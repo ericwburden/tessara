@@ -13,20 +13,32 @@ use axum::{
     http::HeaderMap,
     routing::{get, post},
 };
-use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use serde::Deserialize;
-use sqlx::{Column, Postgres, Row, Transaction};
-use tessara_data_ops::{DataField, FieldType, FilterOperator};
+use sqlx::{Postgres, Row, Transaction};
+use tessara_data_ops::{DataField, FieldType};
 use uuid::Uuid;
 
 mod dto;
+mod runtime;
+
+use runtime::{
+    component_filter_sql, csv_keys, execute_component_table, execute_component_visual,
+    parse_component_cursor, parse_component_query_filters, parse_component_sort,
+    visible_table_fields,
+};
+
+#[cfg(test)]
+use runtime::{
+    component_pagination_sql, component_visual_source_limit_clause, effective_component_page_size,
+    empty_component_table, table_order_by_sql, table_search_fields, visual_from_rows,
+};
 
 pub use dto::{
-    ComponentDefinition, ComponentSummary, ComponentTable, ComponentTableColumn,
-    ComponentTablePagination, ComponentTableRow, ComponentValidationFinding,
-    ComponentValidationResponse, ComponentVersionSummary, CreateComponentRequest,
-    CreateComponentVersionRequest, SaveComponentEditAction, SaveComponentEditRequest,
-    UpdateComponentRequest,
+    ComponentDefinition, ComponentStatValue, ComponentSummary, ComponentTable,
+    ComponentTableColumn, ComponentTablePagination, ComponentTableRow, ComponentValidationFinding,
+    ComponentValidationResponse, ComponentVersionSummary, ComponentVisual, ComponentVisualPoint,
+    ComponentVisualSlice, CreateComponentRequest, CreateComponentVersionRequest,
+    SaveComponentEditAction, SaveComponentEditRequest, UpdateComponentRequest,
 };
 
 use crate::{
@@ -59,6 +71,7 @@ pub(crate) fn routes() -> Router<AppState> {
             get(list_admin_components).post(create_component),
         )
         .route("/api/admin/components/save", post(save_component_edit))
+        .route("/api/admin/components/preview", post(preview_component))
         .route(
             "/api/admin/components/{component_id}",
             get(get_admin_component).patch(update_component),
@@ -89,6 +102,46 @@ pub(crate) fn routes() -> Router<AppState> {
         .route(
             "/api/components/{component_ref}/versions/{version_id}/table",
             get(run_component_version_table),
+        )
+        .route(
+            "/api/components/{component_ref}/bar",
+            get(run_component_bar),
+        )
+        .route(
+            "/api/components/{component_ref}/versions/{version_id}/bar",
+            get(run_component_version_bar),
+        )
+        .route(
+            "/api/components/{component_ref}/line",
+            get(run_component_line),
+        )
+        .route(
+            "/api/components/{component_ref}/versions/{version_id}/line",
+            get(run_component_version_line),
+        )
+        .route(
+            "/api/components/{component_ref}/pie",
+            get(run_component_pie),
+        )
+        .route(
+            "/api/components/{component_ref}/versions/{version_id}/pie",
+            get(run_component_version_pie),
+        )
+        .route(
+            "/api/components/{component_ref}/donut",
+            get(run_component_donut),
+        )
+        .route(
+            "/api/components/{component_ref}/versions/{version_id}/donut",
+            get(run_component_version_donut),
+        )
+        .route(
+            "/api/components/{component_ref}/stat-card",
+            get(run_component_stat_card),
+        )
+        .route(
+            "/api/components/{component_ref}/versions/{version_id}/stat-card",
+            get(run_component_version_stat_card),
         )
 }
 
@@ -450,6 +503,54 @@ pub async fn validate_component(
     }
 
     Ok(Json(component_validation_response(findings)))
+}
+
+/// Executes an unsaved visual component config against its bound Dataset major line.
+pub async fn preview_component(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> ApiResult<Json<ComponentVisual>> {
+    let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
+    let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
+    let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
+    require_dataset_major_line_exists(
+        &state.pool,
+        binding.dataset_id,
+        binding.dataset_version_major,
+    )
+    .await?;
+    require_dataset_fully_in_capability_scope(
+        &state.pool,
+        &account,
+        "components:manage",
+        binding.dataset_id,
+    )
+    .await?;
+
+    let visual_kind = match payload.component_type.as_str() {
+        "bar" => "bar",
+        "line" => "line",
+        "pie" => "pie",
+        "donut" => "donut",
+        "stat_card" => "stat_card",
+        component_type => {
+            return Err(ApiError::BadRequest(format!(
+                "component preview does not support type '{component_type}'"
+            )));
+        }
+    };
+    let version = ComponentVersionForTable {
+        id: Uuid::nil(),
+        component_id: Uuid::nil(),
+        dataset_id: binding.dataset_id,
+        dataset_version_major: binding.dataset_version_major,
+        component_type: payload.component_type,
+        config: payload.config,
+    };
+    execute_component_visual(&state.pool, &account, version, visual_kind, Some(100))
+        .await
+        .map(Json)
 }
 
 /// Creates or updates a draft component version over a dataset major line.
@@ -960,6 +1061,101 @@ pub async fn run_component_version_table(
         .map(Json)
 }
 
+async fn run_component_visual_kind(
+    state: AppState,
+    headers: HeaderMap,
+    component_ref: String,
+    version_id: Option<Uuid>,
+    visual_kind: &'static str,
+) -> ApiResult<Json<ComponentVisual>> {
+    let account = auth::require_capability(&state.pool, &headers, "components:read").await?;
+    let version =
+        load_component_version_for_table(&state.pool, &account, &component_ref, version_id).await?;
+    execute_component_visual(&state.pool, &account, version, visual_kind, None)
+        .await
+        .map(Json)
+}
+
+pub async fn run_component_bar(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(component_ref): Path<String>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, None, "bar").await
+}
+
+pub async fn run_component_version_bar(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_ref, version_id)): Path<(String, Uuid)>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, Some(version_id), "bar").await
+}
+
+pub async fn run_component_line(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(component_ref): Path<String>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, None, "line").await
+}
+
+pub async fn run_component_version_line(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_ref, version_id)): Path<(String, Uuid)>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, Some(version_id), "line").await
+}
+
+pub async fn run_component_pie(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(component_ref): Path<String>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, None, "pie").await
+}
+
+pub async fn run_component_version_pie(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_ref, version_id)): Path<(String, Uuid)>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, Some(version_id), "pie").await
+}
+
+pub async fn run_component_donut(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(component_ref): Path<String>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, None, "donut").await
+}
+
+pub async fn run_component_version_donut(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_ref, version_id)): Path<(String, Uuid)>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, Some(version_id), "donut").await
+}
+
+pub async fn run_component_stat_card(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(component_ref): Path<String>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, None, "stat_card").await
+}
+
+pub async fn run_component_version_stat_card(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_ref, version_id)): Path<(String, Uuid)>,
+) -> ApiResult<Json<ComponentVisual>> {
+    run_component_visual_kind(state, headers, component_ref, Some(version_id), "stat_card").await
+}
+
 struct ComponentVersionForTable {
     id: Uuid,
     component_id: Uuid,
@@ -1019,660 +1215,6 @@ struct MajorLineMaterialization {
     schema: String,
     table: String,
     state: String,
-}
-
-async fn execute_component_table(
-    pool: &sqlx::PgPool,
-    account: &auth::AccountContext,
-    version: ComponentVersionForTable,
-    query: ComponentRuntimeQuery,
-) -> ApiResult<ComponentTable> {
-    let fields =
-        load_dataset_major_line_fields(pool, version.dataset_id, version.dataset_version_major)
-            .await?;
-    validate_component_config(&version.component_type, &version.config, &fields)?;
-    let Some(materialization) =
-        load_major_line_materialization(pool, version.dataset_id, version.dataset_version_major)
-            .await?
-    else {
-        return Ok(empty_component_table(version, "pending", Vec::new()));
-    };
-    if materialization.state != "ready" {
-        return Ok(empty_component_table(
-            version,
-            &materialization.state,
-            Vec::new(),
-        ));
-    }
-    execute_table_component(pool, account, version, materialization, &fields, query).await
-}
-
-async fn load_major_line_materialization(
-    pool: &sqlx::PgPool,
-    dataset_id: Uuid,
-    version_major: i32,
-) -> ApiResult<Option<MajorLineMaterialization>> {
-    let row = sqlx::query(
-        r#"
-        SELECT materialized_schema, materialized_table, rebuild_status
-        FROM dataset_major_materializations
-        WHERE dataset_id = $1
-          AND version_major = $2
-        "#,
-    )
-    .bind(dataset_id)
-    .bind(version_major)
-    .fetch_optional(pool)
-    .await?;
-    if let Some(row) = row {
-        Ok(Some(MajorLineMaterialization {
-            schema: row.try_get("materialized_schema")?,
-            table: row.try_get("materialized_table")?,
-            state: row.try_get("rebuild_status")?,
-        }))
-    } else {
-        Ok(None)
-    }
-}
-
-fn empty_component_table(
-    version: ComponentVersionForTable,
-    materialization_state: &str,
-    columns: Vec<ComponentTableColumn>,
-) -> ComponentTable {
-    ComponentTable {
-        component_id: version.component_id,
-        component_version_id: version.id,
-        dataset_id: version.dataset_id,
-        dataset_version_major: version.dataset_version_major,
-        component_type: version.component_type,
-        materialization_state: materialization_state.into(),
-        columns,
-        rows: Vec::new(),
-        pagination: ComponentTablePagination {
-            page_size: 0,
-            next_cursor: None,
-            has_more: false,
-        },
-    }
-}
-
-async fn execute_table_component(
-    pool: &sqlx::PgPool,
-    account: &auth::AccountContext,
-    version: ComponentVersionForTable,
-    materialization: MajorLineMaterialization,
-    fields: &[DataField],
-    query: ComponentRuntimeQuery,
-) -> ApiResult<ComponentTable> {
-    validate_component_type(&version.component_type)?;
-    let config: TableComponentConfig =
-        serde_json::from_value(version.config.clone()).map_err(|error| {
-            ApiError::BadRequest(format!("table component config is invalid: {error}"))
-        })?;
-    let field_refs = fields.iter().collect::<Vec<_>>();
-    let configured_visible_columns = config
-        .visible_columns
-        .iter()
-        .map(|column| column.field_key().to_string())
-        .collect::<Vec<_>>();
-    let component_contract_fields = visible_table_fields(&field_refs, &configured_visible_columns)?;
-    let component_contract_refs = component_contract_fields.to_vec();
-    let selected_fields = visible_table_fields(&component_contract_refs, &query.visible_columns)?;
-    let columns = selected_fields
-        .iter()
-        .map(|field| component_table_column(field, &config.display_labels))
-        .collect::<Vec<_>>();
-    let select_columns = selected_fields
-        .iter()
-        .map(|field| quote_identifier(&field.key))
-        .collect::<Vec<_>>();
-    let mut predicates =
-        vec![tier_access_predicate_for_materialization(pool, account, &materialization).await?];
-    predicates.extend(component_filter_sql(&config.filters, &field_refs)?);
-    predicates.extend(component_filter_sql(
-        &query.filters,
-        &component_contract_fields,
-    )?);
-    if let Some(search) = query.search.as_deref() {
-        let search_fields = table_search_fields(&config, &component_contract_fields)?;
-        if !search_fields.is_empty() {
-            predicates.push(search_predicate_sql(&search_fields, search));
-        }
-    }
-    let full_name = materialized_full_name(&materialization);
-    let sort = query.sort.or(config.default_sort);
-    let order_by = table_order_by_sql(sort.as_ref(), &component_contract_refs, "__row_id")?;
-    let page_size = effective_component_page_size(query.page_size, config.page_size);
-    let page = component_pagination_sql(query.offset, page_size);
-    let sql = format!(
-        "SELECT __row_id, {} FROM {full_name} WHERE {}{order_by}{page}",
-        select_columns.join(", "),
-        predicates.join(" AND ")
-    );
-    let (rows, pagination) = component_rows_from_query(pool, &sql, query.offset, page_size).await?;
-    Ok(ComponentTable {
-        component_id: version.component_id,
-        component_version_id: version.id,
-        dataset_id: version.dataset_id,
-        dataset_version_major: version.dataset_version_major,
-        component_type: version.component_type,
-        materialization_state: "ready".into(),
-        columns,
-        rows,
-        pagination,
-    })
-}
-
-async fn component_rows_from_query(
-    pool: &sqlx::PgPool,
-    sql: &str,
-    offset: usize,
-    page_size: usize,
-) -> ApiResult<(Vec<ComponentTableRow>, ComponentTablePagination)> {
-    let mut rows = sqlx::query(sql).fetch_all(pool).await?;
-    let has_more = rows.len() > page_size;
-    if has_more {
-        rows.truncate(page_size);
-    }
-    let next_cursor = has_more.then(|| format!("offset:{}", offset + page_size));
-    let rows = rows
-        .into_iter()
-        .map(|row| {
-            let row_id: String = row.try_get("__row_id")?;
-            let mut values = BTreeMap::new();
-            for column in row.columns() {
-                let name = column.name();
-                if name.starts_with("__") {
-                    continue;
-                }
-                values.insert(name.to_string(), row.try_get(name)?);
-            }
-            Ok(ComponentTableRow { row_id, values })
-        })
-        .collect::<Result<Vec<_>, sqlx::Error>>()
-        .map_err(ApiError::from)?;
-    Ok((
-        rows,
-        ComponentTablePagination {
-            page_size,
-            next_cursor,
-            has_more,
-        },
-    ))
-}
-
-fn component_table_column(
-    field: &DataField,
-    display_labels: &BTreeMap<String, String>,
-) -> ComponentTableColumn {
-    ComponentTableColumn {
-        key: field.key.clone(),
-        label: display_labels
-            .get(&field.key)
-            .cloned()
-            .unwrap_or_else(|| field.label.clone()),
-        field_type: field.field_type.as_str().to_string(),
-    }
-}
-
-fn visible_table_fields<'a>(
-    fields: &[&'a DataField],
-    visible_columns: &[String],
-) -> ApiResult<Vec<&'a DataField>> {
-    if visible_columns.is_empty() {
-        return Ok(fields.to_vec());
-    }
-    let mut selected = Vec::new();
-    for key in visible_columns {
-        let field = fields
-            .iter()
-            .find(|field| field.key == *key)
-            .copied()
-            .ok_or_else(|| {
-                ApiError::BadRequest(format!(
-                    "visible column '{key}' is outside the component table contract"
-                ))
-            })?;
-        selected.push(field);
-    }
-    Ok(selected)
-}
-
-fn table_search_fields<'a>(
-    config: &TableComponentConfig,
-    fields: &[&'a DataField],
-) -> ApiResult<Vec<&'a DataField>> {
-    // Blank search fields means search every projected component field using
-    // text coercion, matching the shared interactive table viewer behavior.
-    if config.search_fields.is_empty() {
-        return Ok(fields.to_vec());
-    }
-    config
-        .search_fields
-        .iter()
-        .map(|key| require_component_field_ref(fields, key, "table search field"))
-        .collect()
-}
-
-fn search_predicate_sql(fields: &[&DataField], search: &str) -> String {
-    let value = sql_literal(search);
-    let predicates = fields
-        .iter()
-        .map(|field| {
-            format!(
-                "POSITION(LOWER({value}) IN LOWER(COALESCE({}::text, ''))) > 0",
-                quote_identifier(&field.key)
-            )
-        })
-        .collect::<Vec<_>>();
-    format!("({})", predicates.join(" OR "))
-}
-
-fn table_order_by_sql(
-    sort: Option<&ComponentSortConfig>,
-    fields: &[&DataField],
-    fallback: &str,
-) -> ApiResult<String> {
-    let Some(sort) = sort else {
-        return Ok(format!(" ORDER BY {}", quote_identifier(fallback)));
-    };
-    let field = fields
-        .iter()
-        .find(|field| field.key == sort.field_key)
-        .copied()
-        .ok_or_else(|| {
-            ApiError::BadRequest(format!(
-                "component table sort references field '{}' outside the table contract",
-                sort.field_key
-            ))
-        })?;
-    let direction = if sort.direction.eq_ignore_ascii_case("desc") {
-        "DESC"
-    } else {
-        "ASC"
-    };
-    Ok(format!(
-        " ORDER BY {} {direction}, {}",
-        typed_orderable_sql(&quote_identifier(&field.key), field.field_type.as_str()),
-        quote_identifier(fallback)
-    ))
-}
-
-fn component_pagination_sql(offset: usize, page_size: usize) -> String {
-    format!(" LIMIT {} OFFSET {}", page_size + 1, offset)
-}
-
-fn effective_component_page_size(
-    query_page_size: Option<usize>,
-    config_page_size: Option<usize>,
-) -> usize {
-    query_page_size
-        .or(config_page_size)
-        .unwrap_or(50)
-        .clamp(1, 200)
-}
-
-fn filter_to_sql(
-    filter: &ComponentFilterConfig,
-    fields: &[&DataField],
-    label: &str,
-) -> ApiResult<String> {
-    let field = require_component_field_ref(fields, &filter.field_key, label)?;
-    let operator = FilterOperator::parse(&filter.operator).map_err(component_data_op_error)?;
-    operator
-        .validate_for_field(field)
-        .map_err(component_data_op_error)?;
-    validate_component_filter_value(field, operator, filter.value.as_deref(), label)?;
-    Ok(filter_predicate_sql(
-        field,
-        operator,
-        filter.value.as_deref(),
-    ))
-}
-
-fn validate_component_filter_value(
-    field: &DataField,
-    operator: FilterOperator,
-    value: Option<&str>,
-    label: &str,
-) -> ApiResult<()> {
-    if !operator.requires_value() {
-        return Ok(());
-    }
-    if matches!(
-        operator,
-        FilterOperator::Between | FilterOperator::NotBetween
-    ) {
-        let value = required_filter_value(field, value, operator, label)?;
-        let (lower, upper) = parse_filter_range(value).ok_or_else(|| {
-            ApiError::BadRequest(format!(
-                "{label} for field '{}' requires two values for operator '{}'",
-                field.key,
-                operator.as_str()
-            ))
-        })?;
-        validate_filter_scalar(field, lower, operator, label)?;
-        validate_filter_scalar(field, upper, operator, label)?;
-        return Ok(());
-    }
-    let value = required_filter_value(field, value, operator, label)?;
-    validate_filter_scalar(field, value, operator, label)
-}
-
-fn required_filter_value<'a>(
-    field: &DataField,
-    value: Option<&'a str>,
-    operator: FilterOperator,
-    label: &str,
-) -> ApiResult<&'a str> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            ApiError::BadRequest(format!(
-                "{label} for field '{}' requires a value for operator '{}'",
-                field.key,
-                operator.as_str()
-            ))
-        })
-}
-
-fn parse_filter_range(value: &str) -> Option<(&str, &str)> {
-    value
-        .split_once("..")
-        .or_else(|| value.split_once(','))
-        .and_then(|(lower, upper)| {
-            let lower = lower.trim();
-            let upper = upper.trim();
-            if lower.is_empty() || upper.is_empty() {
-                None
-            } else {
-                Some((lower, upper))
-            }
-        })
-}
-
-fn validate_filter_scalar(
-    field: &DataField,
-    value: &str,
-    operator: FilterOperator,
-    label: &str,
-) -> ApiResult<()> {
-    let valid = match &field.field_type {
-        FieldType::Number => value.parse::<f64>().is_ok(),
-        FieldType::Boolean => matches!(
-            value.to_ascii_lowercase().as_str(),
-            "true" | "t" | "1" | "yes" | "y" | "false" | "f" | "0" | "no" | "n"
-        ),
-        FieldType::Date => NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok(),
-        FieldType::DateTime | FieldType::Timestamp => parse_filter_timestamp(value),
-        _ => true,
-    };
-    if valid {
-        Ok(())
-    } else {
-        Err(ApiError::BadRequest(format!(
-            "{label} for field '{}' has invalid value '{}' for operator '{}' and type '{}'",
-            field.key,
-            value,
-            operator.as_str(),
-            field.field_type.as_str()
-        )))
-    }
-}
-
-fn parse_filter_timestamp(value: &str) -> bool {
-    DateTime::parse_from_rfc3339(value).is_ok()
-        || DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f%#z").is_ok()
-        || NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f").is_ok()
-        || NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
-}
-
-fn parse_component_cursor(cursor: Option<&str>) -> ApiResult<usize> {
-    let Some(cursor) = cursor.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(0);
-    };
-    let value = cursor.strip_prefix("offset:").unwrap_or(cursor);
-    value
-        .parse::<usize>()
-        .map_err(|_| ApiError::BadRequest("component table cursor is invalid".into()))
-}
-
-fn parse_component_sort(value: &str) -> ApiResult<ComponentSortConfig> {
-    let (field_key, direction) = value.split_once(':').unwrap_or((value, "asc"));
-    let direction = match direction.trim().to_ascii_lowercase().as_str() {
-        "asc" | "" => "asc",
-        "desc" => "desc",
-        _ => {
-            return Err(ApiError::BadRequest(
-                "component table sort direction must be asc or desc".into(),
-            ));
-        }
-    };
-    Ok(ComponentSortConfig {
-        field_key: field_key.trim().to_string(),
-        direction: direction.into(),
-    })
-}
-
-fn parse_component_query_filters(
-    values: &HashMap<String, String>,
-) -> ApiResult<Vec<ComponentFilterConfig>> {
-    let mut by_field = BTreeMap::<String, (Option<String>, Option<String>)>::new();
-    for (key, value) in values {
-        let Some(remainder) = key.strip_prefix("filter[") else {
-            continue;
-        };
-        let Some((field_key, suffix)) = remainder.split_once("][") else {
-            continue;
-        };
-        let Some(kind) = suffix.strip_suffix(']') else {
-            continue;
-        };
-        let entry = by_field.entry(field_key.to_string()).or_default();
-        match kind {
-            "operator" => entry.0 = Some(value.clone()),
-            "value" => entry.1 = Some(value.clone()),
-            _ => {}
-        }
-    }
-    by_field
-        .into_iter()
-        .map(|(field_key, (operator, value))| {
-            let operator = operator.ok_or_else(|| {
-                ApiError::BadRequest(format!(
-                    "component table filter for '{field_key}' is missing an operator"
-                ))
-            })?;
-            Ok(ComponentFilterConfig {
-                field_key,
-                operator,
-                value,
-            })
-        })
-        .collect()
-}
-
-fn csv_keys(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
-fn materialized_full_name(materialization: &MajorLineMaterialization) -> String {
-    format!(
-        "{}.{}",
-        quote_identifier(&materialization.schema),
-        quote_identifier(&materialization.table)
-    )
-}
-
-fn component_filter_sql(
-    filters: &[ComponentFilterConfig],
-    fields: &[&DataField],
-) -> ApiResult<Vec<String>> {
-    filters
-        .iter()
-        .map(|filter| filter_to_sql(filter, fields, "component filter"))
-        .collect()
-}
-
-fn filter_predicate_sql(
-    field: &DataField,
-    operator: FilterOperator,
-    value: Option<&str>,
-) -> String {
-    let field_sql = quote_identifier(&field.key);
-    let value_sql = sql_literal(value.unwrap_or_default());
-    match operator {
-        FilterOperator::Equals => equality_sql(&field_sql, &value_sql, field.field_type.as_str()),
-        FilterOperator::NotEquals => {
-            let equality = equality_sql(&field_sql, &value_sql, field.field_type.as_str());
-            format!("NOT ({equality})")
-        }
-        FilterOperator::Contains => {
-            format!("POSITION(LOWER({value_sql}) IN LOWER(COALESCE({field_sql}, ''))) > 0")
-        }
-        FilterOperator::NotContains => {
-            format!("POSITION(LOWER({value_sql}) IN LOWER(COALESCE({field_sql}, ''))) = 0")
-        }
-        FilterOperator::Lt => {
-            comparison_sql(&field_sql, "<", &value_sql, field.field_type.as_str())
-        }
-        FilterOperator::Lte => {
-            comparison_sql(&field_sql, "<=", &value_sql, field.field_type.as_str())
-        }
-        FilterOperator::Gt => {
-            comparison_sql(&field_sql, ">", &value_sql, field.field_type.as_str())
-        }
-        FilterOperator::Gte => {
-            comparison_sql(&field_sql, ">=", &value_sql, field.field_type.as_str())
-        }
-        FilterOperator::Between | FilterOperator::NotBetween => {
-            between_filter_sql(&field_sql, field.field_type.as_str(), value, operator)
-        }
-        FilterOperator::IsEmpty => format!("NULLIF({field_sql}, '') IS NULL"),
-        FilterOperator::IsNotEmpty => format!("NULLIF({field_sql}, '') IS NOT NULL"),
-        FilterOperator::IsNull => format!("{field_sql} IS NULL"),
-        FilterOperator::IsNotNull => format!("{field_sql} IS NOT NULL"),
-    }
-}
-
-fn between_filter_sql(
-    field_sql: &str,
-    field_type: &str,
-    value: Option<&str>,
-    operator: FilterOperator,
-) -> String {
-    let (lower, upper) = value
-        .unwrap_or_default()
-        .split_once("..")
-        .or_else(|| value.unwrap_or_default().split_once(','))
-        .unwrap_or(("", ""));
-    let lower = sql_literal(lower.trim());
-    let upper = sql_literal(upper.trim());
-    let predicate = format!(
-        "({} AND {})",
-        comparison_sql(field_sql, ">=", &lower, field_type),
-        comparison_sql(field_sql, "<=", &upper, field_type)
-    );
-    if operator == FilterOperator::NotBetween {
-        format!("NOT {predicate}")
-    } else {
-        predicate
-    }
-}
-
-fn comparison_sql(left: &str, operator: &str, right: &str, field_type: &str) -> String {
-    typed_comparable_sql(left, field_type)
-        .zip(typed_comparable_sql(right, field_type))
-        .map(|(left, right)| format!("{left} {operator} {right}"))
-        .unwrap_or_else(|| "FALSE /* unsupported comparison */".to_string())
-}
-
-fn equality_sql(left: &str, right: &str, field_type: &str) -> String {
-    typed_comparable_sql(left, field_type)
-        .zip(typed_comparable_sql(right, field_type))
-        .map(|(left, right)| {
-            format!("COALESCE({left} = {right}, {left} IS NULL AND {right} IS NULL)")
-        })
-        .unwrap_or_else(|| format!("COALESCE({left}, '') = COALESCE({right}, '')"))
-}
-
-fn typed_comparable_sql(expression: &str, field_type: &str) -> Option<String> {
-    match field_type {
-        "number" => Some(format!("NULLIF({expression}, '')::numeric")),
-        "date" => Some(format!("NULLIF({expression}, '')::date")),
-        "datetime" | "timestamp" => Some(format!("NULLIF({expression}, '')::timestamptz")),
-        "boolean" => Some(nullable_boolean_expression_sql(expression)),
-        _ => None,
-    }
-}
-
-fn typed_orderable_sql(expression: &str, field_type: &str) -> String {
-    typed_comparable_sql(expression, field_type)
-        .unwrap_or_else(|| format!("NULLIF({expression}, '')"))
-}
-
-fn boolean_expression_sql(expression: &str) -> String {
-    format!("LOWER(COALESCE({expression}, '')) IN ('true', 't', '1', 'yes', 'y')")
-}
-
-fn nullable_boolean_expression_sql(expression: &str) -> String {
-    format!(
-        "CASE WHEN NULLIF({expression}, '') IS NULL THEN NULL ELSE {} END",
-        boolean_expression_sql(expression)
-    )
-}
-
-fn tier_access_predicate(account: &auth::AccountContext) -> &'static str {
-    if account.has_capability("admin:all") || account.has_capability("datasets:read_confidential") {
-        "TRUE"
-    } else if account.has_capability("datasets:read_restricted") {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal', 'restricted')"
-    } else {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal')"
-    }
-}
-
-async fn tier_access_predicate_for_materialization(
-    pool: &sqlx::PgPool,
-    account: &auth::AccountContext,
-    materialization: &MajorLineMaterialization,
-) -> ApiResult<String> {
-    let has_restriction_tier: bool = sqlx::query_scalar(
-        r#"
-        SELECT EXISTS(
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = $1
-              AND table_name = $2
-              AND column_name = '__restriction_tier'
-        )
-        "#,
-    )
-    .bind(&materialization.schema)
-    .bind(&materialization.table)
-    .fetch_one(pool)
-    .await?;
-
-    if has_restriction_tier {
-        Ok(tier_access_predicate(account).to_string())
-    } else {
-        Ok("TRUE".into())
-    }
-}
-
-fn quote_identifier(value: &str) -> String {
-    format!("\"{}\"", value.replace('"', "\"\""))
-}
-
-fn sql_literal(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
 }
 
 async fn load_component_version_for_table(
@@ -1991,15 +1533,43 @@ fn component_config_validation_finding(error: ApiError) -> ComponentValidationFi
     let lower = message.to_ascii_lowercase();
     let (code, field_path) = if lower.contains("unsupported component type") {
         ("COMPONENT_UNSUPPORTED_KIND", "component_type")
-    } else if lower.contains("filter operator") {
-        ("COMPONENT_FILTER_FIELD_NOT_IN_MAJOR_LINE", "config.filters")
-    } else if lower.contains("sort") {
+    } else if lower.contains("requires numeric summary field") {
         (
-            "COMPONENT_SORT_FIELD_NOT_IN_MAJOR_LINE",
-            "config.default_sort",
+            "COMPONENT_SUMMARY_FIELD_TYPE_MISMATCH",
+            "config.summary_field",
         )
-    } else {
+    } else if lower.contains("summary field references field") {
+        (
+            "COMPONENT_SUMMARY_FIELD_NOT_IN_MAJOR_LINE",
+            "config.summary_field",
+        )
+    } else if lower.contains("bar category field") || lower.contains("pie category field") {
+        (
+            "COMPONENT_CATEGORY_FIELD_NOT_IN_MAJOR_LINE",
+            "config.category_field",
+        )
+    } else if lower.contains("bar comparison field") {
+        (
+            "COMPONENT_COMPARISON_FIELD_NOT_IN_MAJOR_LINE",
+            "config.comparison_field",
+        )
+    } else if lower.contains("line x field") {
+        ("COMPONENT_X_FIELD_NOT_IN_MAJOR_LINE", "config.x_field")
+    } else if lower.contains("table visible column references field") {
         ("COMPONENT_FIELD_NOT_IN_MAJOR_LINE", "config")
+    } else if lower.contains("component filter") && lower.contains("outside") {
+        ("COMPONENT_FILTER_FIELD_NOT_IN_MAJOR_LINE", "config.filters")
+    } else if lower.contains("filter operator") {
+        ("COMPONENT_FILTER_OPERATOR_INVALID", "config.filters")
+    } else if lower.contains("stacked bar comparison layout") {
+        (
+            "COMPONENT_COMPARISON_LAYOUT_INCOMPATIBLE",
+            "config.comparison_layout",
+        )
+    } else if lower.contains("sort") {
+        ("COMPONENT_SORT_INVALID", "config.sort_field")
+    } else {
+        ("COMPONENT_CONFIG_INVALID", "config")
     };
     ComponentValidationFinding {
         code: code.into(),
@@ -2094,10 +1664,20 @@ async fn load_component_versions(
 
 fn validate_component_type(component_type: &str) -> ApiResult<()> {
     match component_type {
-        "table" => Ok(()),
+        "table" | "bar" | "line" | "pie" | "donut" | "stat_card" => Ok(()),
         other => Err(ApiError::BadRequest(format!(
             "unsupported component type '{other}'"
         ))),
+    }
+}
+
+fn require_component_kind(component_type: &str, expected: &str, label: &str) -> ApiResult<()> {
+    if component_type == expected {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(format!(
+            "{label} expected component type '{expected}' but found '{component_type}'"
+        )))
     }
 }
 
@@ -2162,13 +1742,209 @@ impl ComponentFieldRef {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ComponentFilterConfig {
     field_key: String,
     operator: String,
     #[serde(default)]
     value: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VisualSharedConfig {
+    summary_field: String,
+    summary_type: String,
+    #[serde(default = "default_value_format")]
+    value_format: String,
+    #[serde(default = "default_missing_policy")]
+    missing_policy: String,
+    #[serde(default)]
+    value_missing_policy: Option<String>,
+    #[serde(default)]
+    sort_field: Option<String>,
+    #[serde(default = "default_sort_direction")]
+    sort_direction: String,
+    #[serde(default)]
+    filters: Vec<ComponentFilterConfig>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StatCardComponentConfig {
+    #[serde(flatten)]
+    shared: VisualSharedConfig,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    supporting_text: Option<String>,
+    #[serde(default = "default_panel_style")]
+    panel_style: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BarComponentConfig {
+    #[serde(flatten)]
+    shared: VisualSharedConfig,
+    mode: String,
+    category_field: String,
+    #[serde(default)]
+    category_missing_policy: Option<String>,
+    #[serde(default)]
+    comparison_field: Option<String>,
+    #[serde(default)]
+    comparison_missing_policy: Option<String>,
+    #[serde(default = "default_bar_orientation")]
+    orientation: String,
+    #[serde(default = "default_bar_comparison_layout")]
+    comparison_layout: String,
+    #[serde(default = "default_visual_limit")]
+    number_of_points: usize,
+    #[serde(default)]
+    category_labels: BTreeMap<String, String>,
+    #[serde(default)]
+    category_colors: BTreeMap<String, String>,
+    #[serde(default)]
+    legend_title: Option<String>,
+    #[serde(default)]
+    x_axis_label: Option<String>,
+    #[serde(default)]
+    y_axis_label: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LineComponentConfig {
+    #[serde(flatten)]
+    shared: VisualSharedConfig,
+    x_field: String,
+    #[serde(default)]
+    x_missing_policy: Option<String>,
+    #[serde(default = "default_line_smoothing")]
+    smoothing: bool,
+    #[serde(default = "default_visual_limit")]
+    number_of_points: usize,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PieComponentConfig {
+    #[serde(flatten)]
+    shared: VisualSharedConfig,
+    category_field: String,
+    #[serde(default)]
+    category_missing_policy: Option<String>,
+    #[serde(default = "default_visual_limit")]
+    max_slices: usize,
+    #[serde(default)]
+    category_labels: BTreeMap<String, String>,
+    #[serde(default)]
+    category_colors: BTreeMap<String, String>,
+    #[serde(default)]
+    legend_title: Option<String>,
+}
+
+enum VisualComponentConfig {
+    StatCard(StatCardComponentConfig),
+    Bar(BarComponentConfig),
+    Line(LineComponentConfig),
+    Pie(PieComponentConfig),
+    Donut(PieComponentConfig),
+}
+
+impl VisualComponentConfig {
+    fn parse(component_type: &str, config: &serde_json::Value) -> ApiResult<Self> {
+        match component_type {
+            "stat_card" => Ok(Self::StatCard(
+                serde_json::from_value(config.clone()).map_err(|error| {
+                    ApiError::BadRequest(format!("stat card component config is invalid: {error}"))
+                })?,
+            )),
+            "bar" => Ok(Self::Bar(serde_json::from_value(config.clone()).map_err(
+                |error| ApiError::BadRequest(format!("bar component config is invalid: {error}")),
+            )?)),
+            "line" => Ok(Self::Line(serde_json::from_value(config.clone()).map_err(
+                |error| ApiError::BadRequest(format!("line component config is invalid: {error}")),
+            )?)),
+            "pie" => Ok(Self::Pie(serde_json::from_value(config.clone()).map_err(
+                |error| ApiError::BadRequest(format!("pie component config is invalid: {error}")),
+            )?)),
+            "donut" => Ok(Self::Donut(
+                serde_json::from_value(config.clone()).map_err(|error| {
+                    ApiError::BadRequest(format!("donut component config is invalid: {error}"))
+                })?,
+            )),
+            _ => Err(ApiError::BadRequest(format!(
+                "unsupported component type '{component_type}'"
+            ))),
+        }
+    }
+
+    fn shared(&self) -> &VisualSharedConfig {
+        match self {
+            Self::StatCard(config) => &config.shared,
+            Self::Bar(config) => &config.shared,
+            Self::Line(config) => &config.shared,
+            Self::Pie(config) | Self::Donut(config) => &config.shared,
+        }
+    }
+
+    fn value_format(&self) -> String {
+        self.shared().value_format.clone()
+    }
+
+    fn referenced_fields(&self) -> Vec<String> {
+        let mut fields = Vec::new();
+        if self.shared().summary_type != "row_count" {
+            fields.push(self.shared().summary_field.clone());
+        }
+        fields.extend(
+            self.shared()
+                .filters
+                .iter()
+                .map(|filter| filter.field_key.clone()),
+        );
+        match self {
+            Self::StatCard(_) => {}
+            Self::Bar(config) => {
+                fields.push(config.category_field.clone());
+                fields.extend(config.comparison_field.clone());
+            }
+            Self::Line(config) => fields.push(config.x_field.clone()),
+            Self::Pie(config) | Self::Donut(config) => fields.push(config.category_field.clone()),
+        }
+        fields
+    }
+}
+
+fn default_value_format() -> String {
+    "plain".into()
+}
+
+fn default_missing_policy() -> String {
+    "omit".into()
+}
+
+fn default_panel_style() -> String {
+    "default".into()
+}
+
+fn default_bar_orientation() -> String {
+    "horizontal".into()
+}
+
+fn default_bar_comparison_layout() -> String {
+    "grouped".into()
+}
+
+fn default_visual_limit() -> usize {
+    20
+}
+
+fn default_line_smoothing() -> bool {
+    true
 }
 
 fn validate_component_config(
@@ -2178,7 +1954,223 @@ fn validate_component_config(
 ) -> ApiResult<()> {
     match component_type {
         "table" => validate_table_component_config(config, fields),
+        "bar" | "line" | "pie" | "donut" | "stat_card" => {
+            validate_visual_component_config(component_type, config, fields)
+        }
         _ => validate_component_type(component_type),
+    }
+}
+
+fn validate_visual_component_config(
+    component_type: &str,
+    config: &serde_json::Value,
+    fields: &[DataField],
+) -> ApiResult<()> {
+    let config = VisualComponentConfig::parse(component_type, config)?;
+    validate_visual_shared_config(config.shared(), fields)?;
+    match &config {
+        VisualComponentConfig::StatCard(config) => {
+            validate_enum(
+                &config.panel_style,
+                &["default", "muted", "accent"],
+                "stat card panel style",
+            )?;
+            if config.shared.sort_field.is_some() {
+                return Err(ApiError::BadRequest(
+                    "stat card config does not support sort_field".into(),
+                ));
+            }
+        }
+        VisualComponentConfig::Bar(config) => {
+            require_component_field(fields, &config.category_field, "bar category field")?;
+            validate_optional_missing_policy(
+                config.category_missing_policy.as_deref(),
+                &["omit", "explicit_missing"],
+                "bar category missing policy",
+            )?;
+            validate_optional_missing_policy(
+                config.comparison_missing_policy.as_deref(),
+                &["omit", "explicit_missing"],
+                "bar comparison missing policy",
+            )?;
+            validate_enum(&config.mode, &["summary", "comparison"], "bar mode")?;
+            validate_enum(
+                &config.orientation,
+                &["vertical", "horizontal"],
+                "bar orientation",
+            )?;
+            validate_enum(
+                &config.comparison_layout,
+                &["grouped", "stacked"],
+                "bar comparison layout",
+            )?;
+            if config.mode == "comparison"
+                && config.comparison_layout == "stacked"
+                && !matches!(
+                    config.shared.summary_type.as_str(),
+                    "row_count" | "count" | "sum"
+                )
+            {
+                return Err(ApiError::BadRequest(format!(
+                    "stacked bar comparison layout requires row_count, count, or sum calculation; found '{}'",
+                    config.shared.summary_type
+                )));
+            }
+            validate_visual_limit(config.number_of_points, "bar number_of_points")?;
+            match config.mode.as_str() {
+                "summary" if config.comparison_field.is_some() => {
+                    return Err(ApiError::BadRequest(
+                        "bar summary config must not include comparison_field".into(),
+                    ));
+                }
+                "comparison" => {
+                    let comparison_field = config.comparison_field.as_deref().ok_or_else(|| {
+                        ApiError::BadRequest(
+                            "bar comparison config requires comparison_field".into(),
+                        )
+                    })?;
+                    require_component_field(fields, comparison_field, "bar comparison field")?;
+                }
+                _ => {}
+            }
+            validate_visual_sort_field(
+                config.shared.sort_field.as_deref(),
+                if config.mode == "comparison" {
+                    &["category", "comparison", "summary_value"]
+                } else {
+                    &["category", "summary_value"]
+                },
+                "bar sort field",
+            )?;
+        }
+        VisualComponentConfig::Line(config) => {
+            require_component_field(fields, &config.x_field, "line x field")?;
+            validate_optional_missing_policy(
+                config.x_missing_policy.as_deref(),
+                &["omit", "explicit_missing"],
+                "line x missing policy",
+            )?;
+            validate_visual_limit(config.number_of_points, "line number_of_points")?;
+            validate_visual_sort_field(
+                config.shared.sort_field.as_deref(),
+                &["x", "summary_value"],
+                "line sort field",
+            )?;
+        }
+        VisualComponentConfig::Pie(config) | VisualComponentConfig::Donut(config) => {
+            require_component_field(fields, &config.category_field, "pie category field")?;
+            validate_optional_missing_policy(
+                config.category_missing_policy.as_deref(),
+                &["omit", "explicit_missing"],
+                "pie category missing policy",
+            )?;
+            validate_visual_limit(config.max_slices, "pie max_slices")?;
+            validate_visual_sort_field(
+                config.shared.sort_field.as_deref(),
+                &["category", "summary_value"],
+                "pie sort field",
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_visual_shared_config(
+    config: &VisualSharedConfig,
+    fields: &[DataField],
+) -> ApiResult<()> {
+    validate_enum(
+        &config.summary_type,
+        &[
+            "row_count",
+            "count",
+            "unique_count",
+            "sum",
+            "average",
+            "median",
+            "none",
+        ],
+        "summary type",
+    )?;
+    let summary_field = if config.summary_type == "row_count" {
+        None
+    } else {
+        Some(require_component_field(
+            fields,
+            &config.summary_field,
+            "summary field",
+        )?)
+    };
+    validate_enum(
+        &config.value_format,
+        &["plain", "integer", "decimal", "percent"],
+        "value format",
+    )?;
+    validate_enum(
+        &config.missing_policy,
+        &["omit", "zero", "explicit_missing"],
+        "missing policy",
+    )?;
+    validate_optional_missing_policy(
+        config.value_missing_policy.as_deref(),
+        &["omit", "zero", "explicit_missing"],
+        "value missing policy",
+    )?;
+    validate_enum(&config.sort_direction, &["asc", "desc"], "sort direction")?;
+    if matches!(
+        config.summary_type.as_str(),
+        "sum" | "average" | "median" | "none"
+    ) && summary_field.is_some_and(|field| field.field_type != FieldType::Number)
+    {
+        return Err(ApiError::BadRequest(format!(
+            "summary type '{}' requires numeric summary field '{}'",
+            config.summary_type, config.summary_field
+        )));
+    }
+    let field_refs = fields.iter().collect::<Vec<_>>();
+    component_filter_sql(&config.filters, &field_refs)?;
+    Ok(())
+}
+
+fn validate_optional_missing_policy(
+    value: Option<&str>,
+    allowed: &[&str],
+    label: &str,
+) -> ApiResult<()> {
+    if let Some(value) = value {
+        validate_enum(value, allowed, label)?;
+    }
+    Ok(())
+}
+
+fn validate_visual_sort_field(
+    sort_field: Option<&str>,
+    allowed: &[&str],
+    label: &str,
+) -> ApiResult<()> {
+    if let Some(sort_field) = sort_field {
+        validate_enum(sort_field, allowed, label)?;
+    }
+    Ok(())
+}
+
+fn validate_visual_limit(value: usize, label: &str) -> ApiResult<()> {
+    if (1..=100).contains(&value) {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(format!(
+            "{label} must be between 1 and 100"
+        )))
+    }
+}
+
+fn validate_enum(value: &str, allowed: &[&str], label: &str) -> ApiResult<()> {
+    if allowed.contains(&value) {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(format!(
+            "{label} has unsupported value '{value}'"
+        )))
     }
 }
 
@@ -2527,578 +2519,4 @@ async fn require_component_visible_for_boundary(
 }
 
 #[cfg(test)]
-mod tests {
-    use serde_json::json;
-    use std::collections::{BTreeMap, HashMap};
-    use tessara_data_ops::{DataField, FieldType};
-
-    use uuid::Uuid;
-
-    use super::{
-        ComponentSummary, ComponentTableQuery, ComponentVersionForTable, CreateComponentRequest,
-        CreateComponentVersionRequest, UpdateComponentRequest, component_filter_sql,
-        component_pagination_sql, effective_component_page_size, parse_component_query_filters,
-        parse_component_sort, require_component_version_draft, table_order_by_sql,
-        table_search_fields, validate_component_config, visible_table_fields,
-    };
-
-    fn field(key: &str, field_type: FieldType) -> DataField {
-        DataField {
-            key: key.into(),
-            label: key.into(),
-            field_type,
-            position: 0,
-        }
-    }
-
-    #[test]
-    fn reader_component_summary_omits_absent_draft_metadata() {
-        let summary = ComponentSummary {
-            id: Uuid::nil(),
-            name: "Published Table".into(),
-            slug: "published_table".into(),
-            description: None,
-            current_version_id: Some(Uuid::nil()),
-            current_version_label: Some("1".into()),
-            current_component_type: Some("table".into()),
-            draft_version_id: None,
-            draft_version_label: None,
-        };
-
-        let value = serde_json::to_value(summary).expect("summary should serialize");
-
-        assert!(value.get("draft_version_id").is_none());
-        assert!(value.get("draft_version_label").is_none());
-    }
-
-    #[test]
-    fn table_config_validates_presentation_fields() {
-        let fields = vec![
-            field("program", FieldType::Text),
-            field("amount", FieldType::Number),
-        ];
-        let config = json!({
-            "visible_columns": ["program", "amount"],
-            "filters": [
-                {
-                    "field_key": "program",
-                    "operator": "not_contains",
-                    "value": "archived"
-                }
-            ],
-            "search_fields": ["program"],
-            "default_sort": {
-                "field_key": "amount",
-                "direction": "desc"
-            },
-            "page_size": 25,
-            "display_labels": {
-                "amount": "Award Amount"
-            }
-        });
-
-        validate_component_config("table", &config, &fields)
-            .expect("valid table component config should pass");
-    }
-
-    #[test]
-    fn table_config_rejects_stale_analytical_keys() {
-        let fields = vec![field("program", FieldType::Text)];
-        let config = json!({
-            "visible_columns": ["program"],
-            "metrics": [
-                {
-                    "function": "count",
-                    "field_key": "program"
-                }
-            ]
-        });
-
-        let error = validate_component_config("table", &config, &fields)
-            .expect_err("component analytical keys should fail");
-        assert!(error.to_string().contains("unknown field `metrics`"));
-    }
-
-    #[test]
-    fn table_config_validates_saved_filters() {
-        let fields = vec![field("score", FieldType::Number)];
-        let config = json!({
-            "visible_columns": ["score"],
-            "filters": [
-                {
-                    "field_key": "score",
-                    "operator": "contains",
-                    "value": "10"
-                }
-            ]
-        });
-
-        let error = validate_component_config("table", &config, &fields)
-            .expect_err("invalid saved filter should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("filter operator 'contains' is not supported")
-        );
-    }
-
-    #[test]
-    fn table_config_rejects_invalid_numeric_saved_filter_value() {
-        let fields = vec![field("score", FieldType::Number)];
-        let config = json!({
-            "visible_columns": ["score"],
-            "filters": [
-                {
-                    "field_key": "score",
-                    "operator": "equals",
-                    "value": "not-a-number"
-                }
-            ]
-        });
-
-        let error = validate_component_config("table", &config, &fields)
-            .expect_err("invalid numeric saved filter should fail");
-        assert!(error.to_string().contains("invalid value 'not-a-number'"));
-    }
-
-    #[test]
-    fn table_config_rejects_invalid_date_saved_filter_range() {
-        let fields = [field("submitted_on", FieldType::Date)];
-        let config = json!({
-            "visible_columns": ["submitted_on"],
-            "filters": [
-                {
-                    "field_key": "submitted_on",
-                    "operator": "between",
-                    "value": "2026-01-01..soon"
-                }
-            ]
-        });
-
-        let error = validate_component_config("table", &config, &fields)
-            .expect_err("invalid date saved filter range should fail");
-        assert!(error.to_string().contains("invalid value 'soon'"));
-    }
-
-    #[test]
-    fn component_filter_sql_rejects_invalid_runtime_filter_value() {
-        let fields = [field("submitted_on", FieldType::Date)];
-        let filters = vec![super::ComponentFilterConfig {
-            field_key: "submitted_on".into(),
-            operator: "gte".into(),
-            value: Some("not-a-date".into()),
-        }];
-        let refs = fields.iter().collect::<Vec<_>>();
-
-        let error = component_filter_sql(&filters, &refs)
-            .expect_err("invalid runtime filter literal should fail");
-        assert!(error.to_string().contains("invalid value 'not-a-date'"));
-    }
-
-    #[test]
-    fn table_config_rejects_field_mode_component_filters() {
-        let fields = [field("program", FieldType::Text)];
-        let config = json!({
-            "visible_columns": ["program"],
-            "filters": [
-                {
-                    "field_key": "program",
-                    "operator": "equals",
-                    "value_field_key": "other_program"
-                }
-            ]
-        });
-
-        let error = validate_component_config("table", &config, &fields)
-            .expect_err("field-mode component filter should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("unknown field `value_field_key`")
-        );
-    }
-
-    #[test]
-    fn table_config_rejects_missing_visible_column() {
-        let fields = [field("program", FieldType::Text)];
-        let config = json!({
-            "visible_columns": ["program", "amount"]
-        });
-
-        let error = validate_component_config("table", &config, &fields)
-            .expect_err("unknown visible column should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("table visible column references field 'amount'")
-        );
-    }
-
-    #[test]
-    fn old_component_table_kinds_are_rejected() {
-        let fields = [field("program", FieldType::Text)];
-        let config = json!({ "visible_columns": ["program"] });
-
-        let detail_error = validate_component_config("detail_table", &config, &fields)
-            .expect_err("old detail kind should fail");
-        let aggregate_error = validate_component_config("aggregate_table", &config, &fields)
-            .expect_err("old aggregate kind should fail");
-
-        assert!(
-            detail_error
-                .to_string()
-                .contains("unsupported component type")
-        );
-        assert!(
-            aggregate_error
-                .to_string()
-                .contains("unsupported component type")
-        );
-    }
-
-    #[test]
-    fn component_filter_sql_supports_negative_operator() {
-        let fields = [field("program", FieldType::Text)];
-        let filters = vec![super::ComponentFilterConfig {
-            field_key: "program".into(),
-            operator: "not_contains".into(),
-            value: Some("archived".into()),
-        }];
-        let refs = fields.iter().collect::<Vec<_>>();
-
-        let sql = component_filter_sql(&filters, &refs).expect("filter should compile");
-        assert_eq!(
-            sql,
-            vec!["POSITION(LOWER('archived') IN LOWER(COALESCE(\"program\", ''))) = 0"]
-        );
-    }
-
-    #[test]
-    fn component_filter_sql_validates_operator_field_compatibility() {
-        let fields = [field("score", FieldType::Number)];
-        let filters = vec![super::ComponentFilterConfig {
-            field_key: "score".into(),
-            operator: "contains".into(),
-            value: Some("10".into()),
-        }];
-        let refs = fields.iter().collect::<Vec<_>>();
-
-        let error = component_filter_sql(&filters, &refs)
-            .expect_err("text operator on numeric field should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("filter operator 'contains' is not supported")
-        );
-    }
-
-    #[test]
-    fn component_table_query_parses_runtime_filters_and_cursor() {
-        let mut extra = HashMap::new();
-        extra.insert("filter[program][operator]".into(), "not_contains".into());
-        extra.insert("filter[program][value]".into(), "archived".into());
-        let query = ComponentTableQuery {
-            q: Some(" demo ".into()),
-            page_size: Some(500),
-            cursor: Some("offset:25".into()),
-            sort: Some("program:desc".into()),
-            visible_columns: Some("program, row_count".into()),
-            extra,
-        }
-        .into_runtime_query()
-        .expect("query should parse");
-
-        assert_eq!(query.search.as_deref(), Some("demo"));
-        assert_eq!(query.page_size, Some(200));
-        assert_eq!(query.offset, 25);
-        assert_eq!(query.visible_columns, vec!["program", "row_count"]);
-        assert_eq!(query.filters[0].field_key, "program");
-        assert_eq!(query.filters[0].operator, "not_contains");
-        assert_eq!(query.filters[0].value.as_deref(), Some("archived"));
-        assert_eq!(query.sort.expect("sort").direction, "desc");
-    }
-
-    #[test]
-    fn component_table_sort_and_page_sql_are_server_driven() {
-        let fields = [
-            field("program", FieldType::Text),
-            field("score", FieldType::Number),
-        ];
-        let refs = fields.iter().collect::<Vec<_>>();
-        let sort = parse_component_sort("score:desc").expect("sort should parse");
-        let order_by =
-            table_order_by_sql(Some(&sort), &refs, "__row_id").expect("sort should compile");
-
-        assert!(order_by.contains("\"score\""));
-        assert!(order_by.contains("DESC"));
-        assert_eq!(component_pagination_sql(25, 50), " LIMIT 51 OFFSET 25");
-        assert_eq!(effective_component_page_size(None, Some(500)), 200);
-        assert_eq!(effective_component_page_size(Some(25), Some(500)), 25);
-    }
-
-    #[test]
-    fn visible_table_fields_preserves_requested_order_and_rejects_unknown_columns() {
-        let fields = [
-            field("program", FieldType::Text),
-            field("score", FieldType::Number),
-        ];
-        let refs = fields.iter().collect::<Vec<_>>();
-        let selected = visible_table_fields(&refs, &["score".into(), "program".into()])
-            .expect("known visible columns should pass");
-        assert_eq!(
-            selected
-                .iter()
-                .map(|field| field.key.as_str())
-                .collect::<Vec<_>>(),
-            vec!["score", "program"]
-        );
-
-        let error = visible_table_fields(&refs, &["missing".into()])
-            .expect_err("unknown visible column should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("visible column 'missing' is outside")
-        );
-    }
-
-    #[test]
-    fn table_search_defaults_to_component_projection_contract() {
-        let config = super::TableComponentConfig {
-            visible_columns: vec![super::ComponentFieldRef::Key("score".into())],
-            filters: Vec::new(),
-            search_fields: Vec::new(),
-            default_sort: None,
-            page_size: None,
-            display_labels: BTreeMap::new(),
-        };
-        let fields = [
-            field("program", FieldType::Text),
-            field("score", FieldType::Number),
-        ];
-
-        let refs = fields.iter().collect::<Vec<_>>();
-        let selected = visible_table_fields(&refs, &["score".into()])
-            .expect("visible column projection should pass");
-
-        let search_fields = table_search_fields(&config, &selected).expect("search fields");
-
-        assert_eq!(
-            selected
-                .iter()
-                .map(|field| field.key.as_str())
-                .collect::<Vec<_>>(),
-            vec!["score"]
-        );
-        assert_eq!(
-            search_fields
-                .iter()
-                .map(|field| field.key.as_str())
-                .collect::<Vec<_>>(),
-            vec!["score"]
-        );
-    }
-
-    #[test]
-    fn runtime_visible_columns_can_only_narrow_component_projection() {
-        let fields = [
-            field("program", FieldType::Text),
-            field("score", FieldType::Number),
-            field("hidden", FieldType::Text),
-        ];
-        let refs = fields.iter().collect::<Vec<_>>();
-        let component_contract = visible_table_fields(&refs, &["program".into(), "score".into()])
-            .expect("configured projection should pass");
-
-        let selected = visible_table_fields(&component_contract, &["score".into()])
-            .expect("query projection can narrow component projection");
-        assert_eq!(
-            selected
-                .iter()
-                .map(|field| field.key.as_str())
-                .collect::<Vec<_>>(),
-            vec!["score"]
-        );
-
-        let error = visible_table_fields(&component_contract, &["hidden".into()])
-            .expect_err("query projection cannot expand component projection");
-        assert!(
-            error
-                .to_string()
-                .contains("visible column 'hidden' is outside")
-        );
-    }
-
-    #[test]
-    fn component_query_filters_require_operators() {
-        let mut extra = HashMap::new();
-        extra.insert("filter[program][value]".into(), "demo".into());
-
-        let error = match parse_component_query_filters(&extra) {
-            Ok(_) => panic!("missing operator should fail"),
-            Err(error) => error.to_string(),
-        };
-        assert!(error.contains("missing an operator"));
-    }
-
-    #[test]
-    fn component_publish_guard_rejects_immutable_versions() {
-        let version_id = Uuid::nil();
-
-        assert!(require_component_version_draft(version_id, "draft").is_ok());
-        assert!(require_component_version_draft(version_id, "published").is_err());
-        assert!(require_component_version_draft(version_id, "superseded").is_err());
-    }
-
-    #[test]
-    fn new_component_versions_require_notes() {
-        assert!(super::require_new_version_note("changed displayed fields").is_ok());
-        let error =
-            super::require_new_version_note("   ").expect_err("blank new-version note should fail");
-        assert!(error.to_string().contains("require a version note"));
-    }
-
-    #[test]
-    fn component_table_without_materialization_uses_pending_state() {
-        let version = ComponentVersionForTable {
-            id: Uuid::new_v4(),
-            component_id: Uuid::new_v4(),
-            dataset_id: Uuid::new_v4(),
-            dataset_version_major: 1,
-            component_type: "table".into(),
-            config: json!({ "visible_columns": ["program"] }),
-        };
-
-        let table = super::empty_component_table(version, "pending", Vec::new());
-
-        assert_eq!(table.materialization_state, "pending");
-        assert!(table.rows.is_empty());
-        assert_eq!(table.pagination.page_size, 0);
-        assert!(!table.pagination.has_more);
-    }
-
-    #[test]
-    fn component_table_materialization_failure_is_render_state() {
-        let version = ComponentVersionForTable {
-            id: Uuid::new_v4(),
-            component_id: Uuid::new_v4(),
-            dataset_id: Uuid::new_v4(),
-            dataset_version_major: 1,
-            component_type: "table".into(),
-            config: json!({ "visible_columns": ["program"] }),
-        };
-
-        let table = super::empty_component_table(version, "failed", Vec::new());
-
-        assert_eq!(table.materialization_state, "failed");
-        assert!(table.rows.is_empty());
-        assert!(!table.pagination.has_more);
-    }
-
-    #[test]
-    fn create_component_request_accepts_first_version_payload() {
-        let dataset_id = Uuid::nil();
-        let payload: CreateComponentRequest = serde_json::from_value(json!({
-            "name": "Program table",
-            "slug": "program-table",
-            "description": "A first table component",
-            "version": {
-                "dataset_id": dataset_id,
-                "dataset_version_major": 1,
-                "component_type": "table",
-                "config": {
-                    "visible_columns": ["program"]
-                }
-            }
-        }))
-        .expect("atomic create payload should deserialize");
-
-        assert_eq!(payload.name, "Program table");
-        let version = payload.version.expect("version should be present");
-        assert_eq!(version.dataset_id, Some(dataset_id));
-        assert_eq!(version.dataset_version_major, Some(1));
-        assert_eq!(version.component_type, "table");
-    }
-
-    #[test]
-    fn component_shell_payloads_reject_unknown_fields() {
-        let create_error = match serde_json::from_value::<CreateComponentRequest>(json!({
-            "name": "Program table",
-            "slug": "program-table",
-            "description": "A first table component",
-            "dataset_revision_id": Uuid::nil()
-        })) {
-            Ok(_) => panic!("create component shell should reject legacy revision fields"),
-            Err(error) => error,
-        };
-        assert!(create_error.to_string().contains("dataset_revision_id"));
-
-        let update_error = match serde_json::from_value::<UpdateComponentRequest>(json!({
-            "name": "Program table",
-            "slug": "program-table",
-            "description": "Updated table component",
-            "dataset_revision_id": Uuid::nil()
-        })) {
-            Ok(_) => panic!("update component shell should reject legacy revision fields"),
-            Err(error) => error,
-        };
-        assert!(update_error.to_string().contains("dataset_revision_id"));
-    }
-
-    #[test]
-    fn atomic_component_version_payload_rejects_legacy_revision_binding() {
-        let error = match serde_json::from_value::<CreateComponentRequest>(json!({
-            "name": "Program table",
-            "slug": "program-table",
-            "description": "A first table component",
-            "version": {
-                "dataset_id": Uuid::nil(),
-                "dataset_version_major": 1,
-                "dataset_revision_id": Uuid::nil(),
-                "component_type": "table",
-                "config": {
-                    "visible_columns": ["program"]
-                }
-            }
-        })) {
-            Ok(_) => panic!("atomic create version should reject legacy revision fields"),
-            Err(error) => error,
-        };
-
-        assert!(error.to_string().contains("dataset_revision_id"));
-    }
-
-    #[test]
-    fn component_version_payload_rejects_legacy_revision_binding() {
-        let error = match serde_json::from_value::<CreateComponentVersionRequest>(json!({
-            "dataset_revision_id": Uuid::nil(),
-            "component_type": "table",
-            "config": {
-                "visible_columns": ["program"]
-            }
-        })) {
-            Ok(_) => panic!("legacy revision-bound payload should be rejected"),
-            Err(error) => error,
-        };
-
-        assert!(error.to_string().contains("dataset_revision_id"));
-    }
-
-    #[test]
-    fn component_version_payload_rejects_inline_publish_flag() {
-        let error = match serde_json::from_value::<CreateComponentVersionRequest>(json!({
-            "dataset_id": Uuid::nil(),
-            "dataset_version_major": 1,
-            "component_type": "table",
-            "config": {
-                "visible_columns": ["program"]
-            },
-            "publish": true
-        })) {
-            Ok(_) => panic!("inline publish flag should be rejected"),
-            Err(error) => error,
-        };
-
-        assert!(error.to_string().contains("publish"));
-    }
-}
+mod tests;

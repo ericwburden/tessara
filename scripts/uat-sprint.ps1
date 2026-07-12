@@ -106,7 +106,26 @@ function New-BrowserSession {
 
 $adminToken = Get-ApiToken -Email "admin@tessara.local" -Password "tessara-dev-admin"
 $headers = @{ Authorization = "Bearer $adminToken" }
-$seedSummary = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/demo/seed" -Headers $headers -TimeoutSec 30
+try {
+    $seedSummary = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/demo/seed" -Headers $headers -TimeoutSec 30
+} catch {
+    $forms = Invoke-RestMethod -Uri "$BaseUrl/api/forms" -Headers $headers -TimeoutSec 30
+    $datasets = Invoke-RestMethod -Uri "$BaseUrl/api/datasets" -Headers $headers -TimeoutSec 30
+    $components = Invoke-RestMethod -Uri "$BaseUrl/api/components" -Headers $headers -TimeoutSec 30
+    $sessionForm = $forms | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
+    $sessionDataset = $datasets | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
+    $sessionTableComponent = $components | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
+    if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent) {
+        throw "Sprint UAT failure: demo seed failed and seeded Demo Session Log assets could not be found. Original error: $($_.Exception.Message)"
+    }
+
+    $seedSummary = [pscustomobject]@{
+        seed_version         = "uat-demo-v1"
+        form_id              = $sessionForm.id
+        dataset_id           = $sessionDataset.id
+        component_version_id = $sessionTableComponent.current_version_id
+    }
+}
 if ($seedSummary.seed_version -ne "uat-demo-v1") {
     throw "Sprint UAT failure: demo seed did not confirm expected uat-demo-v1."
 }
@@ -174,6 +193,69 @@ if ($componentTable.materialization_state -ne "ready" -or -not $componentTable.r
     throw "Sprint UAT failure: seeded component table did not return ready rows."
 }
 
+$seededVisualBar = Invoke-RestMethod -Uri "$BaseUrl/api/components/demo-session-log-bar/bar" -Headers $headers -TimeoutSec 30
+$hasCompletedBarSeries = $seededVisualBar.points | Where-Object { $_.comparison -eq "Completed as planned" -and $_.color -eq "var(--semantic-primary)" }
+$hasIncompleteBarSeries = $seededVisualBar.points | Where-Object { $_.comparison -eq "Did not complete as planned" -and $_.color -eq "var(--semantic-warning)" }
+if ($seededVisualBar.materialization_state -ne "ready" -or $seededVisualBar.component_type -ne "bar" -or $seededVisualBar.legend_title -ne "Completion Status" -or -not $hasCompletedBarSeries -or -not $hasIncompleteBarSeries) {
+    throw "Sprint UAT failure: seeded Demo Session Bar did not expose configured labels and colors."
+}
+$seededVisualLine = Invoke-RestMethod -Uri "$BaseUrl/api/components/demo-session-log-line/line" -Headers $headers -TimeoutSec 30
+if ($seededVisualLine.materialization_state -ne "ready" -or $seededVisualLine.component_type -ne "line" -or -not $seededVisualLine.points -or $seededVisualLine.points.Count -lt 1) {
+    throw "Sprint UAT failure: seeded Demo Session Line did not return ready points."
+}
+foreach ($seededSliceVisual in @(
+    @{ Slug = "demo-session-completion-pie"; Kind = "pie" },
+    @{ Slug = "demo-session-completion-donut"; Kind = "donut" }
+)) {
+    $seededSlices = Invoke-RestMethod -Uri "$BaseUrl/api/components/$($seededSliceVisual.Slug)/$($seededSliceVisual.Kind)" -Headers $headers -TimeoutSec 30
+    if ($seededSlices.materialization_state -ne "ready" -or $seededSlices.component_type -ne $seededSliceVisual.Kind -or $seededSlices.legend_title -ne "Completion Status" -or -not ($seededSlices.slices | Where-Object { $_.category -eq "Did not complete as planned" -and $_.color -eq "var(--semantic-warning)" })) {
+        throw "Sprint UAT failure: seeded Demo Session $($seededSliceVisual.Kind) did not expose configured legend, labels, and colors."
+    }
+}
+$seededStatCard = Invoke-RestMethod -Uri "$BaseUrl/api/components/demo-session-total-participants-stat-card/stat-card" -Headers $headers -TimeoutSec 30
+if ($seededStatCard.materialization_state -ne "ready" -or $seededStatCard.component_type -ne "stat_card" -or $seededStatCard.stat.label -ne "Total participants" -or $seededStatCard.stat.supporting_text -ne "Submitted Demo Session Log entries") {
+    throw "Sprint UAT failure: seeded Demo Session StatCard did not expose configured display text."
+}
+
+$datasetDefinition = Invoke-RestMethod -Uri "$BaseUrl/api/datasets/$($seedSummary.dataset_id)" -Headers $headers -TimeoutSec 30
+$visualField = $datasetDefinition.output_fields | Select-Object -First 1
+if (-not $visualField -or -not $visualField.key) {
+    throw "Sprint UAT failure: seeded dataset did not expose an output field for visual component coverage."
+}
+$visualDatasetMajor = $datasetDefinition.current_version_major
+if (-not $visualDatasetMajor) {
+    throw "Sprint UAT failure: seeded dataset did not expose a current major version for visual component coverage."
+}
+$visualSlug = "uat-visual-bar-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+$visualCreateBody = @{
+    name        = "UAT Visual Bar"
+    slug        = $visualSlug
+    description = "Sprint 4B UAT visual component fixture."
+    version     = @{
+        dataset_id            = $seedSummary.dataset_id
+        dataset_version_major = $visualDatasetMajor
+        component_type        = "bar"
+        config                = @{
+            mode             = "summary"
+            summary_field    = $visualField.key
+            summary_type     = "count"
+            category_field   = $visualField.key
+            sort_field       = "summary_value"
+            sort_direction   = "desc"
+            number_of_points = 20
+            value_format     = "integer"
+        }
+    }
+} | ConvertTo-Json -Depth 20
+$visualCreated = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components" -Headers $headers -ContentType "application/json" -Body $visualCreateBody -TimeoutSec 30
+$visualDetail = Invoke-RestMethod -Uri "$BaseUrl/api/admin/components/$visualSlug" -Headers $headers -TimeoutSec 30
+$visualVersion = $visualDetail.versions | Select-Object -First 1
+Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components/$($visualCreated.id)/versions/$($visualVersion.id)/publish" -Headers $headers -TimeoutSec 30 | Out-Null
+$visualBar = Invoke-RestMethod -Uri "$BaseUrl/api/components/$visualSlug/bar" -Headers $headers -TimeoutSec 30
+if ($visualBar.materialization_state -ne "ready" -or $visualBar.component_type -ne "bar" -or -not $visualBar.points -or $visualBar.points.Count -lt 1) {
+    throw "Sprint UAT failure: visual Bar component did not return ready points."
+}
+
 $componentsList = Invoke-Html -Uri "$BaseUrl/components" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $componentsList -Needles @("Components") -Context "components list"
 
@@ -191,6 +273,9 @@ Assert-ProtectedShell -Content $componentVersions -Needles @("Component Versions
 
 $componentViewer = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/view" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $componentViewer -Needles @("Component") -Context "component viewer"
+
+$visualViewer = Invoke-Html -Uri "$BaseUrl/components/$visualSlug/view" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $visualViewer -Needles @("Component") -Context "visual component viewer"
 
 $workflowsList = Invoke-Html -Uri "$BaseUrl/workflows" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $workflowsList -Needles @("Workflows") -Context "workflow directory"

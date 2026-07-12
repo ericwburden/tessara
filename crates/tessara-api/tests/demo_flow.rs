@@ -46,8 +46,9 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
     assert_eq!(seed["seed_version"], "uat-demo-v1");
     assert_eq!(seed["dataset_count"], 4);
     assert_eq!(seed["dataset_revision_count"], 4);
-    assert_eq!(seed["component_count"], 4);
+    assert_eq!(seed["component_count"], 9);
     assert_eq!(seed["dashboard_count"], 1);
+    assert_eq!(seed["submitted_submission_count"], 58);
 
     let summary = request_json(
         app.clone(),
@@ -56,9 +57,10 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
     .await;
     assert_eq!(summary["datasets"], 4);
     assert_eq!(summary["dataset_revisions"], 4);
-    assert_eq!(summary["components"], 4);
-    assert_eq!(summary["component_versions"], 4);
+    assert_eq!(summary["components"], 9);
+    assert_eq!(summary["component_versions"], 9);
     assert_eq!(summary["dashboards"], 1);
+    assert_eq!(summary["submitted_submissions"], 58);
     assert!(summary.get("reports").is_none());
     assert!(summary.get("charts").is_none());
 
@@ -67,12 +69,188 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         authorized_request("GET", "/api/components", &admin_token, None),
     )
     .await;
+    let seeded_component = components
+        .as_array()
+        .expect("components should be an array")
+        .iter()
+        .find(|component| component["current_version_id"] == seed["component_version_id"])
+        .expect("seeded component should appear in the component directory");
     assert!(
         components
             .as_array()
             .expect("components should be an array")
             .iter()
             .any(|component| component["current_version_id"] == seed["component_version_id"])
+    );
+    let component_kinds = components
+        .as_array()
+        .expect("components should be an array")
+        .iter()
+        .filter_map(|component| component["current_component_type"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for kind in ["table", "bar", "line", "pie", "donut", "stat_card"] {
+        assert!(
+            component_kinds.contains(kind),
+            "seeded demo components should include {kind}"
+        );
+    }
+    let seeded_dataset_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/table?page_size=100",
+                seed["dataset_id"].as_str().expect("dataset id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        seeded_dataset_table["rows"]
+            .as_array()
+            .expect("seeded dataset table rows")
+            .len(),
+        52
+    );
+    let seeded_dataset_columns = seeded_dataset_table["columns"]
+        .as_array()
+        .expect("seeded dataset columns")
+        .iter()
+        .filter_map(|column| column["key"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for field in [
+        "session__session_date",
+        "session__participants",
+        "session__completed_as_planned",
+        "session__facilitator_notes",
+        "session__topics_covered",
+    ] {
+        assert!(
+            seeded_dataset_columns.contains(field),
+            "session log dataset should keep field {field}"
+        );
+    }
+    let completed_values = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/distinct-values?version_major=1&field=session__completed_as_planned",
+                seed["dataset_id"].as_str().expect("dataset id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(completed_values["version_major"], 1);
+    assert_eq!(completed_values["field"], "session__completed_as_planned");
+    assert_eq!(completed_values["values"], json!(["false", "true"]));
+    let seeded_component_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/components/{}/table?page_size=100",
+                seeded_component["slug"].as_str().expect("component slug")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        seeded_component_table["rows"]
+            .as_array()
+            .expect("seeded component table rows")
+            .len(),
+        52
+    );
+
+    let seeded_bar = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/components/demo-session-log-bar/bar",
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(seeded_bar["component_type"], "bar");
+    assert!(
+        seeded_bar["points"]
+            .as_array()
+            .expect("seeded bar points")
+            .iter()
+            .any(|point| {
+                point["x"] == "Completed as planned" && point["color"] == "var(--semantic-primary)"
+            })
+    );
+
+    let seeded_line = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/components/demo-session-log-line/line",
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(seeded_line["component_type"], "line");
+    assert!(
+        !seeded_line["points"]
+            .as_array()
+            .expect("seeded line points")
+            .is_empty()
+    );
+
+    for (slug, kind) in [
+        ("demo-session-completion-pie", "pie"),
+        ("demo-session-completion-donut", "donut"),
+    ] {
+        let seeded_slices = request_json(
+            app.clone(),
+            authorized_request(
+                "GET",
+                &format!("/api/components/{slug}/{kind}"),
+                &admin_token,
+                None,
+            ),
+        )
+        .await;
+        assert_eq!(seeded_slices["component_type"], kind);
+        assert_eq!(seeded_slices["legend_title"], "Completion Status");
+        assert!(
+            seeded_slices["slices"]
+                .as_array()
+                .expect("seeded slices")
+                .iter()
+                .any(|slice| {
+                    slice["category"] == "Did not complete as planned"
+                        && slice["color"] == "var(--semantic-warning)"
+                })
+        );
+    }
+
+    let seeded_stat_card = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/components/demo-session-total-participants-stat-card/stat-card",
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(seeded_stat_card["component_type"], "stat_card");
+    assert_eq!(seeded_stat_card["stat"]["label"], "Total participants");
+    assert_eq!(
+        seeded_stat_card["stat"]["supporting_text"],
+        "Submitted Demo Session Log entries"
     );
 
     let dashboard = request_json(
@@ -93,7 +271,7 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .as_array()
             .expect("dashboard components should be an array")
             .len(),
-        4
+        9
     );
     assert!(
         dashboard["components"]
@@ -120,7 +298,7 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
     .await;
     assert_eq!(
         seeded_revision["dependencies"]["component_version_count"],
-        1
+        6
     );
     assert_eq!(seeded_revision["dependencies"]["dashboard_count"], 1);
     assert!(
@@ -165,7 +343,7 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
     .await;
     assert_eq!(
         scoped_seeded_revision["dependencies"]["component_version_count"],
-        1
+        6
     );
     assert_eq!(scoped_seeded_revision["dependencies"]["dashboard_count"], 1);
     assert!(
@@ -203,7 +381,7 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         .expect("admin seeded revision summary");
     assert_eq!(
         admin_seeded_revision_summary["dependencies"]["component_version_count"],
-        1
+        6
     );
     assert_eq!(
         admin_seeded_revision_summary["dependencies"]["dashboard_count"],
@@ -230,7 +408,7 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         .expect("scoped seeded revision summary");
     assert_eq!(
         scoped_seeded_revision_summary["dependencies"]["component_version_count"],
-        1
+        6
     );
     assert_eq!(
         scoped_seeded_revision_summary["dependencies"]["dashboard_count"],
@@ -1244,6 +1422,299 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             .len(),
         initial_major_line_row_count
     );
+
+    let visual_slug = "revision-lifecycle-visual-component";
+    let visual_component = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components",
+            &admin_token,
+            Some(json!({
+                "name": "Revision Lifecycle Visual Component",
+                "slug": visual_slug,
+                "description": "Visual component endpoint coverage over a Dataset major line.",
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "bar",
+                    "config": {
+                        "mode": "summary",
+                        "summary_field": first_key,
+                        "summary_type": "count",
+                        "category_field": first_key,
+                        "sort_field": "summary_value",
+                        "sort_direction": "desc",
+                        "number_of_points": 20,
+                        "value_format": "integer"
+                    }
+                }
+            })),
+        ),
+    )
+    .await;
+    let visual_component_id = visual_component["id"]
+        .as_str()
+        .expect("visual component id");
+    let visual_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{visual_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let bar_version_id = visual_detail["versions"][0]["id"]
+        .as_str()
+        .expect("bar visual version id");
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/components/{visual_component_id}/versions/{bar_version_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let visual_bar = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{visual_slug}/bar"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(visual_bar["component_type"], "bar");
+    assert_eq!(visual_bar["component_version_id"], bar_version_id);
+    assert_eq!(visual_bar["materialization_state"], "ready");
+    assert!(
+        !visual_bar["points"]
+            .as_array()
+            .expect("bar points")
+            .is_empty()
+    );
+    let (wrong_kind_status, wrong_kind_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{visual_slug}/line"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(wrong_kind_status, StatusCode::BAD_REQUEST);
+    assert!(
+        wrong_kind_body["error"]
+            .as_str()
+            .expect("wrong kind visual error")
+            .contains("expected component type 'line'")
+    );
+    let table_for_visual_status = request_status(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{visual_slug}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(table_for_visual_status, StatusCode::BAD_REQUEST);
+    let stat_card_alias_status = request_status(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{visual_slug}/stat_card"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(stat_card_alias_status, StatusCode::NOT_FOUND);
+
+    let line_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/components/{visual_component_id}/versions"),
+            &admin_token,
+            Some(json!({
+                "dataset_id": dataset_id,
+                "dataset_version_major": 1,
+                "component_type": "line",
+                "version_note": "Switch visual component to a line chart.",
+                "config": {
+                    "summary_field": first_key,
+                    "summary_type": "count",
+                    "x_field": first_key,
+                    "number_of_points": 20
+                }
+            })),
+        ),
+    )
+    .await;
+    let line_version_id = line_draft["id"].as_str().expect("line draft id");
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/components/{visual_component_id}/versions/{line_version_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let current_line = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{visual_slug}/line"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(current_line["component_type"], "line");
+    assert_eq!(current_line["component_version_id"], line_version_id);
+    let historical_bar = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{visual_slug}/versions/{bar_version_id}/bar"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(historical_bar["component_type"], "bar");
+    assert_eq!(historical_bar["component_version_id"], bar_version_id);
+    let versioned_wrong_kind_status = request_status(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{visual_slug}/versions/{line_version_id}/bar"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(versioned_wrong_kind_status, StatusCode::BAD_REQUEST);
+
+    for (kind, path, config, output_key) in [
+        (
+            "pie",
+            "pie",
+            json!({
+                "summary_field": first_key,
+                "summary_type": "count",
+                "category_field": first_key,
+                "max_slices": 20
+            }),
+            "slices",
+        ),
+        (
+            "donut",
+            "donut",
+            json!({
+                "summary_field": first_key,
+                "summary_type": "count",
+                "category_field": first_key,
+                "max_slices": 20
+            }),
+            "slices",
+        ),
+        (
+            "stat_card",
+            "stat-card",
+            json!({
+                "summary_field": first_key,
+                "summary_type": "count",
+                "label": "Submission count",
+                "value_format": "integer",
+                "panel_style": "accent"
+            }),
+            "stat",
+        ),
+    ] {
+        let slug = format!("revision-lifecycle-{kind}-component");
+        let component = request_json(
+            app.clone(),
+            authorized_request(
+                "POST",
+                "/api/admin/components",
+                &admin_token,
+                Some(json!({
+                    "name": format!("Revision Lifecycle {kind} Component"),
+                    "slug": slug,
+                    "description": "Visual component endpoint coverage.",
+                    "version": {
+                        "dataset_id": dataset_id,
+                        "dataset_version_major": 1,
+                        "component_type": kind,
+                        "config": config
+                    }
+                })),
+            ),
+        )
+        .await;
+        let component_id = component["id"].as_str().expect("visual component id");
+        let detail = request_json(
+            app.clone(),
+            authorized_request(
+                "GET",
+                &format!("/api/admin/components/{slug}"),
+                &admin_token,
+                None,
+            ),
+        )
+        .await;
+        let version_id = detail["versions"][0]["id"]
+            .as_str()
+            .expect("visual version id");
+        request_json(
+            app.clone(),
+            authorized_request(
+                "POST",
+                &format!("/api/admin/components/{component_id}/versions/{version_id}/publish"),
+                &admin_token,
+                None,
+            ),
+        )
+        .await;
+        let visual = request_json(
+            app.clone(),
+            authorized_request(
+                "GET",
+                &format!("/api/components/{slug}/{path}"),
+                &admin_token,
+                None,
+            ),
+        )
+        .await;
+        assert_eq!(visual["component_type"], kind);
+        assert_eq!(visual["component_version_id"], version_id);
+        if output_key == "stat" {
+            assert!(visual[output_key].is_object());
+        } else {
+            assert!(
+                !visual[output_key]
+                    .as_array()
+                    .unwrap_or_else(|| panic!("{kind} should return {output_key}"))
+                    .is_empty()
+            );
+        }
+    }
+
     let revision_before_component_draft = request_json(
         app.clone(),
         authorized_request(

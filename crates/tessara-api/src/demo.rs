@@ -24,8 +24,8 @@ use accounts::{
     require_dev_admin_account,
 };
 use analytics::{
-    DatasetFieldBinding, ensure_component, ensure_dashboard, ensure_dataset,
-    replace_dashboard_components,
+    DatasetFieldBinding, ensure_component, ensure_component_with_config, ensure_dashboard,
+    ensure_dataset, replace_dashboard_components,
 };
 use forms::{DemoFormSpec, FormFieldDef, ensure_demo_form, replace_form_scope_nodes};
 use hierarchy::{
@@ -546,7 +546,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
-    let _session_c = ensure_demo_node(
+    let session_c = ensure_demo_node(
         pool,
         session_type_id,
         Some(activity_b),
@@ -564,7 +564,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
-    let _session_d = ensure_demo_node(
+    let session_d = ensure_demo_node(
         pool,
         session_type_id,
         Some(activity_b),
@@ -582,7 +582,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
-    let _session_e = ensure_demo_node(
+    let session_e = ensure_demo_node(
         pool,
         session_type_id,
         Some(activity_c),
@@ -600,7 +600,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
-    let _session_f = ensure_demo_node(
+    let session_f = ensure_demo_node(
         pool,
         session_type_id,
         Some(activity_d),
@@ -636,7 +636,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
-    let _session_h = ensure_demo_node(
+    let session_h = ensure_demo_node(
         pool,
         session_type_id,
         Some(activity_f),
@@ -942,7 +942,9 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     replace_form_scope_nodes(
         pool,
         session_form.form_id,
-        &[session_a, session_b, session_g],
+        &[
+            session_a, session_b, session_c, session_d, session_e, session_f, session_g, session_h,
+        ],
     )
     .await?;
 
@@ -1169,6 +1171,16 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
+    ensure_component_testing_session_responses(
+        pool,
+        session_form.form_version_id,
+        &[
+            (session_a, respondent_account_id),
+            (session_b, delegate_account_id),
+            (session_g, operator_account_id),
+        ],
+    )
+    .await?;
 
     ensure_single_form_workflow_assignment(
         pool,
@@ -1288,15 +1300,39 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     let (session_dataset_id, session_dataset_revision_id) = ensure_dataset(
         pool,
         session_form.form_id,
-        "Participants Dataset",
-        "demo-session-participants",
+        "Demo Session Log Dataset",
+        "demo-session-log",
         "session",
-        &[session_a, session_b, session_g],
-        &[DatasetFieldBinding {
-            label: "Participants",
-            source_field_key: "participants",
-            field_type: "number",
-        }],
+        &[
+            session_a, session_b, session_c, session_d, session_e, session_f, session_g, session_h,
+        ],
+        &[
+            DatasetFieldBinding {
+                label: "Session Date",
+                source_field_key: "session_date",
+                field_type: "date",
+            },
+            DatasetFieldBinding {
+                label: "Participants",
+                source_field_key: "participants",
+                field_type: "number",
+            },
+            DatasetFieldBinding {
+                label: "Completed As Planned",
+                source_field_key: "completed_as_planned",
+                field_type: "boolean",
+            },
+            DatasetFieldBinding {
+                label: "Facilitator Notes",
+                source_field_key: "facilitator_notes",
+                field_type: "text",
+            },
+            DatasetFieldBinding {
+                label: "Topics Covered",
+                source_field_key: "topics_covered",
+                field_type: "multi_choice",
+            },
+        ],
     )
     .await?;
 
@@ -1323,11 +1359,133 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     let (session_component_id, session_component_version_id) = ensure_component(
         pool,
-        "Participants Table",
-        "demo-session-participants-table",
+        "Demo Session Log Table",
+        "demo-session-log-table",
         session_dataset_revision_id,
     )
     .await?;
+    let (_session_bar_component_id, session_bar_component_version_id) =
+        ensure_component_with_config(
+            pool,
+            "Demo Session Participants Bar",
+            "demo-session-log-bar",
+            session_dataset_revision_id,
+            "bar",
+            json!({
+                "mode": "comparison",
+                "summary_field": "session__participants",
+                "summary_type": "sum",
+                "category_field": "session__session_date",
+                "comparison_field": "session__completed_as_planned",
+                "comparison_layout": "stacked",
+                "orientation": "horizontal",
+                "sort_field": "summary_value",
+                "sort_direction": "desc",
+                "number_of_points": 20,
+                "value_format": "integer",
+                "x_axis_label": "Participants",
+                "y_axis_label": "Session Date",
+                "legend_title": "Completion Status",
+                "category_labels": {
+                    "true": "Completed as planned",
+                    "false": "Did not complete as planned"
+                },
+                "category_colors": {
+                    "true": "var(--semantic-primary)",
+                    "false": "var(--semantic-warning)"
+                }
+            }),
+        )
+        .await?;
+    let (_session_line_component_id, session_line_component_version_id) =
+        ensure_component_with_config(
+            pool,
+            "Demo Session Participants Line",
+            "demo-session-log-line",
+            session_dataset_revision_id,
+            "line",
+            json!({
+                "summary_field": "session__participants",
+                "summary_type": "sum",
+                "x_field": "session__session_date",
+                "sort_field": "x",
+                "sort_direction": "asc",
+                "number_of_points": 20,
+                "value_format": "integer"
+            }),
+        )
+        .await?;
+    let (_session_pie_component_id, session_pie_component_version_id) =
+        ensure_component_with_config(
+            pool,
+            "Demo Session Completion Pie",
+            "demo-session-completion-pie",
+            session_dataset_revision_id,
+            "pie",
+            json!({
+                "summary_field": "session__participants",
+                "summary_type": "sum",
+                "category_field": "session__completed_as_planned",
+                "sort_field": "summary_value",
+                "sort_direction": "desc",
+                "max_slices": 10,
+                "value_format": "integer",
+                "legend_title": "Completion Status",
+                "category_labels": {
+                    "true": "Completed as planned",
+                    "false": "Did not complete as planned"
+                },
+                "category_colors": {
+                    "true": "var(--semantic-primary)",
+                    "false": "var(--semantic-warning)"
+                }
+            }),
+        )
+        .await?;
+    let (_session_donut_component_id, session_donut_component_version_id) =
+        ensure_component_with_config(
+            pool,
+            "Demo Session Completion Donut",
+            "demo-session-completion-donut",
+            session_dataset_revision_id,
+            "donut",
+            json!({
+                "summary_field": "session__participants",
+                "summary_type": "sum",
+                "category_field": "session__completed_as_planned",
+                "sort_field": "summary_value",
+                "sort_direction": "desc",
+                "max_slices": 10,
+                "value_format": "integer",
+                "legend_title": "Completion Status",
+                "category_labels": {
+                    "true": "Completed as planned",
+                    "false": "Did not complete as planned"
+                },
+                "category_colors": {
+                    "true": "var(--semantic-primary)",
+                    "false": "var(--semantic-warning)"
+                }
+            }),
+        )
+        .await?;
+    let (_session_stat_component_id, session_stat_component_version_id) =
+        ensure_component_with_config(
+            pool,
+            "Demo Session Total Participants StatCard",
+            "demo-session-total-participants-stat-card",
+            session_dataset_revision_id,
+            "stat_card",
+            json!({
+                "summary_field": "session__participants",
+                "summary_type": "sum",
+                "label": "Total participants",
+                "supporting_text": "Submitted Demo Session Log entries",
+                "panel_style": "accent",
+                "value_format": "integer"
+            }),
+        )
+        .await?;
 
     let dashboard_id = ensure_dashboard(
         pool,
@@ -1336,7 +1494,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         &[
             partner_a, partner_b, program_a, program_b, program_c, program_d, activity_a,
             activity_b, activity_c, activity_d, activity_e, activity_f, session_a, session_b,
-            session_g,
+            session_c, session_d, session_e, session_f, session_g, session_h,
         ],
     )
     .await?;
@@ -1362,7 +1520,32 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             (
                 session_component_version_id,
                 3,
-                json!({"title": "Session Participation"}),
+                json!({"title": "Session Log Table"}),
+            ),
+            (
+                session_bar_component_version_id,
+                4,
+                json!({"title": "Participants by Completion"}),
+            ),
+            (
+                session_line_component_version_id,
+                5,
+                json!({"title": "Participants Over Time"}),
+            ),
+            (
+                session_pie_component_version_id,
+                6,
+                json!({"title": "Completion Share"}),
+            ),
+            (
+                session_donut_component_version_id,
+                7,
+                json!({"title": "Completion Donut"}),
+            ),
+            (
+                session_stat_component_version_id,
+                8,
+                json!({"title": "Total Participants"}),
             ),
         ],
     )
@@ -1378,10 +1561,10 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
         form_count: 6,
         draft_submission_count: 4,
-        submitted_submission_count: 8,
+        submitted_submission_count: 58,
         dataset_count: 4,
         dataset_revision_count: 4,
-        component_count: 4,
+        component_count: 9,
         dashboard_count: 1,
         organization_node_id: session_a,
         form_id: session_form.form_id,
@@ -1448,4 +1631,69 @@ async fn require_demo_seed_target_empty(
     Err(ApiError::BadRequest(
         "Demo seed requires an empty database. Recreate the local database or run local launch with -FreshData before seeding.".into(),
     ))
+}
+
+async fn ensure_component_testing_session_responses(
+    pool: &PgPool,
+    form_version_id: Uuid,
+    session_accounts: &[(Uuid, Uuid)],
+) -> ApiResult<()> {
+    const TOPIC_SETS: &[&[&str]] = &[
+        &["intake", "welcome"],
+        &["attendance", "check_in"],
+        &["family_support", "wellness"],
+        &["resume", "job_search"],
+        &["mentoring", "onboarding"],
+        &["nutrition", "follow_up"],
+    ];
+    const NOTE_PATTERNS: &[&str] = &[
+        "Session stayed on pace with steady participation.",
+        "Facilitator adjusted pacing after participant questions.",
+        "Follow-up materials were requested by several attendees.",
+        "Attendance was lower than planned but discussion quality was high.",
+        "Participants completed the core activities before wrap-up.",
+    ];
+
+    for index in 0..50 {
+        let (node_id, account_id) = session_accounts[index % session_accounts.len()];
+        let topic_set = TOPIC_SETS[index % TOPIC_SETS.len()];
+        let participant_count = 8 + ((index * 7) % 31) as i64;
+        let completed_as_planned = index % 7 != 3;
+        let month = 4 + (index / 17);
+        let day = 1 + ((index * 3) % 27);
+        let session_date = format!("2026-{month:02}-{day:02}");
+        let seed_key = format!("seed_demo:session-component-test-{index:02}");
+        let facilitator_notes = format!(
+            "{} Batch response {}.",
+            NOTE_PATTERNS[index % NOTE_PATTERNS.len()],
+            index + 1
+        );
+        let topics = Value::Array(
+            topic_set
+                .iter()
+                .map(|topic| Value::String((*topic).to_string()))
+                .collect(),
+        );
+
+        ensure_seed_submission(
+            pool,
+            account_id,
+            form_version_id,
+            node_id,
+            SeedSubmissionSpec {
+                seed_key: &seed_key,
+                status: "submitted",
+                values: vec![
+                    ("session_date", json!(session_date)),
+                    ("participants", json!(participant_count)),
+                    ("completed_as_planned", json!(completed_as_planned)),
+                    ("facilitator_notes", json!(facilitator_notes)),
+                    ("topics_covered", topics),
+                ],
+            },
+        )
+        .await?;
+    }
+
+    Ok(())
 }

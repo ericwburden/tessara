@@ -2,11 +2,18 @@
 //!
 //! Keep favicon, stylesheet, preload, and embedded SVG lookup concerns here so native rendering has a single asset metadata source.
 
-/// Route prefix used for SVG brand assets served by the API crate.
+/// Route prefix used for static assets served by the API crate.
 pub const ASSET_PREFIX: &str = "/assets";
+
+#[cfg(any(feature = "ssr", test))]
+pub(crate) struct StaticAsset {
+    pub(crate) content: &'static str,
+    pub(crate) content_type: &'static str,
+}
 
 /// Returns the HTML tags that connect Tessara icons and social previews to a document head.
 pub(crate) fn document_head_tags(title: &str, description: &str) -> String {
+    let asset_version = crate::pipeline::asset_version();
     format!(
         r##"<meta name="description" content="{description}">
     <meta name="theme-color" content="#F8FAFC">
@@ -24,8 +31,28 @@ pub(crate) fn document_head_tags(title: &str, description: &str) -> String {
     <link rel="icon" type="image/svg+xml" sizes="32x32" href="{ASSET_PREFIX}/tessara-favicon-32.svg">
     <link rel="icon" type="image/svg+xml" sizes="64x64" href="{ASSET_PREFIX}/tessara-favicon-64.svg">
     <link rel="mask-icon" href="{ASSET_PREFIX}/tessara-favicon-mono.svg" color="#0F172A">
-    <link rel="apple-touch-icon" href="{ASSET_PREFIX}/tessara-icon-256.svg">"##
+    <link rel="apple-touch-icon" href="{ASSET_PREFIX}/tessara-icon-256.svg">
+    <script src="{ASSET_PREFIX}/d3.v7.9.0.min.js" defer></script>
+    <script src="{ASSET_PREFIX}/tessara-d3-charts.js?v={asset_version}" defer></script>"##
     )
+}
+
+#[cfg(any(feature = "ssr", test))]
+pub(crate) fn static_asset(name: &str) -> Option<StaticAsset> {
+    match name {
+        "d3.v7.9.0.min.js" => Some(StaticAsset {
+            content: include_str!("../../assets/d3.v7.9.0.min.js"),
+            content_type: "application/javascript; charset=utf-8",
+        }),
+        "tessara-d3-charts.js" => Some(StaticAsset {
+            content: include_str!("../../assets/tessara-d3-charts.js"),
+            content_type: "application/javascript; charset=utf-8",
+        }),
+        _ => svg_asset(name).map(|content| StaticAsset {
+            content,
+            content_type: "image/svg+xml; charset=utf-8",
+        }),
+    }
 }
 
 /// Returns an embedded SVG asset by public asset filename.
@@ -45,7 +72,7 @@ pub(crate) fn svg_asset(name: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{document_head_tags, svg_asset};
+    use super::{document_head_tags, static_asset, svg_asset};
 
     #[test]
     /// Verifies the document head exposes brand assets behavior.
@@ -59,6 +86,9 @@ mod tests {
         assert!(head.contains("tessara-icon-256.svg"));
         assert!(head.contains("tessara-icon-512.svg"));
         assert!(head.contains("font-awesome"));
+        assert!(head.contains("d3.v7.9.0.min.js"));
+        assert!(head.contains("tessara-d3-charts.js"));
+        assert!(head.contains(crate::pipeline::asset_version()));
         assert!(head.contains("theme-color"));
         assert!(head.contains("#F8FAFC"));
         assert!(head.contains("light dark"));
@@ -70,5 +100,18 @@ mod tests {
         assert!(svg_asset("tessara-favicon-32.svg").is_some());
         assert!(svg_asset("tessara-wordmark.svg").is_some());
         assert!(svg_asset("missing.svg").is_none());
+    }
+
+    #[test]
+    /// Verifies the static asset lookup serves non-SVG assets behavior.
+    fn static_asset_lookup_serves_chart_renderer() {
+        let d3 = static_asset("d3.v7.9.0.min.js").expect("pinned D3 asset");
+        assert!(d3.content.contains("d3js.org v7.9.0"));
+
+        let asset = static_asset("tessara-d3-charts.js").expect("chart renderer asset");
+
+        assert_eq!(asset.content_type, "application/javascript; charset=utf-8");
+        assert!(asset.content.contains("TessaraCharts"));
+        assert!(static_asset("missing.js").is_none());
     }
 }

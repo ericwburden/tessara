@@ -78,6 +78,53 @@ pub(crate) struct ComponentTableRow {
     pub(crate) values: BTreeMap<String, Option<String>>,
 }
 
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
+pub(crate) struct ComponentVisual {
+    pub(crate) component_id: String,
+    pub(crate) component_version_id: String,
+    pub(crate) dataset_id: String,
+    pub(crate) dataset_version_major: i32,
+    pub(crate) component_type: String,
+    pub(crate) materialization_state: String,
+    pub(crate) value_format: String,
+    pub(crate) legend_title: Option<String>,
+    pub(crate) bar_orientation: Option<String>,
+    pub(crate) bar_comparison_layout: Option<String>,
+    pub(crate) x_axis_label: Option<String>,
+    pub(crate) y_axis_label: Option<String>,
+    #[serde(default)]
+    pub(crate) line_smoothing: Option<bool>,
+    pub(crate) stat: Option<ComponentStatValue>,
+    pub(crate) points: Vec<ComponentVisualPoint>,
+    pub(crate) slices: Vec<ComponentVisualSlice>,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
+pub(crate) struct ComponentStatValue {
+    pub(crate) label: String,
+    pub(crate) value: Option<f64>,
+    pub(crate) display_value: Option<String>,
+    pub(crate) supporting_text: Option<String>,
+    pub(crate) panel_style: String,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
+pub(crate) struct ComponentVisualPoint {
+    pub(crate) x: String,
+    pub(crate) value: f64,
+    pub(crate) display_value: String,
+    pub(crate) color: Option<String>,
+    pub(crate) comparison: Option<String>,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
+pub(crate) struct ComponentVisualSlice {
+    pub(crate) category: String,
+    pub(crate) value: f64,
+    pub(crate) display_value: String,
+    pub(crate) color: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 pub(crate) struct UpdateComponentRequest {
     pub(crate) name: String,
@@ -141,6 +188,23 @@ pub(crate) struct DatasetSummary {
     #[serde(default)]
     pub(crate) provenance: DatasetProvenanceSummary,
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+    #[serde(default)]
+    pub(crate) revisions: Vec<DatasetRevisionFieldSummary>,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+pub(crate) struct DatasetRevisionFieldSummary {
+    pub(crate) version_number: i32,
+    pub(crate) version_major: Option<i32>,
+    pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+pub(crate) struct DatasetDistinctValues {
+    pub(crate) dataset_id: String,
+    pub(crate) version_major: i32,
+    pub(crate) field: String,
+    pub(crate) values: Vec<String>,
 }
 
 #[derive(Clone, Default, Deserialize, PartialEq, Eq)]

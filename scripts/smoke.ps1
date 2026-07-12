@@ -1,6 +1,8 @@
 param(
     [switch]$KeepServices,
     [switch]$ComposeApi,
+    [switch]$UseExistingService,
+    [string]$BaseUrl = "http://127.0.0.1:8080",
     [int]$ApiTimeoutSeconds = 600
 )
 
@@ -10,7 +12,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $tmpDir = Join-Path $repoRoot "tmp"
 $apiOut = Join-Path $tmpDir "tessara-api.out.log"
 $apiErr = Join-Path $tmpDir "tessara-api.err.log"
-$baseUrl = "http://127.0.0.1:8080"
+$baseUrl = $BaseUrl.TrimEnd('/')
 $apiProcess = $null
 $cargoCommand = $null
 
@@ -182,7 +184,9 @@ try {
     Remove-Item -LiteralPath $apiOut, $apiErr -ErrorAction SilentlyContinue
     $cargoCommand = Resolve-CargoCommand
 
-    if ($ComposeApi) {
+    if ($UseExistingService) {
+        Write-Host "Using existing Tessara service at $baseUrl" -ForegroundColor Cyan
+    } elseif ($ComposeApi) {
         docker compose down --remove-orphans | Out-Host
         Assert-LastExitCode "docker compose down"
         Start-ComposeWithRetry -Arguments @("up", "-d", "--build") -CommandName "docker compose up"
@@ -192,17 +196,19 @@ try {
         Start-ComposeWithRetry -Arguments @("up", "-d", "--wait", "postgres") -CommandName "docker compose up"
     }
 
-    $postgresDeadline = (Get-Date).AddSeconds(120)
-    do {
-        docker compose exec -T postgres pg_isready -U tessara -d postgres | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            break
-        }
-        Start-Sleep -Seconds 2
-    } while ((Get-Date) -lt $postgresDeadline)
+    if (-not $UseExistingService) {
+        $postgresDeadline = (Get-Date).AddSeconds(120)
+        do {
+            docker compose exec -T postgres pg_isready -U tessara -d postgres | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                break
+            }
+            Start-Sleep -Seconds 2
+        } while ((Get-Date) -lt $postgresDeadline)
 
-    if ((Get-Date) -ge $postgresDeadline) {
-        throw "Timed out waiting for Postgres readiness"
+        if ((Get-Date) -ge $postgresDeadline) {
+            throw "Timed out waiting for Postgres readiness"
+        }
     }
 
     $env:DATABASE_URL = "postgres://tessara:tessara@localhost:5432/tessara"
@@ -210,14 +216,16 @@ try {
     $env:TESSARA_BIND_ADDR = "127.0.0.1:8080"
     $env:RUST_LOG = "tessara_api=debug,sqlx=warn"
 
-    foreach ($databaseName in @("tessara", "tessara_test")) {
-        $dbExists = Invoke-PostgresSqlWithRetry "SELECT 1 FROM pg_database WHERE datname = '$databaseName'"
-        if (-not ($dbExists | Select-String "1" -Quiet)) {
-            $null = Invoke-PostgresSqlWithRetry "CREATE DATABASE $databaseName"
+    if (-not $UseExistingService) {
+        foreach ($databaseName in @("tessara", "tessara_test")) {
+            $dbExists = Invoke-PostgresSqlWithRetry "SELECT 1 FROM pg_database WHERE datname = '$databaseName'"
+            if (-not ($dbExists | Select-String "1" -Quiet)) {
+                $null = Invoke-PostgresSqlWithRetry "CREATE DATABASE $databaseName"
+            }
         }
     }
 
-    if (-not $ComposeApi) {
+    if (-not $ComposeApi -and -not $UseExistingService) {
         & $cargoCommand test -p tessara-api --test demo_flow | Out-Host
         Assert-LastExitCode "cargo test -p tessara-api --test demo_flow"
 
@@ -296,7 +304,34 @@ try {
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "admin@tessara.local"; password = "tessara-dev-admin" }
     $headers = @{ Authorization = "Bearer $($login.token)" }
-    $seed = Invoke-Json -Method "Post" -Uri "$baseUrl/api/demo/seed" -Headers $headers
+    try {
+        $seed = Invoke-Json -Method "Post" -Uri "$baseUrl/api/demo/seed" -Headers $headers
+    } catch {
+        $formsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/forms" -Headers $headers
+        $datasetsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/datasets" -Headers $headers
+        $componentsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components" -Headers $headers
+        $dashboardsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards" -Headers $headers
+        $nodesForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
+        $submissionsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/submissions" -Headers $headers
+        $sessionForm = $formsForSeed | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
+        $sessionDataset = $datasetsForSeed | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
+        $sessionTableComponent = $componentsForSeed | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
+        $dashboardForSeed = $dashboardsForSeed | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
+        $submissionForSeed = $submissionsForSeed | Where-Object { $_.form_name -eq "Demo Session Log" -and $_.status -eq "submitted" } | Select-Object -First 1
+        if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or -not $dashboardForSeed -or -not $submissionForSeed -or -not $nodesForSeed) {
+            throw "Smoke failure: demo seed failed and existing seeded demo assets could not be found. Original error: $($_.Exception.Message)"
+        }
+        $seed = [pscustomobject]@{
+            seed_version          = "uat-demo-v1"
+            organization_node_id  = ($nodesForSeed | Select-Object -First 1).id
+            form_id               = $sessionForm.id
+            submission_id         = $submissionForSeed.id
+            dataset_id            = $sessionDataset.id
+            component_version_id  = $sessionTableComponent.current_version_id
+            dashboard_id          = $dashboardForSeed.id
+            analytics_values      = 1
+        }
+    }
     $summary = Invoke-Json -Method "Get" -Uri "$baseUrl/api/summary" -Headers $headers
     $operatorLogin = Invoke-Json `
         -Method "Post" `
@@ -318,6 +353,7 @@ try {
     }
     $nodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
     $dashboard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards/$($seed.dashboard_id)" -Headers $headers
+    $datasetDetail = Invoke-Json -Method "Get" -Uri "$baseUrl/api/datasets/$($seed.dataset_id)" -Headers $headers
     $dataset = Invoke-Json -Method "Get" -Uri "$baseUrl/api/datasets/$($seed.dataset_id)/table" -Headers $headers
     $components = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components" -Headers $headers
     $seedComponent = $components | Where-Object { $_.current_version_id -eq $seed.component_version_id } | Select-Object -First 1
@@ -370,6 +406,68 @@ try {
     }
     if ($componentTable.materialization_state -ne "ready" -or $componentTable.rows.Count -lt 1) {
         throw "Expected seeded component table to render ready rows, got: $($componentTable | ConvertTo-Json -Depth 20)"
+    }
+    $seededVisualBar = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/demo-session-log-bar/bar" -Headers $headers
+    $hasCompletedBarSeries = $seededVisualBar.points | Where-Object { $_.comparison -eq "Completed as planned" -and $_.color -eq "var(--semantic-primary)" }
+    $hasIncompleteBarSeries = $seededVisualBar.points | Where-Object { $_.comparison -eq "Did not complete as planned" -and $_.color -eq "var(--semantic-warning)" }
+    if ($seededVisualBar.materialization_state -ne "ready" -or $seededVisualBar.component_type -ne "bar" -or $seededVisualBar.legend_title -ne "Completion Status" -or -not $hasCompletedBarSeries -or -not $hasIncompleteBarSeries) {
+        throw "Expected seeded Demo Session Bar to expose configured labels and colors, got: $($seededVisualBar | ConvertTo-Json -Depth 20)"
+    }
+    $seededVisualLine = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/demo-session-log-line/line" -Headers $headers
+    if ($seededVisualLine.materialization_state -ne "ready" -or $seededVisualLine.component_type -ne "line" -or $seededVisualLine.points.Count -lt 1) {
+        throw "Expected seeded Demo Session Line to render ready points, got: $($seededVisualLine | ConvertTo-Json -Depth 20)"
+    }
+    foreach ($seededSliceVisual in @(
+        @{ Slug = "demo-session-completion-pie"; Kind = "pie" },
+        @{ Slug = "demo-session-completion-donut"; Kind = "donut" }
+    )) {
+        $seededSlices = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/$($seededSliceVisual.Slug)/$($seededSliceVisual.Kind)" -Headers $headers
+        if ($seededSlices.materialization_state -ne "ready" -or $seededSlices.component_type -ne $seededSliceVisual.Kind -or $seededSlices.legend_title -ne "Completion Status" -or -not ($seededSlices.slices | Where-Object { $_.category -eq "Did not complete as planned" -and $_.color -eq "var(--semantic-warning)" })) {
+            throw "Expected seeded Demo Session $($seededSliceVisual.Kind) to expose configured legend, labels, and colors, got: $($seededSlices | ConvertTo-Json -Depth 20)"
+        }
+    }
+    $seededStatCard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/demo-session-total-participants-stat-card/stat-card" -Headers $headers
+    if ($seededStatCard.materialization_state -ne "ready" -or $seededStatCard.component_type -ne "stat_card" -or $seededStatCard.stat.label -ne "Total participants" -or $seededStatCard.stat.supporting_text -ne "Submitted Demo Session Log entries") {
+        throw "Expected seeded Demo Session StatCard to expose configured display text, got: $($seededStatCard | ConvertTo-Json -Depth 20)"
+    }
+    $visualField = $datasetDetail.output_fields | Select-Object -First 1
+    if (-not $visualField -or -not $visualField.key) {
+        throw "Expected seeded dataset to expose an output field for visual component coverage"
+    }
+    $visualSlug = "smoke-visual-bar-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+    $visualComponent = Invoke-Json `
+        -Method "Post" `
+        -Uri "$baseUrl/api/admin/components" `
+        -Headers $headers `
+        -Body @{
+            name        = "Smoke Visual Bar"
+            slug        = $visualSlug
+            description = "Sprint 4B smoke visual component fixture."
+            version     = @{
+                dataset_id            = $seed.dataset_id
+                dataset_version_major = $datasetDetail.current_version_major
+                component_type        = "bar"
+                config                = @{
+                    mode             = "summary"
+                    summary_field    = $visualField.key
+                    summary_type     = "count"
+                    category_field   = $visualField.key
+                    sort_field       = "summary_value"
+                    sort_direction   = "desc"
+                    number_of_points = 20
+                    value_format     = "integer"
+                }
+            }
+        }
+    $visualDetail = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/components/$visualSlug" -Headers $headers
+    $visualVersion = $visualDetail.versions | Select-Object -First 1
+    Invoke-Json `
+        -Method "Post" `
+        -Uri "$baseUrl/api/admin/components/$($visualComponent.id)/versions/$($visualVersion.id)/publish" `
+        -Headers $headers | Out-Null
+    $visualBar = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/$visualSlug/bar" -Headers $headers
+    if ($visualBar.materialization_state -ne "ready" -or $visualBar.component_type -ne "bar" -or $visualBar.points.Count -lt 1) {
+        throw "Expected visual Bar component to render ready points, got: $($visualBar | ConvertTo-Json -Depth 20)"
     }
     if (-not ($operatorMe.capabilities -contains "forms:read") -or $operatorMe.scope_nodes.Count -lt 1) {
         throw "Expected operator account context to include effective forms read capability and scoped nodes"
@@ -430,6 +528,8 @@ try {
     Assert-ProtectedShell -Content $componentVersionsPage -Needles @("Component Versions") -Context "component versions shell"
     $componentViewerPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/view" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $componentViewerPage -Needles @("Component") -Context "component viewer shell"
+    $visualViewerPage = Invoke-Html -Uri "$baseUrl/components/$visualSlug/view" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $visualViewerPage -Needles @("Component") -Context "visual component viewer shell"
 
     [pscustomobject]@{
         status = "passed"
@@ -437,6 +537,8 @@ try {
         dashboard_id = $seed.dashboard_id
         dataset_rows = $dataset.rows.Count
         component_rows = $componentTable.rows.Count
+        seeded_visual_points = $seededVisualBar.points.Count
+        visual_points = $visualBar.points.Count
         first_dataset_participants = $dataset.rows[0].values.participants
     } | ConvertTo-Json -Depth 10
 }
@@ -445,7 +547,7 @@ finally {
         Stop-Process -Id $apiProcess.Id -Force
     }
 
-    if (-not $KeepServices) {
+    if (-not $KeepServices -and -not $UseExistingService) {
         docker compose down -v | Out-Host
         Assert-LastExitCode "docker compose down"
     }

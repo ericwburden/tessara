@@ -6,7 +6,11 @@ use std::path::PathBuf;
 
 pub const OUTPUT_NAME: &str = "tessara-web";
 pub const APP_ROOT_ID: &str = "app-root";
-const ASSET_VERSION: &str = "20260708-remove-component-publish-route-1";
+const ASSET_VERSION: &str = env!("TESSARA_ASSET_VERSION");
+
+pub const fn asset_version() -> &'static str {
+    ASSET_VERSION
+}
 
 pub fn site_root() -> PathBuf {
     std::env::var("LEPTOS_SITE_ROOT")

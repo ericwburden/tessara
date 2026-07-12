@@ -40,6 +40,7 @@ type DatasetSummary = {
   name: string;
   slug?: string;
   visibility_nodes: VisibilityNode[];
+  output_fields: Array<{ key: string; label: string; field_type: string }>;
   current_revision_id: string | null;
   current_version_major?: number | null;
   current_version_minor?: number | null;
@@ -64,11 +65,22 @@ type DatasetTable = {
   }>;
 };
 type ComponentSummary = { id: string; name: string; slug: string };
-type ComponentDefinition = { id: string; name: string; versions: unknown[] };
+type ComponentDefinition = {
+  id: string;
+  name: string;
+  slug: string;
+  versions: Array<{ id: string; status: string; component_type: string }>;
+};
 type ComponentTable = {
   component_version_id: string;
   materialization_state: string;
   rows: Array<{ values: Record<string, string | null> }>;
+};
+type ComponentVisual = {
+  component_version_id: string;
+  materialization_state: string;
+  component_type: string;
+  points: Array<{ x: string; value: number }>;
 };
 type DashboardSummary = { id: string; name: string; visibility_nodes: VisibilityNode[] };
 type DashboardDefinition = DashboardSummary & { description: string | null };
@@ -144,6 +156,8 @@ type FixtureState = {
   outOfScopeDataset: DatasetSummary;
   inScopeComponent: ComponentSummary;
   outOfScopeComponent: ComponentSummary;
+  inScopeVisualComponent: ComponentSummary;
+  outOfScopeVisualComponent: ComponentSummary;
   inScopeDashboard: DashboardSummary;
   outOfScopeDashboard: DashboardSummary;
   inScopeAssignmentId: string;
@@ -304,6 +318,48 @@ function tableConfig(dataset: DatasetSummary) {
   return {
     visible_columns: [firstField],
   };
+}
+
+function visualConfig(dataset: DatasetSummary) {
+  const firstField = dataset.output_fields[0]?.key;
+  expect(firstField, `dataset ${dataset.name} should expose output fields`).toBeTruthy();
+  return {
+    mode: "summary",
+    summary_field: firstField,
+    summary_type: "count",
+    category_field: firstField,
+    sort_field: "summary_value",
+    sort_direction: "desc",
+    number_of_points: 20,
+    value_format: "integer",
+  };
+}
+
+async function createPublishedVisualComponent(
+  admin: APIRequestContext,
+  dataset: DatasetSummary,
+  slug: string,
+  name: string,
+) {
+  const component = await postJson<IdResponse>(admin, "/api/admin/components", {
+    name,
+    slug,
+    description: "Visual component permission fixture.",
+    version: {
+      dataset_id: dataset.id,
+      dataset_version_major: datasetMajor(dataset),
+      component_type: "bar",
+      config: visualConfig(dataset),
+    },
+  });
+  const detail = await getJson<ComponentDefinition>(admin, `/api/admin/components/${slug}`);
+  const version = detail.versions[0];
+  expect(version.component_type).toBe("bar");
+  await postJson<IdResponse>(
+    admin,
+    `/api/admin/components/${component.id}/versions/${version.id}/publish`,
+  );
+  return { id: component.id, name, slug };
 }
 
 async function createAssignmentFor(
@@ -540,6 +596,18 @@ async function setupFixtures(): Promise<FixtureState> {
     (component) => !scopedComponentIds.has(component.id),
     "an out-of-scope component should exist",
   );
+  const inScopeVisualComponent = await createPublishedVisualComponent(
+    admin,
+    inScopeDataset,
+    `${RUN_ID}-visible-bar-component`,
+    `${RUN_ID} Visible Bar Component`,
+  );
+  const outOfScopeVisualComponent = await createPublishedVisualComponent(
+    admin,
+    outOfScopeDataset,
+    `${RUN_ID}-hidden-bar-component`,
+    `${RUN_ID} Hidden Bar Component`,
+  );
 
   const outDashboard = await postJson<IdResponse>(admin, "/api/admin/dashboards", {
     name: `${RUN_ID} Out Dashboard`,
@@ -587,6 +655,8 @@ async function setupFixtures(): Promise<FixtureState> {
     outOfScopeDataset,
     inScopeComponent,
     outOfScopeComponent,
+    inScopeVisualComponent,
+    outOfScopeVisualComponent,
     inScopeDashboard,
     outOfScopeDashboard,
     inScopeAssignmentId: inScopeAssignment.id,
@@ -1120,6 +1190,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     const components = await getJson<ComponentSummary[]>(fixtures.scopedManager, "/api/components");
     expect(components.some((component) => component.id === fixtures.inScopeComponent.id)).toBe(true);
     expect(components.some((component) => component.id === fixtures.outOfScopeComponent.id)).toBe(false);
+    expect(components.some((component) => component.id === fixtures.inScopeVisualComponent.id)).toBe(true);
+    expect(components.some((component) => component.id === fixtures.outOfScopeVisualComponent.id)).toBe(false);
     const inComponent = await getJson<ComponentDefinition>(
       fixtures.scopedManager,
       `/api/components/${fixtures.inScopeComponent.slug}`,
@@ -1131,6 +1203,18 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
     expect(componentTable.materialization_state).toBe("ready");
     expect(componentTable.rows.length).toBeGreaterThan(0);
+    const visualComponent = await getJson<ComponentDefinition>(
+      fixtures.scopedManager,
+      `/api/components/${fixtures.inScopeVisualComponent.slug}`,
+    );
+    expect(visualComponent.versions.some((version) => version.component_type === "bar")).toBe(true);
+    const visual = await getJson<ComponentVisual>(
+      fixtures.scopedManager,
+      `/api/components/${fixtures.inScopeVisualComponent.slug}/bar`,
+    );
+    expect(visual.materialization_state).toBe("ready");
+    expect(visual.component_type).toBe("bar");
+    expect(visual.points.length).toBeGreaterThan(0);
     await expectStatus(
       fixtures.scopedManager,
       "get",
@@ -1143,6 +1227,18 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       `/api/components/${fixtures.outOfScopeComponent.slug}/table`,
       [403],
     );
+    await expectStatus(
+      fixtures.scopedManager,
+      "get",
+      `/api/components/${fixtures.outOfScopeVisualComponent.slug}`,
+      [403],
+    );
+    await expectStatus(
+      fixtures.scopedManager,
+      "get",
+      `/api/components/${fixtures.outOfScopeVisualComponent.slug}/bar`,
+      [403],
+    );
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
     await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
     await expect(
@@ -1153,6 +1249,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.slug }),
     ).toBeVisible();
     await expect(page.getByRole("table")).toBeVisible();
+    await page.goto(`/components/${fixtures.inScopeVisualComponent.slug}/view`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: fixtures.inScopeVisualComponent.name }),
+    ).toBeVisible();
+    await expect(page.locator(".component-visual-preview")).toBeVisible();
 
     const dashboards = await getJson<DashboardSummary[]>(fixtures.scopedManager, "/api/dashboards");
     expect(dashboards.some((dashboard) => dashboard.id === fixtures.inScopeDashboard.id)).toBe(true);

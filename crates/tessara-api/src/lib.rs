@@ -85,7 +85,7 @@ pub fn router(state: AppState) -> Router {
             "/login",
             get(|| async { native_app("/login", "Tessara Sign In", "Sign in to Tessara.") }),
         )
-        .route("/assets/{asset_name}", get(svg_asset))
+        .route("/assets/{asset_name}", get(static_asset))
         .nest_service("/pkg", ServeDir::new(shell_pkg_dir()))
         .route(
             "/organization",
@@ -546,14 +546,12 @@ fn is_protected_ui_request(request: &Request) -> bool {
         || path.starts_with("/pkg/"))
 }
 
-async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
+async fn static_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
     #[cfg(feature = "ssr")]
-    match tessara_web::svg_asset(&asset_name) {
-        Some(svg) => (
-            [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
-            svg,
-        )
-            .into_response(),
+    match tessara_web::static_asset(&asset_name) {
+        Some((content, content_type)) => {
+            ([(header::CONTENT_TYPE, content_type)], content).into_response()
+        }
         None => (StatusCode::NOT_FOUND, "asset not found").into_response(),
     }
 

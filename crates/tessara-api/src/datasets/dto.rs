@@ -582,6 +582,22 @@ pub struct DatasetTable {
     pub(crate) rows: Vec<DatasetTableRow>,
 }
 
+/// Query selecting one field's distinct values from a published Dataset major line.
+#[derive(Deserialize)]
+pub struct DatasetDistinctValuesQuery {
+    pub(crate) version_major: i32,
+    pub(crate) field: String,
+}
+
+/// Distinct non-empty values for one field in a published Dataset major line.
+#[derive(Serialize)]
+pub struct DatasetDistinctValues {
+    pub(crate) dataset_id: Uuid,
+    pub(crate) version_major: i32,
+    pub(crate) field: String,
+    pub(crate) values: Vec<String>,
+}
+
 /// Generated SQL preview for an unsaved dataset definition draft.
 #[derive(Serialize)]
 pub struct DatasetSqlPreview {

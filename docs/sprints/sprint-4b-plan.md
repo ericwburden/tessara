@@ -2,6 +2,8 @@
 
 Kickoff status: started from clean `main` on 2026-07-09 after Sprint 4A was fast-forward merged.
 
+Closeout status: complete on 2026-07-12 after the migration set was squashed into the baseline, the database was recreated and reseeded from an empty volume, and the complete workspace/browser/UAT validation suite passed. The rebuilt UAT stack remains available at `http://localhost:8080`.
+
 ## Sprint Summary
 
 Sprint 4B makes visual presentation assets first-class Components. Sprint 4A established Dataset major-line-backed Table components and the Component versioning model; this sprint extends that model so authors can build and view visual components without using deprecated workbench-style visual analysis flows.
@@ -32,7 +34,7 @@ Visual presentation assets are first-class components.
 - Visual components bind to Dataset major lines exactly like Table components: `dataset_id`, `dataset_version_major`, and `binding_mode = major_line`. They do not bind directly to Dataset revisions and do not create component-owned aggregation definitions.
 - Visual components may own a bounded presentation transform over the bound Dataset major-line output, inspired by the legacy MMI chart model but implemented on the new `Dataset -> ComponentVersion` path. The transform may summarize, group, limit, and handle missing values for the visual; it must not create separate Report, Aggregation, Chart, workbench, or dashboard assets.
 - Sprint 4B delivers core legacy-chart parity adapted to Components: StatCard replaces the legacy Badge concept, Bar supports both summary and comparison modes, Line supports trend-style summaries, and Pie/Donut share summary-by-category behavior. Gauges, richer chart controls, and additional chart types remain future scope.
-- The v1 visual renderer should be native Leptos/SVG/CSS in `tessara-web-components`. Do not introduce a JavaScript chart controller, bridge asset, or workbench-owned rendering path for this sprint.
+- The v1 visual renderer uses native Leptos component routes with a small D3-backed chart renderer asset for chart drawing. Do not introduce a `/bridge/*` asset, deprecated workbench-owned rendering path, or separate report/chart asset family for this sprint.
 - Existing `/api/components/{component_ref}/table` and versioned table execution endpoints remain table-only compatibility endpoints for Table viewers and tests. Visual execution uses kind-specific endpoints: `GET /api/components/{component_ref}/bar`, `/line`, `/pie`, `/donut`, and `/stat-card`, plus versioned variants under `GET /api/components/{component_ref}/versions/{version_id}/{kind}`. These endpoints must load only the selected `ComponentVersion`, its Dataset major-line binding, and the bound Dataset major-line rows/fields.
 - Kind-specific visual execution endpoints must reject component-kind mismatches with a stable 400 error. `/stat-card` is the only public StatCard execution path and maps to `component_type = stat_card`; `/stat_card` is not a public alias and should fall through normal routing as a 404.
 - The common Component list/detail/version routes remain the entrypoint for all Component kinds. Kind-specific execution endpoints are implementation/API boundaries for viewers and tests, not separate product asset families.
@@ -147,6 +149,7 @@ The application must provide visual component builder and viewer screens for the
 - Management routes expose only manageable visual component drafts/versions.
 - Touched legacy visual-analysis endpoints, if any, remain adapter-only and enforce scoped component/dashboard visibility before returning metadata.
 - Touched Component routes remain native Leptos SSR routes.
+- Chart visuals render through D3 in the Component viewer while preserving native route ownership and ComponentVersion-sourced data.
 - Sprint closeout includes evidence that touched Component routes are hydration-clean, browser-console-clean, and do not request `/bridge/*` assets.
 - Sprint closeout includes a legacy visual-analysis endpoint inventory: either "No legacy visual-analysis endpoints touched" or a list of touched endpoints with adapter-only proof, source-of-truth proof, scoped visibility tests, and automated coverage.
 
@@ -242,6 +245,7 @@ Frontend/E2E scenarios:
 - Create/publish/view a Line component.
 - Create/publish/view both Pie and Donut component treatments.
 - Create/publish/view a StatCard component.
+- Chart component viewers render D3 SVG output from the kind-specific Component visual endpoint payload.
 - Validation findings render for incomplete or invalid visual configs.
 - Visual component save draft, publish first version, update existing version, create new version with note, and explicit older-version viewing flows work.
 - Reader-only users do not see draft metadata or authoring actions.
@@ -266,6 +270,35 @@ Permission fixture requirements:
 8. Add reader/manage scoped authorization coverage for visual component routes and any touched legacy adapter endpoint.
 9. Add unit and Playwright coverage for visual authoring, validation, publishing, viewing, and scoped negative paths.
 10. Run full closeout validation, update permission scenario docs, and update sprint progress notes with the legacy endpoint inventory.
+
+## Closeout Migration Squash
+
+The development branch intentionally keeps the Sprint 4B schema changes in
+forward migrations `002_visual_component_types.sql` and
+`003_visual_component_constraint.sql`. Do not rewrite the baseline while the
+sprint is active; this preserves repeatable upgrades for existing developer
+databases and keeps schema ownership reviewable.
+
+At sprint closeout:
+
+1. Fold the visual `component_type` enum values and the supported-kind
+   constraint into `001_baseline.sql`.
+2. Remove migrations `002` and `003` after confirming their complete schema
+   effect is represented in the baseline.
+3. Update `crates/tessara-api/src/db.rs` migration tests: refresh the baseline
+   integrity hash and replace the development-chain assertion with an assertion
+   that the squashed baseline contains every supported Component kind.
+4. Recreate the local database from an empty volume, apply the single baseline,
+   and reseed all demo data.
+5. Run the full workspace, browser, smoke, and UAT suites against that fresh
+   database before recording closeout evidence.
+
+The squash is a closeout operation, not part of this maintainability refactor.
+
+Closeout result: completed on 2026-07-12. The migration directory contains
+only `001_baseline.sql`; the fresh database reports migration version `1` and
+the `component_type` enum contains `table`, `bar`, `line`, `pie`, `donut`, and
+`stat_card`.
 
 ## Dependencies And Blockers
 

@@ -5,7 +5,8 @@ use super::http::{fetch_json_request, send_json_request};
 #[cfg(feature = "hydrate")]
 use super::types::{
     ComponentDefinition, ComponentSummary, ComponentTable, ComponentValidationResponse,
-    CreateComponentVersionRequest, DatasetSummary, IdResponse, SaveComponentEditRequest,
+    ComponentVisual, CreateComponentVersionRequest, DatasetDistinctValues, DatasetSummary,
+    IdResponse, SaveComponentEditRequest,
 };
 
 #[cfg(feature = "hydrate")]
@@ -58,8 +59,53 @@ pub(crate) async fn fetch_component_table(
 }
 
 #[cfg(feature = "hydrate")]
+pub(crate) async fn fetch_component_visual(
+    component_ref: &str,
+    component_type: &str,
+) -> Result<Option<ComponentVisual>, String> {
+    let path_kind = match component_type {
+        "stat_card" => "stat-card",
+        "bar" | "line" | "pie" | "donut" => component_type,
+        _ => return Ok(None),
+    };
+    fetch_json_request(
+        &format!("/api/components/{component_ref}/{path_kind}"),
+        "Component visual",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn preview_component_visual(
+    payload: CreateComponentVersionRequest,
+) -> Result<ComponentVisual, String> {
+    send_json_request(
+        gloo_net::http::Request::post("/api/admin/components/preview"),
+        serde_json::to_string(&payload)
+            .map_err(|_| "Component preview payload is invalid.".to_string())?,
+        "Component preview",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_datasets() -> Result<Option<Vec<DatasetSummary>>, String> {
     fetch_json_request("/api/datasets", "Dataset list").await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn fetch_dataset_distinct_values(
+    dataset_id: &str,
+    version_major: i32,
+    field: &str,
+) -> Result<Option<DatasetDistinctValues>, String> {
+    fetch_json_request(
+        &format!(
+            "/api/datasets/{dataset_id}/distinct-values?version_major={version_major}&field={field}"
+        ),
+        "Dataset distinct values",
+    )
+    .await
 }
 
 #[cfg(feature = "hydrate")]

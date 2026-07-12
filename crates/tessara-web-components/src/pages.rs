@@ -1,14 +1,23 @@
 //! Route-level page composition for the Components feature.
 
+mod editor;
+#[cfg(any(feature = "hydrate", test))]
+mod editor_config;
+
+use editor::*;
+#[cfg(any(feature = "hydrate", test))]
+use editor_config::*;
+
 use std::collections::BTreeMap;
 
 #[cfg(feature = "hydrate")]
 use super::types::{
     CreateComponentVersionRequest, SaveComponentEditRequest, UpdateComponentRequest,
 };
-use icons::{ChevronDown, History, ListFilter, Pencil, Search, X};
+use icons::{ChevronDown, CircleHelp, History, ListFilter, PanelRight, Pencil, Search, X};
 use leptos::prelude::*;
-use serde_json::{Value, json};
+#[cfg(feature = "hydrate")]
+use leptos::wasm_bindgen::{JsCast, closure::Closure};
 use tessara_web_data_ops::{
     DataOpsFiltersEditor, DataOpsProjectionEditor, DatasetFieldDraft as DataOpsDatasetFieldDraft,
     DatasetRowFilterDraft as DataOpsRowFilterDraft,
@@ -16,14 +25,14 @@ use tessara_web_data_ops::{
 use tessara_web_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
     EmptyState, InteractiveDataTable, InteractiveTableColumn, InteractiveTableRow, PageHeader,
-    TableFilterHeader, TablePaginationFooter,
+    Skeleton, TableFilterHeader, TablePaginationFooter,
 };
 
 #[cfg(feature = "hydrate")]
 use super::api;
 use super::types::{
     ComponentDefinition, ComponentSummary, ComponentTable, ComponentValidationFinding,
-    ComponentVersionSummary, DatasetFieldDefinition, DatasetSummary,
+    ComponentVersionSummary, ComponentVisual, DatasetFieldDefinition, DatasetSummary,
 };
 
 #[component]
@@ -128,9 +137,14 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let dataset_error = RwSignal::new(None::<String>);
     let name = RwSignal::new(String::new());
     let slug = RwSignal::new(String::new());
+    let slug_manually_edited = RwSignal::new(false);
     let description = RwSignal::new(String::new());
     let dataset_id = RwSignal::new(String::new());
     let dataset_major = RwSignal::new(String::from("1"));
+    let dataset_picker_open = RwSignal::new(false);
+    let dataset_picker_search = RwSignal::new(String::new());
+    let dataset_picker_active_index = RwSignal::new(0_usize);
+    let dataset_picker_search_input = NodeRef::<leptos::html::Input>::new();
     let component_type = RwSignal::new(String::from("table"));
     let columns = RwSignal::new(Vec::<DataOpsDatasetFieldDraft>::new());
     let filters = RwSignal::new(Vec::<DataOpsRowFilterDraft>::new());
@@ -138,29 +152,74 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let sort_field = RwSignal::new(String::new());
     let sort_direction = RwSignal::new(String::from("asc"));
     let page_size = RwSignal::new(String::from("50"));
+    let visual_summary_field = RwSignal::new(String::new());
+    let visual_summary_type = RwSignal::new(String::from("count"));
+    let visual_category_field = RwSignal::new(String::new());
+    let visual_category_labels = RwSignal::new(String::new());
+    let visual_category_colors = RwSignal::new(String::new());
+    let visual_legend_title = RwSignal::new(String::new());
+    let visual_comparison_field = RwSignal::new(String::new());
+    let visual_bar_orientation = RwSignal::new(String::from("horizontal"));
+    let visual_bar_comparison_layout = RwSignal::new(String::from("grouped"));
+    let visual_x_axis_label = RwSignal::new(String::new());
+    let visual_y_axis_label = RwSignal::new(String::new());
+    let visual_x_field = RwSignal::new(String::new());
+    let visual_line_smoothing = RwSignal::new(true);
+    let visual_sort_field = RwSignal::new(String::new());
+    let visual_sort_direction = RwSignal::new(String::from("asc"));
+    let visual_limit = RwSignal::new(String::from("20"));
+    let visual_value_format = RwSignal::new(String::from("plain"));
+    let visual_category_missing_policy = RwSignal::new(String::from("omit"));
+    let visual_comparison_missing_policy = RwSignal::new(String::from("omit"));
+    let visual_missing_policy = RwSignal::new(String::from("omit"));
+    let stat_label = RwSignal::new(String::new());
+    let stat_supporting_text = RwSignal::new(String::new());
+    let stat_panel_style = RwSignal::new(String::from("default"));
     let editing_component_id = RwSignal::new(None::<String>);
     let editing_version_id = RwSignal::new(None::<String>);
     let current_published_version_id = RwSignal::new(None::<String>);
     let publish_menu_open = RwSignal::new(false);
+    let preview_drawer_open = RwSignal::new(false);
     let consumer_modal_open = RwSignal::new(false);
     let consumer_search = RwSignal::new(String::new());
     let new_version_note = RwSignal::new(String::new());
+    let draft_preview = RwSignal::new(None::<ComponentVisual>);
+    let draft_preview_error = RwSignal::new(None::<String>);
+    let draft_preview_loading = RwSignal::new(false);
+    let draft_preview_generation = RwSignal::new(0_u64);
+    let draft_preview_timeout = RwSignal::new(None::<i32>);
 
     let selected_fields = Memo::new(move |_| {
+        let selected_major = dataset_major.get().trim().parse::<i32>().ok();
         datasets
             .get()
             .into_iter()
             .find(|dataset| dataset.id == dataset_id.get())
-            .map(|dataset| dataset.output_fields)
+            .and_then(|dataset| {
+                selected_major.map(|major| dataset_fields_for_major(&dataset, major))
+            })
             .unwrap_or_default()
     });
-    let selected_dataset = Memo::new(move |_| {
-        datasets
-            .get()
-            .into_iter()
-            .find(|dataset| dataset.id == dataset_id.get())
+    let select_dataset_version =
+        Callback::new(move |(selected_dataset_id, major): (String, i32)| {
+            dataset_id.set(selected_dataset_id);
+            dataset_major.set(major.to_string());
+            columns.set(Vec::new());
+            filters.set(Vec::new());
+            sort_field.set(String::new());
+            visual_category_labels.set(String::new());
+            visual_category_colors.set(String::new());
+            dataset_picker_search.set(String::new());
+            dataset_picker_active_index.set(0);
+            dataset_picker_open.set(false);
+        });
+    Effect::new(move |_| {
+        if dataset_picker_open.get()
+            && let Some(input) = dataset_picker_search_input.get()
+        {
+            let _ = input.focus();
+        }
     });
-
     Effect::new(move |_| load_datasets(datasets, dataset_error));
     Effect::new({
         let component_ref = component_ref.clone();
@@ -182,17 +241,136 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     sort_field,
                     sort_direction,
                     page_size,
+                    visual_summary_field,
+                    visual_summary_type,
+                    visual_category_field,
+                    visual_category_labels,
+                    visual_category_colors,
+                    visual_legend_title,
+                    visual_comparison_field,
+                    visual_bar_orientation,
+                    visual_bar_comparison_layout,
+                    visual_x_axis_label,
+                    visual_y_axis_label,
+                    visual_x_field,
+                    visual_line_smoothing,
+                    visual_sort_field,
+                    visual_sort_direction,
+                    visual_limit,
+                    visual_value_format,
+                    visual_category_missing_policy,
+                    visual_comparison_missing_policy,
+                    visual_missing_policy,
+                    stat_label,
+                    stat_supporting_text,
+                    stat_panel_style,
+                    slug_manually_edited,
                     error,
                 );
             }
         }
     });
+    Effect::new(move |_| {
+        let values = ComponentFormValues {
+            name: name.get(),
+            slug: slug.get(),
+            description: description.get(),
+            dataset_id: dataset_id.get(),
+            dataset_major: dataset_major.get(),
+            columns: columns.get(),
+            filters: filters.get(),
+            sort_field: sort_field.get(),
+            sort_direction: sort_direction.get(),
+            page_size: page_size.get(),
+            component_type: component_type.get(),
+            visual_summary_field: visual_summary_field.get(),
+            visual_summary_type: visual_summary_type.get(),
+            visual_category_field: visual_category_field.get(),
+            visual_category_labels: visual_category_labels.get(),
+            visual_category_colors: visual_category_colors.get(),
+            visual_legend_title: visual_legend_title.get(),
+            visual_comparison_field: visual_comparison_field.get(),
+            visual_bar_orientation: visual_bar_orientation.get(),
+            visual_bar_comparison_layout: visual_bar_comparison_layout.get(),
+            visual_x_axis_label: visual_x_axis_label.get(),
+            visual_y_axis_label: visual_y_axis_label.get(),
+            visual_x_field: visual_x_field.get(),
+            visual_line_smoothing: visual_line_smoothing.get(),
+            visual_sort_field: visual_sort_field.get(),
+            visual_sort_direction: visual_sort_direction.get(),
+            visual_limit: visual_limit.get(),
+            visual_value_format: visual_value_format.get(),
+            visual_category_missing_policy: visual_category_missing_policy.get(),
+            visual_comparison_missing_policy: visual_comparison_missing_policy.get(),
+            visual_missing_policy: visual_missing_policy.get(),
+            stat_label: stat_label.get(),
+            stat_supporting_text: stat_supporting_text.get(),
+            stat_panel_style: stat_panel_style.get(),
+        };
+        schedule_component_editor_preview(
+            values,
+            draft_preview,
+            draft_preview_error,
+            draft_preview_loading,
+            draft_preview_generation,
+            draft_preview_timeout,
+        );
+    });
+    let has_kind_specific_changes = Signal::derive(move || match component_type.get().as_str() {
+        "table" => !columns.get().is_empty() || !sort_field.get().trim().is_empty(),
+        _ => {
+            !visual_summary_field.get().trim().is_empty()
+                || !visual_category_field.get().trim().is_empty()
+                || !visual_comparison_field.get().trim().is_empty()
+                || !visual_x_field.get().trim().is_empty()
+                || !stat_label.get().trim().is_empty()
+        }
+    });
+    let change_component_kind = Callback::new(move |next_kind: String| {
+        if next_kind == component_type.get_untracked() {
+            return;
+        }
+        columns.set(Vec::new());
+        sort_field.set(String::new());
+        sort_direction.set("asc".into());
+        page_size.set("50".into());
+        visual_summary_field.set(String::new());
+        visual_summary_type.set("count".into());
+        visual_category_field.set(String::new());
+        visual_category_labels.set(String::new());
+        visual_category_colors.set(String::new());
+        visual_legend_title.set(String::new());
+        visual_comparison_field.set(String::new());
+        visual_bar_orientation.set("horizontal".into());
+        visual_bar_comparison_layout.set("grouped".into());
+        visual_x_axis_label.set(String::new());
+        visual_y_axis_label.set(String::new());
+        visual_x_field.set(String::new());
+        visual_line_smoothing.set(true);
+        visual_sort_field.set(String::new());
+        visual_sort_direction.set("asc".into());
+        visual_limit.set("20".into());
+        visual_value_format.set("plain".into());
+        visual_category_missing_policy.set("omit".into());
+        visual_comparison_missing_policy.set("omit".into());
+        visual_missing_policy.set("omit".into());
+        stat_label.set(String::new());
+        stat_supporting_text.set(String::new());
+        stat_panel_style.set("default".into());
+        component_type.set(next_kind);
+        focus_component_kind_editor();
+    });
 
     view! {
-        <section class="route-panel components-page">
+        <section
+            class="route-panel components-page"
+            on:click=move |_| dataset_picker_open.set(false)
+        >
             <ComponentsBreadcrumb current=title/>
             <PageHeader title/>
-            <form class="route-panel__section form-grid component-editor-form" on:submit=move |event| {
+            <form
+                class="route-panel__section form-grid component-editor-form"
+                on:submit=move |event| {
                 event.prevent_default();
                 create_component_from_form(
                     ComponentSaveIntent {
@@ -213,6 +391,30 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         sort_field: sort_field.get_untracked(),
                         sort_direction: sort_direction.get_untracked(),
                         page_size: page_size.get_untracked(),
+                        component_type: component_type.get_untracked(),
+                        visual_summary_field: visual_summary_field.get_untracked(),
+                        visual_summary_type: visual_summary_type.get_untracked(),
+                        visual_category_field: visual_category_field.get_untracked(),
+                        visual_category_labels: visual_category_labels.get_untracked(),
+                        visual_category_colors: visual_category_colors.get_untracked(),
+                        visual_legend_title: visual_legend_title.get_untracked(),
+                        visual_comparison_field: visual_comparison_field.get_untracked(),
+                        visual_bar_orientation: visual_bar_orientation.get_untracked(),
+                        visual_bar_comparison_layout: visual_bar_comparison_layout.get_untracked(),
+                        visual_x_axis_label: visual_x_axis_label.get_untracked(),
+                        visual_y_axis_label: visual_y_axis_label.get_untracked(),
+                        visual_x_field: visual_x_field.get_untracked(),
+                        visual_line_smoothing: visual_line_smoothing.get_untracked(),
+                        visual_sort_field: visual_sort_field.get_untracked(),
+                        visual_sort_direction: visual_sort_direction.get_untracked(),
+                        visual_limit: visual_limit.get_untracked(),
+                        visual_value_format: visual_value_format.get_untracked(),
+                        visual_category_missing_policy: visual_category_missing_policy.get_untracked(),
+                        visual_comparison_missing_policy: visual_comparison_missing_policy.get_untracked(),
+                        visual_missing_policy: visual_missing_policy.get_untracked(),
+                        stat_label: stat_label.get_untracked(),
+                        stat_supporting_text: stat_supporting_text.get_untracked(),
+                        stat_panel_style: stat_panel_style.get_untracked(),
                     },
                     ComponentFormFeedback {
                         message,
@@ -220,93 +422,386 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         findings: validation_findings,
                     },
                 );
-            }>
+                }
+            >
                 <label class="form-field">
                     <span>"Name"</span>
                     <input
                         prop:value=move || name.get()
-                        on:change=move |event| commit_component_name(name, slug, event_target_value(&event))
-                        on:blur=move |event| commit_component_name(name, slug, event_target_value(&event))
+                        on:input=move |event| name.set(event_target_value(&event))
+                        on:change=move |event| commit_component_name(name, slug, slug_manually_edited, event_target_value(&event))
+                        on:blur=move |event| commit_component_name(name, slug, slug_manually_edited, event_target_value(&event))
+                        on:focusout=move |event| commit_component_name(name, slug, slug_manually_edited, event_target_value(&event))
                     />
                 </label>
                 <label class="form-field">
                     <span>"Slug"</span>
-                    <input prop:value=move || slug.get() on:input=move |event| slug.set(event_target_value(&event))/>
+                    <input prop:value=move || slug.get() on:input=move |event| {
+                        slug_manually_edited.set(true);
+                        slug.set(event_target_value(&event));
+                    }/>
                 </label>
                 <label class="form-field form-field--wide">
                     <span>"Description"</span>
                     <textarea prop:value=move || description.get() on:input=move |event| description.set(event_target_value(&event))></textarea>
                 </label>
-                <label class="form-field form-field--wide">
-                    <span>"Dataset Version"</span>
-                    <select prop:value=move || selected_dataset_major_value(&dataset_id.get(), &dataset_major.get()) on:change=move |event| {
-                        let value = event_target_value(&event);
-                        if let Some((selected_dataset_id, selected_major)) = value.split_once('|') {
-                            dataset_id.set(selected_dataset_id.to_string());
-                            dataset_major.set(selected_major.to_string());
-                            columns.set(Vec::new());
-                            filters.set(Vec::new());
-                            sort_field.set(String::new());
+                <div
+                    class="form-field form-field--wide component-dataset-picker"
+                    on:click=move |event| event.stop_propagation()
+                >
+                    <span id="component-dataset-picker-label">"Dataset Version"</span>
+                    <button
+                        id="component-dataset-picker-trigger"
+                        type="button"
+                        class="component-dataset-picker__trigger"
+                        role="combobox"
+                        aria-labelledby="component-dataset-picker-label"
+                        aria-controls="component-dataset-picker-options"
+                        aria-haspopup="listbox"
+                        aria-expanded=move || dataset_picker_open.get().to_string()
+                        on:click=move |_| {
+                            dataset_picker_active_index.set(0);
+                            dataset_picker_open.update(|open| *open = !*open);
                         }
-                    }>
-                        <option value="" prop:selected=move || selected_dataset_major_value(&dataset_id.get(), &dataset_major.get()).is_empty()>"Select a Dataset version"</option>
-                        {move || datasets.get().into_iter().flat_map(|dataset| {
-                            dataset_picker_majors(&dataset).into_iter().map(move |major| {
-                                let value = format!("{}|{}", dataset.id, major);
-                                let selected_value = value.clone();
-                                let label = dataset_catalog_option_label(&dataset, major);
-                                view! {
-                                    <option
-                                        value=value
-                                        prop:selected=move || selected_dataset_major_value(&dataset_id.get(), &dataset_major.get()) == selected_value
-                                    >
-                                        {label}
-                                    </option>
-                                }
-                            }).collect::<Vec<_>>()
-                        }).collect_view()}
-                    </select>
-                </label>
-                <div class="component-editor__dataset-subpanels">
-                    <DatasetCatalogContext dataset=Signal::derive(move || selected_dataset.get())/>
-                    <TableDefaultsControls
-                        fields=Signal::derive(move || selected_fields.get())
-                        sort_field
-                        sort_direction
-                        page_size
-                    />
+                        on:keydown=move |event| {
+                            if event.key() == "ArrowDown" {
+                                event.prevent_default();
+                                dataset_picker_active_index.set(0);
+                                dataset_picker_open.set(true);
+                            } else if event.key() == "Escape" {
+                                dataset_picker_open.set(false);
+                            }
+                        }
+                    >
+                        <span>{move || selected_dataset_picker_label(&datasets.get(), &dataset_id.get(), &dataset_major.get())}</span>
+                        <ChevronDown class="component-dataset-picker__chevron"/>
+                    </button>
+                    {move || dataset_picker_open.get().then(|| {
+                        let query = dataset_picker_search.get();
+                        let rows = dataset_picker_rows(&datasets.get(), &query);
+                        view! {
+                            <div class="component-dataset-picker__menu" id="component-dataset-picker-options">
+                                <div class="component-dataset-picker__search">
+                                    <Search class="component-dataset-picker__search-icon"/>
+                                    <input
+                                        type="search"
+                                        role="searchbox"
+                                        aria-label="Filter dataset versions"
+                                        aria-controls="component-dataset-picker-listbox"
+                                        aria-activedescendant=move || format!("component-dataset-picker-option-{}", dataset_picker_active_index.get())
+                                        placeholder="Filter datasets, versions, tags, or provenance"
+                                        node_ref=dataset_picker_search_input
+                                        prop:value=query
+                                        on:input=move |event| {
+                                            dataset_picker_active_index.set(0);
+                                            dataset_picker_search.set(event_target_value(&event));
+                                        }
+                                        on:keydown={
+                                            move |event| {
+                                                let rows = dataset_picker_rows(&datasets.get(), &dataset_picker_search.get());
+                                                match event.key().as_str() {
+                                                    "ArrowDown" => {
+                                                        event.prevent_default();
+                                                        let last = rows.len().saturating_sub(1);
+                                                        dataset_picker_active_index.update(|index| *index = (*index + 1).min(last));
+                                                    }
+                                                    "ArrowUp" => {
+                                                        event.prevent_default();
+                                                        dataset_picker_active_index.update(|index| *index = index.saturating_sub(1));
+                                                    }
+                                                    "Enter" => {
+                                                        event.prevent_default();
+                                                        if let Some((dataset, major)) = rows.get(dataset_picker_active_index.get_untracked()) {
+                                                            select_dataset_version.run((dataset.id.clone(), *major));
+                                                            focus_component_dataset_picker_trigger();
+                                                        }
+                                                    }
+                                                    "Escape" => {
+                                                        event.prevent_default();
+                                                        dataset_picker_open.set(false);
+                                                        focus_component_dataset_picker_trigger();
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
+                                    />
+                                </div>
+                                <div class="component-dataset-picker__table-wrap">
+                                    <table class="component-dataset-picker__table">
+                                        <thead>
+                                            <tr>
+                                                <th>"Dataset"</th>
+                                                <th>"Version"</th>
+                                                <th>"Tags"</th>
+                                                <th>"Provenance"</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="component-dataset-picker-listbox" role="listbox" aria-label="Dataset versions">
+                                            {rows.into_iter().enumerate().map(|(index, (dataset, major))| {
+                                                let selected_dataset_id = dataset.id.clone();
+                                                let selected_dataset_id_for_check = selected_dataset_id.clone();
+                                                let selected_dataset_id_for_aria = selected_dataset_id.clone();
+                                                let tags = if dataset.tags.is_empty() { "None".into() } else { dataset.tags.join(", ") };
+                                                let provenance = dataset_provenance_label(&dataset.provenance);
+                                                view! {
+                                                    <tr
+                                                        id=format!("component-dataset-picker-option-{index}")
+                                                        role="option"
+                                                        aria-selected=move || {
+                                                            (dataset_id.get() == selected_dataset_id_for_aria
+                                                                && dataset_major.get() == major.to_string()).to_string()
+                                                        }
+                                                        class:component-dataset-picker__row--active=move || dataset_picker_active_index.get() == index
+                                                        class:component-dataset-picker__row--selected=move || {
+                                                        dataset_id.get() == selected_dataset_id_for_check
+                                                            && dataset_major.get() == major.to_string()
+                                                        }
+                                                    >
+                                                        <td>
+                                                            <button
+                                                                type="button"
+                                                                class="component-dataset-picker__option"
+                                                                on:click=move |_| {
+                                                                    select_dataset_version.run((selected_dataset_id.clone(), major));
+                                                                    focus_component_dataset_picker_trigger();
+                                                                }
+                                                            >
+                                                                {dataset.name.clone()}
+                                                            </button>
+                                                        </td>
+                                                        <td>{format!("v{major}")}</td>
+                                                        <td>{tags}</td>
+                                                        <td>{provenance}</td>
+                                                    </tr>
+                                                }
+                                            }).collect_view()}
+                                        </tbody>
+                                    </table>
+                                    {(dataset_picker_rows(&datasets.get(), &dataset_picker_search.get()).is_empty()).then(|| view! {
+                                        <p class="component-dataset-picker__empty">"No dataset versions match this filter."</p>
+                                    })}
+                                </div>
+                            </div>
+                        }
+                    })}
                 </div>
-                <DataOpsProjectionEditor
-                    available_fields=Signal::derive(move || {
-                        selected_fields
-                            .get()
-                            .into_iter()
-                            .map(|field| component_data_ops_field(&field))
-                            .collect::<Vec<_>>()
-                    })
-                    fields=Signal::derive(move || columns.get())
-                    active_source_tab=Signal::derive(move || projection_active_source_tab.get())
-                    on_active_source_tab_change=Callback::new(move |tab| projection_active_source_tab.set(tab))
-                    on_fields_change=Callback::new(move |fields| columns.set(fields))
-                    title="Displayed Fields"
-                    collapsible=true
-                    initially_open=false
-                />
-                <DataOpsFiltersEditor
-                    fields=Signal::derive(move || {
-                        selected_fields
-                            .get()
-                            .into_iter()
-                            .map(|field| component_data_ops_field(&field))
-                            .collect::<Vec<_>>()
-                    })
-                    row_filters=Signal::derive(move || filters.get())
-                    on_row_filters_change=Callback::new(move |row_filters| filters.set(row_filters))
-                    title="Default Filters"
-                    collapsible=true
-                    initially_open=false
-                />
+                {move || if component_type.get() == "table" {
+                    view! {
+                        <div class="component-editor__workbench">
+                            <div class="component-editor__config-stack" tabindex="-1" data-component-kind-editor>
+                                <ComponentEditorFieldset title="Filters" class="component-editor__visual-filters">
+                                    <DataOpsFiltersEditor
+                                        fields=Signal::derive(move || {
+                                            selected_fields
+                                                .get()
+                                                .into_iter()
+                                                .map(|field| component_data_ops_field(&field))
+                                                .collect::<Vec<_>>()
+                                        })
+                                        row_filters=Signal::derive(move || filters.get())
+                                        on_row_filters_change=Callback::new(move |row_filters| filters.set(row_filters))
+                                        embedded=true
+                                    />
+                                </ComponentEditorFieldset>
+                                <TableDefaultsControls
+                                    fields=Signal::derive(move || selected_fields.get())
+                                    sort_field
+                                    sort_direction
+                                    page_size
+                                />
+                            </div>
+                            <div class="component-editor__right-rail">
+                                <div class="component-editor__kind-stack">
+                                    <ComponentKindControls
+                                        component_type
+                                        has_kind_specific_changes
+                                        on_kind_change=change_component_kind
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! {
+                        <div class="component-editor__workbench">
+                            <div class="component-editor__config-stack" tabindex="-1" data-component-kind-editor>
+                                <ComponentEditorFieldset title="Filters" class="component-editor__visual-filters">
+                                    <DataOpsFiltersEditor
+                                        fields=Signal::derive(move || {
+                                            selected_fields
+                                                .get()
+                                                .into_iter()
+                                                .map(|field| component_data_ops_field(&field))
+                                                .collect::<Vec<_>>()
+                                        })
+                                        row_filters=Signal::derive(move || filters.get())
+                                        on_row_filters_change=Callback::new(move |row_filters| filters.set(row_filters))
+                                        embedded=true
+                                    />
+                                </ComponentEditorFieldset>
+                                {move || if component_type.get() == "bar" {
+                                    view! {
+                                        <BarConfigEditor
+                                            fields=Signal::derive(move || selected_fields.get())
+                                            summary_field=visual_summary_field
+                                            summary_type=visual_summary_type
+                                            category_field=visual_category_field
+                                            category_labels=visual_category_labels
+                                            category_colors=visual_category_colors
+                                            legend_title=visual_legend_title
+                                            comparison_field=visual_comparison_field
+                                            orientation=visual_bar_orientation
+                                            comparison_layout=visual_bar_comparison_layout
+                                            x_axis_label=visual_x_axis_label
+                                            y_axis_label=visual_y_axis_label
+                                            sort_field=visual_sort_field
+                                            sort_direction=visual_sort_direction
+                                            limit=visual_limit
+                                            value_format=visual_value_format
+                                            category_missing_policy=visual_category_missing_policy
+                                            comparison_missing_policy=visual_comparison_missing_policy
+                                            value_missing_policy=visual_missing_policy
+                                        />
+                                    }.into_any()
+                                } else if component_type.get() == "line" {
+                                    view! { <LineConfigEditor fields=Signal::derive(move || selected_fields.get()) summary_field=visual_summary_field summary_type=visual_summary_type x_field=visual_x_field smoothing=visual_line_smoothing sort_field=visual_sort_field sort_direction=visual_sort_direction limit=visual_limit value_format=visual_value_format x_missing_policy=visual_category_missing_policy value_missing_policy=visual_missing_policy/> }.into_any()
+                                } else if matches!(component_type.get().as_str(), "pie" | "donut") {
+                                    view! { <PieDonutConfigEditor fields=Signal::derive(move || selected_fields.get()) summary_field=visual_summary_field summary_type=visual_summary_type category_field=visual_category_field category_labels=visual_category_labels category_colors=visual_category_colors legend_title=visual_legend_title sort_field=visual_sort_field sort_direction=visual_sort_direction limit=visual_limit value_format=visual_value_format category_missing_policy=visual_category_missing_policy value_missing_policy=visual_missing_policy/> }.into_any()
+                                } else {
+                                    view! { <StatCardConfigEditor fields=Signal::derive(move || selected_fields.get()) summary_field=visual_summary_field summary_type=visual_summary_type value_format=visual_value_format value_missing_policy=visual_missing_policy stat_label stat_supporting_text stat_panel_style/> }.into_any()
+                                }}
+                                {move || matches!(component_type.get().as_str(), "bar" | "pie" | "donut").then(|| view! {
+                                    <CategoryDisplayControls
+                                        dataset_id
+                                        dataset_major
+                                        component_type
+                                        fields=Signal::derive(move || selected_fields.get())
+                                        category_field=visual_category_field
+                                        comparison_field=visual_comparison_field
+                                        category_labels=visual_category_labels
+                                        category_colors=visual_category_colors
+                                        legend_title=visual_legend_title
+                                    />
+                                })}
+                            </div>
+                            <div class="component-editor__right-rail">
+                                <div class="component-editor__kind-stack">
+                                    <ComponentKindControls
+                                        component_type
+                                        has_kind_specific_changes
+                                        on_kind_change=change_component_kind
+                                    />
+                                </div>
+                                <div class="component-editor__preview-stack">
+                                    <div class=move || if preview_drawer_open.get() {
+                                        "component-editor__preview-drawer is-open"
+                                    } else {
+                                        "component-editor__preview-drawer"
+                                    }>
+                                        <button
+                                            class="component-editor__preview-drawer-scrim"
+                                            type="button"
+                                            aria-label="Close preview"
+                                            on:click=move |_| {
+                                                preview_drawer_open.set(false);
+                                                focus_component_preview_button();
+                                            }
+                                        ></button>
+                                        <div
+                                            id="component-editor-preview-drawer"
+                                            class="component-editor__preview-drawer-surface"
+                                            role=move || preview_drawer_open.get().then_some("dialog")
+                                            aria-modal=move || preview_drawer_open.get().then_some("true")
+                                            aria-label="Component preview"
+                                            tabindex="-1"
+                                            on:keydown=move |event| {
+                                                if event.key() == "Escape" {
+                                                    event.prevent_default();
+                                                    preview_drawer_open.set(false);
+                                                    focus_component_preview_button();
+                                                } else if event.key() == "Tab" && preview_drawer_open.get_untracked() {
+                                                    event.prevent_default();
+                                                    focus_component_preview_close_button();
+                                                }
+                                            }
+                                        >
+                                            <header class="component-editor__preview-drawer-header">
+                                                <strong>"Preview"</strong>
+                                                <button
+                                                    class="icon-button icon-button--compact-control"
+                                                    id="component-editor-preview-close"
+                                                    type="button"
+                                                    aria-label="Close preview"
+                                                    title="Close preview"
+                                                    on:click=move |_| {
+                                                        preview_drawer_open.set(false);
+                                                        focus_component_preview_button();
+                                                    }
+                                                >
+                                                    <X class="icon-button__icon"/>
+                                                </button>
+                                            </header>
+                                            <ComponentEditorDraftPreview
+                                                visual=draft_preview
+                                                error=draft_preview_error
+                                                loading=draft_preview_loading
+                                                component_type
+                                                fields=Signal::derive(move || selected_fields.get())
+                                                summary_field=visual_summary_field
+                                                summary_type=visual_summary_type
+                                                category_field=visual_category_field
+                                                comparison_field=visual_comparison_field
+                                                sort_direction=visual_sort_direction
+                                                limit=visual_limit
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    class="component-editor__preview-fab"
+                                    id="component-editor-preview-fab"
+                                    type="button"
+                                    aria-label="Open preview"
+                                    aria-controls="component-editor-preview-drawer"
+                                    aria-expanded=move || preview_drawer_open.get().to_string()
+                                    title="Preview"
+                                    on:click=move |_| {
+                                        preview_drawer_open.set(true);
+                                        focus_component_preview_drawer();
+                                    }
+                                >
+                                    <PanelRight class="component-editor__preview-fab-icon"/>
+                                </button>
+                            </div>
+                        </div>
+                    }.into_any()
+                }}
+                {move || (component_type.get() == "table").then(|| view! {
+                    <ComponentEditorFieldset title="Displayed Fields" class="component-editor__projection-panel">
+                        <DataOpsProjectionEditor
+                            available_fields=Signal::derive(move || {
+                                selected_fields
+                                    .get()
+                                    .into_iter()
+                                    .map(|field| component_data_ops_field(&field))
+                                    .collect::<Vec<_>>()
+                            })
+                            fields=Signal::derive(move || columns.get())
+                            active_source_tab=Signal::derive(move || projection_active_source_tab.get())
+                            on_active_source_tab_change=Callback::new(move |tab| projection_active_source_tab.set(tab))
+                            on_fields_change=Callback::new(move |fields| columns.set(fields))
+                        />
+                    </ComponentEditorFieldset>
+                })}
                 <div class="form-actions">
+                    <button
+                        class="button button--secondary button--warning"
+                        type="button"
+                        on:click=move |_| cancel_component_edit()
+                    >
+                        "Cancel"
+                    </button>
                     {move || editing_version_id.get().map(|version_id| {
                         let component_id = editing_component_id.get_untracked().unwrap_or_default();
                         view! {
@@ -318,7 +813,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                     error,
                                     validation_findings,
                                 );
-                            }>"Delete Draft"</button>
+                            }>"Discard Draft"</button>
                         }
                     })}
                     <button class="button button--secondary" type="submit">"Save Draft"</button>
@@ -369,6 +864,30 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                         sort_field: sort_field.get_untracked(),
                                         sort_direction: sort_direction.get_untracked(),
                                         page_size: page_size.get_untracked(),
+                                        component_type: component_type.get_untracked(),
+                                        visual_summary_field: visual_summary_field.get_untracked(),
+                                        visual_summary_type: visual_summary_type.get_untracked(),
+                                        visual_category_field: visual_category_field.get_untracked(),
+                                        visual_category_labels: visual_category_labels.get_untracked(),
+                                        visual_category_colors: visual_category_colors.get_untracked(),
+                                        visual_legend_title: visual_legend_title.get_untracked(),
+                                        visual_comparison_field: visual_comparison_field.get_untracked(),
+                                        visual_bar_orientation: visual_bar_orientation.get_untracked(),
+                                        visual_bar_comparison_layout: visual_bar_comparison_layout.get_untracked(),
+                                        visual_x_axis_label: visual_x_axis_label.get_untracked(),
+                                        visual_y_axis_label: visual_y_axis_label.get_untracked(),
+                                        visual_x_field: visual_x_field.get_untracked(),
+                                        visual_line_smoothing: visual_line_smoothing.get_untracked(),
+                                        visual_sort_field: visual_sort_field.get_untracked(),
+                                        visual_sort_direction: visual_sort_direction.get_untracked(),
+                                        visual_limit: visual_limit.get_untracked(),
+                                        visual_value_format: visual_value_format.get_untracked(),
+                                        visual_category_missing_policy: visual_category_missing_policy.get_untracked(),
+                                        visual_comparison_missing_policy: visual_comparison_missing_policy.get_untracked(),
+                                        visual_missing_policy: visual_missing_policy.get_untracked(),
+                                        stat_label: stat_label.get_untracked(),
+                                        stat_supporting_text: stat_supporting_text.get_untracked(),
+                                        stat_panel_style: stat_panel_style.get_untracked(),
                                     },
                                     ComponentFormFeedback {
                                         message,
@@ -474,6 +993,30 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                             sort_field: sort_field.get_untracked(),
                                             sort_direction: sort_direction.get_untracked(),
                                             page_size: page_size.get_untracked(),
+                                            component_type: component_type.get_untracked(),
+                                            visual_summary_field: visual_summary_field.get_untracked(),
+                                            visual_summary_type: visual_summary_type.get_untracked(),
+                                            visual_category_field: visual_category_field.get_untracked(),
+                                            visual_category_labels: visual_category_labels.get_untracked(),
+                                            visual_category_colors: visual_category_colors.get_untracked(),
+                                            visual_legend_title: visual_legend_title.get_untracked(),
+                                            visual_comparison_field: visual_comparison_field.get_untracked(),
+                                            visual_bar_orientation: visual_bar_orientation.get_untracked(),
+                                            visual_bar_comparison_layout: visual_bar_comparison_layout.get_untracked(),
+                                            visual_x_axis_label: visual_x_axis_label.get_untracked(),
+                                            visual_y_axis_label: visual_y_axis_label.get_untracked(),
+                                            visual_x_field: visual_x_field.get_untracked(),
+                                            visual_line_smoothing: visual_line_smoothing.get_untracked(),
+                                            visual_sort_field: visual_sort_field.get_untracked(),
+                                            visual_sort_direction: visual_sort_direction.get_untracked(),
+                                            visual_limit: visual_limit.get_untracked(),
+                                            visual_value_format: visual_value_format.get_untracked(),
+                                            visual_category_missing_policy: visual_category_missing_policy.get_untracked(),
+                                            visual_comparison_missing_policy: visual_comparison_missing_policy.get_untracked(),
+                                            visual_missing_policy: visual_missing_policy.get_untracked(),
+                                            stat_label: stat_label.get_untracked(),
+                                            stat_supporting_text: stat_supporting_text.get_untracked(),
+                                            stat_panel_style: stat_panel_style.get_untracked(),
                                         },
                                         ComponentFormFeedback {
                                             message,
@@ -507,6 +1050,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     let component_error = RwSignal::new(None::<String>);
     let can_manage_component = RwSignal::new(false);
     let table = RwSignal::new(None::<ComponentTable>);
+    let visual = RwSignal::new(None::<ComponentVisual>);
     let error = RwSignal::new(None::<String>);
     let component_ref_for_title = component_ref.clone();
 
@@ -524,7 +1068,20 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     });
     Effect::new({
         let component_ref = component_ref.clone();
-        move |_| load_component_table(component_ref.clone(), String::new(), table, error)
+        move |_| {
+            if let Some(component_type) = published_component_type(component.get()).as_deref() {
+                if component_type == "table" {
+                    load_component_table(component_ref.clone(), String::new(), table, error);
+                } else {
+                    load_component_visual(
+                        component_ref.clone(),
+                        component_type.to_string(),
+                        visual,
+                        error,
+                    );
+                }
+            }
+        }
     });
 
     view! {
@@ -539,6 +1096,16 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                             .unwrap_or_else(|| component_ref_for_title.clone())
                     }}</h1>
                 </div>
+                {move || can_manage_component.get().then(|| {
+                    let edit_href = format!("/components/{}/edit", component_ref.clone());
+                    let versions_href = format!("/components/{}/versions", component_ref.clone());
+                    view! {
+                        <div class="page-header__actions">
+                            <a class="button button--secondary" href=versions_href>"Versions"</a>
+                            <a class="button button--secondary" href=edit_href>"Edit"</a>
+                        </div>
+                    }
+                })}
             </header>
             {move || {
                 if component_loading.get() {
@@ -546,10 +1113,14 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                 } else if let Some(message) = component_error.get() {
                     view! { <EmptyState title="Configuration unavailable" message=message/> }.into_any()
                 } else if let Some(component) = component.get() {
-                    if component.versions.iter().any(|version| version.status == "published") {
-                        view! { <ComponentTablePreviewSection table=table.get() table_error=error.get()/> }.into_any()
+                    if let Some(component_type) = published_component_type(Some(component.clone())) {
+                        if component_type == "table" {
+                            view! { <ComponentTablePreviewSection table=table.get() table_error=error.get()/> }.into_any()
+                        } else {
+                            view! { <ComponentVisualPreviewSection visual=visual.get() visual_error=error.get()/> }.into_any()
+                        }
                     } else {
-                        view! { <EmptyState title="No published version" message="This component does not have a published table yet."/> }.into_any()
+                        view! { <EmptyState title="No published version" message="This component does not have a published version yet."/> }.into_any()
                     }
                 } else {
                     view! { <EmptyState title="Component unavailable" message="Component data could not be loaded."/> }.into_any()
@@ -562,7 +1133,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
 #[component]
 fn ValidationFindingsPanel(findings: Vec<ComponentValidationFinding>) -> impl IntoView {
     view! {
-        <section class="route-panel__section validation-findings" aria-label="Validation Findings">
+        <section class="route-panel__section validation-findings" aria-label="Validation Findings" aria-live="polite">
             <h2>"Validation Findings"</h2>
             <ul>
                 {findings.into_iter().map(|finding| {
@@ -581,74 +1152,6 @@ fn ValidationFindingsPanel(findings: Vec<ComponentValidationFinding>) -> impl In
                 }).collect_view()}
             </ul>
         </section>
-    }
-}
-
-#[component]
-fn DatasetCatalogContext(dataset: Signal<Option<DatasetSummary>>) -> impl IntoView {
-    view! {
-        <section class="route-panel__section component-editor__subpanel">
-            {move || if let Some(dataset) = dataset.get() {
-                let tags = dataset_tag_label(&dataset.tags);
-                let provenance = dataset_provenance_label(&dataset.provenance);
-                view! {
-                    <h2>"Dataset Context"</h2>
-                    <table class="info-list-table component-editor__context-table">
-                        <tbody>
-                            <tr><th scope="row">"Grain"</th><td>{dataset.grain}</td></tr>
-                            <tr><th scope="row">"Tags"</th><td>{tags}</td></tr>
-                            <tr><th scope="row">"Provenance"</th><td>{provenance}</td></tr>
-                        </tbody>
-                    </table>
-                }.into_any()
-            } else {
-                view! {
-                    <h2>"Dataset Context"</h2>
-                    <p class="muted">"Select a Dataset version to review tags, provenance, and output fields."</p>
-                }.into_any()
-            }}
-        </section>
-    }
-}
-
-#[component]
-fn TableDefaultsControls(
-    fields: Signal<Vec<DatasetFieldDefinition>>,
-    sort_field: RwSignal<String>,
-    sort_direction: RwSignal<String>,
-    page_size: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <fieldset class="route-panel__section component-editor__subpanel component-editor__table-defaults">
-            <legend>"Table Defaults"</legend>
-            <label class="form-field">
-                <span>"Sort Field"</span>
-                <select prop:value=move || sort_field.get() on:change=move |event| sort_field.set(event_target_value(&event))>
-                    <option value="">"Default row order"</option>
-                    {move || fields.get().into_iter().map(|field| {
-                        let label = format!("{} ({})", field.label, field.field_type);
-                        view! { <option value=field.key>{label}</option> }
-                    }).collect_view()}
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Sort Direction"</span>
-                <select prop:value=move || sort_direction.get() on:change=move |event| sort_direction.set(event_target_value(&event))>
-                    <option value="asc">"Ascending"</option>
-                    <option value="desc">"Descending"</option>
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Page Size"</span>
-                <input
-                    type="number"
-                    min="1"
-                    max="200"
-                    prop:value=move || page_size.get()
-                    on:input=move |event| page_size.set(event_target_value(&event))
-                />
-            </label>
-        </fieldset>
     }
 }
 
@@ -791,6 +1294,194 @@ fn ComponentTablePreview(table: ComponentTable) -> impl IntoView {
                 />
             }.into_any()
         }}
+    }
+}
+
+#[component]
+fn ComponentVisualPreviewSection(
+    visual: Option<ComponentVisual>,
+    visual_error: Option<String>,
+) -> impl IntoView {
+    view! {
+        <section class="route-panel__section component-visual-preview">
+            {if let Some(message) = visual_error {
+                view! { <EmptyState title="Preview unavailable" message=message/> }.into_any()
+            } else if let Some(visual) = visual {
+                view! { <ComponentVisualPreview visual/> }.into_any()
+            } else {
+                view! { <EmptyState title="Loading preview" message="Fetching the published visual preview."/> }.into_any()
+            }}
+        </section>
+    }
+}
+
+#[component]
+fn ComponentEditorDraftPreview(
+    visual: RwSignal<Option<ComponentVisual>>,
+    error: RwSignal<Option<String>>,
+    loading: RwSignal<bool>,
+    component_type: RwSignal<String>,
+    fields: Signal<Vec<DatasetFieldDefinition>>,
+    summary_field: RwSignal<String>,
+    summary_type: RwSignal<String>,
+    category_field: RwSignal<String>,
+    comparison_field: RwSignal<String>,
+    sort_direction: RwSignal<String>,
+    limit: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <aside class="route-panel__section component-editor-preview">
+            <header class="component-editor-preview__header">
+                <div>
+                    <h2>"Preview"</h2>
+                    <p>"Uses up to 100 rows from the current draft"</p>
+                </div>
+                <span class=move || if error.get().is_some() {
+                    "component-editor-preview__badge is-error"
+                } else if loading.get() {
+                    "component-editor-preview__badge is-loading"
+                } else {
+                    "component-editor-preview__badge"
+                }>
+                    {move || if error.get().is_some() {
+                        "Needs attention"
+                    } else if loading.get() {
+                        "Updating"
+                    } else if visual.get().is_some() {
+                        "Valid config"
+                    } else {
+                        "Incomplete"
+                    }}
+                </span>
+            </header>
+            <div class="component-editor-preview__body" aria-live="polite">
+                {move || if let Some(message) = error.get() {
+                    view! { <EmptyState title="Preview unavailable" message/> }.into_any()
+                } else if let Some(visual) = visual.get() {
+                    view! { <ComponentVisualPreview visual/> }.into_any()
+                } else {
+                    view! {
+                        <EmptyState
+                            title="Complete the data mapping"
+                            message="Choose the required Dataset fields to render this draft."
+                        />
+                    }.into_any()
+                }}
+            </div>
+            <p class="component-editor-preview__note">
+                {move || component_editor_execution_summary(
+                    &component_type.get(),
+                    &fields.get(),
+                    &summary_field.get(),
+                    &summary_type.get(),
+                    &category_field.get(),
+                    &comparison_field.get(),
+                    &sort_direction.get(),
+                    &limit.get(),
+                )}
+            </p>
+        </aside>
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn component_editor_execution_summary(
+    component_type: &str,
+    fields: &[DatasetFieldDefinition],
+    summary_field: &str,
+    summary_type: &str,
+    category_field: &str,
+    comparison_field: &str,
+    sort_direction: &str,
+    limit: &str,
+) -> String {
+    let summary_label = field_label_for_key(fields, summary_field)
+        .unwrap_or_else(|| "the selected value field".into());
+    let calculation = match summary_type {
+        "unique_count" => "counting unique values of",
+        "sum" => "summing",
+        "average" => "averaging",
+        "median" => "taking the median of",
+        _ => "counting non-empty values of",
+    };
+    if component_type == "stat_card" {
+        return format!("Calculates one value by {calculation} {summary_label}.");
+    }
+    let category_label = field_label_for_key(fields, category_field)
+        .unwrap_or_else(|| "the selected category field".into());
+    let comparison = field_label_for_key(fields, comparison_field)
+        .map(|label| format!(", split by {label}"))
+        .unwrap_or_default();
+    let direction = if sort_direction == "desc" {
+        "descending"
+    } else {
+        "ascending"
+    };
+    format!(
+        "Shows up to {} {category_label} groups{comparison}, {calculation} {summary_label}, ordered {direction}.",
+        limit.trim().parse::<usize>().unwrap_or(20)
+    )
+}
+
+#[component]
+fn ComponentVisualPreview(visual: ComponentVisual) -> impl IntoView {
+    match visual.component_type.as_str() {
+        "stat_card" => view! { <ComponentStatCardPreview visual/> }.into_any(),
+        _ => view! { <ComponentD3ChartPreview visual/> }.into_any(),
+    }
+}
+
+#[component]
+fn ComponentStatCardPreview(visual: ComponentVisual) -> impl IntoView {
+    let class_name = format!(
+        "component-stat-card component-stat-card--{}",
+        visual
+            .stat
+            .as_ref()
+            .map(|stat| stat.panel_style.as_str())
+            .unwrap_or("default")
+    );
+    view! {
+        <div class=class_name>
+            {if let Some(stat) = visual.stat {
+                view! {
+                    <p>{stat.label}</p>
+                    <strong>{stat.display_value.unwrap_or_else(|| "-".into())}</strong>
+                    {stat.supporting_text.map(|text| view! { <span>{text}</span> })}
+                }.into_any()
+            } else {
+                view! { <EmptyState title="No stat value" message="The published StatCard returned no value."/> }.into_any()
+            }}
+        </div>
+    }
+}
+
+#[component]
+fn ComponentD3ChartPreview(visual: ComponentVisual) -> impl IntoView {
+    let kind = visual.component_type.clone();
+    let item_count = if matches!(kind.as_str(), "pie" | "donut") {
+        visual.slices.len()
+    } else {
+        visual.points.len()
+    };
+    let is_empty = item_count == 0;
+    let payload = serde_json::to_string(&visual).unwrap_or_else(|_| "{}".into());
+    let aria_label = format!("{} chart preview", component_type_label(&kind));
+    view! {
+        <div class="component-chart component-d3-chart" data-chart=payload>
+            {if is_empty {
+                view! { <EmptyState title="No visual data" message="The published visual returned no grouped values."/> }.into_any()
+            } else {
+                view! {
+                    <div class="component-d3-chart__surface" role="img" aria-label=aria_label>
+                        <div class="component-d3-chart__loading" aria-label="Loading chart preview">
+                            <Skeleton class="skeleton--text skeleton--short"/>
+                            <Skeleton class="skeleton--chart"/>
+                        </div>
+                    </div>
+                }.into_any()
+            }}
+        </div>
     }
 }
 
@@ -1169,6 +1860,11 @@ fn materialization_empty_state(state: &str) -> (&'static str, String) {
 fn component_type_label(component_type: &str) -> &'static str {
     match component_type {
         "table" => "Table",
+        "bar" => "Bar",
+        "line" => "Line",
+        "pie" => "Pie",
+        "donut" => "Donut",
+        "stat_card" => "Stat Card",
         _ => "Component",
     }
 }
@@ -1295,12 +1991,41 @@ fn dataset_catalog_option_label(dataset: &DatasetSummary, major: i32) -> String 
     parts.join(" · ")
 }
 
-fn dataset_tag_label(tags: &[String]) -> String {
-    if tags.is_empty() {
-        "No tags".into()
-    } else {
-        tags.join(", ")
-    }
+fn selected_dataset_picker_label(
+    datasets: &[DatasetSummary],
+    dataset_id: &str,
+    dataset_major: &str,
+) -> String {
+    let Some(major) = dataset_major.parse::<i32>().ok() else {
+        return "Select a Dataset version".into();
+    };
+    datasets
+        .iter()
+        .find(|dataset| dataset.id == dataset_id)
+        .map(|dataset| dataset_catalog_option_label(dataset, major))
+        .unwrap_or_else(|| "Select a Dataset version".into())
+}
+
+fn dataset_picker_rows(datasets: &[DatasetSummary], query: &str) -> Vec<(DatasetSummary, i32)> {
+    let query = query.trim().to_lowercase();
+    datasets
+        .iter()
+        .flat_map(|dataset| {
+            dataset_picker_majors(dataset)
+                .into_iter()
+                .map(move |major| (dataset.clone(), major))
+        })
+        .filter(|(dataset, major)| {
+            query.is_empty()
+                || dataset.name.to_lowercase().contains(&query)
+                || format!("v{major}").contains(&query)
+                || major.to_string().contains(&query)
+                || dataset.tags.join(", ").to_lowercase().contains(&query)
+                || dataset_provenance_label(&dataset.provenance)
+                    .to_lowercase()
+                    .contains(&query)
+        })
+        .collect()
 }
 
 fn dataset_provenance_label(provenance: &super::types::DatasetProvenanceSummary) -> String {
@@ -1338,6 +2063,23 @@ fn dataset_picker_majors(dataset: &DatasetSummary) -> Vec<i32> {
     } else {
         dataset.major_versions.clone()
     }
+}
+
+fn dataset_fields_for_major(
+    dataset: &DatasetSummary,
+    version_major: i32,
+) -> Vec<DatasetFieldDefinition> {
+    dataset
+        .revisions
+        .iter()
+        .filter(|revision| revision.version_major == Some(version_major))
+        .max_by_key(|revision| revision.version_number)
+        .map(|revision| revision.output_fields.clone())
+        .or_else(|| {
+            (dataset.current_version_major == Some(version_major))
+                .then(|| dataset.output_fields.clone())
+        })
+        .unwrap_or_default()
 }
 
 fn csv_field_keys(value: &str) -> Vec<String> {
@@ -1384,276 +2126,8 @@ fn toggle_visible_column(value: &mut String, key: &str, all_keys: &[String]) {
     }
 }
 
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn build_component_config(
-    columns: &[DataOpsDatasetFieldDraft],
-    filters: &[DataOpsRowFilterDraft],
-    sort_field: &str,
-    sort_direction: &str,
-    page_size: &str,
-) -> Value {
-    let defaults = table_defaults_config(sort_field, sort_direction, page_size);
-    let display_labels = columns
-        .iter()
-        .map(|field| (field.key.clone(), Value::String(field.label.clone())))
-        .collect::<serde_json::Map<_, _>>();
-    let filters = filters
-        .iter()
-        .filter(|filter| !filter.field_key.trim().is_empty())
-        .map(table_filter_config)
-        .collect::<Vec<_>>();
-    let mut config = json!({
-        "visible_columns": columns
-            .iter()
-            .map(|field| field.key.clone())
-            .collect::<Vec<_>>(),
-        "display_labels": display_labels,
-        "filters": filters
-    });
-    merge_table_defaults(&mut config, defaults);
-    config
-}
-
-fn table_filter_config(filter: &DataOpsRowFilterDraft) -> Value {
-    let mut filter_config = serde_json::Map::new();
-    filter_config.insert("field_key".into(), Value::String(filter.field_key.clone()));
-    filter_config.insert("operator".into(), Value::String(filter.operator.clone()));
-    if !filter.value.trim().is_empty() {
-        filter_config.insert("value".into(), Value::String(filter.value.clone()));
-    }
-    Value::Object(filter_config)
-}
-
-fn table_defaults_config(sort_field: &str, sort_direction: &str, page_size: &str) -> Value {
-    let parsed_page_size = page_size
-        .trim()
-        .parse::<usize>()
-        .ok()
-        .map(|value| value.clamp(1, 200))
-        .unwrap_or(50);
-    let direction = if sort_direction.trim() == "desc" {
-        "desc"
-    } else {
-        "asc"
-    };
-    let default_sort = if sort_field.trim().is_empty() {
-        Value::Null
-    } else {
-        json!({
-            "field_key": sort_field.trim(),
-            "direction": direction
-        })
-    };
-    json!({
-        "default_sort": default_sort,
-        "page_size": parsed_page_size
-    })
-}
-
-fn merge_table_defaults(config: &mut Value, defaults: Value) {
-    if let (Some(target), Some(defaults)) = (config.as_object_mut(), defaults.as_object()) {
-        for (key, value) in defaults {
-            target.insert(key.clone(), value.clone());
-        }
-    }
-}
-
-fn selected_dataset_major_value(dataset_id: &str, dataset_major: &str) -> String {
-    if dataset_id.trim().is_empty() || dataset_major.trim().is_empty() {
-        String::new()
-    } else {
-        format!("{}|{}", dataset_id.trim(), dataset_major.trim())
-    }
-}
-
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn editable_component_version(component: &ComponentDefinition) -> Option<ComponentVersionSummary> {
-    component
-        .versions
-        .iter()
-        .find(|version| version.status == "draft")
-        .or_else(|| {
-            component
-                .versions
-                .iter()
-                .find(|version| version.status == "published")
-        })
-        .cloned()
-}
-
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn table_visible_columns_from_config(config: &Value) -> String {
-    config
-        .get("visible_columns")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|value| {
-            value.as_str().map(str::to_string).or_else(|| {
-                value
-                    .get("field_key")
-                    .or_else(|| value.get("key"))
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn table_projection_fields_from_config_keys(config: &Value) -> Vec<DataOpsDatasetFieldDraft> {
-    let labels = config
-        .get("display_labels")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    csv_field_keys(&table_visible_columns_from_config(config))
-        .into_iter()
-        .map(|key| DataOpsDatasetFieldDraft {
-            label: labels
-                .get(&key)
-                .and_then(Value::as_str)
-                .unwrap_or(&key)
-                .into(),
-            source_alias: "dataset".into(),
-            source_field_key: key.clone(),
-            field_type: String::new(),
-            key,
-        })
-        .collect()
-}
-
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn table_sort_from_config(config: &Value) -> (String, String) {
-    let Some(sort) = config.get("default_sort") else {
-        return (String::new(), "asc".into());
-    };
-    let field = sort
-        .get("field_key")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let direction = match sort.get("direction").and_then(Value::as_str) {
-        Some("desc") => "desc",
-        _ => "asc",
-    };
-    (field, direction.into())
-}
-
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn table_page_size_from_config(config: &Value) -> String {
-    config
-        .get("page_size")
-        .and_then(Value::as_u64)
-        .map(|value| value.clamp(1, 200).to_string())
-        .unwrap_or_else(|| "50".into())
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn table_filter_drafts_from_config(config: &Value) -> Vec<DataOpsRowFilterDraft> {
-    config
-        .get("filters")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .enumerate()
-        .filter_map(|(index, filter)| {
-            let field_key = filter.get("field_key").and_then(Value::as_str)?.trim();
-            let operator = filter.get("operator").and_then(Value::as_str)?.trim();
-            if field_key.is_empty() || operator.is_empty() {
-                return None;
-            }
-            Some(DataOpsRowFilterDraft {
-                id: (index as u64) + 1,
-                field_key: field_key.into(),
-                operator: operator.into(),
-                value: filter
-                    .get("value")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .into(),
-                value_mode: "value".into(),
-                value_field_key: String::new(),
-            })
-        })
-        .collect()
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-struct ComponentTableQueryInput<'a> {
-    search: &'a str,
-    page_size: &'a str,
-    cursor: &'a str,
-    sort_field: &'a str,
-    sort_direction: &'a str,
-    filter_field: &'a str,
-    filter_operator: &'a str,
-    filter_value: &'a str,
-    visible_columns: &'a str,
-}
-
-#[allow(dead_code)]
-fn build_component_table_query(input: ComponentTableQueryInput<'_>) -> String {
-    let mut params = Vec::new();
-    push_query_param(&mut params, "q", input.search);
-    push_query_param(&mut params, "page_size", input.page_size);
-    push_query_param(&mut params, "cursor", input.cursor);
-    if !input.sort_field.trim().is_empty() {
-        let direction = if input.sort_direction.trim() == "desc" {
-            "desc"
-        } else {
-            "asc"
-        };
-        push_query_param(
-            &mut params,
-            "sort",
-            &format!("{}:{direction}", input.sort_field.trim()),
-        );
-    }
-    let filter_field = input.filter_field.trim();
-    if !filter_field.is_empty() {
-        push_query_param(
-            &mut params,
-            &format!("filter[{filter_field}][operator]"),
-            input.filter_operator,
-        );
-        push_query_param(
-            &mut params,
-            &format!("filter[{filter_field}][value]"),
-            input.filter_value,
-        );
-    }
-    push_query_param(&mut params, "visible_columns", input.visible_columns);
-    params.join("&")
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn push_query_param(params: &mut Vec<String>, key: &str, value: &str) {
-    let value = value.trim();
-    if !value.is_empty() {
-        params.push(format!(
-            "{}={}",
-            percent_encode_query_component(key),
-            percent_encode_query_component(value)
-        ));
-    }
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn percent_encode_query_component(value: &str) -> String {
-    value
-        .bytes()
-        .flat_map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                vec![byte as char]
-            }
-            byte => format!("%{byte:02X}").chars().collect::<Vec<_>>(),
-        })
-        .collect()
-}
-
 #[cfg(feature = "hydrate")]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn load_components(
     components: RwSignal<Vec<ComponentSummary>>,
     is_loading: RwSignal<bool>,
@@ -1756,6 +2230,30 @@ fn load_component_for_edit(
     sort_field: RwSignal<String>,
     sort_direction: RwSignal<String>,
     page_size: RwSignal<String>,
+    visual_summary_field: RwSignal<String>,
+    visual_summary_type: RwSignal<String>,
+    visual_category_field: RwSignal<String>,
+    visual_category_labels: RwSignal<String>,
+    visual_category_colors: RwSignal<String>,
+    visual_legend_title: RwSignal<String>,
+    visual_comparison_field: RwSignal<String>,
+    visual_bar_orientation: RwSignal<String>,
+    visual_bar_comparison_layout: RwSignal<String>,
+    visual_x_axis_label: RwSignal<String>,
+    visual_y_axis_label: RwSignal<String>,
+    visual_x_field: RwSignal<String>,
+    visual_line_smoothing: RwSignal<bool>,
+    visual_sort_field: RwSignal<String>,
+    visual_sort_direction: RwSignal<String>,
+    visual_limit: RwSignal<String>,
+    visual_value_format: RwSignal<String>,
+    visual_category_missing_policy: RwSignal<String>,
+    visual_comparison_missing_policy: RwSignal<String>,
+    visual_missing_policy: RwSignal<String>,
+    stat_label: RwSignal<String>,
+    stat_supporting_text: RwSignal<String>,
+    stat_panel_style: RwSignal<String>,
+    slug_manually_edited: RwSignal<bool>,
     error: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
@@ -1772,6 +2270,7 @@ fn load_component_for_edit(
                 );
                 name.set(component.name.clone());
                 slug.set(component.slug.clone());
+                slug_manually_edited.set(true);
                 description.set(component.description.clone().unwrap_or_default());
                 if let Some(version) = editable_component_version(&component) {
                     editing_version_id.set((version.status == "draft").then(|| version.id.clone()));
@@ -1785,6 +2284,33 @@ fn load_component_for_edit(
                     page_size.set(table_page_size_from_config(&version.config));
                     columns.set(table_projection_fields_from_config_keys(&version.config));
                     filters.set(table_filter_drafts_from_config(&version.config));
+                    load_visual_config_signals(
+                        &version.component_type,
+                        &version.config,
+                        visual_summary_field,
+                        visual_summary_type,
+                        visual_category_field,
+                        visual_category_labels,
+                        visual_category_colors,
+                        visual_legend_title,
+                        visual_comparison_field,
+                        visual_bar_orientation,
+                        visual_bar_comparison_layout,
+                        visual_x_axis_label,
+                        visual_y_axis_label,
+                        visual_x_field,
+                        visual_line_smoothing,
+                        visual_sort_field,
+                        visual_sort_direction,
+                        visual_limit,
+                        visual_value_format,
+                        visual_category_missing_policy,
+                        visual_comparison_missing_policy,
+                        visual_missing_policy,
+                        stat_label,
+                        stat_supporting_text,
+                        stat_panel_style,
+                    );
                 }
             }
             Ok(None) => error.set(Some("Component could not be loaded.".into())),
@@ -1796,22 +2322,46 @@ fn load_component_for_edit(
 #[cfg(not(feature = "hydrate"))]
 #[allow(clippy::too_many_arguments)]
 fn load_component_for_edit(
-    _: String,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<Vec<DataOpsDatasetFieldDraft>>,
-    _: RwSignal<Vec<DataOpsRowFilterDraft>>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<Option<String>>,
+    _component_ref: String,
+    _editing_component_id: RwSignal<Option<String>>,
+    _editing_version_id: RwSignal<Option<String>>,
+    _current_published_version_id: RwSignal<Option<String>>,
+    _name: RwSignal<String>,
+    _slug: RwSignal<String>,
+    _description: RwSignal<String>,
+    _dataset_id: RwSignal<String>,
+    _dataset_major: RwSignal<String>,
+    _component_type: RwSignal<String>,
+    _columns: RwSignal<Vec<DataOpsDatasetFieldDraft>>,
+    _filters: RwSignal<Vec<DataOpsRowFilterDraft>>,
+    _sort_field: RwSignal<String>,
+    _sort_direction: RwSignal<String>,
+    _page_size: RwSignal<String>,
+    _visual_summary_field: RwSignal<String>,
+    _visual_summary_type: RwSignal<String>,
+    _visual_category_field: RwSignal<String>,
+    _visual_category_labels: RwSignal<String>,
+    _visual_category_colors: RwSignal<String>,
+    _visual_legend_title: RwSignal<String>,
+    _visual_comparison_field: RwSignal<String>,
+    _visual_bar_orientation: RwSignal<String>,
+    _visual_bar_comparison_layout: RwSignal<String>,
+    _visual_x_axis_label: RwSignal<String>,
+    _visual_y_axis_label: RwSignal<String>,
+    _visual_x_field: RwSignal<String>,
+    _visual_line_smoothing: RwSignal<bool>,
+    _visual_sort_field: RwSignal<String>,
+    _visual_sort_direction: RwSignal<String>,
+    _visual_limit: RwSignal<String>,
+    _visual_value_format: RwSignal<String>,
+    _visual_category_missing_policy: RwSignal<String>,
+    _visual_comparison_missing_policy: RwSignal<String>,
+    _visual_missing_policy: RwSignal<String>,
+    _stat_label: RwSignal<String>,
+    _stat_supporting_text: RwSignal<String>,
+    _stat_panel_style: RwSignal<String>,
+    _slug_manually_edited: RwSignal<bool>,
+    _error: RwSignal<Option<String>>,
 ) {
 }
 
@@ -1841,6 +2391,197 @@ fn load_datasets(datasets: RwSignal<Vec<DatasetSummary>>, error: RwSignal<Option
 #[cfg(not(feature = "hydrate"))]
 fn load_datasets(_: RwSignal<Vec<DatasetSummary>>, _: RwSignal<Option<String>>) {}
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn component_preview_ready(values: &ComponentFormValues) -> bool {
+    if values.dataset_id.trim().is_empty()
+        || values.dataset_major.trim().parse::<i32>().is_err()
+        || !visual_summary_field_ready(&values.visual_summary_type, &values.visual_summary_field)
+    {
+        return false;
+    }
+    match values.component_type.as_str() {
+        "bar" | "pie" | "donut" => !values.visual_category_field.trim().is_empty(),
+        "line" => !values.visual_x_field.trim().is_empty(),
+        "stat_card" => true,
+        _ => false,
+    }
+}
+
+fn visual_summary_field_ready(summary_type: &str, summary_field: &str) -> bool {
+    summary_type == "row_count" || !summary_field.trim().is_empty()
+}
+
+#[cfg(feature = "hydrate")]
+fn schedule_component_editor_preview(
+    values: ComponentFormValues,
+    preview: RwSignal<Option<ComponentVisual>>,
+    error: RwSignal<Option<String>>,
+    loading: RwSignal<bool>,
+    generation: RwSignal<u64>,
+    timeout: RwSignal<Option<i32>>,
+) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    if let Some(handle) = timeout.get_untracked() {
+        window.clear_timeout_with_handle(handle);
+        timeout.set(None);
+    }
+    if !component_preview_ready(&values) {
+        request_component_editor_preview(values, preview, error, loading, generation);
+        return;
+    }
+    let callback = Closure::once(Box::new(move || {
+        timeout.set(None);
+        request_component_editor_preview(values, preview, error, loading, generation);
+    }) as Box<dyn FnOnce()>);
+    if let Ok(handle) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        callback.as_ref().unchecked_ref(),
+        250,
+    ) {
+        timeout.set(Some(handle));
+        callback.forget();
+    }
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn schedule_component_editor_preview(
+    _: ComponentFormValues,
+    _: RwSignal<Option<ComponentVisual>>,
+    _: RwSignal<Option<String>>,
+    _: RwSignal<bool>,
+    _: RwSignal<u64>,
+    _: RwSignal<Option<i32>>,
+) {
+}
+
+#[cfg(feature = "hydrate")]
+fn request_component_editor_preview(
+    values: ComponentFormValues,
+    preview: RwSignal<Option<ComponentVisual>>,
+    error: RwSignal<Option<String>>,
+    loading: RwSignal<bool>,
+    generation: RwSignal<u64>,
+) {
+    if !component_preview_ready(&values) {
+        generation.update(|value| *value += 1);
+        preview.set(None);
+        error.set(None);
+        loading.set(false);
+        return;
+    }
+    generation.update(|value| *value += 1);
+    let request_generation = generation.get_untracked();
+    let payload = CreateComponentVersionRequest {
+        dataset_id: Some(values.dataset_id.clone()),
+        dataset_version_major: values.dataset_major.trim().parse::<i32>().ok(),
+        component_type: values.component_type.clone(),
+        config: build_component_config(&values),
+        version_note: None,
+    };
+    loading.set(true);
+    error.set(None);
+    leptos::task::spawn_local(async move {
+        let result = api::preview_component_visual(payload).await;
+        if generation.get_untracked() != request_generation {
+            return;
+        }
+        loading.set(false);
+        match result {
+            Ok(next_preview) => {
+                preview.set(Some(next_preview));
+                error.set(None);
+            }
+            Err(message) => {
+                preview.set(None);
+                error.set(Some(message));
+            }
+        }
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
+fn request_component_editor_preview(
+    _: ComponentFormValues,
+    _: RwSignal<Option<ComponentVisual>>,
+    _: RwSignal<Option<String>>,
+    _: RwSignal<bool>,
+    _: RwSignal<u64>,
+) {
+}
+
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Copy)]
+struct CategoryValueLoadState {
+    active_dataset_id: RwSignal<String>,
+    active_dataset_major: RwSignal<String>,
+    active_category_field: RwSignal<String>,
+    values: RwSignal<Vec<String>>,
+    error: RwSignal<Option<String>>,
+}
+
+#[cfg(feature = "hydrate")]
+fn load_category_values(
+    dataset_id: String,
+    dataset_major: String,
+    category_field: String,
+    state: CategoryValueLoadState,
+) {
+    leptos::task::spawn_local(async move {
+        state.error.set(None);
+        let Ok(version_major) = dataset_major.parse::<i32>() else {
+            state.values.set(Vec::new());
+            return;
+        };
+        match api::fetch_dataset_distinct_values(&dataset_id, version_major, &category_field).await
+        {
+            Ok(Some(response)) => {
+                if state.active_dataset_id.get_untracked() != dataset_id
+                    || state.active_dataset_major.get_untracked() != dataset_major
+                    || state.active_category_field.get_untracked() != category_field
+                {
+                    return;
+                }
+                state.values.set(response.values);
+            }
+            Ok(None) => {
+                if state.active_dataset_id.get_untracked() != dataset_id
+                    || state.active_dataset_major.get_untracked() != dataset_major
+                    || state.active_category_field.get_untracked() != category_field
+                {
+                    return;
+                }
+                state.values.set(Vec::new());
+            }
+            Err(message) => {
+                if state.active_dataset_id.get_untracked() != dataset_id
+                    || state.active_dataset_major.get_untracked() != dataset_major
+                    || state.active_category_field.get_untracked() != category_field
+                {
+                    return;
+                }
+                state.values.set(Vec::new());
+                state.error.set(Some(message));
+            }
+        }
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
+#[derive(Clone, Copy)]
+struct CategoryValueLoadState {
+    active_dataset_id: RwSignal<String>,
+    active_dataset_major: RwSignal<String>,
+    active_category_field: RwSignal<String>,
+    values: RwSignal<Vec<String>>,
+    error: RwSignal<Option<String>>,
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn load_category_values(_: String, _: String, _: String, _: CategoryValueLoadState) {}
+
 #[cfg(feature = "hydrate")]
 fn load_component_table(
     component_ref: String,
@@ -1867,6 +2608,43 @@ fn load_component_table(
 ) {
 }
 
+#[cfg(feature = "hydrate")]
+fn load_component_visual(
+    component_ref: String,
+    component_type: String,
+    visual: RwSignal<Option<ComponentVisual>>,
+    error: RwSignal<Option<String>>,
+) {
+    leptos::task::spawn_local(async move {
+        error.set(None);
+        match api::fetch_component_visual(&component_ref, &component_type).await {
+            Ok(Some(response)) => visual.set(Some(response)),
+            Ok(None) => visual.set(None),
+            Err(message) => error.set(Some(message)),
+        }
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn load_component_visual(
+    _: String,
+    _: String,
+    _: RwSignal<Option<ComponentVisual>>,
+    _: RwSignal<Option<String>>,
+) {
+}
+
+fn published_component_type(component: Option<ComponentDefinition>) -> Option<String> {
+    component
+        .and_then(|component| {
+            component
+                .versions
+                .into_iter()
+                .find(|version| version.status == "published")
+        })
+        .map(|version| version.component_type)
+}
+
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct ComponentFormValues {
     name: String,
@@ -1874,11 +2652,35 @@ struct ComponentFormValues {
     description: String,
     dataset_id: String,
     dataset_major: String,
+    component_type: String,
     columns: Vec<DataOpsDatasetFieldDraft>,
     filters: Vec<DataOpsRowFilterDraft>,
     sort_field: String,
     sort_direction: String,
     page_size: String,
+    visual_summary_field: String,
+    visual_summary_type: String,
+    visual_category_field: String,
+    visual_category_labels: String,
+    visual_category_colors: String,
+    visual_legend_title: String,
+    visual_comparison_field: String,
+    visual_bar_orientation: String,
+    visual_bar_comparison_layout: String,
+    visual_x_axis_label: String,
+    visual_y_axis_label: String,
+    visual_x_field: String,
+    visual_line_smoothing: bool,
+    visual_sort_field: String,
+    visual_sort_direction: String,
+    visual_limit: String,
+    visual_value_format: String,
+    visual_category_missing_policy: String,
+    visual_comparison_missing_policy: String,
+    visual_missing_policy: String,
+    stat_label: String,
+    stat_supporting_text: String,
+    stat_panel_style: String,
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
@@ -1915,17 +2717,11 @@ fn create_component_from_form(
         feedback.error.set(None);
         feedback.findings.set(Vec::new());
         let major = values.dataset_major.trim().parse::<i32>().unwrap_or(1);
-        let config = build_component_config(
-            &values.columns,
-            &values.filters,
-            &values.sort_field,
-            &values.sort_direction,
-            &values.page_size,
-        );
+        let config = build_component_config(&values);
         let version = CreateComponentVersionRequest {
             dataset_id: Some(values.dataset_id),
             dataset_version_major: Some(major),
-            component_type: "table".into(),
+            component_type: values.component_type.clone(),
             config,
             version_note: normalized_component_version_note(intent.version_note),
         };
@@ -1998,11 +2794,16 @@ fn normalized_component_version_note(note: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn commit_component_name(name: RwSignal<String>, slug: RwSignal<String>, value: String) {
+fn commit_component_name(
+    name: RwSignal<String>,
+    slug: RwSignal<String>,
+    slug_manually_edited: RwSignal<bool>,
+    value: String,
+) {
     let derived_slug = snake_case_component_slug(&value);
     name.set(value);
 
-    if slug.get_untracked().trim().is_empty() && !derived_slug.is_empty() {
+    if !slug_manually_edited.get_untracked() {
         slug.set(derived_slug);
     }
 }
@@ -2044,7 +2845,7 @@ fn delete_component_draft(
         .and_then(|window| {
             window
                 .confirm_with_message(
-                    "Delete this component draft? Published versions will remain available.",
+                    "Discard this component draft? Published versions will remain available.",
                 )
                 .ok()
         })
@@ -2059,7 +2860,7 @@ fn delete_component_draft(
         findings.set(Vec::new());
         match api::delete_component_version(&component_id, &version_id).await {
             Ok(_) => {
-                message.set(Some("Component draft deleted.".into()));
+                message.set(Some("Component draft discarded.".into()));
                 if let Some(window) = web_sys::window() {
                     let _ = window.location().set_href("/components");
                 }
@@ -2080,381 +2881,4 @@ fn delete_component_draft(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        ComponentDefinition, ComponentVersionSummary, DatasetSummary, build_component_config,
-        dataset_picker_majors, toggle_csv_key, toggle_visible_column,
-    };
-    use super::{
-        ComponentTableQueryInput, build_component_table_query, percent_encode_query_component,
-    };
-    use super::{
-        component_kind_filter_options, component_matches_filters, component_status_filter_options,
-    };
-    use super::{
-        component_redirect_ref, component_summary_kind_label, component_summary_revision_label,
-        component_summary_status_label, dataset_catalog_option_label, dataset_provenance_label,
-        editable_component_version, materialization_empty_state, selected_dataset_major_value,
-        snake_case_component_slug, table_page_size_from_config, table_sort_from_config,
-        table_visible_columns_from_config,
-    };
-    use crate::types::{ComponentSummary, DatasetProvenanceItem, DatasetProvenanceSummary};
-    use tessara_web_data_ops::{
-        DatasetFieldDraft as DataOpsDatasetFieldDraft,
-        DatasetRowFilterDraft as DataOpsRowFilterDraft,
-    };
-
-    fn dataset(major_versions: Vec<i32>, current_version_major: Option<i32>) -> DatasetSummary {
-        DatasetSummary {
-            id: "dataset-1".into(),
-            current_version_major,
-            major_versions,
-            name: "Dataset".into(),
-            slug: "dataset".into(),
-            grain: "submission".into(),
-            tags: Vec::new(),
-            provenance: Default::default(),
-            output_fields: Vec::new(),
-        }
-    }
-
-    fn component_summary(
-        name: &str,
-        component_type: Option<&str>,
-        published: bool,
-    ) -> ComponentSummary {
-        ComponentSummary {
-            id: format!("{name}-id"),
-            name: name.into(),
-            slug: name.to_lowercase().replace(' ', "-"),
-            description: None,
-            current_version_id: published.then(|| format!("{name}-version")),
-            current_version_label: published.then(|| "1".into()),
-            current_component_type: component_type.map(str::to_string),
-            draft_version_id: (!published).then(|| format!("{name}-draft")),
-            draft_version_label: (!published).then(|| "1".into()),
-        }
-    }
-
-    #[test]
-    fn dataset_picker_prefers_major_versions_from_list_response() {
-        assert_eq!(
-            dataset_picker_majors(&dataset(vec![1, 2], Some(3))),
-            vec![1, 2]
-        );
-    }
-
-    #[test]
-    fn dataset_picker_falls_back_to_current_major() {
-        assert_eq!(
-            dataset_picker_majors(&dataset(Vec::new(), Some(4))),
-            vec![4]
-        );
-    }
-
-    #[test]
-    fn dataset_catalog_option_includes_tags_and_provenance() {
-        let mut dataset = dataset(vec![1], Some(1));
-        dataset.tags = vec!["finance".into(), "display".into()];
-        dataset.provenance = DatasetProvenanceSummary {
-            forms: vec![DatasetProvenanceItem {
-                id: "form-1".into(),
-                name: "Intake Form".into(),
-                slug: Some("intake".into()),
-            }],
-            datasets: vec![DatasetProvenanceItem {
-                id: "dataset-2".into(),
-                name: "Analytical Source".into(),
-                slug: Some("analytical-source".into()),
-            }],
-        };
-
-        assert_eq!(
-            dataset_catalog_option_label(&dataset, 1),
-            "Dataset · v1 · finance, display · Intake Form, Dataset: Analytical Source"
-        );
-        assert_eq!(
-            dataset_provenance_label(&dataset.provenance),
-            "Intake Form, Dataset: Analytical Source"
-        );
-    }
-
-    #[test]
-    fn component_list_filters_match_name_kind_and_status() {
-        let published_table = component_summary("Program Snapshot", Some("table"), true);
-        let draft_component = component_summary("Program Draft", None, false);
-        let mut updating_component = component_summary("Program Update", Some("table"), true);
-        updating_component.draft_version_id = Some("Program Update-draft".into());
-        updating_component.draft_version_label = Some("2".into());
-        let components = vec![
-            published_table.clone(),
-            draft_component.clone(),
-            updating_component.clone(),
-        ];
-
-        assert_eq!(component_kind_filter_options(&components), vec!["Table"]);
-        assert_eq!(
-            component_status_filter_options(&components),
-            vec!["Draft", "Published", "Updating"]
-        );
-        assert!(component_matches_filters(
-            &published_table,
-            "snapshot",
-            "Table",
-            "Published"
-        ));
-        assert!(!component_matches_filters(
-            &published_table,
-            "snapshot",
-            "Draft",
-            "Published"
-        ));
-        assert!(component_matches_filters(
-            &draft_component,
-            "program",
-            "Table",
-            "Draft"
-        ));
-        assert!(component_matches_filters(
-            &updating_component,
-            "program",
-            "Table",
-            "Updating"
-        ));
-    }
-
-    #[test]
-    fn reader_component_summary_without_draft_metadata_stays_published() {
-        let reader_summary = component_summary("Reader Visible Table", Some("table"), true);
-
-        assert_eq!(component_summary_kind_label(&reader_summary), "Table");
-        assert_eq!(component_summary_status_label(&reader_summary), "Published");
-        assert_eq!(component_summary_revision_label(&reader_summary), "v1");
-    }
-
-    #[test]
-    fn table_config_uses_visible_columns_and_defaults() {
-        let config = build_component_config(
-            &projection_fields(&["program", "amount"]),
-            &[filter_draft(1, "program", "equals", "Afterschool")],
-            "program",
-            "desc",
-            "25",
-        );
-
-        assert_eq!(
-            config["visible_columns"],
-            serde_json::json!(["program", "amount"])
-        );
-        assert_eq!(config["display_labels"]["program"], "program");
-        assert_eq!(config["default_sort"]["field_key"], "program");
-        assert_eq!(config["default_sort"]["direction"], "desc");
-        assert_eq!(config["page_size"], 25);
-        assert_eq!(config["filters"][0]["field_key"], "program");
-        assert_eq!(config["filters"][0]["operator"], "equals");
-        assert_eq!(config["filters"][0]["value"], "Afterschool");
-    }
-
-    #[test]
-    fn toggle_csv_key_adds_and_removes_keys() {
-        let mut value = "program".to_string();
-        toggle_csv_key(&mut value, "amount");
-        assert_eq!(value, "program, amount");
-        toggle_csv_key(&mut value, "program");
-        assert_eq!(value, "amount");
-    }
-
-    #[test]
-    fn toggle_visible_column_treats_blank_as_all_selected() {
-        let all_keys = vec!["program".into(), "amount".into(), "status".into()];
-        let mut value = String::new();
-
-        toggle_visible_column(&mut value, "amount", &all_keys);
-        assert_eq!(value, "program, status");
-
-        toggle_visible_column(&mut value, "amount", &all_keys);
-        assert_eq!(value, "");
-    }
-
-    #[test]
-    fn table_visible_columns_parse_string_and_object_configs() {
-        let config = serde_json::json!({
-            "visible_columns": [
-                "program",
-                { "field_key": "amount" },
-                { "key": "status" }
-            ]
-        });
-
-        assert_eq!(
-            table_visible_columns_from_config(&config),
-            "program, amount, status"
-        );
-    }
-
-    #[test]
-    fn table_config_extracts_sort_and_page_size() {
-        let config = serde_json::json!({
-            "default_sort": {
-                "field_key": "program",
-                "direction": "desc"
-            },
-            "page_size": 25
-        });
-
-        assert_eq!(
-            table_sort_from_config(&config),
-            ("program".into(), "desc".into())
-        );
-        assert_eq!(table_page_size_from_config(&config), "25");
-    }
-
-    #[test]
-    fn component_table_query_encodes_server_driven_view_state() {
-        let query = build_component_table_query(ComponentTableQueryInput {
-            search: "family outreach",
-            page_size: "25",
-            cursor: "offset:25",
-            sort_field: "program",
-            sort_direction: "desc",
-            filter_field: "row_count",
-            filter_operator: "between",
-            filter_value: "1,10",
-            visible_columns: "program, row_count",
-        });
-
-        assert_eq!(
-            query,
-            "q=family%20outreach&page_size=25&cursor=offset%3A25&sort=program%3Adesc&filter%5Brow_count%5D%5Boperator%5D=between&filter%5Brow_count%5D%5Bvalue%5D=1%2C10&visible_columns=program%2C%20row_count"
-        );
-    }
-
-    #[test]
-    fn component_table_query_omits_blank_optional_params() {
-        assert_eq!(
-            build_component_table_query(ComponentTableQueryInput {
-                search: "",
-                page_size: "50",
-                cursor: "",
-                sort_field: "",
-                sort_direction: "asc",
-                filter_field: "",
-                filter_operator: "equals",
-                filter_value: "",
-                visible_columns: "",
-            }),
-            "page_size=50"
-        );
-        assert_eq!(percent_encode_query_component("a/b?c"), "a%2Fb%3Fc");
-    }
-
-    #[test]
-    fn materialization_empty_state_distinguishes_failed_from_pending() {
-        let (pending_title, pending_message) = materialization_empty_state("pending");
-        assert_eq!(pending_title, "Table materializing");
-        assert!(pending_message.contains("still being prepared"));
-
-        let (failed_title, failed_message) = materialization_empty_state("failed");
-        assert_eq!(failed_title, "Table materialization failed");
-        assert!(failed_message.contains("configuration is valid"));
-
-        let (retry_title, retry_message) = materialization_empty_state("retry");
-        assert_eq!(retry_title, "Table materializing");
-        assert!(retry_message.contains("retry"));
-    }
-
-    #[test]
-    fn selected_dataset_major_value_is_empty_until_complete() {
-        assert_eq!(selected_dataset_major_value("", "1"), "");
-        assert_eq!(selected_dataset_major_value("dataset-1", ""), "");
-        assert_eq!(
-            selected_dataset_major_value("dataset-1", "2"),
-            "dataset-1|2"
-        );
-    }
-
-    #[test]
-    fn component_redirect_ref_uses_trimmed_slug() {
-        assert_eq!(
-            component_redirect_ref("  family-outreach-table  "),
-            "family-outreach-table"
-        );
-    }
-
-    #[test]
-    fn snake_case_component_slug_normalizes_component_names() {
-        assert_eq!(
-            snake_case_component_slug("UAT Table Component"),
-            "uat_table_component"
-        );
-        assert_eq!(
-            snake_case_component_slug(" Demo Partner: Snapshot 2026 "),
-            "demo_partner_snapshot_2026"
-        );
-        assert_eq!(snake_case_component_slug("Already_snake"), "already_snake");
-    }
-
-    #[test]
-    fn editable_component_version_prefers_draft() {
-        let component = ComponentDefinition {
-            id: "component-1".into(),
-            name: "Component".into(),
-            slug: "component".into(),
-            description: None,
-            versions: vec![
-                component_version("published", "published-version"),
-                component_version("draft", "draft-version"),
-            ],
-        };
-
-        assert_eq!(
-            editable_component_version(&component)
-                .expect("editable version")
-                .id,
-            "draft-version"
-        );
-    }
-
-    fn component_version(status: &str, id: &str) -> ComponentVersionSummary {
-        ComponentVersionSummary {
-            id: id.into(),
-            component_id: "component-1".into(),
-            dataset_id: "dataset-1".into(),
-            dataset_version_major: 1,
-            binding_mode: "major_line".into(),
-            component_type: "table".into(),
-            status: status.into(),
-            version_label: "1".into(),
-            version_note: String::new(),
-            config: serde_json::json!({ "visible_columns": ["program"] }),
-        }
-    }
-
-    fn projection_fields(keys: &[&str]) -> Vec<DataOpsDatasetFieldDraft> {
-        keys.iter()
-            .map(|key| DataOpsDatasetFieldDraft {
-                key: (*key).into(),
-                label: (*key).into(),
-                source_alias: "dataset".into(),
-                source_field_key: (*key).into(),
-                field_type: "text".into(),
-            })
-            .collect()
-    }
-
-    fn filter_draft(
-        id: u64,
-        field_key: &str,
-        operator: &str,
-        value: &str,
-    ) -> DataOpsRowFilterDraft {
-        DataOpsRowFilterDraft {
-            id,
-            field_key: field_key.into(),
-            operator: operator.into(),
-            value: value.into(),
-            value_mode: "value".into(),
-            value_field_key: String::new(),
-        }
-    }
-}
+mod tests;

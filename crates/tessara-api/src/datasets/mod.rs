@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
 };
 use sqlx::{Column, Postgres, Row, Transaction, postgres::PgRow};
@@ -30,16 +30,17 @@ pub use dto::{
     DatasetCalculatedFieldRequest, DatasetCarryForwardState, DatasetCompatibilityFinding,
     DatasetCompatibilityState, DatasetCompatibilitySummary, DatasetDefinition,
     DatasetDependencyBindingMode, DatasetDependencyImpact, DatasetDependencyKind,
-    DatasetDependencySummary, DatasetDraftRevisionResponse, DatasetFieldDefinition,
-    DatasetJoinKeyRequest, DatasetLineageNode, DatasetOperationRequest,
-    DatasetProjectionFieldRequest, DatasetProvenanceItem, DatasetProvenanceSummary,
-    DatasetPublishRevisionResponse, DatasetRestrictionPolicyRequest, DatasetRevisionDetail,
-    DatasetRevisionFieldSummary, DatasetRevisionLabelResponse, DatasetRevisionMetadata,
-    DatasetRevisionStatus, DatasetRevisionSummary, DatasetRowFilterRequest,
-    DatasetRowPickerRequest, DatasetSemanticBump, DatasetSourceDefinition, DatasetSourceRequest,
-    DatasetSqlPreview, DatasetSummary, DatasetTable, DatasetTableRow, DatasetVersionImpact,
-    DatasetVisibilityNodeSummary, UpdateDatasetRevisionLabelRequest,
-    UpdateDatasetRevisionOptionsRequest, UpdateDatasetTagsRequest,
+    DatasetDependencySummary, DatasetDistinctValues, DatasetDistinctValuesQuery,
+    DatasetDraftRevisionResponse, DatasetFieldDefinition, DatasetJoinKeyRequest,
+    DatasetLineageNode, DatasetOperationRequest, DatasetProjectionFieldRequest,
+    DatasetProvenanceItem, DatasetProvenanceSummary, DatasetPublishRevisionResponse,
+    DatasetRestrictionPolicyRequest, DatasetRevisionDetail, DatasetRevisionFieldSummary,
+    DatasetRevisionLabelResponse, DatasetRevisionMetadata, DatasetRevisionStatus,
+    DatasetRevisionSummary, DatasetRowFilterRequest, DatasetRowPickerRequest, DatasetSemanticBump,
+    DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview, DatasetSummary, DatasetTable,
+    DatasetTableRow, DatasetVersionImpact, DatasetVisibilityNodeSummary,
+    UpdateDatasetRevisionLabelRequest, UpdateDatasetRevisionOptionsRequest,
+    UpdateDatasetTagsRequest,
 };
 
 use crate::{
@@ -1436,6 +1437,45 @@ pub async fn run_dataset_table(
     Ok(Json(DatasetTable {
         dataset_id,
         rows: table_rows,
+    }))
+}
+
+/// Lists every distinct non-empty value for one field in a published Dataset major line.
+pub async fn list_dataset_distinct_values(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+    Query(query): Query<DatasetDistinctValuesQuery>,
+) -> ApiResult<Json<DatasetDistinctValues>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
+    require_dataset_visible_for_boundary(&state.pool, dataset_id, &boundary, "datasets:read")
+        .await?;
+    if matches!(boundary, auth::CapabilityBoundary::None) {
+        return Err(ApiError::Forbidden("datasets:read".into()));
+    }
+    if query.version_major < 1 {
+        return Err(ApiError::BadRequest(
+            "dataset version major must be at least 1".into(),
+        ));
+    }
+    let field = query.field.trim().to_string();
+    require_text("dataset field", &field)?;
+    require_identifier("dataset field", &field)?;
+    let values = load_dataset_major_distinct_values(
+        &state.pool,
+        &account,
+        dataset_id,
+        query.version_major,
+        &field,
+    )
+    .await?;
+
+    Ok(Json(DatasetDistinctValues {
+        dataset_id,
+        version_major: query.version_major,
+        field,
+        values,
     }))
 }
 
@@ -5185,6 +5225,66 @@ pub(crate) async fn load_dataset_table_rows(
     dataset_id: Uuid,
 ) -> ApiResult<Vec<DatasetTableRow>> {
     load_materialized_dataset_table_rows(pool, account, dataset_id).await
+}
+
+async fn load_dataset_major_distinct_values(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    dataset_id: Uuid,
+    version_major: i32,
+    field_key: &str,
+) -> ApiResult<Vec<String>> {
+    let Some(row) = sqlx::query(
+        r#"
+        SELECT materialized_schema, materialized_table, output_fields
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND version_major = $2
+          AND status IN (
+              'published'::dataset_revision_status,
+              'superseded'::dataset_revision_status
+          )
+          AND materialized_table IS NOT NULL
+        ORDER BY version_number DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_major)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Err(ApiError::BadRequest(format!(
+            "dataset {dataset_id} major version {version_major} does not have a materialized published revision"
+        )));
+    };
+    let output_fields = parse_json_or_default::<Vec<DatasetFieldDefinition>>(
+        row.try_get("output_fields")?,
+        "stored dataset revision output fields",
+    )?;
+    if !output_fields.iter().any(|field| field.key == field_key) {
+        return Err(ApiError::BadRequest(format!(
+            "dataset field '{field_key}' is not in major version {version_major}"
+        )));
+    }
+
+    let schema: String = row.try_get("materialized_schema")?;
+    let table: String = row.try_get("materialized_table")?;
+    let full_name = format!("{}.{}", quote_identifier(&schema), quote_identifier(&table));
+    let field = quote_identifier(field_key);
+    let rows = sqlx::query(&format!(
+        "SELECT DISTINCT BTRIM({field}::text) AS value \
+         FROM {full_name} \
+         WHERE {} AND {field} IS NOT NULL AND BTRIM({field}::text) <> '' \
+         ORDER BY value",
+        tier_access_predicate(account)
+    ))
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| row.try_get("value").map_err(ApiError::from))
+        .collect()
 }
 
 async fn load_materialized_dataset_table_rows(

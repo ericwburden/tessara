@@ -658,7 +658,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can tag and discover Datasets, review direct provenance, then create, version, publish, and view thin table components in the app.
 
-### Sprint 4B: Chart And Stat Component Slice (Next)
+### Sprint 4B: Chart And Stat Component Slice (Complete)
 
 **Outcome:** visual presentation assets are first-class components.
 
@@ -678,7 +678,7 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 5: Dashboards, Scoped Analytics, And Dependency Upgrade UX
 
-### Sprint 5A: Dashboard Composition Slice
+### Sprint 5A: Dashboard Composition Slice (Next)
 
 **Outcome:** dashboards compose component versions through application-grade flows.
 

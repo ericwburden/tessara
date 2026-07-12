@@ -212,3 +212,28 @@ async fn ensure_role_capability(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    const BASELINE: &[u8] = include_bytes!("../migrations/001_baseline.sql");
+
+    #[test]
+    fn squashed_baseline_migration_remains_immutable() {
+        assert_eq!(fnv1a(BASELINE), 0xb2f5_7278_25e1_d5b9);
+        let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
+        assert!(baseline.contains(
+            "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
+        ));
+        assert!(baseline.contains("component_versions_component_type_supported_chk"));
+        for kind in ["table", "bar", "line", "pie", "donut", "stat_card"] {
+            assert!(baseline.contains(&format!("'{kind}'::component_type")));
+        }
+        assert!(!baseline.contains("component_versions_component_type_table_chk"));
+    }
+
+    fn fnv1a(bytes: &[u8]) -> u64 {
+        bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+        })
+    }
+}

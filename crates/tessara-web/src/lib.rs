@@ -45,6 +45,11 @@ pub fn svg_asset(name: &str) -> Option<&'static str> {
     document::svg_asset(name)
 }
 
+#[cfg(feature = "ssr")]
+pub fn static_asset(name: &str) -> Option<(&'static str, &'static str)> {
+    document::static_asset(name).map(|asset| (asset.content, asset.content_type))
+}
+
 #[cfg(test)]
 mod tests {
     use super::application_html;

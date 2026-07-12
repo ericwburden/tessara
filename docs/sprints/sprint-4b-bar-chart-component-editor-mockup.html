@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tessara Component Editor UX Mockup</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #26364b;
+      --panel: #2d3e54;
+      --control: #172338;
+      --border: rgba(226, 232, 240, .19);
+      --text: #f8fafc;
+      --muted: rgba(226, 232, 240, .72);
+      --teal: #14b8a6;
+      --teal-soft: rgba(20, 184, 166, .13);
+      --teal-border: rgba(20, 184, 166, .42);
+      --indigo: #818cf8;
+      --orange: #f59e0b;
+      --red: #fb7185;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1180px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+    }
+    button, input, select { font: inherit; }
+    button, select, input { color: var(--text); }
+    .page { padding: 22px; }
+    .topline {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 5px; color: var(--teal); font-size: 22px; }
+    .subtitle { margin: 0; color: var(--muted); }
+    .status { color: var(--muted); font-weight: 700; }
+    .status b { color: var(--text); }
+    .shell { display: grid; gap: 16px; }
+    .card, fieldset {
+      min-width: 0;
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+    fieldset { padding: 16px; }
+    legend { padding: 0 8px; font-size: 16px; font-weight: 750; }
+    .context-kind { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+    .dataset-strip { display: grid; grid-template-columns: 1.3fr .8fr 1.25fr auto; gap: 0; overflow: hidden; }
+    .context-item { min-width: 0; padding: 10px 13px; border-right: 1px solid var(--border); background: var(--teal-soft); }
+    .context-item:last-child { border-right: 0; }
+    .eyebrow, label > span, .field-label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .055em;
+      text-transform: uppercase;
+    }
+    .context-item strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .version-chip { align-self: center; justify-self: center; border: 1px solid var(--teal-border); border-radius: 999px; padding: 5px 9px; color: #5eead4; font-weight: 800; }
+    .kind-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .kind-button {
+      min-height: 42px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--control);
+      color: var(--muted);
+      cursor: pointer;
+      font-weight: 800;
+    }
+    .kind-button:hover, .kind-button.is-selected { border-color: var(--teal-border); background: var(--teal-soft); color: var(--text); }
+    .kind-button.is-selected { box-shadow: inset 0 -2px 0 var(--teal); }
+    .kind-help { margin: 9px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+    .editor-layout { display: grid; grid-template-columns: minmax(650px, 1.42fr) minmax(390px, .78fr); gap: 16px; align-items: start; }
+    .config-stack { display: grid; gap: 16px; }
+    .section-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .section-title h2 { margin: 0; font-size: 17px; }
+    .section-title p { margin: 4px 0 0; color: var(--muted); line-height: 1.4; }
+    .step-number { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-right: 8px; border-radius: 50%; background: var(--teal); color: #0f172a; font-weight: 900; }
+    .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+    .span-2 { grid-column: 1 / -1; }
+    select, input[type="text"], input[type="number"] {
+      width: 100%;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--control);
+      padding: 0 12px;
+      outline: none;
+    }
+    select:focus, input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(20,184,166,.13); }
+    .role-card { padding: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: rgba(15, 23, 42, .16); }
+    .role-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .role-head strong { font-size: 14px; }
+    .role-description { margin: -2px 0 11px; color: var(--muted); font-size: 12px; }
+    .toggle-row { display: flex; align-items: center; gap: 9px; }
+    .switch { position: relative; width: 38px; height: 22px; flex: 0 0 auto; }
+    .switch input { position: absolute; opacity: 0; }
+    .switch-ui { position: absolute; inset: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--control); cursor: pointer; }
+    .switch-ui::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: .16s ease; }
+    .switch input:checked + .switch-ui { background: var(--teal-soft); border-color: var(--teal); }
+    .switch input:checked + .switch-ui::after { left: 19px; background: var(--teal); }
+    .helper { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.42; }
+    .calculation-summary { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--teal-border); border-radius: var(--radius); background: var(--teal-soft); color: #ccfbf1; line-height: 1.45; }
+    .info-dot { display: inline-flex; width: 18px; height: 18px; flex: 0 0 18px; align-items: center; justify-content: center; border: 1px solid currentColor; border-radius: 50%; font-size: 11px; font-weight: 900; }
+    .details-card { overflow: hidden; }
+    .details-card summary { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 14px; cursor: pointer; font-weight: 800; list-style: none; }
+    .details-card summary::-webkit-details-marker { display: none; }
+    .summary-copy { display: flex; align-items: center; gap: 9px; }
+    .summary-count { border-radius: 999px; background: var(--teal-soft); color: #5eead4; padding: 3px 8px; font-size: 11px; }
+    .details-body { border-top: 1px solid var(--border); padding: 14px; }
+    .inline-3 { display: grid; grid-template-columns: 1.15fr .75fr .55fr; gap: 12px; }
+    .preview { position: sticky; top: 16px; overflow: hidden; }
+    .preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 15px 16px 12px; border-bottom: 1px solid var(--border); }
+    .preview-head h2 { margin: 0; font-size: 17px; }
+    .preview-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .preview-badge { border: 1px solid var(--teal-border); border-radius: 999px; padding: 4px 8px; color: #5eead4; font-size: 11px; font-weight: 800; }
+    .chart { padding: 18px 18px 14px; }
+    .chart-title { margin: 0 0 3px; font-size: 15px; }
+    .chart-subtitle { margin: 0 0 18px; color: var(--muted); font-size: 12px; }
+    .bar-list { display: grid; gap: 13px; }
+    .bar-row { display: grid; grid-template-columns: 54px 1fr 34px; align-items: center; gap: 9px; }
+    .bar-label { color: var(--muted); font-size: 11px; text-align: right; }
+    .bar-track { display: flex; height: 19px; overflow: hidden; border-radius: 4px; background: rgba(15,23,42,.35); }
+    .bar-segment { height: 100%; }
+    .planned { background: var(--teal); }
+    .unplanned { background: var(--orange); }
+    .bar-value { font-size: 11px; font-weight: 800; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 0 0 63px; color: var(--muted); font-size: 11px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 9px; height: 9px; border-radius: 2px; }
+    .preview-rule { height: 1px; margin: 16px 0 12px 63px; background: var(--border); }
+    .axis-title { margin-left: 63px; color: var(--muted); font-size: 11px; text-align: center; }
+    .preview-note { margin: 0; padding: 12px 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .warning { color: #fde68a; }
+    .actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
+    .action-group { display: flex; gap: 9px; }
+    .button { min-height: 42px; border: 0; border-radius: var(--radius); padding: 0 16px; background: var(--teal); color: #0f172a; cursor: pointer; font-weight: 850; }
+    .button.secondary { border: 1px solid var(--border); background: var(--control); color: var(--text); }
+    .button.quiet { background: transparent; color: var(--muted); }
+    .publish-menu { position: relative; }
+    .publish-trigger { gap: 8px; }
+    .publish-trigger[aria-expanded="true"] { box-shadow: 0 0 0 3px rgba(20,184,166,.13); }
+    .publish-options {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 7px);
+      z-index: 10;
+      display: grid;
+      width: 240px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: 0 18px 42px rgba(15,23,42,.48);
+    }
+    .publish-options button {
+      min-height: 49px;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      padding: 0 18px;
+      text-align: left;
+      font-weight: 800;
+    }
+    .publish-options button:last-child { border-bottom: 0; }
+    .publish-options button:hover { background: var(--teal-soft); }
+    .hidden { display: none !important; }
+    .empty-kind { min-height: 330px; display: grid; place-items: center; padding: 30px; text-align: center; color: var(--muted); }
+    .empty-kind strong { display: block; margin-bottom: 7px; color: var(--text); font-size: 16px; }
+    @media (max-width: 1280px) {
+      body { min-width: 980px; }
+      .editor-layout { grid-template-columns: minmax(580px, 1.3fr) minmax(350px, .7fr); }
+      .kind-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topline">
+      <div>
+        <h1>Edit Component</h1>
+        <p class="subtitle">Define how a published Dataset becomes a reusable dashboard component.</p>
+      </div>
+      <div class="status">Version <b>2 draft</b></div>
+    </header>
+
+    <form class="shell" onsubmit="event.preventDefault()">
+      <div class="context-kind">
+        <fieldset>
+          <legend>Dataset Context</legend>
+          <div class="dataset-strip">
+            <div class="context-item"><span class="eyebrow">Dataset</span><strong>Demo Session Log</strong></div>
+            <div class="context-item"><span class="eyebrow">Grain</span><strong>submission</strong></div>
+            <div class="context-item"><span class="eyebrow">Tags</span><strong>demo, log, session</strong></div>
+            <div class="context-item"><span class="eyebrow">Binding</span><span class="version-chip">Version 1</span></div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Component Kind</legend>
+          <div class="kind-grid" role="radiogroup" aria-label="Component kind">
+            <button type="button" class="kind-button" data-kind="table">Table</button>
+            <button type="button" class="kind-button is-selected" data-kind="bar">Bar</button>
+            <button type="button" class="kind-button" data-kind="line">Line</button>
+            <button type="button" class="kind-button" data-kind="pie">Pie / Donut</button>
+            <button type="button" class="kind-button" data-kind="stat">Stat Card</button>
+          </div>
+          <p class="kind-help" id="kind-help">Compare one measure across categories, with an optional series breakdown.</p>
+        </fieldset>
+      </div>
+
+      <div class="editor-layout">
+        <div class="config-stack" id="bar-editor">
+          <fieldset>
+            <legend><span class="step-number">1</span>Fields &amp; calculation</legend>
+            <div class="section-title">
+              <div><h2>Build the bars</h2><p>Choose what creates each bar and how its value is calculated.</p></div>
+            </div>
+            <div class="field-grid">
+              <section class="role-card">
+                <div class="role-head"><strong>Category</strong><span class="info-dot" title="Creates one category group for every distinct value.">i</span></div>
+                <p class="role-description">What should each row of bars represent?</p>
+                <label><span>Category field</span><select><option>Session Date (date)</option><option>Program (text)</option><option>Site (text)</option></select></label>
+                <label style="display:block;margin-top:10px"><span>Missing categories</span><select><option>Omit rows</option><option>Show as “Missing”</option></select></label>
+              </section>
+
+              <section class="role-card">
+                <div class="role-head">
+                  <strong>Series</strong>
+                  <div class="toggle-row"><span style="color:var(--muted);font-size:12px">Split bars</span><label class="switch" aria-label="Split bars into series"><input id="series-toggle" type="checkbox" checked><span class="switch-ui"></span></label></div>
+                </div>
+                <p class="role-description">Optionally compare a second dimension within each category.</p>
+                <div id="series-fields">
+                  <label><span>Series field</span><select><option>Completed As Planned (boolean)</option><option>Program (text)</option><option>Site (text)</option></select></label>
+                  <label style="display:block;margin-top:10px"><span>Missing series</span><select><option>Omit rows</option><option>Show as “Missing”</option></select></label>
+                </div>
+              </section>
+
+              <section class="role-card span-2">
+                <div class="role-head"><strong>Measure</strong><span class="info-dot" title="Calculates one value per category and series group.">i</span></div>
+                <p class="role-description">What number should determine the length of each bar?</p>
+                <div class="field-grid">
+                  <label><span>Calculation</span>
+                    <select id="operation">
+                      <option value="row_count">Count rows</option>
+                      <option value="count">Count non-empty values</option>
+                      <option value="unique_count">Count unique values</option>
+                      <option value="sum" selected>Sum</option>
+                      <option value="average">Average</option>
+                      <option value="median">Median</option>
+                      <option value="none">Do not summarize</option>
+                    </select>
+                  </label>
+                  <label id="value-field"><span>Value field</span><select><option>Participants (number)</option><option>Duration (number)</option><option>Session Score (number)</option></select></label>
+                  <label id="null-values"><span>Empty numeric values</span><select><option>Ignore</option><option>Treat as zero</option></select></label>
+                  <div class="calculation-summary" id="calculation-summary"><span class="info-dot">i</span><span>Adds <b>Participants</b> for every Session Date and Completion Status group.</span></div>
+                </div>
+              </section>
+            </div>
+          </fieldset>
+
+          <details class="card details-card">
+            <summary><span class="summary-copy">Filters <span class="summary-count">1 applied</span></span><span>⌄</span></summary>
+            <div class="details-body"><div class="inline-3"><label><span>Field</span><select><option>Reporting Year</option></select></label><label><span>Condition</span><select><option>Equals</option></select></label><label><span>Value</span><input type="text" value="2026"></label></div></div>
+          </details>
+
+          <fieldset>
+            <legend><span class="step-number">2</span>Order &amp; display</legend>
+            <div class="field-grid">
+              <label><span>Order categories by</span><select><option>Total value</option><option>Category label</option></select><p class="helper">For a series chart, Total value is recalculated across all series for each category.</p></label>
+              <label><span>Direction</span><select><option>Descending</option><option>Ascending</option></select></label>
+              <label><span>Category limit</span><input type="number" value="20" min="1" max="100"><p class="helper">Applied to categories after sorting—not to individual series bars.</p></label>
+              <label><span>Orientation</span><select><option>Horizontal</option><option>Vertical</option></select></label>
+              <label><span>Comparison layout</span><select><option>Stacked</option><option>Grouped</option></select><p class="helper warning">Stacked is available for count and sum calculations.</p></label>
+              <label><span>Value format</span><select><option>Integer</option><option>Plain</option><option>Decimal</option><option>Percent</option></select></label>
+            </div>
+          </fieldset>
+
+          <details class="card details-card">
+            <summary><span class="summary-copy">Labels &amp; colors <span class="summary-count">2 series</span></span><span>⌄</span></summary>
+            <div class="details-body field-grid"><label><span>Category axis title</span><input type="text" value="Session Date"></label><label><span>Value axis title</span><input type="text" value="Participants"></label><label><span>Series title</span><input type="text" value="Completion Status"></label><label><span>Color palette</span><select><option>Tessara default</option><option>High contrast</option></select></label></div>
+          </details>
+        </div>
+
+        <div class="config-stack hidden" id="other-editor">
+          <fieldset><legend>Kind-specific configuration</legend><div class="empty-kind"><div><strong id="other-kind-title">Table configuration</strong><span>This shared editor shell swaps in the selected kind’s own typed controls. Dataset binding, validation, versioning, and actions remain unchanged.</span></div></div></fieldset>
+        </div>
+
+        <aside class="card preview">
+          <div class="preview-head"><div><h2>Preview</h2><p>Uses current draft settings</p></div><span class="preview-badge">Valid config</span></div>
+          <div class="chart" id="chart-preview">
+            <h3 class="chart-title">Participants by Session Date</h3>
+            <p class="chart-subtitle">Split by Completion Status</p>
+            <div class="bar-list">
+              <div class="bar-row"><span class="bar-label">Jul 08</span><div class="bar-track"><span class="bar-segment planned" style="width:68%"></span><span class="bar-segment unplanned" style="width:20%"></span></div><span class="bar-value">44</span></div>
+              <div class="bar-row"><span class="bar-label">Jul 07</span><div class="bar-track"><span class="bar-segment planned" style="width:55%"></span><span class="bar-segment unplanned" style="width:27%"></span></div><span class="bar-value">41</span></div>
+              <div class="bar-row"><span class="bar-label">Jul 03</span><div class="bar-track"><span class="bar-segment planned" style="width:58%"></span><span class="bar-segment unplanned" style="width:14%"></span></div><span class="bar-value">36</span></div>
+              <div class="bar-row"><span class="bar-label">Jul 02</span><div class="bar-track"><span class="bar-segment planned" style="width:43%"></span><span class="bar-segment unplanned" style="width:18%"></span></div><span class="bar-value">31</span></div>
+              <div class="bar-row"><span class="bar-label">Jun 30</span><div class="bar-track"><span class="bar-segment planned" style="width:37%"></span><span class="bar-segment unplanned" style="width:16%"></span></div><span class="bar-value">27</span></div>
+            </div>
+            <div class="legend"><span><i class="swatch planned"></i>Completed as planned</span><span><i class="swatch unplanned"></i>Not completed as planned</span></div>
+            <div class="preview-rule"></div><div class="axis-title">Participants</div>
+          </div>
+          <p class="preview-note" id="preview-note">Showing the top 20 Session Dates, ordered by total Participants descending. Empty categories and series values are omitted.</p>
+        </aside>
+      </div>
+
+      <div class="actions">
+        <div class="action-group">
+          <button type="button" class="button secondary">Save Draft</button>
+          <div class="publish-menu">
+            <div class="publish-options hidden" id="publish-options" role="menu">
+              <button type="button" role="menuitem">Update Existing Version</button>
+              <button type="button" role="menuitem">Create New Version</button>
+            </div>
+            <button type="button" class="button publish-trigger" id="publish-trigger" aria-expanded="false">Save and Publish <span aria-hidden="true">⌄</span></button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </main>
+  <script>
+    const kindHelp = {
+      table: 'Display Dataset rows with a selected projection, filters, sort, and paging.',
+      bar: 'Compare one measure across categories, with an optional series breakdown.',
+      line: 'Show how one measure changes across an ordered or time-based dimension.',
+      pie: 'Show how categories contribute to a whole using one summarized measure.',
+      stat: 'Present one summarized value with supporting context.'
+    };
+    document.querySelectorAll('.kind-button').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.kind-button').forEach(item => item.classList.remove('is-selected'));
+        button.classList.add('is-selected');
+        const kind = button.dataset.kind;
+        document.getElementById('kind-help').textContent = kindHelp[kind];
+        document.getElementById('bar-editor').classList.toggle('hidden', kind !== 'bar');
+        document.getElementById('other-editor').classList.toggle('hidden', kind === 'bar');
+        document.getElementById('chart-preview').classList.toggle('hidden', kind !== 'bar');
+        document.getElementById('preview-note').textContent = kind === 'bar'
+          ? 'Showing the top 20 Session Dates, ordered by total Participants descending. Empty categories and series values are omitted.'
+          : `The ${button.textContent.trim()} editor uses this same shell with its own typed controls and preview.`;
+        document.getElementById('other-kind-title').textContent = `${button.textContent.trim()} configuration`;
+      });
+    });
+    const seriesToggle = document.getElementById('series-toggle');
+    seriesToggle.addEventListener('change', () => {
+      document.getElementById('series-fields').classList.toggle('hidden', !seriesToggle.checked);
+      document.querySelector('.chart-subtitle').textContent = seriesToggle.checked ? 'Split by Completion Status' : 'One value per Session Date';
+      document.querySelector('.legend').classList.toggle('hidden', !seriesToggle.checked);
+      document.querySelectorAll('.unplanned').forEach(item => item.classList.toggle('hidden', !seriesToggle.checked));
+    });
+    const operation = document.getElementById('operation');
+    operation.addEventListener('change', () => {
+      const rowCount = operation.value === 'row_count';
+      const none = operation.value === 'none';
+      document.getElementById('value-field').classList.toggle('hidden', rowCount);
+      document.getElementById('null-values').classList.toggle('hidden', rowCount);
+      const text = rowCount
+        ? 'Counts Dataset rows in every Session Date and Completion Status group. No value field is needed.'
+        : none
+          ? 'Uses the single Participants value already present for each group. Duplicate rows will fail validation.'
+          : `${operation.options[operation.selectedIndex].text} of Participants for every Session Date and Completion Status group.`;
+      document.getElementById('calculation-summary').querySelector('span:last-child').textContent = text;
+    });
+    const publishTrigger = document.getElementById('publish-trigger');
+    const publishOptions = document.getElementById('publish-options');
+    publishTrigger.addEventListener('click', () => {
+      const willOpen = publishOptions.classList.contains('hidden');
+      publishOptions.classList.toggle('hidden', !willOpen);
+      publishTrigger.setAttribute('aria-expanded', String(willOpen));
+    });
+    publishOptions.querySelectorAll('button').forEach(button => {
+      button.addEventListener('click', () => {
+        publishOptions.classList.add('hidden');
+        publishTrigger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -154,3 +154,66 @@ pub struct ComponentTableRow {
     pub(crate) row_id: String,
     pub(crate) values: BTreeMap<String, Option<String>>,
 }
+
+/// Executed visual component response for chart and stat viewers.
+#[derive(Serialize)]
+pub struct ComponentVisual {
+    pub(crate) component_id: Uuid,
+    pub(crate) component_version_id: Uuid,
+    pub(crate) dataset_id: Uuid,
+    pub(crate) dataset_version_major: i32,
+    pub(crate) component_type: String,
+    pub(crate) materialization_state: String,
+    pub(crate) value_format: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) legend_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) bar_orientation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) bar_comparison_layout: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) x_axis_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) y_axis_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) line_smoothing: Option<bool>,
+    pub(crate) stat: Option<ComponentStatValue>,
+    pub(crate) points: Vec<ComponentVisualPoint>,
+    pub(crate) slices: Vec<ComponentVisualSlice>,
+}
+
+/// Single-value view model for StatCard components.
+#[derive(Serialize)]
+pub struct ComponentStatValue {
+    pub(crate) label: String,
+    pub(crate) value: Option<f64>,
+    pub(crate) display_value: Option<String>,
+    pub(crate) supporting_text: Option<String>,
+    pub(crate) panel_style: String,
+}
+
+/// Cartesian visual point for Bar and Line components.
+#[derive(Serialize)]
+pub struct ComponentVisualPoint {
+    pub(crate) x: String,
+    #[serde(skip)]
+    pub(crate) sort_x: String,
+    pub(crate) value: f64,
+    pub(crate) display_value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) comparison: Option<String>,
+    #[serde(skip)]
+    pub(crate) sort_comparison: Option<String>,
+}
+
+/// Category share view model for Pie and Donut components.
+#[derive(Serialize)]
+pub struct ComponentVisualSlice {
+    pub(crate) category: String,
+    pub(crate) value: f64,
+    pub(crate) display_value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) color: Option<String>,
+}

@@ -5,9 +5,10 @@ use axum::{
 
 use super::{
     create_dataset, delete_dataset, delete_dataset_revision, get_dataset, get_dataset_revision,
-    list_dataset_revisions, list_datasets, preview_dataset_sql, preview_existing_dataset_sql,
-    publish_dataset_revision, run_dataset_table, save_dataset_draft_revision,
-    update_dataset_revision_label, update_dataset_revision_options, update_dataset_tags,
+    list_dataset_distinct_values, list_dataset_revisions, list_datasets, preview_dataset_sql,
+    preview_existing_dataset_sql, publish_dataset_revision, run_dataset_table,
+    save_dataset_draft_revision, update_dataset_revision_label, update_dataset_revision_options,
+    update_dataset_tags,
 };
 use crate::db::AppState;
 
@@ -55,4 +56,8 @@ pub(crate) fn routes() -> Router<AppState> {
             get(get_dataset_revision),
         )
         .route("/api/datasets/{dataset_id}/table", get(run_dataset_table))
+        .route(
+            "/api/datasets/{dataset_id}/distinct-values",
+            get(list_dataset_distinct_values),
+        )
 }

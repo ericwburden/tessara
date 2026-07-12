@@ -5,6 +5,245 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-07-12 - Sprint 4B Chart And Stat Component Closeout
+
+- Completed:
+  - delivered first-class Bar, Line, Pie, Donut, and Stat Card authoring, validation, preview, versioning, publishing, and viewing on the canonical `Dataset -> ComponentVersion` path
+  - delivered kind-specific execution endpoints, D3-backed chart rendering, responsive editor behavior, category/series labels and colors, filters, sorting, limits, axis controls, and seeded examples for every Component kind
+  - preserved Table Component behavior and scoped Component/Dataset visibility while adding visual kinds
+  - decomposed the Component API runtime and frontend editor into focused runtime, editor, typed-config, and test modules
+  - bundled D3 locally with licensing attribution and retained native Leptos route ownership without `/bridge/*` assets
+- Closeout validation:
+  - `crates/tessara-api/migrations` contains only `001_baseline.sql`; a fresh database reports only migration `1:baseline:true` and the six supported Component enum values
+  - `.\scripts\local-launch.ps1 -FreshData` - passed: rebuilt the release image, recreated the Postgres volume, applied the squashed baseline, and seeded 58 submitted Demo Session Log responses, four Datasets, nine Components, and one Dashboard
+  - `cargo fmt --all -- --check` - passed
+  - `cargo check --workspace --all-features` - passed
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings` - passed
+  - `cargo test --workspace --all-features` - passed: all unit, integration, and doc tests, including 86 API tests, 6 demo-flow tests, 25 workflow-runtime tests, and 22 Component editor tests
+  - `npx playwright test` - passed: 41/41 browser tests
+  - `.\scripts\validate-e2e.ps1 -BaseUrl http://127.0.0.1:8080` - passed: 41/41 browser tests through the repository validation wrapper
+  - `.\scripts\smoke.ps1 -UseExistingService -BaseUrl http://127.0.0.1:8080 -KeepServices` - passed with 52 Dataset rows, 50 Component rows, 26 seeded visual points, and 20 bounded visual points
+  - `.\scripts\uat-sprint.ps1 -BaseUrl http://localhost:8080` - passed for organization, forms, Datasets, Components, and seed flows
+  - `git diff --check`, D3 renderer JavaScript syntax, and all PowerShell script parser checks - passed
+  - hardened browser diagnostics to retain failed page-response URLs and replaced a hydration-sensitive one-shot mobile geometry read with a live polling assertion
+- Legacy visual-analysis endpoint inventory:
+  - no legacy visual-analysis endpoints were touched; all Sprint 4B execution and metadata behavior is owned by Component and ComponentVersion routes
+- Next Sprint: Sprint 5A Dashboard Composition Slice
+
+### Sprint Handoff / Demo Instructions
+
+#### Visual Component Authoring And Preview
+
+- Role: admin
+- Paths:
+  - `http://localhost:8080/components/new`
+  - `http://localhost:8080/components/demo-session-log-bar/edit`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open Create Component and choose the Demo Session Log Dataset version from the searchable Dataset Version picker.
+  3. Select each visual Component kind and review its stable kind-specific configuration panel.
+  4. For Bar, select Session Date as Category, Completed As Planned as Series, Participants as Value, and review horizontal/vertical plus grouped/stacked preview behavior.
+  5. Add a filter and verify the preview updates from at most 100 source rows.
+- Expected:
+  - the editor exposes only applicable controls, validation is announced in place, help buttons provide on-click guidance, and the sticky desktop preview or mobile preview drawer renders the current draft without saving
+- Acceptance check:
+  - pass when Bar, Line, Pie, Donut, and Stat Card drafts each produce a valid preview and no control or panel escapes its container
+- Evidence location:
+  - `end2end/tests/components.spec.ts` visual authoring and mobile preview scenarios
+
+#### Publish, Version, And View Visual Components
+
+- Role: admin
+- Paths:
+  - `http://localhost:8080/components/demo-session-log-bar`
+  - `http://localhost:8080/components/demo-session-log-bar/versions`
+  - `http://localhost:8080/components/demo-session-log-line`
+  - `http://localhost:8080/components/demo-session-completion-pie`
+  - `http://localhost:8080/components/demo-session-completion-donut`
+  - `http://localhost:8080/components/demo-session-total-participants-stat-card`
+- Steps:
+  1. Open each seeded visual Component viewer and confirm the expected chart or stat treatment renders.
+  2. Use Edit and Versions from the viewer header.
+  3. Save a draft, publish it, and create a later Component version with a version note.
+  4. Open an explicit historical version and confirm it renders from that version's Dataset major-line binding.
+- Expected:
+  - viewers render D3 Bar, Line, Pie, and Donut charts or a bounded Stat Card; version actions remain on the Component workflow and historical versions do not silently resolve to the current version
+- Acceptance check:
+  - pass when every delivered kind can be published and viewed and explicit-version endpoints return the requested version
+- Evidence location:
+  - `end2end/tests/components.spec.ts` visual lifecycle, wrong-kind, and historical-version assertions
+
+#### Labels, Colors, Filters, And Responsive Behavior
+
+- Role: admin
+- Paths:
+  - `http://localhost:8080/components/demo-session-completion-donut/edit`
+  - `http://localhost:8080/components/demo-session-log-line/edit`
+- Steps:
+  1. Change a Category or Series field and verify its labels/colors table refreshes to the new distinct values.
+  2. Set a legend title, display labels, and theme colors, then confirm the preview uses them.
+  3. Narrow the browser to a mobile viewport and open Preview from the floating action button.
+  4. Close the preview drawer and confirm focus returns to the trigger.
+- Expected:
+  - stale category values do not persist, color menus remain visible and dismiss outside, charts avoid overlapping labels, and the mobile editor remains horizontally contained
+- Acceptance check:
+  - pass when label/color changes render correctly and keyboard/mobile preview interactions remain usable without horizontal overflow
+- Evidence location:
+  - `end2end/tests/components.spec.ts` editor containment and accessible preview-drawer scenario
+
+#### Scoped Visual Component Access
+
+- Role: scoped operator fixture used by the permissions suite
+- Paths:
+  - `/components`
+  - `/api/components/{component_ref}/bar`
+- Steps:
+  1. Run the permissions suite to create visible and hidden Dataset-backed Bar fixtures.
+  2. Confirm the scoped user lists, reads, views, and executes the in-scope published Bar.
+  3. Confirm the same user cannot list, direct-load, or execute the out-of-scope Bar.
+- Expected:
+  - published visual metadata and execution follow Dataset and Component scope; hidden assets do not leak names, versions, or chart data
+- Acceptance check:
+  - pass when positive in-scope access succeeds and every hidden direct request is forbidden or absent
+- Evidence location:
+  - `end2end/tests/permissions.spec.ts`
+  - `docs/playwright-permissions-scenarios.md`
+
+### Acceptance Mapping
+
+- Exit condition: a tester can create a Bar, Line, Pie, Donut, and Stat Card through the application UI.
+  - Manual demonstration: Visual Component Authoring And Preview.
+  - Automated check: `end2end/tests/components.spec.ts` visual authoring lifecycle.
+- Exit condition: visual components validate, save, publish, version, and render from ComponentVersion without deprecated workbench assets.
+  - Manual demonstration: Publish, Version, And View Visual Components.
+  - Automated check: API Component tests plus Playwright visual lifecycle, explicit-version, wrong-kind, browser-console, and `/bridge/*` request assertions.
+- Exit condition: Table endpoints remain table-only while kind-specific visual endpoints return stable view models and reject mismatches.
+  - Manual demonstration: publish/view each kind and open historical versions.
+  - Automated check: `cargo test -p tessara-api components::tests::` and Playwright wrong-kind route assertions.
+- Exit condition: reader and management routes enforce published state, capability, and Dataset/Component scope.
+  - Manual demonstration: Scoped Visual Component Access.
+  - Automated check: `end2end/tests/permissions.spec.ts` scoped visual Component scenarios.
+- Exit condition: touched Component routes remain native, hydration-clean, console-clean, and free of `/bridge/*` assets.
+  - Manual demonstration: open editor and viewer routes directly and navigate between Edit, Versions, and viewer actions.
+  - Automated check: full Playwright suite console collector and visual-route request listener.
+- Exit condition: retained legacy visual-analysis endpoints are adapter-only and scope-safe if touched.
+  - Manual demonstration: not applicable; no legacy visual-analysis endpoints were touched.
+  - Automated check: route/code inventory confirms Sprint 4B behavior is implemented under Component/ComponentVersion endpoints only.
+
+## 2026-07-11 - Sprint 4B Full Implementation Review
+
+- Completed a full correctness, UX, accessibility, performance, migration, and code-quality review of the Sprint 4B implementation.
+- Correctness and upgrade repairs:
+  - restored the immutable baseline migration and moved visual component schema changes into forward-only migrations `002` and `003`, with regression tests for baseline integrity and migration ownership
+  - scoped editor field catalogs and distinct category/series values to the selected Dataset major line instead of the latest revision/current-row sample
+  - moved published visual aggregation into SQL and limited previews to at most 100 source rows before grouping
+  - preserved negative Bar/Line values, rejected negative Pie/Donut summaries, made unique counts collision-free, and made numeric/category/comparison sorting type-aware
+  - enforced additive-only stacked Bars and returned role-specific validation codes for stale Summary, Category, Comparison, X, filter, and Table fields
+- UX, resilience, and accessibility repairs:
+  - bundled D3 7.9.0 locally with its ISC notice and build-fingerprinted asset URLs, removing the runtime CDN dependency and stale-cache risk
+  - debounced draft previews, added a chart skeleton/failure state, and kept row-count previews valid without a Value field
+  - made help content real on-click tooltip content with independently named CircleHelp triggers and stable accessible names for associated form controls
+  - added keyboard support to the Dataset Version combobox and focus containment/return behavior to the mobile preview drawer
+  - verified the sticky desktop preview and mobile drawer visually; 1440px and 600px probes had no horizontal overflow, the Bar preview rendered 26 SVG bars, and the browser console remained error-free
+- Final validation against a fresh rebuilt and reseeded stack:
+  - `cargo test --workspace --all-features` - passed: all workspace unit, integration, and doc tests, including 87 API tests, 6 demo-flow tests, 25 workflow-runtime tests, and 22 Component editor tests
+  - `cargo fmt --all -- --check` - passed
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings` - passed
+  - `npx playwright test` - passed: 41/41 browser tests, including visual lifecycle, permissions, historical Dataset-major behavior, mobile containment, and accessible preview-drawer coverage
+  - `scripts/smoke.ps1 -UseExistingService -BaseUrl http://127.0.0.1:8080 -KeepServices` - passed
+  - `scripts/uat-sprint.ps1 -BaseUrl http://localhost:8080` - passed
+  - migration immutability, `git diff --check`, JavaScript syntax, and PowerShell parser checks - passed
+- Maintainability remediation:
+  - split Component runtime execution, aggregation, filtering, and transforms into `components/runtime.rs`, leaving route lifecycle and authorization composition in `components/mod.rs`
+  - split Component editor controls, typed config serialization, and tests into focused `pages/editor.rs`, `pages/editor_config.rs`, and `pages/tests.rs` modules; the config module now declares an explicit dependency boundary instead of inheriting the page module namespace
+  - retained Sprint 4B migrations `002` and `003` during development and documented the required baseline squash, migration-test replacement, fresh-volume rebuild, and complete validation sequence for sprint closeout
+- Remaining follow-up maintainability debt:
+  - Dashboard composition remains outside Sprint 4B; Stat Card CSS is container-bounded, but a real Dashboard-grid integration test should be added when Dashboard layout authoring is implemented
+
+## 2026-07-10 - Sprint 4B Component Editor Alignment
+
+- Reworked the shared Component editor around the implementation guide:
+  - added compact Dataset Context and Component Kind panels, desktop kind buttons with a mobile select fallback, and confirmation before clearing incompatible kind-specific settings
+  - added a Bar-specific role editor for Category, Series, and Measure plus order, category limit, orientation, comparison layout, format, and axis-title controls
+  - added a sticky current-draft preview backed by `POST /api/admin/components/preview`, with validation/loading/error states and a plain-language execution summary
+  - added collapsible visual filters and Labels & colors sections; Bar labels/colors now use Comparison Field values and single-series bars use one consistent color
+  - moved Bar legends into normal flow above the SVG so they wrap without overlapping the plot
+  - added `Count rows` and `Do not summarize`; row counts hide Value field, and unsummarized duplicate groups fail explicitly instead of being silently repaired
+  - separated category, series, and measure missing-value policies so each control affects only its data role, with backward-compatible fallback for older saved configs
+  - moved keyboard focus into the newly rendered kind editor after a confirmed kind change
+  - replaced the generic visual-config switch with dedicated Bar, Line, Pie/Donut, and Stat Card editors plus narrowly shared Measure and Order controls
+  - added a typed `ComponentConfigDraft` boundary with per-kind draft structs and serializers; removed the former component-type JSON builder
+  - corrected Bar DOM order so collapsed Filters sit between field mapping and Order & display, followed by Labels & colors
+  - corrected comparison Bar limiting so Category limit retains whole categories and every series within each retained category; total-value ordering now uses category totals
+- Demo and regression coverage:
+  - refreshed the Demo Session Participants Bar seed as a stacked comparison chart by Session Date and completion status
+  - rebuilt and reseeded the local Docker stack with 58 submitted Demo Session Log responses and nine example Components
+  - expanded the visual Component Playwright scenario for draft preview, kind confirmation, comparison display rows, legend placement, calculation disclosure, and multi-kind publish/view workflows
+- Validation:
+  - `cargo check -p tessara-api -p tessara-web-components --features tessara-web-components/hydrate` - passed
+  - `cargo test -p tessara-api components::tests::` - passed: 36/36, including whole-category comparison limit coverage
+  - `cargo test -p tessara-web-components pages::tests::` - passed: 18/18, including per-kind typed serialization coverage
+  - `npx playwright test tests/components.spec.ts --grep "admin can author, publish, and view visual components"` - passed against the final rebuilt stack: 1/1
+  - `npx playwright test tests/components.spec.ts --list` - passed after the final calculation and null-policy additions
+  - desktop browser probe confirmed the Bar legend precedes the SVG, has zero overlap, contains completion-status series, and causes no horizontal overflow
+  - 390x844 browser probe confirmed a single-column editor, mobile kind select, preview below controls, and no horizontal overflow
+  - live Bar DOM probe confirmed Fields & calculation, collapsed Filters, Order & display, and collapsed Labels & colors in guide order
+  - live accessibility probe confirmed a real six-item kind radiogroup with one selected radio, polite preview/findings regions, and no separate Validate action
+  - save-validation browser coverage confirmed an invalid save remains on the editor, preserves entered identity, and announces Validation Findings before correction
+  - `npx playwright test tests/components.spec.ts` - passed against the final rebuilt stack: 2/2 Table and visual Component lifecycle scenarios
+  - `git diff --check` - passed with only existing PowerShell LF-to-CRLF warnings
+
+## 2026-07-10 - Sprint 4B Category Display Feedback
+
+- Browser-feedback fix:
+  - tightened the Component editor Category Display table so its rows are driven only by the currently selected Category Field values; saved display-label/color entries from a previous Category Field no longer reappear after the field changes
+  - guarded asynchronous Category Field value loading so late responses from a previous field or Dataset Version cannot overwrite the current Category Display table
+  - defaulted Legend Title to the newly selected Category Field label when authors change the Category Field, without overwriting saved legend text on reopen
+  - added a `Versions` action beside `Edit` on Component viewer headers for quicker navigation to version history
+  - aligned Component viewer header action spacing with the existing page-header action group spacing
+- Validation:
+  - `cargo fmt --all -- --check` - passed
+  - `cargo check -p tessara-web-components` - passed
+  - `.\scripts\local-launch.ps1 -FreshData` - passed after rebuilding and reseeding the local stack
+  - `npx playwright test tests/components.spec.ts --grep "visual component"` - passed: 1/1 browser regression covering visual component authoring, Category Field stale-label reset behavior, Legend Title defaulting, and Component viewer version navigation
+  - `.\scripts\smoke.ps1 -UseExistingService -BaseUrl "http://127.0.0.1:8080" -KeepServices` - passed against the rebuilt seeded stack
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"` - passed: 40/40 browser tests, including component visual authoring/viewing and permission scenarios
+  - `cargo test -p tessara-web-components` - passed: 17 component UI helper tests and doc tests
+  - `cargo test -p tessara-api` - passed: 75 component/dataset unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed against the rebuilt seeded stack
+  - `cargo test -p tessara-web -p tessara-web-datasets -p tessara-web-data-ops` - passed: 5 web shell tests, 24 dataset UI helper tests, 1 data-ops helper test, and doc tests
+  - `git diff --check` - passed with only existing PowerShell LF-to-CRLF warnings for `scripts/smoke.ps1` and `scripts/uat-sprint.ps1`
+
+## 2026-07-10 - Sprint 4B Bar Chart Feedback
+
+- Browser-feedback fix:
+  - added Bar Visual Config controls for horizontal/vertical orientation and optional X/Y axis labels
+  - added a comparison layout control that appears when a Bar component has a Comparison Field, supporting grouped and stacked arrangements
+  - carried Bar orientation, comparison layout, and axis labels through the ComponentVersion config, API visual response, seeded demo component, and client DTOs
+  - replaced the simple Bar renderer with a D3 axis-based renderer for horizontal/vertical, grouped/stacked bar charts with axis ticks, labels, titles, and comparison legends
+- Validation:
+  - `cargo check -p tessara-web-components -p tessara-api` - passed
+  - `cargo test -p tessara-api components::tests::visual_component_config` - passed: 2/2 component visual config tests
+  - `cargo fmt --all -- --check` - passed
+  - `node --check crates/tessara-web/assets/tessara-d3-charts.js` - passed
+  - `.\scripts\local-launch.ps1 -FreshData` - passed after rebuilding and reseeding the local stack
+  - `npx playwright test tests/components.spec.ts --grep "visual component"` - passed: 1/1 browser regression covering the new Bar controls inside visual component authoring
+
+## 2026-07-10 - Sprint 4B Bar Comparison Display Feedback
+
+- Browser-feedback fix:
+  - moved Bar comparison legends into a reserved band above the plot area so they no longer overlap the bars
+  - changed Bar display overrides so comparison-mode bars use Comparison Field values for legend labels and colors
+  - kept summary-only Bar charts on one consistent series color instead of recoloring by Category Field
+  - changed the Bar editor Category Display table to load Comparison Field values when a Comparison Field is selected
+- Validation:
+  - `cargo fmt --all -- --check` - passed
+  - `cargo check -p tessara-web-components -p tessara-api` - passed
+  - `cargo test -p tessara-api components::tests::` - passed: 32/32 component tests, including Bar comparison label/color mapping
+  - `node --check crates/tessara-web/assets/tessara-d3-charts.js` - passed
+  - `npx playwright test tests/components.spec.ts --grep "visual component"` - passed: 1/1 browser regression
+  - Live Playwright probe on `/components/demo-session-log-bar` and `/edit` confirmed the legend no longer overlaps the first bar and the Bar display table is driven by comparison values
+
 ## 2026-07-09 - Sprint 4B Kickoff
 
 - Sprint: Sprint 4B: Chart And Stat Component Slice
@@ -29,6 +268,69 @@ project direction.
   - record the legacy visual-analysis endpoint inventory in closeout notes
 - Immediate implementation focus:
   - inventory Sprint 4A ComponentVersion table contracts and define typed visual config contracts for Bar, Line, Pie/Donut, and StatCard components
+
+## 2026-07-09 - Sprint 4B Visual Component API/UI Checkpoint
+
+- Completed first vertical slice:
+  - widened `component_type` storage from `table` to `table`, `bar`, `line`, `pie`, `donut`, and `stat_card`
+  - added typed visual config validation for Bar, Line, Pie/Donut, and StatCard components over Dataset major-line fields
+  - added kind-specific published execution endpoints for `/bar`, `/line`, `/pie`, `/donut`, and `/stat-card`, including versioned endpoint variants
+  - kept table execution table-only; visual kinds now receive stable wrong-kind 400 errors from table endpoints
+  - implemented native server-side visual transforms for grouping, summary functions, missing-value policy, sorting, and limits
+  - extended component authoring with component-kind selection and visual config controls
+  - extended component viewers with native Leptos route ownership, StatCard rendering, and D3-backed Bar, Line, Pie, and Donut chart rendering from ComponentVersion view models
+- Completed follow-up coverage:
+  - added API integration coverage that creates, publishes, and executes Bar, Line, Pie, Donut, and StatCard components over a Dataset major line
+  - added explicit-version visual execution coverage for a superseded Bar version after the current published component switches to Line
+  - added wrong-kind visual endpoint coverage and `/stat_card` 404 coverage
+  - added Playwright coverage for UI-driven visual component authoring and publishing for Bar, Line, Pie, Donut, and StatCard, validation, version-history review, historical visual execution, D3 visual viewer rendering, no `/bridge/*` requests, and browser-console cleanliness
+  - added Playwright scoped permission coverage for visible and hidden published Bar components
+  - added Sprint UAT and smoke-script visual Bar checks that create/publish/execute a visual component and load its viewer shell
+- Legacy visual-analysis endpoint inventory:
+  - No legacy visual-analysis endpoints touched in this checkpoint.
+- Validation:
+  - `cargo fmt --all` - passed
+  - `cargo check -p tessara-api --lib` - passed
+  - `cargo check -p tessara-web --features hydrate` - passed
+  - `cargo check -p tessara-web-components --features hydrate` - passed
+  - `cargo test -p tessara-api` - passed: 75 component/dataset unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
+  - `cargo test -p tessara-web` - passed: 4 web shell tests and doc tests
+  - `cargo test -p tessara-web-components` - passed: 17 component UI helper tests and doc tests
+  - `cargo test -p tessara-web-datasets -p tessara-web-data-ops` - passed: 24 dataset UI helper tests, 1 data-ops helper test, and doc tests
+  - `cargo test -p tessara-api --test demo_flow dataset_revision_draft_publish_preserves_current_until_publish` - passed after adding visual endpoint coverage
+  - `.\scripts\local-launch.ps1 -FreshData -SkipSeed` - passed after redeploying Sprint 4B on the normal local ports
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/components.spec.ts` - passed: table component workflow and visual component workflow, including UI-created/published Bar, Line, Pie, Donut, and StatCard components
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test` - passed: 40/40 browser tests
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"` - passed: 40/40 browser tests, including permission scenarios
+  - PowerShell parse checks for `scripts/smoke.ps1` and `scripts/uat-sprint.ps1` - passed
+  - `.\scripts\smoke.ps1` - passed on normal local ports: 6/6 demo-flow tests plus visual Bar publish/execute smoke evidence with `visual_points = 2`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed against a fresh rebuilt Sprint 4B stack
+- Status:
+  - Sprint 4B implementation and closeout validation are complete on the normal local stack.
+
+## 2026-07-10 - Sprint 4B Browser Feedback Hardening
+
+- Completed browser-feedback refinements for visual component authoring and viewing:
+  - D3-based chart rendering is wired into visual component viewers while retaining ComponentVersion as the source of truth.
+  - Demo Session Log seed data now supports a richer component-testing dataset and one seeded example component per visual kind.
+  - Component editor panels, field help, component-kind descriptions, category display labels, category colors, and legend title controls were refined from in-browser review.
+  - Category Display settings now reset stale per-category labels and colors when the author changes the Dataset Version or Category Field, while preserving saved labels/colors when reopening a component on its saved field.
+- Added regression coverage:
+  - `end2end/tests/components.spec.ts` creates a Donut draft with saved `false`/`true` category labels, switches the Category Field to `Topics Covered (multi_choice)`, and verifies the Category Display table contains only the new topic groups.
+  - `crates/tessara-api/tests/demo_flow.rs` executes the seeded Demo Session Log Bar, Line, Pie, Donut, and StatCard components by slug and verifies their view models carry seeded labels, colors, legend title, and StatCard supporting text.
+  - `scripts/smoke.ps1` and `scripts/uat-sprint.ps1` now exercise the seeded Demo Session Log visual examples by slug and tolerate an already-seeded local database after `local-launch.ps1 -FreshData`.
+- Validation:
+  - `cargo check -p tessara-web-components -p tessara-api` - passed.
+  - `cargo test -p tessara-api --test demo_flow demo_seed_uses_capability_scope_ownership_and_components` - passed.
+  - `cargo test -p tessara-web document::assets::tests` - passed: 3/3 document asset tests, including the D3 chart renderer asset and document head script tags.
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/components.spec.ts` - passed: 2/2 component workflow tests.
+  - `.\scripts\local-launch.ps1` - passed after full API image rebuild and launched healthy `postgres` and `api` containers on the normal local ports.
+  - `.\scripts\local-launch.ps1 -FreshData -SkipBuild` - passed and refreshed/reseeded the local database on the normal local ports.
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed against the refreshed seeded local stack.
+  - `.\scripts\smoke.ps1 -UseExistingService -BaseUrl "http://127.0.0.1:8080" -KeepServices` - passed against the refreshed seeded local stack.
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"` - passed: 40/40 browser tests, including component visual authoring/viewing and permission scenarios.
+  - `cargo test -p tessara-web -p tessara-web-components -p tessara-web-datasets -p tessara-web-data-ops` - passed: 5 web shell tests, 17 component UI helper tests, 24 dataset UI helper tests, 1 data-ops helper test, and doc tests.
+  - `cargo test -p tessara-api` - passed: 75 component/dataset unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests.
 
 ## 2026-07-09 - Sprint 4A Final Closeout
 
