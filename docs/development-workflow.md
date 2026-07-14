@@ -1,6 +1,6 @@
 # Tessara Development Workflow
 
-This document separates the day-to-day development loops by speed and intent.
+This document separates the day-to-day development loops by speed and intent. The commands below describe the current single-service transition baseline. Phase 6 of the roadmap will add module-focused and full-composition workflows; until then these commands remain canonical and must stay working.
 
 ## Recommended Loops
 
@@ -113,8 +113,25 @@ dependencies, migrations, release-build behavior, closeout validation, smoke, or
 manual UAT. Routine UI copy, selector, layout, and Playwright expectation
 changes should not pay the full rebuild cost.
 
-When changing an extracted frontend feature area, prefer the focused crate loop
-first, then run root integration checks before closeout. Major new frontend
-feature areas should start in their own `tessara-web-*` crate with root
-`tessara-web` retaining route adapters, shell, auth/session/navigation policy,
-hydration, document integration, CSS, and assets.
+When changing an existing extracted frontend feature area, prefer the focused
+crate loop first, then run root integration checks before closeout. Keep current
+root route, shell, authentication, hydration, document, CSS, and asset behavior
+stable until the module gateway and SDK replace those responsibilities.
+
+Do not assume that every new capability belongs in another root-integrated web
+crate. New feature areas should be designed as full-stack module boundaries
+owning UI, API, configuration, diagnostics, contracts, migrations, and data.
+
+Once Phase 6 tooling exists, the development workflow must add:
+
+- a focused loop for one Core or module application and its own database
+- manifest, `tessara-oci-v1`, configuration-schema, contract, route, security-capability, and health conformance checks
+- generated-client/provider-consumer contract tests
+- local same-origin multi-process startup and diagnostics
+- local deterministic Materialization Plan plus separate Apply Authorization Envelope, Supervisor-ledger replay/conflict checks, Core/gateway restart, status, rollback, and receipt workflows
+- database-isolation, scope-bound grant, freshness, and downstream-audience authorization-exchange checks
+- module outage and degraded-state validation
+- full-composition validation against an Application Blueprint and lockfile
+
+Sprint closeout for a module-affecting change must run both focused module tests
+and the resolved application's integration, browser, and conformance suites.

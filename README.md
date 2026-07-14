@@ -1,7 +1,9 @@
 # Tessara
 
-Tessara is a configurable data platform for structuring, collecting, and
-analyzing complex hierarchical data.
+Tessara is a modular application-construction platform. It combines a stable
+Core for Organization, identity/users, RBAC, navigation, and composition with
+selected full-stack feature modules to produce independently deployed and
+supported applications.
 
 This repository is the Rust + Leptos implementation of Tessara. It is developed
 as a domain-driven product rather than as a one-for-one port of an earlier
@@ -13,13 +15,19 @@ local development and operational workflow for the Rust workspace.
 
 ## Intended Architecture
 
-- Rust backend with `axum`, `sqlx`, and PostgreSQL
-- Leptos SSR-first frontend
-- PostgreSQL OLTP schema for workflow correctness
-- Materialized analytics schema for component-backed analysis
-- Dataset revisions, components, and dashboards for analytical composition
+- one Core application plus only the separately deployed full-stack modules an application needs
+- one coherent same-origin, Leptos SSR-first user experience
+- module manifests that advertise Feature Declarations, functional contracts, resources, semantic routes, navigation/shell contributions, configuration, health, and namespaced security capabilities
+- Core-owned roles and assignments incorporating module-provided security capabilities
+- one PostgreSQL cluster per v1 installation, with one Core database and one database per module instance
+- APIs, events, exports, and typed resource references instead of cross-module table access
+- declarative Application Blueprints and exact lockfiles for reproducible human, automation, and LLM-driven composition
+- an installation-local Supervisor outside Core for locked Core Release components (including the gateway) and Module Release apply, health-gated traffic switching, and rollback
 
-## Planned Crate Naming
+See [the modular platform contract](./docs/modular-application-platform.md) and
+[target architecture](./docs/architecture.md) for the authoritative design.
+
+## Current Workspace And Transition Seams
 
 ```text
 tessara-api
@@ -35,17 +43,23 @@ tessara-jobs
 tessara-web
 ```
 
-The workspace has these crates scaffolded now. The first implementation keeps
-the vertical slice logic in `tessara-api` so the local service is runnable while
-the domain seams are still stabilizing.
+The workspace has these crates scaffolded now. The current implementation keeps
+the vertical slice logic in one runnable service while the module runtime is
+built. These crate boundaries are useful extraction seams, not the target
+deployment topology.
 
-Pure domain rules should move out of `tessara-api` as soon as their contracts
-stabilize. Current extracted examples:
+Domain rules should move into their owning Core or full-stack module boundary as
+contracts stabilize. Current extracted examples:
 
 - `tessara-core`: shared field type parsing and JSON value validation
 - `tessara-dashboards`: dashboard composition rules
 - `tessara-forms`: form version lifecycle and section/field compatibility rules
 - `tessara-submissions`: draft/edit/submit workflow rules and required value checks
+
+The current crate name `tessara-core` predates architectural **Core** and is not
+its boundary definition. During module extraction, field/value semantics must
+move to their owning module or a genuinely policy-neutral SDK contract rather
+than being retained in platform Core because of the crate name.
 
 ## Local Development
 
@@ -222,7 +236,9 @@ The API serves the native Tessara interface at:
 http://localhost:8080/
 ```
 
-Core product routes are mounted at root-level paths:
+Current transition routes are mounted at root-level paths. Organization remains
+a Core route in the target architecture; Forms, Workflows, and Responses become
+module-owned routes behind the same-origin gateway:
 
 ```text
 http://localhost:8080/organization
@@ -282,7 +298,7 @@ The first implementation milestone should prove an end-to-end thread:
 4. Admin builds and publishes a versioned form.
 5. External user saves a draft and submits a valid response.
 6. Analytics refresh materializes the submission.
-7. A dataset revision feeds a component version shown on a dashboard.
+7. A Dataset major-line contract feeds a ComponentVersion shown on a Dashboard.
 
 ## Implemented Slice Status
 
@@ -299,18 +315,21 @@ The first implementation milestone should prove an end-to-end thread:
   tests.
 - Slice 9: RBAC reset to capability + scope + ownership and single baseline
   migration.
-- Next phase: browser shell screens for admin builder, external submission
-  workflow, dataset/component/dashboard builder workflows.
-- Next phase progress: Leptos shell foundation, selection-driven workflow
-  shortcuts, rendered form submission controls, and extracted form/submission
-  domain rules.
+- Current baseline through Sprint 5A: native Leptos shell, application-grade
+  Organization/RBAC and feature screens, Dataset/Component authoring, and
+  Dashboard composition.
+- Next phase: module contracts and the Core module control plane, followed by
+  independent module runtime/database infrastructure and Dashboard extraction.
 
 ## Next Phase
 
-The initial roadmap pass now proves the thread from configurable hierarchy
-through response collection and component-backed dashboards. The next milestone
-should continue turning the API-first shell into a structured frontend and keep
-moving stable domain contracts out of `tessara-api` into the domain crates.
+Phase 6 establishes the modular application platform before external
+applications depend on the current shared process and database layout. It adds
+versioned module manifests, Core module administration, dynamic navigation and
+Feature Declaration and security-capability discovery, typed cross-module references, same-origin module routing,
+one database per module instance, and deterministic Blueprint/lockfile
+composition. Dashboards will be the first current feature extracted as an
+independently deployed full-stack module.
 
 The Dockerfile uses BuildKit cache mounts for Cargo registry, git, and target
 caches so repeated `docker compose up -d --build` test deployments avoid

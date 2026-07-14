@@ -8,7 +8,9 @@ Scope:
 
 - shared authenticated shell
 - bare sign-in behavior
-- permission-gated navigation
+- one-time administrator enrollment behavior
+- dynamically composed, permission-gated Core and module navigation
+- semantic destination and module-state behavior
 - responsive shell state
 - operational home behavior
 - organization explorer behavior
@@ -26,8 +28,9 @@ Excludes:
 -- allium: 3
 -- ui-guidance-spec.allium
 -- Scope: Canonical UI shell and screen-family behaviour derived from docs/ui-guidance.md.
--- Includes: shared authenticated shell, sign-in, permission-gated navigation, responsive shell states,
--- home, organization explorer, form builder posture, and feedback/state behaviour.
+-- Includes: shared authenticated shell, sign-in, administrator enrollment, dynamically composed Core/module navigation,
+-- semantic destinations, module state, responsive shell states, home, organization explorer,
+-- form builder posture, and feedback/state behaviour.
 -- Excludes: exact CSS, asset implementation details, icon-library internals, and legacy route ownership details.
 
 ------------------------------------------------------------
@@ -42,8 +45,14 @@ enum MetricPresentation { compact_text | summary_cards }
 enum ExplorerPattern { explorer_detail | tree_sheet | flat_cards }
 enum ToastPlacement { top_right | elsewhere }
 enum MajorSuccessPattern { banner | toast_only }
+enum DestinationOwnerKind { core_installation | module_instance }
+enum NavigationDisplayState { hidden | available | disabled | unconfigured | unavailable | incompatible }
+enum DestinationResolutionOutcome { resolved | disabled | unconfigured | unavailable | incompatible | unauthorized | unknown }
+enum AdministratorEnrollmentClaimKind { initial | recovery }
+enum AdministratorEnrollmentClaimState { issued | reserved | consumed | expired | revoked }
 enum SurfaceKind {
     sign_in
+    administrator_enrollment
     home
     organization
     forms
@@ -54,6 +63,9 @@ enum SurfaceKind {
     datasets
     administration
     migration
+    module_product
+    module_administration
+    module_management
 }
 
 ------------------------------------------------------------
@@ -62,9 +74,110 @@ enum SurfaceKind {
 
 entity UserSession {
     signed_in: Boolean
-    permissions: Set<String>
+    authorization_grant_summaries: Set<String>
     delegated_user_label: String?
     scope_root_labels: Set<String>
+    scope_labels_used_as_authority: Boolean
+
+    invariant DisplayScopeLabelsAreNotAuthorization {
+        not scope_labels_used_as_authority
+    }
+}
+
+entity NavigationDestination {
+    owner_kind: DestinationOwnerKind
+    owner_id: String
+    route_name: String
+    required_capability: String?
+    administrative: Boolean
+    administrator_displayed: Boolean
+    module_installed: Boolean
+    module_enabled: Boolean
+    requires_enabled_module: Boolean
+    user_authorized: Boolean
+    display_state: NavigationDisplayState
+    deployment_url_persisted: Boolean
+    display_choice_changes_authorization: Boolean
+
+    invariant DestinationIsSemanticRatherThanDeploymentSpecific {
+        not deployment_url_persisted
+    }
+
+    invariant DisplayPolicyDoesNotChangeAuthorization {
+        not display_choice_changes_authorization
+    }
+
+    invariant HiddenDestinationsAreNotEligibleForDisplay {
+        display_state = hidden implies (
+            not administrator_displayed
+            or not user_authorized
+            or (
+                owner_kind = module_instance
+                and (
+                    not module_installed
+                    or (requires_enabled_module and not module_enabled)
+                )
+            )
+        )
+    }
+
+    invariant VisibleDestinationStatesAreEligible {
+        display_state != hidden implies (
+            administrator_displayed
+            and user_authorized
+            and (
+                owner_kind = core_installation
+                or (
+                    module_installed
+                    and (not requires_enabled_module or module_enabled)
+                )
+            )
+        )
+    }
+
+    invariant AdministrativeDestinationsRemainRecoverable {
+        owner_kind = module_instance and administrative implies not requires_enabled_module
+    }
+
+    invariant ProductDestinationsRequireEnabledModule {
+        owner_kind = module_instance and not administrative implies requires_enabled_module
+    }
+}
+
+entity DestinationResolution {
+    requested_owner_kind: DestinationOwnerKind
+    requested_owner_id: String
+    requested_route_name: String
+    user_authorized: Boolean
+    destination_existence_disclosure_authorized: Boolean
+    outcome: DestinationResolutionOutcome
+
+    invariant UnauthorizedResolutionIsExplicit {
+        outcome = unauthorized implies not user_authorized
+    }
+
+    invariant UnauthorizedUsersDoNotLearnDestinationExistence {
+        not user_authorized implies outcome = unauthorized
+    }
+
+    invariant UnknownDestinationRequiresAuthorization {
+        outcome = unknown implies (
+            user_authorized
+            and destination_existence_disclosure_authorized
+        )
+    }
+
+    invariant NoDisclosureAuthorizationUsesRestrictedOutcome {
+        not destination_existence_disclosure_authorized implies outcome = unauthorized
+    }
+
+    invariant DestinationActionAuthorizationIncludesExistenceDisclosure {
+        user_authorized implies destination_existence_disclosure_authorized
+    }
+
+    invariant ResolvedDestinationIsAuthorized {
+        outcome = resolved implies user_authorized
+    }
 }
 
 entity ShellExperience {
@@ -88,17 +201,38 @@ entity ShellExperience {
     sidebar_footer_scope_visible: Boolean
     sidebar_footer_theme_selector_visible: Boolean
     admin_group_visible: Boolean
+    navigation_destinations: Set<NavigationDestination>
+    destination_resolutions: Set<DestinationResolution>
+    navigation_composed_from_core_and_modules: Boolean
+    administration_destinations_permission_gated: Boolean
+    navigation_visibility_separate_from_authorization: Boolean
+    module_state_dimensions_distinct: Boolean
+    semantic_destination_resolution_used: Boolean
+    destination_resolution_outcomes_distinct: Boolean
+    shell_context_versioned: Boolean
+    module_documents_server_render_shell: Boolean
+    core_fallback_preserves_context: Boolean
+    remote_fragment_wrapping_used: Boolean
+    global_search_provider_contracts_used: Boolean
+    global_search_results_owner_qualified: Boolean
+    global_search_provider_failures_isolated: Boolean
     reports_visible_in_default_sidebar: Boolean
     shell_horizontal_scroll_required: Boolean
 
     is_authenticated: session.signed_in
 
     invariant AuthenticatedShellNeverShowsSignIn {
-        is_authenticated implies active_surface != sign_in
+        is_authenticated implies (
+            active_surface != sign_in
+            and active_surface != administrator_enrollment
+        )
     }
 
-    invariant SignInStateStaysOutsideAuthenticatedShell {
-        active_surface = sign_in implies not is_authenticated
+    invariant EnrollmentAndSignInStayOutsideAuthenticatedShell {
+        (
+            active_surface = sign_in
+            or active_surface = administrator_enrollment
+        ) implies not is_authenticated
     }
 
     invariant TopBarOnlyOwnsQuietUtilities {
@@ -120,8 +254,32 @@ entity ShellExperience {
         and sidebar_footer_scope_visible = (session.scope_root_labels.count > 0)
     }
 
-    invariant AdminGroupMatchesPermission {
-        admin_group_visible = session.permissions.any(p => p = "admin:all")
+    invariant NavigationCompositionUsesCoreAndModuleContributions {
+        navigation_composed_from_core_and_modules
+        and administration_destinations_permission_gated
+        and navigation_visibility_separate_from_authorization
+        and module_state_dimensions_distinct
+        and semantic_destination_resolution_used
+        and destination_resolution_outcomes_distinct
+    }
+
+    invariant AdministrationGroupReflectsVisibleContributions {
+        admin_group_visible = navigation_destinations.any(destination =>
+            destination.administrative and destination.display_state != hidden
+        )
+    }
+
+    invariant ModuleDocumentsUseShellContext {
+        shell_context_versioned
+        and module_documents_server_render_shell
+        and core_fallback_preserves_context
+        and not remote_fragment_wrapping_used
+    }
+
+    invariant GlobalSearchUsesBoundedProviders {
+        global_search_provider_contracts_used
+        and global_search_results_owner_qualified
+        and global_search_provider_failures_isolated
     }
 
     invariant ReportsStayOutOfDefaultSidebar {
@@ -147,15 +305,20 @@ entity ShellExperience {
 
 entity HomeSurface {
     shell: ShellExperience
+    work_discovery_contribution_available: Boolean
+    related_work_contribution_available: Boolean
+    installation_context_primary_when_no_work: Boolean
     queue_primary: Boolean
     hierarchy_secondary: Boolean
     selected_node_related_work_visible: Boolean
     metrics_presentation: MetricPresentation
     destination_launcher_cards_present: Boolean
 
-    invariant HomePrioritisesQueueAndHierarchy {
-        queue_primary
+    invariant HomeUsesAvailableContributions {
+        queue_primary = work_discovery_contribution_available
         and hierarchy_secondary
+        and selected_node_related_work_visible = related_work_contribution_available
+        and (not work_discovery_contribution_available implies installation_context_primary_when_no_work)
         and metrics_presentation = compact_text
         and not destination_launcher_cards_present
     }
@@ -210,6 +373,34 @@ entity SignInSurface {
         and sign_in_action_visible
         and not shell_visible
         and not non_auth_content_visible
+    }
+}
+
+entity AdministratorEnrollmentSurface {
+    session: UserSession
+    claim_kind: AdministratorEnrollmentClaimKind
+    claim_state: AdministratorEnrollmentClaimState
+    reserved_attempt_resumable: Boolean
+    designated_role_covers_capability_floor: Boolean
+    viable_core_administrator_exists: Boolean
+    enrollment_action_visible: Boolean
+    normal_sign_in_fields_visible: Boolean
+    claim_secret_redisplayed: Boolean
+    claim_failure_reason_disclosed: Boolean
+
+    invariant EnrollmentIsOneTimeBareAndSeparate {
+        not session.signed_in
+        and enrollment_action_visible = (
+            designated_role_covers_capability_floor
+            and not viable_core_administrator_exists
+            and (
+                claim_state = issued
+                or (claim_state = reserved and reserved_attempt_resumable)
+            )
+        )
+        and not normal_sign_in_fields_visible
+        and not claim_secret_redisplayed
+        and not claim_failure_reason_disclosed
     }
 }
 
@@ -311,19 +502,53 @@ surface SignInExperience {
         -- or unrelated product content.
 }
 
+surface AdministratorEnrollmentExperience {
+    facing visitor: AnonymousVisitor
+
+    context enrollment: AdministratorEnrollmentSurface where enrollment.session = visitor
+
+    exposes:
+        enrollment.enrollment_action_visible
+        enrollment.claim_kind
+
+    @guarantee EnrollmentRemainsBareAndDistinct
+        -- Initial or recovery administrator enrollment is a one-time surface,
+        -- not normal sign-in and never a place that redisplays the claim secret
+        -- or distinguishes invalid claim lifecycle reasons.
+}
+
 surface SharedApplicationShell {
     facing user: AuthenticatedUser
 
     context shell: ShellExperience
-        where shell.session = user and shell.active_surface != sign_in
+        where shell.session = user
+            and shell.active_surface != sign_in
+            and shell.active_surface != administrator_enrollment
 
     exposes:
         shell.active_surface
         shell.theme_mode
         shell.sidebar_state
         shell.admin_group_visible
+        shell.shell_context_versioned
+        shell.module_documents_server_render_shell
+        shell.core_fallback_preserves_context
+        shell.global_search_provider_contracts_used
+        shell.global_search_results_owner_qualified
+        shell.global_search_provider_failures_isolated
         user.delegated_user_label
         user.scope_root_labels
+        for destination in shell.navigation_destinations:
+            destination.owner_id
+            destination.route_name
+            destination.required_capability
+            destination.administrative
+            destination.display_state
+        for resolution in shell.destination_resolutions:
+            resolution.requested_owner_kind
+            resolution.requested_owner_id
+            resolution.requested_route_name
+            resolution.outcome
 
     provides:
         OpenDestination(user, shell, destination)
@@ -332,8 +557,30 @@ surface SharedApplicationShell {
         ToggleSidebar(user, shell)
 
     @guarantee SharedShellNavigationIsPermissionGated
-        -- The shell keeps one shared navigation model and hides destinations
-        -- that the current user's permission set does not allow.
+        -- The shell composes permanent Core destinations with installed modules'
+        -- advertised contributions and filters them by administrator display policy,
+        -- module enablement and the current user's applicable scope-bound grants.
+
+    @guarantee NavigationVisibilityIsNotAuthorization
+        -- Hiding or ordering a destination never grants, revokes or substitutes
+        -- for authorization enforced by the owning Core or module application.
+
+    @guarantee ModuleDestinationStatesRemainDistinct
+        -- Eligible destinations keep disabled, unconfigured, unavailable and
+        -- incompatible outcomes distinct instead of collapsing them into empty state.
+
+    @guarantee DirectDestinationResolutionRemainsExplicit
+        -- Unauthorized direct requests use one restricted outcome whether the destination
+        -- exists; only disclosure-authorized resolution may return unknown separately from
+        -- disabled, unconfigured, unavailable and incompatible providers.
+
+    @guarantee ModulesRenderAgainstVersionedShellContext
+        -- Route-owning modules server-render complete documents against the authenticated
+        -- versioned Shell Context; the gateway fallback preserves context without remote fragments.
+
+    @guarantee GlobalSearchUsesBoundedModuleProviders
+        -- Global search invokes versioned provider contracts, returns owner-qualified
+        -- semantic destinations, and isolates timeout or failure in one module provider.
 
     @guarantee TopBarRemainsGlobalOnly
         -- The top bar owns search, quiet utilities and mobile navigation only.
@@ -356,7 +603,8 @@ surface OperationalHome {
         SelectHierarchyNode(user, home, node)
 
     @guarantee HomeStaysOperational
-        -- Home is a shared operational workspace rather than a launcher-card index.
+        -- Home is an installation-neutral workspace rather than a launcher-card index.
+        -- Work queues and related work appear only through eligible module contributions.
 }
 
 surface OrganizationExplorer {
@@ -429,5 +677,8 @@ surface FeedbackMessages {
 ------------------------------------------------------------
 
 open question "What global number-formatting pattern should apply beyond tabular numerals and local surface consistency?"
-decision "Shell behaviour and feature-builder behaviour are now separate implementation concerns: root tessara-web owns shell and route policy, while major feature builders belong in focused tessara-web-* crates."
+-- Decision: Core owns shell policy, Shell Context, navigation policy and semantic destination resolution.
+-- Each separately deployed full-stack module uses the shared UI SDK and authenticated Shell Context
+-- to server-render the complete coherent document for its own product and administration routes.
+-- The gateway supplies a Core-owned fallback document when the route owner cannot render.
 ```

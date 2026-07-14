@@ -5,7 +5,7 @@ legacy Django application into Tessara concepts without treating the legacy
 schema as the target design. Current product architecture is defined by
 `docs/architecture.md`; where this document mentions historical report,
 aggregation, or chart nouns, migrate future work through
-`DatasetRevision -> ComponentVersion -> Dashboard`.
+`Dataset major-line contract -> ComponentVersion -> Dashboard`.
 
 ## Source
 

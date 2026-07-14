@@ -6,9 +6,13 @@ Use the generated `sprint-<label>-plan.md` file as the implementation contract f
 
 Out-of-roadmap sprint proposals and migration plans may also live here when they need the same level of delivery detail before they are admitted to the roadmap.
 
-## Drafts Under Review
+## Current Roadmap Position
 
-- [Sprint 3C Implementation Guide Draft 1](./sprint-3c-plan.md)
+The next planned sprint is **6A: Module Contract And Core Control Plane**. It begins the modular application-platform foundation after completed Sprint 5A. The authoritative scope remains in [the roadmap](../roadmap.md); a kickoff plan belongs here only when Sprint 6A is formally started.
+
+## Historical Planning Artifacts
+
+- [Sprint 3C Plan](./sprint-3c-plan.md)
 
 ## Completed Sprint 5A Artifacts
 

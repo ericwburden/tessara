@@ -1,9 +1,9 @@
 # Tessara UI Guidance
 
-**Status:** Canonical UI guidance for Tessara  
-**Date:** 2026-04-14  
-**Audience:** Designers, engineers, and reviewers implementing or auditing the Tessara user interface  
-**Scope:** Naming, brand expression, information architecture, shell behavior, rendering strategy, layout, components, states, messaging, responsiveness, and migration compatibility constraints
+- **Status:** Canonical UI guidance for Tessara
+- **Date:** 2026-07-13
+- **Audience:** Designers, engineers, and reviewers implementing or auditing the Tessara user interface
+- **Scope:** Naming, brand expression, information architecture, shell behavior, rendering strategy, layout, components, states, messaging, responsiveness, and migration compatibility constraints
 
 ## Purpose, authority, and interpretation
 
@@ -20,7 +20,7 @@ Use this document to:
 Authority rules:
 
 - If another active UI document disagrees with this file, this file wins.
-- `roadmap.md`, `requirements.md`, and `architecture.md` remain authoritative for delivery scope, product requirements, and system architecture.
+- `roadmap.md`, `requirements.md`, `modular-application-platform.md`, and `architecture.md` remain authoritative for delivery scope, product requirements, module semantics, and system architecture.
 - Historical route behavior does not override the standards in this file unless the behavior is explicitly required for short-lived compatibility during migration.
 
 Interpretation:
@@ -33,7 +33,7 @@ Interpretation:
 
 ### Product posture
 
-Tessara is a configurable data platform for structuring, collecting, and analyzing complex hierarchical data.
+Tessara is a modular application-construction platform. Each installation presents a coherent application assembled from Core and the full-stack modules selected for that use case.
 
 The UI MUST read as:
 
@@ -49,7 +49,7 @@ The product SHOULD feel:
 - modern but restrained
 - efficient for long working sessions
 - data-forward without feeling cramped
-- like a platform for structured composition and insight, not a one-off admin utility
+- like a coherent application built from reliable, reusable parts, not a collection of unrelated tools or a one-off admin utility
 
 ### Core product principles
 
@@ -208,31 +208,35 @@ When app metadata is updated, prefer:
 
 ### Primary information architecture
 
-The application MUST use a single coherent shell with permission-gated navigation across these main areas:
+The application MUST use a single coherent Core-owned shell with permission-gated navigation composed from permanent Core destinations and installed modules' advertised contributions.
+
+Permanent Core destinations include:
 
 - Home
 - Organization
-- Forms
-- Workflows
-- Responses
-- Components
-- Dashboards
-- Datasets
-- Administration
-- Migration
+- User Management
+- Roles and Access
+- Module Management
+
+The current reference application may additionally contribute Forms, Workflows, Responses, Components, Dashboards, Datasets, and Migration. Those names describe one composition, not a fixed platform-wide route inventory. An application that omits a module MUST not show empty placeholders for it.
 
 Guiding rules:
 
 - product-facing areas should read as real application destinations
 - internal or operator areas should stay available but not define the tone of the whole app
 - access to routes, navigation groups, and actions SHOULD be governed by permissions rather than role names
-- `admin:all` SHOULD unlock a small secondary `Admin` sidebar group rather than a separate mode or shell
+- Core and module administration SHOULD appear in a small secondary administration group rather than a separate mode or shell
+- each administrative destination MUST be filtered by its own required capability; `admin:all` is not the universal determinant for future module navigation
+- administrators MAY hide or reorder module navigation contributions without changing module enablement or user authorization
+- navigation visibility MUST NOT be treated as an authorization boundary
+- destination resolution MUST distinguish unavailable, disabled, unconfigured, incompatible, unknown, and unauthorized outcomes; unauthorized items may be omitted from navigation, and direct access returns the same restricted state whether the requested destination exists or is unknown
+- cross-module links MUST use semantic named destinations resolved for the current installation rather than hard-coded deployment URLs
 - IDs and workbench-style shortcuts should not be required for common user-testing flows
 - the shell should respect the active theme through shared shell chrome
 
 ### Surface model
 
-Product-facing surfaces:
+Product-facing surfaces are composition-dependent. In the current reference application they include:
 
 - Home
 - Organization
@@ -240,37 +244,39 @@ Product-facing surfaces:
 - Responses
 - Dashboards
 
-Datasets and Components MAY have product-grade viewers, but authoring is primarily internal or operator-oriented in v1.
+Datasets and Components MAY have product-grade viewers, while their authoring is primarily internal or operator-oriented in the current reference application.
 
 Internal or operator surfaces:
 
-- Administration
-- Migration
+- Core module, user, role, access, and Organization configuration
+- module-advertised administration, configuration, and diagnostics
+- Migration when its module is installed
 - dataset authoring
 - component authoring
 - access and role-assignment management
 - workflow and materialization monitoring
 
-Future Administration decomposition should replace the current broad Administration
-area with individual feature areas for User Management, Roles and Access, and
-Organization Schema. Do not retain an Administration landing page after that
-split; Datasets is already separate, and Components should remain a separate
-planned feature area.
+The current broad Administration area should decompose into clear Core destinations for User Management, Roles and Access, Organization Schema, and Module Management. Module-specific administration belongs to the owning module and is reached through Module Management or the module's advertised administrative destination.
 
 Internal surfaces SHOULD still feel like part of the same application, but remain visually and structurally subordinate to the core product journey.
 
 ### Home strategy
 
-Home SHOULD remain a shared entry surface that supports different permission sets without route-tree fragmentation.
+Home SHOULD remain an installation-neutral Core entry surface that supports different module compositions and permission sets without route-tree fragmentation.
 
-Home SHOULD provide:
+Core Home SHOULD always provide current installation/Organization context and relevant installation-level notices. Modules MAY advertise typed, permission-gated Home contributions such as work discovery, related records, status summaries, or next actions.
 
-- current context
-- the user's next queue or assignment work as the primary surface
+Core MUST bind those contributions through versioned functional contracts with bounded latency and explicit unavailable behavior. It MUST NOT read module product tables or absorb module-specific queue semantics. Contribution results use the shared rendering contract and semantic destinations back to the owning provider.
+
+In the current reference application:
+
+- a Workflow/Response work-discovery contribution SHOULD make the user's next queue or assignment work primary when installed and authorized
 - a compact hierarchy explorer as the secondary surface
-- selected-node related work when hierarchy context is active
-- compact glanceable metrics rather than a full row of summary cards
+- selected-node related work SHOULD come from installed modules' contribution contracts rather than Core reading their data
+- contributed metrics SHOULD remain compact and glanceable rather than becoming a full row of summary cards
 - obvious distinction between product destinations and internal areas
+
+If no work-discovery contribution is available, Home MUST NOT show an empty assignment queue as though it were a Core capability. It should prioritize installation/Organization context and the eligible contributions that do exist.
 
 ### Screen families
 
@@ -291,10 +297,36 @@ For scoped hierarchy areas, directory screens SHOULD NOT default to a flat card 
 
 ### Product and internal boundaries
 
-- Organization, Forms, and Responses should behave like first-class product areas.
-- Administration should hold powerful configuration work, but should not remain the only route to core authoring flows.
-- Migration should remain clearly operator-focused and visually subordinate to the primary application.
+- Organization and every installed module's primary workflows should behave like first-class parts of one application.
+- Administration should hold powerful Core and module configuration work, but should not be the only route to ordinary product authoring flows.
+- Migration, when installed, should remain clearly operator-focused and visually subordinate to primary application work.
 - User management and RBAC should live in internal or admin surfaces, but they must still be application-grade UI.
+
+### Module management surfaces
+
+Core Module Management MUST provide a directory and detail experience that keeps these concepts visibly separate:
+
+- stable Module Definition identity and namespace
+- exact Module Release version, publisher, `tessara-oci-v1` image provenance, trust, Core Release/Deployment Profile compatibility, and support metadata
+- advertised Feature Declarations with use cases, inputs, outcomes, constraints, and linked routes/contracts
+- durable Module Instance identity, selected release, live/tombstoned identity state, installed/deployed/configured/ready/enabled/healthy operation, and retained/destroyed data state
+- required and optional dependencies and their compatibility findings
+- provided and required functional contracts
+- contributed security capabilities
+- product, administration, configuration, and diagnostics Navigation Contributions and their lifecycle requirements
+- administrator navigation visibility, grouping, and ordering policy
+- per-user access decisions kept separate from all module state
+- configuration validation, diagnostics, and data-retention status
+
+An in-process transition contribution MUST be labeled `Transitional — not independently deployable` and shown without Module Release/Instance, installation, enablement, health, or data-binding claims. It may show its reserved future Module Definition and current Core compatibility contracts, but the UI must not make the descriptor look like an installed module.
+
+The module detail page SHOULD link into the owning module's configuration and diagnostics screens through semantic destinations. It MUST NOT reproduce module-specific configuration fields in Core unless the module's declared schema renders through a standard shared form contract.
+
+Navigation settings MUST explain that display choices do not grant access. Role management MUST show module capability provenance and provider state without allowing a module to silently create or mutate a role. It MUST identify the Blueprint-designated Administrator Enrollment Role, show whether it covers the current Core Administration Capability Floor, and block removal or weakening below that floor until another compliant role is designated through the same desired-state workflow.
+
+Application composition UI MUST keep desired Blueprint state, deterministic lockfile/Materialization Plan, separate pending or accepted Apply Authorization Envelope, and observed Supervisor Ledger/installation receipt visibly distinct. It MUST identify the Core Release and gateway component; show the Core Administration Capability Floor version and designated Administrator Enrollment Role validation; show desired versus observed module enablement separately from navigation visibility and authorization; label emergency disablement as audited drift with reason/actor/time/expiry; show stale-base/replay/conflict findings; and make clear that generating a plan—including through an LLM—does not approve it. Destructive actions require an explicit approval view naming the affected instance/data and rollback limitations.
+
+When a module cannot serve a destination, preserve the shared shell and show an explicit state with the module name, current condition, impact, safe retry or diagnostic action, and a route back to Core. Do not collapse provider unavailability into a generic empty state or permission denial.
 
 ### Shell model
 
@@ -351,18 +383,12 @@ Behavior:
 
 Navigation structure:
 
-- Primary order SHOULD be:
-  - Home
-  - Organization
-  - Forms
-  - Workflows
-  - Responses
-  - Components
-  - Dashboards
-- Secondary `Admin` group SHOULD contain:
-  - Datasets
-  - Administration
-  - Migration
+- Core MUST place Home first and keep Organization readily discoverable.
+- Module product destinations follow according to administrator-defined visibility, grouping, and ordering policy, with stable manifest hints used as defaults.
+- The current reference application's default primary order SHOULD be Forms, Workflows, Responses, Components, and Dashboards after Core destinations.
+- Secondary administration groups MAY contain Datasets authoring, User Management, Roles and Access, Organization Schema, Module Management, Migration, and module-contributed configuration or diagnostics when installed and authorized.
+- A product contribution appears only when the module is installed and enabled, the administrator allows it in navigation, and the current user has an applicable scope-bound Authorization Grant for its required security capability.
+- Administration, configuration, and diagnostics contributions MAY appear for an installed module that is disabled, unconfigured, or unhealthy so authorized administrators can recover it. Such items use an explicit disabled, unconfigured, unavailable, or incompatible treatment when the destination cannot currently execute.
 - `Reports` SHOULD NOT appear in the default sidebar contract unless a future product slice restores reporting as a native route.
 
 Navigation item style:
@@ -394,6 +420,8 @@ Global search:
 
 - MUST be a static field in the top app bar
 - SHOULD remain visible and stable rather than hidden behind a launcher
+- MUST search Core resources only through Core contracts and module resources only through modules that advertise a versioned search-provider contract
+- MUST return owner-qualified results with semantic destinations and isolate unavailable or slow providers without failing the whole search
 
 Sidebar footer/context block:
 
@@ -510,9 +538,12 @@ When tabular interaction is required, prefer an accessible data-grid pattern ove
 ## Rendering, hydration, and lazy-loading rules
 
 - Default to SSR-first route delivery with progressive enhancement.
-- Keep core route state in the URL whenever practical so read-heavy surfaces remain useful even if hydration fails.
+- Keep Core and module route state in the URL whenever practical so read-heavy surfaces remain useful even if hydration fails.
 - Prefer native links and forms where they preserve workflow clarity. Client-side enhancement should improve the experience, not become the only way the page works.
 - Keep the shared shell light. Navigation, titles, breadcrumbs, and core layout should load immediately without depending on heavy lazy chunks.
+- Separately deployed modules MUST use the versioned Shell Context and shared UI SDK to server-render complete same-origin HTML documents for their routes, including coherent shell chrome. Core owns the policy/context contract, not every rendering process, and does not wrap a remote HTML fragment.
+- When a module cannot render, the gateway MUST serve a Core-owned fallback document that preserves shell/navigation context and identifies the unavailable, disabled, unconfigured, or incompatible destination.
+- Module route transitions MUST preserve installation, actor, scope-bound authorization, theme, navigation, and return-destination context without exposing reusable credentials; downstream module calls require Core exchange for the new audience.
 - Treat browser hydration errors as release-blocking defects.
 
 Lazy loading is for heavy, low-frequency operator widgets and richer analytics viewers, not for core shell or navigation or ordinary browse and detail pages.
@@ -1203,8 +1234,10 @@ Tessara MUST keep these states distinct:
 - no results = current filters or search returned nothing
 - error = something failed
 - read-only = visible but not editable
-- restricted = access is limited
-- unavailable or not found = content does not exist or cannot be reached
+- restricted/forbidden = the caller is not authorized; the response must not reveal whether the resource exists or its lifecycle state
+- unavailable = an otherwise eligible provider cannot currently respond
+- not found = an authorized resolution evaluated the resource identifier and found no resource
+- not evaluated = the provider could not determine the relevant resolution dimension
 
 ### Empty, loading, no-results, and error states
 
@@ -1382,14 +1415,15 @@ The reset application starts from a native Leptos SSR baseline.
 
 The next UI work should directly support the roadmap sequence:
 
-- user management and authentication screens
-- RBAC and role-assignment screens
-- organization management flows
-- form, field, and version authoring screens
-- response assignment, start, and review flows
-- dataset and component authoring in the new model
+- Core module directory, module detail, Feature Declaration, contract, dependency, security-capability, and status screens
+- module navigation visibility and ordering controls that remain distinct from authorization
+- module security capabilities integrated into Core role management
+- shared unavailable, disabled, unconfigured, incompatible, and diagnostic states
+- full-stack reference-module configuration and diagnostics
+- Dashboard routes delivered by the first independently deployed product module
+- Application Blueprint validation, plan/diff, lockfile, apply, release inventory, and provenance screens
 
-At every stage, the app should remain usable through the intended shell rather than regress into internal-only builder behavior.
+At every stage, the app should remain usable through the intended shell. Module administration must be application-grade UI, and module extraction must preserve existing product workflows rather than regress them into internal-only builder behavior.
 
 ### Deferred or out of scope
 
@@ -1419,7 +1453,13 @@ Out of scope for this UI guidance:
 ### Shell and information architecture
 
 - [ ] The product uses a single coherent shell with permission-gated navigation.
-- [ ] Main areas include Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, Administration, and Migration.
+- [ ] Permanent Core destinations and installed module contributions are composed dynamically.
+- [ ] Applications do not show placeholders for modules they do not include.
+- [ ] Administrators can hide and order module contributions without changing authorization or enablement.
+- [ ] Module routes and APIs enforce authorization independently of navigation visibility.
+- [ ] Cross-module links use semantic named destinations, not deployment URLs.
+- [ ] Product navigation requires an enabled module, while authorized configuration and diagnostics remain recoverable when that module is disabled or unconfigured.
+- [ ] Home work/related-record panels and global search results come from explicit Core or module contribution contracts.
 - [ ] Product and internal surfaces are distinct but visually related.
 - [ ] The top app bar is global-utility-only and `56px` high.
 - [ ] Global search is a static field in the top app bar.
@@ -1431,9 +1471,11 @@ Out of scope for this UI guidance:
 
 ### Rendering and frontend delivery
 
-- [ ] Core routes are SSR-first and remain useful if hydration fails.
+- [ ] Core and ordinary module routes are SSR-first and remain useful if hydration fails.
 - [ ] URL state is used for core route state where practical.
 - [ ] Shared shell chrome is not lazy-loaded by default.
+- [ ] Separately deployed modules preserve shell, theme, navigation, identity, and scope-bound authorization context through same-origin routing and exchange authority through Core for each downstream audience.
+- [ ] Module outages show contained disabled, unavailable, or diagnostic states without breaking Core.
 - [ ] Hydration errors are treated as release-blocking defects.
 - [ ] Lazy loading is reserved for heavy operator and analytics surfaces.
 
@@ -1537,7 +1579,7 @@ These appendices describe the shared primitive contracts for the reset applicati
 
 ### Current primitive layer
 
-The application has a shared native UI primitive layer in root `tessara-web` plus the policy-neutral `tessara-web-ui` support crate used by extracted feature areas.
+The current transition implementation has a shared native UI primitive layer in root `tessara-web` plus the policy-neutral `tessara-web-ui` support crate used by extracted feature areas. This describes current code, not permanent root ownership for separately deployed modules.
 
 - `crates/tessara-web/src/ui`
   - Leptos-native SSR components for app shell, navigation, root page framing, status badges, filters, timestamps, and root-owned route support.
@@ -1547,14 +1589,16 @@ The application has a shared native UI primitive layer in root `tessara-web` plu
 Rules:
 
 - New route UI MUST use native Leptos components and `view!` markup.
-- Shared primitives SHOULD be extended in `crates/tessara-web-ui` when they are policy-neutral and useful across feature crates. Root-only shell or route-policy UI belongs under `crates/tessara-web/src/ui`.
+- During the transition, shared primitives SHOULD be extended in `crates/tessara-web-ui` when they are policy-neutral and useful across feature crates. Current root-only shell or route-policy UI belongs under `crates/tessara-web/src/ui`.
+- The target module SDK/design system MUST make the same tokens, primitives, shell-integration metadata, accessibility behavior, semantic destinations, feedback states, and compatibility guarantees available to separately released module applications without importing Core product policy.
+- Module UI releases MUST declare and test their supported design-system and shell-contract versions.
 - Application chrome and route icons SHOULD use Rust/UI native Leptos icon components where an appropriate icon exists.
 - Tessara brand marks, favicons, and exploratory icon mockups MAY use custom SVG assets.
 - HTML-string helpers, compatibility shells, and broad legacy UI files are not part of the primitive layer.
 
 ### App shell
 
-Use `AppShell` as the outer frame for authenticated product routes.
+Use `AppShell` as the current outer frame for authenticated product routes. In the target architecture, Core owns shell policy and the Shell Context contract; each separately deployed module uses the shared UI SDK to render a complete document with coherent shell chrome for its own routes. The gateway supplies a Core-owned fallback document when the module cannot render.
 
 Contract:
 
@@ -1567,10 +1611,17 @@ Contract:
 
 Use a Rust/UI-style centered auth card for `/login`.
 
+Administrator enrollment MUST use a dedicated bare route and card rather than overloading `/login`. It may offer either local-user creation or external-identity binding, but only while Core and the Supervisor accept the current installation-bound claim and Core reports no Viable Core Administrator—an active, authenticable identity with a global role assignment covering the Core Administration Capability Floor. The UI identifies whether the claim is for `initial` enrollment or audited `recovery`, and explains that the locked Administrator Enrollment Role will be assigned globally without exposing internal capability identifiers as user choices.
+
+The claim secret is accepted as write-only input: never redisplay it, place it in a URL, or expose it through status, help, diagnostics, audit, or recovery UI. After successful enrollment, route to normal sign-in or the authenticated shell and make the enrollment route unavailable. Expired, revoked, replayed, reserved, cross-installation, and already-consumed claims use a common non-disclosing unavailable state. An interrupted redemption may resume only the same Supervisor reservation and must not ask the user to create another assignment. Initial replacement and recovery issuance belong to the local Supervisor workflow; show their audited authorization and lifecycle outcome without revealing any current or prior secret.
+
 Contract:
 
 - login is outside `AppShell`
+- administrator enrollment is outside `AppShell` and visually distinct from normal sign-in
 - the card includes the Tessara mark, a direct heading, and only the fields needed to sign in
+- the enrollment card includes only the claim and chosen local-user or external-identity binding fields, and never redisplays a submitted or issued claim secret
+- successful administrator enrollment closes the enrollment surface before continuing to normal session entry
 - field icons should come from Rust/UI native Leptos icon components when available
 - errors render inline inside the card using the semantic danger tokens
 - successful logout routes the user to `/login`

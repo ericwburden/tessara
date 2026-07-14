@@ -1,6 +1,6 @@
 # Tessara Roadmap
 
-This roadmap is authoritative as of June 28, 2026. It starts from the current implemented baseline after the native UI refresh, RBAC route coverage cleanup, dataset authoring work, and web feature-crate refactoring pass, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
+This roadmap is authoritative as of July 13, 2026. It starts from the completed Sprint 5A baseline and re-baselines future work around Tessara's modular application-platform direction: Core plus selected, separately deployed full-stack modules, composed into independently supported applications through versioned contracts and declarative blueprints.
 
 ## Delivery Rule
 
@@ -26,6 +26,8 @@ Every future sprint is a full vertical slice.
 - Confirm any sprint that adds or changes permission-controlled behavior updates `docs/playwright-permissions-scenarios.md` and includes positive and negative Playwright coverage where currently executable.
 - Confirm every route surface touched in the sprint remains under native SSR ownership before closing the sprint.
 - Confirm route ownership, hydration, and browser-console cleanliness for every touched route before closing the sprint.
+- For any sprint that adds or changes a module boundary, validate the module manifest, contract compatibility, same-origin routing, scope-bound grants and downstream-audience authorization exchange, database isolation, module outage behavior, and platform conformance suite.
+- Confirm application-composition changes produce a valid Blueprint, resolved lockfile, deterministic plan, and read-back result once those platform capabilities exist.
 - If a detour sprint lands outside the numbered roadmap, reconcile this file with the codebase before selecting the next roadmap sprint.
 
 ## Cross-Cutting Delivery Constraints
@@ -35,6 +37,8 @@ Every future sprint is a full vertical slice.
 - Browser authentication for native UI routes must use a server-managed session contract. JavaScript-managed bearer tokens may remain only for explicit CLI, script, or testing flows.
 - Client-visible error payloads must use stable application codes and messages. Raw database and internal error strings must not be exposed to end users.
 - Any sprint that exposes scoped analytical, workflow, response, dataset, component, chart, or dashboard data must prove operator scope filtering with negative regression coverage before closeout.
+- New cross-feature relationships must move toward versioned functional contracts and typed resource references. Do not introduce new cross-module table access, database credentials, foreign keys, or stored deployment URLs.
+- Core remains authoritative for Organization, identity and user management, RBAC, the shared shell, and module composition. Module-specific domain rules, persistence, versioning, and lifecycle policy belong to the owning module.
 - Dependency-audit failures are treated as release blockers unless the advisory is documented as unreachable, accepted, and tied to a replacement or removal path.
 - Every sprint close must verify route ownership, hydration, and browser-console cleanliness for touched routes in addition to the existing UAT script.
 
@@ -73,28 +77,28 @@ The application shell already exposes meaningful user-testable surfaces:
 
 ### Current implementation gaps
 
-The main gaps are no longer raw backend feasibility. The remaining work is to:
+The main gap is now the absence of the module platform that future applications will depend on. The next work must:
 
-- finish backend decomposition for workflow, response, reporting, dashboard, and dataset behavior so new work does not compound large route modules
-- complete response/runtime, dataset, component, and dashboard authoring in end-user-facing application shape
-- retire or clearly isolate remaining transitional reporting compatibility APIs
-- transition deprecated analytical endpoints into adapter-only paths behind the target `Dataset -> Component -> Dashboard` model
-- close scoped analytical visibility gaps as dataset, component, and dashboard execution surfaces become real application features
-- maintain a green dependency-audit posture and document any accepted advisory exceptions
-- keep future frontend crate movement evidence-driven: preserve root ownership of route adapters, shell, auth/session/navigation policy, document integration, CSS/assets, and cargo-leptos entrypoints unless a new proposal proves a better boundary
+- define the module manifest, Feature Declaration, functional-contract, typed-reference, security-capability contribution, semantic-navigation, and lifecycle-state contracts
+- add the Core module registry and administration/control-plane experience
+- introduce a same-origin module runtime with verifiable installation and actor context plus scope-bound grants or exact Core authorization decisions
+- establish one database per module instance in the installation's PostgreSQL cluster, with dedicated credentials and no cross-module database access
+- extract the first existing full-stack feature into an independent process and database
+- define deterministic Application Blueprint, lockfile, validate, plan/diff, apply, and read-back operations for human and LLM composition
+- prove scoped authorization, lifecycle observation, unavailable-state behavior, and diagnostics across actual module boundaries
+- move remaining non-Core feature areas into independently deployed and supported modules before broad pilot hardening
 
-### Frontend feature-crate architecture follow-up
+### Frontend transition baseline
 
-The completed web refactoring pass retained the extracted feature crates because the measured development-loop results were positive and route behavior stayed intact. Future frontend work must treat that outcome as a baseline, not as automatic approval for more crate splitting.
+The completed web refactoring pass remains useful because it created explicit feature seams without changing route behavior. Those crates are now transitional aids toward full-stack module ownership rather than the final architecture.
 
-- Before extracting another feature area, write a focused proposal with source-size/churn inventory, dependency-boundary review, public facade, route-adapter plan, watch/build/browser validation, bundle-size comparison, and rollback path.
-- Keep feature crates exposing content components only; root route adapters continue to own `AppShell`, route parsing, auth guards, route titles, document integration, hydration entrypoints, CSS, and public assets.
-- Keep API DTOs and web DTOs separate by default. Promote shared contracts only when the shape is stable, ownership is clear, adapter duplication is causing real maintenance cost, and WASM dependency cost has been measured.
-- Do not create a shared `tessara-web-platform` crate by default. Reassess only if repeated transport/helper copies become real maintenance drag and a small policy-neutral crate can avoid root auth/session/navigation coupling.
-- Treat Administration as deliberately deferred. When it is revisited, replace the current broad Administration grouping with individual feature areas for User Management, Roles and Access, and Organization Schema rather than assuming one large `tessara-web-administration` extraction. Datasets is already its own feature area, and Components should become its own planned feature area and frontend crate rather than being absorbed into Administration.
-- Use release frontend artifacts for production bundle decisions. Dev-profile bundle measurements may remain a trend signal, but release-size regressions are the decision-grade data.
-- Run a focused Leptos lazy-loading/code-splitting pilot before broad bundle work. `cargo leptos build --split` and `#[lazy]`/`#[lazy_route]` boundaries should be tested on one extracted route area before adopting any router exceptions inside feature crates.
-- Consider future service extraction only for runtime or operational triggers such as durable materialization jobs, retry isolation, independent scaling, or deploy isolation; do not use service extraction as a frontend compile-time remedy.
+- Keep current root route adapters, shell, auth/session policy, hydration entrypoint, CSS, and assets stable until the same-origin gateway and module SDK can replace those responsibilities deliberately.
+- Avoid new dependencies from feature crates into root application policy or sibling feature internals.
+- Treat each non-Core feature area as a candidate module boundary owning UI, API, persistence, configuration, diagnostics, and contracts together.
+- Promote stable wire schemas into module-owned contract crates or generated clients; do not use shared DTO code as a shortcut to shared domain ownership.
+- Build the shared design-system and module SDK around SSR-compatible shell integration, authenticated context, semantic navigation, typed references, stable errors, health, and conformance testing.
+- Use full-page same-origin module routes as the default. Runtime-loaded remote UI code, iframes, and browser-side microfrontend composition are not required.
+- Continue measuring release artifacts and route behavior, but evaluate extraction based on the complete module boundary rather than frontend compile time alone.
 
 ## Current Transitional Architecture
 
@@ -119,33 +123,37 @@ What must change:
 
 ## Target Architecture
 
-The forward model is:
+The platform topology includes an out-of-band control/materialization plane plus the user request/data path:
 
 ```text
-Capture -> Runtime -> Materialization -> Dataset -> Component -> Dashboard
+Installation Supervisor + authoritative ledger
+  `-- materializes Core Release, gateway component, module instances, and database bindings
+
+Browser -> same-origin gateway and Core shell
+  |-- Core (Organization, identity/users, RBAC, module control plane) -> Core database
+  `-- selected full-stack module applications -----------------------> one database each
 ```
 
-More specifically:
+Modules advertise versioned functional contracts, resource types, configuration, semantic destinations, navigation contributions, security capabilities, and health. Core validates and composes those contributions but does not own module product semantics or data. Cross-module integration uses APIs, events, exports, and durable typed resource references; direct cross-module database access is prohibited.
+
+The current first-party capability flow remains the reference application:
 
 ```text
-Forms/Workflows -> Responses -> Materialized Sources -> DatasetRevision -> ComponentVersion -> Dashboard
+Forms/Workflows -> Responses -> Materialized Sources -> Dataset major-line contract -> ComponentVersion -> Dashboard
 ```
 
-This roadmap plans the transition toward:
+This is a product flow, not a deployment diagram. Forms, Workflows, Responses, Datasets, Components, and Dashboards become separately deployed full-stack modules. Module owners decide mutation, versioning, publication, lifecycle, audit, and historical-review rules. The platform guarantees reference owner/type stability and declared state observation, not universal immutability.
 
-- `Dataset` and immutable `DatasetRevision`
-- `Component` and versioned `ComponentVersion`
-- mutable `Dashboard` composed from `ComponentVersion`
-- printable reports as a later separate artifact, not a core v1 analytical asset
+Application construction converges on machine-readable module catalogs and a deterministic `Blueprint -> validate -> resolve -> plan/diff -> lockfile + Materialization Plan`, followed by a separate approval envelope and `Supervisor apply -> verify` workflow suitable for administrators, deployment automation, and LLM clients without conflating planning and approval authority.
 
 ## Durable Carry-Forward Backlog
 
-The items below preserve still-valid future work from completed sprint plans, handoff notes, UAT findings, and review artifacts. They are not active sprint scope unless a later roadmap slice explicitly pulls them forward.
+The items below preserve still-valid future work from completed sprint plans, handoff notes, UAT findings, and review artifacts. They are not active sprint scope unless a later roadmap slice explicitly pulls them forward. Core-owned work stays here; module-specific product work should move into the owning module roadmap as those repositories or release units are established; composition-wide behavior stays in the reference-application roadmap.
 
 Access and administrative feature areas:
 
 - Add an in-app `/administration/users/new` flow so admins can create users without direct API calls, including email, display name, password, active status, initial roles, and a clear follow-up path to scope/delegation access assignment.
-- Replace the current broad Administration grouping with individual future feature areas for User Management, Roles and Access, and Organization Schema. Do not preserve an Administration landing page after that split. Datasets is already its own application feature area, and Components should be developed as its own planned feature area and `tessara-web-components` crate.
+- Replace the current broad Administration grouping with clearer Core areas for User Management, Roles and Access, Organization Schema, and Module Management. Module-provided administration remains owned by the contributing module and is reached through Core's module inventory or its advertised administrative destination.
 - Add direct user capability-assignment affordances only after a role-template and capability-drift model is explicit enough that administrators can understand deviations from role bundles.
 - Add a dedicated administrative workflow assignment detail route when assignment operations grow beyond filtered list management. Future scope should include reassignment, admin completion, deactivation/reactivation, mutation authorization, and capability decisions.
 
@@ -155,7 +163,7 @@ Workflow and response runtime:
 - Decide whether workflow assignments need explicit one-time versus recurring behavior before introducing recurring assignment UX or scheduling semantics.
 - Review workflow publish semantics for branching and sibling step form scopes. Older workflow-runtime expectations treated some branching/sibling scope combinations as invalid at publish time, while the current workflow publisher permits them. Decide whether this was stale test coverage or a dropped product rule; then either implement and document publish-time validation with regression coverage, or document the permissive behavior and keep tests aligned with it.
 - Extend workflow runtime beyond same-assignee automatic handoff only when there is a complete model for per-step assignees, operator-mediated handoff, and capability-aware reassignment.
-- Define the durable form/workflow version lifecycle model: at most one draft and one active version, publish retires the prior active version, retained responses stay pinned to retired versions, and operators choose whether retired-version assignments migrate to the new active version.
+- In the Forms and Workflows module roadmaps, decide their respective draft, active, retired, and publication rules. Expose those states through typed contracts so Responses can retain its references and Workflows can decide whether assignments migrate; do not make Core the owner of that policy.
 - Keep response starts assignment-only. Form-first starts should continue to flow through generated single-form workflow shortcuts and then start a workflow assignment.
 - Make workflow steps the owner of target/context semantics, including explicit workflow availability nodes, step target metadata, cross-step data passing, prefills, hidden or locked carried-forward values, derived target nodes, and future nonlinear branching.
 - Redesign Home delegated-work discovery so accounts with accessible delegate work can discover, switch, or default into delegated work without relying on the Responses route first.
@@ -167,7 +175,7 @@ Datasets, components, dashboards, and operations:
 - After the dataset module split, or when another internal pipeline column is added beyond `__row_id` and `__restriction_tier`, introduce a small pipeline schema abstraction that separates internal CTE columns from user-visible dataset fields.
 - Split revision field loading from `DatasetSummary` if `/api/datasets` payload size, latency, or call-site needs show that output fields and revision field summaries are too heavy by default.
 - Continue the ordered dataset operation-pipeline direction: projection, aggregation, calculated fields, filters, and view restrictions should be composable in saved operation-list order, including multiple operation instances where useful.
-- Keep legacy reporting endpoints adapter-only while the target model moves through `DatasetRevision -> ComponentVersion -> Dashboard`; dashboard composition should depend on component versions rather than legacy report/chart nouns.
+- Keep legacy reporting endpoints adapter-only while the reference model moves through `Dataset major-line contract -> ComponentVersion -> Dashboard`; dashboard composition should depend on component versions rather than legacy report/chart nouns.
 - Treat `/operations` and `operations:view` as read-only status visibility. Keep it separate from `analytics:refresh`, refresh/admin mutations, row-level analytical data, and report execution details unless a later sprint explicitly defines scoped mutation capabilities.
 - Add a refresh ledger or job-history model only if Operations grows beyond derived readiness/status.
 
@@ -319,9 +327,9 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can create a form, add/edit/remove/reorder fields, publish a version, and inspect status entirely through UI.
 
-### Sprint 1E: Form Semantic Versioning And Compatibility Automation
+### Sprint 1E: Form Semantic Versioning And Compatibility Automation (Deferred To Forms Module Roadmap)
 
-**Outcome:** form publishing automatically assigns semantic version and major-version compatibility without asking users for manual version labels or compatibility-group selection.
+**Outcome:** the Forms module defines and automates its own versioning and compatibility policy without asking users for manual labels or exposing internal compatibility identifiers.
 
 **Build:**
 
@@ -329,16 +337,16 @@ This section records the completed foundation sequence that led to the current n
 - structural compatibility classification at publish time
 - automatic major-version reuse for compatible revisions and automatic major-version rollover for breaking revisions
 - publish-time diff summary that explains whether the revision is `PATCH`, `MINOR`, or `MAJOR`
-- automatic binding of dataset and direct report consumers to the current published form major so existing consumers do not drift across breaking revisions
-- explicit handling for direct form-bound reports and datasets so breaking form changes surface stale-dependency warnings without requiring users to interpret compatibility identifiers manually
+- typed `FormVersion` resolution and state-observation contracts for Workflow, Response, and other authorized consumers
+- provider-owned diff, compatibility, and lifecycle metadata exposed through the Forms contract without direct consumer access to Forms storage
 
 **Application UI delivered this sprint:**
 
 - draft version flows that defer semantic version and major-version assignment until publish
-- publish review screens that show the proposed semantic version, major-version decision, and downstream impact before confirmation
+- publish review screens that show the proposed semantic version, Forms-owned compatibility classification, and lifecycle effect before confirmation
 - compatibility status messaging on form detail and edit routes so authors can see when a published revision stayed in the current major line or started a new one
 
-**User-testable exit condition:** a tester can revise a draft form version, publish it, receive an automatically assigned semantic version and major-version compatibility outcome at publish time, and verify from the UI whether the revision stayed in the same major line or created a new one without entering version labels or compatibility-group identifiers manually.
+**User-testable exit condition:** a tester can revise and publish a FormVersion and receive the Forms module's declared versioning, compatibility, and lifecycle outcome without entering version labels or interpreting internal identifiers. Consumer observation and reaction are delivered in Sprint 7B and the relevant extraction sprint.
 
 ### Sprint 1F: Application UI Guidance Alignment (Complete)
 
@@ -677,7 +685,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can build and view visual components without deprecated workbench flows.
 
-## Phase 5: Dashboards, Scoped Analytics, And Dependency Upgrade UX
+## Phase 5: Dashboard Composition
 
 ### Sprint 5A: Dashboard Composition Slice (Complete)
 
@@ -699,87 +707,309 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can assemble and view dashboards through the app.
 
-### Sprint 5B: Scoped Analytics And Presentation Hardening Slice (Next)
+## Phase 6: Modular Application Platform Foundation
 
-**Outcome:** dataset, component, and dashboard execution is scope-safe now that those application surfaces exist.
+### Sprint 6A: Module Contract And Core Control Plane Slice (Next)
+
+**Outcome:** the current Tessara application is represented and administered as Core plus discoverable transition contributions and any real module instances, without pretending in-process features are deployable Module Releases.
 
 **Build:**
 
-- enforce explicit scoped restriction rules for dataset previews, component execution, and dashboard viewing when such rules are authored
-- apply scoped metadata visibility to datasets, dataset revisions, component versions, dashboard composition, and linked presentation assets
-- add negative regression coverage proving scoped operators cannot see rows, linked entities, component metadata, or dashboard contents blocked by explicit visibility or restriction rules
-- keep any retained deprecated analytical endpoints adapter-only and align their authorization with the canonical dataset, component, and dashboard contracts when touched
-- move touched dataset, component, and dashboard execution paths toward bounded-context service and repository boundaries
-- preserve clear empty and forbidden states when explicit visibility or restriction rules remove rows or linked assets
+- define `ApplicationInstallation`, `CoreRelease` (including its gateway component), `ModuleDefinition`, `ModuleRelease`, `ModuleInstance`, Feature Declaration, functional contract, typed resource reference, semantic destination, and module contribution concepts
+- introduce a versioned manifest covering identity, version, Core Release plus Shell Context/UI SDK/design-system compatibility, `tessara-oci-v1` runtime/migration image digests and execution/configuration/probe/shutdown/resource declarations, machine-readable Feature Declarations, functional dependencies/provider-binding constraints, required and provided contracts, resource types, product and administration routes, navigation plus optional Home/work-discovery/search contributions, namespaced security capabilities, configuration schema, and health/readiness contracts
+- model current in-process feature areas with explicitly non-installable `transitional_in_process` contribution descriptors that may reserve future Module Definition identities but create no Module Release/Instance, cannot satisfy dependencies as module providers, and cannot be materialized by the Supervisor; Sprint 6B's reference module is the first full `tessara-oci-v1` manifest
+- keep functional contracts distinct from security capabilities, and keep Core authoritative for roles, assignments, organization scope, and access/composition audit while modules retain product audit
+- keep Definition `registered`; Release `trusted`/`compatible`; Instance `live`/`tombstoned`, `installed`, `deployed`, `configured`, `ready`, `enabled`, `healthy`, and `retained`/`destroyed`; Navigation Contribution display policy; and actor/action/resource/scope authorization as explicit separate dimensions
+- add Core persistence and services for module inventory, manifest validation, dependency findings, Feature Declaration and security-capability discovery, and navigation policy
+- introduce installation-scoped typed resource references whose owner, type, and identifier cannot be reinterpreted
+- define typed resolution and state-observation outcomes without imposing module product rules such as immutability or when a new version must be published
+- introduce semantic named-route destinations instead of hard-coded cross-module URLs
+- expose current Forms, Workflows, Responses, Datasets, Components, Dashboards, and transitional Migration through those temporary in-process contribution descriptors and typed adapters
+- update permission scenarios for module administration, contributed security capabilities, and navigation configuration
+
+**Application UI delivered this sprint:**
+
+- a Core-owned module directory and detail/status experience
+- Feature Declarations and their use cases, inputs, outcomes, constraints, and realizing contracts visible for human and machine discovery
+- administrator controls for module navigation visibility and ordering
+- module-provided security capabilities visible in Core role management
+- dependency, compatibility, configuration, readiness, and health findings presented separately
+
+**User-testable exit condition:** an administrator can inspect every current non-Core feature area, including transitional Migration, as a clearly labeled in-process contribution rather than a Module Instance; understand its advertised Feature Declarations; review its contracts and security capabilities; change navigation visibility without changing authorization; and see valid transition/dependency/readiness state while all current product routes continue to work.
+
+### Sprint 6B: Module Runtime And Installation Infrastructure Slice
+
+**Outcome:** Tessara can securely materialize a Core Release and install/operate an independently deployed full-stack module inside one Supervisor-rooted application installation.
+
+**Build:**
+
+- introduce same-origin gateway routing and service discovery for separately deployed module UI and API routes
+- define the foundational deterministic Materialization Plan schema/digest plus separate Apply Authorization Envelope in 6B, with a hand-authored resolved lockfile/plan fixture, detached signature, first-apply envelope, and verifier; the Supervisor consumes this stable contract now and Sprint 6D embeds the same plan unchanged in generated Application Lockfiles
+- introduce an installation-local Supervisor process and bootstrap CLI outside Core; before Core exists it creates the stable installation identifier, trust anchors, and authoritative ledger, then owns locked Core Release component (including gateway) and Module Release materialization, database provisioning, migrations, health gates, traffic switching, rollback, and recovery
+- define a versioned Core Administration Capability Floor and require every resolved composition to designate an Administrator Enrollment Role that includes the floor; reject missing or weakened designations, assign it globally during enrollment, and use the same active/authenticable identity plus global floor predicate to determine whether a Viable Core Administrator exists
+- after first Core health, let the Supervisor issue installation-bound, single-use, expiring Administrator Enrollment Claims under local operator/host authorization and a current Core decision that no Viable Core Administrator exists: `initial` only until one has ever existed, and `recovery` only with additional explicit audited break-glass authorization
+- allow at most one issued or reserved claim generation per installation; implement `issued -> reserved -> consumed` plus expiry/revocation, make replacement revoke the prior generation, persist only a one-way verifier and non-secret lifecycle/reservation metadata, and show the secret once outside Blueprints, lockfiles, receipts, logs, diagnostics, status/read-back, Core audit, and recovery output
+- implement idempotent enrollment: Core reserves the current generation with the Supervisor, locally transacts identity create/bind plus global designated-role assignment plus redemption record, and returns a signed result for Supervisor consumption/reconciliation; every redemption checks current Supervisor state so restore of a pre-redemption Core backup cannot revive an old claim
+- require mutually authenticated Core/CLI-to-Supervisor handoff bound to installation, base receipt, target plan digest, monotonic desired/apply revision, nonce/idempotency key, initiator/approver evidence, expiry, and destructive-action scope; reject replay/stale/concurrent plans, serialize mutation, and reconcile the authoritative ledger into Core after startup
+- define a versioned authenticated Shell Context and SDK through which each route-owning module server-renders a complete coherent document, plus a Core-rendered gateway fallback when that module is unavailable
+- propagate verifiable installation and user context plus scope-bound Authorization Grants or exact Core decisions while preserving server-managed browser sessions; prohibit independent capability/scope sets
+- define descendant-aware scope expansion, Organization/authorization revision freshness, delegation/ownership assertions, and per-downstream-audience exchange bound to the original actor, presenting service identity, declared dependency/contract/action, and installation without sharing browser cookies, bearer credentials, or database credentials between modules; restrict service-only grants to explicitly authorized system jobs
+- enforce the v1 single-cluster installation topology and provision one PostgreSQL database per module instance beside the Core database; do not add multi-cluster or module-selected external relational database placement
+- provision separate runtime and migration roles, scoped credentials, module-owned migrations, and explicit undeploy/reactivation/data-destruction behavior that preserves or tombstones durable Module Instance identity correctly
+- implement the sole v1 `tessara-oci-v1` Deployment Profile and Supervisor adapter: digest-pinned runtime/optional migration images, platform/architecture, commands, listen/service registration, config/secret injection, separate runtime/migration identities, probes, graceful shutdown, and resource declarations; reject unsupported profiles and conformance-test every field
+- add trusted artifact-source configuration, publisher/signature or provenance verification, and digest-pinned OCI acquisition without relying on Core to replace itself
+- define the gateway as a separately running component artifact versioned and selected only inside its Core Release; prove a Supervisor-driven Core Release patch upgrade/rollback, including its gateway, while Supervisor status remains available, and define the Supervisor's separate non-self-replacing upgrade procedure
+- make upgrade select a new compatible Module Release while preserving the Module Instance identifier, database binding, references, configuration identity, and rollback record
+- prohibit cross-module database access, cross-database foreign keys, shared writable schemas, FDW shortcuts, and shared runtime credentials
+- define module SDK conventions for manifests, `tessara-oci-v1`, configuration APIs, administration UI, route integration, request context, health/readiness, diagnostics, generated clients, and conformance tests
+- require human and machine configuration to use the same module-owned validation contract
+- add local multi-process development, testing, startup, shutdown, and diagnostic workflows
+- implement explicit timeout, unavailable, disabled, and degraded-state behavior at the gateway and shell
+- keep Core Module Management and eligible module administration/configuration/diagnostics destinations reachable while a product destination is disabled, unconfigured, or unhealthy
+- ship a full-stack conformance/reference module with its own administration screen and database before moving a product feature
+- define the conformance timing methodology, normalized test environment, sample size, and pass/fail tolerance for known-versus-random non-disclosure tests
+- add negative conformance scenarios proving (1) one actor with capability A only for subtree X and capability B only for subtree Y cannot obtain A/Y or B/X, (2) undeclared or declared-but-wrong-audience/action services cannot exchange or replay that actor's authority, (3) grants/exchanges issued before role, subtree, ownership, or delegation revision changes are rejected as stale without leaking existence, and (4) unauthorized resolution of known and random identifiers is indistinguishable under the defined status/shape/timing contract
+
+**Application UI delivered this sprint:**
+
+- installation, configuration, enablement, health, and diagnostics flows for the reference module
+- read-only Supervisor ledger, active Materialization Plan/apply, and Core Release status in Core administration
+- a one-time administrator-enrollment surface distinct from normal sign-in, with local-user and external-identity paths, initial/recovery context, capability-floor-safe assignment, and no secret redisplay
+- coherent unavailable and disabled states in navigation and routing
+
+**User-testable exit condition:** using the signed 6B release fixture, a tester can establish the Supervisor-rooted installation; use a once-displayed initial claim to enroll a Viable Core Administrator into the locked floor-compliant role; prove concurrent/replacement, replay, expiry, revocation, cross-installation, interrupted reconciliation, and pre-redemption-restore cases fail or resume as specified; install/configure/authorize/enable/navigate to/disable/diagnose the `tessara-oci-v1` reference module; reject a replayed or stale apply envelope; and complete a Core Release patch upgrade/rollback. Module data remains isolated in its own database, and stopping it produces a contained degraded state rather than breaking Core.
+
+### Sprint 6C: Independently Deployed Dashboard Module Slice
+
+**Outcome:** Dashboards is the first existing Tessara feature area to operate as a separately deployed, full-stack module.
+
+**Build:**
+
+- move Dashboard UI, API, persistence, migrations, configuration, and health/readiness into the Dashboard module
+- provision one Dashboard database per Dashboard module instance and remove Dashboard runtime access to Core or other module databases
+- replace Dashboard database relationships to Components with typed `core_installation`-owned transition `ComponentVersion` references resolved through a versioned, first-party Core Release compatibility contract; do not masquerade the in-process contribution as a Module Instance
+- expose required Component metadata and rendering/execution behavior through that typed adapter, mark the binding transition-only and unavailable to new external Blueprints, and require Sprint 8A to migrate data/references explicitly before retiring it
+- obtain Core-issued, downstream-audience scope-bound grants or decisions bound to original actor, Dashboard service identity, the resolved Components dependency/contract/action, and installation rather than forwarding Dashboard authority
+- advertise Dashboard routes, navigation, functional contracts, resources, configuration, diagnostics, and security capabilities through its manifest
+- preserve the Sprint 5A authoring and viewing experience through same-origin routing
+- show a non-disclosing forbidden placement for unauthorized resolution; after authorization, distinguish unavailable, inactive, superseded, provider-resource tombstoned, owner-module-instance tombstoned/data-destroyed, missing, and not-evaluated outcomes without redefining Component lifecycle semantics
+- restructure seed and local data directly for the new database layout because no production compatibility obligation exists
+- add contract, permission, outage, and browser coverage across Core, Dashboard, and the temporary in-process Components provider
+
+**Application UI delivered this sprint:**
+
+- the existing Dashboard directory, editor, detail, and viewer served by the independent module
+- Dashboard configuration and diagnostics reached from Core module administration
+- clear placement degradation when the Components provider is unavailable or changes lifecycle state
+
+**User-testable exit condition:** a tester can compose and view a Dashboard through the normal shell while Dashboard runs in a separate process and database, and can observe contained behavior when Dashboard or Components is unavailable.
+
+### Sprint 6D: Application Blueprint And Composition Automation Slice
+
+**Outcome:** a Tessara application is a declarative, validated, reproducible composition suitable for human and LLM-driven construction.
+
+**Build:**
+
+- define a versioned Application Blueprint covering a Core Release version constraint, typed Core configuration such as Organization schema/terminology, selected modules, their version constraints and desired enablement, dependency bindings, module configuration, optional module-owned bootstrap declarations, navigation policy, Core-owned role definitions and role-to-capability mappings, a designated Administrator Enrollment Role that covers the Core Release's capability floor, and environment secret references
+- add machine-readable module catalog discovery, Feature Declarations, contribution schemas, configuration schemas, and functional contract descriptions
+- calculate dependency closure and reject missing, incompatible, cyclic, untrusted, or unbound compositions
+- produce a lockfile containing the Blueprint revision/digest, exact Core Release version/component image digests including its gateway, exact Module Release image digests, selected Deployment Profile versions, resolved desired module enablement, composition-engine/schema and required Supervisor/deployment-adapter contract versions, contract/configuration/bootstrap schema versions, dependency bindings, resolved normalized non-secret Core/module configuration and navigation/role policy values plus their digests, designated Administrator Enrollment Role and Core Administration Capability Floor version, normalized bootstrap values or durable content-addressed bootstrap references plus digests, versioned secret-reference identities, and the deterministic 6B Materialization Plan plus digest and enable/disable actions
+- implement deterministic validate, plan, diff, separate Apply Authorization Envelope creation, Supervisor handoff/apply, read-back, and conformance operations with idempotency and provenance; Core UI/API and all machine clients use the same handoff rather than an in-Core self-update path, and planning/LLM access does not imply approval authority
+- ensure product artifacts are created or changed only through module-owned APIs
+- let modules optionally expose typed, idempotent bootstrap/apply/read-back contracts for catalogs or initial product records; record their input digests and result receipts without creating a generic content-package model
+- acquire referenced bootstrap inputs from a configured durable content-addressed source and verify their locked digest before module-owned apply/read-back
+- expose the same composition operations through versioned APIs for UI, CLI, automation, and later MCP or agent adapters
+- share one versioned Composition Engine between Core and the Supervisor bootstrap CLI; before Core exists, allow the CLI to resolve a Blueprint from trusted catalog inputs or verify a detached signature over a pre-resolved lockfile/plan digest, create the separate apply-authorization envelope, record local operator/host authorization and provenance, and seed Core's desired/resolved records after startup
+- create a complete reference-application blueprint and at least one reduced composition that omits unneeded modules
+- emit installation/release receipts containing the observed composition-engine and Supervisor/deployment-adapter versions plus desired/observed module enablement, and retain the resolved composition needed for support and reproduction
+- make UI module enablement, configuration, navigation-policy, role-definition, enrollment-role designation, or declared bootstrap-state edits create a new Blueprint/input revision or explicit desired/actual drift with adopt/reconcile actions; allow immediate emergency disable only through a constrained non-destructive envelope as an audited reasoned/expiring Supervisor-ledger override that remains drift
+- keep each installation locally operable without a required central Tessara SaaS control plane
+
+**Application UI delivered this sprint:**
+
+- an application-composition view showing desired/current modules and enablement, the capability-floor version and designated enrollment-role validation, emergency overrides, dependency findings, proposed changes, resolved versions, drift, and apply/adopt/reconcile results
+- readable release inventory, Supervisor ledger/apply/restart status, pending approval and conflict/replay findings, and provenance for the active installation
+
+**User-testable exit condition:** an administrator or machine client can bootstrap from a Blueprint or a detached signature over a resolved lockfile/plan digest; resolve two different Blueprints; separately approve them; hand their Materialization Plans and Apply Authorization Envelopes to the local Supervisor; reproduce their exact Core Release components/Module Releases/configuration/policy and declared bootstrap composition from lockfiles plus externally resolved secrets; survive a Core restart during apply; detect and reconcile a deliberate UI configuration change; and rerun an unchanged Blueprint as a no-op without handwritten deployment or database glue.
+
+## Phase 7: Cross-Module Authorization And Resource Correctness
+
+### Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice
+
+**Outcome:** dataset, component, and dashboard execution is scope-safe across the real Dashboard process boundary to the transition-only Core Components compatibility contract and the typed adapters later extractions retain.
+
+**Build:**
+
+- enforce explicit scoped restriction rules for dataset previews, component execution, and dashboard viewing when those rules are authored
+- apply scoped metadata visibility to datasets, revisions, component versions, dashboard composition, and linked presentation assets
+- propagate and verify installation, original actor, Dashboard presenting-service identity, declared Core compatibility binding/contract/action, scope-bound grants/Core decisions, freshness, and downstream audience across the real Dashboard process boundary and equivalent in-process Dataset/Component adapters
+- add negative coverage proving scoped operators cannot see blocked rows, linked entities, metadata, or dashboard content, including mixed capabilities assigned to disjoint Organization subtrees; undeclared and wrong-audience/action services; stale grants after role/scope/ownership/delegation revision changes; and known-versus-random identifiers under the 6B non-disclosure profile
+- keep retained deprecated analytical endpoints adapter-only and align their authorization with canonical module contracts when touched
+- move touched Dataset and Component execution paths toward boundaries that can later move into their own deployments
+- preserve clear empty, unavailable, and forbidden states without leaking metadata or internal authorization details
 
 **Application UI delivered this sprint:**
 
 - existing Dataset, Component, and Dashboard surfaces remain usable with corrected scoped behavior
-- operators receive understandable scoped empty states rather than leaked metadata or raw authorization failures
+- operators receive understandable scoped and cross-module failure states
 
-**User-testable exit condition:** a scoped operator can preview datasets, run/view components, and view dashboards according to authored visibility and restriction rules, while an admin still sees the full seeded analytical set.
+**User-testable exit condition:** a scoped operator can preview Datasets, execute/view Components, and view Dashboards according to authored visibility and restriction rules across the real Dashboard boundary and transitional typed adapters, while an administrator sees the full seeded analytical set. Each Phase 8 extraction must rerun this proof when its adapter becomes a process boundary.
 
-### Sprint 5C: Upgrade And Stale Dependency Slice
+### Sprint 7B: Cross-Module Resource Lifecycle And Dependency Slice
 
-**Outcome:** stale dependency and rebind flows are usable.
-
-**Build:**
-
-- changelog version impacts plus any separate publish-blocking validation outcomes
-- carry-forward and rebinding flows
-- publication guards for incompatible changes
-- stale dependency, carry-forward, and rebinding flows operating on typed dataset, component, and dashboard relationships
-- publication guards consuming the typed compatibility and dependency outputs introduced in Sprint 3C
-
-**Application UI delivered this sprint:**
-
-- dependency health and upgrade flows in the application
-
-**User-testable exit condition:** a tester can update dependent assets and resolve or defer findings through UI.
-
-## Phase 6: Migration, Hardening, And Pilot Readiness
-
-### Sprint 6A: Migration And Legacy Mapping Slice
-
-**Outcome:** migration and import flows align to datasets, components, and dashboards.
+**Outcome:** consumers can observe and respond to provider-owned resource changes through the real Dashboard-to-Core-compatibility boundary and reusable typed adapters, without owning provider product semantics or confusing transition ownership with the eventual module.
 
 **Build:**
 
-- mapping docs and verification flows aligned to the new model
-- migration UI references into canonical product/detail screens
-- updated operator verification paths
-- an explicit inventory of all remaining hybrid-shell and legacy-builder surfaces plus a deletion plan for each
-- migration and operator screens pointing to canonical native application routes wherever replacements exist
-- reconcile docs archive references so canonical docs do not link to absent `docs/archive` sources, or restore the archived sources if they are intended to remain part of the repo
+- complete typed resolution and revision/state-change contracts for Dataset, Component, and Dashboard relationships
+- let each owning module define lifecycle states and decide which mutations require a new published version
+- ensure consumers observe relevant changes through live resolution, revision markers, events, or an explicit combination declared by the provider
+- implement changelog impacts, stale-dependency findings, carry-forward, and rebinding over durable typed references
+- preserve reference type and owner when mutable characteristics such as active, inactive, or superseded change
+- add publication or activation guards only where the owning module contract requires them
+- distinguish tagged Core or module owner state, unknown/mismatched owners, owner-module-instance tombstoned/data-destroyed, provider-resource lifecycle (including archived or tombstoned), unavailable, authorization-not-evaluated, incompatible, unknown-resource, undisclosed, and not-evaluated outcomes internally; caller-visible projections must collapse all resource-specific detail to one restricted/undisclosed result whenever existence disclosure is not authorized
+- add contract-version compatibility and consumer regression coverage
 
 **Application UI delivered this sprint:**
 
-- coherent migration/operator screens tied to the new model
+- dependency health, observed provider state, upgrade, carry-forward, and rebinding flows
+- clear choices to resolve or defer findings without Core inventing provider lifecycle policy
 
-**User-testable exit condition:** operators can validate migration outcomes using real application surfaces.
+**User-testable exit condition:** a tester can change the lifecycle or revision state of a referenced Component resource, observe it across the Dashboard boundary, and resolve or defer resulting dependency findings. Equivalent Dataset/Component behavior is proven through the same contract adapters and must be rerun after physical extraction.
 
-### Sprint 6B: Pilot Hardening Slice
+## Phase 8: Current Feature Module Separation
 
-**Outcome:** the app is stable for broader testing.
+Every sprint in this phase must leave the extracted feature as a separately deployed full-stack module with its own administration/configuration surface, manifest, Feature Declarations, security capabilities, database, migrations, health/readiness, same-origin routes, and conformance coverage. Cross-module relationships use APIs, events, exports, and typed references only. Each extraction must inventory Core-owned transition references, migrate data into the new Module Instance, publish a complete old-to-new mapping, invoke versioned consumer-owned rebinding, emit completeness receipts, preserve explicit migrated/retired resolution for old references, and remove the read-only Core compatibility adapter only after all consumers are verified. Each extraction reruns the Phase 7 scope, lifecycle, outage, and compatibility proofs against the newly physical boundary.
+
+### Sprint 8A: Component Module Separation Slice
+
+**Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 
 **Build:**
 
-- end-to-end coverage
-- smoke-path coverage
-- permission hardening
-- performance cleanup
-- explicit unsupported-v1 documentation
-- keep the roadmap closed to any reintroduction of the hybrid shell
-- complete a final permission and session audit, stable error-envelope cleanup, and performance hardening
-- replace permissive production CORS with environment-specific/same-origin policy suitable for cookie sessions
-- verify browser login no longer exposes bearer tokens except through explicit script/test/API token flows
-- verify that no primary route depends on HTML-string route shells, `/bridge/*`, or retained legacy bridge assets
+- move Component UI, API, versions, execution, persistence, configuration, and diagnostics into the Component module
+- create the real Component Module Release/Instance; migrate Component data from Core; publish a complete old-Core-reference to new-Module-reference mapping; and invoke Dashboard-owned versioned rebinding so stored placements are rewritten with migration receipts before the Core adapter becomes read-only and is removed
+- keep old `core_installation` transition references owner/type-stable with explicit migrated/retired resolution rather than silently interpreting them as Component Module references
+- replace Component-to-Dataset database relationships with typed Core-compatibility Dataset references and versioned contracts until Dataset extraction performs the same explicit migration
+- keep Dashboard-to-Component behavior on the public contract introduced in Sprint 6C
+- migrate seed/test data and remove direct access to Dataset, Dashboard, or Core storage
+- add dependency outage, scope propagation, capability, and compatibility coverage
 
-**Application UI delivered this sprint:**
+**Application UI delivered this sprint:** unchanged Component authoring/viewing plus module-owned configuration and diagnostics through the shared shell.
 
-- no new primary surface, but all existing slices remain coherent and testable
+**User-testable exit condition:** a tester can prove every Dashboard placement was explicitly rebound from its Core-owned transition reference to the new Component Module Instance with receipts, then author and execute Components against Dataset compatibility contracts across separate processes/databases while Dashboards continue to consume Components and degrade coherently during outages.
 
-**User-testable exit condition:** the application remains fully testable through intended UI flows after hardening.
+### Sprint 8B: Dataset Module Separation Slice
+
+**Outcome:** Datasets is independently deployed and consumes source data through explicit provider contracts.
+
+**Build:**
+
+- move Dataset UI, API, revision, execution, materialization, persistence, configuration, and diagnostics into the Dataset module
+- migrate Dataset data and Component-owned Dataset references from the Core compatibility owner to the real Dataset Module Instance through mapping/rebinding receipts before retiring the adapter
+- replace reads of Response or other source tables with versioned source APIs, exports, and events
+- preserve Dataset-to-Component contracts and scoped execution
+- keep batch operations and catalog/template semantics owned by Datasets unless a future module provides a declared operation contract
+- migrate seed/test data and remove direct access to Response, Component, or Core storage
+- add materialization retry, dependency outage, scope, and compatibility coverage
+
+**Application UI delivered this sprint:** unchanged Dataset directory, authoring, preview, status, configuration, and diagnostics surfaces through the shared shell.
+
+**User-testable exit condition:** a tester can materialize and preview a Dataset from a provider contract, execute a Component over it, and view the result on a Dashboard across independently deployed modules.
+
+### Sprint 8C: Response Module Separation Slice
+
+**Outcome:** Responses is independently deployed and exposes captured data without sharing its persistence.
+
+**Build:**
+
+- move response start, draft, save, submit, review, export/materialization, persistence, configuration, and diagnostics into the Response module
+- consume typed FormVersion and Workflow context without reading Forms or Workflow tables
+- expose typed response/source contracts and events for Dataset and Workflow consumers
+- preserve assignment-only response starts and scoped review behavior
+- migrate seed/test data and remove direct access to Forms, Workflows, Datasets, or Core storage
+- add cross-module authorization, idempotency, event, outage, and compatibility coverage
+
+**Application UI delivered this sprint:** unchanged response-entry, submission, review, configuration, and diagnostics flows through the shared shell.
+
+**User-testable exit condition:** a tester can complete and review a response through module contracts and consume its output in Datasets without shared database access.
+
+### Sprint 8D: Workflow Module Separation Slice
+
+**Outcome:** Workflows is independently deployed and coordinates Forms and Responses through public contracts.
+
+**Build:**
+
+- move Workflow authoring, versions, publication, assignments, runtime coordination, persistence, configuration, and diagnostics into the Workflow module
+- replace Form database relationships with typed FormVersion references and provider contracts
+- invoke Response runtime contracts and consume response events without sharing storage
+- keep publication, assignment, handoff, and version policy owned by Workflows
+- migrate seed/test data and remove direct access to Forms, Responses, or Core storage
+- add authorization, retry/idempotency, outage, lifecycle, and compatibility coverage
+
+**Application UI delivered this sprint:** unchanged Workflow authoring, assignment, execution, configuration, and diagnostics surfaces through the shared shell.
+
+**User-testable exit condition:** a tester can publish and execute a Workflow over referenced FormVersions and separately deployed Responses while provider lifecycle changes and outages remain visible and contained.
+
+### Sprint 8E: Forms Module Separation Slice
+
+**Outcome:** Forms is independently deployed and is authoritative for Form and FormVersion product semantics.
+
+**Build:**
+
+- move Form and FormVersion authoring, publication, lifecycle, persistence, configuration, diagnostics, and catalog features into the Forms module
+- expose typed Form and FormVersion resolution, state observation, and collection/rendering contracts
+- keep decisions about mutations, publication, active/inactive/superseded behavior, and catalogs inside Forms
+- ensure Workflow and Response consumers use provider contracts and never access Forms storage
+- migrate seed/test data, remove Forms access to Core or consumer storage, and remove every other module's access to Forms storage
+- add lifecycle, authorization, outage, compatibility, and catalog-contract coverage
+
+**Application UI delivered this sprint:** unchanged Form directory, builder, version, publication, catalog, configuration, and diagnostics experiences through the shared shell.
+
+**User-testable exit condition:** a tester can author and publish Forms, observe lifecycle changes through Workflow and Response consumers, and complete the reference application flow with every reference product module independently deployed. Transitional Migration is either modularized or retired in Sprint 9A.
+
+## Phase 9: Migration, Hardening, And Modular Pilot Readiness
+
+### Sprint 9A: Module-Owned Migration And Legacy Mapping Slice
+
+**Outcome:** migration and import populate module-owned data through supported contracts and validate results through canonical module applications.
+
+**Build:**
+
+- align mapping documentation and verification with Core plus module-owned resources and databases
+- route imports through each owning module's validation and import APIs rather than direct database writes
+- use typed cross-module references and explicit binding steps during multi-module migration
+- make any retained migration coordinator a normal full-stack module with its own database, UI, manifest, Feature Declarations, security capabilities, and contracts; otherwise retire the generic Migration feature
+- update semantic route links, dry-run, idempotency, partial-failure, resume, and audit behavior for separately deployed modules
+- inventory and remove remaining transitional reporting, hybrid-shell, legacy-builder, and shared-database paths
+- reconcile canonical documentation references to absent archive sources
+
+**Application UI delivered this sprint:** coherent module-owned import and verification experiences, plus a coordinator only if cross-module migration remains a supported capability.
+
+**User-testable exit condition:** operators can dry-run, execute, resume, and verify migration through module APIs and product surfaces without an importer writing directly to another module's database, and the transitional in-process Migration contribution is absent: either no coordinator remains or the retained coordinator is independently deployed with its own manifest, Feature Declarations, security capabilities, administration surface, and database.
+
+### Sprint 9B: Modular Application Pilot Hardening Slice
+
+**Outcome:** multiple independently deployed Tessara applications are reproducible, diagnosable, and stable for broader testing and separate support.
+
+**Build:**
+
+- run composition-level end-to-end, smoke, permission, scope, session, and performance coverage across at least two materially different blueprints
+- rerun `tessara-oci-v1` acquisition, migration, runtime/configuration, service registration, probe, graceful-shutdown, identity, and resource-limit conformance for Core Release components and every selected Module Release
+- test first bootstrap from both a Blueprint and a detached signature over a resolved lockfile/plan digest plus Supervisor-driven Core Release (including gateway component) and Module Release install, configuration, enable/disable, upgrade, compatibility rejection, failed migration, traffic switch, rollback, outage, recovery, undeploy/reactivation, explicit data destruction, and tombstone behavior
+- test local-user and external-identity Administrator Enrollment Claim paths, capability-floor/designated-role validation, at-most-one generation and replacement revocation, reservation/local transaction/signed reconciliation and retry, once-only secret display, endpoint closure, expired/revoked/replayed/reserved/consumed/cross-installation rejection, audited recovery issuance, and restore of Core to a pre-redemption backup without claim reuse
+- execute a separately managed Supervisor contract/binary and ledger-schema upgrade plus rollback through the bootstrap launcher, proving ledger backup/recovery and continued compatibility with the installed Core Release
+- verify backup and restore for one module database and a complete application installation, including protected Supervisor Ledger/trust material, lockfiles/receipts, databases, and required external bootstrap inputs
+- enforce connection budgets, query timeouts, health aggregation, and noisy-neighbor monitoring for the shared PostgreSQL cluster
+- produce exportable diagnostic bundles and exact composition-engine, Supervisor/deployment-adapter, Core Release/component (including gateway), and Module Release version/artifact inventories
+- document supported combinations, unsupported-v1 behavior, and application-specific release procedures
+- replace permissive production CORS with same-origin or environment-specific policy suitable for cookie sessions
+- verify browser authentication does not expose bearer tokens except through explicit script, test, or API-token flows
+- verify no primary route depends on HTML-string shells, `/bridge/*`, shared product databases, or legacy adapter assets
+
+**Application UI delivered this sprint:** coherent degraded, maintenance, compatibility, and recovery states across supported module compositions; no new primary surface is required.
+
+**User-testable exit condition:** two different locked application compositions can be bootstrapped, installed, exercised, upgraded across Core Release components and Module Releases, interrupted, rolled back, recovered, backed up, restored, and diagnosed independently through their intended UI and local Supervisor/operational flows.
 
 ## Deferred Beyond This Roadmap
 
@@ -787,5 +1017,7 @@ This section records the completed foundation sequence that led to the current n
 - full visual dashboard designer beyond the required composition flows
 - fuzzy joins, complex window functions, and other analytical features not required for v1
 - broader home-surface specialization after the shared shell and role-ready flows are stable
-- Decomposition of the current broad Administration grouping into User Management, Roles and Access, and Organization Schema feature areas, with no retained Administration landing page after the split, pending a dedicated future sprint
 - Leptos lazy-loading/code-splitting pilot for one extracted route area before broader bundle splitting
+- a required centralized multi-tenant Tessara SaaS control plane
+- hot-swappable equivalent module providers and automatic transfer of provider-owned data
+- a generic content-package abstraction separate from module-owned catalogs, templates, instruments, and batch definitions
