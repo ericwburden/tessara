@@ -2,20 +2,14 @@
 //!
 //! Keep endpoint calls, request assembly, and response handling for Auth screens here; pure DTOs and display formatting belong in sibling modules.
 
-#[cfg(feature = "hydrate")]
-use gloo_net::http::Request;
-
 use crate::features::auth::types::SessionStateResponse;
 
 #[cfg(feature = "hydrate")]
 /// Fetches the fetch session data.
 pub async fn fetch_session() -> Option<SessionStateResponse> {
-    let response = Request::get("/api/auth/session").send().await;
-
-    match response {
-        Ok(response) if response.ok() => response.json::<SessionStateResponse>().await.ok(),
-        _ => None,
-    }
+    tessara_web_http::fetch_json("/api/auth/session", "Session")
+        .await
+        .ok()
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -27,7 +21,11 @@ pub async fn fetch_session() -> Option<SessionStateResponse> {
 #[cfg(feature = "hydrate")]
 /// Submits the submit logout request.
 pub async fn submit_logout() {
-    let _ = Request::delete("/api/auth/logout").send().await;
+    let _ = tessara_web_http::send_without_response(
+        gloo_net::http::Request::delete("/api/auth/logout"),
+        "Sign out",
+    )
+    .await;
 }
 
 #[cfg(not(feature = "hydrate"))]

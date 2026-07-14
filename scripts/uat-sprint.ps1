@@ -112,22 +112,25 @@ try {
     $forms = Invoke-RestMethod -Uri "$BaseUrl/api/forms" -Headers $headers -TimeoutSec 30
     $datasets = Invoke-RestMethod -Uri "$BaseUrl/api/datasets" -Headers $headers -TimeoutSec 30
     $components = Invoke-RestMethod -Uri "$BaseUrl/api/components" -Headers $headers -TimeoutSec 30
+    $dashboards = Invoke-RestMethod -Uri "$BaseUrl/api/dashboards" -Headers $headers -TimeoutSec 30
     $sessionForm = $forms | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
     $sessionDataset = $datasets | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
     $sessionTableComponent = $components | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
-    if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent) {
+    $sessionDashboard = $dashboards | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
+    if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or -not $sessionDashboard) {
         throw "Sprint UAT failure: demo seed failed and seeded Demo Session Log assets could not be found. Original error: $($_.Exception.Message)"
     }
 
     $seedSummary = [pscustomobject]@{
-        seed_version         = "uat-demo-v1"
+        seed_version         = "uat-demo-v2"
         form_id              = $sessionForm.id
         dataset_id           = $sessionDataset.id
         component_version_id = $sessionTableComponent.current_version_id
+        dashboard_id         = $sessionDashboard.id
     }
 }
-if ($seedSummary.seed_version -ne "uat-demo-v1") {
-    throw "Sprint UAT failure: demo seed did not confirm expected uat-demo-v1."
+if ($seedSummary.seed_version -ne "uat-demo-v2") {
+    throw "Sprint UAT failure: demo seed did not confirm expected uat-demo-v2."
 }
 $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
@@ -277,6 +280,57 @@ Assert-ProtectedShell -Content $componentViewer -Needles @("Component") -Context
 $visualViewer = Invoke-Html -Uri "$BaseUrl/components/$visualSlug/view" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $visualViewer -Needles @("Component") -Context "visual component viewer"
 
+$dashboardApi = Invoke-RestMethod -Uri "$BaseUrl/api/dashboards/$($seedSummary.dashboard_id)" -Headers $headers -TimeoutSec 30
+if ($dashboardApi.placement_count -ne 9 -or $dashboardApi.placements.Count -ne 9) {
+    throw "Sprint UAT failure: uat-demo-v2 Dashboard did not expose exactly 9 total placement envelopes."
+}
+$expectedDashboardKinds = @("table", "bar", "line", "pie", "donut", "stat_card")
+$actualDashboardKinds = @($dashboardApi.placements | Where-Object { $_.availability -eq "available" } | ForEach-Object { $_.component.component_type } | Sort-Object -Unique)
+foreach ($expectedKind in $expectedDashboardKinds) {
+    if ($actualDashboardKinds -notcontains $expectedKind) {
+        throw "Sprint UAT failure: seeded Dashboard is missing an available $expectedKind placement."
+    }
+}
+foreach ($placement in $dashboardApi.placements) {
+    if ($placement.grid_row -lt 1 -or $placement.grid_row -gt 240 -or
+        $placement.grid_column -lt 1 -or $placement.grid_column -gt 12 -or
+        $placement.grid_width -lt 1 -or ($placement.grid_column + $placement.grid_width - 1) -gt 12 -or
+        $placement.grid_height -lt 1 -or
+        ($placement.grid_row + $placement.grid_height - 1) -gt 240) {
+        throw "Sprint UAT failure: seeded Dashboard placement has invalid typed geometry: $($placement | ConvertTo-Json -Depth 10)"
+    }
+    if ($placement.availability -ne "available") {
+        continue
+    }
+    $kindPath = if ($placement.component.component_type -eq "stat_card") { "stat-card" } else { $placement.component.component_type }
+    $executionUri = "$BaseUrl/api/components/$($placement.component.component_slug)/versions/$($placement.component.component_version_id)/$kindPath"
+    if ($kindPath -eq "table") {
+        $executionUri = "${executionUri}?page_size=1"
+    }
+    $execution = Invoke-RestMethod -Uri $executionUri -Headers $headers -TimeoutSec 30
+    if ($execution.component_version_id -ne $placement.component.component_version_id -or $execution.materialization_state -ne "ready") {
+        throw "Sprint UAT failure: exact-version Dashboard execution did not return the pinned ready Component version for placement $($placement.placement_id)."
+    }
+    if ($kindPath -eq "table" -and ($execution.pagination.page_size -ne 1 -or $execution.rows.Count -gt 1)) {
+        throw "Sprint UAT failure: embedded Table endpoint did not honor bounded server paging."
+    }
+}
+
+$dashboardsList = Invoke-Html -Uri "$BaseUrl/dashboards" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $dashboardsList -Needles @("Dashboards") -Context "dashboard directory"
+
+$dashboardCreate = Invoke-Html -Uri "$BaseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $dashboardCreate -Needles @("Create Dashboard") -Context "dashboard create"
+
+$dashboardDetail = Invoke-Html -Uri "$BaseUrl/dashboards/$($seedSummary.dashboard_id)" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $dashboardDetail -Needles @("Dashboard Detail", "9 total placements") -Context "dashboard detail"
+
+$dashboardEditor = Invoke-Html -Uri "$BaseUrl/dashboards/$($seedSummary.dashboard_id)/edit" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $dashboardEditor -Needles @("Dashboard") -Context "dashboard editor"
+
+$dashboardViewer = Invoke-Html -Uri "$BaseUrl/dashboards/$($seedSummary.dashboard_id)/view" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $dashboardViewer -Needles @("Dashboard", "Edit Dashboard") -Context "dashboard viewer"
+
 $workflowsList = Invoke-Html -Uri "$BaseUrl/workflows" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $workflowsList -Needles @("Workflows") -Context "workflow directory"
 
@@ -313,5 +367,5 @@ foreach ($roleCheck in @(
     }
 }
 
-Write-Host "`n== Sprint UAT checks passed for organization, forms, datasets, components, and seed flows. ==" -ForegroundColor Green
+Write-Host "`n== Sprint UAT checks passed for organization, forms, datasets, components, dashboards, and seed flows. ==" -ForegroundColor Green
 Write-Host "Next: if this was a sprint-completion run, keep the deployment open for UAT and log these pass markers."

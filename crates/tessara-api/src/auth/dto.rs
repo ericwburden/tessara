@@ -109,7 +109,24 @@ impl AccountContext {
 }
 
 pub fn implied_manage_capability(required: &str) -> Option<String> {
-    required
-        .strip_suffix(":read")
-        .map(|domain| format!("{domain}:manage"))
+    let domain = required.strip_suffix(":read")?;
+    // Dashboard composition intentionally supports internal managers who do
+    // not also receive the product-facing reader directory/viewer surface.
+    // Other established feature areas retain the historical manage=>read
+    // implication.
+    (domain != "dashboards").then(|| format!("{domain}:manage"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::implied_manage_capability;
+
+    #[test]
+    fn dashboard_manage_does_not_imply_product_reader_access() {
+        assert_eq!(implied_manage_capability("dashboards:read"), None);
+        assert_eq!(
+            implied_manage_capability("components:read").as_deref(),
+            Some("components:manage")
+        );
+    }
 }

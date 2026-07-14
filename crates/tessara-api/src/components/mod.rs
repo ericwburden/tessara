@@ -18,6 +18,7 @@ use sqlx::{Postgres, Row, Transaction};
 use tessara_data_ops::{DataField, FieldType};
 use uuid::Uuid;
 
+mod dashboard_compatibility;
 mod dto;
 mod runtime;
 
@@ -289,7 +290,21 @@ pub async fn save_component_edit(
         &dataset_fields,
     )?;
 
+    let published_update_id = if payload.component_id.is_some()
+        && payload.action == SaveComponentEditAction::UpdateExistingVersion
+    {
+        Some(payload.published_version_id.ok_or_else(|| {
+            ApiError::BadRequest(
+                "updating an existing component version requires a published version".into(),
+            )
+        })?)
+    } else {
+        None
+    };
     let mut tx = state.pool.begin().await?;
+    if let Some(version_id) = published_update_id {
+        dashboard_compatibility::prepare_published_update(&mut tx, version_id).await?;
+    }
     let component_id = if let Some(component_id) = payload.component_id {
         lock_component_in_tx(&mut tx, component_id).await?;
         require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id)
@@ -318,7 +333,7 @@ pub async fn save_component_edit(
                 }
             }
             SaveComponentEditAction::UpdateExistingVersion => {
-                let version_id = payload.published_version_id.ok_or_else(|| {
+                let version_id = published_update_id.ok_or_else(|| {
                     ApiError::BadRequest(
                         "updating an existing component version requires a published version"
                             .into(),
@@ -699,40 +714,18 @@ pub async fn update_published_component_version(
     validate_component_config(&payload.component_type, &payload.config, &dataset_fields)?;
 
     let mut tx = state.pool.begin().await?;
+    dashboard_compatibility::prepare_published_update(&mut tx, version_id).await?;
     lock_component_in_tx(&mut tx, component_id).await?;
     require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id).await?;
-    require_component_version_status_row_in_tx(&mut tx, component_id, version_id, "published")
-        .await?;
-    let version_note = normalized_component_version_note(payload.version_note.as_deref())?;
-
-    let update_result = sqlx::query(
-        r#"
-        UPDATE component_versions
-        SET dataset_id = $1,
-            dataset_version_major = $2,
-            binding_mode = 'major_line',
-            component_type = $3::component_type,
-            config = $4,
-            version_note = COALESCE($7, version_note)
-        WHERE component_id = $5
-          AND id = $6
-          AND status = 'published'::component_version_status
-        "#,
+    update_component_version_row_in_tx(
+        &mut tx,
+        component_id,
+        version_id,
+        "published",
+        &binding,
+        &payload,
     )
-    .bind(binding.dataset_id)
-    .bind(binding.dataset_version_major)
-    .bind(&payload.component_type)
-    .bind(&payload.config)
-    .bind(component_id)
-    .bind(version_id)
-    .bind(version_note)
-    .execute(&mut *tx)
     .await?;
-    if update_result.rows_affected() != 1 {
-        return Err(ApiError::BadRequest(format!(
-            "component version {version_id} could not be updated because it is no longer published"
-        )));
-    }
 
     sqlx::query(
         r#"
@@ -876,6 +869,9 @@ async fn update_component_version_row_in_tx(
         return Err(ApiError::BadRequest(format!(
             "component version {version_id} could not be updated because it is no longer {status}"
         )));
+    }
+    if status == "published" {
+        dashboard_compatibility::validate_published_update(tx, version_id).await?;
     }
     Ok(())
 }

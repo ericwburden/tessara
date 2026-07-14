@@ -13,10 +13,13 @@ members = [
     "crates/tessara-jobs",
     "crates/tessara-submissions",
     "crates/tessara-web",
+    "crates/tessara-web-component-viewer",
     "crates/tessara-web-components",
+    "crates/tessara-web-dashboards",
     "crates/tessara-web-data-ops",
     "crates/tessara-web-datasets",
     "crates/tessara-web-forms",
+    "crates/tessara-web-http",
     "crates/tessara-web-organization",
     "crates/tessara-web-responses",
     "crates/tessara-web-workflows",
@@ -40,6 +43,7 @@ axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 datafusion = "50"
 gloo-net = "0.6"
+gloo-timers = { version = "0.3", features = ["futures"] }
 icons = { version = "0.18.2", features = ["leptos"] }
 js-sys = "0.3"
 leptos = { version = "0.8.17", default-features = false }

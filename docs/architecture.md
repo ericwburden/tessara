@@ -63,7 +63,8 @@ In the target model:
 
 ## Key Principles
 
-- Stable dependency edges bind to immutable revisions or versions.
+- Stable dependency edges bind to stable revision/version identifiers and never rebind automatically to a separately published replacement.
+- `DatasetRevision` records and superseded `ComponentVersion` payloads are immutable. The current published `ComponentVersion` is the documented exception: an authorized update-in-place preserves its id and intentionally updates pinned consumers; publishing a separate version creates a new id and leaves existing bindings unchanged.
 - User-facing authoring should prefer automatic derivation over manual metadata entry where practical.
 - Archived or inactive records must remain resolvable for historical integrity.
 - Materialized physical relations may be evicted and rebuilt while semantic revision metadata remains stable.
@@ -71,7 +72,7 @@ In the target model:
 
 ## Frontend Delivery Architecture
 
-The current frontend is a native Leptos SSR application with root route ownership in `tessara-web` and feature-area implementation in focused `tessara-web-*` crates. The extracted baseline includes shared UI plus Datasets, Forms, Workflows, Responses, and Organization. This split is now the default frontend architecture for major feature areas.
+The current frontend is a native Leptos SSR application with root route ownership in `tessara-web` and feature-area implementation in focused `tessara-web-*` crates. The extracted baseline includes shared UI plus Datasets, Components, Dashboards, Forms, Workflows, Responses, and Organization. This split is now the default frontend architecture for major feature areas.
 
 `tessara-web` remains the cargo-leptos application crate. It owns app composition and route policy:
 
@@ -79,24 +80,28 @@ The current frontend is a native Leptos SSR application with root route ownershi
 - `AppShell`, route titles, auth guards, session/navigation/logout policy, document integration, hydration entrypoint, CSS, and public assets
 - thin route adapters that render feature-crate content components
 
-Feature crates own feature UI implementation and feature-local browser transport:
+Feature crates own feature UI implementation and feature-local endpoint orchestration:
 
 - `tessara-web-ui` owns generic, policy-neutral UI primitives
+- `tessara-web-http` owns policy-neutral browser JSON request preparation, API error-envelope parsing, and authentication/retryable/terminal failure classification; it does not own endpoints, redirects, session policy, or navigation
 - `tessara-web-data-ops` owns neutral data-operation authoring controls and draft contracts reused by feature crates, such as projection and filter editors shared by Dataset authoring and thin Table Component authoring
-- `tessara-web-datasets`, `tessara-web-components`, `tessara-web-forms`, `tessara-web-workflows`, `tessara-web-responses`, and `tessara-web-organization` own their respective content components, loaders/actions, web DTOs, display helpers, and local support helpers
-- feature crates expose narrow content facades and do not depend on root `tessara-web`, `tessara-api`, root route modules, `AppShell`, `leptos_router`, `leptos_meta`, auth/session/navigation policy, or sibling feature crates other than shared UI
+- `tessara-web-component-viewer` owns reusable explicit-version Component execution and presentation without Component authoring, Dashboard policy, or route ownership
+- `tessara-web-datasets`, `tessara-web-components`, `tessara-web-dashboards`, `tessara-web-forms`, `tessara-web-workflows`, `tessara-web-responses`, and `tessara-web-organization` own their respective content components, loaders/actions, web DTOs, display helpers, and local support helpers
+- generic grid geometry remains in `tessara-core`, Dashboard composition policy remains in `tessara-dashboards`, and only policy-neutral placement interaction primitives belong in `tessara-web-ui`
+- feature crates expose narrow content facades and do not depend on root `tessara-web`, `tessara-api`, root route modules, `AppShell`, `leptos_router`, `leptos_meta`, or auth/session/navigation policy
+- sibling feature dependencies remain forbidden except for the two approved presentation-leaf edges: `tessara-web-dashboards -> tessara-web-component-viewer` and `tessara-web-components -> tessara-web-component-viewer`; feature crates and the viewer leaf may depend on the policy-neutral shared UI and HTTP transport crates
 
 Frontend delivery should follow these rules:
 
 - use `cargo-leptos` as the canonical workspace build pipeline
 - keep a single `axum` binary (`tessara-api`) that serves API routes, SSR HTML, SVG assets, and the built wasm/js package
 - keep `tessara-web` focused on root application composition and route adapters rather than growing new major feature implementation inside the root crate
-- implement major feature areas as focused feature crates when the boundary is clear; Component authoring/viewing is implemented in `tessara-web-components`
+- implement major feature areas as focused feature crates when the boundary is clear; Component authoring and route-level orchestration live in `tessara-web-components`, while reusable explicit-version viewing lives in `tessara-web-component-viewer`
 - replace the current broad Administration grouping with individual administrative feature areas when that work is revisited: User Management, Roles and Access, and Organization Schema are the intended slices, while Datasets is already separate and Components should be built as its own planned feature area
 - keep REST endpoints as the stable transport contract during the migration; UI components should read and mutate data through feature-local adapters rather than embedding raw fetch logic throughout the component tree
 - keep the root-level native application URLs as the active UI contract
 - keep API DTOs and web DTOs separate by default; promote shared contracts only after ownership, representation stability, maintenance cost, and WASM dependency cost are measured
-- avoid a shared `tessara-web-platform` crate by default; create one only if repeated transport/helper copies become a real maintenance cost and the crate can stay policy-neutral
+- avoid a broad shared `tessara-web-platform` crate; the focused `tessara-web-http` transport exists because repeated JSON/error parsing became a measured maintenance cost and remains policy-neutral
 - use release frontend artifacts for production bundle decisions, and treat dev-profile bundle size as a trend signal only
 
 ### Rendering policy
@@ -153,6 +158,8 @@ Future component types may add charts or stat cards, but analytical shaping, agg
 ### Dashboard
 
 Mutable composition asset that references specific `ComponentVersion` records. Dashboards are not versioned in v1.
+
+Dashboard geometry is bounded by a fixed 12-column, 240-row grid and a 240-placement storage limit. Component-kind policy may raise the global `1 x 1` minimum, but placement height has no independent cap below the grid boundary: `grid_row + grid_height - 1` must remain at or below row 240.
 
 ### Future Printable Report
 

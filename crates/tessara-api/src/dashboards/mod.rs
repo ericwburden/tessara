@@ -1,8 +1,7 @@
-//! Dashboard composition and visibility endpoints.
+//! Dashboard transport boundary.
 //!
-//! Dashboards compose published component versions and carry their own visibility
-//! scope. Handlers here enforce dashboard capability scope and component
-//! compatibility; DTOs live in `dto`.
+//! Handlers authenticate and adapt HTTP only. Dashboard policy and
+//! authorization live in `service`; SQL lives in `repository`.
 
 use axum::{
     Json, Router,
@@ -10,704 +9,131 @@ use axum::{
     http::HeaderMap,
     routing::{get, post},
 };
-use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
 mod dto;
+mod error;
+mod native;
+mod projection;
+mod reconciliation;
+mod repository;
+mod scope;
+mod service;
 
-pub use dto::{
-    AddDashboardComponentRequest, CreateDashboardRequest, DashboardComponentResponse,
-    DashboardResponse, DashboardSummary, DashboardVisibilityNodeSummary,
-};
+pub(crate) use native::viewer as native_viewer;
+pub(crate) use native::{create as native_create, detail as native_detail};
+pub(crate) use native::{directory as native_directory, editor as native_editor};
 
-use crate::{
-    auth,
-    db::AppState,
-    error::{ApiError, ApiResult},
-    hierarchy::{IdResponse, require_text},
+use dto::{
+    CreateDashboardRequest, DashboardCompositionResponse, DashboardResponse, DashboardSummary,
+    DashboardVisibilityNodeOption, ReconcileDashboardCompositionRequest,
 };
+use reconciliation::reconcile_composition;
+
+use crate::{auth, db::AppState, hierarchy::IdResponse};
+use error::DashboardResult;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/admin/dashboards", post(create_dashboard))
         .route(
+            "/api/admin/dashboards/visibility-nodes",
+            get(list_dashboard_visibility_nodes),
+        )
+        .route(
             "/api/admin/dashboards/{dashboard_id}",
             axum::routing::put(update_dashboard).delete(delete_dashboard),
         )
         .route(
-            "/api/admin/dashboards/{dashboard_id}/components",
-            post(add_dashboard_component),
-        )
-        .route(
-            "/api/admin/dashboard-components/{component_id}",
-            axum::routing::put(update_dashboard_component).delete(delete_dashboard_component),
+            "/api/admin/dashboards/{dashboard_id}/composition",
+            get(get_dashboard_composition).put(reconcile_dashboard_composition),
         )
         .route("/api/dashboards/{dashboard_id}", get(get_dashboard))
         .route("/api/dashboards", get(list_dashboards))
 }
 
-/// Creates a dashboard with explicit visibility nodes.
-pub async fn create_dashboard(
+async fn list_dashboard_visibility_nodes(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<CreateDashboardRequest>,
-) -> ApiResult<Json<IdResponse>> {
+) -> DashboardResult<Json<Vec<DashboardVisibilityNodeOption>>> {
     let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
-    require_text("dashboard name", &payload.name)?;
-    require_node_ids_exist(&state.pool, &payload.visibility_node_ids).await?;
-    auth::require_capability_contains_nodes(
-        &state.pool,
-        &account,
-        "dashboards:manage",
-        &payload.visibility_node_ids,
-    )
-    .await?;
-    let mut tx = state.pool.begin().await?;
-    let id = sqlx::query_scalar(
-        "INSERT INTO dashboards (name, description) VALUES ($1, $2) RETURNING id",
-    )
-    .bind(payload.name.trim())
-    .bind(payload.description)
-    .fetch_one(&mut *tx)
-    .await?;
-    replace_dashboard_scope_nodes_tx(&mut tx, id, &payload.visibility_node_ids).await?;
-    tx.commit().await?;
-    Ok(Json(IdResponse { id }))
-}
-
-/// Updates dashboard metadata and replaces its visibility scope.
-pub async fn update_dashboard(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(dashboard_id): Path<Uuid>,
-    Json(payload): Json<CreateDashboardRequest>,
-) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
-    require_dashboard_exists(&state.pool, dashboard_id).await?;
-    require_dashboard_fully_in_capability_scope(
-        &state.pool,
-        &account,
-        "dashboards:manage",
-        dashboard_id,
-    )
-    .await?;
-    require_text("dashboard name", &payload.name)?;
-    require_node_ids_exist(&state.pool, &payload.visibility_node_ids).await?;
-    auth::require_capability_contains_nodes(
-        &state.pool,
-        &account,
-        "dashboards:manage",
-        &payload.visibility_node_ids,
-    )
-    .await?;
-    let mut tx = state.pool.begin().await?;
-    sqlx::query("UPDATE dashboards SET name = $1, description = $2 WHERE id = $3")
-        .bind(payload.name.trim())
-        .bind(payload.description)
-        .bind(dashboard_id)
-        .execute(&mut *tx)
-        .await?;
-    replace_dashboard_scope_nodes_tx(&mut tx, dashboard_id, &payload.visibility_node_ids).await?;
-    tx.commit().await?;
-    Ok(Json(IdResponse { id: dashboard_id }))
-}
-
-/// Deletes a dashboard and its component placements.
-pub async fn delete_dashboard(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(dashboard_id): Path<Uuid>,
-) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
-    require_dashboard_exists(&state.pool, dashboard_id).await?;
-    require_dashboard_fully_in_capability_scope(
-        &state.pool,
-        &account,
-        "dashboards:manage",
-        dashboard_id,
-    )
-    .await?;
-    sqlx::query("DELETE FROM dashboards WHERE id = $1")
-        .bind(dashboard_id)
-        .execute(&state.pool)
-        .await?;
-    Ok(Json(IdResponse { id: dashboard_id }))
-}
-
-/// Adds a component version to a dashboard after scope compatibility checks.
-pub async fn add_dashboard_component(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(dashboard_id): Path<Uuid>,
-    Json(payload): Json<AddDashboardComponentRequest>,
-) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
-    require_dashboard_exists(&state.pool, dashboard_id).await?;
-    require_dashboard_fully_in_capability_scope(
-        &state.pool,
-        &account,
-        "dashboards:manage",
-        dashboard_id,
-    )
-    .await?;
-    require_dashboard_component_version_placeable(&state.pool, payload.component_version_id)
-        .await?;
-    require_component_version_compatible_with_dashboard(
-        &state.pool,
-        &account,
-        dashboard_id,
-        payload.component_version_id,
-    )
-    .await?;
-    let id = sqlx::query_scalar(
-        r#"
-        INSERT INTO dashboard_components (dashboard_id, component_version_id, position, config)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id
-        "#,
-    )
-    .bind(dashboard_id)
-    .bind(payload.component_version_id)
-    .bind(payload.position)
-    .bind(payload.config)
-    .fetch_one(&state.pool)
-    .await?;
-    Ok(Json(IdResponse { id }))
-}
-
-/// Updates dashboard component placement and per-dashboard config.
-pub async fn update_dashboard_component(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(component_id): Path<Uuid>,
-    Json(payload): Json<AddDashboardComponentRequest>,
-) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
-    require_dashboard_component_version_placeable(&state.pool, payload.component_version_id)
-        .await?;
-    let dashboard_id = require_dashboard_component_dashboard_id(&state.pool, component_id).await?;
-    require_dashboard_fully_in_capability_scope(
-        &state.pool,
-        &account,
-        "dashboards:manage",
-        dashboard_id,
-    )
-    .await?;
-    require_component_version_compatible_with_dashboard(
-        &state.pool,
-        &account,
-        dashboard_id,
-        payload.component_version_id,
-    )
-    .await?;
-    sqlx::query(
-        r#"
-        UPDATE dashboard_components
-        SET component_version_id = $2, position = $3, config = $4
-        WHERE id = $1
-        "#,
-    )
-    .bind(component_id)
-    .bind(payload.component_version_id)
-    .bind(payload.position)
-    .bind(payload.config)
-    .execute(&state.pool)
-    .await?;
-    Ok(Json(IdResponse { id: component_id }))
-}
-
-/// Removes one component placement from a dashboard.
-pub async fn delete_dashboard_component(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(component_id): Path<Uuid>,
-) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
-    let dashboard_id = require_dashboard_component_dashboard_id(&state.pool, component_id).await?;
-    require_dashboard_fully_in_capability_scope(
-        &state.pool,
-        &account,
-        "dashboards:manage",
-        dashboard_id,
-    )
-    .await?;
-    sqlx::query("DELETE FROM dashboard_components WHERE id = $1")
-        .bind(component_id)
-        .execute(&state.pool)
-        .await?;
-    Ok(Json(IdResponse { id: component_id }))
-}
-
-/// Lists dashboards visible to the caller's dashboard-read capability scope.
-pub async fn list_dashboards(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> ApiResult<Json<Vec<DashboardSummary>>> {
-    let account = auth::require_capability(&state.pool, &headers, "dashboards:read").await?;
-    let boundary = auth::capability_boundary(&state.pool, &account, "dashboards:read").await?;
-    let rows = match &boundary {
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            sqlx::query(
-                r#"
-        SELECT dashboards.id, dashboards.name, dashboards.description,
-               COUNT(placeable_component_versions.id) AS component_count
-        FROM dashboards
-        JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
-        LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
-        LEFT JOIN component_versions AS placeable_component_versions
-            ON placeable_component_versions.id = dashboard_components.component_version_id
-           AND placeable_component_versions.status IN (
-               'published'::component_version_status,
-               'superseded'::component_version_status
-           )
-        WHERE dashboard_scope_nodes.node_id = ANY($1)
-        GROUP BY dashboards.id, dashboards.name, dashboards.description
-        ORDER BY dashboards.name, dashboards.id
-        "#,
-            )
-            .bind(scope_ids)
-            .fetch_all(&state.pool)
-            .await?
-        }
-        auth::CapabilityBoundary::Global => {
-            sqlx::query(
-                r#"
-        SELECT dashboards.id, dashboards.name, dashboards.description,
-               COUNT(placeable_component_versions.id) AS component_count
-        FROM dashboards
-        LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
-        LEFT JOIN component_versions AS placeable_component_versions
-            ON placeable_component_versions.id = dashboard_components.component_version_id
-           AND placeable_component_versions.status IN (
-               'published'::component_version_status,
-               'superseded'::component_version_status
-           )
-        GROUP BY dashboards.id, dashboards.name, dashboards.description
-        ORDER BY dashboards.name, dashboards.id
-        "#,
-            )
-            .fetch_all(&state.pool)
-            .await?
-        }
-        auth::CapabilityBoundary::None => {
-            return Err(ApiError::Forbidden("dashboards:read".into()));
-        }
-    };
-    let dashboard_ids = rows
-        .iter()
-        .map(|row| row.try_get::<Uuid, _>("id"))
-        .collect::<Result<Vec<_>, sqlx::Error>>()?;
-    let visible_node_filter = match &boundary {
-        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids.as_slice()),
-        _ => None,
-    };
-    let visibility_nodes =
-        load_dashboard_visibility_nodes(&state.pool, &dashboard_ids, visible_node_filter).await?;
     Ok(Json(
-        rows.into_iter()
-            .map(|row| {
-                let id: Uuid = row.try_get("id")?;
-                Ok(DashboardSummary {
-                    id,
-                    name: row.try_get("name")?,
-                    description: row.try_get("description")?,
-                    visibility_nodes: visibility_nodes.get(&id).cloned().unwrap_or_default(),
-                    component_count: row.try_get("component_count")?,
-                })
-            })
-            .collect::<Result<Vec<_>, sqlx::Error>>()?,
+        service::list_visibility_node_options(&state.pool, &account).await?,
     ))
 }
 
-/// Loads one dashboard with component placements when visible to the caller.
-pub async fn get_dashboard(
+async fn create_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateDashboardRequest>,
+) -> DashboardResult<Json<IdResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
+    Ok(Json(
+        service::create_dashboard(&state.pool, &account, payload).await?,
+    ))
+}
+
+async fn update_dashboard(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
-) -> ApiResult<Json<DashboardResponse>> {
+    Json(payload): Json<CreateDashboardRequest>,
+) -> DashboardResult<Json<IdResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
+    Ok(Json(
+        service::update_dashboard(&state.pool, &account, dashboard_id, payload).await?,
+    ))
+}
+
+async fn delete_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dashboard_id): Path<Uuid>,
+) -> DashboardResult<Json<IdResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
+    Ok(Json(
+        service::delete_dashboard(&state.pool, &account, dashboard_id).await?,
+    ))
+}
+
+async fn list_dashboards(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> DashboardResult<Json<Vec<DashboardSummary>>> {
     let account = auth::require_capability(&state.pool, &headers, "dashboards:read").await?;
-    let boundary = auth::capability_boundary(&state.pool, &account, "dashboards:read").await?;
-    require_dashboard_visible_for_boundary(&state.pool, dashboard_id, &boundary, "dashboards:read")
-        .await?;
-    let visible_node_filter = match &boundary {
-        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids.as_slice()),
-        _ => None,
-    };
-    let dashboard = sqlx::query("SELECT id, name, description FROM dashboards WHERE id = $1")
-        .bind(dashboard_id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("dashboard {dashboard_id}")))?;
-    let component_rows = match &boundary {
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            sqlx::query(
-                r#"
-        SELECT
-            dashboard_components.id,
-            dashboard_components.position,
-            dashboard_components.config,
-            component_versions.id AS component_version_id,
-            component_versions.component_id,
-            component_versions.component_type::text AS component_type,
-            component_versions.dataset_id,
-            component_versions.dataset_version_major,
-            component_versions.binding_mode,
-            components.name AS component_name,
-            components.slug AS component_slug
-        FROM dashboard_components
-        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        JOIN components ON components.id = component_versions.component_id
-        WHERE dashboard_components.dashboard_id = $1
-          AND component_versions.status IN (
-              'published'::component_version_status,
-              'superseded'::component_version_status
-          )
-          AND EXISTS (
-              SELECT 1
-              FROM dataset_scope_nodes
-              WHERE dataset_scope_nodes.dataset_id = component_versions.dataset_id
-                AND dataset_scope_nodes.node_id = ANY($2)
-          )
-          AND NOT EXISTS (
-              SELECT 1
-              FROM dataset_scope_nodes
-              WHERE dataset_scope_nodes.dataset_id = component_versions.dataset_id
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM dashboard_scope_nodes
-                    WHERE dashboard_scope_nodes.dashboard_id = dashboard_components.dashboard_id
-                      AND dashboard_scope_nodes.node_id = dataset_scope_nodes.node_id
-                )
-          )
-        ORDER BY dashboard_components.position, dashboard_components.id
-        "#,
-            )
-            .bind(dashboard_id)
-            .bind(scope_ids)
-            .fetch_all(&state.pool)
-            .await?
-        }
-        auth::CapabilityBoundary::Global => {
-            sqlx::query(
-                r#"
-        SELECT
-            dashboard_components.id,
-            dashboard_components.position,
-            dashboard_components.config,
-            component_versions.id AS component_version_id,
-            component_versions.component_id,
-            component_versions.component_type::text AS component_type,
-            component_versions.dataset_id,
-            component_versions.dataset_version_major,
-            component_versions.binding_mode,
-            components.name AS component_name,
-            components.slug AS component_slug
-        FROM dashboard_components
-        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        JOIN components ON components.id = component_versions.component_id
-        WHERE dashboard_components.dashboard_id = $1
-          AND component_versions.status IN (
-              'published'::component_version_status,
-              'superseded'::component_version_status
-          )
-          AND NOT EXISTS (
-              SELECT 1
-              FROM dataset_scope_nodes
-              WHERE dataset_scope_nodes.dataset_id = component_versions.dataset_id
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM dashboard_scope_nodes
-                    WHERE dashboard_scope_nodes.dashboard_id = dashboard_components.dashboard_id
-                      AND dashboard_scope_nodes.node_id = dataset_scope_nodes.node_id
-                )
-          )
-        ORDER BY dashboard_components.position, dashboard_components.id
-        "#,
-            )
-            .bind(dashboard_id)
-            .fetch_all(&state.pool)
-            .await?
-        }
-        auth::CapabilityBoundary::None => {
-            return Err(ApiError::Forbidden("dashboards:read".into()));
-        }
-    };
-
-    let visibility_nodes =
-        load_dashboard_visibility_nodes(&state.pool, &[dashboard_id], visible_node_filter).await?;
-
-    Ok(Json(DashboardResponse {
-        id: dashboard.try_get("id")?,
-        name: dashboard.try_get("name")?,
-        description: dashboard.try_get("description")?,
-        visibility_nodes: visibility_nodes
-            .get(&dashboard_id)
-            .cloned()
-            .unwrap_or_default(),
-        components: component_rows
-            .into_iter()
-            .map(|row| {
-                Ok(DashboardComponentResponse {
-                    id: row.try_get("id")?,
-                    position: row.try_get("position")?,
-                    config: row.try_get("config")?,
-                    component_version_id: row.try_get("component_version_id")?,
-                    component_id: row.try_get("component_id")?,
-                    component_name: row.try_get("component_name")?,
-                    component_slug: row.try_get("component_slug")?,
-                    component_type: row.try_get("component_type")?,
-                    dataset_id: row.try_get("dataset_id")?,
-                    dataset_version_major: row.try_get("dataset_version_major")?,
-                    binding_mode: row.try_get("binding_mode")?,
-                })
-            })
-            .collect::<Result<Vec<_>, sqlx::Error>>()?,
-    }))
+    Ok(Json(service::list_dashboards(&state.pool, &account).await?))
 }
 
-async fn require_dashboard_exists(pool: &sqlx::PgPool, dashboard_id: Uuid) -> ApiResult<()> {
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM dashboards WHERE id = $1)")
-        .bind(dashboard_id)
-        .fetch_one(pool)
-        .await?;
-    if exists {
-        Ok(())
-    } else {
-        Err(ApiError::NotFound(format!("dashboard {dashboard_id}")))
-    }
+async fn get_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dashboard_id): Path<Uuid>,
+) -> DashboardResult<Json<DashboardResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "dashboards:read").await?;
+    Ok(Json(
+        service::get_dashboard(&state.pool, &account, dashboard_id).await?,
+    ))
 }
 
-async fn require_dashboard_component_version_placeable(
-    pool: &sqlx::PgPool,
-    component_version_id: Uuid,
-) -> ApiResult<()> {
-    let status: Option<String> = sqlx::query_scalar(
-        r#"
-        SELECT status::text
-        FROM component_versions
-        WHERE id = $1
-        "#,
-    )
-    .bind(component_version_id)
-    .fetch_optional(pool)
-    .await?;
-    match status.as_deref() {
-        Some("published" | "superseded") => Ok(()),
-        Some("draft") => Err(ApiError::BadRequest(format!(
-            "component version {component_version_id} is a draft and cannot be placed on a dashboard"
-        ))),
-        Some(other) => Err(ApiError::BadRequest(format!(
-            "component version {component_version_id} has unsupported status '{other}'"
-        ))),
-        None => Err(ApiError::NotFound(format!(
-            "component version {component_version_id}"
-        ))),
-    }
+async fn get_dashboard_composition(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dashboard_id): Path<Uuid>,
+) -> DashboardResult<Json<DashboardCompositionResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
+    Ok(Json(
+        service::load_composition(&state.pool, &account, dashboard_id).await?,
+    ))
 }
 
-async fn require_node_ids_exist(pool: &sqlx::PgPool, node_ids: &[Uuid]) -> ApiResult<()> {
-    if node_ids.is_empty() {
-        return Err(ApiError::BadRequest(
-            "at least one visibility node is required".into(),
-        ));
-    }
-    let existing_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM nodes WHERE id = ANY($1)")
-        .bind(node_ids)
-        .fetch_one(pool)
-        .await?;
-    if existing_count as usize == node_ids.len() {
-        Ok(())
-    } else {
-        Err(ApiError::BadRequest(
-            "one or more visibility nodes do not exist".into(),
-        ))
-    }
-}
-
-async fn replace_dashboard_scope_nodes_tx(
-    tx: &mut Transaction<'_, Postgres>,
-    dashboard_id: Uuid,
-    node_ids: &[Uuid],
-) -> ApiResult<()> {
-    sqlx::query("DELETE FROM dashboard_scope_nodes WHERE dashboard_id = $1")
-        .bind(dashboard_id)
-        .execute(&mut **tx)
-        .await?;
-    for node_id in node_ids {
-        sqlx::query(
-            "INSERT INTO dashboard_scope_nodes (dashboard_id, node_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        )
-        .bind(dashboard_id)
-        .bind(node_id)
-        .execute(&mut **tx)
-        .await?;
-    }
-    Ok(())
-}
-
-async fn load_dashboard_visibility_nodes(
-    pool: &sqlx::PgPool,
-    dashboard_ids: &[Uuid],
-    visible_node_filter: Option<&[Uuid]>,
-) -> ApiResult<std::collections::BTreeMap<Uuid, Vec<DashboardVisibilityNodeSummary>>> {
-    if dashboard_ids.is_empty() {
-        return Ok(std::collections::BTreeMap::new());
-    }
-    let rows = if let Some(node_ids) = visible_node_filter {
-        sqlx::query(
-            r#"
-            SELECT
-                dashboard_scope_nodes.dashboard_id,
-                nodes.id AS node_id,
-                nodes.name AS node_name,
-                nodes.parent_node_id,
-                node_types.name AS node_type_name,
-                COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
-            FROM dashboard_scope_nodes
-            JOIN nodes ON nodes.id = dashboard_scope_nodes.node_id
-            JOIN node_types ON node_types.id = nodes.node_type_id
-            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
-            WHERE dashboard_scope_nodes.dashboard_id = ANY($1)
-              AND dashboard_scope_nodes.node_id = ANY($2)
-            ORDER BY node_path, nodes.name, nodes.id
-            "#,
-        )
-        .bind(dashboard_ids)
-        .bind(node_ids)
-        .fetch_all(pool)
-        .await?
-    } else {
-        sqlx::query(
-            r#"
-            SELECT
-                dashboard_scope_nodes.dashboard_id,
-                nodes.id AS node_id,
-                nodes.name AS node_name,
-                nodes.parent_node_id,
-                node_types.name AS node_type_name,
-                COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
-            FROM dashboard_scope_nodes
-            JOIN nodes ON nodes.id = dashboard_scope_nodes.node_id
-            JOIN node_types ON node_types.id = nodes.node_type_id
-            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
-            WHERE dashboard_scope_nodes.dashboard_id = ANY($1)
-            ORDER BY node_path, nodes.name, nodes.id
-            "#,
-        )
-        .bind(dashboard_ids)
-        .fetch_all(pool)
-        .await?
-    };
-    let mut visibility_nodes =
-        std::collections::BTreeMap::<Uuid, Vec<DashboardVisibilityNodeSummary>>::new();
-    for row in rows {
-        let dashboard_id: Uuid = row.try_get("dashboard_id")?;
-        visibility_nodes
-            .entry(dashboard_id)
-            .or_default()
-            .push(DashboardVisibilityNodeSummary {
-                node_id: row.try_get("node_id")?,
-                node_name: row.try_get("node_name")?,
-                node_type_name: row.try_get("node_type_name")?,
-                parent_node_id: row.try_get("parent_node_id")?,
-                node_path: row.try_get("node_path")?,
-            });
-    }
-    Ok(visibility_nodes)
-}
-
-async fn require_dashboard_fully_in_capability_scope(
-    pool: &sqlx::PgPool,
-    account: &auth::AccountContext,
-    capability: &str,
-    dashboard_id: Uuid,
-) -> ApiResult<()> {
-    let node_ids = load_dashboard_scope_node_ids(pool, dashboard_id).await?;
-    auth::require_capability_contains_nodes(pool, account, capability, &node_ids).await
-}
-
-async fn require_dashboard_visible_for_boundary(
-    pool: &sqlx::PgPool,
-    dashboard_id: Uuid,
-    boundary: &auth::CapabilityBoundary,
-    capability: &str,
-) -> ApiResult<()> {
-    match boundary {
-        auth::CapabilityBoundary::Global => Ok(()),
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            let node_ids = load_dashboard_scope_node_ids(pool, dashboard_id).await?;
-            if node_ids.iter().any(|node_id| scope_ids.contains(node_id)) {
-                Ok(())
-            } else {
-                Err(ApiError::Forbidden(capability.into()))
-            }
-        }
-        auth::CapabilityBoundary::None => Err(ApiError::Forbidden(capability.into())),
-    }
-}
-
-async fn load_dashboard_scope_node_ids(
-    pool: &sqlx::PgPool,
-    dashboard_id: Uuid,
-) -> ApiResult<Vec<Uuid>> {
-    sqlx::query_scalar(
-        "SELECT node_id FROM dashboard_scope_nodes WHERE dashboard_id = $1 ORDER BY node_id",
-    )
-    .bind(dashboard_id)
-    .fetch_all(pool)
-    .await
-    .map_err(Into::into)
-}
-
-async fn require_dashboard_component_dashboard_id(
-    pool: &sqlx::PgPool,
-    dashboard_component_id: Uuid,
-) -> ApiResult<Uuid> {
-    sqlx::query_scalar("SELECT dashboard_id FROM dashboard_components WHERE id = $1")
-        .bind(dashboard_component_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("dashboard component {dashboard_component_id}")))
-}
-
-async fn require_component_version_compatible_with_dashboard(
-    pool: &sqlx::PgPool,
-    account: &auth::AccountContext,
-    dashboard_id: Uuid,
-    component_version_id: Uuid,
-) -> ApiResult<()> {
-    let dataset_id: Uuid = sqlx::query_scalar(
-        r#"
-        SELECT dataset_id
-        FROM component_versions
-        WHERE component_versions.id = $1
-        "#,
-    )
-    .bind(component_version_id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound(format!("component version {component_version_id}")))?;
-    let dashboard_node_ids = load_dashboard_scope_node_ids(pool, dashboard_id).await?;
-    let dataset_node_ids = sqlx::query_scalar::<_, Uuid>(
-        "SELECT node_id FROM dataset_scope_nodes WHERE dataset_id = $1",
-    )
-    .bind(dataset_id)
-    .fetch_all(pool)
-    .await?;
-    if !dataset_node_ids
-        .iter()
-        .all(|node_id| dashboard_node_ids.contains(node_id))
-    {
-        return Err(ApiError::BadRequest(
-            "dashboard visibility must encompass component dataset visibility".into(),
-        ));
-    }
-    auth::require_capability_contains_nodes(
-        pool,
-        account,
-        "dashboards:manage",
-        &dashboard_node_ids,
-    )
-    .await?;
-    Ok(())
+async fn reconcile_dashboard_composition(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dashboard_id): Path<Uuid>,
+    Json(payload): Json<ReconcileDashboardCompositionRequest>,
+) -> DashboardResult<Json<DashboardCompositionResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
+    Ok(Json(
+        reconcile_composition(&state.pool, &account, dashboard_id, payload).await?,
+    ))
 }

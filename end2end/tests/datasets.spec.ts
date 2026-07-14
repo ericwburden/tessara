@@ -312,6 +312,11 @@ function attachConsoleGuard(page: Page) {
   };
 }
 
+async function gotoHydrated(page: Page, url: string) {
+  await page.goto(url);
+  await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+}
+
 async function signInAsAdmin(page: Page) {
   const response = await page.request.post("/api/auth/login", {
     data: {
@@ -688,7 +693,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
   try {
     datasetId = await createDataset(page, initialPayload);
 
-    await page.goto("/datasets");
+    await gotoHydrated(page, "/datasets");
     await expect(
       page.getByRole("heading", { level: 1, name: "Datasets" }),
     ).toBeVisible();
@@ -743,7 +748,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await expect(page.locator("pre.dataset-sql-panel code")).not.toContainText(
       "WITH ranked",
     );
-    await page.goto(`/datasets/${datasetId}/edit`);
+    await gotoHydrated(page, `/datasets/${datasetId}/edit`);
     await expect(
       page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
     ).toBeVisible();
@@ -907,7 +912,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     expect(draftRevisionId).toBeTruthy();
     const draft = { revision_id: draftRevisionId! };
     await publishDatasetRevision(page, datasetId, draft.revision_id);
-    await page.goto(`/datasets/${datasetId}`);
+    await gotoHydrated(page, `/datasets/${datasetId}`);
 
     const detail = await expectJson<DatasetDefinition>(
       await page.request.get(`/api/datasets/${datasetId}`),
@@ -1052,7 +1057,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
   try {
     await test.step("Demo: open editor with hidden helper fields available", async () => {
       datasetId = await createDataset(page, initialPayload);
-      await page.goto(`/datasets/${datasetId}/edit`);
+      await gotoHydrated(page, `/datasets/${datasetId}/edit`);
       await expect(
         page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
       ).toBeVisible();
@@ -1317,7 +1322,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
         sourceFieldKey("program2", booleanField.key),
       );
 
-      await page.goto(`/datasets/${datasetId}/edit`);
+      await gotoHydrated(page, `/datasets/${datasetId}/edit`);
       const reopenedProjection = await openOperationPanel(page, "Projection");
       await expectSelectedProjectionFieldCount(
         reopenedProjection,
@@ -1435,7 +1440,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
       secondKey,
     );
 
-    await page.goto(`/datasets/${datasetId}`);
+    await gotoHydrated(page, `/datasets/${datasetId}`);
     await expect(page.getByRole("link", { name: "Revision History" })).toBeVisible();
     await page.getByRole("link", { name: "Revision History" }).click();
     await expect(page.locator("h1", { hasText: "Dataset Revisions" })).toBeVisible();
@@ -1448,7 +1453,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
     expect(draftDetail.status).toBe("draft");
     expect(draftDetail.metadata.name).toBe(`${datasetName} Draft`);
 
-    await page.goto(`/datasets/${datasetId}/revisions/${draft.revision_id}`);
+    await gotoHydrated(page, `/datasets/${datasetId}/revisions/${draft.revision_id}`);
     await expect(page.locator(".page-header")).toContainText(`${datasetName} Draft`);
     const revisionSummary = page
       .locator(".route-panel__section")
@@ -1519,7 +1524,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
         ]),
       ],
     });
-    await page.goto(`/datasets/${datasetId}/revisions/${majorDraft.revision_id}`);
+    await gotoHydrated(page, `/datasets/${datasetId}/revisions/${majorDraft.revision_id}`);
     await expect(page.locator(".page-header")).toContainText(`${datasetName} Major`);
     const majorPublishResponse = page.waitForResponse(
       (response) =>
@@ -1545,7 +1550,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
       is_current: true,
     });
 
-    await page.goto(`/datasets/${datasetId}/revisions`);
+    await gotoHydrated(page, `/datasets/${datasetId}/revisions`);
     await expect(page.locator("tbody")).toContainText("v2.0.0");
   } finally {
     if (dependentDatasetId) {
@@ -1662,7 +1667,7 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
       ],
     });
 
-    await page.goto(`/datasets/${downstreamDatasetId}/edit`);
+    await gotoHydrated(page, `/datasets/${downstreamDatasetId}/edit`);
     await expect(
       page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
     ).toBeVisible();
@@ -1741,13 +1746,13 @@ test("dataset revision navigation handles repeated detail and error states", asy
     const missingRevisionId = "00000000-0000-4000-8000-000000000000";
 
     for (let index = 0; index < 3; index += 1) {
-      await page.goto(`/datasets/${datasetId}/revisions`);
+      await gotoHydrated(page, `/datasets/${datasetId}/revisions`);
       await expect(
         page.getByRole("heading", { level: 1, name: "Dataset Revisions" }),
       ).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Published current");
 
-      await page.goto(`/datasets/${datasetId}/revisions/${revisionId}`);
+      await gotoHydrated(page, `/datasets/${datasetId}/revisions/${revisionId}`);
       await expect(
         page.getByRole("heading", { level: 1, name: "Dataset Revision" }),
       ).toBeVisible();
@@ -1759,10 +1764,10 @@ test("dataset revision navigation handles repeated detail and error states", asy
       ).toContainText("v1.0.0");
     }
 
-    await page.goto(`/datasets/${datasetId}/revisions/${missingRevisionId}`);
+    await gotoHydrated(page, `/datasets/${datasetId}/revisions/${missingRevisionId}`);
     await expect(page.getByText("Revision unavailable")).toBeVisible();
 
-    await page.goto(`/datasets/${datasetId}/revisions/${revisionId}`);
+    await gotoHydrated(page, `/datasets/${datasetId}/revisions/${revisionId}`);
     await expect(
       page.getByRole("heading", { level: 1, name: "Dataset Revision" }),
     ).toBeVisible();
@@ -2288,7 +2293,7 @@ test("dataset operations keep operation-local state through reorder, save, and r
     expect(firstAggregationStart).toBeGreaterThan(statusFilterStart);
     expect(secondAggregationStart).toBeGreaterThan(firstAggregationStart);
 
-    await page.goto(`/datasets/${datasetId}/edit`);
+    await gotoHydrated(page, `/datasets/${datasetId}/edit`);
     const firstCalcPanel = page
       .locator("article.dataset-operation-panel", { hasText: "Calculated Fields" })
       .nth(0);

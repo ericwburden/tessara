@@ -10,6 +10,16 @@ pub(super) enum FormStructureSaveError {
     Message(String),
 }
 
+impl FormStructureSaveError {
+    fn from_request(error: tessara_web_http::RequestError) -> Self {
+        if error.is_authentication() {
+            Self::Unauthorized
+        } else {
+            Self::Message(error.into_message())
+        }
+    }
+}
+
 pub(super) async fn create_form_sections_for_new_form(
     version_id: &str,
     sections: &[FormBuilderSectionDraft],
@@ -17,48 +27,15 @@ pub(super) async fn create_form_sections_for_new_form(
     let mut section_ids = HashMap::new();
     for section in sections {
         let section_payload = form_section_payload(section);
-        let section_body = serde_json::to_string(&section_payload).map_err(|_| {
-            FormStructureSaveError::Message(format!(
-                "{} section request could not be prepared.",
-                section.title
-            ))
-        })?;
-        let section_response = gloo_net::http::Request::post(&format!(
-            "/api/admin/form-versions/{version_id}/sections"
-        ))
-        .header("Content-Type", "application/json")
-        .body(section_body)
-        .expect("json request body should be valid")
-        .send()
-        .await;
-
-        let created_section = match section_response {
-            Ok(response) if response.status() == 401 => {
-                return Err(FormStructureSaveError::Unauthorized);
-            }
-            Ok(response) if response.ok() => match response.json::<IdResponse>().await {
-                Ok(created_section) => created_section,
-                Err(_) => {
-                    return Err(FormStructureSaveError::Message(format!(
-                        "{} section response could not be read.",
-                        section.title
-                    )));
-                }
-            },
-            Ok(response) => {
-                return Err(FormStructureSaveError::Message(format!(
-                    "Form was created, but {} section setup failed with status {}.",
-                    section.title,
-                    response.status()
-                )));
-            }
-            Err(_) => {
-                return Err(FormStructureSaveError::Message(format!(
-                    "Form was created, but the {} section API could not be reached.",
-                    section.title
-                )));
-            }
-        };
+        let created_section: IdResponse = tessara_web_http::send_json(
+            gloo_net::http::Request::post(&format!(
+                "/api/admin/form-versions/{version_id}/sections"
+            )),
+            &section_payload,
+            &format!("Create {} section", section.title),
+        )
+        .await
+        .map_err(FormStructureSaveError::from_request)?;
         section_ids.insert(section.id, created_section.id);
     }
 
@@ -78,39 +55,13 @@ pub(super) async fn create_form_fields_for_new_form(
             )));
         };
         let field_payload = form_field_payload(field, section_id.clone(), (index + 1) as i32);
-        let field_body = serde_json::to_string(&field_payload).map_err(|_| {
-            FormStructureSaveError::Message(format!(
-                "{} field request could not be prepared.",
-                field.label
-            ))
-        })?;
-        let field_response =
-            gloo_net::http::Request::post(&format!("/api/admin/form-versions/{version_id}/fields"))
-                .header("Content-Type", "application/json")
-                .body(field_body)
-                .expect("json request body should be valid")
-                .send()
-                .await;
-
-        match field_response {
-            Ok(response) if response.status() == 401 => {
-                return Err(FormStructureSaveError::Unauthorized);
-            }
-            Ok(response) if response.ok() => {}
-            Ok(response) => {
-                return Err(FormStructureSaveError::Message(format!(
-                    "{} field setup failed with status {}.",
-                    field.label,
-                    response.status()
-                )));
-            }
-            Err(_) => {
-                return Err(FormStructureSaveError::Message(format!(
-                    "{} field API could not be reached.",
-                    field.label
-                )));
-            }
-        }
+        tessara_web_http::send_json_without_response(
+            gloo_net::http::Request::post(&format!("/api/admin/form-versions/{version_id}/fields")),
+            &field_payload,
+            &format!("Create {} field", field.label),
+        )
+        .await
+        .map_err(FormStructureSaveError::from_request)?;
     }
 
     Ok(())

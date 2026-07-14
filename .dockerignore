@@ -1,6 +1,12 @@
 .git/
 target/
 tmp/
+node_modules/
+**/node_modules/
+test-results/
+playwright-report/
+**/test-results/
+**/playwright-report/
 .env
 .env.*
 !.env.example

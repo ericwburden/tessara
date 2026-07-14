@@ -91,10 +91,13 @@ Dataset -> Component -> Dashboard
 - Dashboards must compose specific `ComponentVersion` references.
 - Dashboards are mutable in v1.
 - Dashboard authoring and viewing must be available through application-grade UI.
+- Dashboard composition uses a fixed 12-column, 240-row grid with at most 240 stored placements. A placement may use every remaining row from its starting row, subject to its Component-kind minimum and the requirement that its bottom edge not exceed row 240; there is no smaller independent placement-height maximum.
 
 ## Compatibility And Versioning Requirements
 
-- Stable dependency edges must bind to immutable revisions or versions.
+- Stable dependency edges must bind to stable revision/version identifiers and must not rebind automatically when a separate newer revision or version is published.
+- `DatasetRevision` records and superseded `ComponentVersion` payloads are immutable.
+- The current published `ComponentVersion` is the explicit exception: an authorized, intentional update-in-place preserves its id and changes what pinned consumers render. Publishing a separate Component version creates a new id and does not move existing consumers.
 - Archived or inactive records must remain resolvable for historical integrity.
 - When a dependent draft is rebound to a newer dependency version, the system must classify changelog entries by version impact: `major`, `minor`, or `patch`.
 - Publication must be blocked for empty revisions and may separately block on validation failures when a definition cannot compile or materialize.

@@ -43,7 +43,7 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
     )
     .await;
-    assert_eq!(seed["seed_version"], "uat-demo-v1");
+    assert_eq!(seed["seed_version"], "uat-demo-v2");
     assert_eq!(seed["dataset_count"], 4);
     assert_eq!(seed["dataset_revision_count"], 4);
     assert_eq!(seed["component_count"], 9);
@@ -114,11 +114,13 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .len(),
         52
     );
-    let seeded_dataset_columns = seeded_dataset_table["columns"]
+    let seeded_dataset_columns = seeded_dataset_table["rows"]
         .as_array()
-        .expect("seeded dataset columns")
-        .iter()
-        .filter_map(|column| column["key"].as_str())
+        .and_then(|rows| rows.first())
+        .and_then(|row| row["values"].as_object())
+        .expect("seeded dataset row values")
+        .keys()
+        .map(String::as_str)
         .collect::<std::collections::BTreeSet<_>>();
     for field in [
         "session__session_date",
@@ -186,7 +188,8 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .expect("seeded bar points")
             .iter()
             .any(|point| {
-                point["x"] == "Completed as planned" && point["color"] == "var(--semantic-primary)"
+                point["comparison"] == "Completed as planned"
+                    && point["color"] == "var(--semantic-primary)"
             })
     );
 
@@ -266,19 +269,147 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         ),
     )
     .await;
+    assert_eq!(dashboard["placement_count"], 9);
     assert_eq!(
-        dashboard["components"]
+        dashboard["placements"]
             .as_array()
-            .expect("dashboard components should be an array")
+            .expect("dashboard placements should be an array")
             .len(),
         9
     );
     assert!(
-        dashboard["components"]
+        dashboard["placements"]
             .as_array()
-            .expect("dashboard components should be an array")
+            .expect("dashboard placements should be an array")
             .iter()
-            .any(|component| component["component_version_id"] == seed["component_version_id"])
+            .any(|placement| {
+                placement["component"]["component_version_id"] == seed["component_version_id"]
+            })
+    );
+    assert!(
+        dashboard["placements"]
+            .as_array()
+            .expect("dashboard placements should be an array")
+            .iter()
+            .all(|placement| {
+                placement["availability"] == "available"
+                    && placement["grid_row"].as_u64().is_some_and(|row| row >= 1)
+                    && placement["grid_column"]
+                        .as_u64()
+                        .is_some_and(|column| (1..=12).contains(&column))
+                    && placement["grid_width"]
+                        .as_u64()
+                        .is_some_and(|width| (1..=12).contains(&width))
+                    && placement["grid_height"]
+                        .as_u64()
+                        .is_some_and(|height| (1..=6).contains(&height))
+            })
+    );
+
+    let composition = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/admin/dashboards/{}/composition",
+                seed["dashboard_id"].as_str().expect("dashboard id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let composition_placements = composition["dashboard"]["placements"]
+        .as_array()
+        .expect("composition should include placements");
+    assert_eq!(composition_placements.len(), 9);
+    let seed_pool = PgPoolOptions::new()
+        .connect(&std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set"))
+        .await
+        .expect("seed config verification pool");
+    let seeded_configs = sqlx::query_scalar::<_, Value>(
+        "SELECT config FROM dashboard_components WHERE dashboard_id = $1 ORDER BY position, id",
+    )
+    .bind(
+        seed["dashboard_id"]
+            .as_str()
+            .expect("dashboard id")
+            .parse::<Uuid>()
+            .expect("dashboard UUID"),
+    )
+    .fetch_all(&seed_pool)
+    .await
+    .expect("seeded Dashboard configs");
+    assert_eq!(seeded_configs.len(), 9);
+    assert!(seeded_configs.iter().all(|config| {
+        config["schema_version"] == 1
+            && config["grid_row"].as_i64().is_some()
+            && config["grid_column"].as_i64().is_some()
+            && config["grid_width"].as_i64().is_some()
+            && config["grid_height"].as_i64().is_some()
+    }));
+    let session_table_config = seeded_configs
+        .iter()
+        .find(|config| config["title"] == "Session Log Table")
+        .expect("seeded Session Log Table config");
+    assert_eq!(session_table_config["grid_row"], 9);
+    assert_eq!(session_table_config["grid_column"], 1);
+    assert_eq!(session_table_config["grid_width"], 12);
+    assert_eq!(session_table_config["grid_height"], 6);
+    assert!(
+        seeded_configs
+            .iter()
+            .filter(|config| matches!(
+                config["title"].as_str(),
+                Some("Participants by Completion" | "Participants Over Time")
+            ))
+            .all(|config| config["grid_row"] == 15)
+    );
+    assert!(
+        composition["available_component_versions"]
+            .as_array()
+            .is_some_and(|options| options.len() >= 9)
+    );
+    let commands = composition_placements
+        .iter()
+        .map(|placement| {
+            json!({
+                "operation": "retain",
+                "placement_id": placement["placement_id"],
+                "geometry": {
+                    "grid_row": placement["grid_row"],
+                    "grid_column": placement["grid_column"],
+                    "grid_width": placement["grid_width"],
+                    "grid_height": placement["grid_height"]
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    let reconciled = request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!(
+                "/api/admin/dashboards/{}/composition",
+                seed["dashboard_id"].as_str().expect("dashboard id")
+            ),
+            &admin_token,
+            Some(json!({ "commands": commands })),
+        ),
+    )
+    .await;
+    assert_eq!(reconciled["dashboard"]["placement_count"], 9);
+    assert_eq!(
+        reconciled["dashboard"]["placements"]
+            .as_array()
+            .expect("reconciled placements")
+            .iter()
+            .filter_map(|placement| placement["placement_id"].as_str())
+            .collect::<std::collections::BTreeSet<_>>(),
+        composition_placements
+            .iter()
+            .filter_map(|placement| placement["placement_id"].as_str())
+            .collect::<std::collections::BTreeSet<_>>()
     );
     let seeded_revision = request_json(
         app.clone(),
@@ -540,7 +671,7 @@ async fn demo_seed_requires_an_empty_domain_database() {
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
     )
     .await;
-    assert_eq!(seed["seed_version"], "uat-demo-v1");
+    assert_eq!(seed["seed_version"], "uat-demo-v2");
 
     let (status, body) = request_status_and_json(
         app.clone(),
@@ -1191,7 +1322,8 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     .await;
     let atomic_published_id = atomic_published_detail["versions"][0]["id"]
         .as_str()
-        .expect("atomic published id");
+        .expect("atomic published id")
+        .to_string();
     assert_eq!(
         atomic_published_detail["versions"][0]["status"],
         "published"
@@ -1200,6 +1332,57 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         atomic_published_detail["versions"][0]["version_note"],
         "Initial atomic publish."
     );
+
+    let pinning_dashboard = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/dashboards",
+            &admin_token,
+            Some(json!({
+                "name": "Current-published pinning contract",
+                "description": "Stable placement id and mutable current-published payload coverage.",
+                "visibility_node_ids": [visibility_node_id]
+            })),
+        ),
+    )
+    .await;
+    let pinning_dashboard_id = pinning_dashboard["id"]
+        .as_str()
+        .expect("pinning Dashboard id");
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/dashboards/{pinning_dashboard_id}/composition"),
+            &admin_token,
+            Some(json!({
+                "commands": [{
+                    "operation": "bind",
+                    "client_key": "current-published-pin",
+                    "component_version_id": atomic_published_id,
+                    "geometry": {
+                        "grid_row": 1,
+                        "grid_column": 1,
+                        "grid_width": 6,
+                        "grid_height": 4
+                    }
+                }]
+            })),
+        ),
+    )
+    .await;
+    let table_before_update = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{atomic_slug}/versions/{atomic_published_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_ne!(table_before_update["pagination"]["page_size"], 1);
 
     request_json(
         app.clone(),
@@ -1222,7 +1405,8 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                     "component_type": "table",
                     "version_note": "Updated current version in place.",
                     "config": {
-                        "visible_columns": [first_key]
+                        "visible_columns": [first_key],
+                        "page_size": 1
                     }
                 }
             })),
@@ -1259,6 +1443,134 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             .iter()
             .all(|version| version["status"] != "draft")
     );
+    let table_after_update = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{atomic_slug}/versions/{atomic_published_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        table_after_update["component_version_id"],
+        atomic_published_id
+    );
+    assert_eq!(table_after_update["pagination"]["page_size"], 1);
+    let pinning_detail_after_update = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{pinning_dashboard_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        pinning_detail_after_update["placements"][0]["component"]["component_version_id"],
+        atomic_published_id
+    );
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components/save",
+            &admin_token,
+            Some(json!({
+                "component_id": atomic_component_id,
+                "action": "create_new_version",
+                "component": {
+                    "name": "Atomic Save Command Component Updated",
+                    "slug": atomic_slug,
+                    "description": "A newer version must not repin existing Dashboard placements."
+                },
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "table",
+                    "version_note": "Separate newer version for Dashboard pinning coverage.",
+                    "config": {
+                        "visible_columns": [first_key],
+                        "page_size": 2
+                    }
+                }
+            })),
+        ),
+    )
+    .await;
+    let after_new_version = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{atomic_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let newer_version_id = after_new_version["versions"]
+        .as_array()
+        .expect("atomic version history")
+        .iter()
+        .find(|version| version["status"] == "published")
+        .and_then(|version| version["id"].as_str())
+        .expect("new current published version");
+    assert_ne!(newer_version_id, atomic_published_id);
+    assert!(
+        after_new_version["versions"]
+            .as_array()
+            .expect("atomic version history")
+            .iter()
+            .any(|version| {
+                version["id"] == atomic_published_id && version["status"] == "superseded"
+            })
+    );
+    let pinning_detail_after_new_version = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{pinning_dashboard_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        pinning_detail_after_new_version["placements"][0]["component"]["component_version_id"],
+        atomic_published_id
+    );
+
+    let (superseded_update_status, superseded_update_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components/save",
+            &admin_token,
+            Some(json!({
+                "component_id": atomic_component_id,
+                "published_version_id": atomic_published_id,
+                "action": "update_existing_version",
+                "component": {
+                    "name": "Atomic Save Command Component Updated",
+                    "slug": atomic_slug,
+                    "description": "Superseded versions are immutable."
+                },
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "table",
+                    "version_note": "This write must be rejected.",
+                    "config": { "visible_columns": [first_key] }
+                }
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(superseded_update_status, StatusCode::BAD_REQUEST);
+    assert_eq!(superseded_update_body["code"], "bad_request");
     let (legacy_shell_status, legacy_shell_body) = request_status_and_json(
         app.clone(),
         authorized_request(
@@ -1408,7 +1720,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         app.clone(),
         authorized_request(
             "GET",
-            &format!("/api/components/{component_slug}/table"),
+            &format!("/api/components/{component_slug}/table?page_size=200"),
             &admin_token,
             None,
         ),
@@ -2258,7 +2570,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         app.clone(),
         authorized_request(
             "GET",
-            &format!("/api/components/{component_slug}/table"),
+            &format!("/api/components/{component_slug}/table?page_size=200"),
             &admin_token,
             None,
         ),
@@ -2394,7 +2706,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         app.clone(),
         authorized_request(
             "GET",
-            &format!("/api/components/{component_slug}/table"),
+            &format!("/api/components/{component_slug}/table?page_size=200"),
             &admin_token,
             None,
         ),

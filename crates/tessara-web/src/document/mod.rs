@@ -9,5 +9,7 @@ pub(crate) mod theme_bootstrap;
 #[cfg(any(feature = "ssr", test))]
 pub(crate) use assets::static_asset;
 pub(crate) use assets::{document_head_tags, svg_asset};
-pub(crate) use html::render_native_app_document;
+pub(crate) use html::{
+    render_native_app_document, render_native_app_document_with_dashboard_bootstrap,
+};
 pub(crate) use theme_bootstrap::{bootstrap_script, stylesheet_links};

@@ -1,16 +1,20 @@
 //! Browser resize handling for form builder grid tiles.
 
-#[cfg(feature = "hydrate")]
-use crate::builder::FORM_BUILDER_COLUMN_COUNT;
 use crate::builder::{FormBuilderFieldDraft, FormBuilderResizeAxis};
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
-use super::layout::form_builder_field_has_collision;
+use super::layout::{FORM_BUILDER_GRID_CONSTRAINTS, form_builder_field_has_collision};
 #[cfg(feature = "hydrate")]
 use super::sizing::set_form_builder_field_size;
 #[cfg(feature = "hydrate")]
 use std::{cell::Cell, cell::RefCell, rc::Rc};
+#[cfg(feature = "hydrate")]
+use tessara_core::{GridRect, GridSize, resolve_resize_request};
+#[cfg(feature = "hydrate")]
+use tessara_web_ui::placement_editor::{
+    PlacementResizeSession, placement_grid_metrics_from_element, placement_tile_style,
+};
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::JsCast;
 #[cfg(feature = "hydrate")]
@@ -20,13 +24,52 @@ use wasm_bindgen::closure::Closure;
 type MouseEventCallback = Rc<RefCell<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>>>;
 
 #[cfg(feature = "hydrate")]
-fn form_builder_grid_tile_style(field: &FormBuilderFieldDraft) -> String {
-    let column = field.grid_column.max(1);
-    let row = field.grid_row.max(1);
-    let width = field.grid_width.max(1);
-    let height = field.grid_height.max(1);
+struct ActiveFormBuilderResize {
+    window: web_sys::Window,
+    tile: web_sys::Element,
+    active: Rc<Cell<bool>>,
+    move_callback: MouseEventCallback,
+    up_callback: MouseEventCallback,
+}
 
-    format!("grid-column: {column} / span {width}; grid-row: {row} / span {height};")
+#[cfg(feature = "hydrate")]
+thread_local! {
+    static ACTIVE_FORM_BUILDER_RESIZE: RefCell<Option<ActiveFormBuilderResize>> =
+        const { RefCell::new(None) };
+}
+
+/// Binds global resize listeners to the current form-builder owner.
+#[cfg(feature = "hydrate")]
+pub(crate) fn install_form_builder_resize_cleanup() {
+    on_cleanup(clear_active_form_builder_resize);
+}
+
+#[cfg(not(feature = "hydrate"))]
+pub(crate) fn install_form_builder_resize_cleanup() {}
+
+#[cfg(feature = "hydrate")]
+fn clear_active_form_builder_resize() {
+    ACTIVE_FORM_BUILDER_RESIZE.with(|active_resize| {
+        let Some(active_resize) = active_resize.borrow_mut().take() else {
+            return;
+        };
+
+        active_resize.active.set(false);
+        let _ = active_resize.tile.class_list().remove_1("is-resizing");
+        if let Some(callback) = active_resize.move_callback.borrow().as_ref() {
+            let _ = active_resize.window.remove_event_listener_with_callback(
+                "mousemove",
+                callback.as_ref().unchecked_ref(),
+            );
+        }
+        if let Some(callback) = active_resize.up_callback.borrow().as_ref() {
+            let _ = active_resize
+                .window
+                .remove_event_listener_with_callback("mouseup", callback.as_ref().unchecked_ref());
+        }
+        active_resize.move_callback.borrow_mut().take();
+        active_resize.up_callback.borrow_mut().take();
+    });
 }
 
 /// Starts pointer-driven resizing for a form builder field tile.
@@ -59,10 +102,14 @@ pub(crate) fn start_form_builder_field_resize(
     else {
         return;
     };
-    let Some(tile) = target.closest(".form-builder-grid-tile").ok().flatten() else {
+    let Some(tile) = target.closest(".placement-editor-tile").ok().flatten() else {
         return;
     };
-    let Some(grid) = target.closest(".form-builder-layout-grid").ok().flatten() else {
+    let Some(grid) = target
+        .closest("[data-placement-grid-canvas]")
+        .ok()
+        .flatten()
+    else {
         return;
     };
     let Some(start_field) = builder_fields
@@ -73,15 +120,17 @@ pub(crate) fn start_form_builder_field_resize(
         return;
     };
 
-    let Some(grid_element) = grid.dyn_ref::<web_sys::HtmlElement>() else {
+    let Some(metrics) = placement_grid_metrics_from_element(&grid) else {
         return;
     };
-    let cell_width = f64::from(grid_element.client_width()) / f64::from(FORM_BUILDER_COLUMN_COUNT);
-    let row_height = 80.0;
-    if cell_width <= 0.0 {
-        return;
-    }
+    let start_rect = GridRect::new(
+        start_field.grid_row.max(1),
+        start_field.grid_column.max(1),
+        start_field.grid_width.max(1),
+        start_field.grid_height.max(1),
+    );
 
+    clear_active_form_builder_resize();
     suppress_builder_field_click.set(Some(field_id));
     let _ = tile.class_list().add_1("is-resizing");
 
@@ -90,6 +139,8 @@ pub(crate) fn start_form_builder_field_resize(
     let last_valid_height = Rc::new(Cell::new(start_field.grid_height.max(1)));
     let start_x = event.client_x();
     let start_y = event.client_y();
+    let resize_session =
+        PlacementResizeSession::new(start_rect, axis, f64::from(start_x), f64::from(start_y));
 
     let move_callback: MouseEventCallback = Rc::new(RefCell::new(None));
     let up_callback: MouseEventCallback = Rc::new(RefCell::new(None));
@@ -106,26 +157,22 @@ pub(crate) fn start_form_builder_field_resize(
         }
         event.prevent_default();
 
-        let mut candidate = start_field_for_move.clone();
-        match axis {
-            FormBuilderResizeAxis::Width => {
-                let width_delta =
-                    (f64::from(event.client_x() - start_x) / cell_width).round() as i32;
-                candidate.grid_width = (start_field_for_move.grid_width + width_delta)
-                    .clamp(1, FORM_BUILDER_COLUMN_COUNT);
-            }
-            FormBuilderResizeAxis::Height => {
-                let height_delta =
-                    (f64::from(event.client_y() - start_y) / row_height).round() as i32;
-                candidate.grid_height =
-                    (start_field_for_move.grid_height + height_delta).clamp(1, 6);
-            }
-        }
-
-        let column_end = candidate.grid_column.max(1) + candidate.grid_width.max(1) - 1;
-        if column_end > FORM_BUILDER_COLUMN_COUNT {
+        let request = resize_session.request_at(
+            metrics,
+            f64::from(event.client_x()),
+            f64::from(event.client_y()),
+        );
+        let Ok(size) = resolve_resize_request(
+            FORM_BUILDER_GRID_CONSTRAINTS,
+            start_rect,
+            request,
+            GridSize::ONE,
+        ) else {
             return;
-        }
+        };
+        let mut candidate = start_field_for_move.clone();
+        candidate.grid_width = size.width;
+        candidate.grid_height = size.height;
 
         let fields = builder_fields_for_move.get_untracked();
         if form_builder_field_has_collision(&candidate, &fields) {
@@ -134,21 +181,25 @@ pub(crate) fn start_form_builder_field_resize(
 
         last_width_for_move.set(candidate.grid_width.max(1));
         last_height_for_move.set(candidate.grid_height.max(1));
-        let _ = tile_for_move.set_attribute("style", &form_builder_grid_tile_style(&candidate));
+        let _ = tile_for_move.set_attribute(
+            "style",
+            &placement_tile_style(GridRect::new(
+                candidate.grid_row,
+                candidate.grid_column,
+                candidate.grid_width,
+                candidate.grid_height,
+            )),
+        );
     }) as Box<dyn FnMut(_)>));
 
     let active_for_up = active.clone();
-    let tile_for_up = tile.clone();
     let last_width_for_up = last_valid_width.clone();
     let last_height_for_up = last_valid_height.clone();
-    let move_callback_for_up = move_callback.clone();
-    let up_callback_for_up = up_callback.clone();
     *up_callback.borrow_mut() = Some(Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
         if !active_for_up.replace(false) {
             return;
         }
         event.prevent_default();
-        let _ = tile_for_up.class_list().remove_1("is-resizing");
         builder_fields.update(|fields| {
             set_form_builder_field_size(
                 fields,
@@ -158,22 +209,7 @@ pub(crate) fn start_form_builder_field_resize(
             );
         });
 
-        if let Some(window) = web_sys::window() {
-            if let Some(callback) = move_callback_for_up.borrow().as_ref() {
-                let _ = window.remove_event_listener_with_callback(
-                    "mousemove",
-                    callback.as_ref().unchecked_ref(),
-                );
-            }
-            if let Some(callback) = up_callback_for_up.borrow().as_ref() {
-                let _ = window.remove_event_listener_with_callback(
-                    "mouseup",
-                    callback.as_ref().unchecked_ref(),
-                );
-            }
-        }
-        move_callback_for_up.borrow_mut().take();
-        up_callback_for_up.borrow_mut().take();
+        clear_active_form_builder_resize();
     }) as Box<dyn FnMut(_)>));
 
     if let Some(callback) = move_callback.borrow().as_ref() {
@@ -184,6 +220,15 @@ pub(crate) fn start_form_builder_field_resize(
         let _ =
             window.add_event_listener_with_callback("mouseup", callback.as_ref().unchecked_ref());
     }
+    ACTIVE_FORM_BUILDER_RESIZE.with(|active_resize| {
+        *active_resize.borrow_mut() = Some(ActiveFormBuilderResize {
+            window,
+            tile,
+            active,
+            move_callback,
+            up_callback,
+        });
+    });
 }
 
 /// No-op resize hook for server-side builds.

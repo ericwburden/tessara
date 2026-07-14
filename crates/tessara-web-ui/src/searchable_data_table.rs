@@ -1,9 +1,8 @@
 //! Shared searchable data-table layout component.
 
-use icons::Search;
 use leptos::prelude::*;
 
-use crate::DataTable;
+use crate::{DataTable, TableSearch};
 
 #[component]
 pub fn SearchableDataTable(
@@ -14,16 +13,12 @@ pub fn SearchableDataTable(
 ) -> impl IntoView {
     view! {
         <div class="searchable-data-table">
-            <label class="searchable-data-table__search searchable-data-table__control">
-                <Search class="searchable-data-table__control-icon"/>
-                <span class="sr-only">{search_label}</span>
-                <input
-                    type="search"
-                    placeholder=placeholder
-                    prop:value=move || search.get()
-                    on:input=move |event| search.set(event_target_value(&event))
-                />
-            </label>
+            <TableSearch
+                value=Signal::from(search)
+                on_input=Callback::new(move |value| search.set(value))
+                label=search_label
+                placeholder=placeholder
+            />
             <DataTable>{children()}</DataTable>
         </div>
     }

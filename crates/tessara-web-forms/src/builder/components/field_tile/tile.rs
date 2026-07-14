@@ -8,6 +8,8 @@ use crate::builder::{
     FormBuilderDragPreview, clear_form_builder_drag_intent, form_builder_field_default_label,
     form_builder_field_type_icon, schedule_form_builder_drag_preview,
 };
+use tessara_core::GridRect;
+use tessara_web_ui::placement_editor::{PlacementTileShell, placement_grid_cell_id};
 
 #[component]
 pub(crate) fn FormBuilderGridTile(
@@ -39,111 +41,110 @@ pub(crate) fn FormBuilderGridTile(
             })
             .unwrap_or_else(|| format!("Field {field_id}"))
     };
+    let rect = Signal::derive(move || {
+        field.get().map(|field| {
+            GridRect::new(
+                field.grid_row.max(1),
+                field.grid_column.max(1),
+                field.grid_width.max(1),
+                field.grid_height.max(1),
+            )
+        })
+    });
+    let class = Signal::derive(move || {
+        let width_class = field
+            .get()
+            .map(|field| {
+                if field.grid_width <= 2 {
+                    " form-builder-grid-tile--icon-only"
+                } else if field.grid_width >= 4 {
+                    " form-builder-grid-tile--mobile-label"
+                } else {
+                    ""
+                }
+            })
+            .unwrap_or("");
+        format!(
+            "form-builder-grid-tile form-builder-grid-field--summary form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary{width_class}"
+        )
+    });
+    let selected = Signal::derive(move || active_builder_field.get() == Some(field_id));
+    let dragging = Signal::derive(move || dragged_builder_field.get() == Some(field_id));
+    let on_select = Callback::new(move |_| {
+        if suppress_builder_field_click.get_untracked() == Some(field_id) {
+            suppress_builder_field_click.set(None);
+        } else {
+            dragged_builder_field.set(None);
+            active_builder_field.set(Some(field_id));
+        }
+    });
+    let on_drag_start = Callback::new(move |_event: leptos::ev::DragEvent| {
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::JsCast;
+            if let Some(target) = _event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                && target
+                    .closest(".placement-editor-resize-handle")
+                    .ok()
+                    .flatten()
+                    .is_some()
+            {
+                _event.prevent_default();
+                return;
+            }
+        }
+        clear_form_builder_drag_intent(
+            builder_drag_preview,
+            pending_builder_drag_preview,
+            builder_drag_preview_timeout,
+        );
+        dragged_builder_field.set(Some(field_id));
+    });
+    let on_drag_enter = Callback::new(move |event: leptos::ev::DragEvent| {
+        if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
+            event.prevent_default();
+            let Some(field) = field.get_untracked() else {
+                return;
+            };
+            let cell = tessara_web_ui::placement_editor::PlacementGridCell {
+                row: field.grid_row.max(1),
+                column: field.grid_column.max(1),
+            };
+            schedule_form_builder_drag_preview(
+                builder_drag_preview,
+                pending_builder_drag_preview,
+                builder_drag_preview_timeout,
+                FormBuilderDragPreview {
+                    placement_id: dragged_field_id,
+                    canvas_id: section_id,
+                    row: cell.row,
+                    column: cell.column,
+                },
+                placement_grid_cell_id(&format!("form-builder-section-{section_id}"), cell),
+            );
+        }
+    });
+    let on_drag_end = Callback::new(move |_| {
+        clear_form_builder_drag_intent(
+            builder_drag_preview,
+            pending_builder_drag_preview,
+            builder_drag_preview_timeout,
+        );
+        dragged_builder_field.set(None);
+    });
 
     view! {
-        <div
-            class=move || {
-                let width_class = field
-                    .get()
-                    .map(|field| {
-                        if field.grid_width <= 2 {
-                            " form-builder-grid-tile--icon-only"
-                        } else if field.grid_width >= 4 {
-                            " form-builder-grid-tile--mobile-label"
-                        } else {
-                            ""
-                        }
-                    })
-                    .unwrap_or("");
-                if dragged_builder_field.get() == Some(field_id) {
-                    format!(
-                        "form-builder-grid-tile form-builder-grid-field--summary is-dragging form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary{width_class}"
-                    )
-                } else {
-                    format!(
-                        "form-builder-grid-tile form-builder-grid-field--summary form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary{width_class}"
-                    )
-                }
-            }
-            draggable="true"
-            style=move || {
-                field
-                    .get()
-                    .map(|field| {
-                        let width = field.grid_width.max(1);
-                        let height = field.grid_height.max(1);
-                        let row = field.grid_row.max(1);
-                        let column = field.grid_column.max(1);
-                        format!(
-                            "grid-column: {column} / span {width}; grid-row: {row} / span {height};"
-                        )
-                    })
-                    .unwrap_or_else(|| "display: none;".into())
-            }
-            on:dragstart=move |_event: leptos::ev::DragEvent| {
-                #[cfg(feature = "hydrate")]
-                {
-                    use wasm_bindgen::JsCast;
-                    if let Some(target) = _event
-                        .target()
-                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
-                        && target
-                            .closest(".form-builder-resize-handle")
-                            .ok()
-                            .flatten()
-                            .is_some()
-                    {
-                        _event.prevent_default();
-                        return;
-                    }
-                }
-                clear_form_builder_drag_intent(
-                    builder_drag_preview,
-                    pending_builder_drag_preview,
-                    builder_drag_preview_timeout,
-                );
-                dragged_builder_field.set(Some(field_id));
-            }
-            on:dragenter=move |event| {
-                if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
-                    event.prevent_default();
-                    let Some(field) = field.get_untracked() else {
-                        return;
-                    };
-                    schedule_form_builder_drag_preview(
-                        builder_drag_preview,
-                        pending_builder_drag_preview,
-                        builder_drag_preview_timeout,
-                        FormBuilderDragPreview {
-                            field_id: dragged_field_id,
-                            section_id,
-                            row: field.grid_row.max(1),
-                            column: field.grid_column.max(1),
-                        },
-                        format!(
-                            "form-builder-section-{section_id}-cell-r{}-c{}",
-                            field.grid_row.max(1),
-                            field.grid_column.max(1),
-                        ),
-                    );
-                }
-            }
-            on:click=move |_| {
-                if suppress_builder_field_click.get_untracked() == Some(field_id) {
-                    suppress_builder_field_click.set(None);
-                } else {
-                    dragged_builder_field.set(None);
-                    active_builder_field.set(Some(field_id));
-                }
-            }
-            on:dragend=move |_| {
-                clear_form_builder_drag_intent(
-                    builder_drag_preview,
-                    pending_builder_drag_preview,
-                    builder_drag_preview_timeout,
-                );
-                dragged_builder_field.set(None);
-            }
+        <PlacementTileShell
+            rect=rect
+            class=class
+            selected=selected
+            dragging=dragging
+            on_select=on_select
+            on_drag_start=on_drag_start
+            on_drag_enter=on_drag_enter
+            on_drag_end=on_drag_end
         >
             <button
                 class="form-builder-grid-field__summary"
@@ -173,6 +174,6 @@ pub(crate) fn FormBuilderGridTile(
                 </div>
             </button>
             <FormBuilderFieldResizeHandles field_id builder_fields suppress_builder_field_click/>
-        </div>
+        </PlacementTileShell>
     }
 }

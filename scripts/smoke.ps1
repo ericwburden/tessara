@@ -60,7 +60,7 @@ function Invoke-Html {
     )
 
     $arguments = @("-sS", "-f")
-    if ($null -ne $CookieJarPath) {
+    if (-not [string]::IsNullOrWhiteSpace($CookieJarPath)) {
         $arguments += @("-b", $CookieJarPath)
     }
     $arguments += $Uri
@@ -322,7 +322,7 @@ try {
             throw "Smoke failure: demo seed failed and existing seeded demo assets could not be found. Original error: $($_.Exception.Message)"
         }
         $seed = [pscustomobject]@{
-            seed_version          = "uat-demo-v1"
+            seed_version          = "uat-demo-v2"
             organization_node_id  = ($nodesForSeed | Select-Object -First 1).id
             form_id               = $sessionForm.id
             submission_id         = $submissionForSeed.id
@@ -395,8 +395,32 @@ try {
     if ($nodes.Count -lt 1) {
         throw "Expected at least one node, got $($nodes.Count)"
     }
-    if ($dashboard.components.Count -lt 1) {
-        throw "Expected at least one dashboard component, got $($dashboard.components.Count)"
+    if ($dashboard.placement_count -lt 1 -or $dashboard.placements.Count -ne $dashboard.placement_count) {
+        throw "Expected Dashboard placement_count to match a non-empty placement envelope list, got: $($dashboard | ConvertTo-Json -Depth 20)"
+    }
+    foreach ($placement in $dashboard.placements) {
+        if ($placement.grid_row -lt 1 -or $placement.grid_column -lt 1 -or
+            $placement.grid_width -lt 1 -or $placement.grid_height -lt 1 -or
+            ($placement.grid_column + $placement.grid_width - 1) -gt 12 -or
+            ($placement.grid_row + $placement.grid_height - 1) -gt 240) {
+            throw "Expected every Dashboard placement to expose valid typed grid geometry, got: $($placement | ConvertTo-Json -Depth 10)"
+        }
+    }
+    for ($leftIndex = 0; $leftIndex -lt $dashboard.placements.Count; $leftIndex++) {
+        $left = $dashboard.placements[$leftIndex]
+        for ($rightIndex = $leftIndex + 1; $rightIndex -lt $dashboard.placements.Count; $rightIndex++) {
+            $right = $dashboard.placements[$rightIndex]
+            $overlap = $left.grid_column -le ($right.grid_column + $right.grid_width - 1) -and
+                $right.grid_column -le ($left.grid_column + $left.grid_width - 1) -and
+                $left.grid_row -le ($right.grid_row + $right.grid_height - 1) -and
+                $right.grid_row -le ($left.grid_row + $left.grid_height - 1)
+            if ($overlap) {
+                throw "Expected Dashboard seed placements not to overlap, got: $($dashboard.placements | ConvertTo-Json -Depth 20)"
+            }
+        }
+    }
+    if ($seed.seed_version -eq "uat-demo-v2" -and $dashboard.placement_count -ne 9) {
+        throw "Expected uat-demo-v2 Dashboard to contain 9 typed placements, got $($dashboard.placement_count)"
     }
     $hasExpectedDatasetValue = $dataset.rows | Where-Object {
         $_.values.PSObject.Properties.Value -contains "42"
@@ -512,6 +536,10 @@ try {
     Assert-ProtectedShell -Content $dashboardDetailPage -Needles @("Dashboard Detail") -Context "dashboard detail shell"
     $dashboardNew = Invoke-Html -Uri "$baseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardNew -Needles @("Create Dashboard") -Context "dashboard create shell"
+    $dashboardEditorPage = Invoke-Html -Uri "$baseUrl/dashboards/$($seed.dashboard_id)/edit" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $dashboardEditorPage -Needles @("Dashboard") -Context "dashboard editor shell"
+    $dashboardViewerPage = Invoke-Html -Uri "$baseUrl/dashboards/$($seed.dashboard_id)/view" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $dashboardViewerPage -Needles @("Dashboard") -Context "dashboard viewer shell"
     $datasetDetailPage = Invoke-Html -Uri "$baseUrl/datasets/$($seed.dataset_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $datasetDetailPage -Needles @("Dataset Detail") -Context "dataset detail shell"
     $datasetEditPage = Invoke-Html -Uri "$baseUrl/datasets/$($seed.dataset_id)/edit" -CookieJarPath $adminBrowserSession

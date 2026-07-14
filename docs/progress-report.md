@@ -5,6 +5,342 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-07-13 - Sprint 5A Final Closeout
+
+- Completed:
+  - accepted the reviewed Dashboard directory, detail, editor, and viewer UI; retained the established outer route panels while giving charts and Tables subdued half-strength gradient surfaces and preserving configured Stat Card fills
+  - completed native Dashboard composition over stable `ComponentVersion` ids, including atomic full-layout reconciliation, typed placement config, deterministic reflow, granular sizing through row 240, per-kind minimums, redacted placeholders, total-placement counts, and current-published update-in-place compatibility guards
+  - consolidated editor mutation gating under one operation state, added direction-aware history restoration, bounded viewer polling with explicit success/retryable/terminal outcomes, and selected one deterministic comparator from each Table column's declared data type
+  - decomposed Dashboard API and viewer/editor responsibilities into focused domain, service, repository, request, projection, reconciliation, and presentation modules
+  - consolidated policy-neutral web transport plus shared side-sheet, modal, search, placement-editor, Table toolbar, column-selector, pagination, fullscreen, and visibility-scope UI primitives across Dashboard and adjacent application surfaces
+  - retained owner-bound RAII cleanup for the current drag/resize event path and carried a focused Pointer Events plus `setPointerCapture` migration into the durable roadmap backlog with capture-loss, accessibility, modal, touch, and pen regression requirements
+  - corrected the existing-database migration preflight for placement count, geometry overlap, fallback-row exhaustion, and mutable current-published Component kinds; cleaned the seed to one nine-placement Dashboard inside the 240-row/240-placement contract
+- Validation:
+  - `scripts/local-launch.ps1` rebuilt the production CSS, split WASM, and API image, recreated only the Sprint 5A Compose stack without deleting the reviewed database, and returned healthy application routes at `http://localhost:8080`; after disposable smoke teardown, `scripts/local-launch.ps1 -SkipBuild` recreated and seeded the final user-testable deployment
+  - `scripts/uat-sprint.ps1 -BaseUrl "http://localhost:8080"` passed organization, Forms, Datasets, Components, Dashboards, and seed flows
+  - the first exact `scripts/smoke.ps1` closeout run exposed an empty optional cookie-path bug in its `curl` argument construction after all six demo-flow tests passed; the helper now rejects null/blank paths, parses cleanly, and the exact rerun passed with 52 Dataset rows, 50 Component rows, 26 seeded visual points, and 20 bounded visual points
+  - `cargo test -p tessara-api` passed 90 unit tests, the published-version Dashboard compatibility integration, 14 Dashboard composition tests, six demo-flow tests, 25 workflow-runtime tests, and documentation tests
+  - `cargo test -p tessara-web` passed 11 root route, document, SSR-bootstrap, and hydration tests after compiling the complete feature/UI graph
+  - `npx playwright test` passed 50/50 application scenarios, including all eight Dashboard composition/viewer scenarios and constrained Dashboard/Component visibility coverage
+  - `cargo fmt --all` completed successfully; the preceding post-review full all-feature Rust workspace matrix, strict Clippy, native/WASM dependency checks, production build, and web-crate boundary audit also passed
+- Next Sprint: Sprint 5B Scoped Analytics And Presentation Hardening Slice
+
+### Sprint Handoff / Demo Instructions
+
+#### Dashboard Directory, Detail, And Visibility
+
+- Role: admin
+- Paths:
+  - `http://localhost:8080/dashboards`
+  - `http://localhost:8080/dashboards/{dashboard_id}` (follow `Demo Operations Dashboard` from the directory)
+- Steps:
+  1. Sign in as `admin@tessara.local` and open the Dashboard directory.
+  2. Search for `Demo Operations Dashboard`; confirm the row remains aligned and exposes named View/Edit icon actions.
+  3. Open its detail route and use the visibility-node count link to open, search, and follow a node from the shared side sheet.
+- Expected:
+  - the directory and detail surfaces reuse established Tessara search, table, stat-card, action, and disclosure patterns; the Dashboard reports nine total placements without exposing expanded node metadata by default
+- Acceptance check:
+  - pass when the Dashboard is searchable, all actions remain capability-aware and accessible, and the visibility sheet lists linked nodes without page overflow
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `end2end/tests/permissions.spec.ts`, `docs/audits/sprint-5a-ui-review-2026-07-13`, and the final closeout Playwright/UAT output
+
+#### Dashboard Composition And Stable Version Binding
+
+- Role: admin
+- Paths:
+  - `http://localhost:8080/dashboards/{dashboard_id}/edit` (use the seeded Dashboard's Edit action)
+- Steps:
+  1. Open Components, use the shared search and kind picker, and add a published Component version.
+  2. Move and resize the placement with pointer and direct controls, including a height above six rows; inspect its exact pinned version and use `Preview selected`.
+  3. Close the nested preview and Placement details sheet, save the layout, reload it, then remove the test placement and save again.
+  4. Confirm `Preview Dashboard` remains disabled while unsaved changes exist and becomes available after a successful save.
+- Expected:
+  - one coordinated operation state prevents overlapping saves/settings mutations; metadata-only composition makes no unsolicited Component execution requests; successful saves retain stable placement ids and exact version bindings
+- Acceptance check:
+  - pass when add, move, resize, preview, save, reload, and remove preserve canonical non-overlapping geometry and dirty-state rules
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `crates/tessara-api/tests/dashboard_composition.rs`, `crates/tessara-api/tests/component_dashboard_compatibility.rs`, and the final closeout API/web test output
+
+#### Dashboard Viewer And Standard Component Presentation
+
+- Role: admin
+- Paths:
+  - `http://localhost:8080/dashboards/{dashboard_id}/view` (use the seeded Dashboard's View action)
+- Steps:
+  1. Confirm Table, Bar, Line, Pie, Donut, and Stat Card placements render from their exact pinned versions.
+  2. Page and resize a Table result, use Reset and Columns, then open the standard Fullscreen icon and continue paging without resetting state.
+  3. Close fullscreen with Escape and confirm focus returns to its trigger.
+  4. Narrow the viewport and confirm placements stack in reading order, controls remain reachable, and no horizontal overflow appears.
+- Expected:
+  - charts and Tables use the approved rounded half-strength gradient without hard borders; Stat Cards retain their configured fill; Tables remain complete and server-paged; bounded polling and six-request scheduling isolate retryable or terminal placement failures
+- Acceptance check:
+  - pass when every supported kind renders, Table state survives fullscreen and paging, one failed placement cannot block siblings, and the viewer remains responsive
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `crates/tessara-web-component-viewer`, `docs/audits/sprint-5a-ui-review-2026-07-13`, and the final closeout browser output
+
+#### Scoped And Redacted Dashboard Access
+
+- Role: scoped operator and manage-without-read test accounts provisioned by the permissions suites
+- Paths:
+  - `http://localhost:8080/dashboards`
+  - `/dashboards/{dashboard_id}/edit`
+  - `/dashboards/{dashboard_id}/view`
+- Steps:
+  1. As a scoped reader, open an in-scope Dashboard containing a Component outside the caller's Component visibility.
+  2. Confirm the hidden placement keeps its saved footprint and contributes to the total count while exposing no title, Component, version, Dataset, or execution metadata.
+  3. As a manage-without-read operator, direct-load the editor and confirm management is available while the reader directory remains denied.
+- Expected:
+  - Dashboard and Component scope are enforced independently; hidden placements are generic redacted placeholders and management authority remains narrowed to the editor
+- Acceptance check:
+  - pass when allowed scoped operations succeed and out-of-scope metadata, execution, and directory access remain unavailable
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `end2end/tests/permissions.spec.ts`, `docs/playwright-permissions-scenarios.md`, and Dashboard split-capability API tests
+
+#### Native SSR, Capacity, And Shared-UI Regression
+
+- Role: admin plus the constrained permission fixtures
+- Paths:
+  - all Dashboard application routes
+  - `http://localhost:8080/forms`
+  - `http://localhost:8080/workflows`
+- Steps:
+  1. Disable JavaScript and direct-load Dashboard directory, detail, editor, and viewer routes; confirm useful safe HTML rather than loading-only shells.
+  2. Exercise Dashboard, Form, and Workflow side sheets and nested dialogs; confirm Escape, Tab containment, background inertness, and opener focus restoration.
+  3. Review the capacity runbook and the disposable 241st-placement/preflight test evidence rather than mutating the seeded Dashboard.
+- Expected:
+  - native routes remain hydration- and bridge-free; shared disclosures behave consistently across application surfaces; over-cap, overlapping, or fallback-exhausted data is rejected non-destructively before serving
+- Acceptance check:
+  - pass when SSR exposes no hidden metadata, shared UI remains keyboard-operable, and the migration/capacity tests leave saved data unchanged on failure
+- Evidence location:
+  - `crates/tessara-api/tests/dashboard_ssr.rs`, `crates/tessara-api/tests/dashboard_composition.rs`, `crates/tessara-web-ui`, `end2end/tests`, `docs/sprints/sprint-5a-dashboard-capacity-runbook.md`, and the final smoke/UAT output
+
+### Acceptance Mapping
+
+- Exit condition: a tester can assemble and view Dashboards through the app.
+  - Plan criteria covered: searchable directory and total counts; read denial; create; manage-without-read editing; metadata/scope editing and atomic incompatible-scope rollback; separate detail, editor, and viewer flows.
+  - Manual demonstration: Dashboard Directory, Detail, And Visibility; Dashboard Composition And Stable Version Binding; Dashboard Viewer And Standard Component Presentation.
+  - Automated check: `npx playwright test`, `cargo test -p tessara-api`, `cargo test -p tessara-web`, and `scripts/uat-sprint.ps1`.
+- Exit condition: Dashboard composition depends on exact `ComponentVersion` ids, supports every delivered Component kind, and preserves stable-id current-published update-in-place behavior without repinning newer versions.
+  - Plan criteria covered: published/superseded candidate selection; Dashboard-manage plus Component-read authorization without Component-manage; draft rejection; legacy fallback and typed seed geometry; granular sizes and kind minimums; pointer/keyboard/direct reflow and invalid-target rejection; atomic full-layout save; stable placement ids; redacted-row retain/move/resize/remove; metadata-only editing and dirty-preview behavior.
+  - Manual demonstration: Dashboard Composition And Stable Version Binding; Dashboard Viewer And Standard Component Presentation.
+  - Automated check: explicit-version request assertions in `end2end/tests/dashboards.spec.ts` and compatibility/lifecycle assertions in `crates/tessara-api/tests/component_dashboard_compatibility.rs` and `crates/tessara-api/tests/dashboard_composition.rs`.
+- Exit condition: Dashboard viewer and composition boundaries preserve scoped Dashboard, Component, and Dataset visibility.
+  - Plan criteria covered: generic geometry-preserving redaction with unchanged total counts; reader-only action/draft hiding; scoped list/load/place/execute denial; manage-without-read positive access; hidden binding non-disclosure.
+  - Manual demonstration: Scoped And Redacted Dashboard Access.
+  - Automated check: Dashboard split-capability/redaction API tests plus `end2end/tests/dashboards.spec.ts` and `end2end/tests/permissions.spec.ts`.
+- Exit condition: touched Dashboard routes remain native SSR and do not revive product-facing bridge logic.
+  - Plan criteria covered: `ComponentVersion`-only product contracts; useful JavaScript-disabled metadata/layout; hydration-, console-, and bridge-request guards.
+  - Manual demonstration: Native SSR, Capacity, And Shared-UI Regression.
+  - Automated check: `cargo test -p tessara-api --test dashboard_ssr` plus Playwright JavaScript-disabled, console, and request guards.
+- Exit condition: storage and display layout remain valid at the 240-placement/240-row boundary without truncating or silently repairing incompatible existing data.
+  - Plan criteria covered: 240-placement rejection; all remaining-row heights; cross-row-240 reflow rejection; non-destructive count/overlap/fallback-exhaustion preflight; complete paged Tables; near-viewport lazy execution; version labels; failure isolation; current-published mutation and separate-version non-repinning.
+  - Manual demonstration: Native SSR, Capacity, And Shared-UI Regression.
+  - Automated check: migration preflight, exactly-240/241st-placement, overlap, fallback-exhaustion, and rollback assertions in `crates/tessara-api/tests/dashboard_composition.rs`, plus `scripts/smoke.ps1`.
+- Exit condition: application-wide UI reuse does not regress existing authoring/disclosure surfaces touched by consolidation.
+  - Manual demonstration: Native SSR, Capacity, And Shared-UI Regression.
+  - Automated check: shared-UI, Forms, Workflow, Component, Dashboard, full Playwright, and web-crate boundary checks.
+
+## 2026-07-13 - Sprint 5A Shared UI And Deployed-UI Follow-up
+
+- Completed:
+  - revised the Dashboard editor to keep the composition canvas primary, with Components in a shared left side sheet and selected Placement details in a shared right side sheet
+  - retained granular placement sizing while enforcing the code-defined Table minimum of `6 x 4`; repacked the seeded Session Log Table to `12 x 6` and kept all nine seeded placements within row 20 and the 240-placement/row storage contract
+  - removed the viewer grid treatment behind cards, kept embedded Tables complete and server-paged, tightened Table density, and replaced Table geometry counts with a state-preserving `View fullscreen` action
+  - aligned the Dashboard directory with Forms and Components through the shared page header, search, semantic table/card, count disclosure, compact actions, and pagination patterns; corrected desktop action overflow and phone description wrapping
+  - introduced shared `SideSheet`, `ModalDialog`, and `FullscreenDialog` lifecycle ownership for Portal placement, Escape/Tab behavior, nested dialogs, background inertness, body scroll locking, and opener focus restoration, including conditionally unmounted disclosures
+  - migrated the Dashboard selected preview, Forms attached-node sheet, and Workflow available-node/assigned-user sheets to the shared dialog/search primitives; made Dashboard, Forms, and Workflow disclosure triggers expose stable dialog relationships and reactive expanded state
+  - made `InteractiveDataTable` compose shared `TableSearch` and `TablePaginationFooter`, compacted the shared row-count selector, and removed the orphaned root-local searchable-table implementation
+  - hid noninteractive grid-guide cells from the accessibility tree while preserving their pointer-target data, eliminating hundreds of decorative row/column announcements in the editor
+  - captured the desktop, tablet, and phone audit with comparison screenshots from established Forms and Components surfaces in `docs/audits/sprint-5a-ui-review-2026-07-13`
+  - completed the annotation follow-up: replaced Table full-screen text with the shared Fullscreen icon and tooltip semantics; removed redundant viewer placement counts, geometry labels, and Table summary chrome; added a capability-gated `Edit Dashboard` action
+  - condensed Dashboard detail metadata into metric cards and replaced the expanded Visibility value with a searchable shared side sheet containing live counts and links to all in-scope nodes; removed the invariant 12-column layout row
+  - aligned the editor palette with Components by composing shared icon-bearing search and the established compact kind picker, including a no-overflow 390-pixel-width check
+  - implemented the approved viewer presentation split while retaining the established outer route panel: charts and Tables use one subdued rounded soft-surface token without hard borders or shadows, charts use in-chart titles, and Stat Cards render their configured semantic fill without outer placement chrome
+  - moved optional Table title and full-screen behavior into the route-free standard Component Table renderer; Dashboard placements now pass only stable presentation ids/text, while the renderer owns the shared query/paging state, puts Reset -> Columns -> Fullscreen in the standard toolbar, and prevents nested full-screen triggers
+  - removed the arbitrary six-row placement-height ceiling; placements may use all remaining rows through row 240 while per-kind minimums, collision rules, and the 240-row/240-placement contracts remain enforced
+  - corrected repair-mode resizing so a malformed fallback may transition to valid kind-conforming geometry without weakening normal resize validation, and kept Stat Cards compact at phone widths instead of inheriting the chart/Table minimum height
+  - corrected the final surface annotation after clarification: removed the intermediate neutral overlay and reduced the original shared blue-to-teal gradient to 50% of its prior visual strength for all chart placements and standard/embedded Tables; chart marks, labels, Table controls, and rows remain fully opaque, while Stat Cards retain their configured fill
+  - corrected the Dashboard directory action-row annotation by keeping the desktop Actions cell in native table layout, nesting View/Edit in a reusable icon-action group with Eye/Pencil icons and named tooltips, narrowing the action column, and preserving the mobile card's labeled action row
+- Validation:
+  - affected all-feature native checks, the root WASM hydration graph, strict Clippy, Tailwind 4.2.4 compilation, formatting, and diff checks passed
+  - 67 focused shared-UI/Forms/Workflow/Dataset tests passed; final focused core, Dashboard-domain, Dashboard-web, and Component-viewer suites passed 23/23, 24/24, 25/25, and 18/18
+  - all 12 database-backed Dashboard composition/API tests passed against a disposable isolated database, including the 240-row boundary and full-height Table case
+  - the dedicated saved-viewer Table/chart/Stat E2E contract scenario passes Playwright discovery and TypeScript transformation as part of the eight-scenario Dashboard file
+  - the navigation/lazy-render Table-fullscreen regression passed repeatedly and covers desktop open/close, client navigation away/back, phone reflow, lazy Table rendering, dialog mounting, and expanded-state transitions
+  - in-app browser review exercised desktop, tablet, and phone directory/editor/viewer states, side-sheet and full-screen dialog semantics, complete embedded paging, shared query state, keyboard close behavior, capability-gated viewer actions, Visibility filtering/linking, compact editor filters, and console output
+  - the final release image was rebuilt and health-checked with only the Sprint 5A API and Postgres containers running; deployed review at 1951 x 806, 1440 x 1000, and 390 x 844 confirmed the approved soft surfaces, wide and wrapped Table toolbar layouts, desktop/phone full-screen behavior, focus restoration, popover hit-testing, paging continuity, and zero page-level horizontal overflow while the user-directed outer route panels remain intact
+  - the clarified half-gradient release follow-up was rebuilt and health-checked, then verified in the in-app browser at 1168 x 912 in dark and light themes and at 390 x 844 in dark mode; all four chart kinds and mounted standard/embedded Table surfaces resolved to the same half-strength gradient with element opacity `1`, page-level horizontal overflow remained zero, and Stat Card fill remained independent
+  - the Dashboard action-row release follow-up was rebuilt and health-checked; 25 Dashboard crate tests and the updated native-routes Playwright scenario passed, the eight-scenario Dashboard file passed discovery/transformation, and deployed checks at 1262 x 912 light/dark plus 390 x 844 mobile confirmed full row/cell alignment, icon contrast, accessible names/tooltips, and zero horizontal overflow
+- Follow-up disposition:
+  - shared Table toolbar, selector, pagination, fullscreen, modal, side-sheet, and search presentation is resolved for Sprint 5A; client-backed and server-backed state engines remain deliberately separate
+  - Dashboard API, editor, request, visual, reconciliation, repository, and viewer responsibilities received the planned focused decomposition
+  - remaining hand-rolled disclosure candidates outside the touched Dashboard/Form/Workflow surfaces are optional future consolidation work rather than an unresolved Sprint 5A decision
+  - a Pointer Events plus `setPointerCapture` migration remains a focused future-work item in `docs/roadmap.md`; owner-bound RAII cleanup is the accepted current implementation
+
+## 2026-07-12 - Sprint 5A Dashboard Composition Closeout
+
+- Completed:
+  - delivered native Dashboard directory, create, detail, composition-editor, and focused-viewer routes over exact `ComponentVersion` bindings
+  - delivered atomic full-layout reconciliation with stable placement ids, deterministic reflow, direct/pointer/keyboard movement and sizing, redacted placeholder preservation, and the 240-placement/240-row storage contract
+  - extracted reusable grid policy into `tessara-core`, Dashboard composition policy into `tessara-dashboards`, shared placement interactions into `tessara-web-ui`, Dashboard routes into `tessara-web-dashboards`, and the route-free exact-version renderer into `tessara-web-component-viewer`
+  - delivered full server-paged embedded Tables, viewport-lazy viewer mounting with six-request execution concurrency, bounded renderer/Table-state caches, and isolated placement failure states
+  - documented stable-id current-published update-in-place behavior, immutable superseded versions, non-repinning newer versions, seeded typed V1 geometry, and the over-cap deployment preflight/runbook
+- Validation:
+  - closeout was first validated against an isolated optimized release at port 8081 so the pre-existing Sprint 4B stack was not disturbed; after deployment authorization, Sprint 4B was brought down without deleting its volume and a fresh Sprint 5A Compose deployment was built, migrated, seeded, and health-checked on the standard `http://127.0.0.1:8080` and `tessara` database
+  - the fresh database applied migration `1:baseline` and `2:dashboard placement capacity`, then seeded five demo accounts, 20 nodes, nine Components, one Demo Operations Dashboard, and nine typed V1 placements within row 20; the content-heavy Session Log Table occupies `12 x 6`
+  - `cargo leptos build --release --split` plus `npm run tailwind:build` - passed; the release CSS and JavaScript assets return 200 without unresolved Tailwind imports
+  - `.\scripts\validate.ps1` with `TEST_DATABASE_URL` - passed in 20m14s: format, native/SSR/wasm32 checks, 11 web tests, 87 API unit tests, 11 Dashboard composition tests, one Dashboard SSR test, six demo-flow tests, and 25 workflow-runtime tests
+  - `cargo check --workspace --all-features` - passed
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings` - passed
+  - `cargo test --workspace --all-features` - passed, including API, composition, migration, SSR, exact-version viewer, scheduler, Form characterization, and documentation tests
+  - exact `cargo test -p tessara-web`, `cargo test -p tessara-api`, and `cargo test -p tessara-web-ui --all-features` invocations - passed; the shared UI set includes the grid-guide hydration-markup regression
+  - real `wasm32-unknown-unknown` hydrate checks for `tessara-web`, `tessara-web-dashboards`, and `tessara-web-component-viewer` - passed
+  - `npm test` and `.\scripts\validate-e2e.ps1 -BaseUrl http://127.0.0.1:8081` - passed: 48/48 browser tests each, including all six Sprint 5A Dashboard scenarios and scoped/redacted permission coverage
+  - `.\scripts\smoke.ps1 -UseExistingService -BaseUrl http://127.0.0.1:8081 -KeepServices` - passed with 52 Dataset rows, 50 Component rows, 26 seeded visual points, 20 bounded visual points, and the nine-placement Dashboard contract
+  - `.\scripts\uat-sprint.ps1 -BaseUrl http://127.0.0.1:8081` - passed for organization, Forms, Datasets, Components, Dashboards, exact-version execution, bounded Table paging, native SSR markers, and seed flows
+  - in-app browser visual QA - passed at desktop, tablet, and phone widths after the follow-up review: a canvas-first editor with shared Component and Placement-details side sheets, nine readable symbolic placements, a solid viewer surface, complete paged embedded Tables, and a state-preserving full-screen Table treatment
+  - `cargo audit --quiet` - passed with three allowed transitive warnings (`paste`, `proc-macro-error2`, and `anyhow`); dependency boundaries, PowerShell parsing, `cargo fmt --all -- --check`, and `git diff --check` - passed
+- Next Sprint: Sprint 5B Scoped Analytics And Presentation Hardening Slice
+
+### Sprint Handoff / Demo Instructions
+
+#### Dashboard Directory, Creation, And Detail
+
+- Role: admin
+- Paths:
+  - `http://127.0.0.1:8080/dashboards`
+  - `http://127.0.0.1:8080/dashboards/new`
+  - `http://127.0.0.1:8080/dashboards/{dashboard_id}` (follow the Demo Operations Dashboard link from the directory)
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Search the Dashboard directory for `Demo Operations` and confirm its total placement count.
+  3. Create an in-scope Dashboard with a name, optional description, and visibility node, then open its detail page.
+- Expected:
+  - native pages expose capability-appropriate actions, useful metadata, and clear populated or empty states
+- Acceptance check:
+  - pass when the seeded Dashboard is searchable, the count includes all stored placements, and a scoped create opens a separate detail surface
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `crates/tessara-api/tests/dashboard_composition.rs`, and the closeout Playwright/smoke transcripts
+
+#### Symbolic Dashboard Composition
+
+- Role: admin
+- Paths:
+  - `http://127.0.0.1:8080/dashboards/{dashboard_id}/edit` (use the seeded Dashboard id from the directory)
+- Steps:
+  1. Add a published Component version from the metadata-only palette.
+  2. Drag it into occupied geometry and confirm deterministic reflow; resize it with a handle and direct Width/Height controls.
+  3. Edit its title, inspect the exact-version link, and use `Preview selected`.
+  4. Close the preview, save once, reload, remove the placement, and save again.
+- Expected:
+  - editor tiles remain symbolic until explicit preview; valid edits preserve non-overlapping geometry and stable ids, invalid inputs restore the last canonical values, and save reconciles the full layout atomically
+- Acceptance check:
+  - pass when add/reflow/resize/title/preview/save/remove survive reload without unsolicited Component execution
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `crates/tessara-core/src/grid_layout.rs`, `crates/tessara-api/tests/dashboard_composition.rs`, and `design-qa.md`
+
+#### Exact-Version Dashboard Viewer And Embedded Table
+
+- Role: admin
+- Paths:
+  - `http://127.0.0.1:8080/dashboards/{dashboard_id}/view` (use the seeded Dashboard id from the directory)
+- Steps:
+  1. Confirm Table, Bar, Line, Pie, Donut, and Stat Card placements render in saved geometry.
+  2. In the Session Log Table, use Next and change the page size; confirm the tile remains bounded while later rows are reachable.
+  3. Use the standard Table toolbar's Fullscreen icon; confirm the same paging state opens in the dialog, no nested Fullscreen action appears, and Escape returns focus to the trigger.
+  4. Narrow the viewport below 780px and confirm cards stack in deterministic reading order while Table controls wrap without page overflow.
+- Expected:
+  - each available placement executes its pinned exact version; charts and Tables use the approved subdued borderless surfaces, Stat Cards keep configured fills, and the standard Table presentation retains complete server-backed paging while viewer execution stays responsive and bounded
+- Acceptance check:
+  - pass when all six kinds render, Table controls issue exact-version page requests, and the narrow layout has no horizontal overflow
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `crates/tessara-web-component-viewer`, and the closeout Playwright/UAT transcripts
+
+#### Scoped And Redacted Dashboard Access
+
+- Role: scoped operator fixtures from the permissions and Dashboard suites
+- Paths:
+  - `/dashboards`
+  - `/dashboards/{dashboard_id}/edit`
+  - `/dashboards/{dashboard_id}/view`
+- Steps:
+  1. As a scoped reader, open an in-scope Dashboard containing a Component outside the caller's Component visibility.
+  2. Confirm the hidden placement keeps its footprint and contributes to the total count but exposes no title, Component, version, or Dataset metadata and issues no execution request.
+  3. As a manage-without-read operator, direct-load an in-scope editor and confirm the reader directory remains unavailable.
+- Expected:
+  - Dashboard and Component scope are enforced independently; management is narrowed to the editor and hidden bindings remain opaque
+- Acceptance check:
+  - pass when positive scoped operations work and out-of-scope metadata, directory access, and execution remain unavailable
+- Evidence location:
+  - `end2end/tests/dashboards.spec.ts`, `end2end/tests/permissions.spec.ts`, `docs/playwright-permissions-scenarios.md`, and API split-capability tests
+
+#### Native SSR And Capacity Safety
+
+- Role: admin and scoped operator fixtures
+- Paths:
+  - all five Dashboard application routes
+  - `/api/admin/dashboards/{dashboard_id}/composition`
+- Steps:
+  1. Disable JavaScript and direct-load Dashboard directory, detail, editor, and viewer routes.
+  2. Confirm useful metadata, saved geometry, capability-aware actions, and generic redacted placeholders are present in HTML.
+  3. Review the capacity runbook, then attempt a 241st placement against a disposable fixture.
+- Expected:
+  - native SSR remains useful without hydration or `/bridge/*`; the 241st placement and geometry beyond row 240 fail atomically with stable errors
+- Acceptance check:
+  - pass when SSR contains no hidden metadata and capacity failures leave the stored composition unchanged
+- Evidence location:
+  - `crates/tessara-api/tests/dashboard_ssr.rs`, `crates/tessara-api/tests/dashboard_composition.rs`, `end2end/tests/dashboards.spec.ts`, and `docs/sprints/sprint-5a-dashboard-capacity-runbook.md`
+
+### Acceptance Mapping
+
+- Exit condition: a tester can assemble and view Dashboards through the app.
+  - Manual demonstration: Dashboard Directory, Creation, And Detail; Symbolic Dashboard Composition; Exact-Version Dashboard Viewer And Embedded Table.
+  - Automated check: `npm --prefix .\end2end test`, `cargo test -p tessara-api`, and `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:8080"`.
+- Exit condition: Dashboard composition depends on exact `ComponentVersion` ids and supports all delivered Component kinds without legacy report/chart/workbench behavior.
+  - Manual demonstration: Exact-Version Dashboard Viewer And Embedded Table.
+  - Automated check: exact-version request assertions in `end2end/tests/dashboards.spec.ts` and lifecycle assertions in `crates/tessara-api/tests/dashboard_composition.rs`.
+- Exit condition: Dashboard viewer and composition endpoints preserve scoped Dashboard and Component visibility.
+  - Manual demonstration: Scoped And Redacted Dashboard Access.
+  - Automated check: split-capability/redaction API tests plus the Dashboard and permissions Playwright suites.
+- Exit condition: touched Dashboard routes remain native SSR and do not revive product-facing bridge logic.
+  - Manual demonstration: Native SSR And Capacity Safety.
+  - Automated check: `cargo test -p tessara-api --test dashboard_ssr` and Playwright console/request guards for all Dashboard routes.
+- Exit condition: storage and layout remain valid at the supported boundary.
+  - Manual demonstration: Native SSR And Capacity Safety.
+  - Automated check: migration preflight/trigger and exactly-240/241st-placement assertions in `crates/tessara-api/tests/dashboard_composition.rs`, plus `.\scripts\smoke.ps1`.
+
+## 2026-07-12 - Sprint 5A Dashboard Composition Kickoff
+
+- Sprint: `Sprint 5A: Dashboard Composition Slice`, selected from the sole roadmap heading marked `(Next)`.
+- Kickoff status: prepared from clean, synchronized `main` at `a09a17c516dd7773fcec700e2d2415c91757ae62`; the UI direction is approved, implementation is unstarted, and application changes await a separate go-ahead.
+- Branch: `codex/sprint-5a`
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-5a`
+- Plan file: `docs/sprints/sprint-5a-plan.md`
+- Design gate: satisfied on 2026-07-12 for the composition editor only, with the approved Symbolic Builder reference at `docs/mockups/sprint-5a-dashboard-symbolic-builder-approved.png` and decision record at `docs/sprints/sprint-5a-dashboard-editor-design.md`; detail/viewer surfaces follow existing native patterns, and mockup-only Dashboard status/grid-setting controls are illustrative.
+- Layout direction: reuse and generalize the Form builder 12-column placement model, including equivalent pointer/keyboard/direct occupied-target movement reflow and collision-rejecting size changes, rather than introducing a separate ordered-list editor.
+- Sizing decision: retain every integer width 1 through 12 and every height that fits through row 240 when it satisfies the Component kind's minimum. Table ships with a `6 x 4` minimum, not a fixed size, and may grow to width 12 and through every row remaining below its starting row; other kinds retain the `1 x 1` hard minimum. Use non-binding add defaults of Table `6 x 4`, Bar `6 x 3`, Line `6 x 2`, Pie/Donut `3 x 3`, and Stat Card `3 x 2`; retain code-defined per-kind minimum support for later explicit policy changes. Desktop tracks use a shared, non-user-configurable square-cell rule clamped from 48px through 80px and pointer math measures the rendered track.
+- Mockup refinement: keep the editor canvas iconographic and metadata-only, with selected/full Component rendering available only through explicit lazy preview actions. The post-implementation review moved Components and Placement details from persistent columns into shared side sheets so the canvas remains primary.
+- Shared ownership direction: extract framework-free grid policy into `tessara-core`, genuinely reusable low-level Leptos placement interactions into `tessara-web-ui`, and Dashboard composition policy into `tessara-dashboards`; preserve the Form builder's current add/config UX and complete the required proposal before extracting `tessara-web-dashboards`.
+- Pinning decision: Dashboard placement pins a stable `component_version_id`; an intentional Sprint 4A current-published update-in-place may change the rendered payload under that id, while publishing a separate version never repins automatically.
+- Visibility decision: detail/viewer responses preserve every stored placement; inaccessible placements become geometry-preserving redacted placeholders with no hidden Component/version/Dataset metadata, and directory/detail counts report total distinct stored placements.
+- Table viewer decision: embedded Table placements use the shared controlled, server-backed complete paged Table renderer and normal viewer affordances; pagination bounds the tile without replacing the Table with a truncated or client-only summary.
+- Capacity and seed direction: Dashboards store at most 240 placements and no placement may extend beyond row 240. There is no overflow repair list and a 241st placement is rejected atomically. A non-mutating deployment preflight blocks an over-cap existing database and reports Dashboard ids/counts for an operator-controlled cleanup procedure with backup/export safeguards. Current Demo Operations Dashboard placements receive explicit typed V1 geometry and are repacked or removed if needed to meet the cap, while title-only/empty existing configs remain readable through deterministic position-derived fallback for an in-cap Dashboard. The focused viewer uses viewport-lazy mounting and a named code-level execution-concurrency ceiling below the supported storage cap.
+- Planned verification:
+  - `cargo fmt --all -- --check`
+  - `cargo check --workspace --all-features`
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  - `cargo test --workspace --all-features`
+  - `cargo audit --quiet`
+  - `.\scripts\check-web-crate-boundaries.ps1`
+  - `.\scripts\validate.ps1`
+  - `.\scripts\local-launch.ps1 -FreshData`
+  - `npm --prefix .\end2end test`
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"`
+  - `.\scripts\smoke.ps1 -UseExistingService -BaseUrl "http://127.0.0.1:8080" -KeepServices`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `git diff --check`
+- Immediate implementation focus after approval: protect Dashboard scope/redaction/total-count behavior and current Form placement behavior with targeted regression coverage; complete the focused frontend ownership proposal; then replace the `/dashboards` placeholder with a native, capability-aware directory as the first user-visible vertical slice.
+
 ## 2026-07-12 - Sprint 4B Chart And Stat Component Closeout
 
 - Completed:

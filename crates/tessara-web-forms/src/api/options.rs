@@ -27,107 +27,58 @@ pub(crate) struct FormEditOptions {
 
 #[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_form_create_options() -> Result<FormCreateOptions, FormsApiError> {
-    let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
-    let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
+    let node_types = tessara_web_http::fetch_json("/api/node-types", "Form node type options")
+        .await
+        .map_err(FormsApiError::from_request)?;
+    let existing_forms = tessara_web_http::fetch_json("/api/forms", "Form options")
+        .await
+        .map_err(FormsApiError::from_request)?;
 
-    match (node_types_response, forms_response) {
-        (Ok(response), _) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        (_, Ok(response)) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        (Ok(node_types_response), Ok(forms_response))
-            if node_types_response.ok() && forms_response.ok() =>
-        {
-            let node_types = node_types_response.json::<Vec<FormNodeTypeOption>>().await;
-            let existing_forms = forms_response.json::<Vec<FormSummary>>().await;
-
-            match (node_types, existing_forms) {
-                (Ok(node_types), Ok(existing_forms)) => Ok(FormCreateOptions {
-                    node_types,
-                    existing_forms,
-                }),
-                _ => Err(FormsApiError::message("Form options could not be read.")),
-            }
-        }
-        (Ok(node_types_response), Ok(forms_response)) => Err(FormsApiError::message(format!(
-            "Form options failed with status {} / {}.",
-            node_types_response.status(),
-            forms_response.status()
-        ))),
-        _ => Err(FormsApiError::message(
-            "Could not reach the form option APIs.",
-        )),
-    }
+    Ok(FormCreateOptions {
+        node_types,
+        existing_forms,
+    })
 }
 
 #[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_form_edit_options(
     form_id: &str,
 ) -> Result<FormEditOptions, FormsApiError> {
-    let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
-    let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
-    let detail_response = gloo_net::http::Request::get(&format!("/api/admin/forms/{form_id}"))
-        .send()
-        .await;
+    let node_types = tessara_web_http::fetch_json("/api/node-types", "Form node type options")
+        .await
+        .map_err(FormsApiError::from_request)?;
+    let existing_forms = tessara_web_http::fetch_json("/api/forms", "Form options")
+        .await
+        .map_err(FormsApiError::from_request)?;
+    let detail: FormDefinition =
+        tessara_web_http::fetch_json(&format!("/api/admin/forms/{form_id}"), "Form edit detail")
+            .await
+            .map_err(FormsApiError::from_request)?;
 
-    match (node_types_response, forms_response, detail_response) {
-        (Ok(response), _, _) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        (_, Ok(response), _) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        (_, _, Ok(response)) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        (Ok(node_types_response), Ok(forms_response), Ok(detail_response))
-            if node_types_response.ok() && forms_response.ok() && detail_response.ok() =>
+    let selected_version = editable_form_definition_version(&detail);
+    let rendered_form = if let Some(version) = selected_version {
+        match tessara_web_http::fetch_json::<RenderedForm>(
+            &format!("/api/form-versions/{}/render", version.id),
+            "Rendered form",
+        )
+        .await
         {
-            let node_types = node_types_response.json::<Vec<FormNodeTypeOption>>().await;
-            let existing_forms = forms_response.json::<Vec<FormSummary>>().await;
-            let detail = detail_response.json::<FormDefinition>().await;
-
-            match (node_types, existing_forms, detail) {
-                (Ok(node_types), Ok(existing_forms), Ok(detail)) => {
-                    let selected_version = editable_form_definition_version(&detail);
-                    let mut rendered_form = None;
-
-                    if let Some(version) = selected_version {
-                        match gloo_net::http::Request::get(&format!(
-                            "/api/form-versions/{}/render",
-                            version.id
-                        ))
-                        .send()
-                        .await
-                        {
-                            Ok(response) if response.ok() => {
-                                rendered_form = response.json::<RenderedForm>().await.ok();
-                            }
-                            Ok(response) if response.status() == 401 => {
-                                return Err(FormsApiError::Unauthorized);
-                            }
-                            _ => {
-                                rendered_form = None;
-                            }
-                        }
-                    }
-
-                    Ok(FormEditOptions {
-                        node_types,
-                        existing_forms,
-                        edit_version_id: selected_version.map(|version| version.id.clone()),
-                        edit_version_status: selected_version.map(|version| version.status.clone()),
-                        detail,
-                        rendered_form,
-                    })
-                }
-                _ => Err(FormsApiError::message(
-                    "Form edit options could not be read.",
-                )),
+            Ok(form) => Some(form),
+            Err(error) if error.is_authentication() => {
+                return Err(FormsApiError::Unauthorized);
             }
+            Err(_) => None,
         }
-        (Ok(node_types_response), Ok(forms_response), Ok(detail_response)) => {
-            Err(FormsApiError::message(format!(
-                "Form edit options failed with status {} / {} / {}.",
-                node_types_response.status(),
-                forms_response.status(),
-                detail_response.status()
-            )))
-        }
-        _ => Err(FormsApiError::message(
-            "Could not reach the form edit APIs.",
-        )),
-    }
+    } else {
+        None
+    };
+
+    Ok(FormEditOptions {
+        node_types,
+        existing_forms,
+        edit_version_id: selected_version.map(|version| version.id.clone()),
+        edit_version_status: selected_version.map(|version| version.status.clone()),
+        detail,
+        rendered_form,
+    })
 }

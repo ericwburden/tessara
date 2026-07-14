@@ -18,6 +18,5 @@ pub(crate) use shell::AppShell;
 pub(crate) use status_badge::*;
 pub(crate) use tessara_web_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
-    EmptyState, InfoListTable, InfoRow, PageHeader, TableFilterHeader, TablePaginationFooter,
-    Timestamp,
+    EmptyState, InfoListTable, PageHeader, TableFilterHeader, TablePaginationFooter, Timestamp,
 };

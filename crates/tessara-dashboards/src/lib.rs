@@ -1,83 +1,23 @@
-//! Dashboard and chart domain logic for Tessara.
+//! Pure dashboard composition contracts.
 //!
-//! This crate owns pure dashboard concepts that are useful outside the HTTP
-//! layer. Database-backed dashboard persistence still lives in `tessara-api`
-//! until the repository seams stabilize.
+//! HTTP DTOs and persistence remain outside this crate. This module owns the
+//! bounded dashboard policy layered over Tessara's framework-free grid types.
 
-use std::{fmt, str::FromStr};
+mod composition;
+mod placement_config;
 
-use serde::{Deserialize, Serialize};
+pub use composition::{
+    CompositionError, DASHBOARD_GRID_CONSTRAINTS, DASHBOARD_HARD_MINIMUM,
+    DashboardPlacementOperation, DashboardPlacementSizePolicy, DashboardPlacementSizeRule,
+    reflow_dashboard_movement, validate_dashboard_layout, validate_dashboard_layout_with,
+    validate_dashboard_resize,
+};
+pub use placement_config::{
+    DASHBOARD_PLACEMENT_SCHEMA_VERSION, DashboardPlacementConfigInput,
+    DashboardPlacementConfigState, DashboardPlacementConfigV1, LegacyPlacementKey,
+    ParsedDashboardPlacement, ParsedDashboardPlacementConfig, classify_dashboard_placement_config,
+    encode_dashboard_placement_config, legacy_fallback_layout, parse_dashboard_placement_config,
+    parse_dashboard_placement_configs,
+};
 
-/// Chart presentation type supported by the current dashboard slice.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChartType {
-    /// Tabular report output.
-    Table,
-    /// Bar chart visualization.
-    Bar,
-    /// Single summary metric visualization.
-    Summary,
-}
-
-impl ChartType {
-    /// Returns the canonical database/API string for this chart type.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Table => "table",
-            Self::Bar => "bar",
-            Self::Summary => "summary",
-        }
-    }
-}
-
-impl fmt::Display for ChartType {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-impl FromStr for ChartType {
-    type Err = ChartTypeError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "table" => Ok(Self::Table),
-            "bar" => Ok(Self::Bar),
-            "summary" => Ok(Self::Summary),
-            other => Err(ChartTypeError::Unsupported(other.to_string())),
-        }
-    }
-}
-
-/// Error returned when parsing a [`ChartType`].
-#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
-pub enum ChartTypeError {
-    /// The provided chart type string is not supported.
-    #[error("unsupported chart type '{0}'")]
-    Unsupported(String),
-}
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use super::ChartType;
-
-    #[test]
-    fn parses_supported_chart_types() {
-        for (raw, expected) in [
-            ("table", ChartType::Table),
-            ("bar", ChartType::Bar),
-            ("summary", ChartType::Summary),
-        ] {
-            assert_eq!(ChartType::from_str(raw), Ok(expected));
-            assert_eq!(expected.as_str(), raw);
-        }
-    }
-
-    #[test]
-    fn rejects_unknown_chart_types() {
-        assert!(ChartType::from_str("scatter").is_err());
-    }
-}
+pub use tessara_core::grid_layout::{GridPlacement, GridRect, GridSize};

@@ -818,7 +818,7 @@ pub(super) async fn load_dependency_impacts(
             auth::CapabilityBoundary::Global => {
                 sqlx::query(
                     r#"
-        SELECT dashboards.id, dashboards.name
+        SELECT DISTINCT dashboards.id, dashboards.name
         FROM dashboard_components
         JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
         JOIN component_versions ON component_versions.id = dashboard_components.component_version_id

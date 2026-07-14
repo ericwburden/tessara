@@ -2,21 +2,12 @@
 //!
 //! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Forms.
 
-pub(crate) const FORM_BUILDER_COLUMN_COUNT: i32 = 12;
+pub(crate) const FORM_BUILDER_COLUMN_COUNT: i32 =
+    tessara_web_ui::placement_editor::PLACEMENT_GRID_COLUMN_COUNT;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct FormBuilderDragPreview {
-    pub(crate) field_id: usize,
-    pub(crate) section_id: usize,
-    pub(crate) row: i32,
-    pub(crate) column: i32,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum FormBuilderResizeAxis {
-    Width,
-    Height,
-}
+pub(crate) type FormBuilderDragPreview =
+    tessara_web_ui::placement_editor::PlacementDragPreview<usize, usize>;
+pub(crate) type FormBuilderResizeAxis = tessara_core::GridResizeAxis;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FormBuilderSectionDraft {

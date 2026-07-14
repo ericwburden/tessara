@@ -8,8 +8,6 @@ use editor::*;
 #[cfg(any(feature = "hydrate", test))]
 use editor_config::*;
 
-use std::collections::BTreeMap;
-
 #[cfg(feature = "hydrate")]
 use super::types::{
     CreateComponentVersionRequest, SaveComponentEditRequest, UpdateComponentRequest,
@@ -24,15 +22,18 @@ use tessara_web_data_ops::{
 };
 use tessara_web_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
-    EmptyState, InteractiveDataTable, InteractiveTableColumn, InteractiveTableRow, PageHeader,
-    Skeleton, TableFilterHeader, TablePaginationFooter,
+    EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter,
 };
 
 #[cfg(feature = "hydrate")]
 use super::api;
 use super::types::{
-    ComponentDefinition, ComponentSummary, ComponentTable, ComponentValidationFinding,
-    ComponentVersionSummary, ComponentVisual, DatasetFieldDefinition, DatasetSummary,
+    ComponentDefinition, ComponentSummary, ComponentValidationFinding, ComponentVersionSummary,
+    DatasetFieldDefinition, DatasetSummary,
+};
+use tessara_web_component_viewer::{
+    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
+    ComponentViewerMode, ComponentVisual, ComponentVisualPresentation,
 };
 
 #[component]
@@ -1049,10 +1050,9 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     let component_loading = RwSignal::new(true);
     let component_error = RwSignal::new(None::<String>);
     let can_manage_component = RwSignal::new(false);
-    let table = RwSignal::new(None::<ComponentTable>);
-    let visual = RwSignal::new(None::<ComponentVisual>);
-    let error = RwSignal::new(None::<String>);
     let component_ref_for_title = component_ref.clone();
+    let component_ref_for_actions = component_ref.clone();
+    let component_ref_for_execution = component_ref.clone();
 
     Effect::new({
         let component_ref = component_ref.clone();
@@ -1064,23 +1064,6 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                 component_error,
                 can_manage_component,
             )
-        }
-    });
-    Effect::new({
-        let component_ref = component_ref.clone();
-        move |_| {
-            if let Some(component_type) = published_component_type(component.get()).as_deref() {
-                if component_type == "table" {
-                    load_component_table(component_ref.clone(), String::new(), table, error);
-                } else {
-                    load_component_visual(
-                        component_ref.clone(),
-                        component_type.to_string(),
-                        visual,
-                        error,
-                    );
-                }
-            }
         }
     });
 
@@ -1097,8 +1080,8 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                     }}</h1>
                 </div>
                 {move || can_manage_component.get().then(|| {
-                    let edit_href = format!("/components/{}/edit", component_ref.clone());
-                    let versions_href = format!("/components/{}/versions", component_ref.clone());
+                    let edit_href = format!("/components/{}/edit", component_ref_for_actions);
+                    let versions_href = format!("/components/{}/versions", component_ref_for_actions);
                     view! {
                         <div class="page-header__actions">
                             <a class="button button--secondary" href=versions_href>"Versions"</a>
@@ -1113,12 +1096,11 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                 } else if let Some(message) = component_error.get() {
                     view! { <EmptyState title="Configuration unavailable" message=message/> }.into_any()
                 } else if let Some(component) = component.get() {
-                    if let Some(component_type) = published_component_type(Some(component.clone())) {
-                        if component_type == "table" {
-                            view! { <ComponentTablePreviewSection table=table.get() table_error=error.get()/> }.into_any()
-                        } else {
-                            view! { <ComponentVisualPreviewSection visual=visual.get() visual_error=error.get()/> }.into_any()
-                        }
+                    if let Some(target) = published_component_target(
+                        &component_ref_for_execution,
+                        Some(component.clone()),
+                    ) {
+                        view! { <ComponentExecutionPreviewSection target/> }.into_any()
                     } else {
                         view! { <EmptyState title="No published version" message="This component does not have a published version yet."/> }.into_any()
                     }
@@ -1219,98 +1201,15 @@ fn ComponentNestedBreadcrumb(
 }
 
 #[component]
-fn ComponentTablePreviewSection(
-    table: Option<ComponentTable>,
-    table_error: Option<String>,
-) -> impl IntoView {
+fn ComponentExecutionPreviewSection(target: ComponentVersionTarget) -> impl IntoView {
     view! {
-        <section class="route-panel__section component-table-preview">
-            {if let Some(message) = table_error {
-                view! { <EmptyState title="Preview unavailable" message=message/> }.into_any()
-            } else if let Some(table) = table {
-                view! { <ComponentTablePreview table/> }.into_any()
-            } else {
-                view! { <EmptyState title="Loading preview" message="Fetching the published table preview."/> }.into_any()
-            }}
-        </section>
-    }
-}
-
-#[component]
-fn ComponentTablePreview(table: ComponentTable) -> impl IntoView {
-    let columns = table.columns.clone();
-    let rows = table.rows.clone();
-    let column_count = columns.len();
-    let row_count = rows.len();
-    let table_columns = columns
-        .iter()
-        .map(|column| {
-            InteractiveTableColumn::new(
-                column.key.clone(),
-                column.label.clone(),
-                sentence_label(&column.field_type),
-            )
-        })
-        .collect::<Vec<_>>();
-    let table_rows = rows
-        .into_iter()
-        .map(|row| {
-            let values = columns
-                .iter()
-                .map(|column| {
-                    let value = row
-                        .values
-                        .get(&column.key)
-                        .cloned()
-                        .flatten()
-                        .unwrap_or_default();
-                    (column.key.clone(), value)
-                })
-                .collect::<BTreeMap<_, _>>();
-            InteractiveTableRow::new(row.row_id, values)
-        })
-        .collect::<Vec<_>>();
-
-    view! {
-        <div class="component-table-preview__header">
-            <div>
-                <h2>"Preview"</h2>
-                <p>{format!("Showing {row_count} rows across {column_count} visible columns.")}</p>
+        <section class="route-panel__section component-version-preview">
+            <div class="component-table-preview__header">
+                <div>
+                    <h2>"Preview"</h2>
+                </div>
             </div>
-        </div>
-        {if columns.is_empty() {
-            view! { <EmptyState title="No visible columns" message="This component does not currently expose any table columns."/> }.into_any()
-        } else if row_count == 0 {
-            view! { <EmptyState title="No rows to display" message="The published table returned no rows for its current configuration."/> }.into_any()
-        } else {
-            view! {
-                <InteractiveDataTable
-                    columns=table_columns
-                    rows=table_rows
-                    search_label="Search component rows"
-                    search_placeholder="Search table"
-                    item_label="table rows"
-                    empty_message="No table rows match the current controls."
-                />
-            }.into_any()
-        }}
-    }
-}
-
-#[component]
-fn ComponentVisualPreviewSection(
-    visual: Option<ComponentVisual>,
-    visual_error: Option<String>,
-) -> impl IntoView {
-    view! {
-        <section class="route-panel__section component-visual-preview">
-            {if let Some(message) = visual_error {
-                view! { <EmptyState title="Preview unavailable" message=message/> }.into_any()
-            } else if let Some(visual) = visual {
-                view! { <ComponentVisualPreview visual/> }.into_any()
-            } else {
-                view! { <EmptyState title="Loading preview" message="Fetching the published visual preview."/> }.into_any()
-            }}
+            <ComponentVersionExecutionContent target mode=ComponentViewerMode::Full/>
         </section>
     }
 }
@@ -1358,7 +1257,7 @@ fn ComponentEditorDraftPreview(
                 {move || if let Some(message) = error.get() {
                     view! { <EmptyState title="Preview unavailable" message/> }.into_any()
                 } else if let Some(visual) = visual.get() {
-                    view! { <ComponentVisualPreview visual/> }.into_any()
+                    view! { <ComponentVisualPresentation visual/> }.into_any()
                 } else {
                     view! {
                         <EmptyState
@@ -1421,68 +1320,6 @@ fn component_editor_execution_summary(
         "Shows up to {} {category_label} groups{comparison}, {calculation} {summary_label}, ordered {direction}.",
         limit.trim().parse::<usize>().unwrap_or(20)
     )
-}
-
-#[component]
-fn ComponentVisualPreview(visual: ComponentVisual) -> impl IntoView {
-    match visual.component_type.as_str() {
-        "stat_card" => view! { <ComponentStatCardPreview visual/> }.into_any(),
-        _ => view! { <ComponentD3ChartPreview visual/> }.into_any(),
-    }
-}
-
-#[component]
-fn ComponentStatCardPreview(visual: ComponentVisual) -> impl IntoView {
-    let class_name = format!(
-        "component-stat-card component-stat-card--{}",
-        visual
-            .stat
-            .as_ref()
-            .map(|stat| stat.panel_style.as_str())
-            .unwrap_or("default")
-    );
-    view! {
-        <div class=class_name>
-            {if let Some(stat) = visual.stat {
-                view! {
-                    <p>{stat.label}</p>
-                    <strong>{stat.display_value.unwrap_or_else(|| "-".into())}</strong>
-                    {stat.supporting_text.map(|text| view! { <span>{text}</span> })}
-                }.into_any()
-            } else {
-                view! { <EmptyState title="No stat value" message="The published StatCard returned no value."/> }.into_any()
-            }}
-        </div>
-    }
-}
-
-#[component]
-fn ComponentD3ChartPreview(visual: ComponentVisual) -> impl IntoView {
-    let kind = visual.component_type.clone();
-    let item_count = if matches!(kind.as_str(), "pie" | "donut") {
-        visual.slices.len()
-    } else {
-        visual.points.len()
-    };
-    let is_empty = item_count == 0;
-    let payload = serde_json::to_string(&visual).unwrap_or_else(|_| "{}".into());
-    let aria_label = format!("{} chart preview", component_type_label(&kind));
-    view! {
-        <div class="component-chart component-d3-chart" data-chart=payload>
-            {if is_empty {
-                view! { <EmptyState title="No visual data" message="The published visual returned no grouped values."/> }.into_any()
-            } else {
-                view! {
-                    <div class="component-d3-chart__surface" role="img" aria-label=aria_label>
-                        <div class="component-d3-chart__loading" aria-label="Loading chart preview">
-                            <Skeleton class="skeleton--text skeleton--short"/>
-                            <Skeleton class="skeleton--chart"/>
-                        </div>
-                    </div>
-                }.into_any()
-            }}
-        </div>
-    }
 }
 
 #[component]
@@ -1839,24 +1676,6 @@ fn ComponentsMobileFilterSheet(
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-fn materialization_empty_state(state: &str) -> (&'static str, String) {
-    match state {
-        "failed" | "error" => (
-            "Table materialization failed",
-            "The component configuration is valid, but the bound Dataset major-line table could not be materialized. Retry after the Dataset materialization is rebuilt.".into(),
-        ),
-        "pending" => (
-            "Table materializing",
-            "The component configuration is valid, but the bound Dataset major-line table is still being prepared.".into(),
-        ),
-        other => (
-            "Table materializing",
-            format!("The component configuration is valid, but the bound Dataset major-line table is not ready yet. Materialization state: {other}"),
-        ),
-    }
-}
-
 fn component_type_label(component_type: &str) -> &'static str {
     match component_type {
         "table" => "Table",
@@ -2040,21 +1859,6 @@ fn dataset_provenance_label(provenance: &super::types::DatasetProvenanceSummary)
     } else {
         sources.join(", ")
     }
-}
-
-fn sentence_label(value: &str) -> String {
-    value
-        .split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn dataset_picker_majors(dataset: &DatasetSummary) -> Vec<i32> {
@@ -2582,67 +2386,16 @@ struct CategoryValueLoadState {
 #[cfg(not(feature = "hydrate"))]
 fn load_category_values(_: String, _: String, _: String, _: CategoryValueLoadState) {}
 
-#[cfg(feature = "hydrate")]
-fn load_component_table(
-    component_ref: String,
-    query: String,
-    table: RwSignal<Option<ComponentTable>>,
-    error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        error.set(None);
-        match api::fetch_component_table(&component_ref, &query).await {
-            Ok(Some(response)) => table.set(Some(response)),
-            Ok(None) => table.set(None),
-            Err(message) => error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_component_table(
-    _: String,
-    _: String,
-    _: RwSignal<Option<ComponentTable>>,
-    _: RwSignal<Option<String>>,
-) {
-}
-
-#[cfg(feature = "hydrate")]
-fn load_component_visual(
-    component_ref: String,
-    component_type: String,
-    visual: RwSignal<Option<ComponentVisual>>,
-    error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        error.set(None);
-        match api::fetch_component_visual(&component_ref, &component_type).await {
-            Ok(Some(response)) => visual.set(Some(response)),
-            Ok(None) => visual.set(None),
-            Err(message) => error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_component_visual(
-    _: String,
-    _: String,
-    _: RwSignal<Option<ComponentVisual>>,
-    _: RwSignal<Option<String>>,
-) {
-}
-
-fn published_component_type(component: Option<ComponentDefinition>) -> Option<String> {
-    component
-        .and_then(|component| {
-            component
-                .versions
-                .into_iter()
-                .find(|version| version.status == "published")
-        })
-        .map(|version| version.component_type)
+fn published_component_target(
+    component_ref: &str,
+    component: Option<ComponentDefinition>,
+) -> Option<ComponentVersionTarget> {
+    let version = component?
+        .versions
+        .into_iter()
+        .find(|version| version.status == "published")?;
+    let kind = ComponentVersionKind::from_api_kind(&version.component_type)?;
+    Some(ComponentVersionTarget::new(component_ref, version.id, kind))
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]

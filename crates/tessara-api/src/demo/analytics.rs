@@ -1,6 +1,11 @@
 use serde_json::{Value, json};
 use sqlx::{PgPool, Row};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use tessara_core::grid_layout::derive_row_major_positions;
+use tessara_dashboards::{
+    DASHBOARD_GRID_CONSTRAINTS, DashboardPlacementConfigV1, DashboardPlacementSizePolicy,
+    GridPlacement, GridRect, encode_dashboard_placement_config, validate_dashboard_layout_with,
+};
 use uuid::Uuid;
 
 use crate::error::{ApiError, ApiResult};
@@ -11,6 +16,31 @@ pub(super) struct DatasetFieldBinding<'a> {
     pub(super) label: &'a str,
     pub(super) source_field_key: &'a str,
     pub(super) field_type: &'a str,
+}
+
+/// One typed Dashboard placement used by the deterministic demo seed.
+///
+/// The database remains the source of truth for the component kind. The seed
+/// supplies only placement identity, presentation, and geometry; the writer
+/// resolves the kind and applies the same per-kind minimum policy as the API.
+pub(super) struct DashboardComponentPlacementSeed<'a> {
+    component_version_id: Uuid,
+    title: Option<&'a str>,
+    rect: GridRect,
+}
+
+impl<'a> DashboardComponentPlacementSeed<'a> {
+    pub(super) const fn new(
+        component_version_id: Uuid,
+        title: Option<&'a str>,
+        rect: GridRect,
+    ) -> Self {
+        Self {
+            component_version_id,
+            title,
+            rect,
+        }
+    }
 }
 
 struct ResolvedDatasetFieldBinding<'a> {
@@ -712,14 +742,106 @@ async fn replace_dashboard_scope_nodes(
 pub(super) async fn replace_dashboard_components(
     pool: &PgPool,
     dashboard_id: Uuid,
-    components: &[(Uuid, i32, Value)],
+    components: &[DashboardComponentPlacementSeed<'_>],
 ) -> ApiResult<()> {
+    if components.len() > DASHBOARD_GRID_CONSTRAINTS.max_placements() {
+        return Err(ApiError::BadRequest(format!(
+            "demo dashboard {dashboard_id} exceeds the {}-placement capacity",
+            DASHBOARD_GRID_CONSTRAINTS.max_placements()
+        )));
+    }
+
+    let mut tx = pool.begin().await?;
+    let locked_dashboard: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM dashboards WHERE id = $1 FOR UPDATE")
+            .bind(dashboard_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if locked_dashboard.is_none() {
+        return Err(ApiError::NotFound(format!("dashboard {dashboard_id}")));
+    }
+
+    let component_version_ids = components
+        .iter()
+        .map(|component| component.component_version_id)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let component_kind_rows = sqlx::query(
+        r#"
+        SELECT id, component_type::text AS component_type
+        FROM component_versions
+        WHERE id = ANY($1)
+        ORDER BY id
+        FOR SHARE
+        "#,
+    )
+    .bind(&component_version_ids)
+    .fetch_all(&mut *tx)
+    .await?;
+    let component_kind_by_id = component_kind_rows
+        .into_iter()
+        .map(|row| Ok((row.try_get("id")?, row.try_get("component_type")?)))
+        .collect::<Result<BTreeMap<Uuid, String>, sqlx::Error>>()?;
+    let component_kinds = components
+        .iter()
+        .map(|component| {
+            component_kind_by_id
+                .get(&component.component_version_id)
+                .cloned()
+                .ok_or_else(|| {
+                    ApiError::NotFound(format!(
+                        "component version {} required by demo dashboard {dashboard_id}",
+                        component.component_version_id
+                    ))
+                })
+        })
+        .collect::<ApiResult<Vec<_>>>()?;
+
+    let layout: Vec<_> = components
+        .iter()
+        .enumerate()
+        .map(|(index, component)| GridPlacement::new(index, component.rect))
+        .collect();
+    let size_policy = DashboardPlacementSizePolicy::new();
+    validate_dashboard_layout_with(&layout, |placement| {
+        size_policy.minimum_for(&component_kinds[placement.id])
+    })
+    .map_err(|error| {
+        ApiError::BadRequest(format!(
+            "demo dashboard {dashboard_id} has an invalid placement layout: {error}"
+        ))
+    })?;
+
+    let mut prepared = Vec::with_capacity(components.len());
+    for (component_index, position) in derive_row_major_positions(&layout) {
+        let component = &components[component_index];
+        let minimum = size_policy.minimum_for(&component_kinds[component_index]);
+        let config = DashboardPlacementConfigV1::new_with_minimum(
+            component.title.map(str::to_owned),
+            component.rect,
+            minimum,
+        )
+        .and_then(|config| encode_dashboard_placement_config(&config))
+        .map_err(|error| {
+            ApiError::BadRequest(format!(
+                "demo dashboard {dashboard_id} has an invalid placement config: {error}"
+            ))
+        })?;
+        let position = i32::try_from(position).map_err(|_| {
+            ApiError::BadRequest(format!(
+                "demo dashboard {dashboard_id} placement position does not fit in storage"
+            ))
+        })?;
+        prepared.push((component.component_version_id, position, config));
+    }
+
     sqlx::query("DELETE FROM dashboard_components WHERE dashboard_id = $1")
         .bind(dashboard_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-    for (component_version_id, position, config) in components {
+    for (component_version_id, position, config) in prepared {
         sqlx::query(
             r#"
             INSERT INTO dashboard_components (dashboard_id, component_version_id, position, config)
@@ -730,9 +852,10 @@ pub(super) async fn replace_dashboard_components(
         .bind(component_version_id)
         .bind(position)
         .bind(config)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     }
 
+    tx.commit().await?;
     Ok(())
 }

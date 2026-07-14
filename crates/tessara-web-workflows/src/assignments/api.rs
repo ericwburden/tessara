@@ -14,32 +14,13 @@ use crate::assignments::types::{
 pub(super) async fn create_workflow_assignments_bulk(
     payload: BulkWorkflowAssignmentPayload,
 ) -> Result<(), WorkflowAssignmentMutationError> {
-    let body = serde_json::to_string(&payload).map_err(|_| {
-        WorkflowAssignmentMutationError::message("Assignment request could not be prepared.")
-    })?;
-
-    let response = gloo_net::http::Request::post("/api/workflow-assignments/bulk")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .map_err(|_| {
-            WorkflowAssignmentMutationError::message("Assignment request could not be prepared.")
-        })?
-        .send()
-        .await;
-
-    match response {
-        Ok(response) if response.status() == 401 => {
-            Err(WorkflowAssignmentMutationError::Unauthorized)
-        }
-        Ok(response) if response.ok() => Ok(()),
-        Ok(response) => Err(WorkflowAssignmentMutationError::message(format!(
-            "Create assignments failed with status {}.",
-            response.status()
-        ))),
-        Err(error) => Err(WorkflowAssignmentMutationError::message(format!(
-            "Could not reach the assignments API: {error}"
-        ))),
-    }
+    tessara_web_http::send_json_without_response(
+        gloo_net::http::Request::post("/api/workflow-assignments/bulk"),
+        &payload,
+        "Create workflow assignments",
+    )
+    .await
+    .map_err(WorkflowAssignmentMutationError::from_request)
 }
 
 #[cfg(feature = "hydrate")]
@@ -47,85 +28,32 @@ pub(super) async fn update_workflow_assignment(
     assignment_id: &str,
     payload: UpdateWorkflowAssignmentPayload,
 ) -> Result<(), WorkflowAssignmentMutationError> {
-    let body = serde_json::to_string(&payload).map_err(|_| {
-        WorkflowAssignmentMutationError::message("Update request could not be prepared.")
-    })?;
-
-    let response =
-        gloo_net::http::Request::put(&format!("/api/workflow-assignments/{assignment_id}"))
-            .header("Content-Type", "application/json")
-            .body(body)
-            .map_err(|_| {
-                WorkflowAssignmentMutationError::message("Update request could not be prepared.")
-            })?
-            .send()
-            .await;
-
-    match response {
-        Ok(response) if response.status() == 401 => {
-            Err(WorkflowAssignmentMutationError::Unauthorized)
-        }
-        Ok(response) if response.ok() => Ok(()),
-        Ok(response) => Err(WorkflowAssignmentMutationError::message(format!(
-            "Update assignment failed with status {}.",
-            response.status()
-        ))),
-        Err(error) => Err(WorkflowAssignmentMutationError::message(format!(
-            "Could not reach the assignments API: {error}"
-        ))),
-    }
+    tessara_web_http::send_json_without_response(
+        gloo_net::http::Request::put(&format!("/api/workflow-assignments/{assignment_id}")),
+        &payload,
+        "Update workflow assignment",
+    )
+    .await
+    .map_err(WorkflowAssignmentMutationError::from_request)
 }
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_workflow_assignments()
 -> Result<Vec<WorkflowAssignmentSummary>, WorkflowAssignmentApiError> {
-    match gloo_net::http::Request::get("/api/workflow-assignments")
-        .send()
+    tessara_web_http::fetch_json("/api/workflow-assignments", "Workflow assignments")
         .await
-    {
-        Ok(response) if response.status() == 401 => Err(WorkflowAssignmentApiError::Unauthorized),
-        Ok(response) if response.ok() => response
-            .json::<Vec<WorkflowAssignmentSummary>>()
-            .await
-            .map_err(|error| {
-                WorkflowAssignmentApiError::message(format!(
-                    "Unable to parse workflow assignments: {error}"
-                ))
-            }),
-        Ok(response) => Err(WorkflowAssignmentApiError::message(format!(
-            "Unable to load workflow assignments. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(WorkflowAssignmentApiError::message(format!(
-            "Unable to load workflow assignments: {error}"
-        ))),
-    }
+        .map_err(WorkflowAssignmentApiError::from_request)
 }
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_workflow_assignment_candidates()
 -> Result<Vec<WorkflowAssignmentCandidate>, WorkflowAssignmentApiError> {
-    match gloo_net::http::Request::get("/api/workflow-assignment-candidates")
-        .send()
-        .await
-    {
-        Ok(response) if response.status() == 401 => Err(WorkflowAssignmentApiError::Unauthorized),
-        Ok(response) if response.ok() => response
-            .json::<Vec<WorkflowAssignmentCandidate>>()
-            .await
-            .map_err(|error| {
-                WorkflowAssignmentApiError::message(format!(
-                    "Unable to parse assignment candidates: {error}"
-                ))
-            }),
-        Ok(response) => Err(WorkflowAssignmentApiError::message(format!(
-            "Unable to load assignment candidates. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(WorkflowAssignmentApiError::message(format!(
-            "Unable to load assignment candidates: {error}"
-        ))),
-    }
+    tessara_web_http::fetch_json(
+        "/api/workflow-assignment-candidates",
+        "Workflow assignment candidates",
+    )
+    .await
+    .map_err(WorkflowAssignmentApiError::from_request)
 }
 
 #[cfg(feature = "hydrate")]
@@ -137,22 +65,7 @@ pub(super) async fn fetch_workflow_assignment_assignees(
         "/api/workflow-assignment-candidates/assignees?workflow_version_id={workflow_version_id}&node_id={node_id}"
     );
 
-    match gloo_net::http::Request::get(&url).send().await {
-        Ok(response) if response.status() == 401 => Err(WorkflowAssignmentApiError::Unauthorized),
-        Ok(response) if response.ok() => response
-            .json::<Vec<WorkflowAssigneeOption>>()
-            .await
-            .map_err(|error| {
-                WorkflowAssignmentApiError::message(format!(
-                    "Unable to parse eligible assignees: {error}"
-                ))
-            }),
-        Ok(response) => Err(WorkflowAssignmentApiError::message(format!(
-            "Unable to load eligible assignees. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(WorkflowAssignmentApiError::message(format!(
-            "Unable to load eligible assignees: {error}"
-        ))),
-    }
+    tessara_web_http::fetch_json(&url, "Workflow assignment assignees")
+        .await
+        .map_err(WorkflowAssignmentApiError::from_request)
 }

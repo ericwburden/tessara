@@ -61,6 +61,9 @@ try {
         Write-Host "Running fast Tessara validation. Use .\scripts\validate.ps1 for the full pre-commit matrix." -ForegroundColor Yellow
     } else {
         Write-Host "Running full Tessara validation sequentially. This avoids Cargo lock contention on Windows." -ForegroundColor Yellow
+        if ([string]::IsNullOrWhiteSpace($env:TEST_DATABASE_URL)) {
+            throw "Full validation requires TEST_DATABASE_URL so database integration tests cannot silently skip. Use -Fast for a non-database development check."
+        }
     }
 
     Invoke-CheckedStep -Label "Formatting check" -Command {
@@ -94,7 +97,11 @@ try {
     }
 
     Invoke-CheckedStep -Label "API tests" -Command {
-        cargo test -p tessara-api
+        if ($Fast) {
+            cargo test -p tessara-api
+        } else {
+            cargo test -p tessara-api --all-features
+        }
     }
 
     Write-Host "`nValidation passed." -ForegroundColor Green

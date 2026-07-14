@@ -1,11 +1,15 @@
 //! Shared data-table components.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use icons::{
-    ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3Cog, ListFilter, RotateCcw, Search,
-};
+use icons::{ArrowDown, ArrowUp, ListFilter, RotateCcw};
 use leptos::prelude::*;
+
+use crate::{
+    TableColumnOption, TableColumnSelector, TablePaginationFooter, TablePopoverController,
+    TableSearch, TableToolbar, TableToolbarActions,
+};
 
 #[component]
 pub fn DataTable(children: Children) -> impl IntoView {
@@ -22,19 +26,47 @@ pub fn DataTable(children: Children) -> impl IntoView {
 pub struct InteractiveTableColumn {
     pub key: String,
     pub label: String,
-    pub data_type: String,
+    pub data_type: InteractiveTableDataType,
+}
+
+/// Value semantics used by [`InteractiveDataTable`] when ordering a column.
+///
+/// Keeping this typed prevents one column from switching comparators from row
+/// to row, which would violate the total-order contract required by Rust's
+/// sorting algorithms.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InteractiveTableDataType {
+    Boolean,
+    Date,
+    DateTime,
+    Number,
+    #[default]
+    Text,
+}
+
+impl InteractiveTableDataType {
+    /// Maps Tessara field metadata to the table's domain-neutral sort type.
+    pub fn from_field_type(field_type: &str) -> Self {
+        match field_type.trim().to_ascii_lowercase().as_str() {
+            "boolean" => Self::Boolean,
+            "date" => Self::Date,
+            "datetime" | "timestamp" => Self::DateTime,
+            "number" | "integer" | "decimal" | "float" => Self::Number,
+            _ => Self::Text,
+        }
+    }
 }
 
 impl InteractiveTableColumn {
     pub fn new(
         key: impl Into<String>,
         label: impl Into<String>,
-        data_type: impl Into<String>,
+        data_type: InteractiveTableDataType,
     ) -> Self {
         Self {
             key: key.into(),
             label: label.into(),
-            data_type: data_type.into(),
+            data_type,
         }
     }
 }
@@ -109,10 +141,16 @@ pub fn InteractiveDataTable(
             .collect::<Vec<_>>();
 
         if let Some(key) = sort_key.get() {
+            let data_type = columns
+                .get()
+                .into_iter()
+                .find(|column| column.key == key)
+                .map(|column| column.data_type)
+                .unwrap_or_default();
             filtered.sort_by(|left, right| {
                 let left_value = left.values.get(&key).cloned().unwrap_or_default();
                 let right_value = right.values.get(&key).cloned().unwrap_or_default();
-                compare_table_values(&left_value, &right_value)
+                compare_table_values(data_type, &left_value, &right_value)
             });
             if !sort_ascending.get() {
                 filtered.reverse();
@@ -133,20 +171,6 @@ pub fn InteractiveDataTable(
     });
 
     let total_count = Memo::new(move |_| filtered_rows.get().len());
-    let page_count = Memo::new(move |_| total_count.get().max(1).div_ceil(page_size.get().max(1)));
-    let current_page = Memo::new(move |_| page_index.get().min(page_count.get().saturating_sub(1)));
-    let previous_disabled = Memo::new(move |_| current_page.get() == 0);
-    let next_disabled = Memo::new(move |_| current_page.get() + 1 >= page_count.get());
-    let page_summary = move || {
-        let total = total_count.get();
-        if total == 0 {
-            format!("No {item_label} to display")
-        } else {
-            let start = current_page.get() * page_size.get();
-            let end = (start + page_size.get()).min(total);
-            format!("Showing {}-{} of {} {item_label}", start + 1, end, total)
-        }
-    };
 
     let reset_page = move || page_index.set(0);
     let reset_table = move || {
@@ -166,21 +190,18 @@ pub fn InteractiveDataTable(
 
     view! {
         <div class="interactive-data-table">
-            <div class="interactive-data-table__toolbar">
-                <label class="searchable-data-table__search searchable-data-table__control interactive-data-table__search">
-                    <Search class="searchable-data-table__control-icon"/>
-                    <span class="sr-only">{search_label}</span>
-                    <input
-                        type="search"
-                        placeholder=search_placeholder
-                        prop:value=move || search.get()
-                        on:input=move |event| {
-                            search.set(event_target_value(&event));
+            <TableToolbar>
+                <TableSearch
+                    value=Signal::derive(move || search.get())
+                    on_input=Callback::new(move |value| {
+                            search.set(value);
                             reset_page();
-                        }
-                    />
-                </label>
-                <div class="interactive-data-table__toolbar-actions">
+                    })
+                    label=search_label
+                    placeholder=search_placeholder
+                    class="interactive-data-table__search"
+                />
+                <TableToolbarActions>
                     <button
                         class="icon-button icon-button--control interactive-data-table__reset"
                         type="button"
@@ -190,9 +211,19 @@ pub fn InteractiveDataTable(
                     >
                         <RotateCcw/>
                     </button>
-                    <ColumnVisibilityMenu columns visible_column_keys/>
-                </div>
-            </div>
+                    <TableColumnSelector
+                        columns=Signal::derive(move || {
+                            columns
+                                .get()
+                                .into_iter()
+                                .map(|column| TableColumnOption::new(column.key, column.label))
+                                .collect()
+                        })
+                        visible_column_keys=Signal::derive(move || visible_column_keys.get())
+                        on_change=Callback::new(move |keys| visible_column_keys.set(keys))
+                    />
+                </TableToolbarActions>
+            </TableToolbar>
             <div class="table-wrap interactive-data-table__table">
                 <table class="data-table">
                     <thead>
@@ -245,122 +276,14 @@ pub fn InteractiveDataTable(
                     </tbody>
                 </table>
             </div>
-            <div class="directory-table-pagination interactive-data-table__pagination" aria-label="Table pagination">
-                <p>{page_summary}</p>
-                <div class="directory-table-pagination__actions">
-                    <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
-                        <span>"Rows"</span>
-                        <select
-                            prop:value=move || page_size.get().to_string()
-                            on:change=move |event| {
-                                if let Ok(size) = event_target_value(&event).parse::<usize>() {
-                                    page_size.set(size);
-                                    page_index.set(0);
-                                }
-                            }
-                        >
-                            <option value="10">"10"</option>
-                            <option value="25">"25"</option>
-                            <option value="50">"50"</option>
-                        </select>
-                    </label>
-                    <button
-                        class="interactive-data-table__page-button"
-                        type="button"
-                        aria-label="Previous page"
-                        title="Previous page"
-                        disabled=move || previous_disabled.get()
-                        on:click=move |_| page_index.update(|page| *page = page.saturating_sub(1))
-                    >
-                        <ChevronLeft/>
-                    </button>
-                    <span>{move || format!("Page {} of {}", current_page.get() + 1, page_count.get())}</span>
-                    <button
-                        class="interactive-data-table__page-button"
-                        type="button"
-                        aria-label="Next page"
-                        title="Next page"
-                        disabled=move || next_disabled.get()
-                        on:click=move |_| {
-                            let last_page = page_count.get().saturating_sub(1);
-                            page_index.update(|page| *page = (*page + 1).min(last_page));
-                        }
-                    >
-                        <ChevronRight/>
-                    </button>
-                </div>
-            </div>
-        </div>
-    }
-}
-
-#[component]
-fn ColumnVisibilityMenu(
-    columns: RwSignal<Vec<InteractiveTableColumn>>,
-    visible_column_keys: RwSignal<Vec<String>>,
-) -> impl IntoView {
-    let is_open = RwSignal::new(false);
-    let toggle_key = move |key: String| {
-        visible_column_keys.update(|keys| {
-            if keys.iter().any(|selected| selected == &key) {
-                keys.retain(|selected| selected != &key);
-            } else {
-                keys.push(key.clone());
-            }
-        });
-    };
-
-    view! {
-        <div class=move || if is_open.get() { "interactive-data-table__columns is-open" } else { "interactive-data-table__columns" }>
-            <button
-                class="icon-button icon-button--control interactive-data-table__columns-trigger"
-                type="button"
-                aria-label="Choose visible columns"
-                title="Choose visible columns"
-                aria-haspopup="menu"
-                aria-expanded=move || is_open.get().to_string()
-                on:click=move |_| is_open.update(|open| *open = !*open)
-            >
-                <Columns3Cog/>
-            </button>
-            <button
-                class="data-table-filter__scrim"
-                type="button"
-                aria-label="Close column selector"
-                on:click=move |_| is_open.set(false)
-            ></button>
-            <div class="interactive-data-table__columns-menu blurred-surface" role="menu">
-                <div class="interactive-data-table__columns-actions">
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        on:click=move |_| visible_column_keys.set(columns.get().into_iter().map(|column| column.key).collect())
-                    >
-                        "Show All"
-                    </button>
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        on:click=move |_| visible_column_keys.set(Vec::new())
-                    >
-                        "Hide All"
-                    </button>
-                </div>
-                {move || columns.get().into_iter().map(|column| {
-                    let key = column.key.clone();
-                    let checked_key = column.key.clone();
-                    view! {
-                        <label class="interactive-data-table__column-option">
-                            <input
-                                type="checkbox"
-                                prop:checked=move || visible_column_keys.get().iter().any(|selected| selected == &checked_key)
-                                on:change=move |_| toggle_key(key.clone())
-                            />
-                            <span>{column.label}</span>
-                        </label>
-                    }
-                }).collect_view()}
-            </div>
+            <TablePaginationFooter
+                aria_label="Table pagination"
+                item_label
+                class="interactive-data-table__pagination"
+                total_count
+                page_size
+                page_index
+            />
         </div>
     }
 }
@@ -374,7 +297,7 @@ fn InteractiveTableHeader(
     column_filters: RwSignal<BTreeMap<String, String>>,
     reset_page: impl Fn() + Copy + 'static,
 ) -> impl IntoView {
-    let is_open = RwSignal::new(false);
+    let popover = TablePopoverController::new();
     let key = column.key;
     let label = column.label;
     let is_filtered_key = key.clone();
@@ -384,7 +307,7 @@ fn InteractiveTableHeader(
     let clear_checked_key = key.clone();
     let clear_click_key = key.clone();
     let menu_class = move || {
-        if is_open.get() {
+        if popover.open.get() {
             "interactive-data-table__header-menu is-open"
         } else {
             "interactive-data-table__header-menu"
@@ -414,8 +337,9 @@ fn InteractiveTableHeader(
                         aria-label=format!("Sort and filter {label}")
                         title=format!("Sort and filter {label}")
                         aria-haspopup="menu"
-                        aria-expanded=move || is_open.get().to_string()
-                        on:click=move |_| is_open.update(|open| *open = !*open)
+                        node_ref=popover.trigger
+                        aria-expanded=move || popover.open.get().to_string()
+                        on:click=move |_| popover.toggle()
                     >
                         {move || if sort_key.get().as_ref() == Some(&sort_icon_key) {
                             if sort_ascending.get() {
@@ -431,9 +355,16 @@ fn InteractiveTableHeader(
                         class="data-table-filter__scrim"
                         type="button"
                         aria-label=format!("Close {label} controls")
-                        on:click=move |_| is_open.set(false)
+                        on:click=move |_| popover.close()
                     ></button>
-                    <div class="data-table-filter__menu blurred-surface interactive-data-table__header-controls" role="menu">
+                    <div
+                        node_ref=popover.panel
+                        class="data-table-filter__menu blurred-surface interactive-data-table__header-controls"
+                        role="dialog"
+                        aria-label=format!("Sort and filter {label}")
+                        tabindex="-1"
+                        on:keydown=move |event| popover.handle_keydown(event)
+                    >
                         <button
                             class="data-table-filter__option"
                             type="button"
@@ -442,7 +373,7 @@ fn InteractiveTableHeader(
                                 sort_key.set(Some(sort_key_for_asc.clone()));
                                 sort_ascending.set(true);
                                 reset_page();
-                                is_open.set(false);
+                                popover.close();
                             }
                         >
                             "Sort ascending"
@@ -455,7 +386,7 @@ fn InteractiveTableHeader(
                                 sort_key.set(Some(sort_key_for_desc.clone()));
                                 sort_ascending.set(false);
                                 reset_page();
-                                is_open.set(false);
+                                popover.close();
                             }
                         >
                             "Sort descending"
@@ -467,7 +398,7 @@ fn InteractiveTableHeader(
                             on:click=move |_| {
                                 sort_key.set(None);
                                 reset_page();
-                                is_open.set(false);
+                                popover.close();
                             }
                         >
                             "Clear sort"
@@ -487,7 +418,7 @@ fn InteractiveTableHeader(
                                     filters.remove(&clear_click_key);
                                 });
                                 reset_page();
-                                is_open.set(false);
+                                popover.close();
                             }
                         >
                             "All values"
@@ -516,7 +447,7 @@ fn InteractiveTableHeader(
                                             filters.insert(key_for_click.clone(), option_for_click.clone());
                                         });
                                         reset_page();
-                                        is_open.set(false);
+                                        popover.close();
                                     }
                                 >
                                     {option}
@@ -539,11 +470,102 @@ fn filter_options_for_column(rows: Vec<InteractiveTableRow>, key: &str) -> Vec<S
         .collect()
 }
 
-fn compare_table_values(left: &str, right: &str) -> std::cmp::Ordering {
-    match (left.parse::<f64>(), right.parse::<f64>()) {
+fn compare_table_values(data_type: InteractiveTableDataType, left: &str, right: &str) -> Ordering {
+    match data_type {
+        InteractiveTableDataType::Number => compare_numeric_table_values(left, right),
+        InteractiveTableDataType::Boolean
+        | InteractiveTableDataType::Date
+        | InteractiveTableDataType::DateTime
+        | InteractiveTableDataType::Text => compare_text_table_values(left, right),
+    }
+}
+
+fn compare_numeric_table_values(left: &str, right: &str) -> Ordering {
+    match (left.trim().parse::<f64>(), right.trim().parse::<f64>()) {
         (Ok(left_number), Ok(right_number)) => left_number
-            .partial_cmp(&right_number)
-            .unwrap_or(std::cmp::Ordering::Equal),
-        _ => left.to_lowercase().cmp(&right.to_lowercase()),
+            .total_cmp(&right_number)
+            .then_with(|| compare_text_table_values(left, right)),
+        (Ok(_), Err(_)) => Ordering::Less,
+        (Err(_), Ok(_)) => Ordering::Greater,
+        (Err(_), Err(_)) => compare_text_table_values(left, right),
+    }
+}
+
+fn compare_text_table_values(left: &str, right: &str) -> Ordering {
+    left.to_lowercase()
+        .cmp(&right.to_lowercase())
+        .then_with(|| left.cmp(right))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sorted_values(data_type: InteractiveTableDataType, values: &[&str]) -> Vec<String> {
+        let mut values = values
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect::<Vec<_>>();
+        values.sort_by(|left, right| compare_table_values(data_type, left, right));
+        values
+    }
+
+    #[test]
+    fn text_and_number_columns_use_one_comparator_for_the_entire_column() {
+        let values = ["10", "2", "15a"];
+
+        assert_eq!(
+            sorted_values(InteractiveTableDataType::Number, &values),
+            ["2", "10", "15a"]
+        );
+        assert_eq!(
+            sorted_values(InteractiveTableDataType::Text, &values),
+            ["10", "15a", "2"]
+        );
+    }
+
+    #[test]
+    fn numeric_comparator_is_transitive_for_mixed_values() {
+        let two_to_ten = compare_table_values(InteractiveTableDataType::Number, "2", "10");
+        let ten_to_text = compare_table_values(InteractiveTableDataType::Number, "10", "15a");
+        let two_to_text = compare_table_values(InteractiveTableDataType::Number, "2", "15a");
+
+        assert_eq!(two_to_ten, Ordering::Less);
+        assert_eq!(ten_to_text, Ordering::Less);
+        assert_eq!(two_to_text, Ordering::Less);
+    }
+
+    #[test]
+    fn numeric_comparator_orders_special_floats_and_invalid_values_deterministically() {
+        let values = ["invalid", "NaN", "-inf", "0", "inf", "nan"];
+        let first = sorted_values(InteractiveTableDataType::Number, &values);
+        let second = sorted_values(InteractiveTableDataType::Number, &values);
+
+        assert_eq!(first, second);
+        assert_eq!(first.last().map(String::as_str), Some("invalid"));
+        assert!(
+            first.iter().position(|value| value == "-inf")
+                < first.iter().position(|value| value == "0")
+        );
+        assert!(
+            first.iter().position(|value| value == "0")
+                < first.iter().position(|value| value == "inf")
+        );
+    }
+
+    #[test]
+    fn field_type_mapping_is_case_insensitive_and_defaults_to_text() {
+        assert_eq!(
+            InteractiveTableDataType::from_field_type(" Number "),
+            InteractiveTableDataType::Number
+        );
+        assert_eq!(
+            InteractiveTableDataType::from_field_type("TIMESTAMP"),
+            InteractiveTableDataType::DateTime
+        );
+        assert_eq!(
+            InteractiveTableDataType::from_field_type("static_text"),
+            InteractiveTableDataType::Text
+        );
     }
 }

@@ -12,11 +12,11 @@ impl WorkflowEditorMutationError {
         Self::Message(message.into())
     }
 
-    pub(super) fn from_transport_error(error: String) -> Self {
-        if error == "Authentication is required." {
+    pub(super) fn from_transport_error(error: tessara_web_http::RequestError) -> Self {
+        if error.is_authentication() {
             Self::Unauthorized
         } else {
-            Self::Message(error)
+            Self::Message(error.into_message())
         }
     }
 }

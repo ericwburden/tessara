@@ -1,8 +1,6 @@
 //! Components feature DTOs.
 #![cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -43,86 +41,6 @@ pub(crate) struct ComponentVersionSummary {
     #[serde(default)]
     pub(crate) version_note: String,
     pub(crate) config: Value,
-}
-
-#[derive(Clone, Deserialize, PartialEq)]
-pub(crate) struct ComponentTable {
-    pub(crate) component_id: String,
-    pub(crate) component_version_id: String,
-    pub(crate) dataset_id: String,
-    pub(crate) dataset_version_major: i32,
-    pub(crate) component_type: String,
-    pub(crate) materialization_state: String,
-    pub(crate) columns: Vec<ComponentTableColumn>,
-    pub(crate) rows: Vec<ComponentTableRow>,
-    pub(crate) pagination: ComponentTablePagination,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-pub(crate) struct ComponentTablePagination {
-    pub(crate) page_size: usize,
-    pub(crate) next_cursor: Option<String>,
-    pub(crate) has_more: bool,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-pub(crate) struct ComponentTableColumn {
-    pub(crate) key: String,
-    pub(crate) label: String,
-    pub(crate) field_type: String,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-pub(crate) struct ComponentTableRow {
-    pub(crate) row_id: String,
-    pub(crate) values: BTreeMap<String, Option<String>>,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
-pub(crate) struct ComponentVisual {
-    pub(crate) component_id: String,
-    pub(crate) component_version_id: String,
-    pub(crate) dataset_id: String,
-    pub(crate) dataset_version_major: i32,
-    pub(crate) component_type: String,
-    pub(crate) materialization_state: String,
-    pub(crate) value_format: String,
-    pub(crate) legend_title: Option<String>,
-    pub(crate) bar_orientation: Option<String>,
-    pub(crate) bar_comparison_layout: Option<String>,
-    pub(crate) x_axis_label: Option<String>,
-    pub(crate) y_axis_label: Option<String>,
-    #[serde(default)]
-    pub(crate) line_smoothing: Option<bool>,
-    pub(crate) stat: Option<ComponentStatValue>,
-    pub(crate) points: Vec<ComponentVisualPoint>,
-    pub(crate) slices: Vec<ComponentVisualSlice>,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
-pub(crate) struct ComponentStatValue {
-    pub(crate) label: String,
-    pub(crate) value: Option<f64>,
-    pub(crate) display_value: Option<String>,
-    pub(crate) supporting_text: Option<String>,
-    pub(crate) panel_style: String,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
-pub(crate) struct ComponentVisualPoint {
-    pub(crate) x: String,
-    pub(crate) value: f64,
-    pub(crate) display_value: String,
-    pub(crate) color: Option<String>,
-    pub(crate) comparison: Option<String>,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
-pub(crate) struct ComponentVisualSlice {
-    pub(crate) category: String,
-    pub(crate) value: f64,
-    pub(crate) display_value: String,
-    pub(crate) color: Option<String>,
 }
 
 #[derive(Clone, Serialize)]

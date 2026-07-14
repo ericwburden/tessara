@@ -9,10 +9,12 @@ use super::grid_empty_cells::FormBuilderGridEmptyCells;
 use crate::builder::FormBuilderFieldDraft;
 use crate::builder::components::field_tile::FormBuilderGridTile;
 use crate::builder::{
-    FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview, FormBuilderGridCell,
-    FormBuilderSectionLayout, clear_form_builder_drag_intent, commit_form_builder_drag_preview,
-    form_builder_grid_cell_from_drag_event, form_builder_grid_cell_from_pointer,
+    FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview, FormBuilderSectionLayout,
+    clear_form_builder_drag_intent, commit_form_builder_drag_preview,
     schedule_form_builder_drag_preview, set_form_builder_drag_preview,
+};
+use tessara_web_ui::placement_editor::{
+    PlacementGridCanvas, PlacementGridCell, PlacementGridTarget,
 };
 
 #[component]
@@ -30,123 +32,83 @@ pub(crate) fn FormBuilderGrid(
     next_builder_field_id: RwSignal<usize>,
 ) -> impl IntoView {
     let grid_rows = Memo::new(move |_| layout.get().row_count);
-    let grid_cells = Memo::new(move |_| {
+    let grid_cells = Signal::derive(move || {
         let row_count = grid_rows.get();
         (1..=row_count)
             .flat_map(|row| {
-                (1..=FORM_BUILDER_COLUMN_COUNT)
-                    .map(move |column| FormBuilderGridCell { row, column })
+                (1..=FORM_BUILDER_COLUMN_COUNT).map(move |column| PlacementGridCell { row, column })
             })
             .collect::<Vec<_>>()
     });
+    let row_count = Signal::derive(move || grid_rows.get());
+    let dragging = Signal::derive(move || dragged_builder_field.get().is_some());
+    let on_drag_target = Callback::new(move |target: PlacementGridTarget| {
+        let Some(field_id) = dragged_builder_field.get_untracked() else {
+            return;
+        };
+        schedule_form_builder_drag_preview(
+            builder_drag_preview,
+            pending_builder_drag_preview,
+            builder_drag_preview_timeout,
+            FormBuilderDragPreview {
+                placement_id: field_id,
+                canvas_id: section_id,
+                row: target.cell.row,
+                column: target.cell.column,
+            },
+            target.target_id,
+        );
+    });
+    let on_drop_target = Callback::new(move |target: PlacementGridTarget| {
+        if let Some(field_id) = dragged_builder_field.get_untracked() {
+            set_form_builder_drag_preview(
+                builder_drag_preview,
+                FormBuilderDragPreview {
+                    placement_id: field_id,
+                    canvas_id: section_id,
+                    row: target.cell.row,
+                    column: target.cell.column,
+                },
+            );
+        }
+        commit_form_builder_drag_preview(
+            builder_fields,
+            builder_drag_preview,
+            pending_builder_drag_preview,
+            builder_drag_preview_timeout,
+            dragged_builder_field,
+            suppress_builder_field_click,
+        );
+    });
+    let on_cancel_drag = Callback::new(move |_| {
+        clear_form_builder_drag_intent(
+            builder_drag_preview,
+            pending_builder_drag_preview,
+            builder_drag_preview_timeout,
+        );
+    });
+    let on_click = Callback::new(move |event| {
+        add_form_builder_field_from_grid_click(
+            event,
+            section_id,
+            default_column_width,
+            builder_fields,
+            active_builder_field,
+            suppress_builder_field_click,
+            next_builder_field_id,
+        );
+    });
 
     view! {
-        <div
-            data-section-id=section_id
-            class=move || {
-                if dragged_builder_field.get().is_some() {
-                    "form-builder-layout-grid is-dragging"
-                } else {
-                    "form-builder-layout-grid"
-                }
-            }
-            style=move || {
-                let row_count = grid_rows.get();
-                format!(
-                    "--form-builder-rows: {}; --form-builder-max-height: {}px;",
-                    row_count,
-                    row_count * 80,
-                )
-            }
-            on:dragenter=move |event| {
-                let Some(field_id) = dragged_builder_field.get_untracked() else {
-                    return;
-                };
-                let Some((row, column, target_id)) = form_builder_grid_cell_from_drag_event(&event) else {
-                    return;
-                };
-                event.prevent_default();
-                schedule_form_builder_drag_preview(
-                    builder_drag_preview,
-                    pending_builder_drag_preview,
-                    builder_drag_preview_timeout,
-                    FormBuilderDragPreview {
-                        field_id,
-                        section_id,
-                        row,
-                        column,
-                    },
-                    target_id,
-                );
-            }
-            on:dragover=move |event| {
-                let Some(field_id) = dragged_builder_field.get_untracked() else {
-                    return;
-                };
-                event.prevent_default();
-                let Some((row, column, target_id)) =
-                    form_builder_grid_cell_from_pointer(&event, grid_rows.get_untracked())
-                else {
-                    return;
-                };
-                schedule_form_builder_drag_preview(
-                    builder_drag_preview,
-                    pending_builder_drag_preview,
-                    builder_drag_preview_timeout,
-                    FormBuilderDragPreview {
-                        field_id,
-                        section_id,
-                        row,
-                        column,
-                    },
-                    target_id,
-                );
-            }
-            on:drop=move |event| {
-                event.prevent_default();
-                if let Some(field_id) = dragged_builder_field.get_untracked()
-                    && let Some((row, column, _)) =
-                        form_builder_grid_cell_from_pointer(&event, grid_rows.get_untracked())
-                    {
-                        set_form_builder_drag_preview(
-                            builder_drag_preview,
-                            FormBuilderDragPreview {
-                                field_id,
-                                section_id,
-                                row,
-                                column,
-                            },
-                        );
-                    }
-                commit_form_builder_drag_preview(
-                    builder_fields,
-                    builder_drag_preview,
-                    pending_builder_drag_preview,
-                    builder_drag_preview_timeout,
-                    dragged_builder_field,
-                    suppress_builder_field_click,
-                );
-            }
-            on:mouseleave=move |_| {
-                if dragged_builder_field.get_untracked().is_some() {
-                    clear_form_builder_drag_intent(
-                        builder_drag_preview,
-                        pending_builder_drag_preview,
-                        builder_drag_preview_timeout,
-                    );
-                }
-            }
-            on:click=move |event| {
-                add_form_builder_field_from_grid_click(
-                    event,
-                    section_id,
-                    default_column_width,
-                    builder_fields,
-                    active_builder_field,
-                    suppress_builder_field_click,
-                    next_builder_field_id,
-                );
-            }
+        <PlacementGridCanvas
+            canvas_id=format!("form-builder-section-{section_id}")
+            row_count=row_count
+            dragging=dragging
+            on_drag_target=on_drag_target
+            on_drop_target=on_drop_target
+            on_cancel_drag=on_cancel_drag
+            on_click=on_click
+            class="form-builder-layout-grid"
         >
             <FormBuilderGridEmptyCells section_id grid_cells/>
             <For
@@ -168,6 +130,57 @@ pub(crate) fn FormBuilderGrid(
                     }
                 }
             />
-        </div>
+        </PlacementGridCanvas>
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use crate::builder::{
+        FormBuilderSectionDraft, blank_form_builder_field_at, form_builder_section_layout,
+    };
+
+    #[test]
+    fn form_grid_renders_shared_primitives_without_changing_form_affordances() {
+        let html = Owner::new().with(|| {
+            let section = FormBuilderSectionDraft {
+                id: 1,
+                remote_id: None,
+                title: "Main".into(),
+                description: String::new(),
+                default_column_width: 6,
+                position: 1,
+            };
+            let mut field = blank_form_builder_field_at(1, 1, 1, 1, 6);
+            field.label = "Customer".into();
+            let builder_fields = RwSignal::new(vec![field]);
+            let layout =
+                Memo::new(move |_| form_builder_section_layout(&section, &builder_fields.get()));
+            let default_column_width = Memo::new(|_| 6);
+
+            view! {
+                <FormBuilderGrid
+                    section_id=1
+                    layout
+                    default_column_width
+                    builder_fields
+                    active_builder_field=RwSignal::new(None::<usize>)
+                    dragged_builder_field=RwSignal::new(None::<usize>)
+                    builder_drag_preview=RwSignal::new(None::<FormBuilderDragPreview>)
+                    pending_builder_drag_preview=RwSignal::new(None::<FormBuilderDragPreview>)
+                    builder_drag_preview_timeout=RwSignal::new(None::<i32>)
+                    suppress_builder_field_click=RwSignal::new(None::<usize>)
+                    next_builder_field_id=RwSignal::new(2usize)
+                />
+            }
+            .to_html()
+        });
+
+        assert!(html.contains("placement-editor-grid form-builder-layout-grid"));
+        assert!(html.contains("aria-label=\"Add field at row 1, column 1\""));
+        assert!(html.contains("aria-label=\"Configure Customer\""));
+        assert!(html.contains("title=\"Resize field width\""));
+        assert!(html.contains("title=\"Resize field height\""));
     }
 }

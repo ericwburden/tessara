@@ -95,3 +95,42 @@ pub(crate) fn update_field_layout_value(
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builder::blank_form_builder_field_at;
+
+    fn field(id: usize, column: i32) -> FormBuilderFieldDraft {
+        blank_form_builder_field_at(id, 1, 1, column, 6)
+    }
+
+    #[test]
+    fn label_configuration_still_generates_a_key_until_manually_edited() {
+        Owner::new().with(|| {
+            let fields = RwSignal::new(vec![field(1, 1)]);
+            update_field_label(fields, 1, "Customer Name".into());
+            assert_eq!(fields.get()[0].key, "customer-name");
+
+            update_field_key(fields, 1, "account owner".into());
+            update_field_label(fields, 1, "Primary Contact".into());
+            let configured = fields.get();
+            assert_eq!(configured[0].label, "Primary Contact");
+            assert_eq!(configured[0].key, "account-owner");
+        });
+    }
+
+    #[test]
+    fn direct_form_layout_edits_still_reject_collision_without_reflow() {
+        Owner::new().with(|| {
+            let fields = RwSignal::new(vec![field(1, 1), field(2, 7)]);
+
+            update_field_layout_value(fields, 2, 1, 1);
+            assert_eq!(fields.get()[1].grid_column, 7);
+
+            update_field_layout_value(fields, 2, 0, 2);
+            assert_eq!(fields.get()[1].grid_row, 2);
+            assert_eq!(fields.get()[1].grid_column, 7);
+        });
+    }
+}

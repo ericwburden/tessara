@@ -1,5 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
+FROM node:22-bookworm-slim AS styles
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run tailwind:build
+
 FROM rust:1.94-bookworm AS builder
 
 RUN apt-get update \
@@ -13,10 +21,12 @@ WORKDIR /app
 ARG APP_CACHE_BUST=dev
 RUN echo "$APP_CACHE_BUST" >/tmp/app-cache-bust
 COPY . .
+COPY --from=styles /app/target/site/pkg/tessara-web.css /tmp/tessara-web.css
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
     cargo leptos build --release --split \
+    && cp /tmp/tessara-web.css /app/target/site/pkg/tessara-web.css \
     && cp /app/target/release/tessara-api /tmp/tessara-api \
     && cp -r /app/target/site /tmp/site
 

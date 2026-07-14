@@ -43,6 +43,11 @@ pub(crate) struct ComponentRouteParams {
 }
 
 #[derive(PartialEq, Clone, Debug)]
+pub(crate) struct DashboardRouteParams {
+    pub dashboard_id: String,
+}
+
+#[derive(PartialEq, Clone, Debug)]
 pub(crate) struct AccountRouteParams {
     pub account_id: String,
 }
@@ -105,6 +110,14 @@ impl Params for ComponentRouteParams {
     fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
         Ok(Self {
             component_ref: require_map_value(map, "component_ref")?,
+        })
+    }
+}
+
+impl Params for DashboardRouteParams {
+    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
+        Ok(Self {
+            dashboard_id: require_map_value(map, "dashboard_id")?,
         })
     }
 }

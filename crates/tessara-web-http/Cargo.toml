@@ -1,0 +1,18 @@
+[package]
+name = "tessara-web-http"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+default = []
+hydrate = [
+    "dep:gloo-net",
+    "dep:serde",
+    "dep:serde_json",
+]
+
+[dependencies]
+gloo-net = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }

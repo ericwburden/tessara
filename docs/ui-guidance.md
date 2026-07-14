@@ -1148,12 +1148,14 @@ Dashboard layout:
 - use cards for lighter summary tiles and panels for denser work tiles
 - reflow to fewer columns on tablet
 - collapse to a single-column stack on mobile
-- tables inside dashboards should usually be concise summaries rather than giant full-detail grids
+- Table Components inside dashboards render their full paged table experience within the tile; pagination keeps the surface bounded rather than rendering one unbounded full-detail grid
 
 Dashboard tile sizing:
 
-- use a constrained tile sizing system
-- support a small set of standard tile spans or sizes
+- use a constrained, snap-to-grid tile sizing system
+- builders may expose every integer width/height within the approved grid bounds when composition requires it
+- derive a Dashboard placement's maximum selectable height from the rows remaining below its starting row; do not impose a smaller fixed per-placement height cap
+- support recommended defaults and configurable minimum width/height by Component kind without forcing placements into a small fixed preset list
 - keep alignment on a visible grid
 - avoid masonry chaos
 - snap-to-grid behavior is preferred

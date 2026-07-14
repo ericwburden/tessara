@@ -6,7 +6,7 @@ use leptos::prelude::*;
 use serde::Deserialize;
 
 #[cfg(feature = "hydrate")]
-use crate::http::{navigate_to_href, redirect_to_login, send_json_request};
+use crate::http::{navigate_to_href, redirect_to_login};
 use crate::ui::{AppShell, DataTable, PageHeader, TablePaginationFooter, Timestamp};
 use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::nonempty_text;
@@ -148,38 +148,18 @@ fn load_pending_work(
 
 #[cfg(feature = "hydrate")]
 async fn fetch_pending_work() -> Result<Vec<PendingWorkflowWork>, PendingWorkflowWorkApiError> {
-    match gloo_net::http::Request::get("/api/workflow-assignments/pending")
-        .send()
+    tessara_web_http::fetch_json("/api/workflow-assignments/pending", "Assigned work")
         .await
-    {
-        Ok(response) if response.status() == 401 => Err(PendingWorkflowWorkApiError::Unauthorized),
-        Ok(response) if response.ok() => {
-            response
-                .json::<Vec<PendingWorkflowWork>>()
-                .await
-                .map_err(|error| {
-                    PendingWorkflowWorkApiError::message(format!(
-                        "Unable to parse assigned work: {error}"
-                    ))
-                })
-        }
-        Ok(response) => Err(PendingWorkflowWorkApiError::message(format!(
-            "Unable to load assigned work. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(PendingWorkflowWorkApiError::message(format!(
-            "Unable to load assigned work: {error}"
-        ))),
-    }
+        .map_err(PendingWorkflowWorkApiError::from_request_error)
 }
 
 #[cfg(feature = "hydrate")]
 impl PendingWorkflowWorkApiError {
-    fn from_transport_error(error: String) -> Self {
-        if error == "Authentication is required." {
+    fn from_request_error(error: tessara_web_http::RequestError) -> Self {
+        if error.is_authentication() {
             Self::Unauthorized
         } else {
-            Self::Message(error)
+            Self::Message(error.into_message())
         }
     }
 }
@@ -188,7 +168,7 @@ impl PendingWorkflowWorkApiError {
 async fn start_pending_work_response(
     workflow_assignment_id: &str,
 ) -> Result<String, PendingWorkflowWorkApiError> {
-    let response = send_json_request::<serde_json::Value>(
+    let response = tessara_web_http::send_json_text::<serde_json::Value>(
         gloo_net::http::Request::post(&format!(
             "/api/workflow-assignments/{workflow_assignment_id}/start"
         )),
@@ -196,7 +176,7 @@ async fn start_pending_work_response(
         "Start assigned response",
     )
     .await
-    .map_err(PendingWorkflowWorkApiError::from_transport_error)?;
+    .map_err(PendingWorkflowWorkApiError::from_request_error)?;
 
     response
         .get("id")

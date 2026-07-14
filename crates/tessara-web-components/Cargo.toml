@@ -8,9 +8,12 @@ publish = false
 default = []
 hydrate = [
     "leptos/hydrate",
+    "tessara-web-component-viewer/hydrate",
+    "tessara-web-http/hydrate",
 ]
 ssr = [
     "leptos/ssr",
+    "tessara-web-component-viewer/ssr",
 ]
 
 [dependencies]
@@ -19,6 +22,8 @@ icons = { workspace = true }
 leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tessara-web-component-viewer = { path = "../tessara-web-component-viewer", default-features = false }
 tessara-web-data-ops = { path = "../tessara-web-data-ops" }
+tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-web-ui = { path = "../tessara-web-ui" }
 web-sys = { workspace = true }

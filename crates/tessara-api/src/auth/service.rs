@@ -207,6 +207,7 @@ fn capability_keys(scopes: &[CapabilityScope]) -> Vec<String> {
         .filter_map(|capability| {
             capability
                 .strip_suffix(":manage")
+                .filter(|domain| *domain != "dashboards")
                 .map(|domain| format!("{domain}:read"))
         })
         .collect::<Vec<_>>();

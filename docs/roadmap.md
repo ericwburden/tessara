@@ -173,6 +173,7 @@ Datasets, components, dashboards, and operations:
 
 UI and migration:
 
+- Evaluate a focused migration of the shared placement drag/resize interactions from owner-bound mouse listeners to Pointer Events with `setPointerCapture` so mouse, touch, and pen input share one event path. Keep the current RAII cleanup model until that work has dedicated coverage for `pointercancel`/`lostpointercapture`, keyboard and focus accessibility, nested modal/side-sheet interactions, and mobile/pen regressions.
 - Preserve long response values in readable table/detail presentations with wrapping, truncation, or drill-in behavior before expanding dense review surfaces.
 - Review RBAC-heavy tables and details as Administration grows, especially capability bundle display, scope/delegation density, and capability-drift affordances.
 - Keep migration/operator verification pointed at canonical application routes and remove legacy adapter surfaces once their replacement route, validation, and rollback path are explicit.
@@ -678,7 +679,7 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 5: Dashboards, Scoped Analytics, And Dependency Upgrade UX
 
-### Sprint 5A: Dashboard Composition Slice (Next)
+### Sprint 5A: Dashboard Composition Slice (Complete)
 
 **Outcome:** dashboards compose component versions through application-grade flows.
 
@@ -698,7 +699,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can assemble and view dashboards through the app.
 
-### Sprint 5B: Scoped Analytics And Presentation Hardening Slice
+### Sprint 5B: Scoped Analytics And Presentation Hardening Slice (Next)
 
 **Outcome:** dataset, component, and dashboard execution is scope-safe now that those application surfaces exist.
 

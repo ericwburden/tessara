@@ -103,6 +103,20 @@ pub fn nav_item_is_allowed(item: &NavItem, capabilities: &[String]) -> bool {
             .any(|required| capabilities.iter().any(|capability| capability == required))
 }
 
+/// Whether a permitted route also has a useful directory entrypoint.
+///
+/// Object-scoped Dashboard managers can open an editor URL issued for a
+/// Dashboard they manage, but `/dashboards` itself is a reader directory. Do
+/// not advertise that reader link when the account only has manage access.
+pub fn nav_item_is_visible(item: &NavItem, capabilities: &[String]) -> bool {
+    if item.key == "dashboards" {
+        return capabilities
+            .iter()
+            .any(|capability| capability == "dashboards:read" || capability == "admin:all");
+    }
+    nav_item_is_allowed(item, capabilities)
+}
+
 pub fn nav_items_for_section(
     section: &'static str,
     capabilities: &[String],
@@ -110,6 +124,31 @@ pub fn nav_items_for_section(
     NAV_ITEMS
         .iter()
         .filter(move |item| item.section == section)
-        .filter(|item| nav_item_is_allowed(item, capabilities))
+        .filter(|item| nav_item_is_visible(item, capabilities))
         .collect::<Vec<_>>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{nav_item_for_route, nav_item_is_allowed, nav_item_is_visible};
+
+    #[test]
+    fn manage_only_dashboard_access_keeps_route_permission_without_reader_link() {
+        let dashboards = nav_item_for_route("dashboards").expect("Dashboard nav item");
+        let capabilities = vec!["dashboards:manage".to_string()];
+
+        assert!(nav_item_is_allowed(dashboards, &capabilities));
+        assert!(!nav_item_is_visible(dashboards, &capabilities));
+    }
+
+    #[test]
+    fn dashboard_readers_and_admins_receive_the_directory_link() {
+        let dashboards = nav_item_for_route("dashboards").expect("Dashboard nav item");
+
+        assert!(nav_item_is_visible(
+            dashboards,
+            &["dashboards:read".to_string()]
+        ));
+        assert!(nav_item_is_visible(dashboards, &["admin:all".to_string()]));
+    }
 }

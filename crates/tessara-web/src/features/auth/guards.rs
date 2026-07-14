@@ -2,14 +2,14 @@
 //!
 //! Keep route/session gating helpers here so pages can delegate auth decisions to one module.
 
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use crate::features::auth::api;
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use crate::state::navigation;
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use leptos::task::spawn_local;
 
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 pub fn require_authenticated_route(active_route: &'static str) {
     if active_route == "home" {
         return;
@@ -43,7 +43,7 @@ pub fn require_authenticated_route(active_route: &'static str) {
     });
 }
 
-#[cfg(not(feature = "hydrate"))]
+#[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
 pub fn require_authenticated_route(active_route: &'static str) {
     let _ = active_route;
 }

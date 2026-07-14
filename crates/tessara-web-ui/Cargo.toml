@@ -17,5 +17,6 @@ ssr = [
 icons = { workspace = true }
 js-sys = { workspace = true }
 leptos = { workspace = true }
+tessara-core = { path = "../tessara-core" }
 wasm-bindgen = { workspace = true }
-web-sys = { workspace = true }
+web-sys = { workspace = true, features = ["CssStyleDeclaration", "HtmlCollection", "KeyboardEvent"] }

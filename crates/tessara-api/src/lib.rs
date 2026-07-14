@@ -315,46 +315,17 @@ pub fn router(state: AppState) -> Router {
                 )
             }),
         )
-        .route(
-            "/dashboards",
-            get(|| async {
-                native_app(
-                    "/dashboards",
-                    "Tessara Dashboards",
-                    "Browse Tessara dashboards.",
-                )
-            }),
-        )
-        .route(
-            "/dashboards/new",
-            get(|| async {
-                native_app(
-                    "/dashboards/new",
-                    "Create Dashboard",
-                    "Create a Tessara dashboard.",
-                )
-            }),
-        )
+        .route("/dashboards", get(dashboards::native_directory))
+        .route("/dashboards/new", get(dashboards::native_create))
         .route(
             "/dashboards/{dashboard_id}/edit",
-            get(|Path(dashboard_id): Path<String>| async move {
-                native_app(
-                    format!("/dashboards/{dashboard_id}/edit"),
-                    "Edit Dashboard",
-                    "Edit a Tessara dashboard.",
-                )
-            }),
+            get(dashboards::native_editor),
         )
         .route(
-            "/dashboards/{dashboard_id}",
-            get(|Path(dashboard_id): Path<String>| async move {
-                native_app(
-                    format!("/dashboards/{dashboard_id}"),
-                    "Dashboard Detail",
-                    "Inspect a Tessara dashboard.",
-                )
-            }),
+            "/dashboards/{dashboard_id}/view",
+            get(dashboards::native_viewer),
         )
+        .route("/dashboards/{dashboard_id}", get(dashboards::native_detail))
         .route(
             "/datasets",
             get(|| async {

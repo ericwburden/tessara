@@ -1,6 +1,5 @@
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
-import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { runPlaywrightSql } from "./support/postgres";
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
@@ -110,12 +109,16 @@ type ComponentFilterConfig = {
 
 type DashboardSummary = {
   id: string;
-  component_count: number;
+  placement_count: number;
 };
 
 type DashboardResponse = {
   id: string;
-  components: Array<{ component_version_id: string }>;
+  placements: Array<{
+    placement_id: string;
+    availability: "available" | "unavailable";
+    component?: { component_version_id: string };
+  }>;
 };
 
 function isBenignNavigationAbort(message: string) {
@@ -576,54 +579,14 @@ WHERE id IN (SELECT id FROM pw_cleanup_components);
 `;
 
   try {
-    execFileSync(
-      "docker",
-      [
-        "compose",
-        "exec",
-        "-T",
-        "postgres",
-        "psql",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-U",
-        "tessara",
-        "-d",
-        "tessara",
-      ],
-      {
-        cwd: resolve(process.cwd(), ".."),
-        input: sql,
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
+    runPlaywrightSql(sql);
   } catch (error) {
     console.warn(`component cleanup skipped: ${String(error)}`);
   }
 }
 
 function runComponentSql(sql: string) {
-  execFileSync(
-    "docker",
-    [
-      "compose",
-      "exec",
-      "-T",
-      "postgres",
-      "psql",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-U",
-      "tessara",
-      "-d",
-      "tessara",
-    ],
-    {
-      cwd: resolve(process.cwd(), ".."),
-      input: sql,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
+  runPlaywrightSql(sql);
 }
 
 test.describe.serial("Sprint 4A component workflow", () => {
@@ -705,19 +668,28 @@ test.describe.serial("Sprint 4A component workflow", () => {
       }),
     );
     const draftDashboardPlacement = await expectStatus(
-      await page.request.post(`/api/admin/dashboards/${draftDashboard.id}/components`, {
+      await page.request.put(`/api/admin/dashboards/${draftDashboard.id}/composition`, {
         data: {
-          component_version_id: component.versions[0].id,
-          position: 1,
-          config: {},
+          commands: [
+            {
+              operation: "bind",
+              client_key: "draft-version",
+              component_version_id: component.versions[0].id,
+              geometry: {
+                grid_row: 1,
+                grid_column: 1,
+                grid_width: 6,
+                grid_height: 4,
+              },
+            },
+          ],
         },
       }),
       400,
     );
     const draftDashboardPlacementBody = JSON.parse(draftDashboardPlacement) as ApiErrorBody;
     expect(draftDashboardPlacementBody).toMatchObject({
-      code: "bad_request",
-      error: expect.stringContaining("draft"),
+      code: "dashboard_component_version_unavailable",
     });
     runComponentSql(`
 INSERT INTO dashboard_components (dashboard_id, component_version_id, position, config)
@@ -728,12 +700,16 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     );
     expect(
       dashboardsWithLegacyDraftPlacement.find((dashboard) => dashboard.id === draftDashboard.id)
-        ?.component_count,
-    ).toBe(0);
+        ?.placement_count,
+    ).toBe(1);
     const dashboardWithLegacyDraftPlacement = await expectJson<DashboardResponse>(
       await page.request.get(`/api/dashboards/${draftDashboard.id}`),
     );
-    expect(dashboardWithLegacyDraftPlacement.components).toEqual([]);
+    expect(dashboardWithLegacyDraftPlacement.placements).toHaveLength(1);
+    expect(dashboardWithLegacyDraftPlacement.placements[0]).toMatchObject({
+      availability: "unavailable",
+    });
+    expect(dashboardWithLegacyDraftPlacement.placements[0].component).toBeUndefined();
 
     const validValidation = await expectJson<ComponentValidationResponse>(
       await page.request.post("/api/admin/components/validate", {

@@ -4,6 +4,7 @@ use axum::{Json, Router, extract::State, routing::post};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use tessara_dashboards::GridRect;
 use uuid::Uuid;
 
 use crate::{
@@ -24,8 +25,8 @@ use accounts::{
     require_dev_admin_account,
 };
 use analytics::{
-    DatasetFieldBinding, ensure_component, ensure_component_with_config, ensure_dashboard,
-    ensure_dataset, replace_dashboard_components,
+    DashboardComponentPlacementSeed, DatasetFieldBinding, ensure_component,
+    ensure_component_with_config, ensure_dashboard, ensure_dataset, replace_dashboard_components,
 };
 use forms::{DemoFormSpec, FormFieldDef, ensure_demo_form, replace_form_scope_nodes};
 use hierarchy::{
@@ -37,7 +38,7 @@ use workflows::{
     WorkflowStepSeed, ensure_program_checkpoint_workflow, ensure_single_form_workflow_assignment,
 };
 
-const DEMO_SEED_VERSION: &str = "uat-demo-v1";
+const DEMO_SEED_VERSION: &str = "uat-demo-v2";
 
 #[derive(Serialize)]
 pub struct DemoNodeCounts {
@@ -1502,50 +1503,50 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         pool,
         dashboard_id,
         &[
-            (
+            DashboardComponentPlacementSeed::new(
                 partner_component_version_id,
-                0,
-                json!({"title": "Partner Profile"}),
+                Some("Partner Profile"),
+                GridRect::new(1, 1, 6, 4),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 program_component_version_id,
-                1,
-                json!({"title": "Program Snapshot"}),
+                Some("Program Snapshot"),
+                GridRect::new(1, 7, 6, 4),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 activity_component_version_id,
-                2,
-                json!({"title": "Activity Plan"}),
+                Some("Activity Plan"),
+                GridRect::new(5, 1, 6, 4),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 session_component_version_id,
-                3,
-                json!({"title": "Session Log Table"}),
+                Some("Session Log Table"),
+                GridRect::new(9, 1, 12, 6),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 session_bar_component_version_id,
-                4,
-                json!({"title": "Participants by Completion"}),
+                Some("Participants by Completion"),
+                GridRect::new(15, 1, 6, 3),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 session_line_component_version_id,
-                5,
-                json!({"title": "Participants Over Time"}),
+                Some("Participants Over Time"),
+                GridRect::new(15, 7, 6, 2),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 session_pie_component_version_id,
-                6,
-                json!({"title": "Completion Share"}),
+                Some("Completion Share"),
+                GridRect::new(18, 1, 3, 3),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 session_donut_component_version_id,
-                7,
-                json!({"title": "Completion Donut"}),
+                Some("Completion Donut"),
+                GridRect::new(18, 4, 3, 3),
             ),
-            (
+            DashboardComponentPlacementSeed::new(
                 session_stat_component_version_id,
-                8,
-                json!({"title": "Total Participants"}),
+                Some("Total Participants"),
+                GridRect::new(18, 7, 3, 2),
             ),
         ],
     )

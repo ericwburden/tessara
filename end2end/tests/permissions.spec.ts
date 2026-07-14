@@ -1,6 +1,5 @@
 import { expect, request, test, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
-import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { runPlaywrightSql } from "./support/postgres";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-permissions-${Date.now()}`;
@@ -775,15 +774,7 @@ DELETE FROM roles
 WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
 `;
 
-  execFileSync(
-    "docker",
-    ["compose", "exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "tessara", "-d", "tessara"],
-    {
-      cwd: resolve(process.cwd(), ".."),
-      input: sql,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
+  runPlaywrightSql(sql);
 }
 
 test.describe.serial("capability + scope + ownership permissions", () => {
@@ -1031,7 +1022,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expect(page.getByRole("heading", { name: "Response unavailable" })).toBeVisible();
   });
 
-  test("dashboard placeholder routes and APIs exercise scoped manage permission", async ({ page }) => {
+  test("dashboard native routes and APIs exercise scoped manage permission", async ({ page }) => {
     const dashboard = await postJson<IdResponse>(fixtures.scopedManager, "/api/admin/dashboards", {
       name: `${RUN_ID} Managed Dashboard`,
       description: "Scoped dashboard permission fixture.",
@@ -1063,8 +1054,94 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
     await page.goto("/dashboards/new");
     await expect(page.getByRole("heading", { level: 1, name: "Create Dashboard" })).toBeVisible();
+    await page.goto(`/dashboards/${dashboard.id}`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
+    ).toBeVisible();
     await page.goto(`/dashboards/${dashboard.id}/edit`);
-    await expect(page.getByRole("heading", { level: 1, name: "Edit Dashboard" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
+    ).toBeVisible();
+    await expect(page.getByText("Dashboard builder", { exact: true })).toBeVisible();
+    await page.goto(`/dashboards/${dashboard.id}/view`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
+    ).toBeVisible();
+  });
+
+  test("dashboard viewer preserves a redacted footprint without executing the hidden Component", async ({
+    page,
+  }) => {
+    const dashboard = await postJson<IdResponse>(fixtures.admin, "/api/admin/dashboards", {
+      name: `${RUN_ID} Redacted Dashboard`,
+      description: "Dashboard redaction browser fixture.",
+      visibility_node_ids: [
+        fixtures.inScopeNodeId,
+        ...fixtures.outOfScopeDataset.visibility_nodes.map((node) => node.node_id),
+      ],
+    });
+
+    try {
+      const composition = await getJson<{
+        available_component_versions: Array<{
+          component_version_id: string;
+          component_slug: string;
+          default_grid_width: number;
+          default_grid_height: number;
+        }>;
+      }>(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`);
+      const hiddenVersion = requireItem(
+        composition.available_component_versions,
+        (option) => option.component_slug === fixtures.outOfScopeVisualComponent.slug,
+        "the hybrid-scope Dashboard should allow the hidden visual Component version",
+      );
+      await putJson(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`, {
+        commands: [
+          {
+            operation: "bind",
+            client_key: `${RUN_ID}-redacted-placement`,
+            component_version_id: hiddenVersion.component_version_id,
+            geometry: {
+              grid_row: 1,
+              grid_column: 1,
+              grid_width: hiddenVersion.default_grid_width,
+              grid_height: hiddenVersion.default_grid_height,
+            },
+          },
+        ],
+      });
+
+      const scopedDashboard = await getJson<{
+        placements: Array<{
+          availability: "available" | "unavailable";
+          component?: { component_slug: string };
+        }>;
+      }>(fixtures.scopedManager, `/api/dashboards/${dashboard.id}`);
+      expect(scopedDashboard.placements).toHaveLength(1);
+      expect(scopedDashboard.placements[0].availability).toBe("unavailable");
+      expect(scopedDashboard.placements[0].component).toBeUndefined();
+
+      const hiddenExecutionRequests: string[] = [];
+      page.on("request", (request) => {
+        const pathname = new URL(request.url()).pathname;
+        if (
+          request.method() === "GET" &&
+          pathname.includes(`/api/components/${fixtures.outOfScopeVisualComponent.slug}/`)
+        ) {
+          hiddenExecutionRequests.push(pathname);
+        }
+      });
+      await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+      await page.goto(`/dashboards/${dashboard.id}`);
+      await expect(page.locator(".dashboard-placement-card.is-unavailable")).toBeVisible();
+      await page.goto(`/dashboards/${dashboard.id}/view`);
+      await expect(page.locator(".dashboard-redacted-placeholder")).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      expect(hiddenExecutionRequests).toEqual([]);
+    } finally {
+      const response = await fixtures.admin.delete(`/api/admin/dashboards/${dashboard.id}`);
+      expect(response.ok(), `Dashboard cleanup returned ${response.status()}`).toBeTruthy();
+    }
   });
 
   test("administration user and node-type routes are admin-only", async ({ page }) => {

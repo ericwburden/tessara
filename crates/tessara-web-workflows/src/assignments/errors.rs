@@ -8,8 +8,12 @@ pub(super) enum WorkflowAssignmentApiError {
 
 #[cfg(feature = "hydrate")]
 impl WorkflowAssignmentApiError {
-    pub(super) fn message(message: impl Into<String>) -> Self {
-        Self::Message(message.into())
+    pub(super) fn from_request(error: tessara_web_http::RequestError) -> Self {
+        if error.is_authentication() {
+            Self::Unauthorized
+        } else {
+            Self::Message(error.into_message())
+        }
     }
 }
 
@@ -21,7 +25,11 @@ pub(super) enum WorkflowAssignmentMutationError {
 
 #[cfg(feature = "hydrate")]
 impl WorkflowAssignmentMutationError {
-    pub(super) fn message(message: impl Into<String>) -> Self {
-        Self::Message(message.into())
+    pub(super) fn from_request(error: tessara_web_http::RequestError) -> Self {
+        if error.is_authentication() {
+            Self::Unauthorized
+        } else {
+            Self::Message(error.into_message())
+        }
     }
 }

@@ -4,10 +4,12 @@
 use super::http::{fetch_json_request, send_json_request};
 #[cfg(feature = "hydrate")]
 use super::types::{
-    ComponentDefinition, ComponentSummary, ComponentTable, ComponentValidationResponse,
-    ComponentVisual, CreateComponentVersionRequest, DatasetDistinctValues, DatasetSummary,
-    IdResponse, SaveComponentEditRequest,
+    ComponentDefinition, ComponentSummary, ComponentValidationResponse,
+    CreateComponentVersionRequest, DatasetDistinctValues, DatasetSummary, IdResponse,
+    SaveComponentEditRequest,
 };
+#[cfg(feature = "hydrate")]
+use tessara_web_component_viewer::ComponentVisual;
 
 #[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_components() -> Result<Option<Vec<ComponentSummary>>, String> {
@@ -37,40 +39,6 @@ pub(crate) async fn fetch_admin_component(
     fetch_json_request(
         &format!("/api/admin/components/{component_ref}"),
         "Component detail",
-    )
-    .await
-}
-
-#[cfg(feature = "hydrate")]
-pub(crate) async fn fetch_component_table(
-    component_ref: &str,
-    query: &str,
-) -> Result<Option<ComponentTable>, String> {
-    let suffix = if query.is_empty() {
-        String::new()
-    } else {
-        format!("?{query}")
-    };
-    fetch_json_request(
-        &format!("/api/components/{component_ref}/table{suffix}"),
-        "Component table",
-    )
-    .await
-}
-
-#[cfg(feature = "hydrate")]
-pub(crate) async fn fetch_component_visual(
-    component_ref: &str,
-    component_type: &str,
-) -> Result<Option<ComponentVisual>, String> {
-    let path_kind = match component_type {
-        "stat_card" => "stat-card",
-        "bar" | "line" | "pie" | "donut" => component_type,
-        _ => return Ok(None),
-    };
-    fetch_json_request(
-        &format!("/api/components/{component_ref}/{path_kind}"),
-        "Component visual",
     )
     .await
 }

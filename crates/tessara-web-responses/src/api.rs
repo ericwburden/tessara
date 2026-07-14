@@ -22,84 +22,44 @@ impl ResponseApiError {
         Self::Message(message.into())
     }
 
-    pub(super) fn from_transport_error(error: String) -> Self {
-        if error == "Authentication is required." {
+    pub(super) fn from_transport_error(error: tessara_web_http::RequestError) -> Self {
+        if error.is_authentication() {
             Self::Unauthorized
         } else {
-            Self::Message(error)
+            Self::Message(error.into_message())
         }
     }
 }
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_submissions() -> Result<Vec<SubmissionSummary>, ResponseApiError> {
-    match gloo_net::http::Request::get("/api/submissions")
-        .send()
+    tessara_web_http::fetch_json("/api/submissions", "Responses")
         .await
-    {
-        Ok(response) if response.status() == 401 => Err(ResponseApiError::Unauthorized),
-        Ok(response) if response.ok() => {
-            response
-                .json::<Vec<SubmissionSummary>>()
-                .await
-                .map_err(|error| {
-                    ResponseApiError::message(format!("Unable to parse responses: {error}"))
-                })
-        }
-        Ok(response) => Err(ResponseApiError::message(format!(
-            "Unable to load responses. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(ResponseApiError::message(format!(
-            "Unable to load responses: {error}"
-        ))),
-    }
+        .map_err(ResponseApiError::from_transport_error)
 }
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_submission_detail(
     submission_id: &str,
 ) -> Result<SubmissionDetail, ResponseApiError> {
-    match gloo_net::http::Request::get(&format!("/api/submissions/{submission_id}"))
-        .send()
-        .await
-    {
-        Ok(response) if response.status() == 401 => Err(ResponseApiError::Unauthorized),
-        Ok(response) if response.ok() => {
-            response.json::<SubmissionDetail>().await.map_err(|error| {
-                ResponseApiError::message(format!("Unable to parse response: {error}"))
-            })
-        }
-        Ok(response) => Err(ResponseApiError::message(format!(
-            "Unable to load response. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(ResponseApiError::message(format!(
-            "Unable to load response: {error}"
-        ))),
-    }
+    tessara_web_http::fetch_json(
+        &format!("/api/submissions/{submission_id}"),
+        "Response detail",
+    )
+    .await
+    .map_err(ResponseApiError::from_transport_error)
 }
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_rendered_form(
     form_version_id: &str,
 ) -> Result<RenderedForm, ResponseApiError> {
-    match gloo_net::http::Request::get(&format!("/api/form-versions/{form_version_id}/render"))
-        .send()
-        .await
-    {
-        Ok(response) if response.status() == 401 => Err(ResponseApiError::Unauthorized),
-        Ok(response) if response.ok() => response.json::<RenderedForm>().await.map_err(|error| {
-            ResponseApiError::message(format!("Unable to parse response form: {error}"))
-        }),
-        Ok(response) => Err(ResponseApiError::message(format!(
-            "Unable to load response form. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(ResponseApiError::message(format!(
-            "Unable to load response form: {error}"
-        ))),
-    }
+    tessara_web_http::fetch_json(
+        &format!("/api/form-versions/{form_version_id}/render"),
+        "Response form",
+    )
+    .await
+    .map_err(ResponseApiError::from_transport_error)
 }
 
 #[cfg(feature = "hydrate")]
@@ -111,24 +71,9 @@ pub(super) async fn fetch_response_start_options(
         .map(|value| format!("/api/responses/options?delegate_account_id={value}"))
         .unwrap_or_else(|| "/api/responses/options".to_string());
 
-    match gloo_net::http::Request::get(&path).send().await {
-        Ok(response) if response.status() == 401 => Err(ResponseApiError::Unauthorized),
-        Ok(response) if response.ok() => response
-            .json::<AssignmentResponseStartOptions>()
-            .await
-            .map_err(|error| {
-                ResponseApiError::message(format!(
-                    "Unable to parse assigned response start options: {error}"
-                ))
-            }),
-        Ok(response) => Err(ResponseApiError::message(format!(
-            "Unable to load assigned response start options. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(ResponseApiError::message(format!(
-            "Unable to load assigned response start options: {error}"
-        ))),
-    }
+    tessara_web_http::fetch_json(&path, "Assigned response start options")
+        .await
+        .map_err(ResponseApiError::from_transport_error)
 }
 
 #[cfg(feature = "hydrate")]

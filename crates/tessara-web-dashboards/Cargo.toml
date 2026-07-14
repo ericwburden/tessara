@@ -1,0 +1,44 @@
+[package]
+name = "tessara-web-dashboards"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+default = []
+hydrate = [
+    "leptos/hydrate",
+    "tessara-web-component-viewer/hydrate",
+    "tessara-web-http/hydrate",
+    "tessara-web-ui/hydrate",
+]
+ssr = [
+    "leptos/ssr",
+    "tessara-web-component-viewer/ssr",
+    "tessara-web-ui/ssr",
+]
+
+[dependencies]
+gloo-net = { workspace = true }
+icons = { workspace = true }
+js-sys = { workspace = true }
+leptos = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tessara-core = { path = "../tessara-core" }
+tessara-dashboards = { path = "../tessara-dashboards" }
+tessara-web-component-viewer = { path = "../tessara-web-component-viewer", default-features = false }
+tessara-web-http = { path = "../tessara-web-http", default-features = false }
+tessara-web-ui = { path = "../tessara-web-ui", default-features = false }
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true, features = [
+    "DomRect",
+    "HtmlAnchorElement",
+    "HtmlDetailsElement",
+    "IntersectionObserver",
+    "IntersectionObserverEntry",
+    "IntersectionObserverInit",
+] }
+
+[dev-dependencies]
+any_spawner = "0.3"

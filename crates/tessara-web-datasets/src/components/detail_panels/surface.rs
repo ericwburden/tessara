@@ -317,7 +317,7 @@ pub(crate) fn DatasetPreviewTable(
             InteractiveTableColumn::new(
                 field.key.clone(),
                 field.label.clone(),
-                sentence_label(&field.field_type),
+                tessara_web_ui::InteractiveTableDataType::from_field_type(&field.field_type),
             )
         })
         .collect::<Vec<_>>();

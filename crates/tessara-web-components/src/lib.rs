@@ -11,3 +11,7 @@ pub use pages::{
     ComponentEditorContent, ComponentVersionsContent, ComponentViewerContent,
     ComponentsIndexContent,
 };
+pub use tessara_web_component_viewer::{
+    ComponentRequestActivity, ComponentRequestActivityCallback, ComponentVersionExecutionContent,
+    ComponentVersionKind, ComponentVersionTarget, ComponentViewerMode,
+};

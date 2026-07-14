@@ -1,0 +1,27 @@
+[package]
+name = "tessara-web-component-viewer"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+default = []
+hydrate = [
+    "dep:gloo-timers",
+    "leptos/hydrate",
+    "tessara-web-http/hydrate",
+    "tessara-web-ui/hydrate",
+]
+ssr = [
+    "leptos/ssr",
+    "tessara-web-ui/ssr",
+]
+
+[dependencies]
+gloo-timers = { workspace = true, optional = true }
+icons = { workspace = true }
+leptos = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tessara-web-http = { path = "../tessara-web-http", default-features = false }
+tessara-web-ui = { path = "../tessara-web-ui", default-features = false }

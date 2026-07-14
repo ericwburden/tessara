@@ -5,28 +5,50 @@
 use icons::{ChevronLeft, ChevronRight};
 use leptos::prelude::*;
 
+/// Presentation-only pagination shell. Callers own page state and provide
+/// controls suitable for local, offset, or cursor-backed pagination.
+#[component]
+pub fn TablePaginationBar(
+    summary: Signal<String>,
+    children: Children,
+    #[prop(default = "Table pagination")] aria_label: &'static str,
+    #[prop(optional, into)] class: String,
+) -> impl IntoView {
+    let class = if class.trim().is_empty() {
+        "directory-table-pagination".to_string()
+    } else {
+        format!("directory-table-pagination {}", class.trim())
+    };
+    view! {
+        <nav class=class aria-label=aria_label>
+            <p>{move || summary.get()}</p>
+            <div class="directory-table-pagination__actions">{children()}</div>
+        </nav>
+    }
+}
+
 #[component]
 /// Renders shared pagination controls and a row-range summary for feature tables.
 pub fn TablePaginationFooter(
     aria_label: &'static str,
     item_label: &'static str,
     #[prop(optional)] empty_item_label: Option<&'static str>,
+    #[prop(optional, into)] class: String,
     total_count: Memo<usize>,
     page_size: RwSignal<usize>,
     page_index: RwSignal<usize>,
 ) -> impl IntoView {
+    let summary = Signal::derive(move || {
+        table_page_summary(
+            total_count.get(),
+            page_size.get(),
+            page_index.get(),
+            item_label,
+            empty_item_label,
+        )
+    });
     view! {
-        <div class="directory-table-pagination" aria-label=aria_label>
-            <p>{move || {
-                table_page_summary(
-                    total_count.get(),
-                    page_size.get(),
-                    page_index.get(),
-                    item_label,
-                    empty_item_label,
-                )
-            }}</p>
-            <div class="directory-table-pagination__actions">
+        <TablePaginationBar summary aria_label class>
                 <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
                     <span>"Rows"</span>
                     <select
@@ -78,8 +100,33 @@ pub fn TablePaginationFooter(
                 >
                     <ChevronRight/>
                 </button>
-            </div>
-        </div>
+        </TablePaginationBar>
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pagination_bar_accepts_caller_owned_controls() {
+        let html = Owner::new().with(|| {
+            view! {
+                <TablePaginationBar
+                    summary=Signal::derive(|| "Showing 1-10 of 25 rows".to_string())
+                    aria_label="Orders pagination"
+                >
+                    <button type="button">"Next"</button>
+                </TablePaginationBar>
+            }
+            .to_html()
+        });
+
+        assert!(html.contains("<nav"));
+        assert!(html.contains("aria-label=\"Orders pagination\""));
+        assert!(html.contains("Showing 1-10 of 25 rows"));
+        assert!(html.contains("directory-table-pagination__actions"));
+        assert!(html.contains(">Next</button>"));
     }
 }
 

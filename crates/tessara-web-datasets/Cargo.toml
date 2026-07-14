@@ -8,6 +8,7 @@ publish = false
 default = []
 hydrate = [
     "leptos/hydrate",
+    "tessara-web-http/hydrate",
 ]
 ssr = [
     "leptos/ssr",
@@ -21,6 +22,7 @@ leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-web-data-ops = { path = "../tessara-web-data-ops" }
+tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-web-ui = { path = "../tessara-web-ui" }
 wasm-bindgen = { workspace = true }
 web-sys = { workspace = true }

@@ -7,15 +7,12 @@ use super::{
     toggle_visible_column,
 };
 use super::{
-    ComponentTableQueryInput, build_component_table_query, percent_encode_query_component,
-};
-use super::{
     component_kind_filter_options, component_matches_filters, component_status_filter_options,
 };
 use super::{
     component_redirect_ref, component_summary_kind_label, component_summary_revision_label,
     component_summary_status_label, dataset_catalog_option_label, dataset_picker_rows,
-    dataset_provenance_label, editable_component_version, materialization_empty_state,
+    dataset_provenance_label, editable_component_version, published_component_target,
     selected_dataset_major_value, selected_dataset_picker_label, snake_case_component_slug,
     table_page_size_from_config, table_sort_from_config, table_visible_columns_from_config,
     visual_summary_field_ready,
@@ -24,6 +21,7 @@ use crate::types::{
     ComponentSummary, DatasetFieldDefinition, DatasetProvenanceItem, DatasetProvenanceSummary,
     DatasetRevisionFieldSummary,
 };
+use tessara_web_component_viewer::ComponentVersionKind;
 use tessara_web_data_ops::{
     DatasetFieldDraft as DataOpsDatasetFieldDraft, DatasetRowFilterDraft as DataOpsRowFilterDraft,
 };
@@ -376,60 +374,6 @@ fn table_config_extracts_sort_and_page_size() {
 }
 
 #[test]
-fn component_table_query_encodes_server_driven_view_state() {
-    let query = build_component_table_query(ComponentTableQueryInput {
-        search: "family outreach",
-        page_size: "25",
-        cursor: "offset:25",
-        sort_field: "program",
-        sort_direction: "desc",
-        filter_field: "row_count",
-        filter_operator: "between",
-        filter_value: "1,10",
-        visible_columns: "program, row_count",
-    });
-
-    assert_eq!(
-        query,
-        "q=family%20outreach&page_size=25&cursor=offset%3A25&sort=program%3Adesc&filter%5Brow_count%5D%5Boperator%5D=between&filter%5Brow_count%5D%5Bvalue%5D=1%2C10&visible_columns=program%2C%20row_count"
-    );
-}
-
-#[test]
-fn component_table_query_omits_blank_optional_params() {
-    assert_eq!(
-        build_component_table_query(ComponentTableQueryInput {
-            search: "",
-            page_size: "50",
-            cursor: "",
-            sort_field: "",
-            sort_direction: "asc",
-            filter_field: "",
-            filter_operator: "equals",
-            filter_value: "",
-            visible_columns: "",
-        }),
-        "page_size=50"
-    );
-    assert_eq!(percent_encode_query_component("a/b?c"), "a%2Fb%3Fc");
-}
-
-#[test]
-fn materialization_empty_state_distinguishes_failed_from_pending() {
-    let (pending_title, pending_message) = materialization_empty_state("pending");
-    assert_eq!(pending_title, "Table materializing");
-    assert!(pending_message.contains("still being prepared"));
-
-    let (failed_title, failed_message) = materialization_empty_state("failed");
-    assert_eq!(failed_title, "Table materialization failed");
-    assert!(failed_message.contains("configuration is valid"));
-
-    let (retry_title, retry_message) = materialization_empty_state("retry");
-    assert_eq!(retry_title, "Table materializing");
-    assert!(retry_message.contains("retry"));
-}
-
-#[test]
 fn selected_dataset_major_value_is_empty_until_complete() {
     assert_eq!(selected_dataset_major_value("", "1"), "");
     assert_eq!(selected_dataset_major_value("dataset-1", ""), "");
@@ -479,6 +423,27 @@ fn editable_component_version_prefers_draft() {
             .id,
         "draft-version"
     );
+}
+
+#[test]
+fn reader_viewer_resolves_the_current_published_version_to_an_exact_target() {
+    let mut draft = component_version("draft", "draft-version");
+    draft.component_type = "line".into();
+    let mut published = component_version("published", "published-version");
+    published.component_type = "bar".into();
+    let component = ComponentDefinition {
+        id: "component-1".into(),
+        name: "Component".into(),
+        slug: "component".into(),
+        description: None,
+        versions: vec![draft, published],
+    };
+
+    let target = published_component_target("component", Some(component))
+        .expect("published target should resolve");
+    assert_eq!(target.component_ref(), "component");
+    assert_eq!(target.component_version_id(), "published-version");
+    assert_eq!(target.kind(), ComponentVersionKind::Bar);
 }
 
 fn component_version(status: &str, id: &str) -> ComponentVersionSummary {

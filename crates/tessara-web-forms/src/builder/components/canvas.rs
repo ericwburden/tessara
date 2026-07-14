@@ -5,8 +5,10 @@
 use leptos::prelude::*;
 
 use crate::builder::components::{FieldConfigSheet, FormBuilderSection};
+use crate::builder::install_form_builder_resize_cleanup;
 use crate::builder::state::{FormBuilderEditorState, add_form_builder_section_to_editor};
 use icons::Plus;
+use tessara_web_ui::placement_editor::install_placement_drag_cleanup;
 use tessara_web_ui::{Tabs, TabsList};
 
 #[component]
@@ -24,6 +26,13 @@ pub(crate) fn FormBuilderCanvas(state: FormBuilderEditorState) -> impl IntoView 
         suppress_builder_field_click,
         next_builder_field_id,
     } = state;
+
+    install_placement_drag_cleanup(
+        builder_drag_preview,
+        pending_builder_drag_preview,
+        builder_drag_preview_timeout,
+    );
+    install_form_builder_resize_cleanup();
 
     view! {
         <section class="form-builder form-section">

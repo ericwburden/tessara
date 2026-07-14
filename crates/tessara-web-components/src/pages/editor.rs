@@ -1,6 +1,7 @@
 //! Component editor controls and kind-specific configuration surfaces.
 
 use super::*;
+use std::collections::BTreeMap;
 
 #[component]
 pub(super) fn TableDefaultsControls(

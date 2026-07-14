@@ -4,6 +4,14 @@
 //! contexts. Keep this crate small: add types here only when multiple contexts
 //! need the same semantic contract.
 
+pub mod grid_layout;
+
+pub use grid_layout::{
+    GridConstraints, GridLayoutError, GridMoveDirection, GridMoveRequest, GridPlacement, GridRect,
+    GridResizeAxis, GridResizeRequest, GridResizeStep, GridSize, derive_row_major_positions,
+    reflow_movement, resolve_move_request, resolve_resize_request, sort_row_major, validate_resize,
+};
+
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
