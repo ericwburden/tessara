@@ -503,6 +503,43 @@ function Assert-Sprint6ACatalog {
     $databaseEntries
 }
 
+function ConvertTo-Sprint6AConfigSequenceJson {
+    param(
+        [Parameter(Mandatory)]$Config,
+        [Parameter(Mandatory)]
+        [ValidateSet("Cmd", "Entrypoint")]
+        [string]$PropertyName
+    )
+
+    $property = $Config.PSObject.Properties[$PropertyName]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return "[]"
+    }
+    $values = @($property.Value)
+    if ($values.Count -eq 0) {
+        return "[]"
+    }
+    return $values | ConvertTo-Json -Compress
+}
+
+function ConvertTo-Sprint6AConfigScalar {
+    param(
+        [Parameter(Mandatory)]$Config,
+        [Parameter(Mandatory)]
+        [ValidateSet("User", "WorkingDir")]
+        [string]$PropertyName
+    )
+
+    $property = $Config.PSObject.Properties[$PropertyName]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return [string]::Empty
+    }
+    if ($property.Value -isnot [string]) {
+        throw "Docker config property '$PropertyName' must be a string when present."
+    }
+    return [string]$property.Value
+}
+
 function Get-Sprint6ADeploymentSnapshot {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
@@ -570,14 +607,18 @@ function Get-Sprint6ADeploymentSnapshot {
     if ($writableLayerChanges.Count -ne 0) {
         throw "The running API container writable layer differs from its immutable release image: $($writableLayerChanges -join ', ')."
     }
-    $imageCommand = @($imageInspect.Config.Cmd) | ConvertTo-Json -Compress
-    $containerCommand = @($apiInspect.Config.Cmd) | ConvertTo-Json -Compress
-    $imageEntrypoint = @($imageInspect.Config.Entrypoint) | ConvertTo-Json -Compress
-    $containerEntrypoint = @($apiInspect.Config.Entrypoint) | ConvertTo-Json -Compress
+    $imageCommand = ConvertTo-Sprint6AConfigSequenceJson -Config $imageInspect.Config -PropertyName Cmd
+    $containerCommand = ConvertTo-Sprint6AConfigSequenceJson -Config $apiInspect.Config -PropertyName Cmd
+    $imageEntrypoint = ConvertTo-Sprint6AConfigSequenceJson -Config $imageInspect.Config -PropertyName Entrypoint
+    $containerEntrypoint = ConvertTo-Sprint6AConfigSequenceJson -Config $apiInspect.Config -PropertyName Entrypoint
+    $imageWorkingDirectory = ConvertTo-Sprint6AConfigScalar -Config $imageInspect.Config -PropertyName WorkingDir
+    $containerWorkingDirectory = ConvertTo-Sprint6AConfigScalar -Config $apiInspect.Config -PropertyName WorkingDir
+    $imageUser = ConvertTo-Sprint6AConfigScalar -Config $imageInspect.Config -PropertyName User
+    $containerUser = ConvertTo-Sprint6AConfigScalar -Config $apiInspect.Config -PropertyName User
     if ($imageCommand -cne $containerCommand -or
         $imageEntrypoint -cne $containerEntrypoint -or
-        [string]$imageInspect.Config.WorkingDir -cne [string]$apiInspect.Config.WorkingDir -or
-        [string]$imageInspect.Config.User -cne [string]$apiInspect.Config.User) {
+        $imageWorkingDirectory -cne $containerWorkingDirectory -or
+        $imageUser -cne $containerUser) {
         throw "The running API container overrides the immutable release image command, entrypoint, working directory, or user."
     }
     $criticalEnvironment = [ordered]@{
@@ -735,8 +776,8 @@ function Get-Sprint6ADeploymentSnapshot {
                 writable_layer_changes = $writableLayerChanges
                 command = $containerCommand
                 entrypoint = $containerEntrypoint
-                working_directory = [string]$apiInspect.Config.WorkingDir
-                user = [string]$apiInspect.Config.User
+                working_directory = $containerWorkingDirectory
+                user = $containerUser
                 critical_environment = $criticalEnvironment
             }
         }

@@ -82,6 +82,55 @@ function Publish-Sprint6AEvidencePair {
 }
 
 if ($SelfTest) {
+    $missingConfig = [pscustomobject][ordered]@{ Cmd = "tessara-api" }
+    $nullConfig = [pscustomobject][ordered]@{
+        Cmd = "tessara-api"
+        Entrypoint = $null
+        User = $null
+        WorkingDir = $null
+    }
+    $emptyConfig = [pscustomobject][ordered]@{
+        Cmd = "tessara-api"
+        Entrypoint = @()
+        User = ""
+        WorkingDir = ""
+    }
+    $explicitConfig = [pscustomobject][ordered]@{
+        Cmd = @("tessara-api", "--serve")
+        Entrypoint = @("/usr/bin/env")
+        User = "10001"
+        WorkingDir = "/app"
+    }
+    foreach ($config in @($missingConfig, $nullConfig, $emptyConfig)) {
+        $entrypoint = ConvertTo-Sprint6AConfigSequenceJson -Config $config -PropertyName Entrypoint
+        $user = ConvertTo-Sprint6AConfigScalar -Config $config -PropertyName User
+        $workingDirectory = ConvertTo-Sprint6AConfigScalar -Config $config -PropertyName WorkingDir
+        if ($entrypoint -cne "[]" -or $user -cne "" -or $workingDirectory -cne "") {
+            throw "Self-test failed: missing, null, and empty Docker runtime defaults must normalize exactly."
+        }
+    }
+    if ((ConvertTo-Sprint6AConfigSequenceJson -Config $missingConfig -PropertyName Cmd) -cne '"tessara-api"' -or
+        (ConvertTo-Sprint6AConfigSequenceJson -Config $explicitConfig -PropertyName Cmd) -cne '["tessara-api","--serve"]' -or
+        (ConvertTo-Sprint6AConfigSequenceJson -Config $explicitConfig -PropertyName Entrypoint) -cne '"/usr/bin/env"' -or
+        (ConvertTo-Sprint6AConfigScalar -Config $explicitConfig -PropertyName User) -cne "10001" -or
+        (ConvertTo-Sprint6AConfigScalar -Config $explicitConfig -PropertyName WorkingDir) -cne "/app") {
+        throw "Self-test failed: non-empty Docker runtime identity was not preserved exactly."
+    }
+    $invalidScalarRejected = $false
+    try {
+        ConvertTo-Sprint6AConfigScalar `
+            -Config ([pscustomobject]@{ User = @("10001") }) `
+            -PropertyName User | Out-Null
+    } catch {
+        if ($_.Exception.Message -notmatch "must be a string") {
+            throw
+        }
+        $invalidScalarRejected = $true
+    }
+    if (-not $invalidScalarRejected) {
+        throw "Self-test failed: a non-string Docker scalar config value was accepted."
+    }
+
     $publishTestRoot = Join-Path ([IO.Path]::GetTempPath()) "tessara-deployment-evidence-$([guid]::NewGuid().ToString('N'))"
     [IO.Directory]::CreateDirectory($publishTestRoot) | Out-Null
     try {
