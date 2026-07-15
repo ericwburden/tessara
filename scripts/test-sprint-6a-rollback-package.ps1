@@ -145,6 +145,16 @@ function Test-DisposableDatabaseName {
     return Test-Sprint6ADisposableDatabaseName $Name
 }
 
+function ConvertTo-HistoricalFormArray {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Response)
+
+    $forms = [object[]]$Response
+    if ($forms.Count -eq 1 -and $forms[0] -is [Array]) {
+        throw "Historical product form response must be one flat JSON array."
+    }
+    return ,$forms
+}
+
 function Select-HistoricalFormScope {
     param([Parameter(Mandatory)][object[]]$Forms)
 
@@ -214,6 +224,22 @@ function Assert-HistoricalFormScopeProjection {
         [string]$visibilityNodeIdProperty.Value -cne $ExpectedVisibilityNodeId) {
         throw "$Context did not retain the selected visibility node exactly."
     }
+}
+
+function New-HistoricalFormCreateBody {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Slug,
+        [Parameter(Mandatory)][string]$ScopeNodeTypeId,
+        [Parameter(Mandatory)][string]$VisibilityNodeId
+    )
+
+    return [ordered]@{
+        name = $Name
+        slug = $Slug
+        scope_node_type_id = $ScopeNodeTypeId
+        visibility_node_ids = [string[]]@($VisibilityNodeId)
+    } | ConvertTo-Json -Compress
 }
 
 function New-SanitizedLogEvidence {
@@ -381,7 +407,7 @@ if ($SelfTest) {
     $historicalFormId = "10000000-0000-0000-0000-000000000001"
     $historicalScopeNodeTypeId = "20000000-0000-0000-0000-000000000002"
     $historicalVisibilityNodeId = "30000000-0000-0000-0000-000000000003"
-    $historicalScope = Select-HistoricalFormScope ([object[]]@(
+    $historicalFormsResponse = [object[]]@(
         [pscustomobject][ordered]@{
             id = "not-a-uuid"
             scope_node_type_id = $historicalScopeNodeTypeId
@@ -392,16 +418,39 @@ if ($SelfTest) {
             scope_node_type_id = $historicalScopeNodeTypeId
             visibility_nodes = @([pscustomobject]@{ node_id = $historicalVisibilityNodeId })
         }
-    ))
+    )
+    $historicalForms = ConvertTo-HistoricalFormArray -Response $historicalFormsResponse
+    if ($historicalForms.Count -ne 2 -or $historicalForms[1].id -cne $historicalFormId) {
+        throw "Self-test did not retain the flat historical forms response exactly."
+    }
+    $historicalScope = Select-HistoricalFormScope $historicalForms
     if ($historicalScope.source_form_id -cne $historicalFormId -or
         $historicalScope.scope_node_type_id -cne $historicalScopeNodeTypeId -or
         $historicalScope.visibility_node_id -cne $historicalVisibilityNodeId) {
         throw "Self-test did not select the valid historical form scope exactly."
     }
-    $scopePayload = @{
-        scope_node_type_id = $historicalScope.scope_node_type_id
-        visibility_node_ids = @($historicalScope.visibility_node_id)
-    } | ConvertTo-Json | ConvertFrom-Json
+    $nestedHistoricalFormsRejected = $false
+    try {
+        ConvertTo-HistoricalFormArray -Response (, $historicalFormsResponse) | Out-Null
+    } catch {
+        if ($_.Exception.Message -notmatch "one flat JSON array") {
+            throw
+        }
+        $nestedHistoricalFormsRejected = $true
+    }
+    if (-not $nestedHistoricalFormsRejected) {
+        throw "Self-test accepted a nested historical forms response."
+    }
+    $scopeBody = New-HistoricalFormCreateBody `
+        -Name "Compatibility proof" `
+        -Slug "compatibility-proof" `
+        -ScopeNodeTypeId $historicalScope.scope_node_type_id `
+        -VisibilityNodeId $historicalScope.visibility_node_id
+    $expectedScopeBody = '{"name":"Compatibility proof","slug":"compatibility-proof","scope_node_type_id":"20000000-0000-0000-0000-000000000002","visibility_node_ids":["30000000-0000-0000-0000-000000000003"]}'
+    if ($scopeBody -cne $expectedScopeBody) {
+        throw "Self-test did not retain the exact historical form-create JSON array shape."
+    }
+    $scopePayload = $scopeBody | ConvertFrom-Json
     $roundTrippedVisibilityNodeIds = @($scopePayload.visibility_node_ids)
     if ([string]$scopePayload.scope_node_type_id -cne $historicalScopeNodeTypeId -or
         $roundTrippedVisibilityNodeIds.Count -ne 1 -or
@@ -1507,7 +1556,7 @@ function Invoke-ProductSmoke {
         }
         $headers = @{ Authorization = "Bearer $($login.token)" }
         $existingFormsResponse = Invoke-RestMethod -Uri "$baseUrl/api/admin/forms" -Headers $headers
-        $existingForms = [object[]]$existingFormsResponse
+        $existingForms = ConvertTo-HistoricalFormArray -Response $existingFormsResponse
         if ($existingForms.Count -lt 1) {
             throw "Historical product read did not return the populated Sprint 5A form."
         }
@@ -1516,12 +1565,11 @@ function Invoke-ProductSmoke {
         $suffix = [Guid]::NewGuid().ToString("N")
         $formName = "Compatibility rollback proof $suffix"
         $formSlug = "compatibility-rollback-proof-$suffix"
-        $createBody = @{
-            name = $formName
-            slug = $formSlug
-            scope_node_type_id = $historicalScope.scope_node_type_id
-            visibility_node_ids = @($historicalScope.visibility_node_id)
-        } | ConvertTo-Json
+        $createBody = New-HistoricalFormCreateBody `
+            -Name $formName `
+            -Slug $formSlug `
+            -ScopeNodeTypeId $historicalScope.scope_node_type_id `
+            -VisibilityNodeId $historicalScope.visibility_node_id
         $createArguments = @{
             Uri = "$baseUrl/api/admin/forms"
             Headers = $headers
