@@ -8,13 +8,13 @@ Out-of-roadmap sprint proposals and migration plans may also live here when they
 
 ## Current Roadmap Position
 
-**Sprint 6A: Module Contract And Core Control Plane** is active. It started on
-2026-07-13 after completed Sprint 5A and begins the modular application-platform
-foundation. The authoritative delivery contract is the
-[Sprint 6A plan](./sprint-6a-plan.md); the broader sequence and release gates
-remain in [the roadmap](../roadmap.md).
+**Sprint 6A: Module Contract And Core Control Plane** completed on 2026-07-15.
+**Sprint 6B: Module Runtime And Installation Infrastructure** is next; it will
+begin real Module Release/Instance persistence and materialization from the
+contract/control-plane baseline. Sprint 6B has not been kicked off and does not
+yet have a sprint plan; use [its roadmap block](../roadmap.md#sprint-6b-module-runtime-and-installation-infrastructure-slice-next) until kickoff.
 
-## Active Sprint Artifacts
+## Completed Sprint 6A Artifacts
 
 - [Sprint 6A Module Contract And Core Control Plane Plan](./sprint-6a-plan.md)
 - [Sprint 6A Kickoff Baseline Evidence](./sprint-6a-kickoff-baseline-evidence.md)

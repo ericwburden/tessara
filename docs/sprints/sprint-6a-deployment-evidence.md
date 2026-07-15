@@ -4,6 +4,44 @@ Sprint 6A acceptance uses a retained, machine-verified deployment record. A
 switch such as “release build confirmed” or “disposable database confirmed” is
 not proof and is not accepted by the closing gates.
 
+## Closeout Binding
+
+Commit `6580b040236f563c30b5162fa833d7b0fed16478` is the reviewed
+implementation, canonical-fixture, and exact browser-inventory acceptance
+boundary. Commits through `9ba79752a4ee15ea224fa1da2932b26b279b9847`
+hardened only the retained-evidence path, including empty process logs,
+historical Forms request shape, Docker 29 optional runtime defaults, and exact
+timestamp-string round trips. The canonical Gate 3–6 artifacts must all name
+the clean commit containing the final closeout documentation. Any later tracked
+commit invalidates them and requires a complete recapture; commit-suffixed
+`*-implementation-*` artifacts and failed-run output are diagnostic history,
+not final proof.
+
+The canonical artifact index is:
+
+- Gate 3 rollback/restore: `compatibility-rollback/manifest.json`,
+  `rollback-package-only.json`, `rollback-compatibility-upgraded.json`,
+  `pre-upgrade-backup.dump`, `rollback-restore-evidence.json`, and
+  `rollback-original-restored.json`.
+- Gate 4 upgraded state: `deployment-upgraded.json` plus sidecar,
+  `smoke-upgraded.json` plus sidecar, `uat-upgraded.json` plus sidecar,
+  `playwright-acceptance-upgraded.json`, its `.discovery.json`, `.xml`, and
+  `.summary.json` companions, and
+  `resource-reference-nondisclosure-upgraded.json` plus sidecar.
+- Gate 5 fresh state: the corresponding `deployment-fresh`, `smoke-fresh`,
+  `uat-fresh`, `playwright-acceptance-fresh`, and
+  `resource-reference-nondisclosure-fresh` files and required companions.
+- Gate 6: the exact command list in the Sprint 6A plan's Gate 1 row, whose pass
+  result is summarized in the final progress entry, followed by an empty
+  `git status --short`; the ignored artifact directory does not substitute for
+  that clean tracked-tree proof.
+
+All paths above are beneath `artifacts/sprint-6a/`. JSON publishers retain
+their required SHA-256 sidecars. The rollback manifest, deployment records,
+and acceptance evidence retain the exact final commit/tree/image/database
+bindings so a documentation file never has to predict the hash of the commit
+that contains it.
+
 ## Capture
 
 Sprint 6A closeout requires two distinct records in one fixed order. Complete

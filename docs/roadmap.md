@@ -1,6 +1,6 @@
 # Tessara Roadmap
 
-This roadmap is authoritative as of July 13, 2026. It starts from the completed Sprint 5A baseline and re-baselines future work around Tessara's modular application-platform direction: Core plus selected, separately deployed full-stack modules, composed into independently supported applications through versioned contracts and declarative blueprints.
+This roadmap is authoritative as of July 15, 2026. It starts from the completed Sprint 6A control-plane baseline and sequences the next work around Tessara's modular application-platform direction: Core plus selected, separately deployed full-stack modules, composed into independently supported applications through versioned contracts and declarative blueprints.
 
 ## Delivery Rule
 
@@ -80,6 +80,8 @@ The codebase already includes a substantial vertical foundation:
 - Sprint 2B authentication hardening: Argon2id credential storage, server-side session expiry/revocation/last-seen tracking, same-origin `HttpOnly` browser cookies, stable auth/session errors, and native SSR login/session behavior
 - UI Overhaul 2.0 detour work: approved shell navigation posture, access-denied redirect plus transient feedback, sidebar footer account/scope/theme context, queue-first home posture, explorer-oriented organization work, section-oriented form-builder UI, and section description/column-count persistence
 - Sprint 4A Dataset Catalog and Thin Table Components: searchable Dataset tags, Dataset provenance lineage, one thin Table Component over Dataset major-line outputs with last-mile projection/filter defaults, edit-screen component versioning/publishing, and shared interactive table rendering for Dataset previews and Component viewers
+- Sprint 5A Dashboard Composition: native directory/detail/editor/viewer flows over stable `ComponentVersion` identities, revisioned placement composition, bounded execution, and scoped redaction
+- Sprint 6A Module Contract and Core Control Plane: one stable Application Installation and Core runtime observation; exact Manifest, Feature Declaration, contract, semantic-destination, typed-reference, and real Release/Instance public types; seven versioned transition descriptors with six active in-process contributions and retired Migration; Core-owned module inventory/provenance APIs and native Module Management UI; and revisioned band-restricted navigation policy, without Release/Instance persistence, installation, execution, or mutation
 
 ### Current UI baseline
 
@@ -87,6 +89,7 @@ The application shell already exposes meaningful user-testable surfaces:
 
 - role-aware login and shared home entry
 - product-area navigation for Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, and Administration; Migration is retained only as retired historical/support inventory
+- a fixed Module Management item in the `Admin` group: effective installation-global `modules:read` exposes the inventory and policy readback, `modules:manage_navigation` implies read and enables policy controls, and the separate Administration item remains `admin:all`-only
 - dedicated list/detail/create/edit flows for major top-level entities
 - dedicated administration list/detail/create/edit/access flows for users and roles
 - visible separation between product-facing and internal/operator areas
@@ -95,13 +98,13 @@ The application shell already exposes meaningful user-testable surfaces:
 
 ### Current implementation gaps
 
-The main gap is now the absence of the module platform that future applications will depend on. The next work must:
+The contract and control-plane foundation is complete, but Tessara does not yet materialize or operate a real Module Release or Module Instance. The next work must:
 
-- define the module manifest, Feature Declaration, functional-contract, typed-reference, security-capability contribution, semantic-navigation, and lifecycle-state contracts
-- add the Core module registry and administration/control-plane experience
-- introduce a same-origin module runtime with verifiable installation and actor context plus scope-bound grants or exact Core authorization decisions
+- persist and mutate real Module Releases and Instances without treating Sprint 6A transition descriptors as deployable providers
+- introduce a Supervisor-rooted `tessara-oci-v1` runtime, same-origin gateway, verifiable installation context, health/readiness observation, and controlled lifecycle operations
+- add scope-bound grants or exact Core authorization decisions with downstream audience, freshness, replay, and revocation proof
 - establish one database per module instance in the installation's PostgreSQL cluster, with dedicated credentials and no cross-module database access
-- extract the first existing full-stack feature into an independent process and database
+- install the Sprint 6B reference module as the first independently deployed full-stack process and database
 - define deterministic Application Blueprint, lockfile, validate, plan/diff, apply, and read-back operations for human and LLM composition
 - prove scoped authorization, lifecycle observation, unavailable-state behavior, and diagnostics across actual module boundaries
 - move remaining non-Core feature areas into independently deployed and supported modules before broad pilot hardening
@@ -727,7 +730,7 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 6: Modular Application Platform Foundation
 
-### Sprint 6A: Module Contract And Core Control Plane Slice (Active)
+### Sprint 6A: Module Contract And Core Control Plane Slice (Complete)
 
 **Outcome:** the current Tessara application is represented and administered as Core plus discoverable transition contributions, with future real Module Release/Instance wire types defined but no real-instance persistence or mutation, and without pretending in-process features are deployable Module Releases.
 
@@ -761,7 +764,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** an actor with global `modules:read` can discover fixed Module Management in the `Admin` group and inspect Forms, Workflows, Responses, Datasets, Components, and Dashboards as clearly labeled in-process contributions rather than Module Instances; understand their advertised Feature Declarations; and review their contracts, security capabilities, and current navigation policy without receiving mutation controls. An actor with global `modules:manage_navigation` can change contribution visibility/order without changing authorization. The same directory shows Migration as retired historical/support inventory with no route, navigation item, provider, Feature Declaration, contract, capability, or action, while every current product route continues to work.
 
-### Sprint 6B: Module Runtime And Installation Infrastructure Slice
+### Sprint 6B: Module Runtime And Installation Infrastructure Slice (Next)
 
 **Outcome:** Tessara can securely materialize a Core Release and install/operate an independently deployed full-stack module inside one Supervisor-rooted application installation.
 

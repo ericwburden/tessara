@@ -57,4 +57,18 @@ This log records changes to pre-existing test expectations and accepted fixtures
 
 ## Closeout Additions
 
-Append one row for every later expectation or accepted-fixture change. Include file/test name, old assertion, linked decision, and the exact replacement test. If no other existing tests change, closeout states that explicitly rather than deleting this section.
+Closeout reconciled all **40** recorded rationale rows: 32 dated 2026-07-14
+and 8 dated 2026-07-15. Rows may aggregate multiple related assertions or
+fixtures and therefore are not a count of changed tests. Canonical v1 fixture
+bytes, digest sidecars, the populated Sprint 5A upgrade fixture, and the
+schema-v2 inventory of 60 exact Playwright identities across seven files were
+accepted at commit `6580b040236f563c30b5162fa833d7b0fed16478` and did not
+change afterward. Later commits only strengthened evidence scripts and their
+database-free self-tests; they did not delete, skip, rename, filter, retry,
+extend a timeout for, or weaken an accepted test. No existing expectation or
+accepted-fixture change is omitted from this log.
+
+If any test, identity, expectation, or accepted fixture changes after this
+reconciliation, append a rationale row, recompute the count, commit the change,
+and recapture every commit-bound closeout artifact. A green result never
+authorizes editing expected output merely to match an implementation.

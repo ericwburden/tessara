@@ -5,7 +5,320 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A: Module Contract And Core Control Plane.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6B: Module Runtime And Installation Infrastructure `(Next)`.
+
+## 2026-07-15 - Sprint 6A Final Closeout
+
+- Completed the Module Contract and Core Control Plane slice. User-facing
+  changes are additive administration features: the Core-owned Module
+  Management surface, its navigation-policy controls, and capability-provenance
+  display in role management. All pre-existing product routes, their default
+  relative navigation order before an authorized policy change, authorization
+  behavior, and supported workflows remain unchanged.
+- Established one durable Application Installation and Core runtime
+  observation; exact versioned Manifest, Feature Declaration, contract,
+  semantic-destination, typed-reference, and real `ModuleRelease`/
+  `ModuleInstance` public types; and a seven-entry transition catalog. Sprint
+  6A creates no Release/Instance table, row, mutation, provider, Supervisor
+  process, module database, installation, materialization, or runtime claim.
+- Forms, Workflows, Responses, Datasets, Components, and Dashboards are
+  explicitly `transitional_in_process` and not independently deployable.
+  Migration is `retired` historical/support inventory and has no current
+  feature, contract, capability, route, navigation contribution, provider,
+  configuration, destination, or action.
+- Added native SSR Module Management directory/detail pages and exact
+  human/machine descriptor parity. The fixed Module Management item is in the
+  `Admin` group after Datasets. Effective installation-global `modules:read`
+  exposes the item and read surfaces; `modules:manage_navigation` implies read
+  and alone enables policy mutation; the separate Administration item remains
+  `admin:all`-only. Navigation contributions can move only inside their
+  existing Core-assigned bands; Core items, groups, anchors, and cross-band
+  placement remain immutable.
+- Core remains authoritative for roles and assignments. Ordinary roles cannot
+  mix scope-aware and installation-global capabilities; `admin:all` is the sole
+  universal-sentinel exception and the complete bundle remains
+  installation-global. Module descriptors and navigation policy cannot mutate
+  roles or product authorization.
+- Deterministic built-in seed data is versioned package data and may be updated.
+  The Sprint 6A package intentionally converges only the exact membership of
+  built-in roles named `admin`, `operator`, and `respondent`; it preserves role
+  rows/IDs, assignments, accounts, every user-managed credential, user-role
+  links, every user-managed role/mapping, and every session column except the
+  activity-driven `auth_sessions.last_seen_at`. The separate declared startup
+  normalization may replace only the development admin credential. Those two
+  narrow exceptions and the built-in membership replacement are executable
+  upgrade proof, not a promise that all seed data remains historically frozen.
+- Commit `6580b040236f563c30b5162fa833d7b0fed16478` is the reviewed production,
+  canonical-fixture, and exact 60-scenario browser-inventory acceptance
+  boundary. Evidence-only hardening then retained legitimate empty process
+  logs (`fa197be6`), exercised a valid historical Forms write (`f832cecb`),
+  froze flat response and one-element request-array wires (`86e22c3f`),
+  normalized Docker 29 optional runtime defaults (`5bb81382`), and preserved
+  canonical timestamp strings during live revalidation (`9ba79752`). None of
+  those later commits changed production code, accepted fixture bytes, or a
+  browser identity. Canonical Gate 3–6 evidence binds the clean commit
+  containing this closeout entry; all earlier commit-suffixed artifacts are
+  diagnostic only.
+- Reconciled 40 test-change rationale rows: 32 dated 2026-07-14 and 8 dated
+  2026-07-15. The accepted browser inventory remains 60 exact identities across
+  seven files. No test was deleted, skipped, renamed, made retry-dependent,
+  filtered, loosened, or given a longer timeout to obtain a pass; the temporary
+  Dataset timeout was removed and its exact scenario passed under the unchanged
+  30-second default.
+
+### Validation And Retained Proof
+
+- Gate 1 source/contract proof passed: formatting, all-feature check, strict
+  all-target Clippy, 42 module-contract tests, native/WASM web-crate boundary
+  checks, local-launch/deployment/Playwright/nondisclosure/rollback/acceptance
+  self-tests, dependency audit, and diff hygiene. `cargo audit` found zero
+  vulnerabilities; four explicitly allowed transitive warnings remain
+  documented by the repository policy.
+- Gate 2 integration proof passed: `scripts/validate.ps1` completed in about
+  29m46s, and `cargo test --workspace --all-features --locked` completed in
+  about 26m57s. The exercised graph includes 61 web tests and 192 API tests.
+  The release-only resource-reference timing test executed samples rather than
+  returning a debug pseudo-pass.
+- Gate 3 passed on three separate databases: the populated Sprint 5A upgrade
+  test passed 3/3 with zero ignored or filtered cases; the compatibility package
+  passed `PackageOnly` and `CompatibilityOnUpgraded`; a custom-format backup of
+  the independent Sprint 5A demo source restored to an exact fingerprint; and
+  the original Sprint 5A executable passed `OriginalAfterRestore`. Canonical
+  evidence is `compatibility-rollback/manifest.json`,
+  `rollback-package-only.json`, `rollback-compatibility-upgraded.json`,
+  `pre-upgrade-backup.dump`, `rollback-restore-evidence.json`, and
+  `rollback-original-restored.json` under `artifacts/sprint-6a/`.
+- Gate 4 passed against the restored demo target after the clean closing image
+  applied migration 3 with `-SkipSeed`. Deployment capture, smoke, UAT, the
+  exact 60/60 Playwright inventory, and 200-known/200-random nondisclosure
+  sampling per restricted state passed. Browser evidence reports zero skipped,
+  unexpected, flaky, filtered, or retried tests. Canonical files use the
+  `deployment-upgraded`, `smoke-upgraded`, `uat-upgraded`,
+  `playwright-acceptance-upgraded`, and
+  `resource-reference-nondisclosure-upgraded` names documented in the
+  deployment-evidence contract.
+- Gate 5 independently passed after `local-launch.ps1 -FreshData` created a new
+  Compose database. The equivalent fresh deployment, smoke, UAT, 60/60 browser,
+  and nondisclosure sets passed with the same zero-skip/retry requirements and
+  database-derived `fresh` classification.
+- Gate 6 reran Gate 1 against the final tracked closeout commit, including every
+  evidence self-test and `cargo audit --quiet`; `git diff --check` passed and
+  final `git status --short` emitted no lines. The final fresh application is
+  left healthy at `http://localhost:8080/` for review.
+- Seven real-runtime conformance areas remain explicitly deferred—not passed—to
+  Sprint 6B: Supervisor Manifest execution, real provider/consumer binding,
+  gateway routing, cross-process grants/audience/replay/freshness, per-instance
+  database isolation, real outage/health fallback, and the OCI platform
+  conformance suite. Their accountable roles and executable Sprint 6A
+  substitutes remain in the plan.
+
+### Sprint Handoff / Demo Instructions
+
+The retained final deployment is the read-only review target. Any walkthrough
+that creates roles/accounts or changes navigation policy must use a disposable
+manual-test deployment and the exact setup/cleanup procedure in the Sprint 6A
+plan's `Disposable Reader/Manager And Provenance Fixtures` section. Never add
+manual actors to, or mutate policy in, either canonical upgraded/fresh evidence
+database.
+
+#### Module Inventory And Truthful Transition State
+
+- Role: seeded admin, then a disposable installation-global
+  `modules:read`-only actor.
+- Paths: `/administration/modules`,
+  `/administration/modules/{definition_id}`, `GET /api/admin/modules`, and the
+  matching detail/descriptor APIs.
+- Steps:
+  1. Sign in as `admin@tessara.local` and open Module Management from the
+     `Admin` group.
+  2. Inspect Forms, Workflows, Responses, Datasets, Components, and Dashboards;
+     compare their directory/detail fields with the inventory and exact
+     descriptor responses.
+  3. Verify each is labeled transitional/in-process and makes no Release,
+     Instance, install, enablement, readiness, or health claim.
+  4. Open Migration and verify `Retired`, the withdrawal narrative, and the
+     absence of route, navigation, provider, feature, contract, capability,
+     configuration, destination, and action declarations.
+- Expected result: human and machine projections agree, six current entries
+  remain honest in-process contributions, and Migration remains inert history.
+- Acceptance check: pass only when all seven entries and their source digests
+  match and no UI/API field implies a deployable runtime.
+- Evidence: `deployment-upgraded.json`, `deployment-fresh.json`,
+  `playwright-acceptance-{upgraded,fresh}.summary.json`, contract fixtures, and
+  module inventory/API tests.
+
+#### Global Read Versus Navigation Management
+
+- Roles: disposable reader with only `modules:read`; disposable manager storing
+  only `modules:manage_navigation`; seeded operator as the product-only
+  comparison. Scoped-only module authority and no-access cases remain automated
+  proof because the supported role API correctly rejects a scoped assignment
+  for an installation-global module capability.
+- Paths: `/administration/modules`, `GET /api/admin/navigation-policy`,
+  `PUT /api/admin/navigation-policy`, and `GET /api/shell/navigation`.
+- Steps:
+  1. Create the prefixed roles/accounts through the documented admin APIs with
+     no scope node; confirm the manager role has no separately stored read row.
+  2. Sign in as reader. Verify the `Admin` group and fixed Module Management
+     item appear while Administration is absent; inspect inventory, descriptor,
+     and policy readback; confirm no enabled mutation control and a direct
+     policy `PUT` returns `modules_manage_navigation_global_required`.
+  3. Sign in as manager. Verify read surfaces appear through implication and
+     show/hide/reorder controls plus the policy `PUT` are enabled.
+  4. Sign in as the seeded operator and verify that product authority alone does
+     not expose or authorize Module Management. Inspect the retained automated
+     result for scoped-only injection and no-access actors rather than bypassing
+     the supported API in the manual environment.
+- Expected result: read controls discovery only; manage implies read; neither
+  capability grants Administration or product authority.
+- Acceptance check: pass only if UI visibility, direct routes, API reads, and
+  API writes independently match the named actor matrix.
+- Evidence: both Playwright summaries, `modules.spec.ts`, module API permission
+  tests, and `docs/playwright-permissions-scenarios.md`.
+
+#### Band-Restricted Navigation Without Authorization Changes
+
+- Role: disposable global manager; repeat direct-load with an actor already
+  authorized for Forms.
+- Paths: Module Management navigation policy, `/forms`, desktop shell, and
+  mobile shell.
+- Steps:
+  1. Save the original policy/revision; hide Forms and move Dashboards before
+     Components within its current band.
+  2. Reload desktop and mobile shells and require the same persisted visibility
+     and relative order.
+  3. Direct-load `/forms` as an authorized actor and require the route/API to
+     remain usable even though its contribution is hidden.
+  4. Attempt to move Dashboards before Operations, Forms after Operations, or
+     Datasets after Module Management; require atomic
+     `navigation_policy_band_change_forbidden` rejection and unchanged state.
+  5. Attempt to mutate `module_management`; require atomic
+     `navigation_policy_core_item_immutable` rejection. Exercise a stale
+     revision and require `409 navigation_policy_revision_conflict`.
+  6. Restore the original policy and verify persistence before cleanup.
+- Expected result: policy changes presentation only inside existing bands;
+  groups, Core anchors, authorization, and audit transactionality remain intact.
+- Acceptance check: pass only when positive changes persist, every forbidden
+  request leaves the full prior projection unchanged, and authorization is
+  identical before/after.
+- Evidence: both Playwright summaries, policy API integration/audit tests, and
+  deployment-bound shell/navigation snapshots.
+
+#### Capability Provenance And Scope Rules
+
+- Role: seeded admin and disposable `manual-sprint-6a-provenance` role.
+- Path: `/administration/roles` and the role/capability admin APIs.
+- Steps:
+  1. Inspect `forms:read`; require its Core/Forms transition provenance,
+     installation/scope metadata, and current provider state.
+  2. Add/remove a compatible scope-aware capability on the disposable role and
+     save the intended bundle; require descriptors and navigation policy to
+     remain byte-for-byte unchanged.
+  3. Attempt an ordinary scope-aware plus installation-global mixed bundle and
+     require atomic rejection with the prior role unchanged.
+  4. Inspect the seeded `admin` role, which contains only `admin:all`, as the
+     sole universal-sentinel exception; require the complete role to classify
+     installation-global.
+  5. Clean up only the prefixed manual fixtures through the evidence-bound
+     database triple and require zero remaining rows.
+- Expected result: Core owns role mutation, provenance is discoverable, ordinary
+  mixed scope modes fail, and only `admin:all` receives the approved exception.
+- Acceptance check: pass only when failed changes are atomic and no role action
+  changes a module descriptor or navigation policy.
+- Evidence: role API integration tests, both permissions Playwright summaries,
+  and the versioned built-in seed digest in both deployment records.
+
+#### Semantic Destinations And Typed References
+
+- Role: seeded admin plus the existing respondent/delegation fixtures.
+- Paths: `POST /api/platform/destinations/resolve`,
+  `POST /api/platform/resource-references`, and
+  `POST /api/platform/resource-references/resolve`.
+- Steps:
+  1. Read the exact Application Installation ID from module inventory and
+     resolve schema-v1 `core_installation` route `forms.detail` with a typed
+     `form_id`; require only the existing same-origin `/forms/{form_id}` path.
+  2. Construct and resolve the checked `tessara.transition.form` reference for
+     `Platform reference fixture` / `platform-reference-fixture`.
+  3. Resolve the deterministic owned and delegated
+     `tessara.transition.response` references, then repeat with random UUIDs and
+     mismatched owner/type/installation/schema/fields.
+  4. Require every reference to remain owned by the exact Core Application
+     Installation, never a fictional Module Instance; compare restricted known
+     and random responses byte-for-byte.
+- Expected result: destinations are semantic and same-origin; typed references
+  cannot be reinterpreted; authorization precedes existence lookup and returns
+  independent seven-dimension resolution outcomes.
+- Acceptance check: pass only when all positive identities resolve exactly and
+  restricted known/random envelopes and timing remain non-disclosing.
+- Evidence: platform/reference API tests and
+  `resource-reference-nondisclosure-{upgraded,fresh}.json` plus sidecars.
+
+#### Native SSR And Existing Product Regression
+
+- Roles: admin, operator, respondent, and the established scoped/delegated
+  fixtures.
+- Paths: Home, Organization, Forms, Workflows, Responses, Operations,
+  Administration, Datasets, Components, Dashboards, and Module Management.
+- Steps:
+  1. Disable JavaScript and direct-load/refresh every native route family;
+     compare existing hydrate-dependent routes with their frozen characterized
+     state rather than imposing new data-complete SSR.
+  2. Re-enable JavaScript and repeat representative list/detail/create/edit/
+     execute flows for each authorized actor.
+  3. Inspect desktop/mobile navigation, route responses, browser console, and
+     network requests.
+- Expected result: native document ownership, hydration parity, existing
+  authorization and relative navigation, responsive layout, and all supported
+  workflows remain intact; no `/bridge/*` request or unexpected console error
+  occurs.
+- Acceptance check: pass only when the exact 60-test manifest runs unfiltered
+  with one worker, zero retries/skips/flakes, and both smoke/UAT sets pass.
+- Evidence: upgraded and fresh smoke/UAT JSON plus sidecars and all four
+  Playwright artifacts for each state.
+
+#### Upgrade, Rollback, And Fresh-State Handoff
+
+- Role: release reviewer/database operator; final UI walkthrough uses seeded
+  admin on the fresh deployment.
+- Paths: `artifacts/sprint-6a/`, `http://localhost:8080/`, and `/health`.
+- Steps:
+  1. Verify rollback package manifest/payload digests bind the final commit and
+     exact Sprint 5A source; inspect `PackageOnly` and
+     `CompatibilityOnUpgraded` results.
+  2. Verify the custom backup and structured restore record bind the migration-2
+     source and restored target with identical all-table fingerprints; inspect
+     `OriginalAfterRestore`.
+  3. Compare upgraded deployment/acceptance records: they must bind the external
+     restored database, classify `upgraded`, contain pre-migration product rows,
+     and show no demo seed invocation.
+  4. Compare fresh records: they must bind the new Compose database directly,
+     classify `fresh`, and contain no pre-migration product rows.
+  5. Confirm final `/health` returns `200`/`ok`, `/` returns `200`, and leave the
+     fresh application running for reviewer use.
+- Expected result: historical code works on the compatible upgraded ledger,
+  backup restore recovers the original ledger, current code preserves upgraded
+  product assets, and a clean install independently works.
+- Acceptance check: pass only when every artifact digest and commit/tree/image/
+  container/user/database binding revalidates and the tracked tree is clean.
+- Evidence: the complete canonical Gate 3–5 artifact index in
+  `docs/sprints/sprint-6a-deployment-evidence.md` and the Gate 6 command record.
+
+### Acceptance Mapping
+
+| Roadmap exit-condition clause | Manual handoff section | Durable automated proof |
+| --- | --- | --- |
+| Fixed Module Management is discoverable by effective global read | Module Inventory; Global Read Versus Navigation Management | `modules.spec.ts` global-read scenario, module inventory/API tests, both deployment records |
+| Six current features are in-process contributions rather than Module Instances | Module Inventory And Truthful Transition State | exact transition fixtures/contract tests, directory/detail parity scenario, both catalog snapshots |
+| Features, contracts, capabilities, findings, and policy are readable without mutation controls | Module Inventory; Global Read Versus Navigation Management | descriptor parity/API tests and read-only actor browser/API negative-write proof |
+| Global manage changes visibility/order without granting authorization | Band-Restricted Navigation Without Authorization Changes | keyboard policy scenario, navigation API/audit tests, shell/permissions coverage |
+| Migration is retired and inert | Module Inventory And Truthful Transition State | retired fixture/catalog tests, directory/detail parity, both deployment snapshots |
+| Provenance and scope rules remain Core-owned and fail closed | Capability Provenance And Scope Rules | role/capability API tests, permissions browser scenarios, exact seed contracts |
+| Semantic destinations and typed references do not leak existence or deployment URLs | Semantic Destinations And Typed References | platform/reference API tests and both release nondisclosure artifacts |
+| Existing product routes and workflows continue to work | Native SSR And Existing Product Regression | exact 60-test/seven-file upgraded and fresh Playwright sets plus both smoke/UAT sets |
+| Upgrade, compatibility rollback, restore, and fresh installation are proven separately | Upgrade, Rollback, And Fresh-State Handoff | Gate 3 package/restore evidence plus distinct Gate 4 upgraded and Gate 5 fresh artifact sets |
+
+- Next Sprint: Sprint 6B: Module Runtime And Installation Infrastructure Slice.
 
 ## 2026-07-14 - Sprint 6A Implementation-Contract Hardening
 
