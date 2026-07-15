@@ -131,6 +131,16 @@ if ($SelfTest) {
         throw "Self-test failed: a non-string Docker scalar config value was accepted."
     }
 
+    $timestampJson = '{"created_at":"2026-07-15T18:28:31.2182510+00:00","observed_at":"2026-07-15T18:28:31.8063730+00:00"}'
+    $timestampDocument = ConvertFrom-Sprint6ADeploymentEvidenceJson -Json $timestampJson
+    if ($timestampDocument.created_at -isnot [string] -or
+        $timestampDocument.observed_at -isnot [string] -or
+        [string]$timestampDocument.created_at -cne "2026-07-15T18:28:31.2182510+00:00" -or
+        [string]$timestampDocument.observed_at -cne "2026-07-15T18:28:31.8063730+00:00" -or
+        ($timestampDocument | ConvertTo-Json -Depth 5 -Compress) -cne $timestampJson) {
+        throw "Self-test failed: deployment timestamps changed type, offset, precision, or bytes during JSON parsing."
+    }
+
     $publishTestRoot = Join-Path ([IO.Path]::GetTempPath()) "tessara-deployment-evidence-$([guid]::NewGuid().ToString('N'))"
     [IO.Directory]::CreateDirectory($publishTestRoot) | Out-Null
     try {

@@ -540,6 +540,18 @@ function ConvertTo-Sprint6AConfigScalar {
     return [string]$property.Value
 }
 
+function ConvertFrom-Sprint6ADeploymentEvidenceJson {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Json
+    )
+
+    try {
+        ConvertFrom-Json -InputObject $Json -DateKind String
+    } catch {
+        throw "Deployment evidence is not valid JSON: $($_.Exception.Message)"
+    }
+}
+
 function Get-Sprint6ADeploymentSnapshot {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
@@ -888,11 +900,8 @@ function Assert-Sprint6ADeploymentEvidence {
     if ($expectedDigest -notmatch "^[0-9a-f]{64}$" -or $expectedDigest -cne $actualDigest) {
         throw "Deployment evidence SHA-256 verification failed for '$fullPath'."
     }
-    try {
-        $evidence = Get-Content -LiteralPath $fullPath -Raw | ConvertFrom-Json
-    } catch {
-        throw "Deployment evidence '$fullPath' is not valid JSON: $($_.Exception.Message)"
-    }
+    $evidence = ConvertFrom-Sprint6ADeploymentEvidenceJson `
+        -Json (Get-Content -LiteralPath $fullPath -Raw)
     Assert-Sprint6ADeploymentEvidenceDocument `
         -Evidence $evidence `
         -ExpectedDataState $ExpectedDataState `
