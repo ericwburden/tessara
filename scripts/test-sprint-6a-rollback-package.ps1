@@ -127,7 +127,7 @@ function Get-Sha256 {
 }
 
 function Get-StringSha256 {
-    param([Parameter(Mandatory)][string]$Value)
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Value)
 
     $utf8 = [Text.UTF8Encoding]::new($false)
     $algorithm = [Security.Cryptography.SHA256]::Create()
@@ -690,6 +690,21 @@ if ($SelfTest) {
             $logEvidence.stdout.sha256 -cne (Get-StringSha256 $logEvidence.stdout.content) -or
             $logEvidence.stderr.sha256 -cne (Get-StringSha256 $logEvidence.stderr.content)) {
             throw "Self-test did not produce durable, sanitized, recomputable final-log evidence."
+        }
+
+        $emptyLogPath = Join-Path $restoreEvidenceTestRoot "empty.log"
+        [IO.File]::WriteAllText($emptyLogPath, "", [Text.UTF8Encoding]::new($false))
+        $emptyLogEvidence = New-SanitizedLogEvidence `
+            -StdoutPath $emptyLogPath `
+            -StderrPath $emptyLogPath `
+            -DatabaseUrl $logDatabaseUrl `
+            -DevAdminPassword $logDevAdminPassword
+        foreach ($stream in @($emptyLogEvidence.stdout, $emptyLogEvidence.stderr)) {
+            if ($stream.content -cne "" -or
+                $stream.length_bytes -ne 0 -or
+                $stream.sha256 -cne "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") {
+                throw "Self-test did not retain deterministic SHA-256 evidence for an empty final log stream."
+            }
         }
 
         $originalProcessInvoker = (Get-Item Function:\Invoke-Sprint6AProcess).ScriptBlock
