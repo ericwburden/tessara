@@ -145,6 +145,77 @@ function Test-DisposableDatabaseName {
     return Test-Sprint6ADisposableDatabaseName $Name
 }
 
+function Select-HistoricalFormScope {
+    param([Parameter(Mandatory)][object[]]$Forms)
+
+    foreach ($form in $Forms) {
+        $formIdProperty = $form.PSObject.Properties["id"]
+        $scopeNodeTypeIdProperty = $form.PSObject.Properties["scope_node_type_id"]
+        $visibilityNodesProperty = $form.PSObject.Properties["visibility_nodes"]
+        if ($null -eq $formIdProperty -or
+            $null -eq $scopeNodeTypeIdProperty -or
+            $null -eq $visibilityNodesProperty) {
+            continue
+        }
+
+        $formId = [Guid]::Empty
+        $scopeNodeTypeId = [Guid]::Empty
+        if (-not [Guid]::TryParse([string]$formIdProperty.Value, [ref]$formId) -or
+            -not [Guid]::TryParse([string]$scopeNodeTypeIdProperty.Value, [ref]$scopeNodeTypeId)) {
+            continue
+        }
+
+        foreach ($visibilityNode in @($visibilityNodesProperty.Value)) {
+            if ($null -eq $visibilityNode) {
+                continue
+            }
+            $visibilityNodeIdProperty = $visibilityNode.PSObject.Properties["node_id"]
+            if ($null -eq $visibilityNodeIdProperty) {
+                continue
+            }
+            $visibilityNodeId = [Guid]::Empty
+            if (-not [Guid]::TryParse([string]$visibilityNodeIdProperty.Value, [ref]$visibilityNodeId)) {
+                continue
+            }
+            return [pscustomobject][ordered]@{
+                source_form_id = $formId.ToString("D")
+                scope_node_type_id = $scopeNodeTypeId.ToString("D")
+                visibility_node_id = $visibilityNodeId.ToString("D")
+            }
+        }
+    }
+
+    throw "Historical product read did not return a form with a valid scope node type and visibility node."
+}
+
+function Assert-HistoricalFormScopeProjection {
+    param(
+        [Parameter(Mandatory)]$Form,
+        [Parameter(Mandatory)][string]$ExpectedScopeNodeTypeId,
+        [Parameter(Mandatory)][string]$ExpectedVisibilityNodeId,
+        [Parameter(Mandatory)][string]$Context
+    )
+
+    $scopeNodeTypeIdProperty = $Form.PSObject.Properties["scope_node_type_id"]
+    $visibilityNodesProperty = $Form.PSObject.Properties["visibility_nodes"]
+    if ($null -eq $scopeNodeTypeIdProperty -or
+        [string]$scopeNodeTypeIdProperty.Value -cne $ExpectedScopeNodeTypeId) {
+        throw "$Context did not retain the selected scope node type exactly."
+    }
+    if ($null -eq $visibilityNodesProperty) {
+        throw "$Context did not return visibility nodes."
+    }
+    $visibilityNodes = @($visibilityNodesProperty.Value)
+    if ($visibilityNodes.Count -ne 1) {
+        throw "$Context did not retain exactly one selected visibility node."
+    }
+    $visibilityNodeIdProperty = $visibilityNodes[0].PSObject.Properties["node_id"]
+    if ($null -eq $visibilityNodeIdProperty -or
+        [string]$visibilityNodeIdProperty.Value -cne $ExpectedVisibilityNodeId) {
+        throw "$Context did not retain the selected visibility node exactly."
+    }
+}
+
 function New-SanitizedLogEvidence {
     param(
         [Parameter(Mandatory)][string]$StdoutPath,
@@ -305,6 +376,82 @@ if ($SelfTest) {
     $tamperedSnapshot = New-BuiltInSeedSnapshot $tamperedMappings
     if ($tamperedSnapshot.canonical_sha256 -eq $sprint6ASeedContract.snapshot.canonical_sha256) {
         throw "Self-test did not detect a changed built-in seed mapping."
+    }
+
+    $historicalFormId = "10000000-0000-0000-0000-000000000001"
+    $historicalScopeNodeTypeId = "20000000-0000-0000-0000-000000000002"
+    $historicalVisibilityNodeId = "30000000-0000-0000-0000-000000000003"
+    $historicalScope = Select-HistoricalFormScope ([object[]]@(
+        [pscustomobject][ordered]@{
+            id = "not-a-uuid"
+            scope_node_type_id = $historicalScopeNodeTypeId
+            visibility_nodes = @([pscustomobject]@{ node_id = $historicalVisibilityNodeId })
+        },
+        [pscustomobject][ordered]@{
+            id = $historicalFormId
+            scope_node_type_id = $historicalScopeNodeTypeId
+            visibility_nodes = @([pscustomobject]@{ node_id = $historicalVisibilityNodeId })
+        }
+    ))
+    if ($historicalScope.source_form_id -cne $historicalFormId -or
+        $historicalScope.scope_node_type_id -cne $historicalScopeNodeTypeId -or
+        $historicalScope.visibility_node_id -cne $historicalVisibilityNodeId) {
+        throw "Self-test did not select the valid historical form scope exactly."
+    }
+    $scopePayload = @{
+        scope_node_type_id = $historicalScope.scope_node_type_id
+        visibility_node_ids = @($historicalScope.visibility_node_id)
+    } | ConvertTo-Json | ConvertFrom-Json
+    $roundTrippedVisibilityNodeIds = @($scopePayload.visibility_node_ids)
+    if ([string]$scopePayload.scope_node_type_id -cne $historicalScopeNodeTypeId -or
+        $roundTrippedVisibilityNodeIds.Count -ne 1 -or
+        [string]$roundTrippedVisibilityNodeIds[0] -cne $historicalVisibilityNodeId) {
+        throw "Self-test did not retain the historical scope as one explicit visibility-node JSON value."
+    }
+    Assert-HistoricalFormScopeProjection `
+        -Form ([pscustomobject][ordered]@{
+            scope_node_type_id = $historicalScopeNodeTypeId
+            visibility_nodes = @([pscustomobject]@{ node_id = $historicalVisibilityNodeId })
+        }) `
+        -ExpectedScopeNodeTypeId $historicalScopeNodeTypeId `
+        -ExpectedVisibilityNodeId $historicalVisibilityNodeId `
+        -Context "Historical form-scope self-test"
+    $invalidHistoricalScopeRejected = $false
+    try {
+        Select-HistoricalFormScope ([object[]]@(
+            [pscustomobject][ordered]@{
+                id = $historicalFormId
+                scope_node_type_id = $historicalScopeNodeTypeId
+                visibility_nodes = @([pscustomobject]@{ node_id = "not-a-uuid" })
+            }
+        )) | Out-Null
+    } catch {
+        if ($_.Exception.Message -notmatch "valid scope node type and visibility node") {
+            throw
+        }
+        $invalidHistoricalScopeRejected = $true
+    }
+    if (-not $invalidHistoricalScopeRejected) {
+        throw "Self-test accepted a malformed historical visibility node."
+    }
+    $invalidHistoricalProjectionRejected = $false
+    try {
+        Assert-HistoricalFormScopeProjection `
+            -Form ([pscustomobject][ordered]@{
+                scope_node_type_id = $historicalScopeNodeTypeId
+                visibility_nodes = @()
+            }) `
+            -ExpectedScopeNodeTypeId $historicalScopeNodeTypeId `
+            -ExpectedVisibilityNodeId $historicalVisibilityNodeId `
+            -Context "Invalid historical form-scope self-test"
+    } catch {
+        if ($_.Exception.Message -notmatch "exactly one selected visibility node") {
+            throw
+        }
+        $invalidHistoricalProjectionRejected = $true
+    }
+    if (-not $invalidHistoricalProjectionRejected) {
+        throw "Self-test accepted a historical read-after-write projection without a visibility node."
     }
 
     foreach ($acceptedName in @(
@@ -798,7 +945,7 @@ if ($SelfTest) {
         Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
     }
 
-    Write-Host "Rollback validator static seed-contract and structured restore-evidence self-test passed."
+    Write-Host "Rollback validator static seed, historical product mutation, and structured restore-evidence self-test passed."
     return
 }
 
@@ -1359,10 +1506,12 @@ function Invoke-ProductSmoke {
             throw "Historical product login did not return a bearer token."
         }
         $headers = @{ Authorization = "Bearer $($login.token)" }
-        $existingForms = @(Invoke-RestMethod -Uri "$baseUrl/api/admin/forms" -Headers $headers)
+        $existingFormsResponse = Invoke-RestMethod -Uri "$baseUrl/api/admin/forms" -Headers $headers
+        $existingForms = [object[]]$existingFormsResponse
         if ($existingForms.Count -lt 1) {
             throw "Historical product read did not return the populated Sprint 5A form."
         }
+        $historicalScope = Select-HistoricalFormScope $existingForms
 
         $suffix = [Guid]::NewGuid().ToString("N")
         $formName = "Compatibility rollback proof $suffix"
@@ -1370,8 +1519,8 @@ function Invoke-ProductSmoke {
         $createBody = @{
             name = $formName
             slug = $formSlug
-            scope_node_type_id = $null
-            visibility_node_ids = @()
+            scope_node_type_id = $historicalScope.scope_node_type_id
+            visibility_node_ids = @($historicalScope.visibility_node_id)
         } | ConvertTo-Json
         $createArguments = @{
             Uri = "$baseUrl/api/admin/forms"
@@ -1388,6 +1537,11 @@ function Invoke-ProductSmoke {
         if ($detail.id -ne $created.id -or $detail.name -ne $formName -or $detail.slug -ne $formSlug) {
             throw "Historical product read-after-write did not return the created form exactly."
         }
+        Assert-HistoricalFormScopeProjection `
+            -Form $detail `
+            -ExpectedScopeNodeTypeId $historicalScope.scope_node_type_id `
+            -ExpectedVisibilityNodeId $historicalScope.visibility_node_id `
+            -Context "Historical product read-after-write"
         $logs = Get-FinalLogEvidence `
             -Run $run `
             -AdditionalSecrets ([string[]]@([string]$login.token))
@@ -1396,6 +1550,9 @@ function Invoke-ProductSmoke {
             forms_visible_before = $existingForms.Count
             created_form_id = $created.id
             created_form_slug = $formSlug
+            source_form_id = $historicalScope.source_form_id
+            scope_node_type_id = $historicalScope.scope_node_type_id
+            visibility_node_id = $historicalScope.visibility_node_id
             logs = $logs
         }
     } finally {
