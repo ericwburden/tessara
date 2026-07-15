@@ -9,10 +9,16 @@ Out-of-roadmap sprint proposals and migration plans may also live here when they
 ## Current Roadmap Position
 
 **Sprint 6A: Module Contract And Core Control Plane** completed on 2026-07-15.
-**Sprint 6B: Module Runtime And Installation Infrastructure** is next; it will
-begin real Module Release/Instance persistence and materialization from the
-contract/control-plane baseline. Sprint 6B has not been kicked off and does not
-yet have a sprint plan; use [its roadmap block](../roadmap.md#sprint-6b-module-runtime-and-installation-infrastructure-slice-next) until kickoff.
+The post-closeout sequencing decision inserts **Sprint 6A-UI: Application UI
+And UX Coherence** as the next sprint without reopening or modifying the closed
+Sprint 6A implementation or its retained evidence. Sprint 6A-UI has not been
+kicked off and does not yet have a sprint plan; use
+[its roadmap block](../roadmap.md#sprint-6a-ui-application-ui-and-ux-coherence-slice-next)
+until kickoff.
+
+**Sprint 6B: Module Runtime And Installation Infrastructure** follows Sprint
+6A-UI with its real Module Release/Instance persistence, materialization, and
+runtime scope unchanged.
 
 ## Completed Sprint 6A Artifacts
 

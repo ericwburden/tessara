@@ -5,7 +5,7 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6B: Module Runtime And Installation Infrastructure `(Next)`.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Application UI And UX Coherence `(Next)`; Sprint 6B follows with its runtime scope unchanged.
 
 ## 2026-07-15 - Sprint 6A Final Closeout
 
