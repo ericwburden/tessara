@@ -1,6 +1,8 @@
 # Playwright Permissions Scenarios
 
-This report describes the executable Playwright permission coverage in `end2end/tests/permissions.spec.ts`.
+This report describes the executable Playwright permission coverage in
+`end2end/tests/permissions.spec.ts` and the dedicated Sprint 6A module-control
+matrix in `end2end/tests/modules.spec.ts`.
 
 The tested access model is capability + scope + ownership. Capabilities decide whether an action or surface exists, scoped role assignments limit that capability to an organization subtree, and response ownership/delegation grants access to assigned response work. The UI label "Responses" maps to the API capability family `submissions:*`.
 
@@ -8,11 +10,24 @@ Project directive: every new permission-controlled surface, action, or data-acce
 
 ## Fixture Accounts And Roles
 
-The suite creates Playwright-owned fixtures with a `pw-permissions-*` prefix through admin APIs after seeding the demo dataset.
+The suite creates Playwright-owned fixtures with a `pw-permissions-*` prefix
+through admin APIs after confirming the demo baseline. Fresh acceptance may
+seed it. Upgraded acceptance never calls `/api/demo/seed` and uses the restored
+pre-migration assets.
 
 ## Fixture Lifecycle
 
-Permission fixtures are created through supported admin APIs, then the suite removes Playwright-owned records with a direct `docker compose exec postgres psql` cleanup pass before and after the run. The cleanup is intentionally limited to records with the `pw-permissions-*` prefix and dependent rows discovered from those records.
+Permission fixtures are created through supported admin APIs, then the suite
+removes Playwright-owned records before and after the run through the shared
+`runPlaywrightSql` helper. In acceptance mode, `validate-e2e.ps1` derives the
+exact PostgreSQL container ID, database user, and current database from the
+validated deployment-evidence record and the helper invokes `docker exec -i
+<container-id> psql -v ON_ERROR_STOP=1 -U <user> -d <database>`. Acceptance
+therefore cannot silently clean the default Compose database when the API is
+bound to the restored Sprint 5A demo target used by Gate 4. Only explicit local
+development mode may fall back to `docker compose exec -T postgres`. The SQL
+remains limited to records with the `pw-permissions-*` prefix and dependent rows
+discovered from those records.
 
 Direct SQL cleanup is a pragmatic local test harness choice until user, role, dataset, and workflow lifecycle APIs are complete. Keep fixture names prefixed with `pw-permissions-*`, and update the cleanup SQL whenever new permission fixtures create additional linked records such as dataset revisions, major-line materializations, components, dashboards, submissions, assignments, or workflow instances.
 
@@ -27,16 +42,34 @@ When local fixture volume gets noisy or cleanup falls out of sync with schema ch
 | Delegator | `submissions:read_own`, `submissions:respond` | Verifies delegated work access through `delegate_account_id`. |
 | Admin | existing `admin@tessara.local` with `admin:all` | Verifies global visibility and creates fixtures. |
 
+`end2end/tests/modules.spec.ts` owns a separate `pw-modules-*` fixture set: a
+global `modules:read` reader, a global `modules:manage_navigation` manager
+without a separately stored read row, a directly scoped module reader, a
+product-only reader, and a no-access actor. Its serial teardown restores the
+exact original navigation policy in `finally`, removes only `pw-modules-*`
+records, and disposes every browser/API context.
+
+Expected permission denials are narrow test scopes, not a general browser
+console allowlist. The native-route guard requires the exact `GET` path/query
+and count for each expected `403`, ties the matching Chrome error-console line
+to that request path, and fails on every other `>=400` response or error-console
+entry. Direct load and refresh must both reach the route-specific characterized
+readiness state. Component routes keep the stable slug in the URL but use the
+rendered component display name for readiness and heading assertions.
+
 ## Implemented Scenario Matrix
 
 | Scenario family | Positive checks | Negative checks |
 | --- | --- | --- |
 | Capability absence | None; no-access user authenticates only. | No-access user receives forbidden responses from admin, forms, workflows, workflow assignment, submissions, datasets, components, and dashboards APIs. |
-| Shell navigation | Scoped manager can see allowed product nav such as Forms and Responses. | Scoped manager cannot see Administration navigation. |
-| Hierarchy routes | Scoped manager can load organization list/detail/edit/create routes for visible hierarchy records. | Scoped manager does not see out-of-scope nodes in the organization list and direct out-of-scope detail/edit routes do not expose editable content. |
+| Shell navigation | Scoped manager can see allowed product nav such as Forms and Responses. A global module reader sees the fixed Module Management item in `Admin` without receiving the separate Administration item. | Scoped manager cannot see the `Administration` navigation item. Scoped-only module authority, product-only authority, and no authority do not expose Module Management, including shell loading/failure fallback. |
+| Module Management authority | Global read loads directory/detail/policy read surfaces with no enabled mutation affordance; global manage implies read and can persist an existing-band-only policy change; `admin:all` retains full authority. | Scoped-only, product-only, no-access, and anonymous actors receive the exact restricted/redirect states; direct writes require global manage; the fixed Core item is not mutable. |
+| Module Management parity and cleanup | Inventory/detail IDs, source digests, policy values, desktop/mobile order, SSR/no-JavaScript content, hydration, and API projections agree across the five executable scenarios. | Unknown detail, unavailable/failure states, bridge requests, console/hydration errors, cross-band policy changes, and teardown policy drift are rejected or absent. Original policy values are restored even when a test fails. |
+| Hierarchy routes | Scoped manager can load organization list/detail/edit/create routes for visible hierarchy records; create/edit consume the narrow hierarchy-readable metadata-field schema and render the expected required control, current value, and clean console. | Scoped manager does not see out-of-scope nodes in the organization list and direct out-of-scope detail/edit routes do not expose editable content; admin node-type definitions remain forbidden. |
 | Forms UI visibility | Scoped manager sees an in-scope form in `/forms`. | Scoped manager does not see an out-of-scope form in the list and direct detail navigation renders the unavailable state. |
 | Forms manage routes | Scoped manager can create and update a form with in-scope visibility and load create/edit routes. | Scoped manager cannot create or update a form with out-of-scope visibility and out-of-scope edit routes do not expose edit actions. |
 | Role route and creation | Admin creates a role through the admin API and loads `/administration/roles`. | Non-admin administration access is covered by shell/API denial scenarios. |
+| Role scope-mode authoring | Selecting `admin:all` with scope-aware and installation-global rows identifies the sole global-admin exception, classifies the complete role as installation-global, and leaves Save enabled. | An ordinary scope-aware plus installation-global selection shows the mixed-mode alert and disables Save. |
 | Administration routes | Admin loads users, user detail, user edit, user access alias, and node-type routes; admin creates/updates a node type through APIs. | Scoped non-admin receives forbidden responses for users, user detail/access, and node-type admin APIs. |
 | Global capability | Admin reads in-scope and out-of-scope forms, datasets, components, dashboards, and workflow assignments. | Not applicable; `admin:all` is intentionally global. |
 | Scoped forms | Scoped manager lists and reads forms whose visibility nodes overlap the assigned subtree. | Out-of-scope form is absent from list and direct detail access is forbidden. |

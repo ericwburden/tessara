@@ -16,17 +16,35 @@ Every future sprint is a full vertical slice.
 
 ## Sprint completion protocol (applies to every sprint)
 
-- Run a local deployment refresh with:
-  - `.\scripts\local-launch.ps1` for standard updates, or `.\scripts\local-launch.ps1 -FreshData` when the local UAT dataset should be reseeded from scratch.
-- Print and run the sprint UAT script:
-  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
-- Run Playwright browser validation, including the permissions scenario suite:
-  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"`
+- Run a local deployment refresh with `.\scripts\local-launch.ps1` for standard
+  updates, or `.\scripts\local-launch.ps1 -FreshData` only when the current
+  sprint's ordered protocol has reached its destructive fresh-install step.
+- Sprint 6A closeout is governed by the plan's
+  [ordered required Gates 1–6](./sprints/sprint-6a-plan.md#ordered-required-gates),
+  not by a single fresh-deployment command or this roadmap summary. Execute the
+  gates in order: source/contract checks, three-database integration,
+  populated-upgrade plus compatibility/restore proof, closing-build regression
+  on the restored Sprint 5A demo target after the closing startup upgrades it
+  with seeding disabled, fresh installation, and final cleanliness. The
+  representative populated-upgrade fixture remains a separate compatibility
+  proof database and is not the Gate 4 browser candidate.
+- Sprint 6A must retain two non-interchangeable acceptance sets. Gate 4 produces
+  `deployment-upgraded.json` plus upgraded smoke, UAT, exact-manifest Playwright,
+  and nondisclosure evidence before any fresh reset. Gate 5 then produces a
+  separate `deployment-fresh.json` plus fresh smoke, UAT, exact-manifest
+  Playwright, and nondisclosure evidence. Gate 3's rollback package and verified
+  backup/restore evidence are also mandatory; neither state-specific set
+  substitutes for them.
+- Print and run the sprint UAT, smoke, Playwright, and any sprint-specific
+  release/conformance commands with the exact deployment-evidence path and data
+  state required by that sprint's ordered plan. For Sprint 6A, use the commands
+  and state-specific output paths in Gates 4 and 5 without filters or a
+  development-mode bypass.
 - Confirm the UAT script output includes current route ownership and role-gated behavior before closing the sprint.
 - Confirm any sprint that adds or changes permission-controlled behavior updates `docs/playwright-permissions-scenarios.md` and includes positive and negative Playwright coverage where currently executable.
 - Confirm every route surface touched in the sprint remains under native SSR ownership before closing the sprint.
 - Confirm route ownership, hydration, and browser-console cleanliness for every touched route before closing the sprint.
-- For any sprint that adds or changes a module boundary, validate the module manifest, contract compatibility, same-origin routing, scope-bound grants and downstream-audience authorization exchange, database isolation, module outage behavior, and platform conformance suite.
+- For any sprint that adds or changes a module boundary, validate the module manifest, contract compatibility, same-origin routing, scope-bound grants and downstream-audience authorization exchange, database isolation, module outage behavior, and platform conformance suite. A pre-runtime contract sprint must name each check that is not yet executable, run the strongest contract-level substitute, carry the real runtime check into the first runtime sprint as an entry criterion, and never report a deferred check as passed.
 - Confirm application-composition changes produce a valid Blueprint, resolved lockfile, deterministic plan, and read-back result once those platform capabilities exist.
 - If a detour sprint lands outside the numbered roadmap, reconcile this file with the codebase before selecting the next roadmap sprint.
 
@@ -57,7 +75,7 @@ The codebase already includes a substantial vertical foundation:
 - draft/save/submit response flows and review behavior
 - reporting/storage slices for datasets, reports, aggregations, charts, and dashboards
 - legacy fixture validation, dry-run, import rehearsal, and demo seed paths
-- a Leptos SSR shell with root-level native product routes for Home, Organization, Forms, Workflows, Responses, Components, Datasets, Dashboards, Administration, and Migration
+- a Leptos SSR shell with root-level native product routes for Home, Organization, Forms, Workflows, Responses, Components, Datasets, Dashboards, and Administration; the former Migration surface is retired and has no live route
 - extracted Leptos feature crates for shared UI, Datasets, Forms, Workflows, Responses, and Organization, with root-owned route adapters preserving shell, auth, route parsing, hydration, CSS, and cargo-leptos ownership
 - Sprint 2B authentication hardening: Argon2id credential storage, server-side session expiry/revocation/last-seen tracking, same-origin `HttpOnly` browser cookies, stable auth/session errors, and native SSR login/session behavior
 - UI Overhaul 2.0 detour work: approved shell navigation posture, access-denied redirect plus transient feedback, sidebar footer account/scope/theme context, queue-first home posture, explorer-oriented organization work, section-oriented form-builder UI, and section description/column-count persistence
@@ -68,7 +86,7 @@ The codebase already includes a substantial vertical foundation:
 The application shell already exposes meaningful user-testable surfaces:
 
 - role-aware login and shared home entry
-- product-area navigation for Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, Administration, and Migration
+- product-area navigation for Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, and Administration; Migration is retained only as retired historical/support inventory
 - dedicated list/detail/create/edit flows for major top-level entities
 - dedicated administration list/detail/create/edit/access flows for users and roles
 - visible separation between product-facing and internal/operator areas
@@ -235,7 +253,7 @@ This section records the completed foundation sequence that led to the current n
 
 **Build:**
 
-- route-level code splitting for heavy operator routes, starting with `/migration`
+- route-level code splitting for heavy operator routes; the historical `/migration` candidate is retired and is no longer a live splitting target
 - bundle-loading verification in end-to-end coverage
 - removal of the bridge from the first product/internal surfaces that have native replacements
 - browser-console and hydration-error enforcement in end-to-end tests
@@ -709,9 +727,9 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 6: Modular Application Platform Foundation
 
-### Sprint 6A: Module Contract And Core Control Plane Slice (Next)
+### Sprint 6A: Module Contract And Core Control Plane Slice (Active)
 
-**Outcome:** the current Tessara application is represented and administered as Core plus discoverable transition contributions and any real module instances, without pretending in-process features are deployable Module Releases.
+**Outcome:** the current Tessara application is represented and administered as Core plus discoverable transition contributions, with future real Module Release/Instance wire types defined but no real-instance persistence or mutation, and without pretending in-process features are deployable Module Releases.
 
 **Build:**
 
@@ -724,18 +742,24 @@ This section records the completed foundation sequence that led to the current n
 - introduce installation-scoped typed resource references whose owner, type, and identifier cannot be reinterpreted
 - define typed resolution and state-observation outcomes without imposing module product rules such as immutability or when a new version must be published
 - introduce semantic named-route destinations instead of hard-coded cross-module URLs
-- expose current Forms, Workflows, Responses, Datasets, Components, Dashboards, and transitional Migration through those temporary in-process contribution descriptors and typed adapters
+- expose current Forms, Workflows, Responses, Datasets, Components, and Dashboards through temporary in-process contribution descriptors and typed adapters; expose Migration only as a retired historical/support descriptor
 - update permission scenarios for module administration, contributed security capabilities, and navigation configuration
+- define real Module Release/Instance public types only; their persistence, mutation, and materialization begin in Sprint 6B
+- classify transitional Migration as retired, with no current route, navigation contribution, provider claim, or fabricated destination; restoration requires a new product decision and roadmap scope
+- keep navigation reordering inside immutable Core-assigned bands—Forms/Workflows/Responses between Organization and Operations, Components/Dashboards after Operations, and Datasets between Administration and the new fixed Module Management anchor—with permanent Core destinations policy-immutable; cross-anchor movement and grouping changes remain deferred
+- make `modules:read` and `modules:manage_navigation` installation-global, with manage implying read and `admin:all` implying both
+- reject roles that mix scope-aware and installation-global capabilities except for the sole universal-sentinel `admin:all` case; classify that complete exception role as installation-global, keep every ordinary mixed bundle invalid, and retain the cleaner `admin:all`-only built-in admin seed contract
+- add policy-immutable Core Module Management to the `Admin` group after Datasets, visible with effective global `modules:read`; retain the separate `admin:all`-only Administration item and gate navigation mutation controls on `modules:manage_navigation`
 
 **Application UI delivered this sprint:**
 
-- a Core-owned module directory and detail/status experience
+- a Core-owned module directory and detail/status experience reached through a fixed `Admin` navigation item for effective global `modules:read`
 - Feature Declarations and their use cases, inputs, outcomes, constraints, and realizing contracts visible for human and machine discovery
-- administrator controls for module navigation visibility and ordering
+- navigation-policy readback for global `modules:read`, with visibility/order mutation controls enabled only for global `modules:manage_navigation`
 - module-provided security capabilities visible in Core role management
 - dependency, compatibility, configuration, readiness, and health findings presented separately
 
-**User-testable exit condition:** an administrator can inspect every current non-Core feature area, including transitional Migration, as a clearly labeled in-process contribution rather than a Module Instance; understand its advertised Feature Declarations; review its contracts and security capabilities; change navigation visibility without changing authorization; and see valid transition/dependency/readiness state while all current product routes continue to work.
+**User-testable exit condition:** an actor with global `modules:read` can discover fixed Module Management in the `Admin` group and inspect Forms, Workflows, Responses, Datasets, Components, and Dashboards as clearly labeled in-process contributions rather than Module Instances; understand their advertised Feature Declarations; and review their contracts, security capabilities, and current navigation policy without receiving mutation controls. An actor with global `modules:manage_navigation` can change contribution visibility/order without changing authorization. The same directory shows Migration as retired historical/support inventory with no route, navigation item, provider, Feature Declaration, contract, capability, or action, while every current product route continues to work.
 
 ### Sprint 6B: Module Runtime And Installation Infrastructure Slice
 
@@ -966,7 +990,7 @@ Every sprint in this phase must leave the extracted feature as a separately depl
 
 **Application UI delivered this sprint:** unchanged Form directory, builder, version, publication, catalog, configuration, and diagnostics experiences through the shared shell.
 
-**User-testable exit condition:** a tester can author and publish Forms, observe lifecycle changes through Workflow and Response consumers, and complete the reference application flow with every reference product module independently deployed. Transitional Migration is either modularized or retired in Sprint 9A.
+**User-testable exit condition:** a tester can author and publish Forms, observe lifecycle changes through Workflow and Response consumers, and complete the reference application flow with every reference product module independently deployed. The former in-process Migration surface remains retired; Sprint 9A may introduce a separately approved module-owned migration coordinator rather than reactivating the retired transition implicitly.
 
 ## Phase 9: Migration, Hardening, And Modular Pilot Readiness
 
@@ -979,14 +1003,14 @@ Every sprint in this phase must leave the extracted feature as a separately depl
 - align mapping documentation and verification with Core plus module-owned resources and databases
 - route imports through each owning module's validation and import APIs rather than direct database writes
 - use typed cross-module references and explicit binding steps during multi-module migration
-- make any retained migration coordinator a normal full-stack module with its own database, UI, manifest, Feature Declarations, security capabilities, and contracts; otherwise retire the generic Migration feature
+- if a migration coordinator is separately approved, introduce it as a normal full-stack module with a reviewed identity, its own database, UI, manifest, Feature Declarations, security capabilities, and contracts; do not reactivate the retired generic Migration transition through a catalog edit
 - update semantic route links, dry-run, idempotency, partial-failure, resume, and audit behavior for separately deployed modules
 - inventory and remove remaining transitional reporting, hybrid-shell, legacy-builder, and shared-database paths
 - reconcile canonical documentation references to absent archive sources
 
 **Application UI delivered this sprint:** coherent module-owned import and verification experiences, plus a coordinator only if cross-module migration remains a supported capability.
 
-**User-testable exit condition:** operators can dry-run, execute, resume, and verify migration through module APIs and product surfaces without an importer writing directly to another module's database, and the transitional in-process Migration contribution is absent: either no coordinator remains or the retained coordinator is independently deployed with its own manifest, Feature Declarations, security capabilities, administration surface, and database.
+**User-testable exit condition:** operators can dry-run, execute, resume, and verify approved module-owned import paths without an importer writing directly to another module's database. The retired in-process Migration contribution remains non-executable; any newly approved coordinator is independently deployed with its own reviewed identity, manifest, Feature Declarations, security capabilities, administration surface, and database.
 
 ### Sprint 9B: Modular Application Pilot Hardening Slice
 

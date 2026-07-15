@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "reserved_definition_id": "tessara.dashboards",
+  "display_name": "Dashboards",
+  "description": "Current in-process dashboard composition and viewing contribution.",
+  "availability": "active_in_process",
+  "features": [
+    {
+      "id": "tessara.dashboards.composition",
+      "name": "Dashboard composition",
+      "description": "Compose a dashboard from exact component versions.",
+      "use_cases": ["Create or revise a dashboard layout from reusable components."],
+      "inputs": ["Dashboard metadata, layout, and exact ComponentVersion references."],
+      "outcomes": ["A saved Dashboard composition."],
+      "constraints": ["Composition retains exact component-version references."],
+      "contracts": [
+        "tessara.dashboards.dashboard",
+        "tessara.dashboards.composition",
+        "tessara.components.component-version"
+      ],
+      "resource_types": ["tessara.transition.dashboard"],
+      "destinations": ["dashboards.create", "dashboards.edit"],
+      "capabilities": ["dashboards:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.dashboards.viewing",
+      "name": "Dashboard viewing",
+      "description": "Inspect and view a dashboard.",
+      "use_cases": ["Open a dashboard directory entry or issued dashboard view."],
+      "inputs": ["A Dashboard identifier and authorized actor context."],
+      "outcomes": ["A rendered dashboard using its bound component versions."],
+      "constraints": ["Manage-only access does not advertise the reader-directory navigation item."],
+      "contracts": ["tessara.dashboards.dashboard"],
+      "resource_types": ["tessara.transition.dashboard"],
+      "destinations": ["dashboards.detail", "dashboards.view"],
+      "capabilities": ["dashboards:read"],
+      "configuration_pointers": []
+    }
+  ],
+  "provided_contracts": [
+    {"id": "tessara.dashboards.dashboard", "version": "1.0.0", "kind": "resource", "description": "Resolve a Dashboard."},
+    {"id": "tessara.dashboards.composition", "version": "1.0.0", "kind": "behavior", "description": "Compose a dashboard."}
+  ],
+  "dependencies": [
+    {
+      "contract_id": "tessara.components.component-version",
+      "version_requirement": "^1.0",
+      "binding_key": "tessara.dashboards.component-version",
+      "optional": false
+    }
+  ],
+  "resource_types": [
+    {"id": "tessara.transition.dashboard", "description": "Core-owned transition Dashboard reference."}
+  ],
+  "routes": [
+    {"name": "dashboards.directory", "kind": "product", "parameters": []},
+    {"name": "dashboards.create", "kind": "product", "parameters": []},
+    {
+      "name": "dashboards.detail",
+      "kind": "product",
+      "parameters": [{"name": "dashboard_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "dashboards.edit",
+      "kind": "product",
+      "parameters": [{"name": "dashboard_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "dashboards.view",
+      "kind": "product",
+      "parameters": [{"name": "dashboard_id", "value_type": "uuid", "required": true}]
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.dashboards.navigation",
+      "destination": "dashboards.directory",
+      "label": "Dashboards",
+      "group": "Main",
+      "order_hint": 70,
+      "required_capabilities_any_of": ["dashboards:read"]
+    }
+  ],
+  "security_capabilities": [
+    {"id": "dashboards:read", "description": "Inspect dashboard definitions"},
+    {"id": "dashboards:manage", "description": "Manage dashboard definitions"}
+  ],
+  "configuration_schema": null
+}

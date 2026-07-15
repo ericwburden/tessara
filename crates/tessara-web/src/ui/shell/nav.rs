@@ -4,7 +4,10 @@
 
 use crate::features::auth;
 use crate::state::navigation;
-use crate::state::session::{shell_session_account, submit_logout};
+use crate::state::session::{shell_navigation_state, shell_session_account, submit_logout};
+use crate::state::shell_navigation::{
+    ShellNavigationGroupV1, ShellNavigationItemV1, ShellNavigationLoadState, ShellNavigationStateV1,
+};
 use crate::ui::empty_view;
 use icons::{
     CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks, LogOut,
@@ -15,6 +18,7 @@ use leptos::prelude::*;
 #[component]
 pub(crate) fn SidebarContent(active_route: &'static str) -> impl IntoView {
     let account = shell_session_account();
+    let shell_navigation = shell_navigation_state();
 
     view! {
         <a class="brand-lockup" href="/">
@@ -26,10 +30,115 @@ pub(crate) fn SidebarContent(active_route: &'static str) -> impl IntoView {
             </span>
         </a>
         <nav class="sidebar-nav" aria-label="Primary">
-            {move || nav_section_for("Main", active_route, account.get())}
-            {move || nav_section_for("Admin", active_route, account.get())}
+            {move || {
+                navigation_view(
+                    active_route,
+                    account.get(),
+                    shell_navigation.get(),
+                )
+            }}
         </nav>
         <AccountCard account/>
+    }
+}
+
+fn navigation_view(
+    active_route: &'static str,
+    account: Option<auth::ShellAccountSummary>,
+    shell_navigation: ShellNavigationLoadState,
+) -> AnyView {
+    match shell_navigation {
+        ShellNavigationLoadState::Ready(response) => {
+            let unavailable = (response.state == ShellNavigationStateV1::Unavailable).then(|| {
+                response
+                    .unavailable
+                    .map(|state| state.message)
+                    .unwrap_or_else(unavailable_message)
+            });
+            view! {
+                <div class="sidebar-navigation-projection">
+                    {response
+                        .groups
+                        .into_iter()
+                        .map(move |group| projected_nav_section(group, active_route))
+                        .collect_view()}
+                    {unavailable.map(navigation_unavailable_view)}
+                </div>
+            }
+            .into_any()
+        }
+        ShellNavigationLoadState::Loading => {
+            fallback_navigation(active_route, account, false).into_any()
+        }
+        ShellNavigationLoadState::Failed => {
+            fallback_navigation(active_route, account, true).into_any()
+        }
+    }
+}
+
+fn projected_nav_section(
+    group: ShellNavigationGroupV1,
+    active_route: &'static str,
+) -> impl IntoView {
+    view! {
+        <p class="sidebar-section">{group.name}</p>
+        {group
+            .items
+            .into_iter()
+            .map(move |item| projected_nav_item_link(item, active_route))
+            .collect_view()}
+    }
+}
+
+fn projected_nav_item_link(
+    item: ShellNavigationItemV1,
+    active_route: &'static str,
+) -> impl IntoView {
+    let class = if item.key == active_route {
+        "sidebar-link is-active"
+    } else {
+        "sidebar-link"
+    };
+    let icon = nav_icon_for(&item.key);
+    let label = item.label;
+    let title = label.clone();
+    let aria_label = label.clone();
+    view! {
+        <a
+            class=class
+            href=item.href
+            title=title
+            aria-label=aria_label
+        >
+            {icon}
+            <span class="sidebar-link__label">{label}</span>
+        </a>
+    }
+}
+
+fn fallback_navigation(
+    active_route: &'static str,
+    account: Option<auth::ShellAccountSummary>,
+    unavailable: bool,
+) -> impl IntoView {
+    view! {
+        <div class="sidebar-navigation-projection">
+            {nav_section_for("Main", active_route, account.clone())}
+            {nav_section_for("Admin", active_route, account)}
+            {unavailable.then(|| navigation_unavailable_view(unavailable_message()))}
+        </div>
+    }
+}
+
+fn unavailable_message() -> String {
+    "Contribution navigation is temporarily unavailable.".to_string()
+}
+
+fn navigation_unavailable_view(message: String) -> impl IntoView {
+    view! {
+        <p class="sidebar-navigation-status" role="status">
+            {message}
+        </p>
     }
 }
 
@@ -104,7 +213,41 @@ pub(crate) fn nav_section_for(
         .as_ref()
         .map(|account| account.capabilities.as_slice())
         .unwrap_or(&[]);
-    let items = navigation::nav_items_for_section(section, capabilities);
+    // Product navigation retains the established flat effective-capability
+    // behavior. Module Management is different: its direct capabilities are
+    // installation-global, so accept those keys only from the authoritative
+    // global companion set while the actor-filtered shell projection loads or
+    // is unavailable. `admin:all` remains in the flat set as the universal
+    // global sentinel.
+    let mut fallback_capabilities = capabilities
+        .iter()
+        .filter(|capability| {
+            capability.as_str() != "modules:read"
+                && capability.as_str() != "modules:manage_navigation"
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Some(account) = &account {
+        fallback_capabilities.extend(
+            account
+                .global_capabilities
+                .iter()
+                .filter(|capability| {
+                    matches!(
+                        capability.as_str(),
+                        "modules:read" | "modules:manage_navigation"
+                    )
+                })
+                .cloned(),
+        );
+    }
+    fallback_capabilities.sort();
+    fallback_capabilities.dedup();
+    let items = navigation::resolve_navigation(&[], None, &fallback_capabilities)
+        .items
+        .into_iter()
+        .filter(|item| item.section.as_str() == section)
+        .collect::<Vec<_>>();
 
     if items.is_empty() {
         return empty_view();
@@ -115,28 +258,35 @@ pub(crate) fn nav_section_for(
         {items
             .into_iter()
             .map(move |item| {
-                nav_item_link(item, active_route)
+                resolved_nav_item_link(item, active_route)
             })
             .collect_view()}
     }
     .into_any()
 }
 
-fn nav_item_link(item: &'static navigation::NavItem, active_route: &'static str) -> impl IntoView {
+fn resolved_nav_item_link(
+    item: navigation::ResolvedNavigationItem,
+    active_route: &'static str,
+) -> impl IntoView {
     let class = if item.key == active_route {
         "sidebar-link is-active"
     } else {
         "sidebar-link"
     };
+    let icon = nav_icon_for(&item.key);
+    let label = item.label;
+    let title = label.clone();
+    let aria_label = label.clone();
     view! {
-        <a class=class href=item.href title=item.label aria-label=item.label>
-            {nav_icon_for(item.key)}
-            <span class="sidebar-link__label">{item.label}</span>
+        <a class=class href=item.href title=title aria-label=aria_label>
+            {icon}
+            <span class="sidebar-link__label">{label}</span>
         </a>
     }
 }
 
-fn nav_icon_for(route_key: &'static str) -> impl IntoView {
+fn nav_icon_for(route_key: &str) -> impl IntoView + use<> {
     match route_key {
         "home" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><House class="sidebar-link__icon"/></span> }.into_any(),
         "organization" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><GitBranch class="sidebar-link__icon"/></span> }.into_any(),
@@ -149,5 +299,95 @@ fn nav_icon_for(route_key: &'static str) -> impl IntoView {
         "datasets" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Database class="sidebar-link__icon"/></span> }.into_any(),
         "administration" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><SlidersHorizontal class="sidebar-link__icon"/></span> }.into_any(),
         _ => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><File class="sidebar-link__icon"/></span> }.into_any(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn account(capabilities: &[&str], global_capabilities: &[&str]) -> auth::ShellAccountSummary {
+        auth::ShellAccountSummary {
+            email: "reader@tessara.local".into(),
+            display_name: "Module Reader".into(),
+            capabilities: capabilities
+                .iter()
+                .map(|capability| (*capability).to_string())
+                .collect(),
+            global_capabilities: global_capabilities
+                .iter()
+                .map(|capability| (*capability).to_string())
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn loading_and_failed_fallbacks_do_not_treat_scope_opaque_module_keys_as_global() {
+        for unavailable in [false, true] {
+            let html = Owner::new().with(|| {
+                fallback_navigation(
+                    "module_management",
+                    Some(account(
+                        &[
+                            "modules:read",
+                            "modules:manage_navigation",
+                            "forms:read",
+                            "datasets:read",
+                        ],
+                        &[],
+                    )),
+                    unavailable,
+                )
+                .to_html()
+            });
+
+            assert!(!html.contains("Module Management"));
+            assert!(!html.contains(">Forms<"));
+            assert!(!html.contains(">Datasets<"));
+            assert!(!html.contains(">Administration<"));
+            assert_eq!(
+                html.contains("Contribution navigation is temporarily unavailable."),
+                unavailable
+            );
+        }
+    }
+
+    #[test]
+    fn loading_and_failed_fallbacks_retain_globally_proven_read_and_manage() {
+        for capability in ["modules:read", "modules:manage_navigation"] {
+            for unavailable in [false, true] {
+                let html = Owner::new().with(|| {
+                    fallback_navigation(
+                        "module_management",
+                        Some(account(&[capability], &[capability])),
+                        unavailable,
+                    )
+                    .to_html()
+                });
+
+                assert!(html.contains("Module Management"), "{capability}");
+                assert!(!html.contains(">Administration<"), "{capability}");
+                assert_eq!(
+                    html.contains("Contribution navigation is temporarily unavailable."),
+                    unavailable
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn failed_fallback_retains_module_management_for_the_global_admin_sentinel() {
+        let html = Owner::new().with(|| {
+            fallback_navigation(
+                "module_management",
+                Some(account(&["admin:all"], &["admin:all"])),
+                true,
+            )
+            .to_html()
+        });
+
+        assert!(html.contains("Module Management"));
+        assert!(html.contains("Administration"));
+        assert!(html.contains("Contribution navigation is temporarily unavailable."));
     }
 }

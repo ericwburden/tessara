@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "reserved_definition_id": "tessara.migration",
+  "display_name": "Migration",
+  "description": "The roadmap identity is retired and no current in-process product surface exists.",
+  "availability": "retired",
+  "features": [],
+  "provided_contracts": [],
+  "dependencies": [],
+  "resource_types": [],
+  "routes": [],
+  "navigation": [],
+  "security_capabilities": [],
+  "configuration_schema": null
+}

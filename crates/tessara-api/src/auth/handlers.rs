@@ -49,7 +49,7 @@ pub async fn session(
     let response = match service::authenticate_request(&state.pool, &state.config, &headers).await {
         Ok((account, _session)) => SessionStateResponse {
             authenticated: true,
-            account: Some(account),
+            account: Some(account.into()),
         },
         Err(crate::error::ApiError::Unauthorized)
         | Err(crate::error::ApiError::SessionExpired)

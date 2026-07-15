@@ -150,10 +150,10 @@ The left navigation is composed from:
 
 1. permanent Core destinations,
 2. eligible module contributions: product destinations normally require an enabled instance, while administration/configuration/diagnostics destinations may remain available for an installed but disabled or unconfigured instance,
-3. administrator visibility and ordering policy, and
+3. administrator visibility and ordering policy for mutable module contributions, and
 4. the current user's applicable scope-bound Authorization Grants.
 
-Navigation filtering is a usability feature, not an authorization boundary. Every module independently enforces authorization on its routes, APIs, commands, and resource resolution.
+Permanent Core destinations are capability-filtered but policy-immutable: module-contribution policy cannot hide, reorder, regroup, or submit them as mutable members. Navigation filtering is a usability feature, not an authorization boundary. Every module independently enforces authorization on its routes, APIs, commands, and resource resolution. In the Sprint 6A reference composition, fixed Core Module Management is in the `Admin` group and uses effective global `modules:read` for discovery/read surfaces; only `modules:manage_navigation` enables navigation mutation.
 
 ## Security Boundary
 

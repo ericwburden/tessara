@@ -16,7 +16,7 @@ const COMPATIBILITY_ERROR: &str =
 #[tokio::test]
 async fn published_kind_update_preserves_every_pinned_dashboard_layout_atomically() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app.clone(),

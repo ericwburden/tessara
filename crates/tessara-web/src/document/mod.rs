@@ -11,5 +11,7 @@ pub(crate) use assets::static_asset;
 pub(crate) use assets::{document_head_tags, svg_asset};
 pub(crate) use html::{
     render_native_app_document, render_native_app_document_with_dashboard_bootstrap,
+    render_native_app_document_with_module_management_and_shell_navigation_bootstrap,
+    render_native_app_document_with_module_management_bootstrap,
 };
 pub(crate) use theme_bootstrap::{bootstrap_script, stylesheet_links};

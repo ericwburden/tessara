@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn demo_seed_backfills_workflows_and_form_links() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let seed = request_json(
@@ -156,7 +156,7 @@ async fn demo_seed_backfills_workflows_and_form_links() {
 #[tokio::test]
 async fn form_versions_can_be_reused_across_workflows() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let seed = request_json(
@@ -247,7 +247,7 @@ async fn form_versions_can_be_reused_across_workflows() {
 #[tokio::test]
 async fn generated_form_workflow_is_replaced_after_shortcut_is_promoted() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -421,9 +421,7 @@ async fn generated_form_workflow_is_replaced_after_shortcut_is_promoted() {
 #[tokio::test]
 async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
@@ -727,9 +725,7 @@ async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
 #[tokio::test]
 async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
@@ -1026,9 +1022,7 @@ async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
 #[tokio::test]
 async fn workflow_publish_rejects_branching_step_form_scopes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
@@ -1156,7 +1150,7 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
 #[tokio::test]
 async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let seed = request_json(
@@ -1237,5 +1231,4 @@ async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
             .contains("one hierarchy lineage")
     );
 }
-
 

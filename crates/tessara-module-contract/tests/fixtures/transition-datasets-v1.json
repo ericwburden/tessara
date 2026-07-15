@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "reserved_definition_id": "tessara.datasets",
+  "display_name": "Datasets",
+  "description": "Current in-process dataset authoring, publication, materialization, and preview contribution.",
+  "availability": "active_in_process",
+  "features": [
+    {
+      "id": "tessara.datasets.authoring",
+      "name": "Dataset authoring",
+      "description": "Author dataset definitions and revisions.",
+      "use_cases": ["Create or revise a governed dataset definition."],
+      "inputs": ["Dataset metadata, schema, source bindings, and classification settings."],
+      "outcomes": ["A saved Dataset and editable DatasetRevision."],
+      "constraints": ["Dataset classification and field policy remain Dataset-owned."],
+      "contracts": ["tessara.datasets.dataset", "tessara.datasets.dataset-revision"],
+      "resource_types": ["tessara.transition.dataset", "tessara.transition.dataset_revision"],
+      "destinations": ["datasets.directory", "datasets.create", "datasets.edit"],
+      "capabilities": ["datasets:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.datasets.publication",
+      "name": "Dataset publication",
+      "description": "Publish and inspect dataset revisions.",
+      "use_cases": ["Publish a reviewed dataset revision for stable consumption."],
+      "inputs": ["A valid DatasetRevision and its compatibility assessment."],
+      "outcomes": ["A published DatasetRevision retained in revision history."],
+      "constraints": ["Publication preserves current compatibility and lifecycle rules."],
+      "contracts": ["tessara.datasets.dataset", "tessara.datasets.dataset-revision"],
+      "resource_types": ["tessara.transition.dataset", "tessara.transition.dataset_revision"],
+      "destinations": ["datasets.revisions", "datasets.revision_detail", "datasets.revision_edit"],
+      "capabilities": ["datasets:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.datasets.materialization",
+      "name": "Dataset materialization",
+      "description": "Materialize a stable dataset major line from response data.",
+      "use_cases": ["Build dataset rows from governed response and form-version data."],
+      "inputs": ["Response records, exact FormVersion context, and a dataset revision."],
+      "outcomes": ["Materialized data associated with a stable dataset major line."],
+      "constraints": ["Materialization retains source provenance and classification policy."],
+      "contracts": [
+        "tessara.datasets.dataset-major-line",
+        "tessara.datasets.materialization",
+        "tessara.responses.response",
+        "tessara.forms.form-version"
+      ],
+      "resource_types": ["tessara.transition.dataset_major_line"],
+      "destinations": ["datasets.revisions"],
+      "capabilities": ["datasets:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.datasets.preview",
+      "name": "Dataset preview",
+      "description": "Preview dataset data under its classification controls.",
+      "use_cases": ["Inspect representative rows and schema before downstream use."],
+      "inputs": ["A Dataset or DatasetRevision identifier and preview parameters."],
+      "outcomes": ["A classification-filtered dataset preview."],
+      "constraints": ["Restricted and confidential fields require their existing read capabilities."],
+      "contracts": [
+        "tessara.datasets.dataset",
+        "tessara.datasets.dataset-revision",
+        "tessara.datasets.dataset-major-line"
+      ],
+      "resource_types": [
+        "tessara.transition.dataset",
+        "tessara.transition.dataset_revision",
+        "tessara.transition.dataset_major_line"
+      ],
+      "destinations": ["datasets.detail", "datasets.preview"],
+      "capabilities": ["datasets:read", "datasets:read_restricted", "datasets:read_confidential"],
+      "configuration_pointers": []
+    }
+  ],
+  "provided_contracts": [
+    {"id": "tessara.datasets.dataset", "version": "1.0.0", "kind": "resource", "description": "Resolve a Dataset."},
+    {"id": "tessara.datasets.dataset-revision", "version": "1.0.0", "kind": "resource", "description": "Resolve a DatasetRevision."},
+    {"id": "tessara.datasets.dataset-major-line", "version": "1.0.0", "kind": "resource", "description": "Resolve a Dataset major line."},
+    {"id": "tessara.datasets.materialization", "version": "1.0.0", "kind": "behavior", "description": "Materialize dataset data."}
+  ],
+  "dependencies": [
+    {
+      "contract_id": "tessara.responses.response",
+      "version_requirement": "^1.0",
+      "binding_key": "tessara.datasets.response",
+      "optional": false
+    },
+    {
+      "contract_id": "tessara.forms.form-version",
+      "version_requirement": "^1.0",
+      "binding_key": "tessara.datasets.form-version",
+      "optional": false
+    }
+  ],
+  "resource_types": [
+    {"id": "tessara.transition.dataset", "description": "Core-owned transition Dataset reference."},
+    {"id": "tessara.transition.dataset_revision", "description": "Core-owned transition DatasetRevision reference."},
+    {"id": "tessara.transition.dataset_major_line", "description": "Core-owned transition Dataset major-line reference."}
+  ],
+  "routes": [
+    {"name": "datasets.directory", "kind": "product", "parameters": []},
+    {"name": "datasets.create", "kind": "product", "parameters": []},
+    {
+      "name": "datasets.detail",
+      "kind": "product",
+      "parameters": [{"name": "dataset_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "datasets.preview",
+      "kind": "product",
+      "parameters": [{"name": "dataset_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "datasets.revisions",
+      "kind": "product",
+      "parameters": [{"name": "dataset_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "datasets.revision_detail",
+      "kind": "product",
+      "parameters": [
+        {"name": "dataset_id", "value_type": "uuid", "required": true},
+        {"name": "revision_id", "value_type": "uuid", "required": true}
+      ]
+    },
+    {
+      "name": "datasets.revision_edit",
+      "kind": "product",
+      "parameters": [
+        {"name": "dataset_id", "value_type": "uuid", "required": true},
+        {"name": "revision_id", "value_type": "uuid", "required": true}
+      ]
+    },
+    {
+      "name": "datasets.edit",
+      "kind": "product",
+      "parameters": [{"name": "dataset_id", "value_type": "uuid", "required": true}]
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.datasets.navigation",
+      "destination": "datasets.directory",
+      "label": "Datasets",
+      "group": "Admin",
+      "order_hint": 20,
+      "required_capabilities_any_of": ["datasets:read", "datasets:manage"]
+    }
+  ],
+  "security_capabilities": [
+    {"id": "datasets:read", "description": "Inspect dataset definitions"},
+    {"id": "datasets:manage", "description": "Manage dataset definitions"},
+    {"id": "datasets:read_restricted", "description": "Read restricted dataset rows when dataset visibility allows access"},
+    {"id": "datasets:read_confidential", "description": "Read confidential and restricted dataset rows when dataset visibility allows access"}
+  ],
+  "configuration_schema": null
+}

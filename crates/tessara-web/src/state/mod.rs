@@ -5,4 +5,5 @@
 pub mod navigation;
 
 pub mod session;
+pub mod shell_navigation;
 pub mod theme;

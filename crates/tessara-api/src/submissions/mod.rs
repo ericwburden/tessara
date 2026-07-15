@@ -15,6 +15,7 @@ pub use handlers::{
     delete_draft_submission, get_submission, list_response_start_options, list_submissions,
     save_submission_values, submit_submission,
 };
+pub(crate) use service::reference_lifecycle_if_accessible;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()

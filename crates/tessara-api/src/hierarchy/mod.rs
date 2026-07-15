@@ -44,6 +44,10 @@ pub(crate) fn routes() -> Router<AppState> {
         )
         .route("/api/node-types", get(list_readable_node_types))
         .route(
+            "/api/node-types/{node_type_id}/metadata-fields",
+            get(get_readable_node_type_metadata_fields),
+        )
+        .route(
             "/api/admin/node-type-relationships",
             get(list_node_type_relationships).post(create_node_type_relationship),
         )
@@ -193,6 +197,19 @@ pub async fn list_readable_node_types(
     Ok(Json(load_node_type_catalog(&state.pool).await?))
 }
 
+/// Returns the ordered metadata schema needed to render hierarchy node editors.
+pub async fn get_readable_node_type_metadata_fields(
+    State(state): State<AppState>,
+    request: AuthenticatedRequest,
+    Path(node_type_id): Path<Uuid>,
+) -> ApiResult<Json<Vec<NodeMetadataFieldSummary>>> {
+    request.require_capability("hierarchy:read")?;
+    require_node_type_exists(&state.pool, node_type_id).await?;
+    Ok(Json(
+        load_node_type_metadata_fields(&state.pool, node_type_id).await?,
+    ))
+}
+
 /// Returns one node type with linked relationships, metadata fields, and scoped forms.
 pub async fn get_node_type(
     State(state): State<AppState>,
@@ -201,39 +218,7 @@ pub async fn get_node_type(
 ) -> ApiResult<Json<NodeTypeDefinition>> {
     request.require_capability("admin:all")?;
     let catalog_entry = load_node_type_catalog_entry(&state.pool, node_type_id).await?;
-
-    let metadata_fields = sqlx::query(
-        r#"
-        SELECT
-            node_metadata_field_definitions.id,
-            node_metadata_field_definitions.node_type_id,
-            node_types.name AS node_type_name,
-            node_metadata_field_definitions.key,
-            node_metadata_field_definitions.label,
-            node_metadata_field_definitions.field_type::text AS field_type,
-            node_metadata_field_definitions.required
-        FROM node_metadata_field_definitions
-        JOIN node_types ON node_types.id = node_metadata_field_definitions.node_type_id
-        WHERE node_metadata_field_definitions.node_type_id = $1
-        ORDER BY node_metadata_field_definitions.key
-        "#,
-    )
-    .bind(node_type_id)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(NodeMetadataFieldSummary {
-            id: row.try_get("id")?,
-            node_type_id: row.try_get("node_type_id")?,
-            node_type_name: row.try_get("node_type_name")?,
-            key: row.try_get("key")?,
-            label: row.try_get("label")?,
-            field_type: row.try_get("field_type")?,
-            required: row.try_get("required")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let metadata_fields = load_node_type_metadata_fields(&state.pool, node_type_id).await?;
 
     let scoped_forms = sqlx::query(
         r#"
@@ -1159,6 +1144,46 @@ async fn require_node_type_slug_available_for_type(
     } else {
         Ok(())
     }
+}
+
+async fn load_node_type_metadata_fields(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+) -> ApiResult<Vec<NodeMetadataFieldSummary>> {
+    let fields = sqlx::query(
+        r#"
+        SELECT
+            node_metadata_field_definitions.id,
+            node_metadata_field_definitions.node_type_id,
+            node_types.name AS node_type_name,
+            node_metadata_field_definitions.key,
+            node_metadata_field_definitions.label,
+            node_metadata_field_definitions.field_type::text AS field_type,
+            node_metadata_field_definitions.required
+        FROM node_metadata_field_definitions
+        JOIN node_types ON node_types.id = node_metadata_field_definitions.node_type_id
+        WHERE node_metadata_field_definitions.node_type_id = $1
+        ORDER BY node_metadata_field_definitions.key
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeMetadataFieldSummary {
+            id: row.try_get("id")?,
+            node_type_id: row.try_get("node_type_id")?,
+            node_type_name: row.try_get("node_type_name")?,
+            key: row.try_get("key")?,
+            label: row.try_get("label")?,
+            field_type: row.try_get("field_type")?,
+            required: row.try_get("required")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(fields)
 }
 
 async fn load_node_type_catalog(pool: &sqlx::PgPool) -> ApiResult<Vec<NodeTypeCatalogEntry>> {

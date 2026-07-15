@@ -1,4 +1,5 @@
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
+import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 import { runPlaywrightSql } from "./support/postgres";
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
@@ -190,7 +191,10 @@ async function expectStatus(response: APIResponse, expectedStatus: number) {
 }
 
 async function ensureDemoSeed(page: Page) {
-  const response = await page.request.post("/api/demo/seed", { data: {} });
+  const response = await invokeDemoSeedEndpoint(page.request);
+  if (response === null) {
+    return;
+  }
   const text = await response.text();
   if (
     response.ok() ||

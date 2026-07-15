@@ -8,7 +8,20 @@ Out-of-roadmap sprint proposals and migration plans may also live here when they
 
 ## Current Roadmap Position
 
-The next planned sprint is **6A: Module Contract And Core Control Plane**. It begins the modular application-platform foundation after completed Sprint 5A. The authoritative scope remains in [the roadmap](../roadmap.md); a kickoff plan belongs here only when Sprint 6A is formally started.
+**Sprint 6A: Module Contract And Core Control Plane** is active. It started on
+2026-07-13 after completed Sprint 5A and begins the modular application-platform
+foundation. The authoritative delivery contract is the
+[Sprint 6A plan](./sprint-6a-plan.md); the broader sequence and release gates
+remain in [the roadmap](../roadmap.md).
+
+## Active Sprint Artifacts
+
+- [Sprint 6A Module Contract And Core Control Plane Plan](./sprint-6a-plan.md)
+- [Sprint 6A Kickoff Baseline Evidence](./sprint-6a-kickoff-baseline-evidence.md)
+- [Sprint 6A Transition Catalog Contract](./sprint-6a-transition-catalog.md)
+- [Sprint 6A Frozen Regression Matrix](./sprint-6a-regression-matrix.md)
+- [Sprint 6A Test Change Log](./sprint-6a-test-change-log.md)
+- [Sprint 6A Deployment Evidence Contract](./sprint-6a-deployment-evidence.md)
 
 ## Historical Planning Artifacts
 

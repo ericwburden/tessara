@@ -3,6 +3,8 @@
 use crate::features::administration::models::AdminCapabilitySummary;
 use leptos::prelude::*;
 
+use super::super::capability_metadata::AdminCapabilityMetadata;
+
 #[component]
 pub(crate) fn AdminCapabilityList(
     capabilities: Vec<String>,
@@ -17,15 +19,25 @@ pub(crate) fn AdminCapabilityList(
                 {capabilities
                     .into_iter()
                     .map(|capability| {
-                        let description = capability_catalog
+                        let summary = capability_catalog
                             .iter()
                             .find(|summary| summary.key == capability)
-                            .map(|summary| summary.description.clone())
-                            .unwrap_or_else(|| "Granted".to_string());
+                            .cloned();
                         view! {
                         <tr>
                             <th scope="row">{capability}</th>
-                            <td>{description}</td>
+                            <td>{if let Some(summary) = summary {
+                                view! {
+                                    <p>{summary.description}</p>
+                                    <AdminCapabilityMetadata
+                                        scope_mode=summary.scope_mode
+                                        provenance=summary.provenance
+                                        show_digest=true
+                                    />
+                                }.into_any()
+                            } else {
+                                view! { <span>"Granted"</span> }.into_any()
+                            }}</td>
                         </tr>
                         }
                     })

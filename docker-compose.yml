@@ -19,12 +19,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
     environment:
-      DATABASE_URL: postgres://tessara:tessara@postgres:5432/tessara
+      DATABASE_URL: ${TESSARA_DATABASE_URL:-postgres://tessara:tessara@postgres:5432/tessara}
       TESSARA_BIND_ADDR: 0.0.0.0:8080
       TESSARA_DEV_ADMIN_EMAIL: admin@tessara.local
       TESSARA_DEV_ADMIN_PASSWORD: tessara-dev-admin
       RUST_LOG: tessara_api=debug,tower_http=info,sqlx=warn
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:8080"
     depends_on:

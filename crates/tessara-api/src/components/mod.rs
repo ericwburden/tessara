@@ -1578,6 +1578,12 @@ fn component_config_validation_finding(error: ApiError) -> ComponentValidationFi
 fn validation_error_message(error: ApiError) -> String {
     match error {
         ApiError::BadRequest(message) | ApiError::NotFound(message) => message,
+        ApiError::MixedCapabilityScopeModes => {
+            "A role cannot mix scope-aware and installation-global capabilities.".into()
+        }
+        ApiError::GlobalCapabilityRequiresGlobalRoleAssignment => {
+            "Installation-global capabilities require a global role assignment.".into()
+        }
         ApiError::Forbidden(capability) => {
             format!("The current account is missing required capability '{capability}'.")
         }

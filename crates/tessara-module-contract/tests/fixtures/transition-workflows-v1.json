@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "reserved_definition_id": "tessara.workflows",
+  "display_name": "Workflows",
+  "description": "Current in-process workflow authoring, assignment, and execution contribution.",
+  "availability": "active_in_process",
+  "features": [
+    {
+      "id": "tessara.workflows.authoring",
+      "name": "Workflow authoring",
+      "description": "Author workflows and their versioned definitions.",
+      "use_cases": ["Create or revise a workflow before assigning it."],
+      "inputs": ["Workflow metadata, ordered steps, and referenced form versions."],
+      "outcomes": ["A saved Workflow and versioned execution definition."],
+      "constraints": ["Workflow editing remains governed by current workflow authorization."],
+      "contracts": ["tessara.workflows.workflow", "tessara.workflows.workflow-version"],
+      "resource_types": ["tessara.transition.workflow", "tessara.transition.workflow_version"],
+      "destinations": ["workflows.directory", "workflows.create", "workflows.edit"],
+      "capabilities": ["workflows:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.workflows.assignment",
+      "name": "Workflow assignment",
+      "description": "Assign work to its intended participants.",
+      "use_cases": ["Assign an available workflow to an eligible participant."],
+      "inputs": ["A workflow assignment target, actor, and applicable scope."],
+      "outcomes": ["A persisted workflow assignment discoverable by its participant."],
+      "constraints": ["Assignment ownership and scope rules remain Workflow-owned policy."],
+      "contracts": ["tessara.workflows.assignment"],
+      "resource_types": [],
+      "destinations": ["workflows.assignments"],
+      "capabilities": ["workflows:read", "workflows:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.workflows.execution",
+      "name": "Workflow execution",
+      "description": "Execute a published workflow against an exact form version.",
+      "use_cases": ["Open assigned work using the workflow's bound form definition."],
+      "inputs": ["An exact WorkflowVersion and required FormVersion binding."],
+      "outcomes": ["A workflow execution context ready for response capture."],
+      "constraints": ["Execution preserves exact version bindings and current authorization checks."],
+      "contracts": ["tessara.workflows.workflow-version", "tessara.forms.form-version"],
+      "resource_types": ["tessara.transition.workflow_version"],
+      "destinations": ["workflows.detail"],
+      "capabilities": ["workflows:read"],
+      "configuration_pointers": []
+    }
+  ],
+  "provided_contracts": [
+    {"id": "tessara.workflows.workflow", "version": "1.0.0", "kind": "resource", "description": "Resolve a Workflow."},
+    {"id": "tessara.workflows.workflow-version", "version": "1.0.0", "kind": "resource", "description": "Resolve a WorkflowVersion."},
+    {"id": "tessara.workflows.assignment", "version": "1.0.0", "kind": "behavior", "description": "Assign workflow work."}
+  ],
+  "dependencies": [
+    {
+      "contract_id": "tessara.forms.form-version",
+      "version_requirement": "^1.0",
+      "binding_key": "tessara.workflows.form-version",
+      "optional": false
+    }
+  ],
+  "resource_types": [
+    {"id": "tessara.transition.workflow", "description": "Core-owned transition Workflow reference."},
+    {"id": "tessara.transition.workflow_version", "description": "Core-owned transition WorkflowVersion reference."}
+  ],
+  "routes": [
+    {"name": "workflows.directory", "kind": "product", "parameters": []},
+    {"name": "workflows.create", "kind": "product", "parameters": []},
+    {"name": "workflows.assignments", "kind": "product", "parameters": []},
+    {
+      "name": "workflows.detail",
+      "kind": "product",
+      "parameters": [{"name": "workflow_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "workflows.edit",
+      "kind": "product",
+      "parameters": [{"name": "workflow_id", "value_type": "uuid", "required": true}]
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.workflows.navigation",
+      "destination": "workflows.directory",
+      "label": "Workflows",
+      "group": "Main",
+      "order_hint": 30,
+      "required_capabilities_any_of": ["workflows:read", "workflows:manage"]
+    }
+  ],
+  "security_capabilities": [
+    {"id": "workflows:read", "description": "Browse workflow definitions and assignments"},
+    {"id": "workflows:manage", "description": "Manage workflow definitions and assignments"}
+  ],
+  "configuration_schema": null
+}

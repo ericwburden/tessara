@@ -31,16 +31,30 @@ See [the modular platform contract](./docs/modular-application-platform.md) and
 
 ```text
 tessara-api
-tessara-core
-tessara-auth
-tessara-hierarchy
-tessara-forms
-tessara-submissions
 tessara-analytics
+tessara-auth
+tessara-core
+tessara-data-ops
+tessara-datasets
 tessara-dashboards
 tessara-db
+tessara-forms
+tessara-hierarchy
 tessara-jobs
+tessara-module-contract
+tessara-submissions
 tessara-web
+tessara-web-component-viewer
+tessara-web-components
+tessara-web-dashboards
+tessara-web-data-ops
+tessara-web-datasets
+tessara-web-forms
+tessara-web-http
+tessara-web-organization
+tessara-web-responses
+tessara-web-ui
+tessara-web-workflows
 ```
 
 The workspace has these crates scaffolded now. The current implementation keeps
@@ -52,9 +66,13 @@ Domain rules should move into their owning Core or full-stack module boundary as
 contracts stabilize. Current extracted examples:
 
 - `tessara-core`: shared field type parsing and JSON value validation
+- `tessara-module-contract`: framework-neutral versioned Manifest, transition,
+  semantic-destination, typed-reference, and resolution wire contracts
 - `tessara-dashboards`: dashboard composition rules
 - `tessara-forms`: form version lifecycle and section/field compatibility rules
 - `tessara-submissions`: draft/edit/submit workflow rules and required value checks
+- `tessara-web-*`: feature-owned native Leptos route/UI seams plus shared HTTP
+  and UI primitives; these remain one deployed web application in Sprint 6A
 
 The current crate name `tessara-core` predates architectural **Core** and is not
 its boundary definition. During module extraction, field/value semantics must
@@ -87,7 +105,8 @@ That script:
 - rebuilds the API image
 - recreates the Compose services
 - waits for `/health` and `/` to return `200`
-- ensures the UAT demo dataset is present in the local database
+- seeds the UAT demo dataset only when seeding is enabled and the application
+  database is empty
 
 Useful options:
 
@@ -97,13 +116,24 @@ Useful options:
 .\scripts\local-launch.ps1 -SkipBuild
 .\scripts\local-launch.ps1 -SkipSeed
 .\scripts\local-launch.ps1 -ApiOnly
+.\scripts\local-launch.ps1 -ExternalDatabaseUrl '<container-routable-url>' -ExternalDatabaseContainerId '<id>' -SkipSeed
 ```
 
 `-FreshData` also removes the local Postgres volume before relaunching.
 `-FollowLogs` tails the Postgres and API container logs after startup.
 `-SkipBuild` reuses the current API image.
-`-SkipSeed` leaves the current local dataset untouched.
+`-SkipSeed` skips only the optional post-start demo-data helper and leaves the
+current demo dataset untouched. It does not disable startup migrations,
+capability catalog synchronization, or the versioned built-in role-membership
+contract.
 `-ApiOnly` delegates to the fast API refresh path instead of rebuilding the full Compose stack.
+The paired external-database options are reserved for closing-build validation
+against a restored Sprint 5A demo clone that closing startup upgrades in place.
+They verify the running container, its published PostgreSQL port, token-bounded
+database name, and `current_database()`; they reject fresh/reset/API-only modes
+and require `-SkipSeed`. This browser candidate is separate from the
+representative populated-upgrade fixture used by Rust compatibility tests. See the
+[Sprint 6A deployment-evidence contract](./docs/sprints/sprint-6a-deployment-evidence.md).
 
 For the fast inner-loop Docker refresh path, use:
 
@@ -117,7 +147,8 @@ That script:
 - rebuilds only the API image unless `-SkipBuild` is supplied
 - recreates only the API container
 - waits for `/health` and `/` to return `200`
-- reseeds demo data unless `-SkipSeed` is supplied
+- seeds demo data only when `-SkipSeed` is absent and the application database
+  is empty; startup security/catalog synchronization still runs
 
 Useful options:
 
@@ -174,45 +205,87 @@ Release packaging for the UI/application binary path:
 cargo leptos build --release --split
 ```
 
-End-to-end coverage runs through Playwright:
+End-to-end coverage runs through the repository Playwright wrapper against an
+already reachable application:
 
 ```powershell
-cd .\end2end
-npm install
-cd ..
-cargo leptos end-to-end
+npm --prefix .\end2end ci
+npm --prefix .\end2end run install-browsers
+.\scripts\local-launch.ps1 -FreshData
+.\scripts\validate-e2e.ps1 -DevelopmentMode -BaseUrl "http://127.0.0.1:8080"
 ```
 
 Useful checks:
 
 ```powershell
-.\scripts\validate.ps1
 .\scripts\validate.ps1 -Fast
-.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"
-cargo clippy --workspace --all-targets -- -D warnings
-.\scripts\smoke.ps1
-.\scripts\smoke.ps1 -ComposeApi
+$env:TEST_DATABASE_URL = '<disposable-test-database-url>'
+$env:SPRINT_6A_UPGRADE_DATABASE_URL = '<second-dedicated-disposable-upgrade-database-url>'
+$env:SPRINT_6A_FRESH_DATABASE_URL = '<third-dedicated-disposable-fresh-database-url>'
+$env:SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
+.\scripts\validate.ps1
+.\scripts\validate-e2e.ps1 -DevelopmentMode -BaseUrl "http://127.0.0.1:8080"
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo audit --quiet
+.\scripts\smoke.ps1 -DevelopmentMode
+.\scripts\smoke.ps1 -ComposeApi -DevelopmentMode
 ```
 
 `.\scripts\validate.ps1` is the standard pre-commit Rust validation path. It
-runs formatting, API checks, the API SSR check, web checks, wasm hydrate checks,
-and API/web tests sequentially so Windows Cargo builds do not fight over the
-same artifact locks. Use `-Fast` for the inner loop when SSR and wasm hydrate
-checks are not relevant to the change.
+runs formatting, the framework-neutral module-contract check/tests, API checks,
+the API SSR check, web checks, wasm hydrate checks, and API/web tests
+sequentially so Windows Cargo builds do not fight over the same artifact locks.
+Full validation requires `TEST_DATABASE_URL`, a distinct
+`SPRINT_6A_UPGRADE_DATABASE_URL` for the destructive populated-upgrade proof,
+and a third distinct `SPRINT_6A_FRESH_DATABASE_URL` for fresh-start/seed-lock
+proof. All three must resolve to token-bounded disposable database names, and
+the exact reset acknowledgement is mandatory. Validation fails instead of
+silently skipping database-backed assertions when any URL is absent or any two
+resolve to the same live database. Use
+`-Fast` only for the inner loop when SSR, wasm hydrate, and database checks are
+not relevant to the change. Closing browser acceptance additionally restores a
+Sprint 5A demo source into a fourth disposable target, validates it with
+`OriginalAfterRestore`, and starts the closing image with `-SkipSeed`; it does
+not repurpose or post-upgrade-seed the representative fixture database.
 
 Testing should focus on behavior that protects domain and workflow boundaries:
 validation rules, capability scope and ownership behavior, projection contracts,
 component/dashboard composition, and end-to-end slice regressions. Avoid
 placeholder tests that only assert generated boilerplate.
 
+Tests are durable executable contracts. Do not delete, skip, weaken, loosen, or
+rewrite a failing test merely to obtain a green run; do not mask failures with
+broader retries, timeouts, selectors, or regenerated expected output. A changed
+expectation requires an approved behavior or contract decision, a written
+rationale, and equivalent or stronger replacement coverage. Accepted versioned
+fixtures are immutable. See
+[the development workflow](./docs/development-workflow.md#test-evidence-and-change-control)
+for the complete change-control and closeout-evidence requirements.
+
 Permission-controlled surfaces and actions must be covered through Playwright
-when executable. The standard `validate-e2e.ps1` / `npx playwright test` path
-includes `end2end/tests/permissions.spec.ts`; update
+when executable. By default, `validate-e2e.ps1` is an acceptance run: it requires
+a retained Sprint 6A deployment-evidence record and expected upgraded/fresh
+state, validates that record against the current live source/image/service/
+database, and rejects
+spec/CLI filters, discovers the exact checked-in acceptance inventory, runs it
+with one worker, zero retries, and `forbidOnly`, then retains JSON/JUnit evidence
+and fails on a skipped, flaky, retried, non-passing, filtered, or unexpected
+test count. It validates discovery, execution JSON, JUnit, and summary in a
+unique temporary directory before publishing the complete set; existing green
+evidence is preserved unless `-OverwriteEvidence` is explicit, and publication
+failure rolls the prior set back. Use `-DevelopmentMode` explicitly for targeted
+local diagnosis; that output is never acceptance evidence. The wrapper restores
+every Playwright environment variable it touches and runs Playwright from the
+`end2end` package and includes `end2end/tests/permissions.spec.ts`; do not
+substitute a root-level `npx playwright test` command. Update
 `docs/playwright-permissions-scenarios.md` alongside new permission scenarios.
 
 The default smoke script uses Docker for Postgres and runs the API locally with
-`cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi` to validate the fully
-containerized Compose deployment path, including the API image.
+`cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi -DevelopmentMode` to validate
+the fully containerized Compose deployment path during development. Sprint
+acceptance instead runs an already-started labeled release image and supplies
+`-DeploymentEvidencePath` plus `-ExpectedDataState`; see the canonical closeout
+commands in [the development workflow](./docs/development-workflow.md#canonical-closeout-validation).
 
 See [docs/development-workflow.md](./docs/development-workflow.md) for the
 recommended fast/medium/slow development loops.
@@ -236,29 +309,57 @@ The API serves the native Tessara interface at:
 http://localhost:8080/
 ```
 
-Current transition routes are mounted at root-level paths. Organization remains
-a Core route in the target architecture; Forms, Workflows, and Responses become
-module-owned routes behind the same-origin gateway:
+Current Core/product routes are mounted at root-level paths. Organization and
+Operations remain Core surfaces in the target architecture; Forms, Workflows,
+Responses, Datasets, Components, and Dashboards are current in-process
+transition surfaces that later become module-owned behind the same-origin
+gateway:
 
 ```text
 http://localhost:8080/organization
 http://localhost:8080/forms
 http://localhost:8080/workflows
 http://localhost:8080/responses
+http://localhost:8080/operations
+http://localhost:8080/datasets
+http://localhost:8080/components
+http://localhost:8080/dashboards
 ```
 
-Administration routes are also mounted at root-level paths:
+Core administration routes are also mounted at root-level paths. Module
+Management is a fixed `Admin`-group Core item gated independently by effective
+global `modules:read`; the separate Administration landing/item remains gated
+by `admin:all`:
 
 ```text
 http://localhost:8080/administration
 http://localhost:8080/administration/users
 http://localhost:8080/administration/node-types
 http://localhost:8080/administration/roles
-http://localhost:8080/datasets
-http://localhost:8080/datasets
-http://localhost:8080/components
-http://localhost:8080/dashboards
+http://localhost:8080/administration/modules
+http://localhost:8080/administration/modules/tessara.forms
 ```
+
+Sprint 6A control-plane and compatibility API entry points are:
+
+```text
+GET  /api/admin/modules
+GET  /api/admin/modules/{definition_id}
+GET  /api/admin/modules/{definition_id}/descriptor
+GET  /api/admin/navigation-policy
+PUT  /api/admin/navigation-policy
+GET  /api/shell/navigation
+POST /api/platform/destinations/resolve
+POST /api/platform/resource-references
+POST /api/platform/resource-references/resolve
+GET  /api/node-types/{node_type_id}/metadata-fields
+```
+
+The Organization metadata-field endpoint is a narrow read schema for effective
+`hierarchy:read`; full node-type definitions and every metadata mutation remain
+on `admin:all` administration APIs. Sprint 6A exposes Module Release/Instance
+contract types but intentionally has no Release/Instance persistence or
+mutation routes.
 
 The former `/app` shell and JavaScript bridge assets have been retired. For user
 testing, start the Compose stack and open the root URL in a browser. The local

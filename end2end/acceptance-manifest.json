@@ -1,0 +1,101 @@
+{
+  "schema_version": 2,
+  "expected_total": 60,
+  "files": [
+    {
+      "path": "app.spec.ts",
+      "tests": [
+        "root route renders assigned work in the native shell",
+        "login is a bare root-level route",
+        "protected native routes redirect unauthenticated browsers to login",
+        "authenticated primary routes render in the native shell",
+        "old /app routes are no longer part of the mounted UI"
+      ]
+    },
+    {
+      "path": "components.spec.ts",
+      "tests": [
+        "Sprint 4A component workflow › admin can create, update, publish, and view a major-line table component",
+        "Sprint 4A component workflow › admin can author, publish, and view visual components",
+        "Sprint 4A component workflow › component editor remains contained and uses an accessible mobile preview drawer"
+      ]
+    },
+    {
+      "path": "dashboards.spec.ts",
+      "tests": [
+        "Sprint 5A Dashboard routes and composition › editor add, direct move, resize, preview, save, and remove preserve dirty-state rules",
+        "Sprint 5A Dashboard routes and composition › invalid inspector geometry resets without dirtying or saving the layout",
+        "Sprint 5A Dashboard routes and composition › viewer request permits execute twelve visible placements fairly without exceeding six in flight",
+        "Sprint 5A Dashboard routes and composition › saved viewer uses the shared Table toolbar while charts and stat cards use intrinsic presentation",
+        "Sprint 5A Dashboard routes and composition › embedded Table keeps full server-backed paging and page-size controls",
+        "Sprint 5A Dashboard routes and composition › mobile Table fullscreen survives returning to a lazily executed viewer",
+        "Sprint 5A Dashboard routes and composition › all native routes keep metadata-only surfaces inert and the focused viewer executes exact versions",
+        "Sprint 5A Dashboard routes and composition › JavaScript-disabled direct loads preserve useful and redacted-safe Dashboard SSR"
+      ]
+    },
+    {
+      "path": "datasets.spec.ts",
+      "tests": [
+        "admin can author, edit, save, and view a Sprint 3A dataset",
+        "admin can UAT Sprint 3B advanced dataset authoring",
+        "dataset SQL preview uses pre-projection join keys and stable field identities",
+        "dataset revision navigation handles repeated detail and error states",
+        "dataset SQL preview renders ordered QuerySpec operations as sequential CTEs",
+        "dataset operations keep operation-local state through reorder, save, and reload",
+        "dataset SQL preview merges unioned source fields under the union step alias",
+        "dataset source picker keeps Version N major-line fields after a newer major exists",
+        "admin can review and publish a dataset draft revision",
+        "frozen Dataset document routes preserve direct-load and refresh ownership"
+      ]
+    },
+    {
+      "path": "modules.spec.ts",
+      "tests": [
+        "Sprint 6A Module Management › directory and detail preserve human-machine parity and explicit route states",
+        "Sprint 6A Module Management › global read exposes the fixed Admin item without Administration and remains read-only",
+        "Sprint 6A Module Management › scoped module authority, product-only authority, and no access stay hidden and restricted",
+        "Sprint 6A Module Management › keyboard policy edits retain focus and persist in desktop and mobile shells",
+        "Sprint 6A Module Management › native directory and detail remain useful without JavaScript or bridge requests"
+      ]
+    },
+    {
+      "path": "permissions.spec.ts",
+      "tests": [
+        "capability + scope + ownership permissions › admin has global access to in-scope and out-of-scope fixtures",
+        "capability + scope + ownership permissions › scoped manager reads in-scope surfaces and is denied out-of-scope surfaces",
+        "capability + scope + ownership permissions › owners and delegators can access owned or delegated work only",
+        "capability + scope + ownership permissions › no-capability users are denied protected capability surfaces",
+        "capability + scope + ownership permissions › administration user and node-type routes are admin-only",
+        "capability + scope + ownership permissions › non-admin shell hides Administration navigation",
+        "capability + scope + ownership permissions › operations route is visible only to operations viewers",
+        "capability + scope + ownership permissions › admin can create a role and load the roles route",
+        "capability + scope + ownership permissions › session metadata exposes capabilities, scopes, and delegations without legacy access switches",
+        "capability + scope + ownership permissions › hierarchy routes enforce scoped read visibility",
+        "capability + scope + ownership permissions › scoped form UI shows visible forms and blocks out-of-scope detail",
+        "capability + scope + ownership permissions › form create and edit routes exercise scoped manage permission",
+        "capability + scope + ownership permissions › workflow create detail and edit routes exercise scoped manage permission",
+        "capability + scope + ownership permissions › workflow assignment candidates and starts respect manager scope",
+        "capability + scope + ownership permissions › response edit route follows ownership and delegation permissions",
+        "capability + scope + ownership permissions › submission management combines scope with response ownership",
+        "capability + scope + ownership permissions › dataset revision UI hides drafts from scoped readers",
+        "capability + scope + ownership permissions › scoped component manager cannot bind or publish out-of-scope dataset major lines",
+        "capability + scope + ownership permissions › explicit historical component table checks selected version dataset scope",
+        "capability + scope + ownership permissions › dashboard native routes and APIs exercise scoped manage permission",
+        "capability + scope + ownership permissions › dashboard viewer preserves a redacted footprint without executing the hidden Component",
+        "capability + scope + ownership permissions › JavaScript-disabled Core, Organization, and Administration routes preserve native SSR ownership",
+        "capability + scope + ownership permissions › JavaScript-disabled Form and Workflow routes preserve native SSR ownership",
+        "capability + scope + ownership permissions › JavaScript-disabled Response and Dataset routes preserve native SSR ownership",
+        "capability + scope + ownership permissions › JavaScript-disabled Component and Dashboard routes preserve native SSR ownership"
+      ]
+    },
+    {
+      "path": "workflow-mediated-assignments.spec.ts",
+      "tests": [
+        "workflow-mediated form shortcuts › publishing a form creates a visible generated single-form workflow",
+        "workflow-mediated form shortcuts › Assign Form uses workflow assignments and delegates start assigned work",
+        "workflow-mediated form shortcuts › editing a generated workflow into multiple steps promotes it and form shortcut creates a fresh workflow",
+        "workflow-mediated form shortcuts › response start options are assignment-only"
+      ]
+    }
+  ]
+}

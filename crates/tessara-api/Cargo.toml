@@ -18,6 +18,7 @@ password-hash = { workspace = true }
 rand_core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 sqlx = { workspace = true }
 tessara-core = { path = "../tessara-core" }
 tessara-data-ops = { path = "../tessara-data-ops" }
@@ -25,6 +26,7 @@ tessara-datasets = { path = "../tessara-datasets" }
 tessara-dashboards = { path = "../tessara-dashboards" }
 tessara-forms = { path = "../tessara-forms" }
 tessara-hierarchy = { path = "../tessara-hierarchy" }
+tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-submissions = { path = "../tessara-submissions" }
 tessara-web = { path = "../tessara-web", default-features = false, optional = true }
 thiserror = { workspace = true }

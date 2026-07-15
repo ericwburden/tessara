@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "reserved_definition_id": "tessara.components",
+  "display_name": "Components",
+  "description": "Current in-process component authoring, publication, execution, and viewing contribution.",
+  "availability": "active_in_process",
+  "features": [
+    {
+      "id": "tessara.components.authoring",
+      "name": "Component authoring",
+      "description": "Author a component against a stable dataset major line.",
+      "use_cases": ["Create or revise a reusable data-backed component."],
+      "inputs": ["Component metadata, configuration, and a Dataset major-line binding."],
+      "outcomes": ["A saved component draft ready for publication."],
+      "constraints": ["Authoring preserves the declared dataset compatibility binding."],
+      "contracts": ["tessara.components.component-version", "tessara.datasets.dataset-major-line"],
+      "resource_types": ["tessara.transition.component_version"],
+      "destinations": ["components.directory", "components.create", "components.edit"],
+      "capabilities": ["components:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.components.publication",
+      "name": "Component publication",
+      "description": "Publish and inspect component versions.",
+      "use_cases": ["Publish a reviewed component for exact-version reuse."],
+      "inputs": ["A valid component draft and compatible Dataset major line."],
+      "outcomes": ["A stable ComponentVersion retained in version history."],
+      "constraints": ["Published ComponentVersion identity remains exact and durable."],
+      "contracts": ["tessara.components.component-version", "tessara.datasets.dataset-major-line"],
+      "resource_types": ["tessara.transition.component_version"],
+      "destinations": ["components.edit", "components.versions"],
+      "capabilities": ["components:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.components.execution",
+      "name": "Component execution",
+      "description": "Execute an exact component version.",
+      "use_cases": ["Render component output against its compatible dataset contract."],
+      "inputs": ["An exact ComponentVersion and authorized data context."],
+      "outcomes": ["Executed component output for the requesting surface."],
+      "constraints": ["Execution uses the exact published version and current data authorization."],
+      "contracts": ["tessara.components.component-version", "tessara.components.execution"],
+      "resource_types": ["tessara.transition.component_version"],
+      "destinations": ["components.view"],
+      "capabilities": ["components:read"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.components.viewing",
+      "name": "Component viewing",
+      "description": "Inspect and view an exact component version.",
+      "use_cases": ["Open a component detail or viewing surface."],
+      "inputs": ["A durable component reference and actor context."],
+      "outcomes": ["Component metadata and rendered view visible to the actor."],
+      "constraints": ["Viewing never broadens the actor's component or dataset authority."],
+      "contracts": ["tessara.components.component-version"],
+      "resource_types": ["tessara.transition.component_version"],
+      "destinations": ["components.detail", "components.view"],
+      "capabilities": ["components:read"],
+      "configuration_pointers": []
+    }
+  ],
+  "provided_contracts": [
+    {"id": "tessara.components.component-version", "version": "1.0.0", "kind": "resource", "description": "Resolve a ComponentVersion."},
+    {"id": "tessara.components.execution", "version": "1.0.0", "kind": "behavior", "description": "Execute a component version."}
+  ],
+  "dependencies": [
+    {
+      "contract_id": "tessara.datasets.dataset-major-line",
+      "version_requirement": "^1.0",
+      "binding_key": "tessara.components.dataset-major-line",
+      "optional": false
+    }
+  ],
+  "resource_types": [
+    {"id": "tessara.transition.component_version", "description": "Core-owned transition ComponentVersion reference."}
+  ],
+  "routes": [
+    {"name": "components.directory", "kind": "product", "parameters": []},
+    {"name": "components.create", "kind": "product", "parameters": []},
+    {
+      "name": "components.detail",
+      "kind": "product",
+      "parameters": [{"name": "component_ref", "value_type": "string", "required": true}]
+    },
+    {
+      "name": "components.edit",
+      "kind": "product",
+      "parameters": [{"name": "component_ref", "value_type": "string", "required": true}]
+    },
+    {
+      "name": "components.versions",
+      "kind": "product",
+      "parameters": [{"name": "component_ref", "value_type": "string", "required": true}]
+    },
+    {
+      "name": "components.view",
+      "kind": "product",
+      "parameters": [{"name": "component_ref", "value_type": "string", "required": true}]
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.components.navigation",
+      "destination": "components.directory",
+      "label": "Components",
+      "group": "Main",
+      "order_hint": 60,
+      "required_capabilities_any_of": ["components:read", "components:manage"]
+    }
+  ],
+  "security_capabilities": [
+    {"id": "components:read", "description": "Inspect component definitions"},
+    {"id": "components:manage", "description": "Manage component definitions"}
+  ],
+  "configuration_schema": null
+}

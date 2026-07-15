@@ -6,6 +6,13 @@ import {
   type Page,
 } from "@playwright/test";
 
+import { invokeDemoSeedEndpoint } from "./support/demo-seed";
+import {
+  attachNativeRouteGuard,
+  expectShellRouteDirectLoadAndRefresh,
+  expectStandaloneRouteDirectLoadAndRefresh,
+} from "./support/native-route";
+
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
   "Failed to fetch",
@@ -337,7 +344,10 @@ async function expectJson<T>(response: APIResponse) {
 }
 
 async function seedDemo(page: Page) {
-  const response = await page.request.post("/api/demo/seed", { data: {} });
+  const response = await invokeDemoSeedEndpoint(page.request);
+  if (response === null) {
+    return existingDemoSeed(page);
+  }
   const text = await response.text();
   if (response.ok()) {
     return JSON.parse(text) as DemoSeed;
@@ -638,6 +648,128 @@ async function expectSelectedProjectionFieldCount(
 ) {
   await expect(selectedProjectionFields(projection, sourceAlias)).toHaveCount(count);
 }
+
+test("frozen Dataset document routes preserve direct-load and refresh ownership", async ({
+  page,
+}) => {
+  const assertNativeRouteGuard = attachNativeRouteGuard(page);
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  await cleanupPlaywrightDatasets(page);
+
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const field = requireRenderedField(
+    renderedFields(renderedForm),
+    () => true,
+    "field for native Dataset route characterization",
+  );
+  const runId = Date.now();
+  const datasetName = `Playwright Native Route ${runId}`;
+  const payload: DatasetPayload = {
+    name: datasetName,
+    slug: `${PW_DATASET_PREFIX}native-route-${runId}`,
+    grain: "submission",
+    visibility_node_ids: [seed.program_node_id],
+    initial_source: {
+      kind: "form",
+      alias: "program",
+      form_id: seed.form_id,
+      form_version_id: seed.form_version_id,
+    },
+    operations: [
+      projectionOperation([
+        datasetField("program", field.key, field.label, 0),
+      ]),
+    ],
+  };
+
+  let datasetId: string | undefined;
+  try {
+    await expectShellRouteDirectLoadAndRefresh(page, {
+      path: "/datasets/new",
+      shellTitle: "Create Dataset",
+      activeHref: "/datasets",
+      ready: async (routePage) => {
+        await expect(
+          routePage.getByRole("heading", {
+            level: 1,
+            name: "Create Dataset",
+          }),
+        ).toBeVisible();
+        await expect(
+          routePage.getByRole("button", { name: "Create Dataset" }),
+        ).toBeEnabled();
+      },
+    });
+
+    datasetId = await createDataset(page, payload);
+    await expectStandaloneRouteDirectLoadAndRefresh(page, {
+      path: `/datasets/${datasetId}/preview`,
+      rootSelector: ".dataset-preview-page",
+      ready: async (routePage) => {
+        await expect(
+          routePage.getByText("Dataset Preview", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          routePage.getByRole("heading", {
+            level: 1,
+            name: datasetName,
+          }),
+        ).toBeVisible();
+        await expect
+          .poll(async () => {
+            const tableCount = await routePage.locator("table").count();
+            const emptyCount = await routePage
+              .getByRole("heading", { level: 3, name: "No preview rows" })
+              .count();
+            return tableCount + emptyCount;
+          })
+          .toBeGreaterThan(0);
+        await expect(
+          routePage.getByRole("heading", {
+            level: 3,
+            name: "Preview unavailable",
+          }),
+        ).toHaveCount(0);
+      },
+    });
+
+    const draftName = `${datasetName} Draft`;
+    const draft = await saveDraftRevision(page, datasetId, {
+      ...payload,
+      name: draftName,
+    });
+    await expectShellRouteDirectLoadAndRefresh(page, {
+      path: `/datasets/${datasetId}/revisions/${draft.revision_id}/edit`,
+      shellTitle: "Edit Revision",
+      activeHref: "/datasets",
+      ready: async (routePage) => {
+        await expect(
+          routePage.getByRole("heading", {
+            level: 1,
+            name: "Edit Revision",
+          }),
+        ).toBeVisible();
+        await expect(routePage.getByLabel("Name", { exact: true })).toHaveValue(
+          draftName,
+        );
+        await expect(
+          routePage.getByRole("button", { name: "Save Revision" }),
+        ).toBeEnabled();
+      },
+    });
+  } finally {
+    if (datasetId) {
+      await deleteDataset(page, datasetId, 5_000).catch((error: unknown) => {
+        console.warn(`native route dataset cleanup failed: ${String(error)}`);
+      });
+    }
+  }
+
+  await assertNativeRouteGuard();
+});
 
 test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
   page,

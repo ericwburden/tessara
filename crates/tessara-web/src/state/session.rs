@@ -5,7 +5,7 @@
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use crate::features::auth;
 use crate::features::auth::ShellAccountSummary;
-#[cfg(feature = "hydrate")]
+use crate::state::shell_navigation::{ShellNavigationLoadState, ShellNavigationResponseV1};
 use leptos::context::{provide_context, use_context};
 use leptos::prelude::RwSignal;
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
@@ -13,56 +13,90 @@ use leptos::prelude::Set;
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use leptos::task::spawn_local;
 
-#[cfg(feature = "hydrate")]
 #[derive(Clone)]
 pub(crate) struct ShellSessionState {
     shell_account: RwSignal<Option<ShellAccountSummary>>,
+    shell_navigation: RwSignal<ShellNavigationLoadState>,
 }
 
-#[cfg(feature = "hydrate")]
 pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
     use_context::<ShellSessionState>()
         .map(|state| state.shell_account)
         .unwrap_or_else(|| RwSignal::new(None))
 }
 
-#[cfg(not(feature = "hydrate"))]
-pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
-    RwSignal::new(None)
+pub(crate) fn shell_navigation_state() -> RwSignal<ShellNavigationLoadState> {
+    use_context::<ShellSessionState>()
+        .map(|state| state.shell_navigation)
+        .unwrap_or_else(|| RwSignal::new(ShellNavigationLoadState::Loading))
 }
 
-#[cfg(feature = "hydrate")]
-pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
+pub(crate) fn provide_shell_session(
+    initial_navigation: Option<ShellNavigationResponseV1>,
+) -> RwSignal<Option<ShellAccountSummary>> {
     let shell_account = RwSignal::new(None::<ShellAccountSummary>);
-    load_shell_account(shell_account);
-    provide_context(ShellSessionState { shell_account });
+    let shell_navigation = RwSignal::new(
+        initial_navigation
+            .filter(ShellNavigationResponseV1::is_supported)
+            .map_or(
+                ShellNavigationLoadState::Loading,
+                ShellNavigationLoadState::Ready,
+            ),
+    );
+    load_shell_state(shell_account, shell_navigation);
+    provide_context(ShellSessionState {
+        shell_account,
+        shell_navigation,
+    });
     shell_account
 }
 
-#[cfg(not(feature = "hydrate"))]
-pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
-    RwSignal::new(None)
-}
-
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-/// Loads the load shell account data.
-pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>) {
+/// Loads the authenticated shell account, then its actor-filtered navigation.
+pub(crate) fn load_shell_state(
+    account: RwSignal<Option<ShellAccountSummary>>,
+    navigation: RwSignal<ShellNavigationLoadState>,
+) {
     spawn_local(async move {
         let session = auth::fetch_session().await;
-        account.set(session.and_then(|session| {
-            if !session.authenticated {
-                return None;
+        let Some(session) = session else {
+            account.set(None);
+            navigation.set(ShellNavigationLoadState::Failed);
+            return;
+        };
+        if !session.authenticated {
+            account.set(None);
+            navigation.set(ShellNavigationLoadState::Loading);
+            return;
+        }
+        let Some(summary) = session.account.map(Into::into) else {
+            account.set(None);
+            navigation.set(ShellNavigationLoadState::Failed);
+            return;
+        };
+        account.set(Some(summary));
+        let projection = tessara_web_http::fetch_json::<ShellNavigationResponseV1>(
+            "/api/shell/navigation",
+            "Shell navigation",
+        )
+        .await;
+        navigation.set(match projection {
+            Ok(projection) if projection.is_supported() => {
+                ShellNavigationLoadState::Ready(projection)
             }
-            session.account.map(Into::into)
-        }));
+            Ok(_) | Err(_) => ShellNavigationLoadState::Failed,
+        });
     });
 }
 
 #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
 #[allow(dead_code)]
-/// Loads the load shell account data.
-pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>) {
+pub(crate) fn load_shell_state(
+    account: RwSignal<Option<ShellAccountSummary>>,
+    navigation: RwSignal<ShellNavigationLoadState>,
+) {
     let _ = account;
+    let _ = navigation;
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]

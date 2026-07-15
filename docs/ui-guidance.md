@@ -218,7 +218,7 @@ Permanent Core destinations include:
 - Roles and Access
 - Module Management
 
-The current reference application may additionally contribute Forms, Workflows, Responses, Components, Dashboards, Datasets, and Migration. Those names describe one composition, not a fixed platform-wide route inventory. An application that omits a module MUST not show empty placeholders for it.
+The current reference application may additionally contribute Forms, Workflows, Responses, Components, Dashboards, and Datasets. The former Migration surface is retired and appears only as historical/support inventory, not as a live route or navigation contribution. Those names describe one composition, not a fixed platform-wide route inventory. An application that omits a module MUST not show empty placeholders for it.
 
 Guiding rules:
 
@@ -233,6 +233,8 @@ Guiding rules:
 - cross-module links MUST use semantic named destinations resolved for the current installation rather than hard-coded deployment URLs
 - IDs and workbench-style shortcuts should not be required for common user-testing flows
 - the shell should respect the active theme through shared shell chrome
+
+For the current reference application, Module Management is a permanent Core destination in the `Admin` group, after Datasets by default. It appears with effective installation-global `modules:read`; `modules:manage_navigation` and `admin:all` also qualify because each implies read. A read-only actor receives the directory, details, descriptors, and current navigation-policy presentation without enabled mutation controls. Show/hide/reorder controls require effective global `modules:manage_navigation`. The separate Administration item remains `admin:all`-only, and the `Admin` group still renders when Module Management is its only visible item. Module Management itself is not administrator-hideable or reorderable.
 
 ### Surface model
 
@@ -250,7 +252,7 @@ Internal or operator surfaces:
 
 - Core module, user, role, access, and Organization configuration
 - module-advertised administration, configuration, and diagnostics
-- Migration when its module is installed
+- a separately approved migration coordinator when its module is installed
 - dataset authoring
 - component authoring
 - access and role-assignment management
@@ -299,7 +301,7 @@ For scoped hierarchy areas, directory screens SHOULD NOT default to a flat card 
 
 - Organization and every installed module's primary workflows should behave like first-class parts of one application.
 - Administration should hold powerful Core and module configuration work, but should not be the only route to ordinary product authoring flows.
-- Migration, when installed, should remain clearly operator-focused and visually subordinate to primary application work.
+- A separately approved migration coordinator, when installed, should remain clearly operator-focused and visually subordinate to primary application work; installing one does not reactivate the retired transition implicitly.
 - User management and RBAC should live in internal or admin surfaces, but they must still be application-grade UI.
 
 ### Module management surfaces
@@ -323,6 +325,8 @@ An in-process transition contribution MUST be labeled `Transitional — not inde
 The module detail page SHOULD link into the owning module's configuration and diagnostics screens through semantic destinations. It MUST NOT reproduce module-specific configuration fields in Core unless the module's declared schema renders through a standard shared form contract.
 
 Navigation settings MUST explain that display choices do not grant access. Role management MUST show module capability provenance and provider state without allowing a module to silently create or mutate a role. It MUST identify the Blueprint-designated Administrator Enrollment Role, show whether it covers the current Core Administration Capability Floor, and block removal or weakening below that floor until another compliant role is designated through the same desired-state workflow.
+
+Module Management read surfaces and navigation-policy mutation affordances MUST be capability-distinct. Effective global `modules:read` makes the fixed `Admin` navigation item and read surfaces discoverable. Effective global `modules:manage_navigation` enables navigation mutation; read-only users must not receive an enabled control that can issue the policy write. A direct write remains authoritatively denied even if a client fabricates the control.
 
 Application composition UI MUST keep desired Blueprint state, deterministic lockfile/Materialization Plan, separate pending or accepted Apply Authorization Envelope, and observed Supervisor Ledger/installation receipt visibly distinct. It MUST identify the Core Release and gateway component; show the Core Administration Capability Floor version and designated Administrator Enrollment Role validation; show desired versus observed module enablement separately from navigation visibility and authorization; label emergency disablement as audited drift with reason/actor/time/expiry; show stale-base/replay/conflict findings; and make clear that generating a plan—including through an LLM—does not approve it. Destructive actions require an explicit approval view naming the affected instance/data and rollback limitations.
 
@@ -384,10 +388,10 @@ Behavior:
 Navigation structure:
 
 - Core MUST place Home first and keep Organization readily discoverable.
-- Module product destinations follow according to administrator-defined visibility, grouping, and ordering policy, with stable manifest hints used as defaults.
-- The current reference application's default primary order SHOULD be Forms, Workflows, Responses, Components, and Dashboards after Core destinations.
-- Secondary administration groups MAY contain Datasets authoring, User Management, Roles and Access, Organization Schema, Module Management, Migration, and module-contributed configuration or diagnostics when installed and authorized.
-- A product contribution appears only when the module is installed and enabled, the administrator allows it in navigation, and the current user has an applicable scope-bound Authorization Grant for its required security capability.
+- Module product destinations follow according to administrator-defined visibility and ordering policy, with stable manifest hints used as defaults. Sprint 6A does not permit administrator-defined grouping.
+- Before any administrator policy change, the current reference application's exact primary sequence SHOULD be Home, Organization, Forms, Workflows, Responses, Operations, Components, and Dashboards; for an actor eligible for every Admin item, the exact secondary sequence SHOULD be Administration, Datasets, then Module Management. Every old item retains its pre-Sprint-6A relative order, while Module Management is the sole additive fixed item. Later Sprint 6A reordering remains within the contribution's existing Core-assigned band: Forms, Workflows, and Responses stay between Organization and Operations; Components and Dashboards stay after Operations; and Datasets stays between Administration and Module Management. Contributions cannot cross a Core anchor or change groups.
+- Secondary administration groups MAY contain Datasets authoring, User Management, Roles and Access, Organization Schema, a separately approved migration coordinator, and module-contributed configuration or diagnostics when installed and authorized. They MUST contain fixed Core Module Management for an actor with effective global `modules:read`, even when the separate Administration item is not eligible. The retired Migration transition contributes no navigation item.
+- A product contribution appears only when the module is installed and enabled, the administrator allows it in navigation, and the current user has at least one of its declared `required_capabilities_any_of` display-eligibility capabilities. Core evaluates `admin:all` implication separately. This display check does not replace the route/API's authoritative action/resource/scope authorization.
 - Administration, configuration, and diagnostics contributions MAY appear for an installed module that is disabled, unconfigured, or unhealthy so authorized administrators can recover it. Such items use an explicit disabled, unconfigured, unavailable, or incompatible treatment when the destination cannot currently execute.
 - `Reports` SHOULD NOT appear in the default sidebar contract unless a future product slice restores reporting as a native route.
 
@@ -1456,6 +1460,9 @@ Out of scope for this UI guidance:
 - [ ] Permanent Core destinations and installed module contributions are composed dynamically.
 - [ ] Applications do not show placeholders for modules they do not include.
 - [ ] Administrators can hide and order module contributions without changing authorization or enablement.
+- [ ] Module Management is a fixed Core destination in the `Admin` group and appears with effective global `modules:read`, even when the separate `admin:all`-only Administration item is absent.
+- [ ] Read-only Module Management users can inspect the current navigation policy but have no enabled mutation affordance; effective global `modules:manage_navigation` is required to show/hide/reorder contributions.
+- [ ] Module Management itself cannot be hidden, reordered, regrouped, or submitted as a mutable contribution-policy member.
 - [ ] Module routes and APIs enforce authorization independently of navigation visibility.
 - [ ] Cross-module links use semantic named destinations, not deployment URLs.
 - [ ] Product navigation requires an enabled module, while authorized configuration and diagnostics remain recoverable when that module is disabled or unconfigured.

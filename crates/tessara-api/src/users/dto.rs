@@ -13,11 +13,46 @@ pub struct RoleSummary {
 }
 
 /// Capability catalog entry that can be assigned to administrator-managed roles.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct CapabilitySummary {
     pub id: Uuid,
     pub key: String,
     pub description: String,
+    pub scope_mode: CapabilityScopeMode,
+    pub provenance: Vec<CapabilityProvenanceSummary>,
+}
+
+/// Whether a capability may participate in scoped role assignments.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityScopeMode {
+    ScopeAware,
+    InstallationGlobal,
+}
+
+/// One durable source that advertises a Core-owned capability row.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct CapabilityProvenanceSummary {
+    pub source_kind: CapabilityProvenanceSourceKind,
+    pub source_key: String,
+    pub definition_id: Option<String>,
+    pub definition_display_name: Option<String>,
+    pub provider_state: CapabilityProviderState,
+    pub source_digest: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityProvenanceSourceKind {
+    Core,
+    TransitionContribution,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityProviderState {
+    CoreAuthoritative,
+    TransitionalInProcess,
 }
 
 /// Account row shown from a role detail page.
@@ -120,4 +155,59 @@ pub struct UpdateRoleRequest {
 pub struct UpdateUserAccessRequest {
     pub scope_node_ids: Vec<Uuid>,
     pub delegate_account_ids: Vec<Uuid>,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::{
+        CapabilityProvenanceSourceKind, CapabilityProvenanceSummary, CapabilityProviderState,
+        CapabilityScopeMode, CapabilitySummary,
+    };
+
+    #[test]
+    fn capability_wire_keeps_scope_and_provenance_as_separate_dimensions() {
+        let capability = CapabilitySummary {
+            id: Uuid::nil(),
+            key: "forms:read".into(),
+            description: "Browse top-level form records".into(),
+            scope_mode: CapabilityScopeMode::ScopeAware,
+            provenance: vec![
+                CapabilityProvenanceSummary {
+                    source_kind: CapabilityProvenanceSourceKind::Core,
+                    source_key: "core".into(),
+                    definition_id: None,
+                    definition_display_name: None,
+                    provider_state: CapabilityProviderState::CoreAuthoritative,
+                    source_digest: None,
+                },
+                CapabilityProvenanceSummary {
+                    source_kind: CapabilityProvenanceSourceKind::TransitionContribution,
+                    source_key: "tessara.forms".into(),
+                    definition_id: Some("tessara.forms".into()),
+                    definition_display_name: Some("Forms".into()),
+                    provider_state: CapabilityProviderState::TransitionalInProcess,
+                    source_digest: Some(
+                        "sha256:71bebdd07ff0028cc0da8bbd9707c393bade9951e5cedb265a4b8465d54b493e"
+                            .into(),
+                    ),
+                },
+            ],
+        };
+
+        let wire = serde_json::to_value(capability).expect("serialize capability");
+        assert_eq!(wire["scope_mode"], json!("scope_aware"));
+        assert_eq!(wire["provenance"][0]["source_kind"], json!("core"));
+        assert_eq!(
+            wire["provenance"][1]["provider_state"],
+            json!("transitional_in_process")
+        );
+        assert_eq!(
+            wire["provenance"][1]["source_digest"],
+            json!("sha256:71bebdd07ff0028cc0da8bbd9707c393bade9951e5cedb265a4b8465d54b493e")
+        );
+        assert!(wire["provenance"][0]["source_digest"].is_null());
+    }
 }

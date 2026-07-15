@@ -7,9 +7,9 @@ This inventory is a historical migration map for the native Leptos SSR reset. It
 | `/app` | `/` | Main | `/api/auth/session`, `/api/me`, `/api/workflow-assignments/pending` | Navigate to product and administration routes, start assigned work | None initially | Assigned work queue | Auth/session DTOs and assigned-work behavior |
 | `/app/login` | `/login` | Session | `/api/auth/login`, `/api/auth/session`, `/api/auth/logout` | Sign in, sign out, session verification | Auth feedback | Login form | Auth request/response contracts and session bootstrap behavior |
 | `/app/organization` | `/organization` | Main | `/api/hierarchy`, `/api/node-types`, `/api/forms`, `/api/submissions`, `/api/dashboards` | Create node, details, edit, create child | Sheet for node details, dropdown row menus | Nested collapsibles, info-list tables, related-work accordions | Hierarchy DTOs, node relationship helpers, metadata label handling, RFC2822 timestamp formatting |
-| `/app/organization/new` | `/organization/new` | Main | `/api/admin/nodes`, `/api/node-types` | Create node, cancel | Validation feedback | Node create form | Node payload assembly and metadata field handling |
+| `/app/organization/new` | `/organization/new` | Main | `/api/admin/nodes`, `/api/node-types`, `/api/node-types/{node_type_id}/metadata-fields` | Create node, cancel | Validation feedback | Node create form | Node payload assembly and metadata field handling; field schema is a `hierarchy:read` Core projection, not an admin node-type definition |
 | `/app/organization/:node_id` | `/organization/:node_id` | Main | `/api/hierarchy/{node_id}` plus related work APIs | Details, edit, create child | Sheet | Info-list tables, related accordions | Related work aggregation and metadata labels |
-| `/app/organization/:node_id/edit` | `/organization/:node_id/edit` | Main | `/api/admin/nodes/{node_id}` | Save, cancel | Validation feedback | Node edit form | Existing validation and patch payload behavior |
+| `/app/organization/:node_id/edit` | `/organization/:node_id/edit` | Main | `/api/nodes/{node_id}`, `/api/node-types`, `/api/node-types/{node_type_id}/metadata-fields`, `/api/admin/nodes/{node_id}` | Save, cancel | Validation feedback | Node edit form | Existing validation and patch payload behavior; metadata schema read does not widen node-type administration |
 | `/app/forms` | `/forms` | Main | `/api/forms`, `/api/node-types` | Create form, view, edit | None initially | Data table | Form DTOs, version summary formatting |
 | `/app/forms/new` | `/forms/new` | Main | `/api/admin/forms`, `/api/node-types` | Create form, add fields, cancel | Field editing drawer if needed | Form builder | Field schema helpers and validation rules |
 | `/app/forms/:form_id` | `/forms/:form_id` | Main | `/api/forms/{form_id}` | Edit, open published versions | Sheet/drawer only when needed | Info-list and field table | Form detail DTOs and published version mapping |
@@ -39,8 +39,16 @@ This inventory is a historical migration map for the native Leptos SSR reset. It
 | `/app/administration/users` | `/administration/users` | Admin | `/api/admin/users`, `/api/admin/roles` | Create, edit, manage access | Access sheet | User table/forms | User and role assignment DTOs |
 | `/app/administration/node-types` | `/administration/node-types` | Admin | `/api/admin/node-types`, relationship and metadata APIs | Create, edit, manage relationships | Relationship and metadata sheets | Node type table/forms | Node type relationship and metadata contracts |
 | `/app/administration/roles` | `/administration/roles` | Admin | `/api/admin/roles`, capabilities API | Create, edit | Capability selector | Role table/forms | Capability grouping helpers |
-| `/app/migration` | `/migration` | Admin | `/api/admin/legacy-import/*` | Inspect fixtures, run import | Import confirmation | Fixture tables/forms | Legacy import DTOs and validation behavior |
+| `/app/migration` | Historical/retired; there is no live `/migration` route | None | Historical `/api/admin/legacy-import/*` references only | None in the current application | None | None | Legacy import DTOs and validation behavior are historical reference material, not an active screen contract |
 | `/app/reports` | Pending scope | Pending | Reporting APIs | Create, run, edit | Report builder | Report tables | Keep reporting domain code parked until product scope is confirmed |
+
+Sprint 6A additive-screen note: Module Management is not a migrated `/app/*` screen, so it does not receive a legacy-map row above. Its authoritative routes are `/administration/modules` and `/administration/modules/:definition_id` in the active Sprint 6A plan. The standalone fixed Core item is in the `Admin` group after Datasets and is visible with effective global `modules:read`; navigation mutation remains separately gated by `modules:manage_navigation`. The existing `Administration` item and route remain `admin:all`-only, and that landing page gains a supplementary Module Management card for its authorized users.
+
+Migration inventory note: the former migration workbench is retired, and
+`/migration` must not be treated as a live route. Any Sprint 6A transition
+descriptor for Migration is historical/support catalog metadata only; it does
+not restore the screen or make Migration a deployable module. Restoration
+requires a new approved product decision and roadmap scope.
 
 ## Migration guardrails
 

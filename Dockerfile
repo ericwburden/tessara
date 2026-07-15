@@ -32,6 +32,15 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM debian:trixie-slim AS runtime
 
+ARG TESSARA_SOURCE_COMMIT=unknown
+ARG TESSARA_SOURCE_TREE=unknown
+ARG TESSARA_SOURCE_DIRTY=unknown
+
+LABEL org.opencontainers.image.revision="$TESSARA_SOURCE_COMMIT" \
+      com.tessara.source-tree="$TESSARA_SOURCE_TREE" \
+      com.tessara.source-dirty="$TESSARA_SOURCE_DIRTY" \
+      com.tessara.build-profile="release"
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*

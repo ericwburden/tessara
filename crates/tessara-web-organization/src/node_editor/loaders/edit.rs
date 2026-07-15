@@ -11,7 +11,7 @@ use std::collections::HashMap;
 #[cfg(feature = "hydrate")]
 use super::super::super::node_metadata::metadata_input_state;
 #[cfg(feature = "hydrate")]
-use super::super::api::{NodeEditorApiError, fetch_node_type_definition};
+use super::super::api::{NodeEditorApiError, fetch_node_type_metadata_fields};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn load_organization_edit_options(
@@ -57,17 +57,15 @@ pub(crate) fn load_organization_edit_options(
 
             match loaded {
                 Ok((loaded_node_types, loaded_nodes, loaded_detail)) => {
-                    match fetch_node_type_definition(&loaded_detail.node_type_id).await {
-                        Ok(definition) => {
-                            let (text_values, boolean_values) = metadata_input_state(
-                                &definition.metadata_fields,
-                                &loaded_detail.metadata,
-                            );
+                    match fetch_node_type_metadata_fields(&loaded_detail.node_type_id).await {
+                        Ok(fields) => {
+                            let (text_values, boolean_values) =
+                                metadata_input_state(&fields, &loaded_detail.metadata);
 
                             selected_parent_node_id
                                 .set(loaded_detail.parent_node_id.clone().unwrap_or_default());
                             name.set(loaded_detail.name.clone());
-                            metadata_fields.set(definition.metadata_fields);
+                            metadata_fields.set(fields);
                             metadata_values.set(text_values);
                             metadata_booleans.set(boolean_values);
                             detail.set(Some(loaded_detail));

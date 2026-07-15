@@ -3,7 +3,9 @@
 #[cfg(feature = "hydrate")]
 use super::{load_admin_role_detail, load_admin_roles_context};
 use crate::features::administration::models::AdminRoleSummary;
-use crate::features::administration::models::{AdminCapabilitySummary, AdminRoleDetail};
+use crate::features::administration::models::{
+    AdminCapabilitySummary, AdminRoleDetail, validate_admin_role_capability_scope_selection,
+};
 #[cfg(feature = "hydrate")]
 use crate::features::administration::models::{CreateAdminRolePayload, UpdateAdminRolePayload};
 #[cfg(feature = "hydrate")]
@@ -25,6 +27,15 @@ pub(crate) fn save_admin_role(
     selected_role_detail: RwSignal<Option<AdminRoleDetail>>,
     detail_loading: RwSignal<bool>,
 ) {
+    if let Err(scope_error) = validate_admin_role_capability_scope_selection(
+        &capabilities.get_untracked(),
+        &selected_capability_ids.get_untracked(),
+    ) {
+        is_saving.set(false);
+        message.set(Some(scope_error.into()));
+        return;
+    }
+
     #[cfg(feature = "hydrate")]
     {
         leptos::task::spawn_local(async move {

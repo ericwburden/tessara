@@ -169,6 +169,10 @@ pub async fn load_effective_capabilities(
         JOIN role_capabilities ON role_capabilities.role_id = role_assignments.role_id
         JOIN capabilities ON capabilities.id = role_capabilities.capability_id
         WHERE role_assignments.account_id = $1
+          AND (
+              capabilities.scope_mode = 'scope_aware'
+              OR role_assignments.node_id IS NULL
+          )
         "#,
     )
     .bind(account_id)
@@ -187,6 +191,10 @@ pub async fn load_capability_scopes(
         JOIN role_capabilities ON role_capabilities.role_id = role_assignments.role_id
         JOIN capabilities ON capabilities.id = role_capabilities.capability_id
         WHERE role_assignments.account_id = $1
+          AND (
+              capabilities.scope_mode = 'scope_aware'
+              OR role_assignments.node_id IS NULL
+          )
         "#,
     )
     .bind(account_id)
@@ -242,6 +250,7 @@ pub async fn effective_scope_node_ids_for_capability(
             WHERE role_assignments.account_id = $1
               AND role_assignments.node_id IS NOT NULL
               AND capabilities.key = $2
+              AND capabilities.scope_mode = 'scope_aware'
             UNION
             SELECT nodes.id
             FROM nodes
@@ -271,6 +280,14 @@ pub async fn load_scope_nodes(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<
             FROM role_assignments
             WHERE account_id = $1
               AND node_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM role_capabilities
+                  JOIN capabilities
+                    ON capabilities.id = role_capabilities.capability_id
+                  WHERE role_capabilities.role_id = role_assignments.role_id
+                    AND capabilities.scope_mode = 'installation_global'
+              )
         ) AS assigned_scope_nodes
         JOIN nodes ON nodes.id = assigned_scope_nodes.node_id
         JOIN node_types ON node_types.id = nodes.node_type_id

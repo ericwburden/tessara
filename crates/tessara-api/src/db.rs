@@ -2,9 +2,93 @@
 
 use std::path::PathBuf;
 
+use sha2::{Digest, Sha256};
 use sqlx::{PgPool, migrate::Migrator, postgres::PgPoolOptions};
 
-use crate::{auth, config::Config};
+use crate::{auth, config::Config, modules};
+
+/// Exact replaceable membership contract for the three Tessara-owned roles.
+///
+/// Only `role_capabilities` membership for these names is seed-owned. Existing
+/// role rows/IDs, assignments, accounts, sessions, and user-managed roles are
+/// never replaced by synchronization.
+pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
+    // `admin:all` universally implies every product and module capability.
+    // Storing only that global capability keeps the role single-mode without
+    // changing its effective authority.
+    ("admin", &["admin:all"]),
+    (
+        "operator",
+        &[
+            "hierarchy:read",
+            "forms:read",
+            "workflows:read",
+            "workflows:manage",
+            "submissions:respond",
+            "submissions:manage",
+            "operations:view",
+            "datasets:read",
+            "components:read",
+            "dashboards:read",
+        ],
+    ),
+    (
+        "respondent",
+        &["submissions:read_own", "submissions:respond"],
+    ),
+];
+
+/// Stable review identifier for the exact built-in membership set above.
+///
+/// The suffix is the first twelve hexadecimal characters of
+/// [`BUILT_IN_ROLE_CAPABILITY_SEED_SHA256`]. This coupling makes a membership
+/// change require both a new digest and an intentional version change.
+pub const BUILT_IN_ROLE_CAPABILITY_SEED_VERSION: &str =
+    "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68";
+
+/// SHA-256 of [`built_in_role_capability_seed_canonical_bytes`].
+pub const BUILT_IN_ROLE_CAPABILITY_SEED_SHA256: &str =
+    "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600";
+
+/// Returns the canonical bytes covered by the built-in membership digest.
+///
+/// The wire is deliberately tiny and explicit: one `role=<name>` line followed
+/// by its ordered `capability=<key>` lines, all UTF-8 with LF terminators.
+pub fn built_in_role_capability_seed_canonical_bytes() -> Vec<u8> {
+    let mut canonical = String::new();
+    for &(role_name, capability_keys) in BUILT_IN_ROLE_CAPABILITY_SEED {
+        canonical.push_str("role=");
+        canonical.push_str(role_name);
+        canonical.push('\n');
+        for &capability_key in capability_keys {
+            canonical.push_str("capability=");
+            canonical.push_str(capability_key);
+            canonical.push('\n');
+        }
+    }
+    canonical.into_bytes()
+}
+
+fn verify_built_in_role_capability_seed_contract() -> anyhow::Result<()> {
+    let actual_digest = sha256_hex(&built_in_role_capability_seed_canonical_bytes());
+    anyhow::ensure!(
+        actual_digest == BUILT_IN_ROLE_CAPABILITY_SEED_SHA256,
+        "built-in role capability seed does not match its declared digest; bump the contract version, update the digest, tests, and Sprint test change log"
+    );
+    let expected_suffix = format!("+sha256.{}", &actual_digest[..12]);
+    anyhow::ensure!(
+        BUILT_IN_ROLE_CAPABILITY_SEED_VERSION.ends_with(&expected_suffix),
+        "built-in role capability seed version must end with '{expected_suffix}'"
+    );
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
 
 /// Shared application state injected into Axum handlers.
 ///
@@ -34,6 +118,7 @@ pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
         .run(&pool)
         .await?;
     seed_dev_admin(&pool, config).await?;
+    modules::synchronize_catalog(&pool).await?;
 
     Ok(pool)
 }
@@ -115,7 +200,7 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     ];
 
     for (key, description) in capabilities {
-        let capability_id: uuid::Uuid = sqlx::query_scalar(
+        let _capability_id: uuid::Uuid = sqlx::query_scalar(
             r#"
             INSERT INTO capabilities (key, description)
             VALUES ($1, $2)
@@ -127,38 +212,9 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         .bind(description)
         .fetch_one(pool)
         .await?;
-
-        ensure_role_capability(pool, "admin", capability_id).await?;
     }
 
-    for capability_key in [
-        "hierarchy:read",
-        "forms:read",
-        "workflows:read",
-        "workflows:manage",
-        "submissions:respond",
-        "submissions:manage",
-        "operations:view",
-        "datasets:read",
-        "components:read",
-        "dashboards:read",
-    ] {
-        let capability_id: uuid::Uuid =
-            sqlx::query_scalar("SELECT id FROM capabilities WHERE key = $1")
-                .bind(capability_key)
-                .fetch_one(pool)
-                .await?;
-        ensure_role_capability(pool, "operator", capability_id).await?;
-    }
-
-    for capability_key in ["submissions:read_own", "submissions:respond"] {
-        let capability_id: uuid::Uuid =
-            sqlx::query_scalar("SELECT id FROM capabilities WHERE key = $1")
-                .bind(capability_key)
-                .fetch_one(pool)
-                .await?;
-        ensure_role_capability(pool, "respondent", capability_id).await?;
-    }
+    synchronize_seed_role_capabilities(pool).await?;
 
     let admin_role_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM roles WHERE name = 'admin'")
         .fetch_one(pool)
@@ -181,41 +237,131 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn ensure_role_capability(
-    pool: &PgPool,
-    role_name: &str,
-    capability_id: uuid::Uuid,
-) -> anyhow::Result<()> {
-    let role_id: uuid::Uuid = sqlx::query_scalar(
+async fn synchronize_seed_role_capabilities(pool: &PgPool) -> anyhow::Result<()> {
+    verify_built_in_role_capability_seed_contract()?;
+
+    let mut tx = pool.begin().await?;
+    for &(role_name, _) in BUILT_IN_ROLE_CAPABILITY_SEED {
+        sqlx::query(
+            r#"
+            INSERT INTO roles (name)
+            VALUES ($1)
+            ON CONFLICT (name) DO NOTHING
+            "#,
+        )
+        .bind(role_name)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    let seed_role_names = BUILT_IN_ROLE_CAPABILITY_SEED
+        .iter()
+        .map(|(role_name, _)| (*role_name).to_string())
+        .collect::<Vec<_>>();
+    // Assignment writers lock every selected role in ascending UUID order.
+    // Take the stronger seed locks in that same order so a concurrent access
+    // rewrite and startup synchronization cannot form an inverted lock cycle.
+    let locked_roles: Vec<(uuid::Uuid, String)> = sqlx::query_as(
         r#"
-        INSERT INTO roles (name)
-        VALUES ($1)
-        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-        RETURNING id
+        SELECT id, name
+        FROM roles
+        WHERE name = ANY($1)
+        ORDER BY id
+        FOR UPDATE
         "#,
     )
-    .bind(role_name)
-    .fetch_one(pool)
+    .bind(&seed_role_names)
+    .fetch_all(&mut *tx)
     .await?;
+    anyhow::ensure!(
+        locked_roles.len() == BUILT_IN_ROLE_CAPABILITY_SEED.len(),
+        "not every built-in seed role could be locked"
+    );
 
-    sqlx::query(
-        r#"
-        INSERT INTO role_capabilities (role_id, capability_id)
-        VALUES ($1, $2)
-        ON CONFLICT DO NOTHING
-        "#,
-    )
-    .bind(role_id)
-    .bind(capability_id)
-    .execute(pool)
-    .await?;
+    let mut role_ids = Vec::with_capacity(BUILT_IN_ROLE_CAPABILITY_SEED.len());
+    for &(role_name, capability_keys) in BUILT_IN_ROLE_CAPABILITY_SEED {
+        let role_id = locked_roles
+            .iter()
+            .find_map(|(role_id, stored_name)| (stored_name == role_name).then_some(*role_id))
+            .ok_or_else(|| anyhow::anyhow!("built-in seed role '{role_name}' is missing"))?;
+        for &capability_key in capability_keys {
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM capabilities WHERE key = $1)")
+                    .bind(capability_key)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            anyhow::ensure!(
+                exists,
+                "seed role '{role_name}' references unknown capability '{capability_key}'"
+            );
+        }
+        role_ids.push((role_name, role_id, capability_keys));
+    }
 
+    // All references are validated before deleting any membership. The
+    // replacement then occurs in the same transaction, so callers can observe
+    // either the prior exact set or the new exact set, never a partial set.
+    for (role_id, _) in &locked_roles {
+        sqlx::query("DELETE FROM role_capabilities WHERE role_id = $1")
+            .bind(role_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    for (role_name, role_id, capability_keys) in role_ids {
+        for &capability_key in capability_keys {
+            let result = sqlx::query(
+                r#"
+                INSERT INTO role_capabilities (role_id, capability_id)
+                SELECT $1, id
+                FROM capabilities
+                WHERE key = $2
+                "#,
+            )
+            .bind(role_id)
+            .bind(capability_key)
+            .execute(&mut *tx)
+            .await?;
+            anyhow::ensure!(
+                result.rows_affected() == 1,
+                "seed role '{role_name}' references unknown capability '{capability_key}'"
+            );
+        }
+    }
+    tx.commit().await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use sha2::{Digest, Sha256};
+
+    use super::{
+        BUILT_IN_ROLE_CAPABILITY_SEED_SHA256, BUILT_IN_ROLE_CAPABILITY_SEED_VERSION,
+        built_in_role_capability_seed_canonical_bytes,
+        verify_built_in_role_capability_seed_contract,
+    };
+
     const BASELINE: &[u8] = include_bytes!("../migrations/001_baseline.sql");
+    const DASHBOARD_PLACEMENT_CAPACITY: &[u8] =
+        include_bytes!("../migrations/002_dashboard_placement_capacity.sql");
+
+    #[test]
+    fn built_in_role_capability_seed_contract_is_exact_and_review_versioned() {
+        assert_eq!(
+            BUILT_IN_ROLE_CAPABILITY_SEED_VERSION,
+            "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68"
+        );
+        assert_eq!(
+            BUILT_IN_ROLE_CAPABILITY_SEED_SHA256,
+            "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600"
+        );
+        assert_eq!(
+            super::sha256_hex(&built_in_role_capability_seed_canonical_bytes()),
+            BUILT_IN_ROLE_CAPABILITY_SEED_SHA256
+        );
+        verify_built_in_role_capability_seed_contract()
+            .expect("checked-in membership contract should match its version and digest");
+    }
 
     #[test]
     fn squashed_baseline_migration_remains_immutable() {
@@ -229,6 +375,25 @@ mod tests {
             assert!(baseline.contains(&format!("'{kind}'::component_type")));
         }
         assert!(!baseline.contains("component_versions_component_type_table_chk"));
+    }
+
+    #[test]
+    fn pre_control_plane_migration_bytes_remain_immutable() {
+        assert_eq!(
+            sha256_hex(BASELINE),
+            "a61f5192ad8e14bdcbbd26203301030fd57b647a237218c1e5443936944e9ca0"
+        );
+        assert_eq!(
+            sha256_hex(DASHBOARD_PLACEMENT_CAPACITY),
+            "c26a100e7fcd7aba4a74622c03f6c8e809219022595206da3ba7ddc86313550e"
+        );
+    }
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
     }
 
     fn fnv1a(bytes: &[u8]) -> u64 {

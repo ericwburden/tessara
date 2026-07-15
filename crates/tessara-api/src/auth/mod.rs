@@ -11,6 +11,8 @@ use axum::{
 
 use crate::db::AppState;
 
+#[cfg(test)]
+pub(crate) use dto::CapabilityScope;
 pub use dto::{
     AccountContext, CapabilityBoundary, DelegationSummary, LoginRequest, LoginResponse,
     LogoutResponse, ScopeNodeSummary, SessionContext, SessionStateResponse,

@@ -116,6 +116,9 @@ test("authenticated primary routes render in the native shell", async ({
   await expect(
     page.getByRole("link", { name: "Open Roles" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open Module Management" }),
+  ).toBeVisible();
   await expect(page.locator(".sidebar")).toBeVisible();
 
   await page.goto("/datasets");

@@ -204,17 +204,23 @@ fn capability_keys(scopes: &[CapabilityScope]) -> Vec<String> {
         .collect::<Vec<_>>();
     let implied_reads = capabilities
         .iter()
-        .filter_map(|capability| {
-            capability
-                .strip_suffix(":manage")
-                .filter(|domain| *domain != "dashboards")
-                .map(|domain| format!("{domain}:read"))
-        })
+        .filter_map(|capability| implied_read_capability(capability))
         .collect::<Vec<_>>();
     capabilities.extend(implied_reads);
     capabilities.sort();
     capabilities.dedup();
     capabilities
+}
+
+fn implied_read_capability(granted: &str) -> Option<String> {
+    if granted == "modules:manage_navigation" {
+        return Some("modules:read".to_string());
+    }
+
+    granted
+        .strip_suffix(":manage")
+        .filter(|domain| *domain != "dashboards")
+        .map(|domain| format!("{domain}:read"))
 }
 
 pub async fn resolve_accessible_delegate_account_id(
@@ -311,4 +317,32 @@ fn extract_session_token(
     }
 
     Err(ApiError::Unauthorized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{capability_keys, implied_read_capability};
+    use crate::auth::dto::CapabilityScope;
+
+    #[test]
+    fn module_navigation_management_is_projected_as_module_read() {
+        assert_eq!(
+            implied_read_capability("modules:manage_navigation").as_deref(),
+            Some("modules:read")
+        );
+        assert_eq!(implied_read_capability("dashboards:manage"), None);
+
+        let capabilities = capability_keys(&[CapabilityScope {
+            capability: "modules:manage_navigation".to_string(),
+            global: true,
+            node_ids: Vec::new(),
+        }]);
+        assert_eq!(
+            capabilities,
+            vec![
+                "modules:manage_navigation".to_string(),
+                "modules:read".to_string()
+            ]
+        );
+    }
 }

@@ -17,6 +17,7 @@ pub mod demo;
 pub mod error;
 mod forms;
 mod hierarchy;
+mod modules;
 mod operations;
 mod submissions;
 mod users;
@@ -363,6 +364,28 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/datasets/{dataset_id}/preview",
+            get(|Path(dataset_id): Path<String>| async move {
+                native_app(
+                    format!("/datasets/{dataset_id}/preview"),
+                    "Dataset Preview",
+                    "Preview a Tessara dataset.",
+                )
+            }),
+        )
+        .route(
+            "/datasets/{dataset_id}/revisions/{revision_id}/edit",
+            get(
+                |Path((dataset_id, revision_id)): Path<(String, String)>| async move {
+                    native_app(
+                        format!("/datasets/{dataset_id}/revisions/{revision_id}/edit"),
+                        "Edit Dataset Revision",
+                        "Edit a Tessara dataset revision.",
+                    )
+                },
+            ),
+        )
+        .route(
             "/datasets/{dataset_id}/revisions/{revision_id}",
             get(
                 |Path((dataset_id, revision_id)): Path<(String, String)>| async move {
@@ -403,6 +426,11 @@ pub fn router(state: AppState) -> Router {
                     "Manage Tessara users.",
                 )
             }),
+        )
+        .route("/administration/modules", get(modules::native_directory))
+        .route(
+            "/administration/modules/{definition_id}",
+            get(modules::native_detail),
         )
         .route(
             "/administration/users/{account_id}",
@@ -479,6 +507,7 @@ fn api_routes() -> Router<AppState> {
         .merge(datasets::routes())
         .merge(components::routes())
         .merge(dashboards::routes())
+        .merge(modules::routes())
         .merge(demo::routes())
 }
 

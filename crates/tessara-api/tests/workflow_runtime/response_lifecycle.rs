@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn assignee_pending_work_can_start_workflow_response() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -91,7 +91,7 @@ async fn assignee_pending_work_can_start_workflow_response() {
 #[tokio::test]
 async fn response_lifecycle_saves_resumes_submits_and_locks_submitted_records() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -287,7 +287,7 @@ async fn response_lifecycle_saves_resumes_submits_and_locks_submitted_records() 
 #[tokio::test]
 async fn pending_work_excludes_assignments_with_existing_drafts() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -361,7 +361,7 @@ async fn pending_work_excludes_assignments_with_existing_drafts() {
 #[tokio::test]
 async fn pending_work_excludes_assignments_with_submitted_responses_and_start_rejects_them() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -443,7 +443,7 @@ async fn pending_work_excludes_assignments_with_submitted_responses_and_start_re
 #[tokio::test]
 async fn starting_distinct_assignments_returns_distinct_submission_ids() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -498,5 +498,4 @@ async fn starting_distinct_assignments_returns_distinct_submission_ids() {
 
     assert_ne!(first_started["id"], second_started["id"]);
 }
-
 

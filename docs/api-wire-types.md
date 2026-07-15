@@ -36,6 +36,24 @@ Contract versions and application versions are related but distinct. A module re
 
 Additive schema evolution is not automatically safe. Compatibility must account for required fields, enums, error variants, authorization semantics, lifecycle outcomes, idempotency, ordering, and event replay behavior. Provider and consumer tests must prove every supported version range.
 
+## Current Core Organization Metadata Schema
+
+- Core exposes `GET /api/node-types/{node_type_id}/metadata-fields` to authenticated actors with effective `hierarchy:read`; the historical `hierarchy:manage` implication and `admin:all` therefore qualify as well.
+- The response is the ordered list of field-schema rows required by the existing Organization create/edit surfaces: `id`, `node_type_id`, `node_type_name`, `key`, `label`, `field_type`, and `required`.
+- This read contract does not expose node values, scoped Forms, node-type relationship administration, or any mutation authority. The complete `GET /api/admin/node-types/{node_type_id}` definition and every node-type/metadata mutation remain `admin:all`-only.
+- Unknown node types return the normal not-found envelope; anonymous and insufficient-capability requests retain the established authentication/authorization envelopes.
+
+## Sprint 6A Concrete Platform Types
+
+- `tessara-module-contract` owns the framework-neutral v1 identities, Manifest/transition declarations, typed resource-reference and semantic-destination primitives, and `ResourceResolutionV1`.
+- `ResourceResolutionV1` keeps `access_state`, tagged `owner_state` plus owner-data state where applicable, `resource_identity_state`, provider-defined `resource_lifecycle_state`, `compatibility_state`, and `availability_state` independent. It replaces any combined resource-resolution outcome enum.
+- Unauthorized and access-not-evaluated resolution uses one restricted projection: every resource-specific dimension is `undisclosed`. Deserialization rejects a restricted envelope that discloses another dimension.
+- A Navigation Contribution declares `required_capabilities_any_of`; Core owns `admin:all` implication and final actor authorization. Display eligibility never becomes route/API authorization.
+- The authenticated `GET /api/auth/session` account projection retains `capabilities` as the established flat effective-key set and adds `global_capabilities` as the subset of those effective keys backed by installation-global authority. Shell fallback uses flat product keys but accepts direct `modules:*` keys only from `global_capabilities`; `admin:all` remains the universal global sentinel. Capability-to-scope bindings/details remain server-internal, and the established `scope_nodes` summary is unchanged.
+- Sprint 6A's Core Module Management destination is not a Navigation Contribution. It is a policy-immutable Core shell item with key `module_management`, route `/administration/modules`, group `Admin`, and a fixed default slot after Datasets. The shell projection includes it only for effective installation-global `modules:read`; `modules:manage_navigation` and `admin:all` qualify through implication. It is excluded from navigation-policy write members, and mutation controls plus `PUT /api/admin/navigation-policy` require effective global `modules:manage_navigation`.
+- Sprint 6A defines `ModuleRelease` and `ModuleInstance` public types only. Persistence, mutation, materialization, and a supported real Module Manifest artifact begin in Sprint 6B.
+- The transitional Migration descriptor is `retired`, with no route, navigation, provider, resource, or executable destination. Its continued discovery is historical/support context and does not authorize restoration.
+
 ## Transitional Migration Rule
 
 Do not introduce route-local raw fetch logic for mutations or authenticated JSON parsing. For current in-process feature routes, add typed client functions over the existing policy-neutral HTTP helper. When a feature becomes a module, move its stable public shapes into the module-owned contract package or schema and generate/adapt clients from that source.

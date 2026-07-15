@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "access_state": "authorized",
+  "owner_state": {
+    "kind": "undisclosed"
+  },
+  "resource_identity_state": "resolved",
+  "resource_lifecycle_state": {
+    "kind": "provider_defined",
+    "state": "active"
+  },
+  "compatibility_state": "compatible",
+  "availability_state": "available"
+}

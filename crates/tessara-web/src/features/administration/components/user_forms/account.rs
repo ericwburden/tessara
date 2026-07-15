@@ -91,6 +91,10 @@ pub(crate) fn AdministrationUserAccountForm(
 
                 <section class="form-section">
                     <h3>"Roles"</h3>
+                    <aside class="administration-role-assignment-guidance" role="note">
+                        <strong>"Role scope behavior"</strong>
+                        <p>"Installation-global roles are always assigned across this installation; organization scope nodes do not limit them. Use a dedicated global module role for modules:read or modules:manage_navigation. It can coexist with separate scoped product roles on the same user."</p>
+                    </aside>
                     <div class="checkbox-list">
                         {move || {
                             let selected = selected_role_ids.get();
@@ -137,5 +141,47 @@ pub(crate) fn AdministrationUserAccountForm(
                 </div>
             </form>
         </>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use leptos::prelude::*;
+
+    use super::AdministrationUserAccountForm;
+    use crate::features::administration::models::AdminRoleSummary;
+
+    #[test]
+    fn account_role_assignment_explains_global_module_and_scoped_role_composition() {
+        let html = Owner::new().with(|| {
+            let roles = RwSignal::new(vec![AdminRoleSummary {
+                id: "module-reader".into(),
+                name: "Module reader".into(),
+                capability_count: 1,
+                account_count: 0,
+            }]);
+
+            view! {
+                <AdministrationUserAccountForm
+                    account_id="account-1".to_string()
+                    roles
+                    email=RwSignal::new("reader@example.com".to_string())
+                    display_name=RwSignal::new("Module Reader".to_string())
+                    password=RwSignal::new(String::new())
+                    is_active=RwSignal::new(true)
+                    selected_role_ids=RwSignal::new(Vec::new())
+                    is_saving=RwSignal::new(false)
+                    message=RwSignal::new(None::<String>)
+                />
+            }
+            .to_html()
+        });
+
+        assert!(html.contains("Role scope behavior"));
+        assert!(html.contains("always assigned across this installation"));
+        assert!(html.contains("dedicated global module role"));
+        assert!(html.contains("modules:read"));
+        assert!(html.contains("modules:manage_navigation"));
+        assert!(html.contains("separate scoped product roles"));
     }
 }

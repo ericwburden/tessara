@@ -10,6 +10,10 @@ use tessara_api::{config::Config, db, router};
 use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
 
+mod database_safety;
+
+use database_safety::{DISPOSABLE_DATABASE_NAME_TOKENS, is_disposable_database_name};
+
 pub static TEST_DATABASE_LOCK: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
 static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
@@ -22,9 +26,9 @@ static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
         .try_init();
 });
 
-pub async fn test_app() -> Option<axum::Router> {
+pub async fn test_app() -> axum::Router {
     LazyLock::force(&TEST_TRACING);
-    Some(router(test_state().await?))
+    router(test_state().await)
 }
 
 pub async fn workflow_node_type_id_for_slug(app: axum::Router, token: &str, slug: &str) -> String {
@@ -173,16 +177,18 @@ pub async fn current_generated_workflow_for_form(
         .expect("form should expose a current generated workflow")
 }
 
-pub async fn test_state() -> Option<db::AppState> {
+pub async fn test_state() -> db::AppState {
     test_state_with_cookie_name("tessara_session").await
 }
 
-pub async fn test_state_with_cookie_name(auth_cookie_name: &str) -> Option<db::AppState> {
+pub async fn test_state_with_cookie_name(auth_cookie_name: &str) -> db::AppState {
     LazyLock::force(&TEST_TRACING);
-    let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .expect("TEST_DATABASE_URL is required; database integration tests must never skip");
+    assert!(
+        !database_url.trim().is_empty(),
+        "TEST_DATABASE_URL is required and must not be empty"
+    );
 
     reset_database(&database_url).await;
     let config = Config {
@@ -198,7 +204,7 @@ pub async fn test_state_with_cookie_name(auth_cookie_name: &str) -> Option<db::A
         .await
         .expect("database should migrate and seed");
 
-    Some(db::AppState { pool, config })
+    db::AppState { pool, config }
 }
 
 pub fn value_for_field_type(field_type: &str) -> Value {
@@ -398,8 +404,9 @@ async fn reset_database(database_url: &str) {
         .await
         .expect("current database should be readable");
     assert!(
-        database_name.contains("test"),
-        "TEST_DATABASE_URL must point at a disposable database; got '{database_name}'"
+        is_disposable_database_name(&database_name),
+        "TEST_DATABASE_URL must point at a database with a token-bounded disposable name marker ({}); got '{database_name}'",
+        DISPOSABLE_DATABASE_NAME_TOKENS.join(", ")
     );
 
     drop_all_public_tables(&pool).await;

@@ -1767,6 +1767,21 @@ input {
   gap: 0.35rem;
 }
 
+.sidebar-navigation-projection {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sidebar-navigation-status {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--semantic-secondary-soft);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .sidebar-section {
   margin: 1rem 0 0.35rem;
   color: var(--semantic-primary);
@@ -5977,6 +5992,71 @@ input {
   max-width: none;
 }
 
+.administration-role-scope-guidance,
+.administration-role-assignment-guidance {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: var(--radius);
+  background: var(--semantic-info-soft);
+  padding: 0.8rem 0.9rem;
+}
+
+.administration-role-scope-guidance h3,
+.administration-role-scope-guidance p,
+.administration-role-assignment-guidance p {
+  margin: 0;
+}
+
+.permission-picker__item .administration-role-capability-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.administration-role-capability-content,
+.administration-role-capability-content > label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.administration-role-capability-content > label {
+  cursor: pointer;
+}
+
+.administration-role-capability-metadata {
+  min-width: 0;
+}
+
+.permission-picker__item .administration-role-capability-scope {
+  width: fit-content;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: 999px;
+  background: var(--semantic-info-soft);
+  color: var(--color-text);
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.administration-role-scope-selection {
+  display: grid;
+  gap: 0.25rem;
+  border-left: 0.2rem solid var(--semantic-info-border);
+  padding: 0.55rem 0.75rem;
+}
+
+.administration-role-scope-selection p {
+  margin: 0;
+}
+
+.administration-role-scope-selection--error {
+  border-left-color: var(--semantic-danger-border);
+}
+
 .administration-node-type-relationships,
 .administration-node-type-collections {
   display: grid;
@@ -9280,6 +9360,7 @@ input {
     display: none;
     position: fixed;
     inset: 0;
+    left: min(20rem, calc(100vw - 2rem));
     z-index: 100;
     border: 0;
     background: var(--color-scrim);

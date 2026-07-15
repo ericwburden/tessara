@@ -92,33 +92,6 @@ pub(crate) struct NodeTypePeerLink {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) struct NodeTypeDefinition {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) slug: String,
-    pub(crate) singular_label: String,
-    pub(crate) plural_label: String,
-    pub(crate) is_root_type: bool,
-    pub(crate) node_count: i64,
-    #[serde(default)]
-    pub(crate) parent_relationships: Vec<NodeTypePeerLink>,
-    #[serde(default)]
-    pub(crate) child_relationships: Vec<NodeTypePeerLink>,
-    #[serde(default)]
-    pub(crate) metadata_fields: Vec<NodeMetadataFieldSummary>,
-    #[serde(default)]
-    pub(crate) scoped_forms: Vec<NodeTypeFormLink>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(crate) struct NodeTypeFormLink {
-    pub(crate) form_id: String,
-    pub(crate) form_name: String,
-    pub(crate) form_slug: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct NodeMetadataFieldSummary {
     pub(crate) id: String,
     pub(crate) node_type_id: String,

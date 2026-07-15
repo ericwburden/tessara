@@ -17,6 +17,12 @@ pub enum ApiError {
     /// The request payload or requested workflow transition is invalid.
     #[error("bad request: {0}")]
     BadRequest(String),
+    /// A role capability bundle mixes installation-global and scope-aware grants.
+    #[error("a role cannot mix scope-aware and installation-global capabilities")]
+    MixedCapabilityScopeModes,
+    /// An installation-global capability was presented with a scoped assignment.
+    #[error("installation-global capabilities require a global role assignment")]
+    GlobalCapabilityRequiresGlobalRoleAssignment,
     /// Authentication is missing or invalid.
     #[error("unauthorized")]
     Unauthorized,
@@ -56,6 +62,16 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(message) => {
                 (StatusCode::BAD_REQUEST, "bad_request", message.clone())
             }
+            ApiError::MixedCapabilityScopeModes => (
+                StatusCode::BAD_REQUEST,
+                "mixed_capability_scope_modes",
+                "A role cannot mix scope-aware and installation-global capabilities.".to_string(),
+            ),
+            ApiError::GlobalCapabilityRequiresGlobalRoleAssignment => (
+                StatusCode::BAD_REQUEST,
+                "global_capability_requires_global_role_assignment",
+                "Installation-global capabilities require a global role assignment.".to_string(),
+            ),
             ApiError::Unauthorized => (
                 StatusCode::UNAUTHORIZED,
                 "auth_unauthorized",

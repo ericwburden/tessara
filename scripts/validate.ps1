@@ -64,43 +64,105 @@ try {
         if ([string]::IsNullOrWhiteSpace($env:TEST_DATABASE_URL)) {
             throw "Full validation requires TEST_DATABASE_URL so database integration tests cannot silently skip. Use -Fast for a non-database development check."
         }
+        if ([string]::IsNullOrWhiteSpace($env:SPRINT_6A_UPGRADE_DATABASE_URL)) {
+            throw "Full validation requires SPRINT_6A_UPGRADE_DATABASE_URL pointing at a second dedicated disposable database. The populated migration proof resets that database and must not share TEST_DATABASE_URL."
+        }
+        if ($env:SPRINT_6A_UPGRADE_DATABASE_URL -eq $env:TEST_DATABASE_URL) {
+            throw "SPRINT_6A_UPGRADE_DATABASE_URL must not equal TEST_DATABASE_URL. Provision a second disposable database for the destructive upgrade proof."
+        }
+        if ([string]::IsNullOrWhiteSpace($env:SPRINT_6A_FRESH_DATABASE_URL)) {
+            throw "Full validation requires SPRINT_6A_FRESH_DATABASE_URL pointing at a third dedicated disposable database. Fresh-start and lock-order proof must not reset the populated upgrade clone."
+        }
+        if ($env:SPRINT_6A_FRESH_DATABASE_URL -eq $env:TEST_DATABASE_URL -or
+            $env:SPRINT_6A_FRESH_DATABASE_URL -eq $env:SPRINT_6A_UPGRADE_DATABASE_URL) {
+            throw "SPRINT_6A_FRESH_DATABASE_URL must differ from both TEST_DATABASE_URL and SPRINT_6A_UPGRADE_DATABASE_URL."
+        }
+        if ($env:SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET -ne "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET") {
+            throw "Full validation requires SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET because the populated upgrade proof destroys and recreates its dedicated database."
+        }
+    }
+
+    Invoke-CheckedStep -Label "Sprint 6A evidence PowerShell contracts" -Command {
+        foreach ($scriptFile in @(Get-ChildItem -Path (Join-Path $repoRoot "scripts") -Filter "*.ps1" -File | Sort-Object FullName)) {
+            $relativePath = [IO.Path]::GetRelativePath($repoRoot, $scriptFile.FullName)
+            $tokens = $null
+            $parseErrors = $null
+            [void][Management.Automation.Language.Parser]::ParseFile(
+                $scriptFile.FullName,
+                [ref]$tokens,
+                [ref]$parseErrors
+            )
+            if ($parseErrors.Count -ne 0) {
+                throw "PowerShell AST validation failed for '$relativePath': $($parseErrors[0].Message)"
+            }
+        }
+        & .\scripts\local-launch.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "local-launch self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\capture-sprint-6a-deployment-evidence.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "deployment-evidence self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\validate-e2e.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "Playwright-evidence self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\validate-resource-reference-nondisclosure.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "nondisclosure-evidence self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\test-sprint-6a-rollback-package.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "rollback-evidence self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\test-sprint-6a-acceptance-evidence.ps1
+        if ($LASTEXITCODE -ne 0) { throw "smoke/UAT acceptance-evidence self-test failed with exit code $LASTEXITCODE" }
     }
 
     Invoke-CheckedStep -Label "Formatting check" -Command {
         cargo fmt --all --check
     }
 
+    Invoke-CheckedStep -Label "Module contract check" -Command {
+        cargo check -p tessara-module-contract --locked
+    }
+
     Invoke-CheckedStep -Label "API check" -Command {
-        cargo check -p tessara-api
+        cargo check -p tessara-api --locked
     }
 
     if (-not $Fast) {
         Invoke-CheckedStep -Label "API SSR check" -Command {
-            cargo check -p tessara-api --features ssr
+            cargo check -p tessara-api --features ssr --locked
         }
     }
 
     Invoke-CheckedStep -Label "Web check" -Command {
-        cargo check -p tessara-web
+        cargo check -p tessara-web --locked
     }
 
     if (-not $Fast) {
         Invoke-CheckedStep -Label "Web hydrate check" -Command {
-            cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown
+            cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown --locked
         }
 
         Clear-TessaraWebTestArtifacts
     }
 
+    # Contract tests are database-independent and belong in both validation modes.
+    Invoke-CheckedStep -Label "Module contract tests" -Command {
+        cargo test -p tessara-module-contract --locked
+    }
+
     Invoke-CheckedStep -Label "Web tests" -Command {
-        cargo test -p tessara-web -j 1
+        cargo test -p tessara-web -j 1 --locked
     }
 
     Invoke-CheckedStep -Label "API tests" -Command {
         if ($Fast) {
-            cargo test -p tessara-api
+            # Integration targets include database proofs that intentionally
+            # fail when their dedicated URLs are absent. Fast mode remains a
+            # truthful non-database loop by selecting library tests only.
+            cargo test -p tessara-api --lib --locked
         } else {
-            cargo test -p tessara-api --all-features
+            cargo test -p tessara-api --all-features --locked
+        }
+    }
+
+    if (-not $Fast) {
+        Invoke-CheckedStep -Label "Release resource-reference timing proof" -Command {
+            cargo test -p tessara-api --test modules --release --locked resource_reference_restricted_known_random_latency_profile -- --exact --nocapture
         }
     }
 

@@ -1,4 +1,5 @@
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
+import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-dashboards-${Date.now()}`;
@@ -170,7 +171,10 @@ async function signInAsAdmin(page: Page) {
 }
 
 async function ensureDemoSeed(page: Page) {
-  const response = await page.request.post("/api/demo/seed", { data: {} });
+  const response = await invokeDemoSeedEndpoint(page.request);
+  if (response === null) {
+    return;
+  }
   const text = await response.text();
   if (
     response.ok() ||

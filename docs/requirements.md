@@ -19,6 +19,7 @@ Human administrators, deployment automation, and LLM clients must be able to dis
 - Core must publish a versioned authenticated Shell Context; each route-owning module must use the shared UI SDK and that context to server-render a complete coherent HTML document rather than relying on remote-fragment wrapping, iframes, or browser-loaded module code.
 - The gateway must serve a Core-owned fallback document that preserves shell/navigation context when a module cannot render.
 - Administrators must be able to choose which module destinations appear in left navigation and adjust their order or grouping.
+- Administrator navigation policy applies to mutable module contributions, not permanent Core destinations. Permanent Core destinations must remain capability-filtered and policy-immutable.
 - Navigation visibility, module enablement, module health, and user authorization must remain separate concepts.
 - Product destinations normally require an enabled module instance; administration, configuration, and diagnostics destinations must remain recoverable for an installed module that is disabled, unconfigured, or unhealthy.
 - Hiding navigation must not grant, revoke, or substitute for authorization.
@@ -303,6 +304,7 @@ Module owners define compatibility and versioning rules for their resources. For
 
 - Every roadmap sprint must leave its capability testable through intended application UI.
 - Core module administration must expose module inventory, configuration, capabilities, dependencies, versions, readiness, health, navigation policy, and diagnostics.
+- In the current reference composition, Core Module Management must be a fixed destination in the `Admin` group. Effective installation-global `modules:read` must make its navigation item and read surfaces discoverable; effective global `modules:manage_navigation` must be required for navigation-policy mutation and must imply read.
 - Core role/composition administration must expose the current Core Administration Capability Floor version and designated Administrator Enrollment Role validation, and must block an edit that leaves no compliant designation.
 - Modules must expose their own product and administrative UI through the shared shell.
 - Common destinations must not require users to copy identifiers or use workbench-only routes.

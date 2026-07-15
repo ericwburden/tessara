@@ -12,13 +12,54 @@ function Invoke-CargoMetadata {
         [string]$Platform
     )
 
-    $output = & cargo metadata --format-version 1 --filter-platform $Platform 2>&1
+    $output = & cargo metadata --locked --format-version 1 --filter-platform $Platform 2>&1
     if ($LASTEXITCODE -ne 0) {
         $output | ForEach-Object { $_.ToString() } | Write-Error
         throw "cargo metadata failed for $Platform"
     }
 
     $output -join "`n" | ConvertFrom-Json
+}
+
+function Assert-PackageTreeContainsNoFrameworks {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Platform,
+
+        [Parameter(Mandatory)]
+        [string]$PackageName,
+
+        [Parameter(Mandatory)]
+        [string[]]$ForbiddenPackages,
+
+        [Parameter(Mandatory)]
+        [string]$Description
+    )
+
+    # Package-scoped Cargo trees avoid attributing features enabled by unrelated
+    # workspace members to a shared transitive dependency of this package.
+    $output = & cargo tree --locked -p $PackageName --target $Platform --edges normal,build,dev --prefix none --format "{p}" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $output | ForEach-Object { $_.ToString() } | Write-Error
+        throw "cargo tree failed for $PackageName on $Platform"
+    }
+
+    $resolvedPackageNames = @(
+        foreach ($line in @($output)) {
+            if ($line.ToString() -match '^(?<name>\S+)\s+v\d') {
+                $Matches.name
+            }
+        }
+    )
+    $violations = @(
+        $resolvedPackageNames |
+            Where-Object { $_ -in $ForbiddenPackages } |
+            Sort-Object -Unique
+    )
+
+    if ($violations.Count -gt 0) {
+        throw "$Description`nRejected resolved package(s): $($violations -join ', ')"
+    }
 }
 
 function Get-DependencyKindLabel {
@@ -208,6 +249,7 @@ $domainCrates = @(
     "tessara-hierarchy",
     "tessara-submissions"
 )
+$frameworkNeutralContractCrates = @("tessara-module-contract")
 $domainForbidden = @("leptos", "axum", "sqlx", "gloo-net", "web-sys", "js-sys", "wasm-bindgen")
 
 Push-Location $repoRoot
@@ -286,6 +328,10 @@ try {
                 $name -in $domainForbidden
             }
         }
+
+        foreach ($crate in $frameworkNeutralContractCrates) {
+            Assert-PackageTreeContainsNoFrameworks -Platform $platform -PackageName $crate -ForbiddenPackages $domainForbidden -Description "$crate must remain a pure, framework-neutral contract crate."
+        }
     }
 
     Assert-SourceDoesNotMatch -Path "crates\tessara-web-datasets\src" -Pattern "crate::(features|ui|utils|routes|state|types::route_params)|AppShell|require_authenticated_route|leptos_router|leptos_meta" -Description "tessara-web-datasets must not import root app, route, shell, auth, or router/meta concepts."
@@ -299,6 +345,10 @@ try {
     Write-ReviewAidMatches -Path "crates\tessara-web-ui\src" -Pattern "datasets|forms|workflows|responses|organization|administration|AppShell|ShellSession|require_authenticated_route" -Description "Review-aid matches in tessara-web-ui source:"
 
     Write-Host "Web crate boundary checks passed." -ForegroundColor Green
+    # `rg` uses exit code 1 for an expected no-match result. Do not leak that
+    # internal probe state to a parent validation script after every assertion
+    # has passed.
+    $global:LASTEXITCODE = 0
 } finally {
     Pop-Location
 }

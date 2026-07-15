@@ -15,6 +15,15 @@ pub mod types;
 pub mod ui;
 pub mod utils;
 
+pub use features::modules::{
+    MODULE_MANAGEMENT_BOOTSTRAP_SCRIPT_ID, ModuleDetailResponseV1, ModuleInventoryResponseV1,
+    ModuleManagementAccessV1, ModuleManagementRouteBootstrapV1, ModuleManagementSurfaceV1,
+    NavigationPolicyBootstrapV1, NavigationPolicyResponseV1,
+};
+pub use state::shell_navigation::{
+    ShellNavigationGroupV1, ShellNavigationItemOwnerV1, ShellNavigationItemV1,
+    ShellNavigationResponseV1, ShellNavigationStateV1, ShellNavigationUnavailableV1,
+};
 pub use tessara_web_dashboards::{
     Dashboard, DashboardComponentVersion, DashboardComponentVersionOption, DashboardComposition,
     DashboardPlacement, DashboardPlacementAvailability, DashboardPlacementIdMapping,
@@ -24,6 +33,9 @@ pub use tessara_web_dashboards::{
 
 /// DOM id for the request-scoped Dashboard hydration payload.
 pub const DASHBOARD_BOOTSTRAP_SCRIPT_ID: &str = "tessara-dashboard-bootstrap";
+
+/// DOM id for the request-scoped, actor-filtered shell navigation payload.
+pub const SHELL_NAVIGATION_BOOTSTRAP_SCRIPT_ID: &str = "tessara-shell-navigation-bootstrap";
 
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -52,6 +64,40 @@ pub fn application_html_with_dashboard_bootstrap(
         description,
         path,
         bootstrap,
+    )
+}
+
+/// Renders one authenticated Module Management route with its authorization-
+/// filtered request bootstrap shared by SSR content and hydration.
+pub fn application_html_with_module_management_bootstrap(
+    path: &str,
+    title: &str,
+    description: &str,
+    bootstrap: &ModuleManagementRouteBootstrapV1,
+) -> String {
+    document::render_native_app_document_with_module_management_bootstrap(
+        title,
+        description,
+        path,
+        bootstrap,
+    )
+}
+
+/// Renders one authenticated Module Management route with its route state and
+/// actor-filtered shell navigation sourced from the same server request.
+pub fn application_html_with_module_management_and_shell_navigation_bootstrap(
+    path: &str,
+    title: &str,
+    description: &str,
+    bootstrap: &ModuleManagementRouteBootstrapV1,
+    shell_navigation: &ShellNavigationResponseV1,
+) -> String {
+    document::render_native_app_document_with_module_management_and_shell_navigation_bootstrap(
+        title,
+        description,
+        path,
+        bootstrap,
+        shell_navigation,
     )
 }
 

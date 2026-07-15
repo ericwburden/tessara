@@ -3,7 +3,12 @@ param(
     [switch]$ComposeApi,
     [switch]$UseExistingService,
     [string]$BaseUrl = "http://127.0.0.1:8080",
-    [int]$ApiTimeoutSeconds = 600
+    [int]$ApiTimeoutSeconds = 600,
+    [string]$DeploymentEvidencePath,
+    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [string]$AcceptanceEvidencePath,
+    [switch]$OverwriteAcceptanceEvidence,
+    [switch]$DevelopmentMode
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +20,57 @@ $apiErr = Join-Path $tmpDir "tessara-api.err.log"
 $baseUrl = $BaseUrl.TrimEnd('/')
 $apiProcess = $null
 $cargoCommand = $null
+$deploymentEvidence = $null
+$deploymentEvidenceCommon = Join-Path $PSScriptRoot "sprint-6a-deployment-evidence-common.ps1"
+$acceptanceEvidenceCommon = Join-Path $PSScriptRoot "sprint-6a-acceptance-evidence-common.ps1"
+$acceptanceEvidenceFullPath = $null
+$deploymentEvidenceFullPath = $null
+$sensitiveTemporaryPaths = [Collections.Generic.List[string]]::new()
+$currentRunSessions = [Collections.Generic.List[object]]::new()
+
+if (-not (Test-Path -LiteralPath $acceptanceEvidenceCommon -PathType Leaf)) {
+    throw "Could not find Sprint 6A acceptance evidence publisher at $acceptanceEvidenceCommon"
+}
+. $acceptanceEvidenceCommon
+$environmentSnapshot = Get-Sprint6AProcessEnvironmentSnapshot -Names @(
+    'DATABASE_URL',
+    'TEST_DATABASE_URL',
+    'TESSARA_BIND_ADDR',
+    'RUST_LOG'
+)
+
+if ($OverwriteAcceptanceEvidence -and [string]::IsNullOrWhiteSpace($AcceptanceEvidencePath)) {
+    throw "-OverwriteAcceptanceEvidence requires -AcceptanceEvidencePath."
+}
+if ($DevelopmentMode -and -not [string]::IsNullOrWhiteSpace($AcceptanceEvidencePath)) {
+    throw "DevelopmentMode cannot produce Sprint acceptance evidence. Remove -DevelopmentMode or omit -AcceptanceEvidencePath."
+}
+if (-not $DevelopmentMode) {
+    if ([string]::IsNullOrWhiteSpace($DeploymentEvidencePath) -or [string]::IsNullOrWhiteSpace($ExpectedDataState)) {
+        throw "Sprint acceptance smoke requires -DeploymentEvidencePath and -ExpectedDataState upgraded|fresh. Use -DevelopmentMode only for non-acceptance local diagnostics."
+    }
+    if (-not (Test-Path -LiteralPath $deploymentEvidenceCommon -PathType Leaf)) {
+        throw "Could not find Sprint 6A deployment evidence validator at $deploymentEvidenceCommon"
+    }
+    . $deploymentEvidenceCommon
+    $deploymentEvidenceFullPath = Resolve-Sprint6AAcceptanceEvidencePath `
+        -RepositoryRoot $repoRoot `
+        -Path $DeploymentEvidencePath
+    if (-not [string]::IsNullOrWhiteSpace($AcceptanceEvidencePath)) {
+        $acceptanceEvidenceFullPath = Resolve-Sprint6AAcceptanceEvidencePath `
+            -RepositoryRoot $repoRoot `
+            -Path $AcceptanceEvidencePath
+        $null = Assert-Sprint6AAcceptanceEvidenceTargetAvailable `
+            -EvidencePath $acceptanceEvidenceFullPath `
+            -DeploymentEvidencePath $deploymentEvidenceFullPath `
+            -Overwrite:$OverwriteAcceptanceEvidence
+    }
+    if ([string]::IsNullOrWhiteSpace($acceptanceEvidenceFullPath)) {
+        Write-Warning "No -AcceptanceEvidencePath was supplied. This run can diagnose acceptance behavior but will not retain durable smoke proof."
+    }
+} else {
+    Write-Warning "DevelopmentMode skips deployment-evidence validation and cannot produce Sprint acceptance evidence."
+}
 
 function Resolve-CargoCommand {
     $cargo = Get-Command cargo -ErrorAction SilentlyContinue
@@ -51,6 +107,42 @@ function Invoke-Json {
     }
 
     Invoke-RestMethod @params
+}
+
+function Invoke-CurrentRunSessionLogout {
+    param([Parameter(Mandatory)][object]$Session)
+
+    if ($Session.source -eq 'bearer') {
+        return Invoke-RestMethod `
+            -Method Delete `
+            -Uri "$baseUrl/api/auth/logout" `
+            -Headers @{ Authorization = "Bearer $($Session.token)" } `
+            -TimeoutSec 30
+    }
+    try {
+        if (-not (Test-Path -LiteralPath $Session.cookie_path -PathType Leaf)) {
+            throw 'Current-run browser cookie is missing before exact logout.'
+        }
+        $null = Get-Sprint6ASecurePathInfo -Path $Session.cookie_path -RequireLeaf
+        $response = & curl.exe -sS -f -X DELETE -b $Session.cookie_path -c $Session.cookie_path "$baseUrl/api/auth/logout"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Browser DELETE /api/auth/logout failed with exit code $LASTEXITCODE."
+        }
+        try { $browserLogout = $response | ConvertFrom-Json -NoEnumerate }
+        catch { throw "Browser DELETE /api/auth/logout returned invalid JSON: $($_.Exception.Message)" }
+        if ($null -eq $browserLogout.PSObject.Properties['signed_out'] -or
+            $browserLogout.signed_out -isnot [bool] -or -not $browserLogout.signed_out) {
+            throw 'Browser DELETE /api/auth/logout did not return exact signed_out=true.'
+        }
+        return $browserLogout
+    } catch {
+        if ([string]::IsNullOrWhiteSpace([string]$Session.token)) { throw }
+        return Invoke-RestMethod `
+            -Method Delete `
+            -Uri "$baseUrl/api/auth/logout" `
+            -Headers @{ Authorization = "Bearer $($Session.token)" } `
+            -TimeoutSec 30
+    }
 }
 
 function Invoke-Html {
@@ -100,21 +192,40 @@ function New-BrowserSession {
         password = $Password
     } | ConvertTo-Json
 
-    [System.IO.File]::WriteAllText($payloadPath, $loginBody, [System.Text.UTF8Encoding]::new($false))
+    $cookieJar = Register-Sprint6ASensitivePath -Paths $sensitiveTemporaryPaths -Path $cookieJar
+    $payloadPath = Register-Sprint6ASensitivePath -Paths $sensitiveTemporaryPaths -Path $payloadPath
+    try {
+        Write-Sprint6AFileExclusive -Path $payloadPath -Content $loginBody
+        New-Sprint6AExclusiveEmptyFile -Path $cookieJar
 
-    $response = & curl.exe `
-        -sS `
-        -f `
-        -c $cookieJar `
-        -H "Content-Type: application/json" `
-        --data-binary ("@" + $payloadPath) `
-        "$baseUrl/api/auth/login"
-    if ($LASTEXITCODE -ne 0) {
-        throw "curl login failed for $Email with exit code $LASTEXITCODE"
-    }
-
-    if (-not $response) {
-        throw "Login response for $Email was empty."
+        $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        try {
+            $response = & curl.exe `
+                -sS `
+                -f `
+                -c $cookieJar `
+                -H "Content-Type: application/json" `
+                --data-binary ("@" + $payloadPath) `
+                "$baseUrl/api/auth/login"
+            $curlExitCode = $LASTEXITCODE
+        } finally {
+            $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+        }
+        $cookieJar = Complete-Sprint6ABrowserLoginObservation `
+            -Sessions $currentRunSessions `
+            -CookiePath $cookieJar `
+            -Response $response `
+            -CurlExitCode $curlExitCode `
+            -Context "Browser login for $Email"
+    } finally {
+        if (Test-Path -LiteralPath $payloadPath) {
+            $null = Get-Sprint6ASecurePathInfo -Path $payloadPath -RequireLeaf
+            Remove-Item -LiteralPath $payloadPath -Force -ErrorAction Stop
+        }
+        if (Test-Path -LiteralPath $payloadPath) {
+            throw 'Browser login credential payload still exists after immediate cleanup.'
+        }
     }
 
     return $cookieJar
@@ -261,6 +372,14 @@ try {
         throw "Timed out waiting for API health. stderr:`n$(Get-Content -Tail 80 -LiteralPath $apiErr -ErrorAction SilentlyContinue)"
     }
 
+    if (-not $DevelopmentMode) {
+        $deploymentEvidence = Assert-Sprint6ADeploymentEvidence `
+            -RepositoryRoot $repoRoot `
+            -EvidencePath $DeploymentEvidencePath `
+            -BaseUrl $baseUrl `
+            -ExpectedDataState $ExpectedDataState
+    }
+
     $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
     $appShell = Invoke-Html -Uri "$baseUrl/" -CookieJarPath $adminBrowserSession
@@ -292,6 +411,28 @@ try {
     Assert-ProtectedShell -Content $nodeTypesShell -Needles @("Node Types") -Context "node type list shell"
     $rolesShell = Invoke-Html -Uri "$baseUrl/administration/roles" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $rolesShell -Needles @("Roles") -Context "roles shell"
+    $modulesShell = Invoke-Html -Uri "$baseUrl/administration/modules" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $modulesShell -Needles @(
+        "Module inventory",
+        "7 contributions",
+        "Transitional — not independently deployable",
+        "No Module Release",
+        "No Module Instance",
+        "Save navigation"
+    ) -Context "Module Management shell"
+    if ($modulesShell -like "*/bridge/*") {
+        throw "Smoke failure: Module Management directory referenced a legacy bridge route"
+    }
+    $migrationModuleShell = Invoke-Html -Uri "$baseUrl/administration/modules/tessara.migration" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $migrationModuleShell -Needles @(
+        "Contribution retired",
+        "The roadmap identity is retired and no current in-process product surface exists.",
+        "No Module Release",
+        "No Module Instance"
+    ) -Context "retired Migration contribution shell"
+    if ($migrationModuleShell -like "*/bridge/*") {
+        throw "Smoke failure: retired Migration detail referenced a legacy bridge route"
+    }
     $dashboardsShell = Invoke-Html -Uri "$baseUrl/dashboards" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell"
     $datasetsShell = Invoke-Html -Uri "$baseUrl/datasets" -CookieJarPath $adminBrowserSession
@@ -303,10 +444,83 @@ try {
         -Method "Post" `
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "admin@tessara.local"; password = "tessara-dev-admin" }
+    Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$login.token)
     $headers = @{ Authorization = "Bearer $($login.token)" }
-    try {
-        $seed = Invoke-Json -Method "Post" -Uri "$baseUrl/api/demo/seed" -Headers $headers
-    } catch {
+    $moduleInventory = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/modules" -Headers $headers
+    if ($moduleInventory.schema_version -ne 1 -or @($moduleInventory.entries).Count -ne 7) {
+        throw "Smoke failure: Module inventory did not expose schema v1 with exactly seven transition contributions"
+    }
+    $migrationContribution = $moduleInventory.entries | Where-Object {
+        $_.descriptor.reserved_definition_id -eq "tessara.migration"
+    } | Select-Object -First 1
+    if (
+        -not $migrationContribution `
+        -or $migrationContribution.kind -ne "transitional_in_process" `
+        -or $migrationContribution.descriptor.availability -ne "retired" `
+        -or $migrationContribution.provider_eligible `
+        -or $migrationContribution.supervisor_materializable `
+        -or ($migrationContribution.PSObject.Properties.Name -contains "release") `
+        -or ($migrationContribution.PSObject.Properties.Name -contains "instance")
+    ) {
+        throw "Smoke failure: Migration did not remain retired and non-deployable"
+    }
+
+    $modulePolicy = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/navigation-policy" -Headers $headers
+    $fixedModuleItem = $modulePolicy.immutable_core_items | Where-Object {
+        $_.id -eq "module_management" `
+        -and $_.group -eq "Admin" `
+        -and $_.route -eq "/administration/modules" `
+        -and -not $_.policy_mutable
+    } | Select-Object -First 1
+    if (
+        -not $modulePolicy.can_manage_navigation `
+        -or -not $fixedModuleItem `
+        -or ($modulePolicy.contributions | Where-Object { $_.id -eq "module_management" })
+    ) {
+        throw "Smoke failure: Module Management policy boundary was not fixed and independently authorized"
+    }
+
+    $shellNavigation = Invoke-Json -Method "Get" -Uri "$baseUrl/api/shell/navigation" -Headers $headers
+    $shellItems = @($shellNavigation.groups | ForEach-Object { $_.items })
+    if (
+        $shellNavigation.schema_version -ne 1 `
+        -or $shellNavigation.state -ne "available" `
+        -or -not ($shellItems | Where-Object { $_.key -eq "module_management" }) `
+        -or -not ($shellItems | Where-Object { $_.key -eq "administration" })
+    ) {
+        throw "Smoke failure: administrator shell navigation did not include both independent Core Admin items"
+    }
+
+    $formsModule = $moduleInventory.entries | Where-Object {
+        $_.descriptor.reserved_definition_id -eq "tessara.forms"
+    } | Select-Object -First 1
+    $descriptorResponse = Invoke-WebRequest `
+        -Uri "$baseUrl/api/admin/modules/tessara.forms/descriptor" `
+        -Headers $headers `
+        -TimeoutSec 30 `
+        -UseBasicParsing
+    $descriptorEtag = [string]$descriptorResponse.Headers.ETag
+    $expectedDescriptorEtag = '"' + [string]$formsModule.source_digest + '"'
+    if (
+        -not $formsModule `
+        -or $descriptorResponse.StatusCode -ne 200 `
+        -or ([string]$descriptorResponse.Headers."Content-Type" -notlike "application/json*") `
+        -or $descriptorEtag -cnotmatch '^"sha256:[0-9a-f]{64}"$' `
+        -or $descriptorEtag -cne $expectedDescriptorEtag
+    ) {
+        throw "Smoke failure: Forms descriptor did not expose a quoted HTTP ETag whose opaque value exactly matched inventory provenance"
+    }
+    $seed = $null
+    if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {
+        try {
+            $seed = Invoke-Json -Method "Post" -Uri "$baseUrl/api/demo/seed" -Headers $headers
+        } catch {
+            Assert-Sprint6ADemoSeedRefusalErrorRecord `
+                -ErrorRecord $_ `
+                -Context 'Smoke demo seed'
+        }
+    }
+    if ($null -eq $seed) {
         $formsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/forms" -Headers $headers
         $datasetsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/datasets" -Headers $headers
         $componentsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components" -Headers $headers
@@ -319,7 +533,7 @@ try {
         $dashboardForSeed = $dashboardsForSeed | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
         $submissionForSeed = $submissionsForSeed | Where-Object { $_.form_name -eq "Demo Session Log" -and $_.status -eq "submitted" } | Select-Object -First 1
         if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or -not $dashboardForSeed -or -not $submissionForSeed -or -not $nodesForSeed) {
-            throw "Smoke failure: demo seed failed and existing seeded demo assets could not be found. Original error: $($_.Exception.Message)"
+            throw "Smoke failure: required existing Demo Session Log assets could not be found."
         }
         $seed = [pscustomobject]@{
             seed_version          = "uat-demo-v2"
@@ -337,16 +551,19 @@ try {
         -Method "Post" `
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "operator@tessara.local"; password = "tessara-dev-operator" }
+    Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$operatorLogin.token)
     $operatorHeaders = @{ Authorization = "Bearer $($operatorLogin.token)" }
     $respondentLogin = Invoke-Json `
         -Method "Post" `
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "respondent@tessara.local"; password = "tessara-dev-respondent" }
+    Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$respondentLogin.token)
     $respondentHeaders = @{ Authorization = "Bearer $($respondentLogin.token)" }
     $delegatorLogin = Invoke-Json `
         -Method "Post" `
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "delegator@tessara.local"; password = "tessara-dev-delegator" }
+    Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$delegatorLogin.token)
     $delegatorHeaders = @{ Authorization = "Bearer $($delegatorLogin.token)" }
     if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.datasets -lt 1 -or $summary.components -lt 1 -or $summary.dashboards -lt 1) {
         throw "Expected application summary to include seeded published forms, submissions, datasets, components, and dashboards"
@@ -559,7 +776,23 @@ try {
     $visualViewerPage = Invoke-Html -Uri "$baseUrl/components/$visualSlug/view" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $visualViewerPage -Needles @("Component") -Context "visual component viewer shell"
 
-    [pscustomobject]@{
+    Complete-Sprint6AAcceptanceRunCleanup `
+        -Sessions $currentRunSessions `
+        -SensitivePaths $sensitiveTemporaryPaths `
+        -LogoutAction ${function:Invoke-CurrentRunSessionLogout} `
+        -EnvironmentSnapshot $environmentSnapshot
+
+    if (-not $DevelopmentMode) {
+        # Revalidate after every smoke assertion. The retained pass must bind to the
+        # deployment that was still live when the checks completed, not only at startup.
+        $deploymentEvidence = Assert-Sprint6ADeploymentEvidence `
+            -RepositoryRoot $repoRoot `
+            -EvidencePath $deploymentEvidenceFullPath `
+            -BaseUrl $baseUrl `
+            -ExpectedDataState $ExpectedDataState
+    }
+
+    $result = [pscustomobject]@{
         status = "passed"
         organization_node_id = $seed.organization_node_id
         dashboard_id = $seed.dashboard_id
@@ -568,15 +801,89 @@ try {
         seeded_visual_points = $seededVisualBar.points.Count
         visual_points = $visualBar.points.Count
         first_dataset_participants = $dataset.rows[0].values.participants
-    } | ConvertTo-Json -Depth 10
-}
-finally {
-    if ($null -ne $apiProcess -and -not $apiProcess.HasExited) {
-        Stop-Process -Id $apiProcess.Id -Force
+        deployment = if ($null -eq $deploymentEvidence) { $null } else {
+            [pscustomobject]@{
+                data_state = [string]$deploymentEvidence.snapshot.data.state
+                image_id = [string]$deploymentEvidence.snapshot.release_image.image_id
+                source_commit = [string]$deploymentEvidence.snapshot.source.commit
+                database_name = [string]$deploymentEvidence.snapshot.database_runtime.current_database
+            }
+        }
+        acceptance_evidence = $null
     }
 
-    if (-not $KeepServices -and -not $UseExistingService) {
-        docker compose down -v | Out-Host
-        Assert-LastExitCode "docker compose down"
+    if (-not [string]::IsNullOrWhiteSpace($acceptanceEvidenceFullPath)) {
+        $evidenceDocument = [pscustomobject][ordered]@{
+            schema_version = $script:Sprint6AAcceptanceEvidenceSchemaVersion
+            evidence_kind = 'tessara.sprint-6a.smoke'
+            status = 'passed'
+            completed_at_utc = [DateTime]::UtcNow.ToString('o')
+            expected_data_state = $ExpectedDataState
+            base_url = $baseUrl
+            runner = [pscustomobject][ordered]@{
+                path = 'scripts/smoke.ps1'
+                sha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+            checks = @(Get-Sprint6AAcceptanceExpectedChecks -Kind smoke)
+            deployment = [pscustomobject][ordered]@{
+                evidence_sha256 = (Get-FileHash -LiteralPath $deploymentEvidenceFullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                data_state = [string]$deploymentEvidence.snapshot.data.state
+                source_commit = [string]$deploymentEvidence.snapshot.source.commit
+                source_tree = [string]$deploymentEvidence.snapshot.source.tree
+                image_id = [string]$deploymentEvidence.snapshot.release_image.image_id
+                database_name = [string]$deploymentEvidence.snapshot.database_runtime.current_database
+                installation_id = [string]$deploymentEvidence.snapshot.installation.id
+                catalog_entries = [int]$deploymentEvidence.snapshot.catalog.definition_count
+                built_in_seed_sha256 = [string]$deploymentEvidence.snapshot.built_in_seed.canonical_sha256
+            }
+            result = [pscustomobject][ordered]@{
+                dataset_rows = [int]$dataset.rows.Count
+                component_rows = [int]$componentTable.rows.Count
+                seeded_visual_points = [int]$seededVisualBar.points.Count
+                visual_points = [int]$visualBar.points.Count
+            }
+        }
+        $publication = Publish-Sprint6AAcceptanceEvidence `
+            -EvidencePath $acceptanceEvidenceFullPath `
+            -DeploymentEvidencePath $deploymentEvidenceFullPath `
+            -RunnerFilePath $PSCommandPath `
+            -Evidence $evidenceDocument `
+            -Overwrite:$OverwriteAcceptanceEvidence
+        $result.acceptance_evidence = $publication
+        Write-Host "Published Sprint 6A $ExpectedDataState smoke evidence: $($publication.evidence_path)" -ForegroundColor Green
+    }
+
+    $result | ConvertTo-Json -Depth 10
+}
+finally {
+    $cleanupFailure = $null
+    try {
+        Complete-Sprint6AAcceptanceRunCleanup `
+            -Sessions $currentRunSessions `
+            -SensitivePaths $sensitiveTemporaryPaths `
+            -LogoutAction ${function:Invoke-CurrentRunSessionLogout} `
+            -EnvironmentSnapshot $environmentSnapshot `
+            -FinalAttempt
+    } catch {
+        $cleanupFailure = $_
+    }
+    $serviceFailure = $null
+    try {
+        if ($null -ne $apiProcess -and -not $apiProcess.HasExited) {
+            Stop-Process -Id $apiProcess.Id -Force
+        }
+
+        if (-not $KeepServices -and -not $UseExistingService) {
+            docker compose down -v | Out-Host
+            Assert-LastExitCode "docker compose down"
+        }
+    } catch {
+        $serviceFailure = $_
+    }
+    if ($null -ne $cleanupFailure) {
+        throw $cleanupFailure
+    }
+    if ($null -ne $serviceFailure) {
+        throw $serviceFailure
     }
 }

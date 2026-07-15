@@ -7,7 +7,7 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 
 #[cfg(feature = "hydrate")]
-use super::super::api::{NodeEditorApiError, fetch_node_type_definition};
+use super::super::api::{NodeEditorApiError, fetch_node_type_metadata_fields};
 
 pub(crate) fn load_node_type_metadata(
     node_type_id: String,
@@ -19,9 +19,9 @@ pub(crate) fn load_node_type_metadata(
     #[cfg(feature = "hydrate")]
     {
         leptos::task::spawn_local(async move {
-            match fetch_node_type_definition(&node_type_id).await {
-                Ok(definition) => {
-                    metadata_fields.set(definition.metadata_fields);
+            match fetch_node_type_metadata_fields(&node_type_id).await {
+                Ok(fields) => {
+                    metadata_fields.set(fields);
                     metadata_values.set(HashMap::new());
                     metadata_booleans.set(HashMap::new());
                 }

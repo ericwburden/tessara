@@ -11,6 +11,11 @@ use tessara_api::{config::Config, db, router};
 use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
 
+#[path = "support/database_safety.rs"]
+mod database_safety;
+
+use database_safety::{DISPOSABLE_DATABASE_NAME_TOKENS, is_disposable_database_name};
+
 static TEST_DATABASE_LOCK: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
 static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
@@ -26,7 +31,7 @@ static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
 #[tokio::test]
 async fn demo_seed_backfills_workflows_and_form_links() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let seed = request_json(
@@ -181,7 +186,7 @@ async fn demo_seed_backfills_workflows_and_form_links() {
 #[tokio::test]
 async fn form_versions_can_be_reused_across_workflows() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let seed = request_json(
@@ -272,7 +277,7 @@ async fn form_versions_can_be_reused_across_workflows() {
 #[tokio::test]
 async fn generated_form_workflow_is_replaced_after_shortcut_is_promoted() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -445,7 +450,7 @@ async fn generated_form_workflow_is_replaced_after_shortcut_is_promoted() {
 #[tokio::test]
 async fn assignee_pending_work_can_start_workflow_response() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -536,7 +541,7 @@ async fn assignee_pending_work_can_start_workflow_response() {
 #[tokio::test]
 async fn response_lifecycle_saves_resumes_submits_and_locks_submitted_records() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -731,9 +736,7 @@ async fn response_lifecycle_saves_resumes_submits_and_locks_submitted_records() 
 #[tokio::test]
 async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
@@ -1037,9 +1040,7 @@ async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
 #[tokio::test]
 async fn multi_step_workflow_preserves_assignment_node_across_steps() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
@@ -1327,9 +1328,7 @@ async fn multi_step_workflow_preserves_assignment_node_across_steps() {
 #[tokio::test]
 async fn workflow_publish_allows_branching_step_form_scopes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
@@ -1448,7 +1447,7 @@ async fn workflow_publish_allows_branching_step_form_scopes() {
 #[tokio::test]
 async fn workflow_publish_allows_sibling_step_assignment_nodes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let seed = request_json(
@@ -1524,7 +1523,7 @@ async fn workflow_publish_allows_sibling_step_assignment_nodes() {
 #[tokio::test]
 async fn scoped_operator_cannot_review_out_of_scope_submission_by_uuid() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -1588,9 +1587,7 @@ async fn scoped_operator_cannot_review_out_of_scope_submission_by_uuid() {
 #[tokio::test]
 async fn response_lifecycle_endpoints_accept_configured_cookie_name() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state_with_cookie_name("custom_tessara_session").await else {
-        return;
-    };
+    let state = test_state_with_cookie_name("custom_tessara_session").await;
     let app = router(state);
     let admin_token = login_token(app.clone()).await;
 
@@ -1651,7 +1648,7 @@ async fn response_lifecycle_endpoints_accept_configured_cookie_name() {
 #[tokio::test]
 async fn pending_work_excludes_assignments_with_existing_drafts() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -1725,7 +1722,7 @@ async fn pending_work_excludes_assignments_with_existing_drafts() {
 #[tokio::test]
 async fn pending_work_excludes_assignments_with_submitted_responses_and_start_rejects_them() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -1807,7 +1804,7 @@ async fn pending_work_excludes_assignments_with_submitted_responses_and_start_re
 #[tokio::test]
 async fn starting_distinct_assignments_returns_distinct_submission_ids() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -1866,7 +1863,7 @@ async fn starting_distinct_assignments_returns_distinct_submission_ids() {
 #[tokio::test]
 async fn workflow_assignments_can_be_deactivated() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -1925,7 +1922,7 @@ async fn workflow_assignments_can_be_deactivated() {
 #[tokio::test]
 async fn workflow_assignment_filters_support_reactivation_and_context_queries() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -2051,7 +2048,7 @@ async fn workflow_assignment_filters_support_reactivation_and_context_queries() 
 #[tokio::test]
 async fn scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -2167,7 +2164,7 @@ async fn scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid()
 #[tokio::test]
 async fn delegator_can_query_pending_work_for_an_accessible_delegate_account() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let _seed = request_json(
         app.clone(),
@@ -2242,7 +2239,7 @@ async fn delegator_can_query_pending_work_for_an_accessible_delegate_account() {
 #[tokio::test]
 async fn logout_revokes_the_current_session_token() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let logout = request_json(
@@ -2263,7 +2260,7 @@ async fn logout_revokes_the_current_session_token() {
 #[tokio::test]
 async fn login_sets_cookie_session_for_browser_requests() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
 
     let response = app
         .clone()
@@ -2316,7 +2313,7 @@ async fn login_sets_cookie_session_for_browser_requests() {
 #[tokio::test]
 async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorization_headers() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -2383,7 +2380,7 @@ async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorizat
 #[tokio::test]
 async fn operations_status_requires_view_capability_and_exposes_assignment_readiness() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -2459,7 +2456,7 @@ async fn operations_status_requires_view_capability_and_exposes_assignment_readi
 #[tokio::test]
 async fn invalid_login_uses_stable_error_payload() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
 
     let login = request_status_and_json(
         app,
@@ -2487,9 +2484,7 @@ async fn invalid_login_uses_stable_error_payload() {
 #[tokio::test]
 async fn revoked_and_expired_sessions_return_stable_auth_codes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
 
     let revoked_token = login_token(app.clone()).await;
@@ -2543,9 +2538,7 @@ async fn revoked_and_expired_sessions_return_stable_auth_codes() {
 #[tokio::test]
 async fn authenticated_requests_update_last_seen_timestamp() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let token = login_token(app.clone()).await;
     let token_uuid = token.parse::<uuid::Uuid>().expect("token should be uuid");
@@ -2572,9 +2565,9 @@ async fn authenticated_requests_update_last_seen_timestamp() {
     assert!(updated_last_seen > initial_last_seen);
 }
 
-async fn test_app() -> Option<axum::Router> {
+async fn test_app() -> axum::Router {
     LazyLock::force(&TEST_TRACING);
-    Some(router(test_state().await?))
+    router(test_state().await)
 }
 
 async fn node_type_id_for_slug(app: axum::Router, token: &str, slug: &str) -> String {
@@ -2707,16 +2700,18 @@ async fn current_generated_workflow_for_form(
         .expect("form should expose a current generated workflow")
 }
 
-async fn test_state() -> Option<db::AppState> {
+async fn test_state() -> db::AppState {
     test_state_with_cookie_name("tessara_session").await
 }
 
-async fn test_state_with_cookie_name(auth_cookie_name: &str) -> Option<db::AppState> {
+async fn test_state_with_cookie_name(auth_cookie_name: &str) -> db::AppState {
     LazyLock::force(&TEST_TRACING);
-    let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .expect("TEST_DATABASE_URL is required; database integration tests must never skip");
+    assert!(
+        !database_url.trim().is_empty(),
+        "TEST_DATABASE_URL is required and must not be empty"
+    );
 
     reset_database(&database_url).await;
     let config = Config {
@@ -2732,7 +2727,7 @@ async fn test_state_with_cookie_name(auth_cookie_name: &str) -> Option<db::AppSt
         .await
         .expect("database should migrate and seed");
 
-    Some(db::AppState { pool, config })
+    db::AppState { pool, config }
 }
 
 fn value_for_field_type(field_type: &str) -> Value {
@@ -2924,8 +2919,9 @@ async fn reset_database(database_url: &str) {
         .await
         .expect("current database should be readable");
     assert!(
-        database_name.contains("test"),
-        "TEST_DATABASE_URL must point at a disposable database; got '{database_name}'"
+        is_disposable_database_name(&database_name),
+        "TEST_DATABASE_URL must point at a database with a token-bounded disposable name marker ({}); got '{database_name}'",
+        DISPOSABLE_DATABASE_NAME_TOKENS.join(", ")
     );
 
     drop_all_public_tables(&pool).await;

@@ -1,5 +1,19 @@
-import { expect, request, test, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
+import {
+  expect,
+  request,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Browser,
+  type Page,
+} from "@playwright/test";
+import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 import { runPlaywrightSql } from "./support/postgres";
+import {
+  attachNativeRouteGuard,
+  expectHydratedNativeRouteDirectLoadAndRefresh,
+  expectNoJavaScriptNativeRouteDirectLoadAndRefresh,
+} from "./support/native-route";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-permissions-${Date.now()}`;
@@ -135,6 +149,13 @@ type ApiErrorBody = {
   error: string;
 };
 
+type FrozenNativeRoute = {
+  path: string;
+  expectedText: string;
+  expectedRootMarkup?: string;
+  contentSelector?: string;
+};
+
 type FixtureState = {
   admin: APIRequestContext;
   scopedManager: APIRequestContext;
@@ -182,7 +203,10 @@ async function expectJson<T>(response: APIResponse): Promise<T> {
 }
 
 async function ensureDemoSeed(admin: APIRequestContext) {
-  const response = await admin.post("/api/demo/seed", { data: {} });
+  const response = await invokeDemoSeedEndpoint(admin);
+  if (response === null) {
+    return;
+  }
   const text = await response.text();
   if (response.ok()) {
     return;
@@ -254,6 +278,64 @@ async function signInPage(page: Page, email: string, password = PASSWORD) {
       sameSite: "Lax",
     },
   ]);
+}
+
+async function expectNoJavaScriptRoutes(
+  page: Page,
+  routes: FrozenNativeRoute[],
+) {
+  for (const route of routes) {
+    await expectNoJavaScriptNativeRouteDirectLoadAndRefresh(page, {
+      path: route.path,
+      expectedRootMarkup: route.expectedRootMarkup,
+      ready: async (routePage) => {
+        const routeContent = routePage.locator(
+          route.contentSelector ?? ".route-panel",
+        );
+        await expect(routeContent).toHaveCount(1);
+        await expect(routeContent).toBeVisible();
+        await expect(
+          routeContent
+            .getByText(route.expectedText, { exact: true })
+            .filter({ visible: true })
+            .first(),
+        ).toBeVisible();
+      },
+    });
+  }
+}
+
+async function expectHydratedRoute(page: Page, route: FrozenNativeRoute) {
+  await expectHydratedNativeRouteDirectLoadAndRefresh(page, {
+    path: route.path,
+    expectedRootMarkup: route.expectedRootMarkup,
+    ready: async (routePage) => {
+      await expect(
+        routePage
+          .getByText(route.expectedText, { exact: true })
+          .filter({ visible: true })
+          .first(),
+      ).toBeVisible();
+    },
+  });
+}
+
+async function withNoJavaScriptPage(
+  browser: Browser,
+  run: (page: Page) => Promise<void>,
+) {
+  const context = await browser.newContext({
+    baseURL: BASE_URL,
+    javaScriptEnabled: false,
+  });
+  try {
+    const page = await context.newPage();
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
+    await run(page);
+    await assertNativeRouteGuard();
+  } finally {
+    await context.close();
+  }
 }
 
 async function createRole(admin: APIRequestContext, name: string, capabilityKeys: string[]) {
@@ -818,6 +900,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("non-admin shell hides Administration navigation", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const login = await page.request.post("/api/auth/login", {
       data: {
         email: `${RUN_ID}-scoped-manager@tessara.local`,
@@ -826,14 +909,16 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     });
     expect(login.ok()).toBeTruthy();
 
-    await page.goto("/");
+    await expectHydratedRoute(page, { path: "/", expectedText: "Home" });
     await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Operations" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Forms" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Responses" })).toBeVisible();
+    await assertNativeRouteGuard();
   });
 
   test("scoped form UI shows visible forms and blocks out-of-scope detail", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const login = await page.request.post("/api/auth/login", {
       data: {
         email: `${RUN_ID}-scoped-manager@tessara.local`,
@@ -842,16 +927,25 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     });
     expect(login.ok()).toBeTruthy();
 
-    await page.goto("/forms");
+    await expectHydratedRoute(page, { path: "/forms", expectedText: "Forms" });
     await expect(page.getByRole("heading", { level: 1, name: "Forms" })).toBeVisible();
     await expect(page.getByRole("link", { name: fixtures.inScopeForm.name })).toBeVisible();
     await expect(page.getByRole("link", { name: fixtures.outOfScopeForm.name })).toHaveCount(0);
 
-    await page.goto(`/forms/${fixtures.outOfScopeForm.id}`);
-    await expect(page.getByRole("heading", { name: "Form detail unavailable" })).toBeVisible();
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/forms/${fixtures.outOfScopeForm.id}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/forms/${fixtures.outOfScopeForm.id}`,
+        expectedText: "Form detail unavailable",
+      });
+      await expect(page.getByRole("heading", { name: "Form detail unavailable" })).toBeVisible();
+    });
+    await assertNativeRouteGuard();
   });
 
   test("admin can create a role and load the roles route", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const roleName = `${RUN_ID}-ui-role`;
     await createRole(fixtures.admin, roleName, ["forms:read"]);
     const roles = await getJson<RoleSummary[]>(fixtures.admin, "/api/admin/roles");
@@ -859,35 +953,124 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
 
     await page.goto("/administration/roles");
+    await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
     await expect(page.getByRole("heading", { level: 1, name: "Roles" })).toBeVisible();
+
+    await page.getByRole("button", { name: "New Role" }).click();
+    const sheet = page.locator(".sheet-panel");
+    await expect(sheet.getByRole("heading", { level: 2, name: "New Role" })).toBeVisible();
+    await expect(sheet.getByText("Capability scope", { exact: true })).toBeVisible();
+    await expect(
+      sheet.getByText(/dedicated global module role alongside separate scoped product roles/),
+    ).toBeVisible();
+
+    const formsRead = sheet.getByRole("checkbox", { name: /forms:read/ });
+    const modulesRead = sheet.getByRole("checkbox", { name: /modules:read/ });
+    const adminAll = sheet.getByRole("checkbox", { name: /admin:all/ });
+    await expect(formsRead).toHaveAttribute("aria-describedby", /-metadata$/);
+    await expect(modulesRead).toHaveAttribute("aria-describedby", /-metadata$/);
+    await sheet.getByText("forms:read", { exact: true }).click();
+    await sheet.getByText("modules:read", { exact: true }).click();
+    await expect(formsRead).toBeChecked();
+    await expect(modulesRead).toBeChecked();
+
+    await expect(sheet.getByRole("alert")).toContainText(
+      "A role cannot combine scope-aware and installation-global capabilities unless it contains admin:all.",
+    );
+    await expect(sheet.getByRole("alert")).toContainText(
+      "Create a dedicated installation-global role for module permissions and keep scoped product capabilities in a separate role.",
+    );
+    await expect(sheet.getByRole("button", { name: "Save Role" })).toBeDisabled();
+
+    await sheet.getByText("admin:all", { exact: true }).click();
+    await expect(adminAll).toBeChecked();
+    await expect(sheet.getByText("Global admin exception", { exact: true })).toBeVisible();
+    await expect(sheet.getByText(/complete role is installation-global/)).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Save Role" })).toBeEnabled();
+    await expectHydratedRoute(page, {
+      path: "/administration/roles",
+      expectedText: "Roles",
+    });
+    await assertNativeRouteGuard();
   });
 
   test("hierarchy routes enforce scoped read visibility", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
 
-    await page.goto("/organization");
+    await expectHydratedRoute(page, {
+      path: "/organization",
+      expectedText: "Organization Explorer",
+    });
     await expect(page.getByRole("heading", { name: "Organization Explorer" })).toBeVisible();
     await expect(page.getByText("Demo Program Family Outreach").first()).toBeVisible();
     await expect(page.getByText("Demo Program Workforce Readiness")).toHaveCount(0);
 
-    await page.goto(`/organization/${fixtures.inScopeNodeId}`);
+    await expectHydratedRoute(page, {
+      path: `/organization/${fixtures.inScopeNodeId}`,
+      expectedText: "Organization Detail",
+    });
     await expect(page.getByRole("heading", { name: "Organization Detail" })).toBeVisible();
     await expect(page.getByText("Demo Program Family Outreach").first()).toBeVisible();
 
-    await page.goto(`/organization/${fixtures.outOfScopeNodeId}`);
-    await expect(page.getByRole("heading", { name: "Organization detail unavailable" })).toBeVisible();
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/nodes/${fixtures.outOfScopeNodeId}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/organization/${fixtures.outOfScopeNodeId}`,
+        expectedText: "Organization detail unavailable",
+      });
+      await expect(page.getByRole("heading", { name: "Organization detail unavailable" })).toBeVisible();
+    });
 
-    await page.goto(`/organization/${fixtures.inScopeNodeId}/edit`);
+    await expectHydratedRoute(page, {
+      path: `/organization/${fixtures.inScopeNodeId}/edit`,
+      expectedText: "Edit Organization Node",
+    });
     await expect(page.getByRole("heading", { name: "Edit Organization Node" })).toBeVisible();
+    await expect(page.locator("#organization-name")).toHaveValue(
+      "Demo Program Family Outreach",
+    );
+    const programCode = page.locator("#organization-metadata-program_code");
+    await expect(programCode).toBeVisible();
+    await expect(programCode).toHaveValue("FO-01");
+    await assertNativeRouteGuard();
 
-    await page.goto(`/organization/${fixtures.outOfScopeNodeId}/edit`);
-    await expect(page.getByRole("heading", { name: "Organization node unavailable" })).toBeVisible();
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/nodes/${fixtures.outOfScopeNodeId}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/organization/${fixtures.outOfScopeNodeId}/edit`,
+        expectedText: "Organization node unavailable",
+      });
+      await expect(page.getByRole("heading", { name: "Organization node unavailable" })).toBeVisible();
+    });
 
-    await page.goto("/organization/new");
+    const readableNodeTypes = await getJson<NodeTypeSummary[]>(
+      fixtures.scopedManager,
+      "/api/node-types",
+    );
+    const partnerNodeType = requireItem(
+      readableNodeTypes,
+      (nodeType) => nodeType.name === "Partner",
+      "the seeded Partner node type should remain readable",
+    );
+    await expectHydratedRoute(page, {
+      path: "/organization/new",
+      expectedText: "Create Organization Node",
+    });
     await expect(page.getByRole("heading", { name: "Create Organization Node" })).toBeVisible();
+    const nodeTypeSelect = page.locator("#organization-node-type");
+    await nodeTypeSelect.selectOption(partnerNodeType.id);
+    await expect(nodeTypeSelect).toHaveValue(partnerNodeType.id);
+    const sourceCode = page.locator("#organization-metadata-source_code");
+    await expect(sourceCode).toBeVisible();
+    await expect(sourceCode).toHaveJSProperty("required", true);
+    await assertNativeRouteGuard();
   });
 
   test("form create and edit routes exercise scoped manage permission", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const formSlug = `${RUN_ID}-managed-form`;
     const created = await postJson<IdResponse>(fixtures.scopedManager, "/api/admin/forms", {
       name: `${RUN_ID} Managed Form`,
@@ -924,15 +1107,31 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
 
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
-    await page.goto("/forms/new");
+    await expectHydratedRoute(page, {
+      path: "/forms/new",
+      expectedText: "Create Form",
+    });
     await expect(page.getByRole("heading", { name: "Create Form" })).toBeVisible();
-    await page.goto(`/forms/${created.id}/edit`);
+    await expectHydratedRoute(page, {
+      path: `/forms/${created.id}/edit`,
+      expectedText: "Edit Form",
+    });
     await expect(page.getByRole("heading", { name: "Edit Form" })).toBeVisible();
-    await page.goto(`/forms/${fixtures.outOfScopeForm.id}/edit`);
-    await expect(page.getByRole("button", { name: "Save as Draft" })).toHaveCount(0);
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/admin/forms/${fixtures.outOfScopeForm.id}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/forms/${fixtures.outOfScopeForm.id}/edit`,
+        expectedText: "Form unavailable",
+      });
+      await expect(page.getByRole("heading", { name: "Form unavailable" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save as Draft" })).toHaveCount(0);
+    });
+    await assertNativeRouteGuard();
   });
 
   test("workflow create detail and edit routes exercise scoped manage permission", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const inWorkflow = await postJson<IdResponse>(fixtures.scopedManager, "/api/workflows", {
       name: `${RUN_ID} Managed Workflow`,
       slug: `${RUN_ID}-managed-workflow`,
@@ -969,19 +1168,44 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expectStatus(fixtures.scopedManager, "get", `/api/workflows/${outWorkflow.id}`, [403]);
 
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
-    await page.goto("/workflows/new");
+    await expectHydratedRoute(page, {
+      path: "/workflows/new",
+      expectedText: "Create Workflow",
+    });
     await expect(page.getByRole("heading", { name: "Create Workflow" })).toBeVisible();
-    await page.goto(`/workflows/${inWorkflow.id}`);
+    await expectHydratedRoute(page, {
+      path: `/workflows/${inWorkflow.id}`,
+      expectedText: `${RUN_ID} Managed Workflow`,
+    });
     await expect(page.getByRole("heading", { name: `${RUN_ID} Managed Workflow` })).toBeVisible();
-    await page.goto(`/workflows/${outWorkflow.id}`);
-    await expect(page.getByRole("heading", { name: "Workflow detail unavailable" })).toBeVisible();
-    await page.goto(`/workflows/${inWorkflow.id}/edit`);
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/workflows/${outWorkflow.id}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/workflows/${outWorkflow.id}`,
+        expectedText: "Workflow detail unavailable",
+      });
+      await expect(page.getByRole("heading", { name: "Workflow detail unavailable" })).toBeVisible();
+    });
+    await expectHydratedRoute(page, {
+      path: `/workflows/${inWorkflow.id}/edit`,
+      expectedText: "Edit Workflow",
+    });
     await expect(page.getByRole("heading", { name: "Edit Workflow" })).toBeVisible();
-    await page.goto(`/workflows/${outWorkflow.id}/edit`);
-    await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(0);
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/workflows/${outWorkflow.id}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/workflows/${outWorkflow.id}/edit`,
+        expectedText: "Workflow unavailable",
+      });
+      await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(0);
+    });
+    await assertNativeRouteGuard();
   });
 
   test("response edit route follows ownership and delegation permissions", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const editorRole = await createRole(fixtures.admin, `${RUN_ID}-response-editor`, [
       "submissions:read_own",
       "submissions:respond",
@@ -1013,16 +1237,28 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
 
     await signInPage(page, editorEmail);
-    await page.goto(`/responses/${draft.id}/edit`);
+    await expectHydratedRoute(page, {
+      path: `/responses/${draft.id}/edit`,
+      expectedText: "Edit Response",
+    });
     await expect(page.getByRole("heading", { level: 1, name: "Edit Response" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save Draft" })).toBeVisible();
 
     await signInPage(page, `${RUN_ID}-delegate@tessara.local`);
-    await page.goto(`/responses/${draft.id}/edit`);
-    await expect(page.getByRole("heading", { name: "Response unavailable" })).toBeVisible();
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/submissions/${draft.id}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/responses/${draft.id}/edit`,
+        expectedText: "Response unavailable",
+      });
+      await expect(page.getByRole("heading", { name: "Response unavailable" })).toBeVisible();
+    });
+    await assertNativeRouteGuard();
   });
 
   test("dashboard native routes and APIs exercise scoped manage permission", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const dashboard = await postJson<IdResponse>(fixtures.scopedManager, "/api/admin/dashboards", {
       name: `${RUN_ID} Managed Dashboard`,
       description: "Scoped dashboard permission fixture.",
@@ -1052,21 +1288,34 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
 
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
-    await page.goto("/dashboards/new");
+    await expectHydratedRoute(page, {
+      path: "/dashboards/new",
+      expectedText: "Create Dashboard",
+    });
     await expect(page.getByRole("heading", { level: 1, name: "Create Dashboard" })).toBeVisible();
-    await page.goto(`/dashboards/${dashboard.id}`);
+    await expectHydratedRoute(page, {
+      path: `/dashboards/${dashboard.id}`,
+      expectedText: `${RUN_ID} Managed Dashboard Updated`,
+    });
     await expect(
       page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
     ).toBeVisible();
-    await page.goto(`/dashboards/${dashboard.id}/edit`);
+    await expectHydratedRoute(page, {
+      path: `/dashboards/${dashboard.id}/edit`,
+      expectedText: `${RUN_ID} Managed Dashboard Updated`,
+    });
     await expect(
       page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
     ).toBeVisible();
     await expect(page.getByText("Dashboard builder", { exact: true })).toBeVisible();
-    await page.goto(`/dashboards/${dashboard.id}/view`);
+    await expectHydratedRoute(page, {
+      path: `/dashboards/${dashboard.id}/view`,
+      expectedText: `${RUN_ID} Managed Dashboard Updated`,
+    });
     await expect(
       page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
     ).toBeVisible();
+    await assertNativeRouteGuard();
   });
 
   test("dashboard viewer preserves a redacted footprint without executing the hidden Component", async ({
@@ -1145,6 +1394,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("administration user and node-type routes are admin-only", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const nodeType = await postJson<IdResponse>(fixtures.admin, "/api/admin/node-types", {
       name: `${RUN_ID} Node Type`,
       slug: `${RUN_ID}-node-type`,
@@ -1161,23 +1411,38 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     });
 
     await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
-    await page.goto("/administration/users");
+    await expectHydratedRoute(page, {
+      path: "/administration/users",
+      expectedText: "Users",
+    });
     await expect(page.getByRole("heading", { level: 1, name: "Users" })).toBeVisible();
     await page.getByPlaceholder("Search users").fill(`${RUN_ID} Owner`);
     await expect(page.getByRole("link", { name: `${RUN_ID} Owner` })).toBeVisible();
 
-    await page.goto(`/administration/users/${fixtures.userIds.owner}`);
+    await expectHydratedRoute(page, {
+      path: `/administration/users/${fixtures.userIds.owner}`,
+      expectedText: `${RUN_ID} Owner`,
+    });
     await expect(page.getByRole("heading", { name: `${RUN_ID} Owner` })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save Permissions" })).toBeVisible();
 
-    await page.goto(`/administration/users/${fixtures.userIds.owner}/access`);
+    await expectHydratedRoute(page, {
+      path: `/administration/users/${fixtures.userIds.owner}/access`,
+      expectedText: `${RUN_ID} Owner`,
+    });
     await expect(page.getByRole("heading", { name: `${RUN_ID} Owner` })).toBeVisible();
 
-    await page.goto(`/administration/users/${fixtures.userIds.owner}/edit`);
+    await expectHydratedRoute(page, {
+      path: `/administration/users/${fixtures.userIds.owner}/edit`,
+      expectedText: "Edit User",
+    });
     await expect(page.getByRole("heading", { name: "Edit User" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save User" })).toBeVisible();
 
-    await page.goto("/administration/node-types");
+    await expectHydratedRoute(page, {
+      path: "/administration/node-types",
+      expectedText: "Node Types",
+    });
     await expect(page.getByRole("heading", { level: 1, name: "Node Types" })).toBeVisible();
 
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
@@ -1189,6 +1454,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     ]) {
       await expectStatus(fixtures.scopedManager, "get", url, [403]);
     }
+    await assertNativeRouteGuard();
   });
 
   test("admin has global access to in-scope and out-of-scope fixtures", async () => {
@@ -1218,6 +1484,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("scoped manager reads in-scope surfaces and is denied out-of-scope surfaces", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const forms = await getJson<FormSummary[]>(fixtures.scopedManager, "/api/forms");
     expect(forms.some((form) => form.id === fixtures.inScopeForm.id)).toBe(true);
     expect(forms.some((form) => form.id === fixtures.outOfScopeForm.id)).toBe(false);
@@ -1317,20 +1584,41 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       [403],
     );
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
-    await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
-    ).toBeVisible();
-    await page.goto(`/components/${fixtures.inScopeComponent.slug}/view`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.slug }),
-    ).toBeVisible();
-    await expect(page.getByRole("table")).toBeVisible();
-    await page.goto(`/components/${fixtures.inScopeVisualComponent.slug}/view`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: fixtures.inScopeVisualComponent.name }),
-    ).toBeVisible();
-    await expect(page.locator(".component-visual-preview")).toBeVisible();
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/admin/components/${fixtures.inScopeComponent.slug}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/components/${fixtures.inScopeComponent.slug}`,
+        expectedText: fixtures.inScopeComponent.name,
+      });
+      await expect(
+        page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
+      ).toBeVisible();
+    });
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/admin/components/${fixtures.inScopeComponent.slug}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/components/${fixtures.inScopeComponent.slug}/view`,
+        expectedText: fixtures.inScopeComponent.name,
+      });
+      await expect(
+        page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
+      ).toBeVisible();
+      await expect(page.getByRole("table")).toBeVisible();
+    });
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: `/api/admin/components/${fixtures.inScopeVisualComponent.slug}`, count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, {
+        path: `/components/${fixtures.inScopeVisualComponent.slug}/view`,
+        expectedText: fixtures.inScopeVisualComponent.name,
+      });
+      await expect(
+        page.getByRole("heading", { level: 1, name: fixtures.inScopeVisualComponent.name }),
+      ).toBeVisible();
+      await expect(page.locator(".component-visual-preview")).toBeVisible();
+    });
 
     const dashboards = await getJson<DashboardSummary[]>(fixtures.scopedManager, "/api/dashboards");
     expect(dashboards.some((dashboard) => dashboard.id === fixtures.inScopeDashboard.id)).toBe(true);
@@ -1347,6 +1635,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.inScopeDataset.id)).toBe(true);
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.outOfScopeDataset.id)).toBe(false);
     expect(operations.workflow_assignments.every((item) => fixtures.inScopeNodeIds.has(item.node_id))).toBe(true);
+    await assertNativeRouteGuard();
   });
 
   test("scoped component manager cannot bind or publish out-of-scope dataset major lines", async () => {
@@ -1521,6 +1810,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("dataset revision UI hides drafts from scoped readers", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const dataset = await getJson<DatasetDefinition>(
       fixtures.admin,
       `/api/datasets/${fixtures.inScopeDataset.id}`,
@@ -1541,15 +1831,24 @@ test.describe.serial("capability + scope + ownership permissions", () => {
 
     try {
       await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
-      await page.goto(`/datasets/${dataset.id}/revisions`);
+      await expectHydratedRoute(page, {
+        path: `/datasets/${dataset.id}/revisions`,
+        expectedText: "Dataset Revisions",
+      });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Draft");
-      await page.goto(`/datasets/${dataset.id}/revisions/${draft.revision_id}`);
+      await expectHydratedRoute(page, {
+        path: `/datasets/${dataset.id}/revisions/${draft.revision_id}`,
+        expectedText: "Dataset Revision",
+      });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revision" })).toBeVisible();
       await expect(page.locator(".route-panel__section").filter({ hasText: "Status" }).first()).toContainText("Draft");
 
       await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
-      await page.goto(`/datasets/${dataset.id}/revisions`);
+      await expectHydratedRoute(page, {
+        path: `/datasets/${dataset.id}/revisions`,
+        expectedText: "Dataset Revisions",
+      });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Published current");
       await expect(page.locator("tbody")).not.toContainText("Draft");
@@ -1559,6 +1858,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         `/api/datasets/${dataset.id}/revisions/${draft.revision_id}`,
         [403],
       );
+      await assertNativeRouteGuard();
     } finally {
       await expectStatus(
         fixtures.admin,
@@ -1570,6 +1870,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("operations route is visible only to operations viewers", async ({ page }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
     const operations = await getJson<OperationsStatus>(fixtures.scopedManager, "/api/operations/status");
     const linkedWorkflow = requireItem(
@@ -1583,16 +1884,24 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "operations should include a dataset readiness row",
     );
 
-    await page.goto("/operations");
+    await expectHydratedRoute(page, {
+      path: "/operations",
+      expectedText: "Operations",
+    });
     await expect(page.getByRole("heading", { level: 1, name: "Operations" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Workflow Assignments" })).toBeVisible();
     await expect(page.locator(`a[href="/workflows/assignments?assignment_id=${linkedWorkflow.workflow_assignment_id}"]`)).not.toHaveCount(0);
     await expect(page.locator(`a[href="/datasets/${linkedDataset.dataset_id}"]`)).not.toHaveCount(0);
 
     await signInPage(page, `${RUN_ID}-no-access@tessara.local`);
-    await page.goto("/");
-    await expect(page.getByRole("link", { name: "Operations" })).toHaveCount(0);
+    await assertNativeRouteGuard.whileExpectedForbiddenGets([
+      { path: "/api/workflow-assignments/pending", count: 2 },
+    ], async () => {
+      await expectHydratedRoute(page, { path: "/", expectedText: "Home" });
+      await expect(page.getByRole("link", { name: "Operations" })).toHaveCount(0);
+    });
     await expectStatus(fixtures.noAccess, "get", "/api/operations/status", [403]);
+    await assertNativeRouteGuard();
   });
 
   test("workflow assignment candidates and starts respect manager scope", async () => {
@@ -1740,5 +2049,234 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(delegatorSession.account?.delegations.map((item) => item.account_id)).toContain(
       fixtures.userIds.delegate,
     );
+  });
+
+  test("JavaScript-disabled Core, Organization, and Administration routes preserve native SSR ownership", async ({
+    browser,
+  }) => {
+    await withNoJavaScriptPage(browser, async (page) => {
+      await expectNoJavaScriptRoutes(page, [
+        {
+          path: "/login",
+          expectedText: "Welcome back",
+          expectedRootMarkup: 'class="login-shell"',
+          contentSelector: ".login-panel",
+        },
+      ]);
+
+      await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+      await expectNoJavaScriptRoutes(page, [
+        { path: "/", expectedText: "Home" },
+        { path: "/operations", expectedText: "Operations" },
+        { path: "/organization", expectedText: "Organization Explorer" },
+        { path: "/organization/new", expectedText: "Create Organization Node" },
+        {
+          path: `/organization/${fixtures.inScopeNodeId}`,
+          expectedText: "Loading detail",
+        },
+        {
+          path: `/organization/${fixtures.inScopeNodeId}/edit`,
+          expectedText: "Edit Organization Node",
+        },
+        { path: "/administration", expectedText: "Administration" },
+        { path: "/administration/users", expectedText: "Users" },
+        {
+          path: `/administration/users/${fixtures.userIds.owner}`,
+          expectedText: "User Detail",
+        },
+        {
+          path: `/administration/users/${fixtures.userIds.owner}/edit`,
+          expectedText: "Edit User",
+        },
+        {
+          path: `/administration/users/${fixtures.userIds.owner}/access`,
+          expectedText: "User Detail",
+        },
+        { path: "/administration/node-types", expectedText: "Node Types" },
+        { path: "/administration/roles", expectedText: "Roles" },
+      ]);
+    });
+  });
+
+  test("JavaScript-disabled Form and Workflow routes preserve native SSR ownership", async ({
+    browser,
+  }) => {
+    const workflows = await getJson<WorkflowSummary[]>(fixtures.admin, "/api/workflows");
+    const workflow = requireItem(
+      workflows,
+      (candidate) => candidate.id.length > 0,
+      "a workflow should exist for native route proof",
+    );
+
+    await withNoJavaScriptPage(browser, async (page) => {
+      await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+      await expectNoJavaScriptRoutes(page, [
+        { path: "/forms", expectedText: "Forms" },
+        { path: "/forms/new", expectedText: "Create Form" },
+        { path: `/forms/${fixtures.inScopeForm.id}`, expectedText: "Loading form" },
+        {
+          path: `/forms/${fixtures.inScopeForm.id}/edit`,
+          expectedText: "Edit Form",
+        },
+        { path: "/workflows", expectedText: "Workflows" },
+        { path: "/workflows/new", expectedText: "Create Workflow" },
+        {
+          path: "/workflows/assignments",
+          expectedText: "Workflow Assignments",
+        },
+        { path: `/workflows/${workflow.id}`, expectedText: "Loading workflow" },
+        { path: `/workflows/${workflow.id}/edit`, expectedText: "Edit Workflow" },
+      ]);
+    });
+  });
+
+  test("JavaScript-disabled Response and Dataset routes preserve native SSR ownership", async ({
+    browser,
+  }) => {
+    const editorRole = await createRole(fixtures.admin, `${RUN_ID}-native-response-editor`, [
+      "submissions:read_own",
+      "submissions:respond",
+    ]);
+    const editorEmail = `${RUN_ID}-native-response-editor@tessara.local`;
+    const editor = await createUser(
+      fixtures.admin,
+      editorEmail,
+      `${RUN_ID} Native Response Editor`,
+      [editorRole.id],
+    );
+    const editorContext = await newContext();
+    await signIn(editorContext, editorEmail, PASSWORD);
+    const candidates = await getJson<WorkflowAssignmentCandidate[]>(
+      fixtures.admin,
+      "/api/workflow-assignment-candidates",
+    );
+    const assignment = await createAssignmentFor(
+      fixtures.admin,
+      candidates,
+      fixtures.inScopeNodeId,
+      editor.id,
+    );
+    const responseDraft = await postJson<IdResponse>(
+      editorContext,
+      `/api/workflow-assignments/${assignment.id}/start`,
+      {},
+    );
+
+    const dataset = await getJson<DatasetDefinition>(
+      fixtures.admin,
+      `/api/datasets/${fixtures.inScopeDataset.id}`,
+    );
+    const datasetDraft = await postJson<DatasetDraftRevisionResponse>(
+      fixtures.admin,
+      `/api/admin/datasets/${dataset.id}/draft-revision`,
+      {
+        name: `${dataset.name} Native Route Draft`,
+        slug: dataset.slug,
+        grain: "submission",
+        visibility_node_ids: dataset.visibility_nodes.map((node) => node.node_id),
+        initial_source: dataset.initial_source,
+        operations: dataset.operations,
+        restriction_policy: dataset.restriction_policy ?? null,
+      },
+    );
+
+    try {
+      await withNoJavaScriptPage(browser, async (page) => {
+        await signInPage(page, editorEmail);
+        await expectNoJavaScriptRoutes(page, [
+          { path: "/responses", expectedText: "Responses" },
+          { path: "/responses/new", expectedText: "Start Response" },
+          {
+            path: `/responses/${responseDraft.id}`,
+            expectedText: "Response Detail",
+          },
+          {
+            path: `/responses/${responseDraft.id}/edit`,
+            expectedText: "Edit Response",
+          },
+        ]);
+
+        await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+        await expectNoJavaScriptRoutes(page, [
+          { path: "/datasets", expectedText: "Datasets" },
+          { path: "/datasets/new", expectedText: "Create Dataset" },
+          {
+            path: `/datasets/${dataset.id}`,
+            expectedText: "Loading dataset",
+          },
+          {
+            path: `/datasets/${dataset.id}/edit`,
+            expectedText: "Edit Dataset",
+          },
+          {
+            path: `/datasets/${dataset.id}/preview`,
+            expectedText: "Loading preview",
+            expectedRootMarkup: 'class="dataset-preview-page"',
+            contentSelector: ".dataset-preview-page",
+          },
+          {
+            path: `/datasets/${dataset.id}/revisions`,
+            expectedText: "Dataset Revisions",
+          },
+          {
+            path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
+            expectedText: "Loading revision",
+          },
+          {
+            path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}/edit`,
+            expectedText: "Edit Revision",
+          },
+        ]);
+      });
+    } finally {
+      await expectStatus(
+        fixtures.admin,
+        "delete",
+        `/api/admin/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
+        [200, 204, 404],
+      );
+    }
+  });
+
+  test("JavaScript-disabled Component and Dashboard routes preserve native SSR ownership", async ({
+    browser,
+  }) => {
+    await withNoJavaScriptPage(browser, async (page) => {
+      await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+      await expectNoJavaScriptRoutes(page, [
+        { path: "/components", expectedText: "Loading components" },
+        { path: "/components/new", expectedText: "Create Component" },
+        {
+          path: `/components/${fixtures.inScopeComponent.slug}`,
+          expectedText: "Loading configuration",
+        },
+        {
+          path: `/components/${fixtures.inScopeComponent.slug}/edit`,
+          expectedText: "Edit Component",
+        },
+        {
+          path: `/components/${fixtures.inScopeComponent.slug}/versions`,
+          expectedText: "Loading component",
+        },
+        {
+          path: `/components/${fixtures.inScopeComponent.slug}/view`,
+          expectedText: "Loading configuration",
+        },
+        { path: "/dashboards", expectedText: "Dashboards" },
+        { path: "/dashboards/new", expectedText: "Create Dashboard" },
+        {
+          path: `/dashboards/${fixtures.inScopeDashboard.id}`,
+          expectedText: "Dashboard Detail",
+        },
+        {
+          path: `/dashboards/${fixtures.inScopeDashboard.id}/edit`,
+          expectedText: "Dashboard builder",
+        },
+        {
+          path: `/dashboards/${fixtures.inScopeDashboard.id}/view`,
+          expectedText: "Viewer",
+        },
+      ]);
+    });
   });
 });

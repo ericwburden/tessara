@@ -41,6 +41,14 @@ pub fn AdministrationPage() -> impl IntoView {
                         </section>
 
                         <section class="organization-detail-card">
+                            <h3>"Module Management"</h3>
+                            <p>"Inspect Core runtime context, transition contributions, exact descriptors, and navigation display policy."</p>
+                            <div class="form-actions">
+                                <a class="button" href="/administration/modules">"Open Module Management"</a>
+                            </div>
+                        </section>
+
+                        <section class="organization-detail-card">
                             <h3>"Datasets"</h3>
                             <p>"Review imported dataset catalogs and supporting reference data."</p>
                             <div class="form-actions">

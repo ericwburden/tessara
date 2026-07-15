@@ -15,7 +15,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn composition_reconcile_preserves_ids_and_rejects_capacity_stale_and_invalid_layouts() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app.clone(),
@@ -164,7 +164,7 @@ async fn composition_reconcile_preserves_ids_and_rejects_capacity_stale_and_inva
 #[tokio::test]
 async fn table_placements_enforce_six_by_four_minimum_without_fixing_their_size() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app.clone(),
@@ -349,7 +349,7 @@ async fn table_placements_enforce_six_by_four_minimum_without_fixing_their_size(
 #[tokio::test]
 async fn total_counts_redaction_and_manage_only_editor_access_follow_the_contract() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app.clone(),
@@ -479,7 +479,7 @@ async fn total_counts_redaction_and_manage_only_editor_access_follow_the_contrac
 #[tokio::test]
 async fn dashboard_manage_affordances_follow_each_dashboard_scope() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     request_json(
         app.clone(),
@@ -584,7 +584,7 @@ async fn dashboard_manage_affordances_follow_each_dashboard_scope() {
 #[tokio::test]
 async fn malformed_v1_requires_explicit_repair_and_preserves_raw_config_on_ordinary_save() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app.clone(),
@@ -829,7 +829,7 @@ async fn malformed_v1_requires_explicit_repair_and_preserves_raw_config_on_ordin
 #[tokio::test]
 async fn concurrent_same_membership_saves_are_serialized_last_write_wins() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let (_, visibility_node_ids, component_version_id) =
         seed_composition_context(app.clone(), &admin_token).await;
@@ -905,7 +905,7 @@ async fn concurrent_same_membership_saves_are_serialized_last_write_wins() {
 #[tokio::test]
 async fn concurrent_add_then_remove_detects_structural_staleness() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let (_, visibility_node_ids, component_version_id) =
         seed_composition_context(app.clone(), &admin_token).await;
@@ -1003,7 +1003,7 @@ async fn concurrent_add_then_remove_detects_structural_staleness() {
 #[tokio::test]
 async fn metadata_scope_and_composition_share_one_lock_and_scope_contraction_rolls_back() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let (_, visibility_node_ids, component_version_id) =
         seed_composition_context(app.clone(), &admin_token).await;
@@ -1151,7 +1151,7 @@ async fn metadata_scope_and_composition_share_one_lock_and_scope_contraction_rol
 #[tokio::test]
 async fn candidate_errors_do_not_reveal_missing_draft_or_out_of_scope_versions() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let (seeded_dashboard_id, visibility_node_ids, _) =
         seed_composition_context(app.clone(), &admin_token).await;
@@ -1351,7 +1351,7 @@ async fn candidate_errors_do_not_reveal_missing_draft_or_out_of_scope_versions()
 #[tokio::test]
 async fn future_schema_can_only_be_retained_unchanged_or_removed_and_preserves_raw_json() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let (_, visibility_node_ids, component_version_id) =
         seed_composition_context(app.clone(), &admin_token).await;
@@ -1484,7 +1484,7 @@ async fn future_schema_can_only_be_retained_unchanged_or_removed_and_preserves_r
 #[tokio::test]
 async fn exactly_240_placements_succeed_and_database_trigger_rejects_241st() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let (_, visibility_node_ids, component_version_id) =
         seed_composition_context(app.clone(), &admin_token).await;
@@ -1571,7 +1571,7 @@ async fn exactly_240_placements_succeed_and_database_trigger_rejects_241st() {
 #[tokio::test]
 async fn placement_capacity_migration_preflight_aborts_without_mutation() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app,
@@ -1647,7 +1647,7 @@ async fn placement_capacity_migration_preflight_aborts_without_mutation() {
 #[tokio::test]
 async fn placement_capacity_migration_rejects_overlapping_valid_v1_without_mutation() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app,
@@ -1724,7 +1724,7 @@ async fn placement_capacity_migration_rejects_overlapping_valid_v1_without_mutat
 #[tokio::test]
 async fn placement_capacity_migration_rejects_fallback_exhaustion_without_mutation() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app,

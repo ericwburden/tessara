@@ -1,0 +1,7 @@
+{
+  "image_reference": "https://registry.example/tessara/forms@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "platform": "linux",
+  "architecture": "amd64",
+  "command": ["/app/forms", "serve"]
+}

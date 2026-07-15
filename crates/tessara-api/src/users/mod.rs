@@ -4,6 +4,8 @@
 //! DTOs live in `dto`, while the handlers below keep the current route contract
 //! and coordinate validation, persistence, and effective-access projections.
 
+use std::collections::HashSet;
+
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -15,9 +17,10 @@ use uuid::Uuid;
 mod dto;
 
 pub use dto::{
-    AccountAssignmentSummary, CapabilitySummary, CreateRoleRequest, CreateUserRequest, IdResponse,
-    RoleDetail, RoleSummary, UpdateRoleRequest, UpdateUserAccessRequest, UpdateUserRequest,
-    UserAccessDetail, UserDetail, UserSummary,
+    AccountAssignmentSummary, CapabilityProvenanceSourceKind, CapabilityProvenanceSummary,
+    CapabilityProviderState, CapabilityScopeMode, CapabilitySummary, CreateRoleRequest,
+    CreateUserRequest, IdResponse, RoleDetail, RoleSummary, UpdateRoleRequest,
+    UpdateUserAccessRequest, UpdateUserRequest, UserAccessDetail, UserDetail, UserSummary,
 };
 
 use crate::{
@@ -98,9 +101,10 @@ pub async fn create_role(
 ) -> ApiResult<Json<IdResponse>> {
     request.require_capability("admin:all")?;
     require_text("role name", &payload.name)?;
-    ensure_capability_ids_exist(&state.pool, &payload.capability_ids).await?;
 
     let mut tx = state.pool.begin().await?;
+    ensure_capability_ids_exist(&mut tx, &payload.capability_ids).await?;
+    capability_bundle_scope_mode(&mut tx, &payload.capability_ids).await?;
     ensure_role_name_unique(&mut tx, &payload.name, None).await?;
 
     let role_id: Uuid = sqlx::query_scalar(
@@ -138,13 +142,15 @@ pub async fn update_role(
     Json(payload): Json<UpdateRoleRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     request.require_capability("admin:all")?;
-    ensure_capability_ids_exist(&state.pool, &payload.capability_ids).await?;
-
-    let role_name: String = sqlx::query_scalar("SELECT name FROM roles WHERE id = $1")
+    let mut tx = state.pool.begin().await?;
+    let role_name: String = sqlx::query_scalar("SELECT name FROM roles WHERE id = $1 FOR UPDATE")
         .bind(role_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("role {role_id}")))?;
+    ensure_capability_ids_exist(&mut tx, &payload.capability_ids).await?;
+    let proposed_scope_mode =
+        capability_bundle_scope_mode(&mut tx, &payload.capability_ids).await?;
 
     let role_currently_grants_admin = sqlx::query_scalar::<_, bool>(
         r#"
@@ -158,7 +164,7 @@ pub async fn update_role(
         "#,
     )
     .bind(role_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await?;
 
     if role_currently_grants_admin {
@@ -173,7 +179,7 @@ pub async fn update_role(
             "#,
         )
         .bind(&payload.capability_ids)
-        .fetch_one(&state.pool)
+        .fetch_one(&mut *tx)
         .await?;
         if !has_admin_all {
             return Err(ApiError::BadRequest(format!(
@@ -183,7 +189,12 @@ pub async fn update_role(
         }
     }
 
-    let mut tx = state.pool.begin().await?;
+    if proposed_scope_mode == RoleScopeMode::InstallationGlobal
+        && role_has_scoped_assignments(&mut tx, role_id).await?
+    {
+        return Err(ApiError::GlobalCapabilityRequiresGlobalRoleAssignment);
+    }
+
     replace_role_capabilities(&mut tx, role_id, &payload.capability_ids).await?;
     tx.commit().await?;
 
@@ -462,24 +473,109 @@ async fn load_roles_for_account(pool: &PgPool, account_id: Uuid) -> ApiResult<Ve
 }
 
 async fn load_capabilities(pool: &PgPool) -> ApiResult<Vec<CapabilitySummary>> {
-    Ok(sqlx::query(
+    let rows = sqlx::query(
         r#"
-        SELECT id, key, description
+        SELECT
+            capabilities.id,
+            capabilities.key,
+            capabilities.description,
+            capabilities.scope_mode,
+            capability_provenance.id AS provenance_id,
+            capability_provenance.source_kind,
+            capability_provenance.source_key,
+            capability_provenance.definition_id,
+            capability_provenance.provider_state,
+            module_definition_reservations.display_name AS definition_display_name,
+            transition_descriptor_sources.source_digest
         FROM capabilities
-        ORDER BY key, id
+        LEFT JOIN capability_provenance
+            ON capability_provenance.capability_id = capabilities.id
+        LEFT JOIN module_definition_reservations
+            ON module_definition_reservations.definition_id = capability_provenance.definition_id
+        LEFT JOIN transition_descriptor_sources
+            ON transition_descriptor_sources.id = capability_provenance.descriptor_source_id
+        ORDER BY
+            capabilities.key,
+            capabilities.id,
+            CASE capability_provenance.source_kind
+                WHEN 'core' THEN 0
+                WHEN 'transition_contribution' THEN 1
+                ELSE 2
+            END,
+            capability_provenance.source_key,
+            capability_provenance.id
         "#,
     )
     .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(CapabilitySummary {
-            id: row.try_get("id")?,
-            key: row.try_get("key")?,
-            description: row.try_get("description")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?)
+    .await?;
+
+    let mut capabilities = Vec::<CapabilitySummary>::new();
+    for row in rows {
+        let capability_id: Uuid = row.try_get("id")?;
+        if capabilities
+            .last()
+            .is_none_or(|capability| capability.id != capability_id)
+        {
+            let scope_mode: String = row.try_get("scope_mode")?;
+            capabilities.push(CapabilitySummary {
+                id: capability_id,
+                key: row.try_get("key")?,
+                description: row.try_get("description")?,
+                scope_mode: parse_capability_scope_mode(&scope_mode)?,
+                provenance: Vec::new(),
+            });
+        }
+
+        let provenance_id: Option<Uuid> = row.try_get("provenance_id")?;
+        if provenance_id.is_none() {
+            continue;
+        }
+        let source_kind: String = row.try_get("source_kind")?;
+        let provider_state: String = row.try_get("provider_state")?;
+        capabilities
+            .last_mut()
+            .expect("the current capability row has a summary")
+            .provenance
+            .push(CapabilityProvenanceSummary {
+                source_kind: parse_provenance_source_kind(&source_kind)?,
+                source_key: row.try_get("source_key")?,
+                definition_id: row.try_get("definition_id")?,
+                definition_display_name: row.try_get("definition_display_name")?,
+                provider_state: parse_capability_provider_state(&provider_state)?,
+                source_digest: row.try_get("source_digest")?,
+            });
+    }
+    Ok(capabilities)
+}
+
+fn parse_capability_scope_mode(value: &str) -> ApiResult<CapabilityScopeMode> {
+    match value {
+        "scope_aware" => Ok(CapabilityScopeMode::ScopeAware),
+        "installation_global" => Ok(CapabilityScopeMode::InstallationGlobal),
+        unexpected => Err(ApiError::Internal(anyhow::anyhow!(
+            "stored capability scope mode '{unexpected}' is unsupported"
+        ))),
+    }
+}
+
+fn parse_provenance_source_kind(value: &str) -> ApiResult<CapabilityProvenanceSourceKind> {
+    match value {
+        "core" => Ok(CapabilityProvenanceSourceKind::Core),
+        "transition_contribution" => Ok(CapabilityProvenanceSourceKind::TransitionContribution),
+        unexpected => Err(ApiError::Internal(anyhow::anyhow!(
+            "stored capability provenance source kind '{unexpected}' is unsupported"
+        ))),
+    }
+}
+
+fn parse_capability_provider_state(value: &str) -> ApiResult<CapabilityProviderState> {
+    match value {
+        "core_authoritative" => Ok(CapabilityProviderState::CoreAuthoritative),
+        "transitional_in_process" => Ok(CapabilityProviderState::TransitionalInProcess),
+        unexpected => Err(ApiError::Internal(anyhow::anyhow!(
+            "stored capability provider state '{unexpected}' is unsupported"
+        ))),
+    }
 }
 
 async fn load_role_detail(pool: &PgPool, role_id: Uuid) -> ApiResult<RoleDetail> {
@@ -489,9 +585,9 @@ async fn load_role_detail(pool: &PgPool, role_id: Uuid) -> ApiResult<RoleDetail>
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("role {role_id}")))?;
 
-    let capabilities = sqlx::query(
+    let assigned_capability_ids = sqlx::query_scalar::<_, Uuid>(
         r#"
-        SELECT capabilities.id, capabilities.key, capabilities.description
+        SELECT capabilities.id
         FROM role_capabilities
         JOIN capabilities ON capabilities.id = role_capabilities.capability_id
         WHERE role_capabilities.role_id = $1
@@ -502,14 +598,12 @@ async fn load_role_detail(pool: &PgPool, role_id: Uuid) -> ApiResult<RoleDetail>
     .fetch_all(pool)
     .await?
     .into_iter()
-    .map(|capability_row| {
-        Ok(CapabilitySummary {
-            id: capability_row.try_get("id")?,
-            key: capability_row.try_get("key")?,
-            description: capability_row.try_get("description")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    .collect::<HashSet<_>>();
+    let capabilities = load_capabilities(pool)
+        .await?
+        .into_iter()
+        .filter(|capability| assigned_capability_ids.contains(&capability.id))
+        .collect();
 
     let assigned_accounts = sqlx::query(
         r#"
@@ -721,13 +815,22 @@ async fn ensure_role_ids_exist(
     Ok(())
 }
 
-async fn ensure_capability_ids_exist(pool: &PgPool, capability_ids: &[Uuid]) -> ApiResult<()> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RoleScopeMode {
+    ScopeAware,
+    InstallationGlobal,
+}
+
+async fn ensure_capability_ids_exist(
+    tx: &mut Transaction<'_, Postgres>,
+    capability_ids: &[Uuid],
+) -> ApiResult<()> {
     for capability_id in capability_ids {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM capabilities WHERE id = $1)",
         )
         .bind(capability_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await?;
         if !exists {
             return Err(ApiError::BadRequest(format!(
@@ -736,6 +839,113 @@ async fn ensure_capability_ids_exist(pool: &PgPool, capability_ids: &[Uuid]) -> 
         }
     }
     Ok(())
+}
+
+async fn capability_bundle_scope_mode(
+    tx: &mut Transaction<'_, Postgres>,
+    capability_ids: &[Uuid],
+) -> ApiResult<RoleScopeMode> {
+    let capabilities = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT key, scope_mode
+        FROM capabilities
+        WHERE id = ANY($1)
+        ORDER BY key
+        "#,
+    )
+    .bind(capability_ids)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    classify_role_capability_scope_modes(
+        capabilities
+            .iter()
+            .map(|(key, scope_mode)| (key.as_str(), scope_mode.as_str())),
+    )
+}
+
+fn classify_role_capability_scope_modes<'a>(
+    capabilities: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> ApiResult<RoleScopeMode> {
+    let mut has_scope_aware = false;
+    let mut has_installation_global = false;
+    let mut has_admin_all = false;
+    for (key, scope_mode) in capabilities {
+        has_admin_all |= key == "admin:all";
+        match scope_mode {
+            "scope_aware" => has_scope_aware = true,
+            "installation_global" => has_installation_global = true,
+            unexpected => {
+                return Err(ApiError::Internal(anyhow::anyhow!(
+                    "stored capability scope mode '{unexpected}' is unsupported"
+                )));
+            }
+        }
+    }
+
+    if has_scope_aware && has_installation_global && !has_admin_all {
+        Err(ApiError::MixedCapabilityScopeModes)
+    } else if has_installation_global {
+        // `admin:all` is the sole mixed-mode exception. Its universal grant is
+        // installation-global, so redundant product rows never change the
+        // role's assignment classification.
+        Ok(RoleScopeMode::InstallationGlobal)
+    } else {
+        // Empty roles retain the historical scope-aware assignment behavior.
+        Ok(RoleScopeMode::ScopeAware)
+    }
+}
+
+async fn role_scope_mode(
+    tx: &mut Transaction<'_, Postgres>,
+    role_id: Uuid,
+) -> ApiResult<RoleScopeMode> {
+    // Hold a lock through assignment rewriting. This serializes against
+    // `update_role`'s FOR UPDATE lock, preventing a scoped row from being
+    // inserted after that role has been converted to installation-global.
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM roles WHERE id = $1 FOR KEY SHARE")
+        .bind(role_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("role {role_id}")))?;
+
+    let capabilities = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT capabilities.key, capabilities.scope_mode
+        FROM role_capabilities
+        JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+        WHERE role_capabilities.role_id = $1
+        ORDER BY capabilities.key
+        "#,
+    )
+    .bind(role_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    classify_role_capability_scope_modes(
+        capabilities
+            .iter()
+            .map(|(key, scope_mode)| (key.as_str(), scope_mode.as_str())),
+    )
+}
+
+async fn role_has_scoped_assignments(
+    tx: &mut Transaction<'_, Postgres>,
+    role_id: Uuid,
+) -> ApiResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM role_assignments
+            WHERE role_id = $1
+              AND node_id IS NOT NULL
+        )
+        "#,
+    )
+    .bind(role_id)
+    .fetch_one(&mut **tx)
+    .await?)
 }
 
 async fn ensure_node_ids_exist(pool: &PgPool, node_ids: &[Uuid]) -> ApiResult<()> {
@@ -783,18 +993,24 @@ async fn replace_role_assignments(
     account_id: Uuid,
     role_ids: &[Uuid],
 ) -> ApiResult<()> {
-    // Role edits preserve the account's existing scope roots. Admin-granting
-    // roles remain global because scoped `admin:all` would make the management
-    // surface disappear unpredictably.
+    // Role edits preserve the account's existing scope roots. Each role is
+    // classified before mutation so an invalid stored bundle fails atomically.
     let scoped_node_ids = current_scope_node_ids(tx, account_id).await?;
+    let mut ordered_role_ids = role_ids.to_vec();
+    ordered_role_ids.sort_unstable();
+    ordered_role_ids.dedup();
+    let mut roles = Vec::with_capacity(ordered_role_ids.len());
+    for role_id in ordered_role_ids {
+        roles.push((role_id, role_scope_mode(tx, role_id).await?));
+    }
 
     sqlx::query("DELETE FROM role_assignments WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut **tx)
         .await?;
 
-    for role_id in role_ids {
-        insert_role_assignment_rows(tx, account_id, *role_id, &scoped_node_ids).await?;
+    for (role_id, scope_mode) in roles {
+        insert_role_assignment_rows(tx, account_id, role_id, scope_mode, &scoped_node_ids).await?;
     }
 
     Ok(())
@@ -834,14 +1050,28 @@ async fn replace_scope_assignments(
     // Scope edits preserve selected roles and rewrite each role assignment to
     // either global or per-node rows according to the capability bundle.
     let role_ids = current_role_ids(tx, account_id).await?;
+    let mut roles = Vec::with_capacity(role_ids.len());
+    for role_id in role_ids {
+        roles.push((role_id, role_scope_mode(tx, role_id).await?));
+    }
+
+    let has_scope_aware_role = roles
+        .iter()
+        .any(|(_, scope_mode)| *scope_mode == RoleScopeMode::ScopeAware);
+    let has_installation_global_role = roles
+        .iter()
+        .any(|(_, scope_mode)| *scope_mode == RoleScopeMode::InstallationGlobal);
+    if !node_ids.is_empty() && has_installation_global_role && !has_scope_aware_role {
+        return Err(ApiError::GlobalCapabilityRequiresGlobalRoleAssignment);
+    }
 
     sqlx::query("DELETE FROM role_assignments WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut **tx)
         .await?;
 
-    for role_id in role_ids {
-        insert_role_assignment_rows(tx, account_id, role_id, node_ids).await?;
+    for (role_id, scope_mode) in roles {
+        insert_role_assignment_rows(tx, account_id, role_id, scope_mode, node_ids).await?;
     }
 
     Ok(())
@@ -874,6 +1104,13 @@ async fn current_scope_node_ids(
         FROM role_assignments
         WHERE account_id = $1
           AND node_id IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM role_capabilities
+              JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+              WHERE role_capabilities.role_id = role_assignments.role_id
+                AND capabilities.scope_mode = 'installation_global'
+          )
         ORDER BY node_id
         "#,
     )
@@ -886,12 +1123,13 @@ async fn insert_role_assignment_rows(
     tx: &mut Transaction<'_, Postgres>,
     account_id: Uuid,
     role_id: Uuid,
+    scope_mode: RoleScopeMode,
     scoped_node_ids: &[Uuid],
 ) -> ApiResult<()> {
     // A role assignment with a NULL node is global. Empty scope selections
-    // intentionally mean unrestricted scope, and administrator roles are forced
-    // global to keep account/role management recoverable.
-    if scoped_node_ids.is_empty() || role_grants_admin(tx, role_id).await? {
+    // intentionally mean unrestricted product scope. Installation-global roles
+    // always use NULL independently of the account's product-scope selections.
+    if scoped_node_ids.is_empty() || scope_mode == RoleScopeMode::InstallationGlobal {
         sqlx::query(
             r#"
             INSERT INTO role_assignments (account_id, role_id, node_id)
@@ -922,23 +1160,6 @@ async fn insert_role_assignment_rows(
     }
 
     Ok(())
-}
-
-async fn role_grants_admin(tx: &mut Transaction<'_, Postgres>, role_id: Uuid) -> ApiResult<bool> {
-    Ok(sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1
-            FROM role_capabilities
-            JOIN capabilities ON capabilities.id = role_capabilities.capability_id
-            WHERE role_capabilities.role_id = $1
-              AND capabilities.key = 'admin:all'
-        )
-        "#,
-    )
-    .bind(role_id)
-    .fetch_one(&mut **tx)
-    .await?)
 }
 
 async fn replace_delegations(
@@ -978,5 +1199,63 @@ async fn require_account_exists(pool: &PgPool, account_id: Uuid) -> ApiResult<()
         Ok(())
     } else {
         Err(ApiError::NotFound(format!("account {account_id}")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CapabilityProvenanceSourceKind, CapabilityProviderState, CapabilityScopeMode,
+        RoleScopeMode, classify_role_capability_scope_modes, parse_capability_provider_state,
+        parse_capability_scope_mode, parse_provenance_source_kind,
+    };
+    use crate::error::ApiError;
+
+    #[test]
+    fn stored_capability_metadata_uses_closed_wire_vocabularies() {
+        assert_eq!(
+            parse_capability_scope_mode("scope_aware").expect("scope mode"),
+            CapabilityScopeMode::ScopeAware
+        );
+        assert_eq!(
+            parse_provenance_source_kind("transition_contribution").expect("source kind"),
+            CapabilityProvenanceSourceKind::TransitionContribution
+        );
+        assert_eq!(
+            parse_capability_provider_state("core_authoritative").expect("provider state"),
+            CapabilityProviderState::CoreAuthoritative
+        );
+        assert!(parse_capability_scope_mode("sometimes_global").is_err());
+        assert!(parse_provenance_source_kind("module_guess").is_err());
+        assert!(parse_capability_provider_state("healthy").is_err());
+    }
+
+    #[test]
+    fn role_scope_mode_classification_allows_only_the_admin_all_mixed_exception() {
+        assert_eq!(
+            classify_role_capability_scope_modes([("forms:read", "scope_aware")])
+                .expect("scope-aware role"),
+            RoleScopeMode::ScopeAware
+        );
+        assert_eq!(
+            classify_role_capability_scope_modes([("modules:read", "installation_global")])
+                .expect("global role"),
+            RoleScopeMode::InstallationGlobal
+        );
+        assert!(matches!(
+            classify_role_capability_scope_modes([
+                ("forms:read", "scope_aware"),
+                ("modules:read", "installation_global"),
+            ]),
+            Err(ApiError::MixedCapabilityScopeModes)
+        ));
+        assert_eq!(
+            classify_role_capability_scope_modes([
+                ("admin:all", "installation_global"),
+                ("forms:read", "scope_aware"),
+            ])
+            .expect("admin:all exception"),
+            RoleScopeMode::InstallationGlobal
+        );
     }
 }

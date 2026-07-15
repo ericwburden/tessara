@@ -7,6 +7,56 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A: Module Contract And Core Control Plane.
 
+## 2026-07-14 - Sprint 6A Implementation-Contract Hardening
+
+- Hardened the active sprint plan into an implementation contract with exact endpoint/authority behavior, source/digest rules, transition catalog, frozen regression matrix, acceptance-to-proof mapping, upgrade/rollback procedure, audit behavior, risk/abort conditions, conformance deferrals, and ordered validation gates.
+- Recorded tests as durable proof: frozen failures default to production regressions; existing expectations cannot be deleted, skipped, loosened, retried, or regenerated to obtain green; accepted fixtures are immutable; every pre-acceptance correction and later expectation change is reviewable in `docs/sprints/sprint-6a-test-change-log.md`.
+- Froze seven canonical transition sources and exact SHA-256 sidecars. Forms, Workflows, Responses, Datasets, Components, and Dashboards have non-empty discovery narratives and exact catalog declarations. Migration is the sole `retired` source and has no live feature, contract, dependency, resource, route, navigation, capability, configuration, provider, or execution declaration.
+- Kept descriptor-source proof separate from later normalized catalog projection proof: `transition_internal_only`, Core-installation resource ownership, and `transition_destination_retired` are not fabricated as source JSON fields.
+- Preserved existing Core capability keys/descriptions and user-managed role mappings. Product confirmed that deterministic built-in seed membership may update. The historical fixture's truthful Sprint 5A 20-capability/admin-20/operator-10/respondent-2 state is independently frozen as `sprint-5a-role-capabilities-v1+sha256.7725e889996a` / `7725e889996a73a5655c57106aca6e12d9a5f95e9103f14d7b0fd50fbac96988`; the reviewed current contract is `sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68` / `2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600`: admin stores only `admin:all`, operator stores its exact established 10, and respondent stores its exact established 2. Only membership for those names is replaceable; role rows/IDs, assignments, accounts, sessions, user-role associations, and all user-managed roles/mappings remain exact invariants. The upgrade proof covers transactional replacement, permitted running-installation drift reconverging at startup, restart/concurrency convergence, and a fresh exact set. The destructive proof now fails instead of skipping when its dedicated URL is absent and rejects an unsafe database name before reset. The plan also defines installation-global module capability scope metadata, manage-implies-read behavior, ordinary mixed scope-mode rejection, the confirmed sole `admin:all` mixed-bundle exception (always installation-global), and fail-closed scoped-role tests.
+- Documented two red/explicit baseline facts instead of weakening proof: the Dataset preview and revision-edit Leptos routes need matching Axum document-route registrations before the navigation refactor, and existing hydrate-dependent screens retain their characterized SSR/no-JavaScript behavior rather than acquiring unplanned data-complete SSR.
+- Corrected rollback evidence: an unmodified Sprint 5A package cannot recognize applied SQLx migration 3. Sprint 6A must retain/test a Sprint 5A-code compatibility package carrying immutable migrations 1–3; the original package is used only after pre-upgrade backup restore.
+- Focused validation completed:
+  - `cargo fmt --all -- --check` - passed.
+  - `cargo test -p tessara-module-contract --locked` - passed: 26 unit and 4 integration tests; 0 failed, ignored, measured, or filtered.
+  - `.\scripts\check-web-crate-boundaries.ps1` - passed for Windows and WASM targets.
+  - PowerShell parser checks for `scripts/validate.ps1` and `scripts/check-web-crate-boundaries.ps1` - passed.
+  - all relative links in changed documentation - resolved.
+  - `git diff --check` - passed; only expected Git line-ending notices for the CRLF-governed PowerShell files were emitted.
+- `.\scripts\validate.ps1 -Fast` was attempted with a 15-minute bound and did not complete before the bound; it emitted no assertion failure, left no Cargo/rustc/API process, and is not counted as passed evidence. `TEST_DATABASE_URL` was not set, so full database, populated-upgrade, rollback/restore, upgraded Gate 4, fresh Gate 5, smoke, UAT, Playwright, and nondisclosure gates were not attempted or claimed.
+- Product confirmed that contribution reordering is existing-band-only. The plan now freezes Core-owned bands on either side of Operations and between Administration and Module Management, rejects group/band/cross-anchor mutation atomically, and requires durable positive and negative policy proof.
+- Product confirmed a permanent Core Module Management item in the `Admin` group, appended after Datasets to preserve every existing item's relative order. Effective global `modules:read` makes the item and read surfaces visible; `modules:manage_navigation` enables mutation controls and implies read; `admin:all` implies both. The separate Administration item remains `admin:all`-only. Permission proof must cover item/group visibility, read-only presentation, enabled controls, direct writes, Core-item immutability, and desktop/mobile parity for every named actor fixture.
+- All Sprint 6A navigation product decisions required by the implementation contract are resolved.
+- Replaced deployed-gate self-attestation with retained schema-v1 evidence. Release images carry the clean source commit/tree, dirty-state, and release-profile labels; capture verifies the running immutable image, live BaseUrl, API-to-`current_database()` Application Installation binding, successful migrations exactly 1–3 against current SQL SHA-384 checksums, the computed versioned built-in seed digest, exact transition-only catalog, and database-derived upgraded/fresh history. Smoke, UAT, Playwright acceptance, and non-disclosure timing now reject missing, stale, opposite-state, or SHA-mismatched evidence before exercising the deployment. Targeted local diagnostics require explicit `-DevelopmentMode` and are not acceptance evidence.
+- Corrected the closeout database sequence before commit-bound proof: the destructive `SPRINT_6A_UPGRADE_DATABASE_URL` fixture is retained only for representative invariant and `CompatibilityOnUpgraded` checks. Gate 3 backs up a separate Sprint 5A demo source, restores it into a disposable target, and validates that target with `OriginalAfterRestore`; Gate 4 then lets the clean closing image apply migration 3 under `-SkipSeed`. Deployment classification plus smoke/UAT/Playwright prove the pre-migration actors and demo assets survived, and upgraded acceptance never calls `/api/demo/seed`; any Gate 4 demo mutation disqualifies the pass. The validated rollback package's exact historical binary plus `original-migrations` and `seed-demo` is the reproducible recovery path if the migration-2 source is lost.
+
+## 2026-07-13 - Sprint 6A Module Contract And Core Control Plane Kickoff
+
+- Sprint: `Sprint 6A: Module Contract And Core Control Plane Slice`, selected from the sole roadmap heading marked `(Next)`.
+- Kickoff status: started from clean `main` at `3625d4de52c5856e4ac3bc642a9422a029e9f375`; branch/worktree setup and roadmap review are complete, and implementation has begun with the pure module/transition contract boundary.
+- Branch: `codex/sprint-6a`
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6a`
+- Plan file: `docs/sprints/sprint-6a-plan.md`
+- Agreed product decisions:
+  - Sprint 6A defines real `ModuleRelease` and `ModuleInstance` contract types; persistence and mutation for those records begin in Sprint 6B.
+  - transitional Migration is `retired`: the former surface was deliberately withdrawn and remains discoverable only for historical/support context, with no current route, provider, navigation item, or executable destination; restoration requires a new product decision.
+  - navigation ordering is configurable only within existing Core-assigned bands; Forms/Workflows/Responses cannot cross Operations, Components/Dashboards remain after Operations, Datasets remains between Administration and Module Management, Core items remain fixed, and grouping changes are deferred.
+  - `modules:read` and `modules:manage_navigation` are global capabilities, and `modules:manage_navigation` implies `modules:read`.
+  - Module Management is a permanent Core item in the `Admin` group after Datasets; effective global `modules:read` shows the item/read surfaces, while `modules:manage_navigation` gates policy mutation and `admin:all` implies both.
+- Planned check-only Rust and repository gate (not yet claimed as passed):
+  - `cargo fmt --all -- --check`
+  - `cargo check --workspace --all-features --locked`
+  - `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  - `cargo test -p tessara-module-contract --locked`
+  - set `TEST_DATABASE_URL` to a disposable test database, then run `.\scripts\validate.ps1`
+  - `cargo test --workspace --all-features --locked`
+  - `.\scripts\check-web-crate-boundaries.ps1`
+  - `cargo audit --quiet`
+  - `git diff --check`
+- Planned stateful and deployed validation (not yet claimed as passed): upgrade a populated Sprint 5A database without reset; verify preserved product data, capability mappings, sessions, audit identities, and every pre-existing navigation item, with only the approved fixed capability-filtered Module Management addition; exercise restart plus repeated/concurrent catalog synchronization; then run `.\scripts\local-launch.ps1 -FreshData`, capture and validate the machine-derived fresh deployment record, and run smoke, UAT, and `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath 'artifacts/sprint-6a/deployment-fresh.json' -ExpectedDataState fresh -EvidencePath 'artifacts/sprint-6a/playwright-acceptance-fresh.json'` against that exact deployment. Retained deployment and Playwright artifacts refuse implicit replacement; failures cannot erase prior green proof. This kickoff-era fresh-only sketch is superseded by the active plan's ordered Gates 1–6, including rollback/restore and the separate upgraded Gate 4 before Gate 5.
+- Evidence requirement: retain the closing commit and environment, exact commands and counts, an acceptance-to-proof mapping, every changed-test rationale, and zero unexpected skipped, ignored, or filtered tests.
+- Immediate implementation focus: define stable namespaced identities and versioned Manifest/transition descriptor contracts, prove transitions cannot masquerade as deployable releases/instances/providers, then add Core persistence and discovery APIs.
+
 ## 2026-07-13 - Sprint 5A Final Closeout
 
 - Completed:

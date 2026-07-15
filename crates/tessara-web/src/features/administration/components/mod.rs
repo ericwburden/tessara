@@ -1,5 +1,6 @@
 //! Feature-local reusable Administration components.
 
+mod capability_metadata;
 mod node_type_detail;
 mod node_type_editor_options;
 mod node_type_identity_fields;

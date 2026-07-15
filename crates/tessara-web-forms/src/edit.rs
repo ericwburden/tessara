@@ -95,6 +95,17 @@ pub fn FormEditContent(form_id: String) -> impl IntoView {
                         </section>
                     }
                     .into_any()
+                } else if detail.get().is_none() {
+                    let message = message
+                        .get()
+                        .unwrap_or_else(|| "The selected form could not be loaded.".to_string());
+                    view! {
+                        <section class="organization-state is-error" role="alert">
+                            <h3>"Form unavailable"</h3>
+                            <p>{message}</p>
+                        </section>
+                    }
+                    .into_any()
                 } else {
                     let form_id_for_submit = form_id_for_submit.clone();
                     view! {

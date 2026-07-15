@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "reserved_definition_id": "tessara.responses",
+  "display_name": "Responses",
+  "description": "Current in-process response start, draft, submission, and review contribution.",
+  "availability": "active_in_process",
+  "features": [
+    {
+      "id": "tessara.responses.start",
+      "name": "Response start",
+      "description": "Start a response from exact workflow and form versions.",
+      "use_cases": ["Begin a new response for available assigned work."],
+      "inputs": ["An exact WorkflowVersion, FormVersion, and authorized actor context."],
+      "outcomes": ["A new response draft bound to its source versions."],
+      "constraints": ["Starting a response preserves assignment, scope, and version checks."],
+      "contracts": ["tessara.workflows.workflow-version", "tessara.forms.form-version"],
+      "resource_types": [],
+      "destinations": ["responses.start"],
+      "capabilities": ["submissions:respond"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.responses.draft",
+      "name": "Response draft",
+      "description": "Persist an in-progress response.",
+      "use_cases": ["Save partially completed answers for later continuation."],
+      "inputs": ["A response identifier and validated partial answer set."],
+      "outcomes": ["A durable response draft retaining its lifecycle state."],
+      "constraints": ["Draft persistence does not implicitly submit the response."],
+      "contracts": ["tessara.responses.response", "tessara.responses.response-lifecycle"],
+      "resource_types": ["tessara.transition.response"],
+      "destinations": ["responses.edit"],
+      "capabilities": ["submissions:respond"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.responses.submit",
+      "name": "Response submission",
+      "description": "Submit a completed response.",
+      "use_cases": ["Complete and submit a response for downstream use."],
+      "inputs": ["A response draft satisfying current form validation."],
+      "outcomes": ["A submitted Response with its lifecycle transition recorded."],
+      "constraints": ["Submission follows current response validation and lifecycle policy."],
+      "contracts": ["tessara.responses.response", "tessara.responses.response-lifecycle"],
+      "resource_types": ["tessara.transition.response"],
+      "destinations": ["responses.edit"],
+      "capabilities": ["submissions:respond"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.responses.review",
+      "name": "Response review",
+      "description": "Inspect submitted response details.",
+      "use_cases": ["Review a response visible within the actor's authority."],
+      "inputs": ["A durable Response identifier and authorized review context."],
+      "outcomes": ["Response details and lifecycle state for review."],
+      "constraints": ["Legacy submissions capabilities remain the authorization namespace."],
+      "contracts": ["tessara.responses.response"],
+      "resource_types": ["tessara.transition.response"],
+      "destinations": ["responses.detail"],
+      "capabilities": ["submissions:read_own", "submissions:manage"],
+      "configuration_pointers": []
+    }
+  ],
+  "provided_contracts": [
+    {"id": "tessara.responses.response", "version": "1.0.0", "kind": "resource", "description": "Resolve a Response."},
+    {"id": "tessara.responses.response-lifecycle", "version": "1.0.0", "kind": "behavior", "description": "Advance response lifecycle state."}
+  ],
+  "dependencies": [
+    {
+      "contract_id": "tessara.workflows.workflow-version",
+      "version_requirement": "^1.0",
+      "binding_key": "tessara.responses.workflow-version",
+      "optional": false
+    },
+    {
+      "contract_id": "tessara.forms.form-version",
+      "version_requirement": "^1.0",
+      "binding_key": "tessara.responses.form-version",
+      "optional": false
+    }
+  ],
+  "resource_types": [
+    {"id": "tessara.transition.response", "description": "Core-owned transition Response reference."}
+  ],
+  "routes": [
+    {"name": "responses.directory", "kind": "product", "parameters": []},
+    {"name": "responses.start", "kind": "product", "parameters": []},
+    {
+      "name": "responses.detail",
+      "kind": "product",
+      "parameters": [{"name": "submission_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "responses.edit",
+      "kind": "product",
+      "parameters": [{"name": "submission_id", "value_type": "uuid", "required": true}]
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.responses.navigation",
+      "destination": "responses.directory",
+      "label": "Responses",
+      "group": "Main",
+      "order_hint": 40,
+      "required_capabilities_any_of": ["submissions:read_own", "submissions:respond", "submissions:manage"]
+    }
+  ],
+  "security_capabilities": [
+    {"id": "submissions:read_own", "description": "Read own and delegated response work"},
+    {"id": "submissions:respond", "description": "Start and complete assigned response work"},
+    {"id": "submissions:manage", "description": "Manage submissions by hierarchy scope"}
+  ],
+  "configuration_schema": null
+}

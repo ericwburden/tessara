@@ -1,5 +1,10 @@
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
 
+import {
+  attachNativeRouteGuard,
+  expectShellRouteDirectLoadAndRefresh,
+} from "./support/native-route";
+
 type IdResponse = {
   id: string;
 };
@@ -357,6 +362,7 @@ test.describe("workflow-mediated form shortcuts", () => {
   test("Assign Form uses workflow assignments and delegates start assigned work", async ({
     page,
   }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     await signInAsAdmin(page);
     const setup = await createPublishedForm(page);
     const assignment = await assignWorkflowToDelegate(
@@ -372,6 +378,23 @@ test.describe("workflow-mediated form shortcuts", () => {
     expect(workflowAssignments.some((item) => item.id === assignment.assignmentId)).toBe(
       true,
     );
+
+    await expectShellRouteDirectLoadAndRefresh(page, {
+      path: "/workflows/assignments",
+      shellTitle: "Workflow Assignments",
+      activeHref: "/workflows",
+      ready: async (routePage) => {
+        await expect(
+          routePage.getByRole("heading", {
+            level: 1,
+            name: "Workflow Assignments",
+          }),
+        ).toBeVisible();
+        await expect(routePage.locator(".workflow-assignments-page")).toContainText(
+          setup.workflowName,
+        );
+      },
+    });
 
     await signInAsDelegate(page);
     const pending = await apiGet<PendingWorkflowWork[]>(
@@ -403,11 +426,33 @@ test.describe("workflow-mediated form shortcuts", () => {
     expect(detail.runtime?.workflow_name).toBe(setup.workflowName);
     expect(detail.runtime?.current_step_position).toBe(0);
     expect(detail.runtime?.step_count).toBe(1);
+
+    await expectShellRouteDirectLoadAndRefresh(page, {
+      path: `/responses/${submission.id}`,
+      shellTitle: "Response Detail",
+      activeHref: "/responses",
+      ready: async (routePage) => {
+        await expect(
+          routePage.getByRole("heading", {
+            level: 1,
+            name: "Response Detail",
+          }),
+        ).toBeVisible();
+        await expect(
+          routePage
+            .locator(".response-detail-content")
+            .getByRole("heading", { level: 2, name: setup.formName }),
+        ).toBeVisible();
+      },
+    });
+
+    await assertNativeRouteGuard();
   });
 
   test("response start options are assignment-only", async ({
     page,
   }) => {
+    const assertNativeRouteGuard = attachNativeRouteGuard(page);
     await signInAsAdmin(page);
     const setup = await createPublishedForm(page);
     const assignment = await assignWorkflowToDelegate(
@@ -428,6 +473,24 @@ test.describe("workflow-mediated form shortcuts", () => {
     expect(option?.form_id).toBe(setup.formId);
     expect(option?.workflow_name).toContain(setup.formName);
 
+    await expectShellRouteDirectLoadAndRefresh(page, {
+      path: "/responses/new",
+      shellTitle: "Start Response",
+      activeHref: "/responses",
+      ready: async (routePage) => {
+        await expect(
+          routePage.getByRole("heading", {
+            level: 1,
+            name: "Start Response",
+          }),
+        ).toBeVisible();
+        const assignedWork = routePage.getByLabel("Assigned Work");
+        await expect(assignedWork).toBeEnabled();
+        await expect(assignedWork).toContainText(setup.formName);
+        await expect(routePage.getByRole("button", { name: "Start Draft" })).toBeDisabled();
+      },
+    });
+
     const removedStart = await page.request.post("/api/responses/start", {
       data: {
         form_id: setup.formId,
@@ -435,6 +498,7 @@ test.describe("workflow-mediated form shortcuts", () => {
       },
     });
     expect([404, 405]).toContain(removedStart.status());
+    await assertNativeRouteGuard();
   });
 
   test("editing a generated workflow into multiple steps promotes it and form shortcut creates a fresh workflow", async ({

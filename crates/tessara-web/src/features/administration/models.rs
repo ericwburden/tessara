@@ -9,6 +9,106 @@ pub(crate) struct AdminCapabilitySummary {
     pub(crate) id: String,
     pub(crate) key: String,
     pub(crate) description: String,
+    pub(crate) scope_mode: AdminCapabilityScopeMode,
+    #[serde(default)]
+    pub(crate) provenance: Vec<AdminCapabilityProvenanceSummary>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AdminCapabilityScopeMode {
+    ScopeAware,
+    InstallationGlobal,
+}
+
+/// The scope profile of the capabilities currently selected for one role.
+///
+/// This is an editor model only. The API remains authoritative and validates
+/// the submitted capability identifiers independently.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AdminRoleCapabilityScopeSelection {
+    Empty,
+    ScopeAware,
+    InstallationGlobal,
+    AdminAllMixedException,
+    Mixed,
+}
+
+impl AdminRoleCapabilityScopeSelection {
+    pub(crate) const fn is_invalid(self) -> bool {
+        matches!(self, Self::Mixed)
+    }
+}
+
+/// Stable client-side rejection shown before a mixed-scope role can be sent.
+pub(crate) const MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE: &str = "A role cannot combine scope-aware and installation-global capabilities unless it contains admin:all. Create a dedicated installation-global role for module permissions and keep scoped product capabilities in a separate role.";
+
+/// Classifies selected capabilities using the catalog's explicit scope-mode
+/// metadata. Unknown identifiers are left to the API's identifier validation;
+/// they must not be guessed from capability names.
+pub(crate) fn admin_role_capability_scope_selection(
+    catalog: &[AdminCapabilitySummary],
+    selected_capability_ids: &[String],
+) -> AdminRoleCapabilityScopeSelection {
+    let mut has_scope_aware = false;
+    let mut has_installation_global = false;
+    let mut has_admin_all = false;
+
+    for capability in catalog.iter().filter(|capability| {
+        selected_capability_ids
+            .iter()
+            .any(|selected_id| selected_id == &capability.id)
+    }) {
+        has_admin_all |= capability.key == "admin:all";
+        match capability.scope_mode {
+            AdminCapabilityScopeMode::ScopeAware => has_scope_aware = true,
+            AdminCapabilityScopeMode::InstallationGlobal => has_installation_global = true,
+        }
+    }
+
+    match (has_scope_aware, has_installation_global, has_admin_all) {
+        (false, false, _) => AdminRoleCapabilityScopeSelection::Empty,
+        (true, false, _) => AdminRoleCapabilityScopeSelection::ScopeAware,
+        (false, true, _) => AdminRoleCapabilityScopeSelection::InstallationGlobal,
+        (true, true, true) => AdminRoleCapabilityScopeSelection::AdminAllMixedException,
+        (true, true, false) => AdminRoleCapabilityScopeSelection::Mixed,
+    }
+}
+
+pub(crate) fn validate_admin_role_capability_scope_selection(
+    catalog: &[AdminCapabilitySummary],
+    selected_capability_ids: &[String],
+) -> Result<AdminRoleCapabilityScopeSelection, &'static str> {
+    let selection = admin_role_capability_scope_selection(catalog, selected_capability_ids);
+    if selection.is_invalid() {
+        Err(MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE)
+    } else {
+        Ok(selection)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub(crate) struct AdminCapabilityProvenanceSummary {
+    pub(crate) source_kind: AdminCapabilityProvenanceSourceKind,
+    pub(crate) source_key: String,
+    pub(crate) definition_id: Option<String>,
+    pub(crate) definition_display_name: Option<String>,
+    pub(crate) provider_state: AdminCapabilityProviderState,
+    pub(crate) source_digest: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AdminCapabilityProvenanceSourceKind {
+    Core,
+    TransitionContribution,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AdminCapabilityProviderState {
+    CoreAuthoritative,
+    TransitionalInProcess,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -217,4 +317,111 @@ pub(crate) struct UpdateNodeMetadataFieldRequest {
     pub(crate) label: String,
     pub(crate) field_type: String,
     pub(crate) required: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AdminCapabilityScopeMode, AdminCapabilitySummary, AdminRoleCapabilityScopeSelection,
+        MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE, admin_role_capability_scope_selection,
+        validate_admin_role_capability_scope_selection,
+    };
+
+    fn capability(
+        id: &str,
+        key: &str,
+        scope_mode: AdminCapabilityScopeMode,
+    ) -> AdminCapabilitySummary {
+        AdminCapabilitySummary {
+            id: id.into(),
+            key: key.into(),
+            description: format!("{key} description"),
+            scope_mode,
+            provenance: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn role_scope_selection_uses_catalog_metadata_and_detects_mixed_bundles() {
+        let catalog = vec![
+            capability(
+                "forms-read",
+                "forms:read",
+                AdminCapabilityScopeMode::ScopeAware,
+            ),
+            capability(
+                "modules-read",
+                "modules:read",
+                AdminCapabilityScopeMode::InstallationGlobal,
+            ),
+            capability(
+                "admin-all",
+                "admin:all",
+                AdminCapabilityScopeMode::InstallationGlobal,
+            ),
+        ];
+
+        assert_eq!(
+            admin_role_capability_scope_selection(&catalog, &[]),
+            AdminRoleCapabilityScopeSelection::Empty
+        );
+        assert_eq!(
+            admin_role_capability_scope_selection(&catalog, &["forms-read".into()]),
+            AdminRoleCapabilityScopeSelection::ScopeAware
+        );
+        assert_eq!(
+            admin_role_capability_scope_selection(&catalog, &["modules-read".into()]),
+            AdminRoleCapabilityScopeSelection::InstallationGlobal
+        );
+        assert_eq!(
+            admin_role_capability_scope_selection(
+                &catalog,
+                &["forms-read".into(), "modules-read".into()],
+            ),
+            AdminRoleCapabilityScopeSelection::Mixed
+        );
+        assert_eq!(
+            validate_admin_role_capability_scope_selection(
+                &catalog,
+                &["forms-read".into(), "modules-read".into()],
+            ),
+            Err(MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE)
+        );
+        assert_eq!(
+            admin_role_capability_scope_selection(
+                &catalog,
+                &[
+                    "forms-read".into(),
+                    "modules-read".into(),
+                    "admin-all".into(),
+                ],
+            ),
+            AdminRoleCapabilityScopeSelection::AdminAllMixedException
+        );
+        assert_eq!(
+            validate_admin_role_capability_scope_selection(
+                &catalog,
+                &[
+                    "forms-read".into(),
+                    "modules-read".into(),
+                    "admin-all".into(),
+                ],
+            ),
+            Ok(AdminRoleCapabilityScopeSelection::AdminAllMixedException)
+        );
+    }
+
+    #[test]
+    fn role_scope_selection_does_not_infer_scope_from_unknown_identifiers() {
+        let catalog = vec![capability(
+            "forms-read",
+            "forms:read",
+            AdminCapabilityScopeMode::ScopeAware,
+        )];
+
+        assert_eq!(
+            admin_role_capability_scope_selection(&catalog, &["unknown-global-looking-id".into()],),
+            AdminRoleCapabilityScopeSelection::Empty
+        );
+    }
 }

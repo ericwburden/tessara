@@ -3681,6 +3681,10 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+dependencies = [
+ "serde",
+ "serde_core",
+]
 
 [[package]]
 name = "send_wrapper"
@@ -4375,6 +4379,7 @@ dependencies = [
  "rand_core 0.6.4",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "tessara-core",
  "tessara-dashboards",
@@ -4382,6 +4387,7 @@ dependencies = [
  "tessara-datasets",
  "tessara-forms",
  "tessara-hierarchy",
+ "tessara-module-contract",
  "tessara-submissions",
  "tessara-web",
  "thiserror 2.0.18",
@@ -4448,6 +4454,18 @@ dependencies = [
 [[package]]
 name = "tessara-jobs"
 version = "0.1.0"
+
+[[package]]
+name = "tessara-module-contract"
+version = "0.1.0"
+dependencies = [
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "uuid",
+]
 
 [[package]]
 name = "tessara-submissions"

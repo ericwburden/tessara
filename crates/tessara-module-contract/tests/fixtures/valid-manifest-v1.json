@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "definition_id": "tessara.forms",
+  "release_version": "1.0.0",
+  "publisher": "tessara.first_party",
+  "support": {
+    "support_tier": "first_party",
+    "contact": "support@tessara.example",
+    "documentation": "https://docs.tessara.example/modules/forms"
+  },
+  "conformance_suite_version": "1.0.0",
+  "core_release_compatibility": "^0.1",
+  "shell_context_compatibility": "^1",
+  "ui_sdk_compatibility": "^1",
+  "design_system_compatibility": "^1",
+  "deployment": {
+    "profile": "tessara-oci-v1",
+    "declaration": {
+      "runtime_image": {
+        "image_reference": "registry.example/tessara/forms@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": ["/app/forms", "serve"]
+      },
+      "migration_image": {
+        "image_reference": "registry.example/tessara/forms-migrations@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": ["/app/forms", "migrate"]
+      },
+      "listen": {
+        "protocol": "http",
+        "port": 8080,
+        "registration_name": "forms"
+      },
+      "configuration_keys": ["DEFAULT_LOCALE"],
+      "secret_keys": ["DATABASE_URL"],
+      "runtime_identity": "forms-runtime",
+      "migration_identity": "forms-migration",
+      "readiness_path": "/health/ready",
+      "liveness_path": "/health/live",
+      "graceful_shutdown_seconds": 30,
+      "resources": {
+        "cpu_request_millis": 250,
+        "cpu_limit_millis": 500,
+        "memory_request_mebibytes": 128,
+        "memory_limit_mebibytes": 256
+      }
+    }
+  },
+  "features": [
+    {
+      "id": "tessara.forms.authoring",
+      "name": "Form authoring",
+      "description": "Author and publish forms.",
+      "use_cases": ["Build a data collection instrument"],
+      "inputs": ["Field definitions"],
+      "outcomes": ["Published FormVersion"],
+      "constraints": ["Publication policy remains Forms-owned"],
+      "contracts": ["tessara.forms.form-version"],
+      "resource_types": ["tessara.forms.form-version"],
+      "destinations": ["forms.directory"],
+      "capabilities": ["forms:read", "forms:manage"],
+      "configuration_pointers": ["/properties/default_locale"]
+    }
+  ],
+  "provided_contracts": [
+    {
+      "id": "tessara.forms.form-version",
+      "version": "1.0.0",
+      "kind": "resource",
+      "description": "Resolve a FormVersion."
+    }
+  ],
+  "dependencies": [],
+  "resource_types": [
+    {
+      "id": "tessara.forms.form-version",
+      "description": "Forms-owned FormVersion reference."
+    }
+  ],
+  "typed_reference_schemas": [
+    {
+      "resource_type": "tessara.forms.form-version",
+      "resource_id": {
+        "format": "opaque_string",
+        "min_length": 1,
+        "max_length": 256
+      }
+    }
+  ],
+  "routes": [
+    {
+      "name": "forms.directory",
+      "kind": "product",
+      "parameters": []
+    },
+    {
+      "name": "forms.configuration.validate",
+      "kind": "configuration",
+      "parameters": []
+    },
+    {
+      "name": "forms.compatibility",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "forms.status",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "forms.diagnostics",
+      "kind": "diagnostics",
+      "parameters": []
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.forms.navigation",
+      "destination": "forms.directory",
+      "label": "Forms",
+      "group": "Main",
+      "order_hint": 20,
+      "required_capabilities_any_of": ["forms:read", "forms:manage"]
+    }
+  ],
+  "security_capabilities": [
+    {
+      "id": "forms:read",
+      "description": "Inspect forms."
+    },
+    {
+      "id": "forms:manage",
+      "description": "Manage forms."
+    }
+  ],
+  "configuration_schema": {
+    "type": "object",
+    "properties": {
+      "default_locale": {"type": "string"}
+    }
+  },
+  "operational_routes": {
+    "configuration_validation": "forms.configuration.validate",
+    "compatibility": "forms.compatibility",
+    "status": "forms.status",
+    "diagnostics": "forms.diagnostics"
+  },
+  "shell_contribution_contracts": null
+}

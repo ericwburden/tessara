@@ -17,7 +17,7 @@ use support::{
 #[tokio::test]
 async fn authenticated_dashboard_direct_loads_embed_authorized_ssr_state() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let seed = request_json(
         app.clone(),

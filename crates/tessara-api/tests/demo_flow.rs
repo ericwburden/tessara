@@ -11,9 +11,12 @@ use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
+#[path = "support/database_safety.rs"]
+mod database_safety;
 #[path = "support/datasets.rs"]
 mod dataset_support;
 
+use database_safety::{DISPOSABLE_DATABASE_NAME_TOKENS, is_disposable_database_name};
 use dataset_support::{
     aggregation_operation, calculated_fields_operation, detail_payload_for_restricted_tier,
     filter_operation, projection_operation,
@@ -34,7 +37,7 @@ static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
 #[tokio::test]
 async fn demo_seed_uses_capability_scope_ownership_and_components() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token =
         login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
 
@@ -662,7 +665,7 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
 #[tokio::test]
 async fn demo_seed_requires_an_empty_domain_database() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token =
         login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
 
@@ -692,7 +695,7 @@ async fn demo_seed_requires_an_empty_domain_database() {
 #[tokio::test]
 async fn seeded_capability_catalog_uses_components_and_dashboards() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token =
         login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
 
@@ -714,9 +717,94 @@ async fn seeded_capability_catalog_uses_components_and_dashboards() {
 }
 
 #[tokio::test]
+async fn capability_catalog_and_role_detail_expose_scope_and_durable_provenance() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let app = test_app().await;
+    let admin_token =
+        login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
+
+    let capabilities = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/capabilities", &admin_token, None),
+    )
+    .await;
+    let capability_items = capabilities.as_array().expect("capability catalog");
+    let forms_read = capability_items
+        .iter()
+        .find(|capability| capability["key"] == "forms:read")
+        .expect("forms:read capability");
+    assert_eq!(forms_read["scope_mode"], "scope_aware");
+    let forms_provenance = forms_read["provenance"]
+        .as_array()
+        .expect("forms:read provenance");
+    assert_eq!(forms_provenance.len(), 2);
+    assert_eq!(forms_provenance[0]["source_kind"], "core");
+    assert_eq!(forms_provenance[0]["source_key"], "core");
+    assert_eq!(forms_provenance[0]["provider_state"], "core_authoritative");
+    assert!(forms_provenance[0]["source_digest"].is_null());
+    assert_eq!(
+        forms_provenance[1]["source_kind"],
+        "transition_contribution"
+    );
+    assert_eq!(forms_provenance[1]["definition_id"], "tessara.forms");
+    assert_eq!(forms_provenance[1]["definition_display_name"], "Forms");
+    assert_eq!(
+        forms_provenance[1]["provider_state"],
+        "transitional_in_process"
+    );
+    assert_eq!(
+        forms_provenance[1]["source_digest"],
+        "sha256:71bebdd07ff0028cc0da8bbd9707c393bade9951e5cedb265a4b8465d54b493e"
+    );
+
+    let modules_read = capability_items
+        .iter()
+        .find(|capability| capability["key"] == "modules:read")
+        .expect("modules:read capability");
+    assert_eq!(modules_read["scope_mode"], "installation_global");
+    let module_provenance = modules_read["provenance"]
+        .as_array()
+        .expect("modules:read provenance");
+    assert_eq!(module_provenance.len(), 1);
+    assert_eq!(module_provenance[0]["source_kind"], "core");
+    assert_eq!(module_provenance[0]["provider_state"], "core_authoritative");
+
+    let roles = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/roles", &admin_token, None),
+    )
+    .await;
+    let operator_role_id = roles
+        .as_array()
+        .expect("role catalog")
+        .iter()
+        .find(|role| role["name"] == "operator")
+        .and_then(|role| role["id"].as_str())
+        .expect("operator role id");
+    let operator_role = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/roles/{operator_role_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let role_forms_read = operator_role["capabilities"]
+        .as_array()
+        .expect("role capabilities")
+        .iter()
+        .find(|capability| capability["key"] == "forms:read")
+        .expect("role forms:read capability");
+    assert_eq!(role_forms_read["scope_mode"], "scope_aware");
+    assert_eq!(role_forms_read["provenance"], forms_read["provenance"]);
+}
+
+#[tokio::test]
 async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_precedence() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token =
         login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
 
@@ -1067,7 +1155,7 @@ async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_preced
 #[tokio::test]
 async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token =
         login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
 
@@ -3096,7 +3184,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
 #[tokio::test]
 async fn admin_dataset_query_designer_materializes_generated_sql() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token =
         login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
 
@@ -3985,20 +4073,28 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     assert!(!hidden_join_key_sql.contains("field_dim.field_key"));
 }
 
-async fn test_app() -> Option<axum::Router> {
+async fn test_app() -> axum::Router {
     LazyLock::force(&TEST_TRACING);
-    let database_url = match std::env::var("TEST_DATABASE_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            eprintln!("skipping database integration test because TEST_DATABASE_URL is not set");
-            return None;
-        }
-    };
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .expect("TEST_DATABASE_URL is required; database integration tests must never skip");
+    assert!(
+        !database_url.trim().is_empty(),
+        "TEST_DATABASE_URL is required and must not be empty"
+    );
     let reset_pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&database_url)
         .await
         .expect("connect test database");
+    let database_name: String = sqlx::query_scalar("SELECT current_database()")
+        .fetch_one(&reset_pool)
+        .await
+        .expect("current database should be readable");
+    assert!(
+        is_disposable_database_name(&database_name),
+        "TEST_DATABASE_URL must point at a database with a token-bounded disposable name marker ({}); got '{database_name}'",
+        DISPOSABLE_DATABASE_NAME_TOKENS.join(", ")
+    );
     sqlx::query("DROP SCHEMA public CASCADE")
         .execute(&reset_pool)
         .await
@@ -4024,7 +4120,7 @@ async fn test_app() -> Option<axum::Router> {
     let pool = db::connect_and_prepare(&config)
         .await
         .expect("prepare database");
-    Some(router(db::AppState { pool, config }))
+    router(db::AppState { pool, config })
 }
 
 async fn login_token_for(app: axum::Router, email: &str, password: &str) -> String {

@@ -215,6 +215,39 @@ pub async fn require_submission_access(
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
 
+    ensure_submission_row_access(pool, account, &row).await?;
+
+    Ok(SubmissionAccess {
+        form_version_id: row.form_version_id,
+        status: row.status,
+    })
+}
+
+/// Returns a Response lifecycle only when the same ownership, delegation, or
+/// scoped-management rule used by the product API authorizes the account.
+/// Unknown and inaccessible identifiers intentionally collapse to `None` so a
+/// typed-reference adapter cannot become a Response-existence oracle.
+pub(crate) async fn reference_lifecycle_if_accessible(
+    pool: &PgPool,
+    account: &auth::AccountContext,
+    submission_id: Uuid,
+) -> ApiResult<Option<String>> {
+    let Some(row) = repo::load_submission_access(pool, submission_id).await? else {
+        return Ok(None);
+    };
+
+    match ensure_submission_row_access(pool, account, &row).await {
+        Ok(()) => Ok(Some(row.status)),
+        Err(ApiError::Forbidden(_)) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+async fn ensure_submission_row_access(
+    pool: &PgPool,
+    account: &auth::AccountContext,
+    row: &repo::SubmissionAccessRow,
+) -> ApiResult<()> {
     match auth::capability_boundary(pool, account, "submissions:manage").await? {
         auth::CapabilityBoundary::Global => {}
         auth::CapabilityBoundary::Scoped(scope_ids) if scope_ids.contains(&row.node_id) => {}
@@ -231,10 +264,7 @@ pub async fn require_submission_access(
         }
     }
 
-    Ok(SubmissionAccess {
-        form_version_id: row.form_version_id,
-        status: row.status,
-    })
+    Ok(())
 }
 
 fn saved_value_counts_as_present(value: &Value) -> bool {

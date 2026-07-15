@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "definition_id": "tessara.forms",
+  "release_version": "1.0.0",
+  "publisher": "tessara.first_party",
+  "support": {
+    "support_tier": "first_party",
+    "contact": "support@tessara.example",
+    "documentation": "https://docs.tessara.example/modules/forms"
+  },
+  "conformance_suite_version": "1.0.0",
+  "core_release_compatibility": "^0.1",
+  "shell_context_compatibility": "^1",
+  "ui_sdk_compatibility": "^1",
+  "design_system_compatibility": "^1",
+  "deployment": {
+    "profile": "tessara-oci-v2",
+    "declaration": {}
+  },
+  "features": [],
+  "provided_contracts": [],
+  "dependencies": [],
+  "resource_types": [],
+  "typed_reference_schemas": [],
+  "routes": [],
+  "navigation": [],
+  "security_capabilities": [],
+  "configuration_schema": {"type": "object"},
+  "operational_routes": {
+    "configuration_validation": "forms.configuration.validate",
+    "compatibility": "forms.compatibility",
+    "status": "forms.status",
+    "diagnostics": "forms.diagnostics"
+  },
+  "shell_contribution_contracts": null
+}

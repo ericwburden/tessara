@@ -18,6 +18,7 @@ node_modules/
 *.db
 /tmp/
 /logs/
+/artifacts/
 
 # Editors and OS files
 .idea/

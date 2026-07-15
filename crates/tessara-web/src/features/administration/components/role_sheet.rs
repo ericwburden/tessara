@@ -1,11 +1,17 @@
 //! Role editor sheet.
 
 use super::super::state::toggle_string_selection;
-use crate::features::administration::models::AdminCapabilitySummary;
+use crate::features::administration::display::admin_capability_scope_label;
+use crate::features::administration::models::{
+    AdminCapabilitySummary, AdminRoleCapabilityScopeSelection, MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE,
+    admin_role_capability_scope_selection,
+};
 use crate::utils::text::text_matches;
 use icons::{Search, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
+
+use super::capability_metadata::AdminCapabilityMetadata;
 
 #[component]
 pub(crate) fn AdminRoleSheet(
@@ -47,6 +53,10 @@ pub(crate) fn AdminRoleSheet(
                                     />
                                 </label>
                             </Show>
+                            <section class="administration-role-scope-guidance" aria-labelledby="administration-role-scope-heading">
+                                <h3 id="administration-role-scope-heading">"Capability scope"</h3>
+                                <p>"Keep scope modes in separate roles. Installation-global roles are assigned across the entire installation. A user can have a dedicated global module role alongside separate scoped product roles. admin:all is the sole mixed-scope exception and makes the complete role installation-global."</p>
+                            </section>
                             <label class="searchable-data-table__search searchable-data-table__control administration-role-sheet__search">
                                 <Search class="searchable-data-table__control-icon"/>
                                 <span class="sr-only">"Search capabilities"</span>
@@ -75,12 +85,19 @@ pub(crate) fn AdminRoleSheet(
                                             .into_iter()
                                             .map(|capability| {
                                                 let capability_id = capability.id.clone();
+                                                let input_id = format!("administration-role-capability-{}", capability.id);
+                                                let metadata_id = format!("{input_id}-metadata");
                                                 let checked = selected.iter().any(|id| id == &capability.id);
+                                                let scope_mode = capability.scope_mode;
+                                                let scope_label = admin_capability_scope_label(scope_mode);
+                                                let provenance = capability.provenance;
                                                 view! {
-                                                    <label class="checkbox-list__item permission-picker__item">
+                                                    <div class="checkbox-list__item permission-picker__item administration-role-capability-entry">
                                                         <input
+                                                            id=input_id.clone()
                                                             type="checkbox"
                                                             prop:checked=checked
+                                                            aria-describedby=metadata_id.clone()
                                                             on:change=move |event| {
                                                                 toggle_string_selection(
                                                                     selected_capability_ids,
@@ -89,11 +106,22 @@ pub(crate) fn AdminRoleSheet(
                                                                 );
                                                             }
                                                         />
-                                                        <span>
-                                                            <strong>{capability.key}</strong>
-                                                            <small>{capability.description}</small>
-                                                        </span>
-                                                    </label>
+                                                        <div class="administration-role-capability-content">
+                                                            <label for=input_id>
+                                                                <span class="administration-role-capability-heading">
+                                                                    <strong>{capability.key}</strong>
+                                                                    <small class="administration-role-capability-scope">{scope_label}</small>
+                                                                </span>
+                                                                <small>{capability.description}</small>
+                                                            </label>
+                                                            <div id=metadata_id class="administration-role-capability-metadata">
+                                                                <AdminCapabilityMetadata
+                                                                    scope_mode
+                                                                    provenance
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 }
                                             })
                                             .collect_view()
@@ -101,6 +129,13 @@ pub(crate) fn AdminRoleSheet(
                                     }
                                 }}
                             </div>
+                            {move || {
+                                let selection = admin_role_capability_scope_selection(
+                                    &capabilities.get(),
+                                    &selected_capability_ids.get(),
+                                );
+                                view! { <AdminRoleScopeSelectionNotice selection/> }
+                            }}
                             <Show when=move || message.get().is_some()>
                                 <p class="form-message" role="status">{move || message.get().unwrap_or_default()}</p>
                             </Show>
@@ -109,7 +144,19 @@ pub(crate) fn AdminRoleSheet(
                             <button class="button button--secondary" type="button" on:click=on_close>
                                 "Cancel"
                             </button>
-                            <button class="button" type="button" disabled=move || is_saving.get() on:click=on_save>
+                            <button
+                                class="button"
+                                type="button"
+                                disabled=move || {
+                                    is_saving.get()
+                                        || admin_role_capability_scope_selection(
+                                            &capabilities.get(),
+                                            &selected_capability_ids.get(),
+                                        )
+                                        .is_invalid()
+                                }
+                                on:click=on_save
+                            >
                                 {move || if is_saving.get() { "Saving..." } else { "Save Role" }}
                             </button>
                         </div>
@@ -117,5 +164,85 @@ pub(crate) fn AdminRoleSheet(
                 </section>
             </Show>
         </Portal>
+    }
+}
+
+#[component]
+fn AdminRoleScopeSelectionNotice(selection: AdminRoleCapabilityScopeSelection) -> impl IntoView {
+    let (heading, detail, is_error) = match selection {
+        AdminRoleCapabilityScopeSelection::Empty => (
+            "No scope mode selected",
+            "Choose capabilities from one scope mode to define this role.",
+            false,
+        ),
+        AdminRoleCapabilityScopeSelection::ScopeAware => (
+            "Scope-aware role",
+            "Assignments for this role may be limited to selected organization scope nodes.",
+            false,
+        ),
+        AdminRoleCapabilityScopeSelection::InstallationGlobal => (
+            "Installation-global role",
+            "Assignments for this role always apply across the entire installation; organization scope nodes do not limit it.",
+            false,
+        ),
+        AdminRoleCapabilityScopeSelection::AdminAllMixedException => (
+            "Global admin exception",
+            "This role contains admin:all, the sole mixed-scope exception. The complete role is installation-global; additional product capabilities are redundant.",
+            false,
+        ),
+        AdminRoleCapabilityScopeSelection::Mixed => (
+            "Mixed scope modes are not allowed",
+            MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE,
+            true,
+        ),
+    };
+    let class = if is_error {
+        "administration-role-scope-selection form-message administration-role-scope-selection--error"
+    } else {
+        "administration-role-scope-selection"
+    };
+    let role = if is_error { "alert" } else { "status" };
+
+    view! {
+        <section class=class role=role aria-live="polite">
+            <strong>{heading}</strong>
+            <p>{detail}</p>
+        </section>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use leptos::prelude::*;
+
+    use super::AdminRoleScopeSelectionNotice;
+    use crate::features::administration::models::AdminRoleCapabilityScopeSelection;
+
+    #[test]
+    fn scope_selection_notice_explains_global_and_rejects_mixed_roles() {
+        let html = Owner::new().with(|| {
+            view! {
+                <div>
+                    <AdminRoleScopeSelectionNotice
+                        selection=AdminRoleCapabilityScopeSelection::InstallationGlobal
+                    />
+                    <AdminRoleScopeSelectionNotice
+                        selection=AdminRoleCapabilityScopeSelection::AdminAllMixedException
+                    />
+                    <AdminRoleScopeSelectionNotice
+                        selection=AdminRoleCapabilityScopeSelection::Mixed
+                    />
+                </div>
+            }
+            .to_html()
+        });
+
+        assert!(html.contains("Installation-global role"));
+        assert!(html.contains("always apply across the entire installation"));
+        assert!(html.contains("Global admin exception"));
+        assert!(html.contains("additional product capabilities are redundant"));
+        assert!(html.contains("Mixed scope modes are not allowed"));
+        assert!(html.contains("dedicated installation-global role for module permissions"));
+        assert!(html.contains("role=\"alert\""));
     }
 }

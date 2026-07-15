@@ -5,6 +5,8 @@ use crate::features::administration::models::{
 };
 use leptos::prelude::*;
 
+use super::super::capability_metadata::AdminCapabilityMetadata;
+
 #[component]
 pub(crate) fn AdministrationRoleDetailPanel(
     detail: Option<AdminRoleDetail>,
@@ -79,11 +81,22 @@ fn AdminRoleCapabilityList(capabilities: Vec<AdminCapabilitySummary>) -> impl In
                 <tbody>
                 {capabilities
                     .into_iter()
-                    .map(|capability| view! {
-                        <tr>
-                            <th scope="row">{capability.key}</th>
-                            <td>{capability.description}</td>
-                        </tr>
+                    .map(|capability| {
+                        let scope_mode = capability.scope_mode;
+                        let provenance = capability.provenance;
+                        view! {
+                            <tr>
+                                <th scope="row">{capability.key}</th>
+                                <td>
+                                    <p>{capability.description}</p>
+                                    <AdminCapabilityMetadata
+                                        scope_mode
+                                        provenance
+                                        show_digest=true
+                                    />
+                                </td>
+                            </tr>
+                        }
                     })
                     .collect_view()}
                 </tbody>

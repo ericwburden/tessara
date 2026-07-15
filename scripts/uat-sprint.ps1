@@ -1,12 +1,69 @@
+[CmdletBinding()]
 param(
-    [string]$BaseUrl = "http://localhost:8080"
+    [string]$BaseUrl = "http://localhost:8080",
+    [string]$DeploymentEvidencePath,
+    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [string]$AcceptanceEvidencePath,
+    [switch]$OverwriteAcceptanceEvidence,
+    [switch]$DevelopmentMode
 )
+$ErrorActionPreference = "Stop"
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$deploymentEvidenceCommon = Join-Path $PSScriptRoot "sprint-6a-deployment-evidence-common.ps1"
+$acceptanceEvidenceCommon = Join-Path $PSScriptRoot "sprint-6a-acceptance-evidence-common.ps1"
+$acceptanceEvidenceFullPath = $null
+$deploymentEvidenceFullPath = $null
+$deploymentEvidence = $null
+$sensitiveTemporaryPaths = [Collections.Generic.List[string]]::new()
+$currentRunSessions = [Collections.Generic.List[object]]::new()
 $BaseUrl = $BaseUrl.TrimEnd('/')
+
+if (-not (Test-Path -LiteralPath $acceptanceEvidenceCommon -PathType Leaf)) {
+    throw "Could not find Sprint 6A acceptance evidence publisher at $acceptanceEvidenceCommon"
+}
+. $acceptanceEvidenceCommon
+if ($OverwriteAcceptanceEvidence -and [string]::IsNullOrWhiteSpace($AcceptanceEvidencePath)) {
+    throw "-OverwriteAcceptanceEvidence requires -AcceptanceEvidencePath."
+}
+if ($DevelopmentMode -and -not [string]::IsNullOrWhiteSpace($AcceptanceEvidencePath)) {
+    throw "DevelopmentMode cannot produce Sprint acceptance evidence. Remove -DevelopmentMode or omit -AcceptanceEvidencePath."
+}
+if (-not $DevelopmentMode) {
+    if ([string]::IsNullOrWhiteSpace($DeploymentEvidencePath) -or [string]::IsNullOrWhiteSpace($ExpectedDataState)) {
+        throw "Sprint acceptance UAT requires -DeploymentEvidencePath and -ExpectedDataState upgraded|fresh. Use -DevelopmentMode only for non-acceptance local diagnostics."
+    }
+    if (-not (Test-Path -LiteralPath $deploymentEvidenceCommon -PathType Leaf)) {
+        throw "Could not find Sprint 6A deployment evidence validator at $deploymentEvidenceCommon"
+    }
+    . $deploymentEvidenceCommon
+    $deploymentEvidenceFullPath = Resolve-Sprint6AAcceptanceEvidencePath `
+        -RepositoryRoot $repoRoot `
+        -Path $DeploymentEvidencePath
+    if (-not [string]::IsNullOrWhiteSpace($AcceptanceEvidencePath)) {
+        $acceptanceEvidenceFullPath = Resolve-Sprint6AAcceptanceEvidencePath `
+            -RepositoryRoot $repoRoot `
+            -Path $AcceptanceEvidencePath
+        $null = Assert-Sprint6AAcceptanceEvidenceTargetAvailable `
+            -EvidencePath $acceptanceEvidenceFullPath `
+            -DeploymentEvidencePath $deploymentEvidenceFullPath `
+            -Overwrite:$OverwriteAcceptanceEvidence
+    }
+    $deploymentEvidence = Assert-Sprint6ADeploymentEvidence `
+        -RepositoryRoot $repoRoot `
+        -EvidencePath $deploymentEvidenceFullPath `
+        -BaseUrl $BaseUrl `
+        -ExpectedDataState $ExpectedDataState
+    if ([string]::IsNullOrWhiteSpace($acceptanceEvidenceFullPath)) {
+        Write-Warning "No -AcceptanceEvidencePath was supplied. This run can diagnose acceptance behavior but will not retain durable UAT proof."
+    }
+} else {
+    Write-Warning "DevelopmentMode skips deployment-evidence validation and cannot produce Sprint acceptance evidence."
+}
 
 Write-Host "`n== Sprint UAT (1) Local deployment sanity ==" -ForegroundColor Cyan
 Write-Host "Use after local deployment refresh:"
 Write-Host "  .\scripts\local-launch.ps1"
-Write-Host "  .\scripts\uat-sprint.ps1 -BaseUrl '$BaseUrl'"
+Write-Host "  .\scripts\uat-sprint.ps1 -BaseUrl '$BaseUrl' -DeploymentEvidencePath '<path>' -ExpectedDataState upgraded|fresh -AcceptanceEvidencePath '<state-specific path>'"
 
 function Assert-Contains {
     param(
@@ -75,7 +132,44 @@ function Get-ApiToken {
     if (-not $response.token) {
         throw "Sprint UAT failure: login response did not include a token for $Email."
     }
+    Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$response.token)
     return $response.token
+}
+
+function Invoke-CurrentRunSessionLogout {
+    param([Parameter(Mandatory)][object]$Session)
+
+    if ($Session.source -eq 'bearer') {
+        return Invoke-RestMethod `
+            -Method Delete `
+            -Uri "$BaseUrl/api/auth/logout" `
+            -Headers @{ Authorization = "Bearer $($Session.token)" } `
+            -TimeoutSec 30
+    }
+    try {
+        if (-not (Test-Path -LiteralPath $Session.cookie_path -PathType Leaf)) {
+            throw 'Current-run browser cookie is missing before exact logout.'
+        }
+        $null = Get-Sprint6ASecurePathInfo -Path $Session.cookie_path -RequireLeaf
+        $response = & curl.exe -sS -f -X DELETE -b $Session.cookie_path -c $Session.cookie_path "$BaseUrl/api/auth/logout"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Browser DELETE /api/auth/logout failed with exit code $LASTEXITCODE."
+        }
+        try { $browserLogout = $response | ConvertFrom-Json -NoEnumerate }
+        catch { throw "Browser DELETE /api/auth/logout returned invalid JSON: $($_.Exception.Message)" }
+        if ($null -eq $browserLogout.PSObject.Properties['signed_out'] -or
+            $browserLogout.signed_out -isnot [bool] -or -not $browserLogout.signed_out) {
+            throw 'Browser DELETE /api/auth/logout did not return exact signed_out=true.'
+        }
+        return $browserLogout
+    } catch {
+        if ([string]::IsNullOrWhiteSpace([string]$Session.token)) { throw }
+        return Invoke-RestMethod `
+            -Method Delete `
+            -Uri "$BaseUrl/api/auth/logout" `
+            -Headers @{ Authorization = "Bearer $($Session.token)" } `
+            -TimeoutSec 30
+    }
 }
 
 function New-BrowserSession {
@@ -91,24 +185,53 @@ function New-BrowserSession {
         password = $Password
     } | ConvertTo-Json
 
-    [System.IO.File]::WriteAllText($payloadPath, $loginBody, [System.Text.UTF8Encoding]::new($false))
+    $cookieJar = Register-Sprint6ASensitivePath -Paths $sensitiveTemporaryPaths -Path $cookieJar
+    $payloadPath = Register-Sprint6ASensitivePath -Paths $sensitiveTemporaryPaths -Path $payloadPath
+    try {
+        Write-Sprint6AFileExclusive -Path $payloadPath -Content $loginBody
+        New-Sprint6AExclusiveEmptyFile -Path $cookieJar
 
-    $response = & curl.exe -sS -f -c $cookieJar -H "Content-Type: application/json" --data-binary ("@" + $payloadPath) "$BaseUrl/api/auth/login"
-    if ($LASTEXITCODE -ne 0) {
-        throw "curl login failed for $Email with exit code $LASTEXITCODE"
-    }
-    if (-not $response) {
-        throw "Login response for $Email was empty."
+        $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        try {
+            $response = & curl.exe -sS -f -c $cookieJar -H "Content-Type: application/json" --data-binary ("@" + $payloadPath) "$BaseUrl/api/auth/login"
+            $curlExitCode = $LASTEXITCODE
+        } finally {
+            $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+        }
+        $cookieJar = Complete-Sprint6ABrowserLoginObservation `
+            -Sessions $currentRunSessions `
+            -CookiePath $cookieJar `
+            -Response $response `
+            -CurlExitCode $curlExitCode `
+            -Context "Browser login for $Email"
+    } finally {
+        if (Test-Path -LiteralPath $payloadPath) {
+            $null = Get-Sprint6ASecurePathInfo -Path $payloadPath -RequireLeaf
+            Remove-Item -LiteralPath $payloadPath -Force -ErrorAction Stop
+        }
+        if (Test-Path -LiteralPath $payloadPath) {
+            throw 'Browser login credential payload still exists after immediate cleanup.'
+        }
     }
 
     return $cookieJar
 }
 
+try {
 $adminToken = Get-ApiToken -Email "admin@tessara.local" -Password "tessara-dev-admin"
 $headers = @{ Authorization = "Bearer $adminToken" }
-try {
-    $seedSummary = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/demo/seed" -Headers $headers -TimeoutSec 30
-} catch {
+$seedSummary = $null
+if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {
+    try {
+        $seedSummary = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/demo/seed" -Headers $headers -TimeoutSec 30
+    } catch {
+        Assert-Sprint6ADemoSeedRefusalErrorRecord `
+            -ErrorRecord $_ `
+            -Context 'Sprint UAT demo seed'
+    }
+}
+if ($null -eq $seedSummary) {
     $forms = Invoke-RestMethod -Uri "$BaseUrl/api/forms" -Headers $headers -TimeoutSec 30
     $datasets = Invoke-RestMethod -Uri "$BaseUrl/api/datasets" -Headers $headers -TimeoutSec 30
     $components = Invoke-RestMethod -Uri "$BaseUrl/api/components" -Headers $headers -TimeoutSec 30
@@ -118,7 +241,7 @@ try {
     $sessionTableComponent = $components | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
     $sessionDashboard = $dashboards | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
     if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or -not $sessionDashboard) {
-        throw "Sprint UAT failure: demo seed failed and seeded Demo Session Log assets could not be found. Original error: $($_.Exception.Message)"
+        throw "Sprint UAT failure: required existing Demo Session Log assets could not be found."
     }
 
     $seedSummary = [pscustomobject]@{
@@ -133,6 +256,75 @@ if ($seedSummary.seed_version -ne "uat-demo-v2") {
     throw "Sprint UAT failure: demo seed did not confirm expected uat-demo-v2."
 }
 $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
+
+$moduleInventory = Invoke-RestMethod -Uri "$BaseUrl/api/admin/modules" -Headers $headers -TimeoutSec 30
+if ($moduleInventory.schema_version -ne 1 -or @($moduleInventory.entries).Count -ne 7) {
+    throw "Sprint UAT failure: Module inventory did not return schema v1 with exactly seven transition contributions."
+}
+$migrationContribution = $moduleInventory.entries | Where-Object {
+    $_.descriptor.reserved_definition_id -eq "tessara.migration"
+} | Select-Object -First 1
+if (
+    -not $migrationContribution `
+    -or $migrationContribution.kind -ne "transitional_in_process" `
+    -or $migrationContribution.descriptor.availability -ne "retired" `
+    -or $migrationContribution.provider_eligible `
+    -or $migrationContribution.supervisor_materializable `
+    -or ($migrationContribution.PSObject.Properties.Name -contains "release") `
+    -or ($migrationContribution.PSObject.Properties.Name -contains "instance")
+) {
+    throw "Sprint UAT failure: Migration did not remain a retired, non-deployable transition contribution."
+}
+
+$modulePolicy = Invoke-RestMethod -Uri "$BaseUrl/api/admin/navigation-policy" -Headers $headers -TimeoutSec 30
+$fixedModuleItem = $modulePolicy.immutable_core_items | Where-Object {
+    $_.id -eq "module_management" `
+    -and $_.group -eq "Admin" `
+    -and $_.route -eq "/administration/modules" `
+    -and -not $_.policy_mutable
+} | Select-Object -First 1
+if (
+    -not $modulePolicy.can_manage_navigation `
+    -or -not $fixedModuleItem `
+    -or ($modulePolicy.contributions | Where-Object { $_.id -eq "module_management" })
+) {
+    throw "Sprint UAT failure: Module Management was not exposed as a fixed Core navigation item outside mutable policy members."
+}
+
+$shellNavigation = Invoke-RestMethod -Uri "$BaseUrl/api/shell/navigation" -Headers $headers -TimeoutSec 30
+$shellItems = @($shellNavigation.groups | ForEach-Object { $_.items })
+if (
+    $shellNavigation.schema_version -ne 1 `
+    -or $shellNavigation.state -ne "available" `
+    -or -not ($shellItems | Where-Object { $_.key -eq "module_management" }) `
+    -or -not ($shellItems | Where-Object { $_.key -eq "administration" })
+) {
+    throw "Sprint UAT failure: administrator shell navigation did not include the independent Administration and Module Management Core items."
+}
+
+$moduleDirectory = Invoke-Html -Uri "$BaseUrl/administration/modules" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $moduleDirectory -Needles @(
+    "Module inventory",
+    "7 contributions",
+    "Transitional — not independently deployable",
+    "No Module Release",
+    "No Module Instance",
+    "Save navigation"
+) -Context "Module Management directory"
+if ($moduleDirectory -like "*/bridge/*") {
+    throw "Sprint UAT failure: Module Management directory referenced a legacy bridge route."
+}
+
+$migrationDetail = Invoke-Html -Uri "$BaseUrl/administration/modules/tessara.migration" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $migrationDetail -Needles @(
+    "Contribution retired",
+    "The roadmap identity is retired and no current in-process product surface exists.",
+    "No Module Release",
+    "No Module Instance"
+) -Context "retired Migration contribution detail"
+if ($migrationDetail -like "*/bridge/*") {
+    throw "Sprint UAT failure: retired Migration detail referenced a legacy bridge route."
+}
 
 $homeShell = Invoke-Html -Uri "$BaseUrl/" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $homeShell -Needles @(
@@ -367,5 +559,67 @@ foreach ($roleCheck in @(
     }
 }
 
-Write-Host "`n== Sprint UAT checks passed for organization, forms, datasets, components, dashboards, and seed flows. ==" -ForegroundColor Green
-Write-Host "Next: if this was a sprint-completion run, keep the deployment open for UAT and log these pass markers."
+Complete-Sprint6AAcceptanceRunCleanup `
+    -Sessions $currentRunSessions `
+    -SensitivePaths $sensitiveTemporaryPaths `
+    -LogoutAction ${function:Invoke-CurrentRunSessionLogout}
+
+if (-not $DevelopmentMode) {
+    # Revalidate after every UAT assertion and mutation so retained proof is tied to
+    # the deployment that remained live through completion of this exact pass.
+    $deploymentEvidence = Assert-Sprint6ADeploymentEvidence `
+        -RepositoryRoot $repoRoot `
+        -EvidencePath $deploymentEvidenceFullPath `
+        -BaseUrl $BaseUrl `
+        -ExpectedDataState $ExpectedDataState
+}
+
+if (-not [string]::IsNullOrWhiteSpace($acceptanceEvidenceFullPath)) {
+    $evidenceDocument = [pscustomobject][ordered]@{
+        schema_version = $script:Sprint6AAcceptanceEvidenceSchemaVersion
+        evidence_kind = 'tessara.sprint-6a.uat'
+        status = 'passed'
+        completed_at_utc = [DateTime]::UtcNow.ToString('o')
+        expected_data_state = $ExpectedDataState
+        base_url = $BaseUrl
+        runner = [pscustomobject][ordered]@{
+            path = 'scripts/uat-sprint.ps1'
+            sha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+        checks = @(Get-Sprint6AAcceptanceExpectedChecks -Kind uat)
+        deployment = [pscustomobject][ordered]@{
+            evidence_sha256 = (Get-FileHash -LiteralPath $deploymentEvidenceFullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            data_state = [string]$deploymentEvidence.snapshot.data.state
+            source_commit = [string]$deploymentEvidence.snapshot.source.commit
+            source_tree = [string]$deploymentEvidence.snapshot.source.tree
+            image_id = [string]$deploymentEvidence.snapshot.release_image.image_id
+            database_name = [string]$deploymentEvidence.snapshot.database_runtime.current_database
+            installation_id = [string]$deploymentEvidence.snapshot.installation.id
+            catalog_entries = [int]$deploymentEvidence.snapshot.catalog.definition_count
+            built_in_seed_sha256 = [string]$deploymentEvidence.snapshot.built_in_seed.canonical_sha256
+        }
+        result = [pscustomobject][ordered]@{
+            seed_version = [string]$seedSummary.seed_version
+            dashboard_placements = [int]$dashboardApi.placement_count
+            component_kinds = @($actualDashboardKinds)
+            authorization_roles_checked = @('operator', 'respondent')
+        }
+    }
+    $publication = Publish-Sprint6AAcceptanceEvidence `
+        -EvidencePath $acceptanceEvidenceFullPath `
+        -DeploymentEvidencePath $deploymentEvidenceFullPath `
+        -RunnerFilePath $PSCommandPath `
+        -Evidence $evidenceDocument `
+        -Overwrite:$OverwriteAcceptanceEvidence
+    Write-Host "Published Sprint 6A $ExpectedDataState UAT evidence: $($publication.evidence_path)" -ForegroundColor Green
+}
+
+Write-Host "`n== Sprint UAT checks passed for modules, organization, forms, datasets, components, dashboards, and seed flows. ==" -ForegroundColor Green
+Write-Host "Next: if this was a sprint-completion run, keep the deployment open for UAT and retain the structured acceptance evidence."
+} finally {
+    Complete-Sprint6AAcceptanceRunCleanup `
+        -Sessions $currentRunSessions `
+        -SensitivePaths $sensitiveTemporaryPaths `
+        -LogoutAction ${function:Invoke-CurrentRunSessionLogout} `
+        -FinalAttempt
+}

@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn workflow_assignments_can_be_deactivated() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -60,7 +60,7 @@ async fn workflow_assignments_can_be_deactivated() {
 #[tokio::test]
 async fn workflow_assignment_filters_support_reactivation_and_context_queries() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -182,5 +182,4 @@ async fn workflow_assignment_filters_support_reactivation_and_context_queries() 
             .any(|item| item["id"] == assignment_id && item["workflow_id"] == workflow_id)
     );
 }
-
 

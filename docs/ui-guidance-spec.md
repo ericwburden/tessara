@@ -23,6 +23,7 @@ Excludes:
 - asset-file details
 - icon-library internals
 - route-by-route legacy compatibility behavior except where the guidance already treats it as a constraint
+- sprint-specific fixed destination keys, default slots, and capability names; the active sprint plan and human-first `ui-guidance.md` remain authoritative for those concrete composition rules
 
 ```allium
 -- allium: 3
@@ -88,7 +89,10 @@ entity NavigationDestination {
     owner_kind: DestinationOwnerKind
     owner_id: String
     route_name: String
-    required_capability: String?
+    required_capabilities_any_of: Set<String>
+    actor_has_any_required_display_capability: Boolean
+    core_admin_all_implied_for_display: Boolean
+    display_capability_eligible: Boolean
     administrative: Boolean
     administrator_displayed: Boolean
     module_installed: Boolean
@@ -107,9 +111,18 @@ entity NavigationDestination {
         not display_choice_changes_authorization
     }
 
+    invariant DisplayCapabilityEligibilityUsesAnyOf {
+        display_capability_eligible = (
+            required_capabilities_any_of.count = 0
+            or actor_has_any_required_display_capability
+            or core_admin_all_implied_for_display
+        )
+    }
+
     invariant HiddenDestinationsAreNotEligibleForDisplay {
         display_state = hidden implies (
             not administrator_displayed
+            or not display_capability_eligible
             or not user_authorized
             or (
                 owner_kind = module_instance
@@ -124,6 +137,7 @@ entity NavigationDestination {
     invariant VisibleDestinationStatesAreEligible {
         display_state != hidden implies (
             administrator_displayed
+            and display_capability_eligible
             and user_authorized
             and (
                 owner_kind = core_installation
@@ -541,7 +555,8 @@ surface SharedApplicationShell {
         for destination in shell.navigation_destinations:
             destination.owner_id
             destination.route_name
-            destination.required_capability
+            destination.required_capabilities_any_of
+            destination.display_capability_eligible
             destination.administrative
             destination.display_state
         for resolution in shell.destination_resolutions:

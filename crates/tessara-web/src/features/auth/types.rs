@@ -15,6 +15,7 @@ pub struct ShellAccountContext {
     pub email: String,
     pub display_name: String,
     pub capabilities: Vec<String>,
+    pub global_capabilities: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -22,6 +23,7 @@ pub struct ShellAccountSummary {
     pub email: String,
     pub display_name: String,
     pub capabilities: Vec<String>,
+    pub global_capabilities: Vec<String>,
 }
 
 impl From<ShellAccountContext> for ShellAccountSummary {
@@ -30,6 +32,7 @@ impl From<ShellAccountContext> for ShellAccountSummary {
             email: context.email,
             display_name: context.display_name,
             capabilities: context.capabilities,
+            global_capabilities: context.global_capabilities,
         }
     }
 }

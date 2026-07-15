@@ -3,7 +3,7 @@
 //! Keep route pages, load orchestration, and submit actions in focused child modules.
 
 mod actions;
-#[cfg(feature = "hydrate")]
+#[cfg(any(feature = "hydrate", test))]
 mod api;
 mod create;
 mod create_form;

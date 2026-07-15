@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn scoped_operator_cannot_review_out_of_scope_submission_by_uuid() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -66,7 +66,7 @@ async fn scoped_operator_cannot_review_out_of_scope_submission_by_uuid() {
 #[tokio::test]
 async fn scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -182,7 +182,7 @@ async fn scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid()
 #[tokio::test]
 async fn delegator_can_query_pending_work_for_an_accessible_delegate_account() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
     let _seed = request_json(
         app.clone(),
@@ -253,5 +253,4 @@ async fn delegator_can_query_pending_work_for_an_accessible_delegate_account() {
         .collect::<Vec<_>>();
     assert_eq!(delegated_pending_ids, delegate_pending_ids);
 }
-
 

@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "reserved_definition_id": "tessara.forms",
+  "display_name": "Forms",
+  "description": "Current in-process form authoring, publication, and lookup contribution.",
+  "availability": "active_in_process",
+  "features": [
+    {
+      "id": "tessara.forms.authoring",
+      "name": "Form authoring",
+      "description": "Author forms and their versioned definitions.",
+      "use_cases": ["Create or revise a form definition before publication."],
+      "inputs": ["Form metadata, field definitions, and validation settings."],
+      "outcomes": ["A saved Form draft that can produce a FormVersion."],
+      "constraints": ["Form editing and validation remain owned by the current Forms product."],
+      "contracts": ["tessara.forms.form", "tessara.forms.form-version"],
+      "resource_types": ["tessara.transition.form", "tessara.transition.form_version"],
+      "destinations": ["forms.directory", "forms.create", "forms.edit"],
+      "capabilities": ["forms:read", "forms:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.forms.publication",
+      "name": "Form publication",
+      "description": "Publish an immutable form version.",
+      "use_cases": ["Publish a reviewed form for workflow and response use."],
+      "inputs": ["A valid Form draft and its current field definition."],
+      "outcomes": ["A published FormVersion with stable identity."],
+      "constraints": ["Published version lifecycle policy remains Forms-owned."],
+      "contracts": ["tessara.forms.form-version"],
+      "resource_types": ["tessara.transition.form_version"],
+      "destinations": ["forms.edit"],
+      "capabilities": ["forms:manage"],
+      "configuration_pointers": []
+    },
+    {
+      "id": "tessara.forms.lookup",
+      "name": "Form lookup",
+      "description": "Find forms and inspect their current details.",
+      "use_cases": ["Browse forms and open a selected form for inspection."],
+      "inputs": ["A directory request or durable Form identifier."],
+      "outcomes": ["Form and FormVersion details visible to the actor."],
+      "constraints": ["Lookup never grants authority beyond the actor's Forms capabilities."],
+      "contracts": ["tessara.forms.form", "tessara.forms.form-version"],
+      "resource_types": ["tessara.transition.form", "tessara.transition.form_version"],
+      "destinations": ["forms.directory", "forms.detail"],
+      "capabilities": ["forms:read"],
+      "configuration_pointers": []
+    }
+  ],
+  "provided_contracts": [
+    {
+      "id": "tessara.forms.form",
+      "version": "1.0.0",
+      "kind": "resource",
+      "description": "Resolve a Form."
+    },
+    {
+      "id": "tessara.forms.form-version",
+      "version": "1.0.0",
+      "kind": "resource",
+      "description": "Resolve a FormVersion."
+    }
+  ],
+  "dependencies": [],
+  "resource_types": [
+    {
+      "id": "tessara.transition.form",
+      "description": "Core-owned transition Form reference."
+    },
+    {
+      "id": "tessara.transition.form_version",
+      "description": "Core-owned transition FormVersion reference."
+    }
+  ],
+  "routes": [
+    {"name": "forms.directory", "kind": "product", "parameters": []},
+    {"name": "forms.create", "kind": "product", "parameters": []},
+    {
+      "name": "forms.detail",
+      "kind": "product",
+      "parameters": [{"name": "form_id", "value_type": "uuid", "required": true}]
+    },
+    {
+      "name": "forms.edit",
+      "kind": "product",
+      "parameters": [{"name": "form_id", "value_type": "uuid", "required": true}]
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.forms.navigation",
+      "destination": "forms.directory",
+      "label": "Forms",
+      "group": "Main",
+      "order_hint": 20,
+      "required_capabilities_any_of": ["forms:read", "forms:manage"]
+    }
+  ],
+  "security_capabilities": [
+    {"id": "forms:read", "description": "Browse top-level form records"},
+    {"id": "forms:manage", "description": "Manage form definitions and versions"}
+  ],
+  "configuration_schema": null
+}

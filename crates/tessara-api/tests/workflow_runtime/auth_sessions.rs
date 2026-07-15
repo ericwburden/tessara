@@ -1,9 +1,7 @@
 #[tokio::test]
 async fn response_lifecycle_endpoints_accept_configured_cookie_name() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state_with_cookie_name("custom_tessara_session").await else {
-        return;
-    };
+    let state = test_state_with_cookie_name("custom_tessara_session").await;
     let app = router(state);
     let admin_token = login_token(app.clone()).await;
 
@@ -65,7 +63,7 @@ async fn response_lifecycle_endpoints_accept_configured_cookie_name() {
 #[tokio::test]
 async fn logout_revokes_the_current_session_token() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let logout = request_json(
@@ -86,7 +84,7 @@ async fn logout_revokes_the_current_session_token() {
 #[tokio::test]
 async fn login_sets_cookie_session_for_browser_requests() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
 
     let response = app
         .clone()
@@ -139,7 +137,7 @@ async fn login_sets_cookie_session_for_browser_requests() {
 #[tokio::test]
 async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorization_headers() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
 
     let _seed = request_json(
@@ -206,7 +204,7 @@ async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorizat
 #[tokio::test]
 async fn invalid_login_uses_stable_error_payload() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let app = test_app().await;
 
     let login = request_status_and_json(
         app,
@@ -234,9 +232,7 @@ async fn invalid_login_uses_stable_error_payload() {
 #[tokio::test]
 async fn revoked_and_expired_sessions_return_stable_auth_codes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
 
     let revoked_token = login_token(app.clone()).await;
@@ -290,9 +286,7 @@ async fn revoked_and_expired_sessions_return_stable_auth_codes() {
 #[tokio::test]
 async fn authenticated_requests_update_last_seen_timestamp() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else {
-        return;
-    };
+    let state = test_state().await;
     let app = router(state.clone());
     let token = login_token(app.clone()).await;
     let token_uuid = token.parse::<uuid::Uuid>().expect("token should be uuid");
@@ -318,5 +312,4 @@ async fn authenticated_requests_update_last_seen_timestamp() {
 
     assert!(updated_last_seen > initial_last_seen);
 }
-
 
