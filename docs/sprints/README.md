@@ -9,11 +9,12 @@ Out-of-roadmap sprint proposals and migration plans may also live here when they
 ## Current Roadmap Position
 
 **Sprint 6A: Module Contract And Core Control Plane** completed on 2026-07-15.
-The post-closeout sequencing decision inserts **Sprint 6A-UI: Application UI
-And UX Coherence** as the next sprint without reopening or modifying the closed
+The post-closeout sequencing decision inserts **Sprint 6A-UI: Sprint 6A Surface
+Harmonization** as the next sprint without reopening or modifying the closed
 Sprint 6A implementation or its retained evidence. Sprint 6A-UI kicked off on
-2026-07-15 from clean post-closeout `main`; its initial source inventory is in
-progress, and visual implementation remains held at the product decision gate.
+2026-07-15 from clean post-closeout `main`. Its approved scope corrects only UI
+introduced by Sprint 6A; existing Tessara pages are design references and
+regression surfaces, not redesign targets.
 
 **Sprint 6B: Module Runtime And Installation Infrastructure** follows Sprint
 6A-UI with its real Module Release/Instance persistence, materialization, and
@@ -21,10 +22,12 @@ runtime scope unchanged.
 
 ## Active Sprint 6A-UI Artifacts
 
-- [Sprint 6A-UI Application UI And UX Coherence Plan](./sprint-6a-ui-plan.md)
-- [Sprint 6A-UI Baseline Inventory](./sprint-6a-ui-baseline-inventory.md)
+- [Sprint 6A-UI Sprint 6A Surface Harmonization Plan](./sprint-6a-ui-plan.md)
+- [Sprint 6A-UI Targeted Baseline Inventory](./sprint-6a-ui-baseline-inventory.md)
 - [Sprint 6A-UI Test Change Log](./sprint-6a-ui-test-change-log.md)
-- [Sprint 6A-UI Roadmap Contract](../roadmap.md#sprint-6a-ui-application-ui-and-ux-coherence-slice-next)
+- [Sprint 6A-UI Targeted Audit](../audits/sprint-6a-ui-module-management-2026-07-15/README.md)
+- [Sprint 6A-UI Targeted Visual Directions](../mockups/sprint-6a-ui/README.md)
+- [Sprint 6A-UI Roadmap Contract](../roadmap.md#sprint-6a-ui-sprint-6a-surface-harmonization-slice-next)
 
 ## Completed Sprint 6A Artifacts
 

@@ -98,7 +98,7 @@ The application shell already exposes meaningful user-testable surfaces:
 
 ### Current implementation gaps
 
-The contract and control-plane foundation is complete, but Tessara does not yet materialize or operate a real Module Release or Module Instance. Sprint 6A-UI first addresses application-wide UI and UX coherence without changing that platform boundary. Sprint 6B then must:
+The contract and control-plane foundation is complete, but Tessara does not yet materialize or operate a real Module Release or Module Instance. Sprint 6A-UI first harmonizes the administration UI introduced by Sprint 6A without changing that platform boundary. Sprint 6B then must:
 
 - persist and mutate real Module Releases and Instances without treating Sprint 6A transition descriptors as deployable providers
 - introduce a Supervisor-rooted `tessara-oci-v1` runtime, same-origin gateway, verifiable installation context, health/readiness observation, and controlled lifecycle operations
@@ -764,34 +764,34 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** an actor with global `modules:read` can discover fixed Module Management in the `Admin` group and inspect Forms, Workflows, Responses, Datasets, Components, and Dashboards as clearly labeled in-process contributions rather than Module Instances; understand their advertised Feature Declarations; and review their contracts, security capabilities, and current navigation policy without receiving mutation controls. An actor with global `modules:manage_navigation` can change contribution visibility/order without changing authorization. The same directory shows Migration as retired historical/support inventory with no route, navigation item, provider, Feature Declaration, contract, capability, or action, while every current product route continues to work.
 
-### Sprint 6A-UI: Application UI And UX Coherence Slice (Next)
+### Sprint 6A-UI: Sprint 6A Surface Harmonization Slice (Next)
 
-**Outcome:** Tessara's current Core and in-process product surfaces provide a coherent, accessible, responsive experience built from shared native Leptos patterns, while existing product behavior, routes, APIs, persistence, authorization, module contracts, and the closed Sprint 6A evidence remain unchanged.
+**Outcome:** Sprint 6A-UI corrects presentation defects introduced by Sprint 6A on the Module Management directory/detail, its navigation-policy controls, the Sprint 6A-added Administration entry, and capability-provenance presentation. Existing Tessara pages are reference and regression surfaces only. Application behavior, routes, shell, navigation presentation/order/grouping, APIs, persistence, authorization, module contracts, and the closed Sprint 6A evidence remain unchanged.
 
 **Relationship to Sprint 6A:** this is a new post-closeout sprint based on the closed Sprint 6A commit. It does not reopen, amend, or replace Sprint 6A's implementation, closeout report, rollback package, or acceptance evidence. Sprint 6B follows this slice with its runtime scope unchanged.
 
 **Build:**
 
-- inventory and audit the authenticated shell, sign-in and standalone routes, Home, Organization, Forms, Workflows, Responses, Operations, Datasets, Components, Dashboards, Administration, role/access management, and Module Management; freeze a prioritized issue matrix and representative before-state evidence before implementation
-- establish shared design tokens and native Leptos primitives for typography, color, spacing, density, elevation, focus, motion, responsive breakpoints, page headers, action hierarchy, status presentation, and content width
-- improve shell hierarchy, navigation legibility, page orientation, responsive behavior, and account/context presentation without changing route ownership, authorization guards, Sprint 6A navigation groups or reorder bands, fixed Core items, or capability semantics
-- standardize tables, search/filter/pagination controls, forms, field grouping, validation feedback, buttons, menus, dialogs, side sheets, notices, empty states, loading states, forbidden states, unavailable/degraded states, and destructive-action confirmation
-- improve the usability and visual hierarchy of the highest-frequency end-to-end product and administration workflows, including Module Management, while retaining their current inputs, outputs, state transitions, and permissions
+- audit the Module Management directory and detail routes, navigation-policy reader/manager controls, the Administration entry, and capability-provenance presentation; use established Tessara administration/list/detail pages only as visual references and regression controls
+- reuse the existing Tessara identity, tokens, page framing, and native Leptos primitives; add only minimal, scoped component or style support required by the Sprint 6A surfaces
+- preserve the current shell and navigation presentation and behavior, including groups, fixed items, relative order, reorder bands, capability eligibility, and display-policy/authorization separation
+- align only the tables, metadata sections, actions, statuses, findings, empty/error states, and policy controls rendered by the Sprint 6A surfaces to established Tessara patterns
+- improve Module Management reader and navigation-manager flows plus capability-provenance readability without changing their data, state transitions, controls, or permissions
 - preserve native Leptos SSR, hydration, direct-load/refresh ownership, useful no-JavaScript documents, clean browser consoles, semantic HTML, and the prohibition on `/bridge/*`, route-level HTML-string injection, and JavaScript controller ownership
 - remediate keyboard order, focus visibility and restoration, labels, landmarks, contrast, reduced-motion behavior, overflow, touch targets, and desktop/mobile viewport behavior on every touched pattern
 - treat the Sprint 6A functional suite as durable parity proof: UI work must make existing behavioral tests pass unchanged unless an explicit product decision approves a changed behavior and the sprint test-change log records the rationale and equal-or-stronger replacement proof
-- add durable semantic interaction, accessibility, viewport, and narrowly scoped visual-regression coverage for shared primitives and representative route states; avoid broad incidental screenshots whose expected output can be regenerated without review
+- add durable semantic interaction, accessibility, viewport, and narrowly scoped visual-regression coverage for the targeted Sprint 6A surfaces and their reader, manager, no-access, retired, unavailable, and finding states; avoid incidental screenshots whose expected output can be regenerated without review
 - keep database schemas, migrations, APIs, module-contract wire types, capability and scope semantics, product lifecycle rules, and Module Release/Instance persistence or runtime work out of scope; route any discovered need to an explicit product decision and later roadmap slice
 - use proportional validation during implementation, then run the unchanged complete browser acceptance inventory once against the final release build together with fresh-deployment smoke/UAT, SSR/hydration/console, accessibility, responsive, and source-quality gates; do not rebuild Sprint 6A's populated-migration or rollback-package evidence unless this sprint's approved scope expands into persistence, migration, API, authorization, or contract changes
 
 **Application UI delivered this sprint:**
 
-- a visually coherent, responsive shell and page framework across current Core and in-process product routes
-- consistent high-quality tables, forms, actions, feedback, status, and route-state presentations
-- clearer, more usable administration and Module Management experiences without new administrative authority or product behavior
-- keyboard-accessible and mobile-usable representative workflows with durable regression coverage
+- Module Management directory and detail pages aligned with existing Tessara administration pages
+- navigation-policy controls and capability provenance made legible using existing Tessara patterns
+- targeted keyboard, accessibility, and desktop/mobile overflow proof for the Sprint 6A surfaces
+- no redesign of the shell, navigation, or unrelated product and administration pages
 
-**User-testable exit condition:** a tester can complete the current seeded workflows across every primary product and administration area on desktop and mobile, using keyboard-only interaction for representative flows, with coherent navigation, hierarchy, controls, feedback, and failure states. Existing route, API, authorization, persistence, and product behavior remains unchanged; the frozen behavioral acceptance inventory passes without skips, retries, weakened expectations, or unexplained test rewrites.
+**User-testable exit condition:** a global Module Management reader can inspect a legible directory and detail page; a global navigation manager can use the same policy controls with clear focus and responsive presentation; no-access, retired, unavailable, and finding states remain distinct; and capability provenance remains understandable in Administration. The unchanged 60-test behavioral inventory plus fresh smoke/UAT pass without skips, retries, weakened expectations, or unexplained test rewrites, proving the rest of the application remains unchanged.
 
 ### Sprint 6B: Module Runtime And Installation Infrastructure Slice
 

@@ -6,6 +6,8 @@ The accepted browser baseline is `end2end/acceptance-manifest.json`, schema vers
 
 Tests are durable proof of supported behavior. A failing test is not authorization to rewrite it. Production code is corrected unless an explicit product decision changes the requirement.
 
+New or changed Sprint 6A-UI proof is limited to Module Management, its policy controls, the Sprint 6A-added Administration entry, and capability-provenance presentation. All other accepted tests remain unchanged parity evidence; no application-wide visual baseline is introduced.
+
 ## Change Rules
 
 Every edit to an existing test, fixture, manifest, timeout, selector, screenshot, smoke check, or UAT assertion requires a row below before the change is accepted. The row must:
@@ -41,6 +43,7 @@ New tests do not need a change row unless they replace or alter existing proof, 
 Before closeout:
 
 - compare this table with the complete Git diff for test, fixture, manifest, script, and visual-baseline paths;
+- verify every new UI identity and visual baseline is confined to the targeted Sprint 6A surfaces;
 - require an exact row for every modification to existing proof;
 - verify the final browser report contains all 60 frozen identities with zero skipped, filtered, flaky, retried, or unexpected results;
 - verify no pass depends on increased timeout or retries;

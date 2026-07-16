@@ -5,9 +5,51 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Application UI And UX Coherence `(Next)`; Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Sprint 6A Surface Harmonization `(Next)`; Sprint 6B follows with its runtime scope unchanged.
 
-## 2026-07-15 - Sprint 6A-UI Application UI And UX Coherence Kickoff
+## 2026-07-15 - Sprint 6A-UI Scope Correction And Targeted Audit
+
+- Recorded the product owner's narrowed direction: Sprint 6A-UI corrects only
+  presentation introduced by Sprint 6A on the Module Management directory and
+  detail, navigation-policy controls, the Administration entry, and
+  capability-provenance presentation. Existing Tessara pages are reference and
+  regression surfaces only.
+- Removed the earlier future-regrouping mockup idea, substantial-redesign
+  direction, all-48-route visual baseline, shell work, and broad workflow work.
+  Navigation groups, anchors, fixed Core items, existing bands, order and
+  eligibility remain unchanged; no rebrand or shell/navigation redesign is
+  authorized.
+- Audited the live 1280×720 Module Management reader/manager surfaces and
+  retained four current-run captures under
+  `docs/audits/sprint-6a-ui-module-management-2026-07-15/`. The evidence shows
+  severe inventory clipping, detail-content overlap and page-level horizontal
+  scroll, dense policy rows, and weak runtime-versus-inventory hierarchy while
+  confirming that useful semantic headings, regions, table relationships, and
+  explicit state text already exist.
+- Replaced the application-wide sprint plan and baseline with a bounded
+  implementation contract and issue matrix. Existing Tessara framing, tokens,
+  cards, information lists, tables, states, actions, and responsive rules are
+  the implementation references; only narrowly scoped support may be added.
+- Kept the 48-route inventory and exact 60-test manifest as parity context, not
+  visual scope. Iteration uses targeted checks for the touched surface; the
+  unchanged complete browser inventory plus fresh smoke/UAT and source gates
+  run once after stabilization. A production or tracked-proof change after the
+  canonical final pass invalidates the affected proof and requires the relevant
+  targeted and commit-bound final gates again.
+- Reaffirmed that tests are durable proof: no failing assertion, selector,
+  timeout, fixture, identity, or screenshot may be changed merely to obtain a
+  pass. Every existing-proof edit requires an approved log row and
+  equal-or-stronger replacement proof; no application-wide visual baseline is
+  introduced.
+- No product or technical blocker remains. The next product checkpoint is to
+  select one of three screenshot-grounded Module Management harmonization
+  directions before production UI implementation.
+
+## 2026-07-15 - Initial Broad Sprint 6A-UI Kickoff (Superseded Same Day)
+
+This entry records the initial kickoff chronology only. Its broad visual scope
+and Decision Gate 0 were superseded by the approved targeted contract above and
+must not be used as implementation authority.
 
 - Kicked off the sole roadmap sprint marked `(Next)` from clean post-closeout
   `main` commit `c37153b19787d4164eaccbb4752980772e6ec84a`, immediately after
