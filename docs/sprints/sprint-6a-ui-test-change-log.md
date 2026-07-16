@@ -6,7 +6,7 @@ The closed Sprint 6A browser baseline is `end2end/acceptance-manifest.json`, sch
 
 Tests are durable proof of supported behavior. A failing test is not authorization to rewrite it. Production code is corrected unless an explicit product decision changes the requirement.
 
-New or changed Sprint 6A-UI proof is limited to the versioned navigation policy and migration, shell group composition, direct Core Admin destinations and exact `/administration` removal, Module Management, and capability-provenance presentation. All unrelated accepted tests remain unchanged parity evidence; no application-wide visual baseline is introduced.
+New or changed Sprint 6A-UI proof is limited to the versioned navigation policy and migration, shell group composition, direct Core Admin destinations and exact `/administration` removal, Module Management UX and approved directory search/status behavior, and capability-provenance presentation. All unrelated accepted tests remain unchanged parity evidence; no application-wide visual baseline is introduced.
 
 ## Approved Behavior Changes
 
@@ -17,9 +17,13 @@ The product owner has approved these reasons for future proof replacement:
 - allow effective global `modules:manage_navigation` to create, rename, reorder, and delete empty custom groups;
 - require stable non-deletable Main/Admin identities; protect Home and Organization in Main under their approved visibility rules; protect User Management, Roles & Access, Node Types, and Module Management in Admin; and make Operations optional;
 - remove the Administration navigation destination, page, and exact `/administration` route without redirect while preserving direct `/administration/*` routes; and
-- version the management and shell wires and migrate the contribution-only v1 policy without weakening authorization, revision, audit, SSR, no-JavaScript, or fail-closed behavior.
+- version the management and shell wires and migrate the contribution-only v1 policy without weakening authorization, revision, audit, SSR, no-JavaScript, or fail-closed behavior; and
+- add functional Module directory search by display name/stable definition ID and exact availability/status filtering over the already-authorized projection, with stable canonical order, combined criteria, a distinct no-match state, and clear/reset behavior.
+- expose the existing durable user-role assignment creation timestamp through the assignment read model and UI as `Assigned on`, with `Pending save` for a newly selected unsaved role and no change to assignment authorization or scope behavior.
 
 These decisions authorize only the obsolete expectation to change. They do not pre-approve a particular test edit, name, fixture, count, timeout, selector, or weaker assertion. Each actual edit still requires an exact row below before it lands.
+
+Sprint 6A-UI is UX-led rather than markup/CSS-only. Related behavior needed to deliver an approved UX outcome may be added with explicit acceptance coverage. Unrelated feature expansion must be approved before inclusion and recorded in the sprint plan before production or proof changes.
 
 ## Change Rules
 
@@ -56,6 +60,8 @@ The pre-implementation impact inventory is intentionally finite:
 
 New canonical proof must cover the ordinary unmatched Axum `/administration` 404 with no redirect, handler, or application tombstone, plus group CRUD/cross-group protection. The final manifest total is derived only after test discovery. Module-contract manifest/transition-fixture bytes and SHA sidecars are outside the approved change set and remain pinned.
 
+Additive Module directory proof must cover default exact content/order, trimmed case-insensitive display-name and definition-ID search, every exact status option, combined predicates, semantic result count, no-match/reset, keyboard/touch operation, authorization parity, and a useful complete SSR/no-JavaScript inventory. These new cases do not authorize weakening accepted catalog, descriptor, migration, authorization, or default seven-entry assertions.
+
 ## Recorded Changes
 
 | Date | File and exact identity | Change type | Approved requirement/decision | Why old proof is no longer correct or stable | Behavior changed? | Equal-or-stronger replacement proof | Reviewer/commit |
@@ -68,6 +74,7 @@ Before closeout:
 
 - compare this table with the complete Git diff for test, fixture, manifest, script, and visual-baseline paths;
 - verify every new UI identity and visual baseline is confined to navigation composition, direct Admin destinations, Module Management, and capability provenance;
+- verify search/status proof preserves the complete default inventory, canonical order, authorization, and useful SSR/no-JavaScript output while covering combined and no-match/reset behavior;
 - require an exact row for every modification to existing proof;
 - verify every unchanged Sprint 6A identity remains present and unchanged, every superseded identity has its logged equal-or-stronger replacement, and the final reconciled manifest/report has zero skipped, filtered, flaky, retried, or unexpected results;
 - verify no pass depends on increased timeout or retries;

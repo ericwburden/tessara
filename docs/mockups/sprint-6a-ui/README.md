@@ -1,6 +1,12 @@
-# Sprint 6A-UI Pre-Navigation-Model Directory Directions
+# Sprint 6A-UI Mockups
 
-Status: retained as Module inventory content references only. The approved dynamic-group model supersedes every depicted sidebar, Administration item, fixed Main/Admin membership, and implied continuation of the Sprint 6A band policy. None of these images may be selected as a full-page implementation target.
+## Selected Direction
+
+[Direction 1](./direction-1/README.md) is the current implementation-oriented mockup suite. It applies the approved dynamic-group product contract, direct Admin destinations, selected structured-registry treatment, responsive compositions, exceptional states, and focused Sprint 6A capability-provenance corrections.
+
+## Retained Pre-Navigation-Model Directions
+
+Status: retained as Module inventory content references only. The approved dynamic-group model supersedes every depicted sidebar, Administration item, fixed Main/Admin membership, and implied continuation of the Sprint 6A band policy. None of the three images below is a full-page implementation target.
 
 The options still illustrate useful alternatives for runtime-context density and seven-entry inventory hierarchy. Generated text is illustrative; implementation must use exact live values, lifecycle meanings, and semantic behavior.
 
@@ -28,9 +34,9 @@ The options still illustrate useful alternatives for runtime-context density and
 - Makes the relationship between installation context and inventory visible while reducing vertical distance.
 - Primary implementation risk: the two-column content frame must collapse cleanly and avoid giving runtime metadata too much width on tablet/mobile.
 
-## Replacement Contract
+## Supersession
 
-After the initial optional-destination placement is approved, create new screenshot-grounded directions for:
+The selected Direction 1 suite now provides:
 
 1. the default sidebar with direct User Management, Roles & Access, Node Types, and Module Management destinations and no Administration item;
 2. navigation configuration reader mode;
@@ -38,4 +44,4 @@ After the initial optional-destination placement is approved, create new screens
 4. narrow/mobile composition; and
 5. protected-operation and revision-conflict states.
 
-The directory portion may reuse one of the three hierarchy ideas above, but the new full-page direction must show the approved configured-group behavior. Search, filtering, installation/lifecycle operations, or new authorization remain excluded unless separately approved.
+It also covers active, dependency/finding, and retired module detail states plus the Sprint 6A role/capability provenance surfaces. Functional Module directory search and availability/status filtering are approved UX behavior. Installation/lifecycle operations, Release/Instance controls, authorization changes, and other unrelated feature expansion require product approval before inclusion.

@@ -57,6 +57,6 @@ Identify presentation defects that prevent a clean, legible Module Management re
 
 ## Bounded Recommendation
 
-Harmonize the directory, detail, and new group-composer controls with existing Tessara cards, information lists, tables, status badges, action groups, and responsive rules. Add only scoped Module Management styles or minimal existing-pattern support. The approved composition model changes what the shell renders, but it does not authorize a visual shell redesign, unrelated page redesign, rebrand, or product-workflow change.
+Harmonize the directory, detail, and new group-composer controls with existing Tessara cards, information lists, tables, status badges, action groups, and responsive rules. Keep changes focused on the touched experience, but do not limit the work to markup or CSS: native component structure, route-local interaction state, shared primitives, and narrowly supporting behavior may change to implement the selected layouts, functional directory search/status filtering, and composer workflow while retaining useful SSR/no-JavaScript documents. The approved composition model does not authorize a visual shell redesign, unrelated page redesign, rebrand, or product-workflow expansion; unrelated feature expansion must be approved before inclusion.
 
 The prioritized implementation issues and proof requirements are maintained in `docs/sprints/sprint-6a-ui-baseline-inventory.md`.

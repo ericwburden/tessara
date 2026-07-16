@@ -1,6 +1,6 @@
 # Sprint 6A-UI Navigation And Module Management Baseline
 
-Status: source, persistence, wire, shell, route, browser-proof, and first visual characterization recorded on 2026-07-15. The approved dynamic-group model supersedes the earlier presentation-only/band-preserving brief. Initial optional-destination placement is the sole current product blocker; refreshed composer mockups are the next planned review artifact after that decision.
+Status: source, persistence, wire, shell, route, browser-proof, and first visual characterization recorded on 2026-07-15. The approved dynamic-group model supersedes the earlier presentation-only/band-preserving brief. Initial optional-destination placement and functional Module directory search/status filtering were approved on 2026-07-16. The selected Direction 1 suite is the current product-review artifact, and its approved directory, filtered-empty, and Module Management sidebar-icon revisions are complete.
 
 ## Authority And Evidence Order
 
@@ -78,9 +78,11 @@ Custom groups use immutable `custom.<lowercase UUID v4>` IDs, validated labels, 
 | `core.admin.roles` | `/administration/roles` | Admin | No | No | Yes |
 | `core.admin.node_types` | `/administration/node-types` | Admin | No | No | Yes |
 | `core.admin.modules` | `/administration/modules` | Admin | No | No | Yes |
-| `core.operations` | `/operations` | Pending initial placement | Yes | Yes | Yes |
+| `core.operations` | `/operations` | Main | Yes | Yes | Yes |
 
 Forms, Workflows, Responses, Operations, Datasets, Components, Dashboards, and future eligible module contributions are optional placements that can move between groups, reorder, and hide.
+
+The authoritative visual mapping for `core.admin.modules` / Module Management is the canonical `Blocks` glyph from Tessara's existing `icons` system. File, Document, Package, and Cubes glyphs are not valid substitutes.
 
 After Decision Gate 1 freezes the six current contribution defaults, a later recognized destination must carry a Core-catalog default referencing a required group. Reconciliation appends it once, uses its catalog visibility default, and records a system audit; invalid/missing defaults fail closed. Custom groups are never catalog defaults, and legacy descriptor group/band values remain provenance only.
 
@@ -104,7 +106,7 @@ After Decision Gate 1 freezes the six current contribution defaults, a later rec
 | Shell UI | desktop/mobile navigation | Render configured groups and correct direct Admin active keys without rebranding the shell |
 | Admin routes | administration route/page/export/breadcrumb owners | Remove landing route/page/nav item; preserve direct descendants |
 | Composer UI | Module Management policy model/API/bootstrap/view | Group reader/manager, group CRUD/order, optional visibility/cross-group/order, protected constraints |
-| Module UI | directory/detail/provenance/style | Retain targeted hierarchy, long-content, state, and responsive corrections |
+| Module UI | directory/detail/provenance/interaction/style | Retain targeted hierarchy, long-content, state, and responsive corrections; add approved name/ID search, exact status filtering, and no-match/reset behavior |
 | Proof | Rust/API/browser/scripts/migration evidence | Logged replacements plus stronger migration/invariant/authorization/UI proof |
 
 Module descriptors contain frozen default group/order hints. Administrator placement must not rewrite descriptor bytes or digests; the new installation policy overrides those hints after discovery.
@@ -134,25 +136,29 @@ Existing headings, regions, tables, links/buttons, status text, revision/save se
 | NAV-04 | Administration landing duplicates direct destinations and consumes a fixed anchor. | P1 | Remove nav item, page, and exact route; directly expose four Core Admin destinations. | Ordinary unmatched 404/no-redirect, direct-route auth/SSR, active-navigation, smoke/UAT/browser replacements. |
 | NAV-05 | Contribution-only persistence cannot retain Core order, Organization visibility, or dynamic group identity. | P1 | Forward migration to complete groups/placements without resetting valid customization. | Fresh/populated/atomic failure/idempotence/backup-restore fingerprints. |
 | NAV-06 | Shell response validation rejects valid future groups and order. | P1 | Versioned arbitrary-group projection with uniqueness, same-origin, ownership, reference, and Core-invariant validation. | API/web parity, malformed wires, unavailable fallback, desktop/mobile/no-JS proof. |
-| MM-UI-01 | Inventory is unreadable and horizontally clipped at 1280px. | P1 | Intentional identity/state hierarchy, safe wrapping, and responsive containment. | Exact-field DOM proof and 1280/768/390 cases. |
+| MM-UI-01 | Inventory is unreadable and horizontally clipped at 1280px. | P1 | Intentional identity/state hierarchy, safe wrapping, responsive containment, and functional combined search/status narrowing. | Exact-field/default-order DOM proof plus search/status/no-match/reset and 1280/768/390 cases. |
 | MM-UI-02 | Detail grid overlaps long content and actions. | P1 | Established wide/stacked responsive detail composition. | Detail parity, source action, heading order, zoom/viewport proof. |
 | MM-UI-03 | Runtime context and lifecycle/provenance explanations compete with primary tasks. | P2 | Compact metadata and explicit supporting hierarchy without content loss. | Exact values/states and reviewed targeted visuals. |
 | MM-UI-04 | Capability provenance needs alignment after direct Admin navigation changes. | P2 | Existing role/access patterns, no authority change. | Permission/source tests and focused visual evidence if edited. |
+| MM-UI-05 | The selected directory needs quick narrowing without turning its small authoritative catalog into a separate product workflow. | P2 | Search display name/stable definition ID and filter exact availability status over the already-authorized projection; preserve canonical order and a useful full SSR/no-JavaScript document. | Pure predicate tests; default/filtered/no-result/reset browser proof; authorization and no-JavaScript parity. |
+| MM-UI-06 | User-role assignment rows show role-wide usage counts but not when the user received a persisted assignment. | P2 | Expose existing `role_assignments.created_at` as `Assigned on`; use `Pending save` for a new unsaved selection and add no new history/audit feature. | Read-model serialization, persisted/pending/unassigned UI states, and unchanged scope/save/removal proof. |
 
 ## Required Capture And Design Matrix
 
 | State | Evidence status |
 | --- | --- |
 | Current v1 directory/detail/manager policy | Captured at 1280 dark |
-| Approved initial sidebar with direct Admin destinations | Pending Decision Gate 1 |
-| Group composer reader | Pending mockup/capture |
-| Manager: create/rename/reorder/delete empty group | Pending mockup/capture |
-| Manager: cross-group move, item reorder, visibility | Pending mockup/capture |
-| Protection and non-empty delete rejection | Pending mockup/capture |
-| Revision conflict/save/discard/focus | Pending implementation proof |
-| Arbitrary groups desktop/tablet/mobile and both themes | Pending implementation proof |
-| Restricted/unavailable/malformed fallback | Pending implementation proof |
-| Harmonized directory/detail | Pending visual selection/implementation |
+| Approved initial sidebar with direct Admin destinations | Selected Direction 1; visible across desktop/tablet/mobile assets |
+| Group composer reader | Direction 1 asset 05 captured; implementation proof pending |
+| Manager: create/rename/reorder/delete empty group | Direction 1 assets 06-07 captured; implementation proof pending |
+| Manager: cross-group move, item reorder, visibility | Direction 1 assets 06-07 and 12 captured; implementation proof pending |
+| Protection and non-empty delete rejection | Direction 1 asset 08 captured; implementation proof pending |
+| Revision conflict/save/discard/focus | Direction 1 assets 07-08 and 16 captured; implementation proof pending |
+| Arbitrary groups desktop/tablet/mobile and both themes | Dark Direction 1 assets 07, 09, and 12 captured; light-theme and implementation proof pending |
+| Restricted/unavailable/malformed fallback | Direction 1 asset 16 captured; implementation proof pending |
+| Harmonized directory/detail | Direction 1 assets 01-04 and 10-11 selected/captured; implementation proof pending |
+| Directory search/status controls | Product contract frozen; targeted Direction 1 asset revisions 01 and 10 complete; implementation proof pending |
+| Filtered zero-match/reset distinct from empty inventory | Product contract frozen; targeted Direction 1 asset revision 16 complete; implementation proof pending |
 
 ## Historical Proof Requiring Explicit Reconciliation
 
@@ -178,6 +184,8 @@ Add canonical browser identities for native `/administration` not-found/no-redir
 
 Keep the module-contract manifest, all seven transition descriptor fixtures, and their SHA sidecars byte-identical. Configurable placement supersedes their default-placement hints without changing module descriptor wire scope.
 
+The exact seven-entry default inventory, source IDs/digests, lifecycle labels, and canonical server order remain durable assertions. Search/status proof is additive. Existing API/catalog/descriptor tests remain unchanged unless the chosen implementation genuinely changes their contract; an affected semantic selector or reviewed visual identity still requires a logged equal-or-stronger replacement.
+
 Every still-valid assertion in those tests remains. Only the explicitly superseded expectation may change, with an exact log row and equal-or-stronger replacement.
 
 ## Freeze Checklist
@@ -185,9 +193,11 @@ Every still-valid assertion in those tests remains. Only the explicitly supersed
 - [x] dynamic-group, cross-group movement, runtime group CRUD, required groups/destinations, Organization visibility, Operations optionality, and `/administration` removal are recorded;
 - [x] current schema/API/shell/route/proof seams are mapped;
 - [x] Module directory/detail visual defects and obsolete band UI are captured;
-- [ ] initial optional-destination placement is approved;
+- [x] initial optional-destination placement is approved;
 - [x] fresh-versus-populated sequencing, legacy-provenance treatment, custom ID/label rules, revision/audit conversion, empty-group projection, and later-contribution default handling are frozen;
-- [ ] v1-to-v2 current-placement migration mapping is frozen by Decision Gate 1;
-- [ ] group-composer reader/manager/protection/mobile directions are reviewed;
+- [x] v1-to-v2 current-placement migration mapping is frozen by Decision Gate 1;
+- [x] group-composer reader/manager/protection/mobile directions are captured in selected Direction 1;
+- [x] the UX-led boundary is frozen: search/status filtering is approved, behavior is not limited to markup/CSS, and unrelated feature expansion requires approval before inclusion;
+- [ ] the expanded Direction 1 suite receives final product review before implementation;
 - [ ] exact first test-change rows are approved before test edits; and
 - [ ] implementation begins with v1 characterization and migration proof, not UI code.

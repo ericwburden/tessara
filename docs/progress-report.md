@@ -7,6 +7,15 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Navigation Composition And Module Management Harmonization `(Next)`; Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-16 - Sprint 6A-UI UX-Led Scope Clarification
+
+- Clarified that Sprint 6A-UI is led by its UX outcome and is not limited to markup or CSS. Native interaction state and narrowly supporting behavior may change when they directly deliver an approved experience on the touched surfaces and receive proportional durable proof.
+- Approved functional Module directory search by display name or stable definition ID plus availability/status filtering for All, Active in Core process, Unavailable, and Retired. Search and status combine without reordering the canonical inventory and include a distinct clearable no-match state.
+- Replaced the blanket exclusion of functionality with the product boundary that unrelated feature expansion must be approved before inclusion. Installation/lifecycle operations, Release/Instance work, authorization changes, and unrelated workflow redesign remain unapproved.
+- Kept tests as durable proof. The exact default seven-entry inventory, order, source data, authorization, and useful SSR/no-JavaScript output remain acceptance evidence; search/filter proof is additive and any affected accepted identity still requires a logged equal-or-stronger replacement.
+- Completed the limited visual follow-up in Direction 1 assets 01, 10, and 16: desktop/mobile directory controls now show the approved search/status treatment, and the state reference distinguishes a clearable filtered no-match outcome from a genuinely empty inventory.
+- Froze `core.admin.modules` / Module Management to Tessara's canonical `Blocks` icon and corrected only that sidebar glyph in Direction 1 assets 01, 03-08, and 13-15; unaffected mockups were not regenerated.
+
 ## 2026-07-15 - Approved Dynamic Navigation Model
 
 - Replaced the planned band-preserving UI correction with an approved

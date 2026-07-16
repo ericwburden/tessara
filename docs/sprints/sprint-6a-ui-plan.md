@@ -1,19 +1,19 @@
 # Sprint 6A-UI Plan: Navigation Composition And Module Management Harmonization
 
-Status: scope amended on 2026-07-15 after product review of the Sprint 6A navigation controls. The sprint started from clean post-closeout `main` commit `c37153b19787d4164eaccbb4752980772e6ec84a`; closed Sprint 6A remains at `f145e059fc1f4d81c960cb35e586c802831ecea2`.
+Status: scope amended on 2026-07-15 after product review of the Sprint 6A navigation controls and clarified on 2026-07-16 as UX-led rather than markup/CSS-only. The sprint started from clean post-closeout `main` commit `c37153b19787d4164eaccbb4752980772e6ec84a`; closed Sprint 6A remains at `f145e059fc1f4d81c960cb35e586c802831ecea2`.
 
 - Branch: `codex/sprint-6a-ui`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6a-ui`
 - Baseline inventory: `docs/sprints/sprint-6a-ui-baseline-inventory.md`
 - Test change log: `docs/sprints/sprint-6a-ui-test-change-log.md`
 - Roadmap source: `Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Next)`
-- Production status: no Sprint 6A-UI production or test code has been changed. Decision Gate 1 is the sole current product blocker; refreshed visual directions are the next planned review checkpoint.
+- Production status: no Sprint 6A-UI production or test code has been changed. Decision Gate 1 is resolved, and the selected Direction 1 mockup suite is the current implementation visual checkpoint.
 
 ## Sprint Summary
 
 Sprint 6A-UI replaces the Sprint 6A navigation model of two hard-coded groups, five fixed anchors, and three reorder bands with revisioned, configuration-driven ordered groups and item placements. It also removes the redundant Administration landing page and harmonizes the Module Management directory/detail and related controls with the existing Tessara UI.
 
-This is no longer a presentation-only sprint. It intentionally changes navigation persistence, API and shell wire models, navigation composition, one route, and the tests that froze the superseded band behavior. Those changes do not reopen Sprint 6A: its commits and retained evidence remain historical proof of the prior contract. Every changed proof must be reconciled explicitly in this sprint.
+This is a UX-led sprint, not a presentation-only or markup/CSS-only sprint. It intentionally changes navigation persistence, API and shell wire models, navigation composition, one route, and the tests that froze the superseded band behavior. It may also add bounded behavior needed to make the touched experiences easier to find, read, navigate, or operate safely. Those changes do not reopen Sprint 6A: its commits and retained evidence remain historical proof of the prior contract. Every changed proof must be reconciled explicitly in this sprint.
 
 Sprint 6B still follows with Module Release/Instance persistence, materialization, Supervisor, gateway, module database, OCI, and runtime scope unchanged.
 
@@ -42,7 +42,7 @@ Protection is expressed as independent flags rather than one overloaded “fixed
 | `core.admin.roles` | `/administration/roles` | `core.admin` | No | No | No | Yes | Existing `admin:all` rule |
 | `core.admin.node_types` | `/administration/node-types` | `core.admin` | No | No | No | Yes | Existing `admin:all` rule |
 | `core.admin.modules` | `/administration/modules` | `core.admin` | No | No | No | Yes | Effective global `modules:read` |
-| `core.operations` | `/operations` | Pending optional default | No while route exists | Yes | Yes | Yes | Existing `operations:view` rule |
+| `core.operations` | `/operations` | `core.main` | No while route exists | Yes | Yes | Yes | Existing `operations:view` rule |
 
 Operations remains Core-owned but is not protected because Home is expected to subsume it. It remains a live route and optional destination until a later explicit retirement decision.
 
@@ -63,23 +63,18 @@ Operations remains Core-owned but is not protected because Home is expected to s
 - Give each direct Core Admin destination its own active navigation key so descendant routes highlight the correct item.
 - Datasets and Components remain available through their own destinations; they are not Core Admin requirements merely because the removed page linked to them.
 
-### Still-Pending Product Decision
+### Resolved Initial Placement Decision
 
-The initial placement of optional destinations must be frozen before migration and mockup work. In particular, Datasets can no longer remain in an initially Core-only Admin group unless that is an intentional exception. See **Decision Gate 1** below.
+The initial placement of optional destinations was approved on 2026-07-16. New installations seed Main and Admin only; all initial optional destinations, including Datasets, are placed in Main. Admin contains the four required direct Admin destinations only.
 
-## Decision Gate 1: Initial Optional Placement
+## Decision Gate 1: Resolved Initial Optional Placement
 
-Before schema fixtures, migration mapping, or navigation-composer mockups are frozen, approve one initial group layout for optional destinations. The implementation must not invent a third seeded group or silently move Datasets without this decision.
-
-The safe choices are:
-
-1. seed only Main/Admin and place every optional destination in Main initially; or
-2. seed an additional configurable product/data group and name the exact destinations assigned to it.
-
-Recommended default: choose option 1. It keeps Admin Core-only, avoids inventing a product taxonomy, and still lets a navigation manager introduce custom groups. The deterministic candidate order is:
+The approved deterministic layout is:
 
 - Main: Home, Organization, Forms, Workflows, Responses, Operations, Datasets, Components, Dashboards.
 - Admin: User Management, Roles & Access, Node Types, Module Management.
+
+No third group is seeded. Managers may introduce custom groups after installation through the revisioned policy workflow.
 
 Existing installations migrate to the approved initial layout while preserving relative order and visibility wherever that mapping is unambiguous. New installations receive the same deterministic layout.
 
@@ -199,23 +194,46 @@ Retain the previously approved targeted outcomes:
 
 - compact, legible Core runtime context;
 - readable seven-entry inventory with exact IDs/digests and explicit Active/Unavailable/Retired state;
+- functional directory search by display name or stable definition ID and an availability/status filter with `All statuses`, `Active in Core process`, `Unavailable`, and `Retired`;
 - responsive detail peer sections with no overlap or page-level horizontal scroll;
 - exact source-descriptor action placement;
-- clear capability provenance; and
+- clear capability provenance;
+- useful user-role assignment provenance by exposing the existing assignment creation timestamp as `Assigned on`, with a pending-save treatment for new selections; and
 - accessible reader/manager/no-access, empty, unavailable, error, not-found, dirty, saving, success, and conflict states.
 
-[The retained directory design directions](../mockups/sprint-6a-ui/README.md) remain visual references for the directory only. Their implied Sprint 6A band-policy continuation is superseded. New group-composer directions wait for Decision Gate 1.
+[The retained pre-navigation-model directions](../mockups/sprint-6a-ui/README.md) remain inventory-hierarchy references only. The [selected Direction 1 suite](../mockups/sprint-6a-ui/direction-1/README.md) is the current implementation visual contract for the directory, detail, composer, responsive, exceptional-state, and focused provenance surfaces.
+
+### UX-Led Implementation Boundary
+
+Sprint 6A-UI is constrained by approved user outcomes, security boundaries, and the Sprint 6B platform boundary—not by implementation layer. Native component behavior, route-local state, shared UI primitives, and narrowly supporting service/API work may change when needed to deliver an approved UX outcome on a touched surface. Any such change must be recorded in this plan, accepted before implementation when it adds product behavior, and covered by proportional durable proof.
+
+The Module directory search/status controls are approved behavior. Their initial contract is:
+
+- the default state shows all authorized definitions in canonical server order;
+- text search is trimmed and case-insensitive over display name and stable definition ID;
+- status options are `All statuses`, `Active in Core process`, `Unavailable`, and `Retired`;
+- text and status criteria combine conjunctively and never reorder matching definitions;
+- a zero-match state is distinct from an empty inventory and provides `Clear filters`; and
+- clearing restores the complete default projection without mutating catalog, lifecycle, authorization, or navigation policy.
+
+The expected first implementation filters the already-authorized loaded projection and leaves the complete SSR/no-JavaScript inventory useful. A different technical approach remains possible if it preserves the same contract and receives the proportional wire/security proof its footprint requires.
+
+User-role assignment presentation may expose the existing durable `role_assignments.created_at` value through a narrowly extended read model. The assignment UI labels this `Assigned on`, shows `Pending save` before a new selection is persisted, and does not add assignment-history, actor-attribution, or audit-log scope.
+
+Unrelated feature expansion must be approved before inclusion. Approval must update this plan, acceptance criteria, and proof inventory before the corresponding production or durable-test change lands.
 
 ## Preserved Behavior And Non-Goals
 
-Except for the explicitly approved navigation model and `/administration` removal:
+Except for the explicitly approved navigation model, `/administration` removal, and UX-supporting behavior recorded in this plan:
 
-- product routes, workflow inputs/outputs/state transitions, persistence, and stable errors remain unchanged;
+- unrelated product routes and workflow inputs/outputs/state transitions remain unchanged unless separately approved;
 - direct-route/API authorization, capability implications, scope, ownership, delegation, redaction, and nondisclosure remain unchanged;
 - module descriptor content, Feature Declarations, lifecycle semantics, semantic destinations, typed references, and retired Migration remain unchanged;
 - native Leptos SSR, hydration, useful no-JavaScript documents, same-origin ownership, and clean consoles remain required;
 - no HTML-string route UI, `inner_html`, `/bridge/*`, JavaScript controller, rebrand, shell redesign, command palette, or unrelated route redesign is introduced; and
 - no Module Release/Instance persistence or mutation, materialization, Supervisor, gateway, OCI, module database, installation, or runtime work enters this sprint.
+
+Search and status filtering are approved. Sorting, pagination, saved views, bulk actions, export, catalog editing, lifecycle actions, and other feature additions are not currently part of the approved contract; they may be included only after product approval and matching plan/proof updates.
 
 ## Acceptance Criteria
 
@@ -231,8 +249,10 @@ Except for the explicitly approved navigation model and `/administration` remova
 10. Policy read remains available to effective global `modules:read`; mutation remains exclusive to effective global `modules:manage_navigation` with atomic revision conflicts and exact audit events.
 11. Desktop/mobile shell projections accept arbitrary valid groups and fail closed on malformed configuration without leaking contributed destinations.
 12. Directory/detail/provenance surfaces satisfy the targeted hierarchy, long-content, keyboard, accessibility, theme, and 1280/768/390 viewport requirements.
-13. Every existing proof edit has a pre-approved test-log row and equal-or-stronger replacement; all unrelated accepted identities remain unchanged.
-14. Fresh, populated-upgrade, rollback/restore, smoke/UAT, reconciled browser, source, SSR/hydration/console, and targeted UI gates pass against the closing commit without skips, retries, unexplained baseline churn, or weakened unrelated assertions.
+13. Module directory search/status controls preserve the exact default inventory and canonical order, combine deterministically, provide semantic result-count/no-match/reset behavior, remain keyboard/touch operable and responsive, add no authority, and leave the complete SSR/no-JavaScript inventory useful.
+14. User-role assignment rows expose the persisted assignment creation date, distinguish an unsaved new selection as `Pending save`, and preserve assignment authorization, scope, save, and removal behavior unchanged.
+15. Every existing proof edit has a pre-approved test-log row and equal-or-stronger replacement; all unrelated accepted identities remain unchanged.
+16. Fresh, populated-upgrade, rollback/restore, smoke/UAT, reconciled browser, source, SSR/hydration/console, and targeted UI gates pass against the closing commit without skips, retries, unexplained baseline churn, or weakened unrelated assertions.
 
 ## Durable Test Contract
 
@@ -241,7 +261,7 @@ The closed Sprint 6A manifest contains 60 exact browser identities. It is histor
 Before editing any accepted test, fixture, manifest, timeout, selector, smoke/UAT check, migration fixture, or screenshot:
 
 1. add an exact row to `sprint-6a-ui-test-change-log.md`;
-2. cite the approved group model or route-removal decision;
+2. cite the approved group model, route-removal decision, or recorded UX-supporting behavior;
 3. explain precisely why the old proof is no longer correct;
 4. retain every still-valid assertion;
 5. name stronger positive and negative replacement proof; and
@@ -268,7 +288,13 @@ Required new proof includes:
 - optimistic concurrency, atomic rollback, exact audit success/denial payloads, and retry behavior;
 - arbitrary group shell projection across desktop/mobile, direct refresh, SSR/no-JavaScript, hydration, and console;
 - ordinary unmatched `/administration` 404/no-redirect behavior plus unchanged direct Admin routes; and
+- pure filter-model proof for default/empty query, trimmed case-insensitive name and definition-ID matches, every exact status, combined criteria, stable canonical order, zero matches, and clear/reset;
+- focused browser proof for default exact inventory, Active/Retired/Unavailable status results, name/ID search, combined filters, result count, no-match/reset, keyboard/touch semantics, and responsive containment; and
+- SSR/no-JavaScript and authorization proof that filtering adds no authority and the complete authorized inventory remains present without hydration;
+- focused API/UI proof that persisted user-role assignments expose their existing creation timestamp, new unsaved selections show `Pending save`, and assignment scope/save/removal semantics remain unchanged; and
 - keyboard, focus, accessibility, and viewport coverage for the composer and Module Management pages.
+
+New additive filter proof does not authorize edits to accepted catalog, API, descriptor, migration, authorization, or exact-default-inventory assertions. If implementation changes an accepted selector or visual baseline, the exact proof identity still requires a pre-approved test-log row and equal-or-stronger semantic replacement.
 
 The module-contract manifest and all seven transition descriptor fixtures remain byte- and digest-pinned. Their group values are discovery hints, not installation policy, and changing their bytes would expand this sprint into module-contract wire scope.
 
@@ -282,7 +308,7 @@ Do not run the entire closeout battery after every UI or code tweak.
 - Migration work: focused fresh/upgrade/atomic-failure tests on disposable databases plus migration self-tests.
 - Shell projection: `tessara-web` unit tests, hydrate check, and focused desktop/mobile browser scenarios.
 - Composer UI: targeted web tests and separate semantic/keyboard/accessibility/viewport UI identities.
-- Module page styling: targeted Module web tests and focused visual/overflow cases.
+- Module pages and directory behavior: targeted Module web/filter tests plus focused default, name/ID search, status, combined, no-match/reset, keyboard, SSR/no-JavaScript, and visual/overflow cases.
 - Administration route removal: exact route, navigation, permission, no-JavaScript, smoke, and UAT cases.
 
 Any failure in an unrelated accepted test is investigated as a regression; it is not absorbed into the approved navigation rewrite.
@@ -335,7 +361,7 @@ Tracked production or proof changes after the canonical final pass invalidate th
 4. Deletion: prove an occupied custom group cannot be deleted, then move its items and delete it.
 5. Authorization: compare admin, module reader, module navigation manager, product-only, and no-capability actors; confirm configuration display never grants direct access.
 6. Admin routes: use Users, Roles, Node Types, and Module Management directly; request `/administration` and receive the ordinary unmatched Axum 404 with no redirect or application tombstone.
-7. Module pages: scan the inventory, retired Migration, findings, Forms detail, exact descriptor, and policy states without overlap or horizontal page scroll.
+7. Module pages: scan the complete inventory, search by module name and stable ID, combine each status with text, clear a no-match state, then inspect retired Migration, findings, Forms detail, exact descriptor, and policy states without overlap or horizontal page scroll.
 8. Repeat representative management with keyboard only and at 1280px, 768px, and 390px in both existing themes; verify focus after every move/save/discard/error.
 9. Direct-load/refresh representative routes with JavaScript enabled and disabled; inspect SSR usefulness, hydration, network ownership, `/bridge/*` absence, and console output.
 
@@ -348,7 +374,7 @@ Tracked production or proof changes after the canonical final pass invalidate th
 4. Introduce versioned group-aware management and shell DTOs/endpoints; retain authorization and stable-error behavior.
 5. Update desktop/mobile shell composition for arbitrary groups and direct Admin active states; remove Administration page/route/nav item.
 6. Implement the reader/manager group composer with semantic keyboard-capable controls and responsive states.
-7. Harmonize Module Management directory/detail and capability provenance using the selected existing-Tessara direction.
+7. Harmonize Module Management directory/detail and capability provenance using the selected existing-Tessara direction, including the approved functional directory search/status controls and no-match/reset state.
 8. Run targeted accessibility, SSR/no-JavaScript, hydration, console, theme, responsive, migration, and failure hardening; reconcile all test changes.
 9. Stabilize the final candidate, execute the ordered fresh/upgrade/rollback/reconciled acceptance gates, and close out without changing Sprint 6A artifacts.
 
@@ -363,10 +389,13 @@ Tracked production or proof changes after the canonical final pass invalidate th
 | Arbitrary groups break shell hydration | Versioned projection validation and desktop/mobile/no-JS tests | Fail closed to Core fallback and correct the projection. |
 | Test rewrite weakens parity | Mandatory pre-edit rows and diff reconciliation | Reject the change until equal-or-stronger proof exists. |
 | UI model depends on drag | Explicit keyboard move/group actions | Block acceptance until all operations are non-drag accessible. |
+| UX work grows into an unrelated feature | Record the outcome and obtain product approval before inclusion | Update scope and proof first or defer the feature; do not smuggle it through as visual polish. |
 | Scope expands into runtime modules | Explicit non-goals and diff review | Defer to Sprint 6B or later roadmap work. |
 
-## Current Product Blocker And Next Checkpoint
+## Current Product Checkpoint
 
-- The sole current product blocker is Decision Gate 1: initial placement of optional destinations, especially Datasets.
-- After that answer, group-composer visual exploration is sprint work and selection is the next planned product checkpoint, not a second unresolved contract decision today.
-- Per the kickoff sequence, production implementation waits for that visual checkpoint and the first expected test-change rows.
+- Decision Gate 1 is resolved with the deterministic Main/Admin layout recorded above.
+- Direction 1 is selected and expanded into the screenshot-grounded mockup suite under `docs/mockups/sprint-6a-ui/direction-1/`.
+- Functional Module directory search and availability/status filtering are approved; the targeted directory and filtered-empty mockup revisions are complete without regeneration of the full suite.
+- The Module Management visual contract maps `core.admin.modules` to Tessara's canonical `Blocks` icon; the targeted sidebar correction is complete in Direction 1 assets 01, 03-08, and 13-15.
+- Production implementation waits for final mockup review plus the first expected test-change rows. Those rows must be approved before any durable test is edited.
