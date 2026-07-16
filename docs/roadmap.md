@@ -83,9 +83,9 @@ The codebase already includes a substantial vertical foundation:
 - Sprint 5A Dashboard Composition: native directory/detail/editor/viewer flows over stable `ComponentVersion` identities, revisioned placement composition, bounded execution, and scoped redaction
 - Sprint 6A Module Contract and Core Control Plane: one stable Application Installation and Core runtime observation; exact Manifest, Feature Declaration, contract, semantic-destination, typed-reference, and real Release/Instance public types; seven versioned transition descriptors with six active in-process contributions and retired Migration; Core-owned module inventory/provenance APIs and native Module Management UI; and revisioned band-restricted navigation policy, without Release/Instance persistence, installation, execution, or mutation
 
-### Current UI baseline
+### Closed Sprint 6A UI baseline (input to Sprint 6A-UI)
 
-The application shell already exposes meaningful user-testable surfaces:
+Until Sprint 6A-UI lands, the application shell exposes these meaningful user-testable surfaces. The Sprint 6A-UI block below explicitly supersedes the fixed group, anchor, band, and Administration-landing details while preserving unrelated route behavior:
 
 - role-aware login and shared home entry
 - product-area navigation for Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, and Administration; Migration is retained only as retired historical/support inventory
@@ -98,7 +98,7 @@ The application shell already exposes meaningful user-testable surfaces:
 
 ### Current implementation gaps
 
-The contract and control-plane foundation is complete, but Tessara does not yet materialize or operate a real Module Release or Module Instance. Sprint 6A-UI first harmonizes the administration UI introduced by Sprint 6A without changing that platform boundary. Sprint 6B then must:
+The contract and control-plane foundation is complete, but Tessara does not yet materialize or operate a real Module Release or Module Instance. Sprint 6A-UI first replaces Sprint 6A's rigid navigation-band policy with configuration-driven groups and harmonizes the related administration UI without changing that platform boundary. Sprint 6B then must:
 
 - persist and mutate real Module Releases and Instances without treating Sprint 6A transition descriptors as deployable providers
 - introduce a Supervisor-rooted `tessara-oci-v1` runtime, same-origin gateway, verifiable installation context, health/readiness observation, and controlled lifecycle operations
@@ -764,34 +764,36 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** an actor with global `modules:read` can discover fixed Module Management in the `Admin` group and inspect Forms, Workflows, Responses, Datasets, Components, and Dashboards as clearly labeled in-process contributions rather than Module Instances; understand their advertised Feature Declarations; and review their contracts, security capabilities, and current navigation policy without receiving mutation controls. An actor with global `modules:manage_navigation` can change contribution visibility/order without changing authorization. The same directory shows Migration as retired historical/support inventory with no route, navigation item, provider, Feature Declaration, contract, capability, or action, while every current product route continues to work.
 
-### Sprint 6A-UI: Sprint 6A Surface Harmonization Slice (Next)
+### Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Next)
 
-**Outcome:** Sprint 6A-UI corrects presentation defects introduced by Sprint 6A on the Module Management directory/detail, its navigation-policy controls, the Sprint 6A-added Administration entry, and capability-provenance presentation. Existing Tessara pages are reference and regression surfaces only. Application behavior, routes, shell, navigation presentation/order/grouping, APIs, persistence, authorization, module contracts, and the closed Sprint 6A evidence remain unchanged.
+**Outcome:** Tessara navigation is composed from revisioned, configuration-driven ordered groups and item placements instead of hard-coded `Main`/`Admin` sections, Core anchors, and reorder bands. Core protects its required groups and destinations while administrators can manage custom groups and freely place optional destinations. The redundant `/administration` page and route are removed, and the Sprint 6A Module Management surfaces are harmonized with the existing Tessara UI.
 
 **Relationship to Sprint 6A:** this is a new post-closeout sprint based on the closed Sprint 6A commit. It does not reopen, amend, or replace Sprint 6A's implementation, closeout report, rollback package, or acceptance evidence. Sprint 6B follows this slice with its runtime scope unchanged.
 
 **Build:**
 
-- audit the Module Management directory and detail routes, navigation-policy reader/manager controls, the Administration entry, and capability-provenance presentation; use established Tessara administration/list/detail pages only as visual references and regression controls
-- reuse the existing Tessara identity, tokens, page framing, and native Leptos primitives; add only minimal, scoped component or style support required by the Sprint 6A surfaces
-- preserve the current shell and navigation presentation and behavior, including groups, fixed items, relative order, reorder bands, capability eligibility, and display-policy/authorization separation
-- align only the tables, metadata sections, actions, statuses, findings, empty/error states, and policy controls rendered by the Sprint 6A surfaces to established Tessara patterns
-- improve Module Management reader and navigation-manager flows plus capability-provenance readability without changing their data, state transitions, controls, or permissions
+- introduce a forward-only migration from the Sprint 6A contribution-only band policy to a revisioned group-and-placement model covering Core and contributed destinations; preserve every compatible visibility/order choice and reject ambiguous or orphaned state
+- define a Core-owned built-in destination catalog with stable identities, routes, capability requirements, default placements, and independent protection flags for removal, visibility, and group movement
+- require stable `core.main` and `core.admin` groups; protect Home in Main, allow Organization to be hidden but not removed or moved out of Main, and protect User Management, Roles & Access, Node Types, and Module Management in Admin while allowing all protected items to reorder inside their group
+- let effective global `modules:manage_navigation` create, rename, delete, and reorder custom groups and show, hide, reorder, or move every non-protected destination between groups; block deletion of non-empty groups and preserve atomic revision-conflict/audit behavior
+- support configurable labels for custom groups; required-group display-label editing is permitted but is not an exit-critical requirement, while stable Core group identities never change
+- remove the Administration navigation item, page component, and `/administration` route without a compatibility redirect or tombstone; the exact path receives the ordinary unmatched 404, while `/administration/users`, `/administration/roles`, `/administration/node-types`, and `/administration/modules` remain direct Core Admin destinations with their existing authorization
+- replace navigation-policy schema v1 and shell-navigation schema v1 assumptions with versioned group-aware wires and fail-closed validation that accepts arbitrary valid groups/order without trusting display configuration as authorization
+- keep capability eligibility, module availability, direct-route/API guards, `modules:manage_navigation` implying `modules:read`, `admin:all` implying both global module capabilities and remaining the sole universal-sentinel mixed-scope exception, and display-policy/authorization separation unchanged
+- audit and harmonize the Module Management directory/detail, group-management controls, and capability-provenance presentation using the existing Tessara identity and native Leptos patterns; do not redesign unrelated product workflows
 - preserve native Leptos SSR, hydration, direct-load/refresh ownership, useful no-JavaScript documents, clean browser consoles, semantic HTML, and the prohibition on `/bridge/*`, route-level HTML-string injection, and JavaScript controller ownership
-- remediate keyboard order, focus visibility and restoration, labels, landmarks, contrast, reduced-motion behavior, overflow, touch targets, and desktop/mobile viewport behavior on every touched pattern
-- treat the Sprint 6A functional suite as durable parity proof: UI work must make existing behavioral tests pass unchanged unless an explicit product decision approves a changed behavior and the sprint test-change log records the rationale and equal-or-stronger replacement proof
-- add durable semantic interaction, accessibility, viewport, and narrowly scoped visual-regression coverage for the targeted Sprint 6A surfaces and their reader, manager, no-access, retired, unavailable, and finding states; avoid incidental screenshots whose expected output can be regenerated without review
-- keep database schemas, migrations, APIs, module-contract wire types, capability and scope semantics, product lifecycle rules, and Module Release/Instance persistence or runtime work out of scope; route any discovered need to an explicit product decision and later roadmap slice
-- use proportional validation during implementation, then run the unchanged complete browser acceptance inventory once against the final release build together with fresh-deployment smoke/UAT, SSR/hydration/console, accessibility, responsive, and source-quality gates; do not rebuild Sprint 6A's populated-migration or rollback-package evidence unless this sprint's approved scope expands into persistence, migration, API, authorization, or contract changes
+- preserve tests as durable proof: record every intentionally superseded Sprint 6A assertion before editing it, retain all unrelated identities unchanged, and add equal-or-stronger migration, invariant, authorization, group CRUD, cross-group placement, concurrency, SSR, accessibility, and viewport proof
+- use proportional targeted validation during implementation, then run the reconciled complete browser inventory, fresh and populated-upgrade deployment proof, smoke/UAT, rollback compatibility, SSR/hydration/console, accessibility, responsive, and source-quality gates against the closing commit
+- keep Module Release/Instance persistence, materialization, Supervisor, gateway, OCI, module databases, and runtime work out of scope; Sprint 6B remains unchanged
 
 **Application UI delivered this sprint:**
 
-- Module Management directory and detail pages aligned with existing Tessara administration pages
-- navigation-policy controls and capability provenance made legible using existing Tessara patterns
-- targeted keyboard, accessibility, and desktop/mobile overflow proof for the Sprint 6A surfaces
-- no redesign of the shell, navigation, or unrelated product and administration pages
+- direct Core Admin destinations for User Management, Roles & Access, Node Types, and Module Management, with no redundant Administration landing page or route
+- an accessible group-and-item navigation composer for readers and managers, including custom-group CRUD, group order, optional-item visibility, cross-group placement, and item order
+- Module Management directory/detail and capability-provenance presentation aligned with existing Tessara patterns
+- responsive, keyboard, focus, SSR/no-JavaScript, and narrowly reviewed visual proof for the changed navigation and Module Management surfaces
 
-**User-testable exit condition:** a global Module Management reader can inspect a legible directory and detail page; a global navigation manager can use the same policy controls with clear focus and responsive presentation; no-access, retired, unavailable, and finding states remain distinct; and capability provenance remains understandable in Administration. The unchanged 60-test behavioral inventory plus fresh smoke/UAT pass without skips, retries, weakened expectations, or unexplained test rewrites, proving the rest of the application remains unchanged.
+**User-testable exit condition:** a global Module Management reader can inspect the navigation configuration without mutation controls. A global navigation manager can create, rename, reorder, and delete empty custom groups; reorder Main and Admin; move any optional destination between groups; and show, hide, or reorder optional destinations without changing authorization. Main, Admin, Home, Organization, User Management, Roles & Access, Node Types, and Module Management enforce their approved protection rules. `/administration` has no route or navigation item. The migrated policy preserves compatible prior choices, invalid mutations fail atomically with stable audited errors, the harmonized Module Management pages remain complete and responsive, and the reconciled acceptance inventory passes without skips, retries, weakened unrelated expectations, or unexplained test rewrites.
 
 ### Sprint 6B: Module Runtime And Installation Infrastructure Slice
 

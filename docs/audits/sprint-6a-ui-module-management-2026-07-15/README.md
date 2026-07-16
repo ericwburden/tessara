@@ -7,11 +7,12 @@ Target: live seeded Sprint 6A application at `http://localhost:8080`
 Viewport: 1280×720
 
 Persona/theme: seeded administrator, dark theme
-Scope: Module Management UI introduced in Sprint 6A; existing Tessara shell and pages are references only.
+
+Scope: pre-amendment Module Management UI introduced in Sprint 6A. The directory and detail captures remain content/layout evidence. The depicted shell and band-policy controls characterize the superseded Sprint 6A navigation model and are not full-page implementation targets.
 
 ## Audit Goal
 
-Identify presentation defects that prevent a clean, legible Module Management reader/manager experience without changing content, behavior, navigation, authorization, APIs, persistence, or module contracts.
+Identify presentation defects that prevent a clean, legible Module Management reader/manager experience. Preserve module content, authorization, and contracts. The later-approved Sprint 6A-UI navigation amendment intentionally replaces the depicted navigation persistence, API, composition, and `/administration` landing route under the current sprint plan.
 
 ## Captures
 
@@ -45,7 +46,7 @@ Identify presentation defects that prevent a clean, legible Module Management re
 
 - Strengths: permanent versus contributed destinations, placement bands, visibility, order actions, and save/discard controls remain explicit. Disabled actions and exact route/band information are present.
 - Risk: labels and destination IDs run together; placement bands wrap unpredictably; repeated actions make rows dense and difficult to scan.
-- Target: preserve policy semantics, action availability, order, focus restoration, and authorization while applying established stacked-label/action patterns.
+- Target: preserve revision, authorization, atomic save/discard, conflict, focus-restoration, and accessibility semantics while replacing bands with the approved ordered-group composer. The depicted placements and band actions are historical evidence, not required behavior.
 
 ## Accessibility Observations
 
@@ -56,6 +57,6 @@ Identify presentation defects that prevent a clean, legible Module Management re
 
 ## Bounded Recommendation
 
-Harmonize the directory, detail, and policy controls with existing Tessara cards, information lists, tables, status badges, action groups, and responsive rules. Add only scoped Module Management styles or minimal existing-pattern support. Do not redesign the shell, navigation, unrelated pages, or product workflows.
+Harmonize the directory, detail, and new group-composer controls with existing Tessara cards, information lists, tables, status badges, action groups, and responsive rules. Add only scoped Module Management styles or minimal existing-pattern support. The approved composition model changes what the shell renders, but it does not authorize a visual shell redesign, unrelated page redesign, rebrand, or product-workflow change.
 
 The prioritized implementation issues and proof requirements are maintained in `docs/sprints/sprint-6a-ui-baseline-inventory.md`.

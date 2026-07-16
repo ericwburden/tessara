@@ -1,8 +1,8 @@
-# Sprint 6A-UI Targeted Visual Directions
+# Sprint 6A-UI Pre-Navigation-Model Directory Directions
 
-Status: product selection pending. These are screenshot-grounded layout directions for the Sprint 6A Module Management surfaces, not proposals to redesign the Tessara shell or add behavior.
+Status: retained as Module inventory content references only. The approved dynamic-group model supersedes every depicted sidebar, Administration item, fixed Main/Admin membership, and implied continuation of the Sprint 6A band policy. None of these images may be selected as a full-page implementation target.
 
-All options preserve the current Tessara identity, shell, navigation groups/order, routes, data, lifecycle meanings, authorization, and policy controls. Generated text is illustrative; implementation must use exact live values and the accepted semantic behavior.
+The options still illustrate useful alternatives for runtime-context density and seven-entry inventory hierarchy. Generated text is illustrative; implementation must use exact live values, lifecycle meanings, and semantic behavior.
 
 ## Option 1: Operational Directory
 
@@ -24,10 +24,18 @@ All options preserve the current Tessara identity, shell, navigation groups/orde
 
 ![Option 3: runtime context rail beside compact inventory ledger](./option-3-context-rail-ledger.png)
 
-- Persistent runtime context at left and a compact contribution ledger at right, with Navigation policy continuing below.
+- Persistent runtime context at left and a compact contribution ledger at right.
 - Makes the relationship between installation context and inventory visible while reducing vertical distance.
 - Primary implementation risk: the two-column content frame must collapse cleanly and avoid giving runtime metadata too much width on tablet/mobile.
 
-## Selection Contract
+## Replacement Contract
 
-The selected direction is a layout/hierarchy decision only. Detail sections and policy controls will reuse its density, metadata, status, wrapping, and responsive treatment while retaining all current content and behavior. Any element that appears to add search, filtering, installation/lifecycle operations, new navigation, or new authorization is excluded.
+After the initial optional-destination placement is approved, create new screenshot-grounded directions for:
+
+1. the default sidebar with direct User Management, Roles & Access, Node Types, and Module Management destinations and no Administration item;
+2. navigation configuration reader mode;
+3. manager mode with group create/rename/reorder/delete and optional cross-group placement;
+4. narrow/mobile composition; and
+5. protected-operation and revision-conflict states.
+
+The directory portion may reuse one of the three hierarchy ideas above, but the new full-page direction must show the approved configured-group behavior. Search, filtering, installation/lifecycle operations, or new authorization remain excluded unless separately approved.

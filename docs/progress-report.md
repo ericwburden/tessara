@@ -5,9 +5,62 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Sprint 6A Surface Harmonization `(Next)`; Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Navigation Composition And Module Management Harmonization `(Next)`; Sprint 6B follows with its runtime scope unchanged.
+
+## 2026-07-15 - Approved Dynamic Navigation Model
+
+- Replaced the planned band-preserving UI correction with an approved
+  configuration-driven navigation model. `core.main` and `core.admin` are
+  stable non-deletable Core group identities; custom groups can be created,
+  renamed, reordered, and deleted when empty by effective global
+  `modules:manage_navigation`.
+- Approved free cross-group movement, visibility, and order management for
+  optional destinations. Capability and module-availability filtering remain
+  independent and authoritative, so display configuration never grants or
+  revokes route/API access.
+- Defined Home and Organization as Core Main placements. Home cannot be hidden
+  or moved out; Organization cannot be removed or moved out but may be hidden.
+  Operations becomes optional because Home is expected to subsume it.
+- Defined User Management, Roles & Access, Node Types, and Module Management as
+  Core Admin placements. They cannot be removed, hidden, or moved out of Admin
+  but may be reordered. Required-group relabeling is supported by the model but
+  is not an exit-critical requirement.
+- Approved complete removal of the Administration navigation item,
+  `AdministrationPage`, and exact `/administration` route with no redirect.
+  Direct `/administration/users`, `/roles`, `/node-types`, and `/modules`
+  routes remain with their current authorization and receive distinct active
+  navigation identities.
+- Confirmed that Core may hard-code the built-in destination catalog and
+  protection rules while persisted installation policy owns group labels,
+  group order, item group placement, visibility, and item order. The shell
+  renders the policy projection rather than a hard-coded list.
+- Audited the existing implementation: migration 003 constrains two groups and
+  three bands; policy v1 stores contribution-only visibility/order; server and
+  browser shell composition duplicate exact groups/ranks; and `/administration`
+  is mounted independently. Sprint 6A-UI therefore now includes migration 004,
+  versioned management/shell wires, composition, route, and durable-proof work
+  in addition to targeted Module Management harmonization.
+- Froze implementation defaults that do not require product choice: populated
+  migration backfill versus fresh post-migration reconciliation; opaque custom
+  group IDs and validated labels; management-only retention of empty groups;
+  legacy band fields as immutable provenance rather than effective policy;
+  revision-preserving conversion with a system audit; ordinary unmatched 404
+  behavior for `/administration`; and separately versioned Sprint 6A-UI
+  deployment/acceptance artifacts and repository-safe browser commands.
+- Preserved closed Sprint 6A as historical evidence. Expected band and
+  Administration assertions may change only through exact pre-approved
+  test-log rows and equal-or-stronger migration, protection, group CRUD,
+  cross-group, authorization, concurrency, SSR, and route-removal proof.
+- One product decision remains before implementation and regenerated composer
+  mockups: the deterministic initial placement of optional destinations,
+  especially Datasets, under an initially Core-only Admin group.
 
 ## 2026-07-15 - Sprint 6A-UI Scope Correction And Targeted Audit
+
+This entry remains authoritative for the captured Module Management content
+defects and no-broad-redesign direction. Its band-preserving, unchanged-shell,
+unchanged-route/API/persistence, and unchanged-60-test assumptions were
+superseded by the approved dynamic-navigation entry above.
 
 - Recorded the product owner's narrowed direction: Sprint 6A-UI corrects only
   presentation introduced by Sprint 6A on the Module Management directory and
@@ -41,9 +94,10 @@ project direction.
   pass. Every existing-proof edit requires an approved log row and
   equal-or-stronger replacement proof; no application-wide visual baseline is
   introduced.
-- No product or technical blocker remains. The next product checkpoint is to
-  select one of three screenshot-grounded Module Management harmonization
-  directions before production UI implementation.
+- Superseded checkpoint: the former statement that no blocker remained and one
+  of three directory images could be selected as a full-page target is no
+  longer current. Decision Gate 1 now freezes optional-destination placement;
+  refreshed group-composer directions follow as the next review artifact.
 
 ## 2026-07-15 - Initial Broad Sprint 6A-UI Kickoff (Superseded Same Day)
 

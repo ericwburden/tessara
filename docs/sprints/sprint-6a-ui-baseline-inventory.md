@@ -1,112 +1,193 @@
-# Sprint 6A-UI Targeted Baseline Inventory
+# Sprint 6A-UI Navigation And Module Management Baseline
 
-Status: narrowed product scope and first current-run visual audit recorded on 2026-07-15. Production UI implementation remains pending selection among three screenshot-grounded directions.
-
-Sprint 6A-UI corrects presentation defects introduced by Sprint 6A on the Module Management directory/detail, its navigation-policy controls, the Sprint 6A-added Administration entry, and capability-provenance presentation. Existing Tessara pages are reference and regression surfaces only.
+Status: source, persistence, wire, shell, route, browser-proof, and first visual characterization recorded on 2026-07-15. The approved dynamic-group model supersedes the earlier presentation-only/band-preserving brief. Initial optional-destination placement is the sole current product blocker; refreshed composer mockups are the next planned review artifact after that decision.
 
 ## Authority And Evidence Order
 
-1. `docs/roadmap.md` and `docs/sprints/sprint-6a-ui-plan.md` define the approved scope and immutable behavior boundary.
-2. `docs/ui-guidance.md` and `docs/ui-guidance-spec.md` define the existing Tessara identity and observable UI posture.
-3. The live Sprint 6A source defines the current targeted content and semantics.
-4. `end2end/acceptance-manifest.json` and its executable specs freeze supported browser behavior.
-5. Current-run screenshots and DOM inspection identify presentation defects; they do not authorize behavior changes.
-6. Existing Administration/list/detail pages and shared components are comparison references, not redesign targets.
+1. `docs/roadmap.md` and `docs/sprints/sprint-6a-ui-plan.md` define the approved prospective contract.
+2. Closed Sprint 6A source, tests, and retained evidence define the historical behavior being migrated.
+3. `docs/ui-guidance.md` and `docs/ui-guidance-spec.md` define the existing Tessara identity and UI posture.
+4. Current-run screenshots and DOM inspection identify presentation defects but do not override functional authorities.
+5. Every change to historical proof is controlled by `sprint-6a-ui-test-change-log.md`.
 
 ## Source And Regression Facts
 
 - Branch: `codex/sprint-6a-ui`
-- Sprint branch base: `c37153b19787d4164eaccbb4752980772e6ec84a`
+- Sprint base: `c37153b19787d4164eaccbb4752980772e6ec84a`
 - Closed Sprint 6A boundary: `f145e059fc1f4d81c960cb35e586c802831ecea2`
-- Sprint 6A production UI boundary: `6580b040236f563c30b5162fa833d7b0fed16478`
-- Pre-Sprint 6A implementation base used for footprint review: `3625d4de`
-- Live route inventory: 48 patterns plus the shared not-found fallback; all but the named Sprint 6A surfaces are regression-only.
-- Frozen browser manifest: schema 2, 60 exact identities in seven files, SHA-256 `95f9a7468315277ab64595f4f36675a0cec7202d7865c257ffd31ecad55eeb1a`.
-- Sprint 6A Module Management proof: five exact identities in `end2end/tests/modules.spec.ts` covering read/manager/no-access authority, directory/detail/API parity, route states, keyboard policy editing and band limits, desktop/mobile navigation, SSR/no-JavaScript usefulness, and `/bridge/*` exclusion.
-- Administration entry proof: `end2end/tests/app.spec.ts`.
-- Role/capability scope and `admin:all` exception proof: relevant `end2end/tests/permissions.spec.ts` scenarios.
-- The closed Sprint 6A final fresh acceptance passed all 60 identities. That is historical parity evidence; Sprint 6A-UI must run the unchanged inventory once against its final release candidate.
+- Sprint 6A production boundary: `6580b040236f563c30b5162fa833d7b0fed16478`
+- Current live route inventory: 48 mounted patterns plus not-found; target inventory after deleting only `/administration`: 47 plus not-found.
+- Closed browser baseline: schema 2, 60 exact identities in seven files, SHA-256 `95f9a7468315277ab64595f4f36675a0cec7202d7865c257ffd31ecad55eeb1a`.
+- Current migration inventory: `001_baseline.sql`, `002_dashboard_placement_capacity.sql`, and `003_module_control_plane.sql`. Sprint 6A-UI must add `004`; it must not edit `003`.
+- Current policy endpoint: `GET|PUT /api/admin/navigation-policy`, guarded by effective global module capabilities and optimistic revision.
+- Current actor shell endpoint: `GET /api/shell/navigation`, consumed by both SSR/hydration and desktop/mobile shell rendering.
 
-## Editable Surface Inventory
+The 60-test result remains durable historical proof. Band, fixed-Administration, and two-group assertions are characterization of the old contract; unrelated assertions remain acceptance requirements.
 
-| Surface | Route/source | Sprint 6A addition | 6A-UI boundary |
-| --- | --- | --- | --- |
-| Module directory | `/administration/modules`; `features/modules/pages.rs`, `directory.rs` | New route, runtime context, seven-entry inventory, navigation policy | Layout, hierarchy, semantics, wrapping, responsive presentation, scoped styles |
-| Module detail | `/administration/modules/:definition_id`; `features/modules/pages.rs`, `detail.rs` | New descriptor detail with peer declaration/dimension sections | Layout, hierarchy, long-content handling, action placement, responsive presentation |
-| Navigation policy | Both Module Management routes; `features/modules/policy.rs` | New read/manager policy display and controls | Legibility, row hierarchy, action layout, focus presentation, responsive behavior |
-| Administration entry | `/administration`; `features/administration/pages/landing.rs` | New Module Management card/link | Alignment with neighboring cards only |
-| Capability provenance | Role/access administration; Sprint 6A capability metadata and related fragments | New global/scope/provenance explanations | Legibility and established-pattern alignment only |
+## Current Navigation Implementation
 
-Supporting edits may touch `style/main.css` or a shared UI component only when narrowly required by these surfaces and proven not to change unrelated pages. Shell, navigation composition, session/auth, route/API, persistence, contract, and lifecycle files are outside the UI implementation boundary.
+### Persistence
 
-## Existing Tessara Patterns To Reuse
+`003_module_control_plane.sql` stores:
 
-- Framing: `AppShell`, `Breadcrumb`, `PageHeader`, and `route-panel`.
-- Metadata: `InfoListTable` or the established definition-list/card treatment when exact semantics fit.
-- Collections: shared `DataTable`, including its existing horizontal containment behavior.
-- States: `EmptyState`, `organization-state`, and explicit status-badge variants.
-- Detail layouts: `organization-detail-content`, `organization-detail-content__grid`, `organization-detail-card`, and `organization-detail-card--wide`.
-- Actions: existing button variants, `form-actions`, and table action groups.
-- Tokens: the current `style/main.css` semantic colors, typography, spacing, radius, surface, border, focus, theme, responsive, and reduced-motion values.
+- `module_navigation_contributions`, whose immutable metadata restricts `group_name` to `Main|Admin` and `reorder_band` to three named bands;
+- one `navigation_policies` row per installation with monotonic revision; and
+- `navigation_policy_entries` for contributions only, containing visibility and band-local order.
 
-The Sprint 6A Module Management files introduced new page structure but no Module-specific style rules. Generic two-column detail and five-column data-table rules therefore receive content they were not designed to contain. The correction should use existing patterns plus narrowly scoped layout rules, not a new design system.
+Core destinations and groups are not persisted. Catalog synchronization creates missing contribution policy entries with `ON CONFLICT DO NOTHING`, preserves current values, and rejects stored group/band drift from frozen catalog defaults.
 
-## Current-Run Evidence
+### API And Service
 
-Captured from the live seeded application at `http://localhost:8080` on 2026-07-15, authenticated as the seeded administrator, dark theme, 1280×720 viewport:
+- Policy response v1 exposes immutable Core items plus contributions with group, band, before/after anchors, visibility, and order.
+- Policy mutation v1 is an atomic complete contribution collection.
+- Service validation rejects all group and band changes and requires dense zero-based order within each band.
+- Revision conflicts and successful/denied mutations are atomic and audited.
 
-| Evidence | State | Observation |
+### Shell
+
+- API shell composition duplicates the exact five Core items, six active contributions, two groups, and three bands.
+- Browser validation rejects more than two groups, group names other than Main/Admin, unknown items, and movement across hard-coded ranks.
+- The renderer already iterates projected groups generically; server composition, browser validation, and fallback composition do not.
+- Capability and module-availability filtering occur after policy composition and must be preserved.
+
+### Routes
+
+- `/administration` mounts `AdministrationPage` and appears as a Core Admin destination.
+- Users, Roles, Node Types, and Module Management already have direct `/administration/*` routes.
+- Administration descendants currently use the generic `administration` active navigation key.
+- Removing only the landing route leaves the `/administration/*` namespace intact and reduces the route inventory by one.
+
+## Approved Target Inventory
+
+### Required Groups
+
+| Stable ID | Default label | Deletable | Reorderable | Label requirement |
+| --- | --- | --- | --- | --- |
+| `core.main` | Main | No | Yes | Required-group relabeling supported but not exit-critical |
+| `core.admin` | Admin | No | Yes | Required-group relabeling supported but not exit-critical |
+
+Custom groups use immutable `custom.<lowercase UUID v4>` IDs, validated labels, persisted order, and deletion only when empty by effective global `modules:manage_navigation`. Management readback retains empty groups; actor shell projections omit groups without eligible visible items.
+
+### Built-In Destinations
+
+| Stable ID | Route | Required group | Hide | Cross-group move | Reorder |
+| --- | --- | --- | --- | --- | --- |
+| `core.home` | `/` | Main | No | No | Yes |
+| `core.organization` | `/organization` | Main | Yes | No | Yes |
+| `core.admin.users` | `/administration/users` | Admin | No | No | Yes |
+| `core.admin.roles` | `/administration/roles` | Admin | No | No | Yes |
+| `core.admin.node_types` | `/administration/node-types` | Admin | No | No | Yes |
+| `core.admin.modules` | `/administration/modules` | Admin | No | No | Yes |
+| `core.operations` | `/operations` | Pending initial placement | Yes | Yes | Yes |
+
+Forms, Workflows, Responses, Operations, Datasets, Components, Dashboards, and future eligible module contributions are optional placements that can move between groups, reorder, and hide.
+
+After Decision Gate 1 freezes the six current contribution defaults, a later recognized destination must carry a Core-catalog default referencing a required group. Reconciliation appends it once, uses its catalog visibility default, and records a system audit; invalid/missing defaults fail closed. Custom groups are never catalog defaults, and legacy descriptor group/band values remain provenance only.
+
+### Intentionally Removed
+
+- Core `administration` destination;
+- `AdministrationPage` and its landing cards;
+- exact `/administration` route, application tombstone, and any redirect/fallback compatibility behavior; the request receives the ordinary unmatched Axum 404;
+- hard-coded NavigationSection/NavigationBand composition; and
+- band/anchor fields and validation in the current policy wire.
+
+## Editable Implementation Footprint
+
+| Layer | Current owners | Approved change |
 | --- | --- | --- |
-| [Directory first viewport](../audits/sprint-6a-ui-module-management-2026-07-15/01-module-directory-current-accepted.png) | Directory, top | Existing shell and page framing are coherent; Core runtime metadata consumes most of the first viewport and delays the primary inventory task. |
-| [Directory inventory](../audits/sprint-6a-ui-module-management-2026-07-15/02-module-directory-inventory-policy-current-accepted.png) | Directory, inventory | Five dense columns, full digests, long status badges, explanations, and Release/Instance text make rows difficult to scan and create severe horizontal clipping. |
-| [Forms module detail](../audits/sprint-6a-ui-module-management-2026-07-15/03-module-detail-current-accepted.png) | Detail, representative content | The generic two-column grid allows long overview/digest/declaration content to overlap; the source-descriptor action collides with content and page-level horizontal scrolling appears. |
-| [Navigation policy controls](../audits/sprint-6a-ui-module-management-2026-07-15/04-navigation-policy-current-accepted.png) | Manager, contributed destinations | Labels and destination IDs run together, placement bands wrap unpredictably, and repeated order controls create a dense row at 1280px. |
+| Migration/schema | `crates/tessara-api/migrations/003_module_control_plane.sql` as historical source | Add `004`; populated SQL backfill only, while fresh materialization follows in startup reconciliation |
+| Catalog/reconciliation | API module catalog, repository, service | Core built-in catalog, fresh 13-placement initialization, one-time recognized additions, no reset of valid customization |
+| Management API | module DTO/routes/service/repository/native bootstrap | Versioned group-aware read/mutation, atomic graph validation, revision/audit retention |
+| Shell API | API module shell projection | Arbitrary ordered groups and actor-filtered items; fail-closed Core fallback |
+| Web state | `state/navigation.rs`, `state/shell_navigation.rs` | Remove two-group/band/rank assumptions; validate generic group projection and Core invariants |
+| Shell UI | desktop/mobile navigation | Render configured groups and correct direct Admin active keys without rebranding the shell |
+| Admin routes | administration route/page/export/breadcrumb owners | Remove landing route/page/nav item; preserve direct descendants |
+| Composer UI | Module Management policy model/API/bootstrap/view | Group reader/manager, group CRUD/order, optional visibility/cross-group/order, protected constraints |
+| Module UI | directory/detail/provenance/style | Retain targeted hierarchy, long-content, state, and responsive corrections |
+| Proof | Rust/API/browser/scripts/migration evidence | Logged replacements plus stronger migration/invariant/authorization/UI proof |
 
-The DOM retains useful headings, regions, table semantics, link/button names, read/manager authority, exact IDs, and explicit lifecycle text. Those are strengths to preserve.
+Module descriptors contain frozen default group/order hints. Administrator placement must not rewrite descriptor bytes or digests; the new installation policy overrides those hints after discovery.
+
+## Current-Run Visual Evidence
+
+Captured from the live Sprint 6A application at `http://localhost:8080` on 2026-07-15, seeded administrator, dark theme, 1280×720:
+
+| Evidence | Characterization |
+| --- | --- |
+| [Directory first viewport](../audits/sprint-6a-ui-module-management-2026-07-15/01-module-directory-current-accepted.png) | Runtime context dominates the useful first viewport; current shell is historical, not a target configuration. |
+| [Directory inventory](../audits/sprint-6a-ui-module-management-2026-07-15/02-module-directory-inventory-policy-current-accepted.png) | Full machine values and five verbose columns clip and become difficult to associate. |
+| [Forms detail](../audits/sprint-6a-ui-module-management-2026-07-15/03-module-detail-current-accepted.png) | Long overview/digest/declaration content overlaps and creates page-level horizontal scroll. |
+| [Band policy manager](../audits/sprint-6a-ui-module-management-2026-07-15/04-navigation-policy-current-accepted.png) | Labels/IDs run together and band controls are dense; the entire band interaction model is now superseded. |
+
+Existing headings, regions, tables, links/buttons, status text, revision/save semantics, and capability separation are strengths to retain.
+
+[The three retained directory mockups](../mockups/sprint-6a-ui/README.md) remain Module inventory references only. Their sidebars and implied band policy are obsolete and cannot be approved as full-page targets.
 
 ## Prioritized Issue Matrix
 
-| ID | Evidence | Finding | Severity | Behavior risk | Existing-pattern outcome | Required proof | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| MM-UI-01 | Directory inventory | Fixed-width generic table plus long machine values makes the inventory unreadable and horizontally clipped at a supported desktop width. | P1 | Medium: restructuring must preserve every field and row/table semantics. | Establish intentional column hierarchy, safe wrapping, and responsive containment using the shared collection posture. | Field/parity assertions, semantic table or approved equivalent, 1280/768/390 overflow cases, reviewed screenshot. | Approved |
-| MM-UI-02 | Forms detail | Two-column peer grid permits content overlap, a misplaced action, and page-level horizontal scrolling. | P1 | Medium: all declaration/dimension content and source action must remain. | Use an established wide/stacked responsive detail composition with `min-width: 0` and long-value handling. | Existing detail parity, source-link assertion, heading order, viewport/zoom/keyboard proof. | Approved |
-| MM-UI-03 | Navigation policy | Destination labels/IDs concatenate visually and controls/placement data are too dense to scan. | P1 | High: policy order, visibility, disabled rules, focus restoration, and authorization cannot change. | Apply established stacked-label and action-group hierarchy with scoped responsive layout. | Existing keyboard/persistence scenario unchanged plus focused reader/manager viewport and focus proof. | Approved |
-| MM-UI-04 | Directory first viewport | Runtime context is verbose and vertically dominant relative to the directory task. | P2 | Low: values and explanatory caveat must remain available. | Compact metadata using an established information-list/card treatment and clearer section hierarchy. | Exact values/text present, heading/region semantics, 1280/390 review. | Approved |
-| MM-UI-05 | Directory/detail | Full IDs, digests, finding paths, routes, and capability IDs lack safe wrapping and secondary hierarchy. | P2 | Medium: machine-readable values must not be truncated from assistive or copyable content. | Scoped wrapping and secondary-code treatment using existing muted text/token patterns. | Long-value fixtures, no page overflow, DOM contains exact values. | Approved |
-| MM-UI-06 | Directory/detail/policy | Lifecycle, provenance, and policy explanations compete with primary labels instead of supporting them. | P2 | Medium: Active, Unavailable, Retired, finding, Release, and Instance meanings must remain exact. | Preserve explicit badges and explanations while separating primary state from supporting detail. | State-specific semantic assertions and reviewed visual states. | Approved |
-| MM-UI-07 | Administration/provenance | Target fragments require current visual comparison before deciding whether code changes are necessary. | P3 pending evidence | Low | Match neighboring Administration cards and established role metadata; make no change if already aligned. | Current capture/source comparison and affected app/permission tests only if edited. | Capture pending |
+| ID | Finding | Severity | Approved outcome | Durable proof |
+| --- | --- | --- | --- | --- |
+| NAV-01 | Groups, anchors, bands, catalog defaults, API, and browser ranks duplicate one rigid composition. | P1 | Generic revisioned groups/placements with one server composition authority and fail-closed client validation. | Migration, domain/API, shell projection, malformed-state, SSR/hydration tests. |
+| NAV-02 | Current policy cannot create groups or move an optional destination across groups. | P1 | Runtime custom-group CRUD/order and free optional cross-group placement. | Positive/negative CRUD, membership, dense-order, revision, audit, keyboard/mobile proof. |
+| NAV-03 | Core protection is encoded as non-persisted anchors rather than explicit independent rules. | P1 | Hard-coded Core catalog plus persisted placements and explicit remove/hide/group-lock/reorder flags. | Complete protection matrix and seed/reconciliation proof. |
+| NAV-04 | Administration landing duplicates direct destinations and consumes a fixed anchor. | P1 | Remove nav item, page, and exact route; directly expose four Core Admin destinations. | Ordinary unmatched 404/no-redirect, direct-route auth/SSR, active-navigation, smoke/UAT/browser replacements. |
+| NAV-05 | Contribution-only persistence cannot retain Core order, Organization visibility, or dynamic group identity. | P1 | Forward migration to complete groups/placements without resetting valid customization. | Fresh/populated/atomic failure/idempotence/backup-restore fingerprints. |
+| NAV-06 | Shell response validation rejects valid future groups and order. | P1 | Versioned arbitrary-group projection with uniqueness, same-origin, ownership, reference, and Core-invariant validation. | API/web parity, malformed wires, unavailable fallback, desktop/mobile/no-JS proof. |
+| MM-UI-01 | Inventory is unreadable and horizontally clipped at 1280px. | P1 | Intentional identity/state hierarchy, safe wrapping, and responsive containment. | Exact-field DOM proof and 1280/768/390 cases. |
+| MM-UI-02 | Detail grid overlaps long content and actions. | P1 | Established wide/stacked responsive detail composition. | Detail parity, source action, heading order, zoom/viewport proof. |
+| MM-UI-03 | Runtime context and lifecycle/provenance explanations compete with primary tasks. | P2 | Compact metadata and explicit supporting hierarchy without content loss. | Exact values/states and reviewed targeted visuals. |
+| MM-UI-04 | Capability provenance needs alignment after direct Admin navigation changes. | P2 | Existing role/access patterns, no authority change. | Permission/source tests and focused visual evidence if edited. |
 
-Severity:
+## Required Capture And Design Matrix
 
-- `P0`: serious security/accessibility failure or supported-workflow block;
-- `P1`: materially impairs the primary task, keyboard use, or supported viewport;
-- `P2`: recurring hierarchy, consistency, state, or efficiency defect; and
-- `P3`: localized polish that does not materially impede completion.
+| State | Evidence status |
+| --- | --- |
+| Current v1 directory/detail/manager policy | Captured at 1280 dark |
+| Approved initial sidebar with direct Admin destinations | Pending Decision Gate 1 |
+| Group composer reader | Pending mockup/capture |
+| Manager: create/rename/reorder/delete empty group | Pending mockup/capture |
+| Manager: cross-group move, item reorder, visibility | Pending mockup/capture |
+| Protection and non-empty delete rejection | Pending mockup/capture |
+| Revision conflict/save/discard/focus | Pending implementation proof |
+| Arbitrary groups desktop/tablet/mobile and both themes | Pending implementation proof |
+| Restricted/unavailable/malformed fallback | Pending implementation proof |
+| Harmonized directory/detail | Pending visual selection/implementation |
 
-## Remaining Targeted Capture Matrix
+## Historical Proof Requiring Explicit Reconciliation
 
-| Capture | Desktop | Tablet | Mobile | Keyboard/focus | Themes | State variants | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Directory/runtime/inventory | Captured | Pending | Pending | Pending | Dark captured | active, retired, findings captured | In progress |
-| Forms detail | Captured | Pending | Pending | Pending | Dark captured | representative declarations/findings | In progress |
-| Navigation policy manager | Captured | Pending | Pending | Pending | Dark captured | dirty/save/discard/disabled pending | In progress |
-| Navigation policy reader | Pending | Pending | Pending | Pending | Pending | read-only | Pending |
-| Restricted/unavailable/error/not-found | Pending | N/A unless layout differs | Pending | Pending | One theme minimum | explicit route states | Pending |
-| Administration entry/provenance | Pending | Reference only | Mobile if edited | If edited | Existing themes if edited | global/scope/provenance | Pending |
+- `end2end/tests/app.spec.ts`: `root route renders assigned work in the native shell` and `authenticated primary routes render in the native shell` contain exact old shell composition.
+- `end2end/tests/modules.spec.ts`: `global read exposes the fixed Admin item without Administration and remains read-only` and `keyboard policy edits retain focus and persist in desktop and mobile shells` freeze the fixed Admin item, immutable Core anchors, band-only reorder, and exact desktop/mobile ordering.
+- `end2end/tests/permissions.spec.ts`: `non-admin shell hides Administration navigation` and `JavaScript-disabled Core, Organization, and Administration routes preserve native SSR ownership` make claims that become false when the exact landing route is removed; rename them only through logged equal-or-stronger replacements.
+- API module integration/unit tests: v1 DTO shape, bands/anchors, immutable Core response, group/band rejection, counts, audit payloads, and revision restore.
+- web navigation/shell tests: exactly two groups, hard-coded ranks, Core fallback, band crossing, fixed items, and current active route.
+- smoke check IDs `protected_server_rendered_shells` and `module_inventory_policy_and_navigation`, plus UAT check IDs `protected_server_rendered_routes` and `module_inventory_policy_and_navigation`, are tied to the removed landing and band model. Replace them with direct-route/removal and group-policy proof; mutating UAT must restore the original policy in `finally`.
+- deployment evidence currently requires migrations 1–3. Sprint 6A-UI evidence must require 1–4 under its own artifact namespace without rewriting retained Sprint 6A evidence or rollback manifests.
+- `sprint_6a_populated_upgrade.rs` currently stops at migration 3. Add a populated migration-3-to-4 case pinned to migration 3 SHA-256 `a3489240633b6019ec9aa7acc0ee41b1f54ba625c02e30c8e925fd8b429ee50b`.
 
-Every retained capture records commit, URL, fixture/persona, viewport, theme, JavaScript mode, state setup, and evidence path. Secrets and session tokens are never retained.
+Known Rust proof identities that must be logged before modification include:
 
-## Regression-Only Inventory
+- API service: `policy_collection_validation_rejects_every_immutable_shape_change`, `policy_collection_validation_accepts_dense_within_band_reordering`, and `catalog_sync_is_repeatable_concurrent_and_rolls_back_injected_failure`;
+- API routes: `policy_projection_exposes_fixed_anchors_and_never_makes_core_items_mutable`, `all_approved_bands_have_explicit_core_anchor_context`, and `policy_errors_keep_the_approved_stable_codes`;
+- API shell projection: `default_navigation_sequences_are_exact_for_named_actors` and `malformed_band_falls_back_to_filtered_core_and_marks_unavailable`;
+- API integration: `module_http_apis_enforce_global_authority_and_preserve_exact_sources`, `navigation_policy_http_rejections_are_atomic_and_exactly_audited`, and `native_module_management_routes_render_authorized_restricted_and_not_found_states`;
+- web navigation/shell: static catalog/default composition, band-local movement, fixed-Core collision, malformed/missing policy, actor filtering, and hard-coded rank cases; and
+- web Module policy: the band-bound movement case changes, while reader-only proof remains valid.
 
-Home/sign-in, Organization, Forms, Workflows, Responses, Operations, Datasets, Components, Dashboards, the existing shell, and pre-Sprint 6A Administration pages are not redesign targets. Their existing Rust/web tests, the frozen 60 browser identities, smoke, and UAT prove that targeted UI work did not alter application behavior. No all-route before/after visual baseline will be created.
+Add canonical browser identities for native `/administration` not-found/no-redirect behavior and manager group CRUD/cross-group protection. Derive the final manifest count only after discovery; do not pre-write an assumed total.
 
-## Implementation Freeze Checklist
+Keep the module-contract manifest, all seven transition descriptor fixtures, and their SHA sidecars byte-identical. Configurable placement supersedes their default-placement hints without changing module descriptor wire scope.
 
-- [x] narrowed scope and the three product decisions are recorded;
-- [x] current directory, inventory, detail, and manager-policy evidence is retained;
-- [x] initial issue IDs and existing Tessara reference patterns are recorded;
-- [ ] reader/no-access and Administration/provenance evidence needed by the selected implementation is captured;
-- [ ] one of three screenshot-grounded directions is selected;
-- [ ] selected option is mapped to issue IDs without adding behavior;
-- [ ] focused UI identities, viewports, fixtures, and visual baselines are named; and
-- [ ] the implementation slice begins with characterization proof and a scoped diff boundary.
+Every still-valid assertion in those tests remains. Only the explicitly superseded expectation may change, with an exact log row and equal-or-stronger replacement.
+
+## Freeze Checklist
+
+- [x] dynamic-group, cross-group movement, runtime group CRUD, required groups/destinations, Organization visibility, Operations optionality, and `/administration` removal are recorded;
+- [x] current schema/API/shell/route/proof seams are mapped;
+- [x] Module directory/detail visual defects and obsolete band UI are captured;
+- [ ] initial optional-destination placement is approved;
+- [x] fresh-versus-populated sequencing, legacy-provenance treatment, custom ID/label rules, revision/audit conversion, empty-group projection, and later-contribution default handling are frozen;
+- [ ] v1-to-v2 current-placement migration mapping is frozen by Decision Gate 1;
+- [ ] group-composer reader/manager/protection/mobile directions are reviewed;
+- [ ] exact first test-change rows are approved before test edits; and
+- [ ] implementation begins with v1 characterization and migration proof, not UI code.
