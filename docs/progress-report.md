@@ -7,6 +7,68 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Application UI And UX Coherence `(Next)`; Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-15 - Sprint 6A-UI Application UI And UX Coherence Kickoff
+
+- Kicked off the sole roadmap sprint marked `(Next)` from clean post-closeout
+  `main` commit `c37153b19787d4164eaccbb4752980772e6ec84a`, immediately after
+  closed Sprint 6A commit `f145e059fc1f4d81c960cb35e586c802831ecea2`.
+  The active branch is `codex/sprint-6a-ui` in
+  `C:\Users\eric-dev\Projects\tessara-sprint-6a-ui`.
+- Added the implementation contract at
+  `docs/sprints/sprint-6a-ui-plan.md`, the source-backed audit ledger at
+  `docs/sprints/sprint-6a-ui-baseline-inventory.md`, and the durable proof
+  ledger at `docs/sprints/sprint-6a-ui-test-change-log.md`.
+- Started implementation with a non-judgmental source inventory: the live
+  native route tree mounts 48 route patterns plus the shared not-found
+  fallback; the accepted schema-v2 browser manifest freezes 60 exact
+  identities across seven files at SHA-256
+  `95f9a7468315277ab64595f4f36675a0cec7202d7865c257ffd31ecad55eeb1a`.
+- Preserved the closed Sprint 6A boundary. Sprint 6A-UI changes presentation
+  and interaction only by default; routes, APIs, persistence, authorization,
+  module contracts, navigation eligibility/bands/fixed Core items, lifecycle
+  behavior, and Sprint 6B runtime scope remain unchanged.
+- Established Decision Gate 0 before visual conclusions, mockups, or production
+  UI code: confirm information-architecture exploration limits, visual
+  direction, and the balance between all-route coherence and deep workflow
+  redesign. Source inventory may continue without selecting those outcomes.
+- Established durable test change control. Existing failures are presumed
+  production regressions; tests may not be deleted, skipped, loosened,
+  timeout/retry-dependent, or casually regenerated. Every existing-test edit,
+  including a selector-only or visual-baseline change, requires an approved
+  rationale and equal-or-stronger replacement proof in the sprint log.
+- Planned proportional validation during implementation and one unchanged
+  complete browser inventory against the final clean fresh release build,
+  together with fresh smoke/UAT, source, SSR/hydration/console, accessibility,
+  responsive, and narrowly reviewed visual proof. Sprint 6A populated-upgrade
+  and rollback-package evidence is not rerun or overwritten unless approved
+  scope expands into persistence, migration, API, authorization, or contracts.
+- Planned source commands (not yet passed for Sprint 6A-UI) are
+  `.\scripts\validate.ps1 -Fast`, `cargo fmt --all -- --check`, workspace
+  check/Clippy with all features and locked dependencies, the WASM hydrate
+  check, workspace tests excluding `tessara-api`, web tests, API library tests,
+  web-crate boundary checks, `cargo audit --quiet`, and `git diff --check`.
+  Bare root `npx playwright test` is unsupported/not run and claims no proof;
+  the supported original-suite wrapper and a separate manifest-bound 6A-UI
+  wrapper are the planned browser gates.
+- Planned final deployment commands (also not yet passed) are locked end-to-end
+  dependency/browser installation, `.\scripts\local-launch.ps1 -FreshData`,
+  deployment capture at `http://127.0.0.1:8080`, `.\scripts\smoke.ps1`,
+  `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:8080"`, the unchanged
+  `.\scripts\validate-e2e.ps1` 60-test pass, and the separate Sprint 6A-UI
+  accessibility/viewport/visual wrapper. The literal kickoff-baseline
+  `localhost` UAT form is diagnostic only because retained deployment evidence
+  binds the exact host used at capture.
+- Kickoff verification completed: `main` and `origin/main` matched the clean
+  sequencing commit before branch creation; exactly one roadmap heading was
+  marked `(Next)`; the new branch/worktree were clean; the 48 route patterns
+  and 60/7 manifest identity/hash were derived from repository sources. No
+  runtime validation is claimed for this documentation-only kickoff; planned
+  commands remain explicitly unpassed until their proportional or final gate.
+- Immediate focus after the three product decisions: reinforce the plan with
+  the approved visual brief and exact evidence protocol, capture representative
+  before states, freeze the prioritized issue matrix, and create UI/UX examples
+  before the first production UI slice.
+
 ## 2026-07-15 - Sprint 6A Final Closeout
 
 - Completed the Module Contract and Core Control Plane slice. User-facing

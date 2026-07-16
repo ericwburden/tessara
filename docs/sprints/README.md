@@ -11,14 +11,20 @@ Out-of-roadmap sprint proposals and migration plans may also live here when they
 **Sprint 6A: Module Contract And Core Control Plane** completed on 2026-07-15.
 The post-closeout sequencing decision inserts **Sprint 6A-UI: Application UI
 And UX Coherence** as the next sprint without reopening or modifying the closed
-Sprint 6A implementation or its retained evidence. Sprint 6A-UI has not been
-kicked off and does not yet have a sprint plan; use
-[its roadmap block](../roadmap.md#sprint-6a-ui-application-ui-and-ux-coherence-slice-next)
-until kickoff.
+Sprint 6A implementation or its retained evidence. Sprint 6A-UI kicked off on
+2026-07-15 from clean post-closeout `main`; its initial source inventory is in
+progress, and visual implementation remains held at the product decision gate.
 
 **Sprint 6B: Module Runtime And Installation Infrastructure** follows Sprint
 6A-UI with its real Module Release/Instance persistence, materialization, and
 runtime scope unchanged.
+
+## Active Sprint 6A-UI Artifacts
+
+- [Sprint 6A-UI Application UI And UX Coherence Plan](./sprint-6a-ui-plan.md)
+- [Sprint 6A-UI Baseline Inventory](./sprint-6a-ui-baseline-inventory.md)
+- [Sprint 6A-UI Test Change Log](./sprint-6a-ui-test-change-log.md)
+- [Sprint 6A-UI Roadmap Contract](../roadmap.md#sprint-6a-ui-application-ui-and-ux-coherence-slice-next)
 
 ## Completed Sprint 6A Artifacts
 
