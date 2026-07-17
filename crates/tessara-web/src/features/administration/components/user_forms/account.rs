@@ -3,7 +3,7 @@
 use crate::features::administration::api::submit_update_admin_user;
 use crate::features::administration::models::AdminRoleSummary;
 use crate::features::administration::state::toggle_string_selection;
-use crate::ui::PageHeader;
+use crate::ui::{PageHeader, Timestamp};
 use leptos::prelude::*;
 
 #[component]
@@ -119,7 +119,24 @@ pub(crate) fn AdministrationUserAccountForm(
                                             />
                                             <span>
                                                 <strong>{role.name}</strong>
-                                                <small>{format!("{} capabilities, {} users", role.capability_count, role.account_count)}</small>
+                                                <small>{format!("{} capabilities", role.capability_count)}</small>
+                                                <span class="administration-role-assignment__metadata">
+                                                    <span>
+                                                        <small>"Assigned on"</small>
+                                                        {if checked {
+                                                            match role.assigned_at {
+                                                                Some(assigned_at) => view! { <Timestamp value=assigned_at/> }.into_any(),
+                                                                None => view! { <strong>"Pending save"</strong> }.into_any(),
+                                                            }
+                                                        } else {
+                                                            view! { <span aria-label="Not assigned">"—"</span> }.into_any()
+                                                        }}
+                                                    </span>
+                                                    <span>
+                                                        <small>"Details"</small>
+                                                        <span>{format!("{} assigned users", role.account_count)}</span>
+                                                    </span>
+                                                </span>
                                             </span>
                                         </label>
                                     }
@@ -159,6 +176,7 @@ mod tests {
                 name: "Module reader".into(),
                 capability_count: 1,
                 account_count: 0,
+                assigned_at: None,
             }]);
 
             view! {
@@ -183,5 +201,7 @@ mod tests {
         assert!(html.contains("modules:read"));
         assert!(html.contains("modules:manage_navigation"));
         assert!(html.contains("separate scoped product roles"));
+        assert!(html.contains("Assigned on"));
+        assert!(html.contains("Details"));
     }
 }

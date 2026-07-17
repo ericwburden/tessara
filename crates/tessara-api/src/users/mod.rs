@@ -4,13 +4,14 @@
 //! DTOs live in `dto`, while the handlers below keep the current route contract
 //! and coordinate validation, persistence, and effective-access projections.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use axum::{
     Json, Router,
     extract::{Path, State},
     routing::get,
 };
+use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
@@ -86,6 +87,7 @@ pub async fn list_roles(
             name: row.try_get("name")?,
             capability_count: row.try_get("capability_count")?,
             account_count: row.try_get("account_count")?,
+            assigned_at: None,
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -447,7 +449,8 @@ async fn load_roles_for_account(pool: &PgPool, account_id: Uuid) -> ApiResult<Ve
             roles.id,
             roles.name,
             COUNT(DISTINCT role_capabilities.capability_id) AS capability_count,
-            COUNT(DISTINCT all_assignments.account_id) AS account_count
+            COUNT(DISTINCT all_assignments.account_id) AS account_count,
+            MIN(role_assignments.created_at) AS assigned_at
         FROM role_assignments
         JOIN roles ON roles.id = role_assignments.role_id
         LEFT JOIN role_capabilities ON role_capabilities.role_id = roles.id
@@ -467,6 +470,7 @@ async fn load_roles_for_account(pool: &PgPool, account_id: Uuid) -> ApiResult<Ve
             name: row.try_get("name")?,
             capability_count: row.try_get("capability_count")?,
             account_count: row.try_get("account_count")?,
+            assigned_at: Some(row.try_get("assigned_at")?),
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?)
@@ -996,6 +1000,7 @@ async fn replace_role_assignments(
     // Role edits preserve the account's existing scope roots. Each role is
     // classified before mutation so an invalid stored bundle fails atomically.
     let scoped_node_ids = current_scope_node_ids(tx, account_id).await?;
+    let existing_assignment_dates = current_role_assignment_dates(tx, account_id).await?;
     let mut ordered_role_ids = role_ids.to_vec();
     ordered_role_ids.sort_unstable();
     ordered_role_ids.dedup();
@@ -1010,7 +1015,15 @@ async fn replace_role_assignments(
         .await?;
 
     for (role_id, scope_mode) in roles {
-        insert_role_assignment_rows(tx, account_id, role_id, scope_mode, &scoped_node_ids).await?;
+        insert_role_assignment_rows(
+            tx,
+            account_id,
+            role_id,
+            scope_mode,
+            &scoped_node_ids,
+            existing_assignment_dates.get(&role_id).copied(),
+        )
+        .await?;
     }
 
     Ok(())
@@ -1050,6 +1063,7 @@ async fn replace_scope_assignments(
     // Scope edits preserve selected roles and rewrite each role assignment to
     // either global or per-node rows according to the capability bundle.
     let role_ids = current_role_ids(tx, account_id).await?;
+    let existing_assignment_dates = current_role_assignment_dates(tx, account_id).await?;
     let mut roles = Vec::with_capacity(role_ids.len());
     for role_id in role_ids {
         roles.push((role_id, role_scope_mode(tx, role_id).await?));
@@ -1071,7 +1085,15 @@ async fn replace_scope_assignments(
         .await?;
 
     for (role_id, scope_mode) in roles {
-        insert_role_assignment_rows(tx, account_id, role_id, scope_mode, node_ids).await?;
+        insert_role_assignment_rows(
+            tx,
+            account_id,
+            role_id,
+            scope_mode,
+            node_ids,
+            existing_assignment_dates.get(&role_id).copied(),
+        )
+        .await?;
     }
 
     Ok(())
@@ -1092,6 +1114,29 @@ async fn current_role_ids(
     .bind(account_id)
     .fetch_all(&mut **tx)
     .await?)
+}
+
+async fn current_role_assignment_dates(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: Uuid,
+) -> ApiResult<BTreeMap<Uuid, DateTime<Utc>>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT role_id, MIN(created_at) AS assigned_at
+        FROM role_assignments
+        WHERE account_id = $1
+        GROUP BY role_id
+        ORDER BY role_id
+        "#,
+    )
+    .bind(account_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| Ok((row.try_get("role_id")?, row.try_get("assigned_at")?)))
+        .collect::<Result<BTreeMap<_, _>, sqlx::Error>>()
+        .map_err(Into::into)
 }
 
 async fn current_scope_node_ids(
@@ -1125,6 +1170,7 @@ async fn insert_role_assignment_rows(
     role_id: Uuid,
     scope_mode: RoleScopeMode,
     scoped_node_ids: &[Uuid],
+    assigned_at: Option<DateTime<Utc>>,
 ) -> ApiResult<()> {
     // A role assignment with a NULL node is global. Empty scope selections
     // intentionally mean unrestricted product scope. Installation-global roles
@@ -1132,13 +1178,14 @@ async fn insert_role_assignment_rows(
     if scoped_node_ids.is_empty() || scope_mode == RoleScopeMode::InstallationGlobal {
         sqlx::query(
             r#"
-            INSERT INTO role_assignments (account_id, role_id, node_id)
-            VALUES ($1, $2, NULL)
+            INSERT INTO role_assignments (account_id, role_id, node_id, created_at)
+            VALUES ($1, $2, NULL, COALESCE($3, now()))
             ON CONFLICT DO NOTHING
             "#,
         )
         .bind(account_id)
         .bind(role_id)
+        .bind(assigned_at)
         .execute(&mut **tx)
         .await?;
         return Ok(());
@@ -1147,14 +1194,15 @@ async fn insert_role_assignment_rows(
     for node_id in scoped_node_ids {
         sqlx::query(
             r#"
-            INSERT INTO role_assignments (account_id, role_id, node_id)
-            VALUES ($1, $2, $3)
+            INSERT INTO role_assignments (account_id, role_id, node_id, created_at)
+            VALUES ($1, $2, $3, COALESCE($4, now()))
             ON CONFLICT DO NOTHING
             "#,
         )
         .bind(account_id)
         .bind(role_id)
         .bind(node_id)
+        .bind(assigned_at)
         .execute(&mut **tx)
         .await?;
     }

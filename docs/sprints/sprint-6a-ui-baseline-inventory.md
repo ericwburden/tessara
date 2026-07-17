@@ -149,16 +149,16 @@ Existing headings, regions, tables, links/buttons, status text, revision/save se
 | --- | --- |
 | Current v1 directory/detail/manager policy | Captured at 1280 dark |
 | Approved initial sidebar with direct Admin destinations | Selected Direction 1; visible across desktop/tablet/mobile assets |
-| Group composer reader | Direction 1 asset 05 captured; implementation proof pending |
-| Manager: create/rename/reorder/delete empty group | Direction 1 assets 06-07 captured; implementation proof pending |
-| Manager: cross-group move, item reorder, visibility | Direction 1 assets 06-07 and 12 captured; implementation proof pending |
-| Protection and non-empty delete rejection | Direction 1 asset 08 captured; implementation proof pending |
-| Revision conflict/save/discard/focus | Direction 1 assets 07-08 and 16 captured; implementation proof pending |
-| Arbitrary groups desktop/tablet/mobile and both themes | Dark Direction 1 assets 07, 09, and 12 captured; light-theme and implementation proof pending |
-| Restricted/unavailable/malformed fallback | Direction 1 asset 16 captured; implementation proof pending |
-| Harmonized directory/detail | Direction 1 assets 01-04 and 10-11 selected/captured; implementation proof pending |
-| Directory search/status controls | Product contract frozen; targeted Direction 1 asset revisions 01 and 10 complete; implementation proof pending |
-| Filtered zero-match/reset distinct from empty inventory | Product contract frozen; targeted Direction 1 asset revision 16 complete; implementation proof pending |
+| Group composer reader | Direction 1 asset 05 captured; implementation reader/capability-list proof passed |
+| Manager: create/rename/reorder/delete empty group | Direction 1 assets 06-07 captured; implementation interaction and service proof passed |
+| Manager: cross-group move, item reorder, visibility | Direction 1 assets 06-07 and 12 captured; desktop/mobile interaction proof passed |
+| Protection and non-empty delete rejection | Direction 1 asset 08 captured; exact service and lock-only UI proof passed |
+| Revision conflict/save/discard/focus | Direction 1 assets 07-08 and 16 captured; revision, audit, recovery, and focus proof passed |
+| Arbitrary groups desktop/tablet/mobile and both themes | Direction 1 assets 07, 09, and 12 captured; 1440/1280/768/390 and both-theme implementation proof passed |
+| Restricted/unavailable/malformed fallback | Direction 1 asset 16 captured; fail-closed API/web proof passed |
+| Harmonized directory/detail | Direction 1 assets 01-04 and 10-11 selected/captured; responsive implementation comparison passed |
+| Directory search/status controls | Product contract frozen; targeted Direction 1 asset revisions 01 and 10 complete; working-control and no-JavaScript proof passed |
+| Filtered zero-match/reset distinct from empty inventory | Product contract frozen; targeted Direction 1 asset revision 16 complete; no-match/Clear filters proof passed |
 
 ## Historical Proof Requiring Explicit Reconciliation
 

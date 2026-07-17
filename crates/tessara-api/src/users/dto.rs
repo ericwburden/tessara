@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -10,6 +11,8 @@ pub struct RoleSummary {
     pub name: String,
     pub capability_count: i64,
     pub account_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned_at: Option<DateTime<Utc>>,
 }
 
 /// Capability catalog entry that can be assigned to administrator-managed roles.
@@ -164,7 +167,7 @@ mod tests {
 
     use super::{
         CapabilityProvenanceSourceKind, CapabilityProvenanceSummary, CapabilityProviderState,
-        CapabilityScopeMode, CapabilitySummary,
+        CapabilityScopeMode, CapabilitySummary, RoleSummary,
     };
 
     #[test]
@@ -209,5 +212,27 @@ mod tests {
             json!("sha256:71bebdd07ff0028cc0da8bbd9707c393bade9951e5cedb265a4b8465d54b493e")
         );
         assert!(wire["provenance"][0]["source_digest"].is_null());
+    }
+
+    #[test]
+    fn role_summary_only_exposes_assignment_time_in_account_context() {
+        let assigned_at = chrono::DateTime::parse_from_rfc3339("2026-07-01T12:30:00Z")
+            .expect("timestamp")
+            .with_timezone(&chrono::Utc);
+        let assigned = RoleSummary {
+            id: Uuid::nil(),
+            name: "Module reader".into(),
+            capability_count: 1,
+            account_count: 1,
+            assigned_at: Some(assigned_at),
+        };
+        let assigned_wire = serde_json::to_value(&assigned).expect("serialize assignment");
+        let mut catalog = assigned;
+        catalog.assigned_at = None;
+
+        let catalog_wire = serde_json::to_value(&catalog).expect("serialize catalog role");
+
+        assert_eq!(assigned_wire["assigned_at"], json!("2026-07-01T12:30:00Z"));
+        assert!(catalog_wire.get("assigned_at").is_none());
     }
 }

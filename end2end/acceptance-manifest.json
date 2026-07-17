@@ -52,9 +52,9 @@
       "path": "modules.spec.ts",
       "tests": [
         "Sprint 6A Module Management › directory and detail preserve human-machine parity and explicit route states",
-        "Sprint 6A Module Management › global read exposes the fixed Admin item without Administration and remains read-only",
+        "Sprint 6A Module Management › global read exposes protected Module Management without an aggregate Administration item and remains read-only",
         "Sprint 6A Module Management › scoped module authority, product-only authority, and no access stay hidden and restricted",
-        "Sprint 6A Module Management › keyboard policy edits retain focus and persist in desktop and mobile shells",
+        "Sprint 6A Module Management › keyboard group and placement edits retain focus and persist in desktop and mobile shells",
         "Sprint 6A Module Management › native directory and detail remain useful without JavaScript or bridge requests"
       ]
     },
@@ -66,7 +66,7 @@
         "capability + scope + ownership permissions › owners and delegators can access owned or delegated work only",
         "capability + scope + ownership permissions › no-capability users are denied protected capability surfaces",
         "capability + scope + ownership permissions › administration user and node-type routes are admin-only",
-        "capability + scope + ownership permissions › non-admin shell hides Administration navigation",
+        "capability + scope + ownership permissions › non-admin shell contains only eligible configured destinations",
         "capability + scope + ownership permissions › operations route is visible only to operations viewers",
         "capability + scope + ownership permissions › admin can create a role and load the roles route",
         "capability + scope + ownership permissions › session metadata exposes capabilities, scopes, and delegations without legacy access switches",
@@ -82,7 +82,7 @@
         "capability + scope + ownership permissions › explicit historical component table checks selected version dataset scope",
         "capability + scope + ownership permissions › dashboard native routes and APIs exercise scoped manage permission",
         "capability + scope + ownership permissions › dashboard viewer preserves a redacted footprint without executing the hidden Component",
-        "capability + scope + ownership permissions › JavaScript-disabled Core, Organization, and Administration routes preserve native SSR ownership",
+        "capability + scope + ownership permissions › JavaScript-disabled Core, Organization, and direct Admin routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Form and Workflow routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Response and Dataset routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Component and Dashboard routes preserve native SSR ownership"

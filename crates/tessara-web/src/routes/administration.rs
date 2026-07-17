@@ -7,9 +7,8 @@ use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
 
 use crate::features::administration::{
-    AdministrationNodeTypesPage, AdministrationPage, AdministrationRolesPage,
-    AdministrationUserAccessPage, AdministrationUserDetailPage, AdministrationUserEditPage,
-    AdministrationUsersPage,
+    AdministrationNodeTypesPage, AdministrationRolesPage, AdministrationUserAccessPage,
+    AdministrationUserDetailPage, AdministrationUserEditPage, AdministrationUsersPage,
 };
 use crate::features::modules::{ModuleManagementDetailPage, ModuleManagementDirectoryPage};
 
@@ -18,11 +17,6 @@ use crate::routes::PRIMARY_SSR_MODE;
 pub fn administration_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>
-            <Route
-                path=path!("/administration")
-                view=AdministrationPage
-                ssr=PRIMARY_SSR_MODE
-            />
             <Route
                 path=path!("/administration/users")
                 view=AdministrationUsersPage

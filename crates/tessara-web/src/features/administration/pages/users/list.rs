@@ -34,11 +34,11 @@ pub fn AdministrationUsersPage() -> impl IntoView {
     let role_options = move || admin_user_role_filter_options(&users.get());
 
     view! {
-        <AppShell active_route="administration" title="Users">
+        <AppShell active_route="user_management" title="Users">
             <section class="route-panel administration-users-page">
                 <Breadcrumb>
                     <BreadcrumbItem>
-                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
+                        <BreadcrumbLink href="/">"Home"</BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator/>
                     <BreadcrumbItem>

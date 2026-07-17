@@ -117,6 +117,8 @@ pub(crate) struct AdminRoleSummary {
     pub(crate) name: String,
     pub(crate) capability_count: i64,
     pub(crate) account_count: i64,
+    #[serde(default)]
+    pub(crate) assigned_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

@@ -403,8 +403,10 @@ try {
     Assert-ProtectedShell -Content $workflowAssignmentsShell -Needles @("Workflow Assignments", "Workflows") -Context "workflow assignments shell"
     $responsesShell = Invoke-Html -Uri "$baseUrl/responses" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $responsesShell -Needles @("Responses") -Context "responses list shell"
-    $administrationShell = Invoke-Html -Uri "$baseUrl/administration" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $administrationShell -Needles @("Administration") -Context "administration shell"
+    $removedAdministration = & curl.exe -sS -o NUL -D - -b $adminBrowserSession -w "STATUS:%{http_code}" "$baseUrl/administration"
+    if ($LASTEXITCODE -ne 0 -or $removedAdministration -notcontains "STATUS:404" -or ($removedAdministration -match '^Location:')) {
+        throw "Smoke failure: /administration must be an ordinary 404 without redirect"
+    }
     $usersShell = Invoke-Html -Uri "$baseUrl/administration/users" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $usersShell -Needles @("Users") -Context "users shell"
     $nodeTypesShell = Invoke-Html -Uri "$baseUrl/administration/node-types" -CookieJarPath $adminBrowserSession
@@ -414,7 +416,7 @@ try {
     $modulesShell = Invoke-Html -Uri "$baseUrl/administration/modules" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $modulesShell -Needles @(
         "Module inventory",
-        "7 contributions",
+        "7 definitions",
         "Transitional — not independently deployable",
         "No Module Release",
         "No Module Instance",
@@ -466,29 +468,37 @@ try {
     }
 
     $modulePolicy = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/navigation-policy" -Headers $headers
-    $fixedModuleItem = $modulePolicy.immutable_core_items | Where-Object {
-        $_.id -eq "module_management" `
-        -and $_.group -eq "Admin" `
+    $moduleDestination = $modulePolicy.destinations | Where-Object {
+        $_.id -eq "core.admin.modules" `
+        -and $_.group_id -eq "core.admin" `
         -and $_.route -eq "/administration/modules" `
-        -and -not $_.policy_mutable
+        -and -not $_.can_hide `
+        -and -not $_.can_move_between_groups
     } | Select-Object -First 1
     if (
-        -not $modulePolicy.can_manage_navigation `
-        -or -not $fixedModuleItem `
-        -or ($modulePolicy.contributions | Where-Object { $_.id -eq "module_management" })
+        $modulePolicy.schema_version -ne 2 `
+        -or -not $modulePolicy.can_manage_navigation `
+        -or @($modulePolicy.groups).Count -lt 2 `
+        -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.main" }) `
+        -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.admin" }) `
+        -or @($modulePolicy.destinations).Count -ne 13 `
+        -or -not $moduleDestination
     ) {
-        throw "Smoke failure: Module Management policy boundary was not fixed and independently authorized"
+        throw "Smoke failure: schema-v2 navigation policy did not preserve required groups, exact membership, and protected Module Management"
     }
 
     $shellNavigation = Invoke-Json -Method "Get" -Uri "$baseUrl/api/shell/navigation" -Headers $headers
     $shellItems = @($shellNavigation.groups | ForEach-Object { $_.items })
     if (
-        $shellNavigation.schema_version -ne 1 `
+        $shellNavigation.schema_version -ne 2 `
         -or $shellNavigation.state -ne "available" `
         -or -not ($shellItems | Where-Object { $_.key -eq "module_management" }) `
-        -or -not ($shellItems | Where-Object { $_.key -eq "administration" })
+        -or ($shellItems | Where-Object { $_.key -eq "administration" }) `
+        -or -not ($shellItems | Where-Object { $_.key -eq "user_management" }) `
+        -or -not ($shellItems | Where-Object { $_.key -eq "roles_access" }) `
+        -or -not ($shellItems | Where-Object { $_.key -eq "node_types" })
     ) {
-        throw "Smoke failure: administrator shell navigation did not include both independent Core Admin items"
+        throw "Smoke failure: schema-v2 administrator shell did not expose the four direct Core Admin destinations"
     }
 
     $formsModule = $moduleInventory.entries | Where-Object {

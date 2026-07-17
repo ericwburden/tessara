@@ -1,8 +1,10 @@
 //! Display helpers for Administration feature screens.
 
+#[cfg(test)]
+use crate::features::administration::models::AdminCapabilityProviderState;
 use crate::features::administration::models::{
     AdminCapabilityProvenanceSourceKind, AdminCapabilityProvenanceSummary,
-    AdminCapabilityProviderState, AdminCapabilityScopeMode, AdminUserSummary,
+    AdminCapabilityScopeMode, AdminUserSummary,
 };
 
 /// Returns the filter key for an admin user's active status.
@@ -47,6 +49,7 @@ pub(crate) const fn admin_capability_scope_label(
     }
 }
 
+#[cfg(test)]
 pub(crate) const fn admin_capability_provider_state_label(
     provider_state: AdminCapabilityProviderState,
 ) -> &'static str {

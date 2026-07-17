@@ -1,3 +1,45 @@
+# Sprint 6A-UI Navigation And Module Management Design QA
+
+Status: **passed on 2026-07-16 for the approved Direction 1 implementation**
+
+References:
+
+- `docs/mockups/sprint-6a-ui/direction-1/01-module-directory-manager-desktop.png`
+- `docs/mockups/sprint-6a-ui/direction-1/06-navigation-composer-manager-clean-desktop.png`
+- `docs/mockups/sprint-6a-ui/direction-1/09-navigation-composer-manager-tablet.png`
+- `docs/mockups/sprint-6a-ui/direction-1/10-module-directory-mobile.png`
+- `docs/mockups/sprint-6a-ui/direction-1/11-module-detail-forms-mobile.png`
+- `docs/mockups/sprint-6a-ui/direction-1/12-navigation-composer-manager-mobile.png`
+- `docs/mockups/sprint-6a-ui/direction-1/13-role-capability-provenance-desktop.png`
+- `docs/mockups/sprint-6a-ui/direction-1/15-user-role-assignment-provenance-desktop.png`
+
+Implementation: `/administration/modules`, `/administration/modules/:definition_id`, `/administration/roles`, `/administration/users/:account_id/edit`, and the shared desktop/mobile shell at `http://localhost:8081`.
+
+## Comparison result
+
+The approved Direction 1 rasters and the rebuilt branch were reviewed at matching 1440 × 1024 desktop and 390 × 844 mobile viewports in the in-app Browser. The implementation intentionally uses Tessara's existing semantic tokens, standard route panel, typography, spacing, borders, radii, controls, and canonical icon library; no raster-specific colors were introduced. The standard route `<section>` panel is treated as an application implementation requirement across the suite even where an approved raster omitted it.
+
+The directory preserves the seven-definition canonical order, compact Core runtime disclosure, working desktop/mobile name-or-ID search, exact status selector, result count, responsive cards, and distinct clearable no-match state. The detail route uses working desktop tabs and a mobile section selector, the approved `View source descriptor (JSON)` label, one-column mobile values, wrapped lifecycle badges, and no page-level horizontal overflow.
+
+The schema-v2 composer preserves required/custom group identity, stateful group carets, one accessible lock icon for protected placement, explicit keyboard-capable ordering and cross-group controls, dirty Save/Discard, revision recovery, and reader capability lists. Desktop controls are one exposed semantic control set; at the mobile breakpoint that same set is revealed through the approved action-sheet trigger. Role capability rows distinguish Scope from Provenance and retain reveal/copy access to complete digests. User assignment rows show the persisted assignment date, pending-save state, or an em dash without restoring the removed Usage/New assignment treatment.
+
+## Accessibility and interaction result
+
+- Search, status, section switching, group/item movement, visibility, Save/Discard, source-digest copy, and Clear filters are working controls rather than decorative placeholders.
+- Optional movement never depends on drag-and-drop; all group and destination operations have labeled keyboard controls and focus-restoration behavior.
+- Protected placements expose one lock icon with an accessible name and do not render redundant disabled movement controls.
+- Reader eligibility uses semantic unordered lists of exact capability keys; manager mode omits eligibility density.
+- Desktop and mobile consume the same shell projection, and both omit unauthorized, hidden, unavailable, and empty-group output.
+
+## Final verification
+
+- The rebuilt desktop composer exposes one inline semantic control set; the 390 px mobile composer keeps those controls hidden until its item action-sheet trigger opens, then exposes the same labeled actions.
+- The directory, detail, and composer remain contained at 1440, 1280, 768, and 390 px widths in the reviewed states, including both Tessara themes and a 200% zoom-equivalent containment check.
+- Add-group, rename, cross-group move, visibility/order controls, dirty Save/Discard, conflict recovery, section switching, search/status filtering, and Clear filters were exercised in the deployed branch without page-level horizontal overflow or new browser-console errors.
+- `cargo test --workspace --locked`, affected-target strict Clippy, focused Playwright, smoke, UAT, fresh initialization, and populated migration proof all pass. No P0, P1, or P2 visual defect remains in the approved Sprint 6A-UI scope.
+
+---
+
 # Sprint 5A Dashboard Design QA
 
 Status: **passed on 2026-07-13 after the approved soft-surface, standard-Table, half-strength shared-gradient, and Dashboard-row action follow-ups**

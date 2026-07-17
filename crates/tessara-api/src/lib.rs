@@ -408,16 +408,6 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
-            "/administration",
-            get(|| async {
-                native_app(
-                    "/administration",
-                    "Tessara Administration",
-                    "Manage Tessara administration.",
-                )
-            }),
-        )
-        .route(
             "/administration/users",
             get(|| async {
                 native_app(

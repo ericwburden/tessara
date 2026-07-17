@@ -7,7 +7,7 @@ use std::cell::Cell;
 
 use super::models::{
     ModuleDetailResponseV1, ModuleInventoryResponseV1, ModuleManagementAccessV1,
-    NavigationPolicyResponseV1,
+    NavigationPolicyResponseV2,
 };
 
 pub const MODULE_MANAGEMENT_BOOTSTRAP_SCRIPT_ID: &str = "tessara-module-management-bootstrap";
@@ -110,12 +110,12 @@ pub enum ModuleManagementSurfaceV1 {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NavigationPolicyBootstrapV1 {
-    Ready { policy: NavigationPolicyResponseV1 },
+    Ready { policy: NavigationPolicyResponseV2 },
     Unavailable { message: String },
 }
 
 impl NavigationPolicyBootstrapV1 {
-    pub fn ready(policy: NavigationPolicyResponseV1) -> Self {
+    pub fn ready(policy: NavigationPolicyResponseV2) -> Self {
         Self::Ready { policy }
     }
 

@@ -34,11 +34,11 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
     });
 
     view! {
-        <AppShell active_route="administration" title="User Detail">
+        <AppShell active_route="user_management" title="User Detail">
             <section class="route-panel administration-user-detail-page">
                 <Breadcrumb>
                     <BreadcrumbItem>
-                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
+                        <BreadcrumbLink href="/">"Home"</BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator/>
                     <BreadcrumbItem>

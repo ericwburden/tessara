@@ -135,28 +135,39 @@ type ModuleManagementBootstrap =
     }
   | { route: "restricted" | "not_found" | "unavailable" };
 type ModuleIdentity = { definition_id: string; source_digest: string };
-type NavigationPolicyContribution = {
+type NavigationPolicyGroup = {
   id: string;
-  definition_id: string;
   label: string;
-  destination: string;
-  group: string;
-  reorder_band: string;
+  order: number;
+  owner: "core" | "custom";
+  can_rename: boolean;
+  can_move: boolean;
+  can_delete: boolean;
+};
+type NavigationPolicyDestination = {
+  id: string;
+  key: string;
+  label: string;
+  route: string;
+  semantic_destination?: string;
+  definition_id?: string;
+  owner: "core" | "contribution";
+  required_capabilities_any_of: string[];
+  group_id: string;
   visible: boolean;
   order: number;
+  available: boolean;
+  can_hide: boolean;
+  can_move_between_groups: boolean;
+  can_reorder: boolean;
 };
 type NavigationPolicyResponse = {
   schema_version: number;
+  installation_id: string;
   revision: number;
   can_manage_navigation: boolean;
-  immutable_core_items: Array<{
-    id: string;
-    label: string;
-    group: string;
-    route: string;
-    policy_mutable: boolean;
-  }>;
-  contributions: NavigationPolicyContribution[];
+  groups: NavigationPolicyGroup[];
+  destinations: NavigationPolicyDestination[];
 };
 type FixtureState = {
   admin: APIRequestContext;
@@ -332,15 +343,20 @@ WHERE account_id = (
 
 function policyUpdate(
   policy: NavigationPolicyResponse,
-  contributions = policy.contributions,
+  groups = policy.groups,
+  destinations = policy.destinations,
 ) {
   return {
-    schema_version: 1,
+    schema_version: 2,
     expected_revision: policy.revision,
-    contributions: contributions.map((entry) => ({
+    groups: groups.map((group) => ({
+      id: group.id,
+      label: group.label,
+      order: group.order,
+    })),
+    destinations: destinations.map((entry) => ({
       id: entry.id,
-      group: entry.group,
-      reorder_band: entry.reorder_band,
+      group_id: entry.group_id,
       visible: entry.visible,
       order: entry.order,
     })),
@@ -348,37 +364,52 @@ function policyUpdate(
 }
 
 function samePolicyValues(
-  left: NavigationPolicyContribution[],
-  right: NavigationPolicyContribution[],
+  left: NavigationPolicyResponse,
+  right: NavigationPolicyResponse,
 ) {
-  const values = (entries: NavigationPolicyContribution[]) =>
+  const groupValues = (entries: NavigationPolicyGroup[]) =>
+    entries.map(({ id, label, order }) => ({ id, label, order })).sort((a, b) => a.id.localeCompare(b.id));
+  const destinationValues = (entries: NavigationPolicyDestination[]) =>
     entries
       .map((entry) => ({
         id: entry.id,
-        group: entry.group,
-        reorder_band: entry.reorder_band,
+        group_id: entry.group_id,
         visible: entry.visible,
         order: entry.order,
       }))
       .sort((a, b) => a.id.localeCompare(b.id));
-  return JSON.stringify(values(left)) === JSON.stringify(values(right));
+  return JSON.stringify({ groups: groupValues(left.groups), destinations: destinationValues(left.destinations) })
+    === JSON.stringify({ groups: groupValues(right.groups), destinations: destinationValues(right.destinations) });
 }
 
 async function restoreOriginalPolicy() {
   if (!fixtures?.admin || !fixtures.originalPolicy) {
     return;
   }
-  const current = await getJson<NavigationPolicyResponse>(
+  let current = await getJson<NavigationPolicyResponse>(
     fixtures.admin,
     "/api/admin/navigation-policy",
   );
-  if (samePolicyValues(current.contributions, fixtures.originalPolicy.contributions)) {
+  if (samePolicyValues(current, fixtures.originalPolicy)) {
     return;
+  }
+  const originalGroupIds = new Set(fixtures.originalPolicy.groups.map((group) => group.id));
+  const populatedRemovedGroup = current.groups.some(
+    (group) =>
+      !originalGroupIds.has(group.id)
+      && current.destinations.some((destination) => destination.group_id === group.id),
+  );
+  if (populatedRemovedGroup) {
+    current = await putJson<NavigationPolicyResponse>(
+      fixtures.admin,
+      "/api/admin/navigation-policy",
+      policyUpdate(current, current.groups, fixtures.originalPolicy.destinations),
+    );
   }
   await putJson<NavigationPolicyResponse>(
     fixtures.admin,
     "/api/admin/navigation-policy",
-    policyUpdate(current, fixtures.originalPolicy.contributions),
+    policyUpdate(current, fixtures.originalPolicy.groups, fixtures.originalPolicy.destinations),
   );
 }
 
@@ -387,28 +418,19 @@ async function preparePolicyScenario() {
     fixtures.admin,
     "/api/admin/navigation-policy",
   );
-  const contributions = current.contributions.map((entry) => ({ ...entry }));
-  const forms = contributions.find((entry) => entry.id === "tessara.forms.navigation");
-  const components = contributions.find(
-    (entry) => entry.id === "tessara.components.navigation",
-  );
-  const dashboards = contributions.find(
-    (entry) => entry.id === "tessara.dashboards.navigation",
-  );
+  const destinations = current.destinations.map((entry) => ({ ...entry }));
+  const forms = destinations.find((entry) => entry.id === "tessara.forms.navigation");
   expect(forms, "Forms navigation contribution should exist").toBeTruthy();
-  expect(components, "Components navigation contribution should exist").toBeTruthy();
-  expect(dashboards, "Dashboards navigation contribution should exist").toBeTruthy();
   forms!.visible = true;
-  components!.order = 0;
-  dashboards!.order = 1;
 
-  if (samePolicyValues(current.contributions, contributions)) {
+  const prepared = { ...current, destinations };
+  if (samePolicyValues(current, prepared)) {
     return current;
   }
   return putJson<NavigationPolicyResponse>(
     fixtures.admin,
     "/api/admin/navigation-policy",
-    policyUpdate(current, contributions),
+    policyUpdate(current, current.groups, destinations),
   );
 }
 
@@ -787,13 +809,10 @@ async function expectRenderedModuleDetailMatchesProjection(
     await expect(
       rendered.locator(":scope > .data-table__secondary-text").nth(0),
     ).toHaveText(
-      `${declaration.group} group; source order hint ${declaration.order_hint}`,
+      `Discovery hint: ${declaration.group} group, source order ${declaration.order_hint}`,
     );
-    await expect(
-      rendered.locator(":scope > .data-table__secondary-text").nth(1),
-    ).toHaveText(
-      `Eligible with any of: ${declaration.required_capabilities_any_of.join(", ")}`,
-    );
+    expect(await rendered.locator("ul.module-navigation-eligibility li code").allTextContents())
+      .toEqual(declaration.required_capabilities_any_of);
   }
 
   const findingNodes = page.locator("[data-finding-code]");
@@ -875,7 +894,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     }
   });
 
-  test("global read exposes the fixed Admin item without Administration and remains read-only", async ({
+  test("global read exposes protected Module Management without an aggregate Administration item and remains read-only", async ({
     page,
   }) => {
     const guard = attachBrowserGuard(page);
@@ -898,7 +917,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
     await expect(
       desktop.getByRole("link", { name: "Module Management" }),
-      "authoritative global module read must retain the fixed Core item while the shell projection is loading",
+      "authoritative global module read must retain protected Module Management while the shell projection is loading",
     ).toBeVisible();
     releaseShellNavigation();
     await expect(desktop.locator(".sidebar-section", { hasText: /^Admin$/ })).toBeVisible();
@@ -924,7 +943,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
     await expect(
       desktopNavigation(page).getByRole("link", { name: "Module Management" }),
-      "authoritative global module read must retain the fixed Core item when shell composition fails",
+      "authoritative global module read must retain protected Module Management when shell composition fails",
     ).toBeVisible();
     await expect(
       desktopNavigation(page).getByRole("link", { name: "Administration" }),
@@ -949,17 +968,18 @@ test.describe.serial("Sprint 6A Module Management", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await gotoHydrated(page, "/administration/modules");
     await expect(page.getByRole("heading", { level: 1, name: "Module Management" })).toBeVisible();
+    await page.getByRole("tab", { name: "Navigation" }).click();
     const policy = page.locator(".module-navigation-policy");
     await expect(policy.getByText("Read-only", { exact: true })).toBeVisible();
     await expect(policy.getByRole("checkbox")).toHaveCount(0);
-    await expect(policy.getByRole("button", { name: /Move .* within its band/ })).toHaveCount(0);
+    await expect(policy.getByRole("button", { name: /Move .* (earlier|later)/ })).toHaveCount(0);
     await expect(policy.getByRole("button", { name: "Save navigation" })).toHaveCount(0);
-    await expect(
-      policy.getByRole("heading", { name: "Permanent Core destinations" }).locator(".."),
-    ).toContainText("Module Management");
-    await expect(
-      policy.locator('tr[data-navigation-contribution="module_management"]'),
-    ).toHaveCount(0);
+    const moduleDestination = policy.locator(
+      '[data-navigation-destination="core.admin.modules"]',
+    );
+    await expect(moduleDestination).toContainText("Module Management");
+    await expect(moduleDestination.getByText("Any of", { exact: true })).toBeVisible();
+    await expect(moduleDestination.getByText("modules:read", { exact: true })).toBeVisible();
 
     const readerPolicy = await getJson<NavigationPolicyResponse>(
       fixtures.reader.context,
@@ -1142,7 +1162,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     ).toEqual(inventoryIdentities);
     await expect(
       page.getByText("Transitional — not independently deployable", { exact: true }),
-    ).toHaveCount(7);
+    ).toHaveCount(1);
     await expect(page.getByText("No Module Release", { exact: true })).toHaveCount(7);
     await expect(page.getByText("No Module Instance", { exact: true })).toHaveCount(7);
     await expect(
@@ -1161,19 +1181,30 @@ test.describe.serial("Sprint 6A Module Management", () => {
       "No Module Instance",
       "Feature Declarations",
       "Contracts",
-      "Capabilities",
+      "View source descriptor (JSON)",
+    ]) {
+      await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
+    }
+    await page.getByRole("tab", { name: "Dependencies" }).click();
+    for (const exactText of [
       "Dependencies",
       "Compatibility",
       "Configuration",
       "Readiness",
       "Health",
       "Findings",
-      "Resources/Destinations",
-      "Navigation",
-      "Open exact source descriptor",
     ]) {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
     }
+    await page.getByRole("tab", { name: "Capabilities" }).click();
+    await expect(page.getByRole("heading", { name: "Capabilities", exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Resources/Destinations" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Resources/Destinations", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("tab", { name: "Navigation" }).click();
+    await expect(page.getByRole("heading", { name: "Navigation", exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Dependencies" }).click();
     for (const dimension of [
       "dependency",
       "compatibility",
@@ -1199,6 +1230,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
 
     await gotoHydrated(page, `/administration/modules/${RESPONSES_DEFINITION}`);
     await expect(page.getByRole("heading", { level: 1, name: "Responses" })).toBeVisible();
+    await page.getByRole("tab", { name: "Dependencies" }).click();
     const responseDependencies = page.locator('[data-module-dimension="dependency"]');
     await expect(
       responseDependencies.getByText("Transition-internal only", { exact: true }),
@@ -1313,6 +1345,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     await expect(page.locator("tr[data-module-definition]")).toHaveCount(
       inventory.entries.length,
     );
+    await page.getByRole("tab", { name: "Navigation" }).click();
     await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
     await page.unroute("**/api/admin/modules");
     expect(guard.moduleDataRequests).toEqual(["/api/admin/modules"]);
@@ -1369,7 +1402,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     ).toEqual([]);
   });
 
-  test("keyboard policy edits retain focus and persist in desktop and mobile shells", async ({
+  test("keyboard group and placement edits retain focus and persist in desktop and mobile shells", async ({
     page,
   }) => {
     const guard = attachBrowserGuard(page);
@@ -1388,34 +1421,40 @@ test.describe.serial("Sprint 6A Module Management", () => {
 
       await signInPage(page, fixtures.manager.email);
       await gotoHydrated(page, "/administration/modules");
+      await page.getByRole("tab", { name: "Navigation" }).click();
 
       const policy = page.locator(".module-navigation-policy");
       await expect(policy.getByText("Read-only", { exact: true })).toHaveCount(0);
       await expect(policy.getByRole("button", { name: "Save navigation" })).toBeDisabled();
       await expect(policy.getByRole("button", { name: "Discard changes" })).toBeDisabled();
       await expect(
-        policy.locator('tr[data-navigation-contribution="module_management"]'),
-      ).toHaveCount(0);
+        policy.locator('[data-navigation-destination="core.admin.modules"]'),
+      ).toContainText("Module Management");
+      await expect(
+        policy.locator('[data-navigation-destination="core.admin.modules"]')
+          .getByLabel("Protected placement"),
+      ).toBeVisible();
 
       const policyBeforeCoreMutation = await getJson<NavigationPolicyResponse>(
         fixtures.manager.context,
         "/api/admin/navigation-policy",
       );
-      const coreMutation = policyUpdate(policyBeforeCoreMutation);
-      coreMutation.contributions.push({
-        id: "module_management",
-        group: "Admin",
-        reorder_band: "admin_between_administration_and_module_management",
-        visible: false,
-        order: 0,
-      });
+      const protectedDestinations = policyBeforeCoreMutation.destinations.map((item) => ({
+        ...item,
+        visible: item.id === "core.admin.modules" ? false : item.visible,
+      }));
+      const coreMutation = policyUpdate(
+        policyBeforeCoreMutation,
+        policyBeforeCoreMutation.groups,
+        protectedDestinations,
+      );
       const coreMutationResponse = await fixtures.manager.context.put(
         "/api/admin/navigation-policy",
         { data: coreMutation },
       );
       expect(coreMutationResponse.status()).toBe(400);
       expect(((await coreMutationResponse.json()) as ApiErrorBody).code).toBe(
-        "navigation_policy_core_item_immutable",
+        "navigation_policy_destination_protected",
       );
       const policyAfterCoreMutation = await getJson<NavigationPolicyResponse>(
         fixtures.manager.context,
@@ -1423,40 +1462,28 @@ test.describe.serial("Sprint 6A Module Management", () => {
       );
       expect(policyAfterCoreMutation.revision).toBe(policyBeforeCoreMutation.revision);
       expect(
-        samePolicyValues(
-          policyAfterCoreMutation.contributions,
-          policyBeforeCoreMutation.contributions,
-        ),
+        samePolicyValues(policyAfterCoreMutation, policyBeforeCoreMutation),
       ).toBe(true);
 
-      const formsRow = policy.locator(
-        'tr[data-navigation-contribution="tessara.forms.navigation"]',
-      );
-      const formsVisibility = formsRow.getByRole("checkbox", { name: "Show" });
-      await expect(formsVisibility).toBeChecked();
-      await formsVisibility.focus();
-      await page.keyboard.press("Space");
-      await expect(formsVisibility).not.toBeChecked();
-
-      const moveDashboardsEarlier = policy.getByRole("button", {
-        name: "Move Dashboards earlier within its band",
-      });
-      const moveDashboardsLater = policy.getByRole("button", {
-        name: "Move Dashboards later within its band",
-      });
-      await moveDashboardsEarlier.focus();
+      await policy.getByRole("button", { name: "Add group" }).focus();
       await page.keyboard.press("Enter");
-      await expect(
-        moveDashboardsLater,
-        "focus should remain on an enabled control for the moved destination",
-      ).toBeFocused();
+      const customGroup = policy.locator(
+        ".module-navigation-group:has(.module-navigation-group__rename)",
+      ).last();
+      await expect(customGroup).toBeVisible();
+      const groupName = customGroup.getByLabel("Group name");
+      await groupName.fill("Insights");
 
-      const draftOrder = await policy
-        .locator("tr[data-navigation-contribution]")
-        .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-navigation-contribution")));
-      expect(draftOrder.indexOf("tessara.dashboards.navigation")).toBeLessThan(
-        draftOrder.indexOf("tessara.components.navigation"),
+      const formsRow = policy.locator(
+        '[data-navigation-destination="tessara.forms.navigation"]',
       );
+      const moveFormsToGroup = formsRow.getByLabel("Move to group");
+      await moveFormsToGroup.selectOption({ label: "Insights" });
+      await expect(
+        moveFormsToGroup,
+        "focus should remain on the cross-group control after moving Forms",
+      ).toBeFocused();
+      await expect(customGroup).toContainText("Forms");
 
       const save = policy.getByRole("button", { name: "Save navigation" });
       await expect(save).toBeEnabled();
@@ -1467,43 +1494,44 @@ test.describe.serial("Sprint 6A Module Management", () => {
 
       await page.reload();
       await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
-      await expect(formsVisibility).not.toBeChecked();
-      const persistedOrder = await policy
-        .locator("tr[data-navigation-contribution]")
-        .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-navigation-contribution")));
-      expect(persistedOrder.indexOf("tessara.dashboards.navigation")).toBeLessThan(
-        persistedOrder.indexOf("tessara.components.navigation"),
+      await page.getByRole("tab", { name: "Navigation" }).click();
+      const persistedCustomGroup = policy.locator(
+        ".module-navigation-group:has(.module-navigation-group__rename)",
       );
+      await expect(persistedCustomGroup.getByLabel("Group name")).toHaveValue("Insights");
+      await expect(persistedCustomGroup).toContainText("Forms");
+      const persistedPolicy = await getJson<NavigationPolicyResponse>(
+        fixtures.manager.context,
+        "/api/admin/navigation-policy",
+      );
+      const persistedForms = persistedPolicy.destinations.find(
+        (destination) => destination.id === "tessara.forms.navigation",
+      );
+      const insights = persistedPolicy.groups.find((group) => group.label === "Insights");
+      expect(insights).toBeTruthy();
+      expect(persistedForms?.group_id).toBe(insights?.id);
 
       await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
       await gotoHydrated(page, "/");
       const adminDesktopNavigation = desktopNavigation(page);
-      await expect(adminDesktopNavigation.getByRole("link", { name: "Dashboards" })).toBeVisible();
-      await expect(adminDesktopNavigation.getByRole("link", { name: "Components" })).toBeVisible();
-      await expect(adminDesktopNavigation.getByRole("link", { name: "Datasets" })).toBeVisible();
-      const desktopLabels = await navigationLabels(adminDesktopNavigation);
-      expect(desktopLabels).not.toContain("Forms");
-      expectBefore(desktopLabels, "Operations", "Dashboards");
-      expectBefore(desktopLabels, "Dashboards", "Components");
-      expectBefore(desktopLabels, "Datasets", "Module Management");
+      await expect(
+        adminDesktopNavigation.locator(".sidebar-section", { hasText: /^Insights$/ }),
+      ).toBeVisible();
+      await expect(adminDesktopNavigation.getByRole("link", { name: "Forms" })).toBeVisible();
 
       await gotoHydrated(page, "/forms");
       await expect(page.getByRole("heading", { level: 1, name: "Forms" })).toBeVisible();
-      await expect(desktopNavigation(page).getByRole("link", { name: "Forms" })).toHaveCount(0);
+      await expect(desktopNavigation(page).getByRole("link", { name: "Forms" })).toBeVisible();
 
       await page.setViewportSize({ width: 390, height: 844 });
       await gotoHydrated(page, "/");
       await page.getByRole("button", { name: "Open navigation" }).click();
       const mobile = page.locator(".mobile-nav__panel");
       await expect(mobile).toBeVisible();
-      await expect(mobile.getByRole("link", { name: "Dashboards" })).toBeVisible();
-      await expect(mobile.getByRole("link", { name: "Components" })).toBeVisible();
-      await expect(mobile.getByRole("link", { name: "Datasets" })).toBeVisible();
-      const mobileLabels = await mobile.locator(".sidebar-link__label").allTextContents();
-      expect(mobileLabels).not.toContain("Forms");
-      expectBefore(mobileLabels, "Operations", "Dashboards");
-      expectBefore(mobileLabels, "Dashboards", "Components");
-      expectBefore(mobileLabels, "Datasets", "Module Management");
+      await expect(
+        mobile.locator(".sidebar-section", { hasText: /^Insights$/ }),
+      ).toBeVisible();
+      await expect(mobile.getByRole("link", { name: "Forms" })).toBeVisible();
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,

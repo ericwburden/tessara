@@ -24,6 +24,20 @@ where
     }
 }
 
+fn deserialize_schema_version_v2<'de, D>(deserializer: D) -> Result<u16, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = u16::deserialize(deserializer)?;
+    if version == 2 {
+        Ok(version)
+    } else {
+        Err(serde::de::Error::custom(format!(
+            "unsupported navigation policy schema version {version}"
+        )))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModuleInventoryResponseV1 {
@@ -500,6 +514,119 @@ pub struct NavigationPolicyMutationV1 {
     pub reorder_band: String,
     pub visible: bool,
     pub order: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NavigationPolicyResponseV2 {
+    #[serde(deserialize_with = "deserialize_schema_version_v2")]
+    pub schema_version: u16,
+    pub installation_id: String,
+    pub revision: i64,
+    pub can_manage_navigation: bool,
+    pub groups: Vec<NavigationGroupV2>,
+    pub destinations: Vec<NavigationDestinationV2>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NavigationGroupOwnerV2 {
+    Core,
+    Custom,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NavigationGroupV2 {
+    pub id: String,
+    pub label: String,
+    pub order: i32,
+    pub owner: NavigationGroupOwnerV2,
+    pub can_rename: bool,
+    pub can_move: bool,
+    pub can_delete: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NavigationDestinationOwnerV2 {
+    Core,
+    Contribution,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NavigationDestinationV2 {
+    pub id: String,
+    pub key: String,
+    pub label: String,
+    pub route: String,
+    pub semantic_destination: Option<String>,
+    pub definition_id: Option<String>,
+    pub owner: NavigationDestinationOwnerV2,
+    pub required_capabilities_any_of: Vec<String>,
+    pub group_id: String,
+    pub visible: bool,
+    pub order: i32,
+    pub available: bool,
+    pub can_hide: bool,
+    pub can_move_between_groups: bool,
+    pub can_reorder: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateNavigationPolicyRequestV2 {
+    #[serde(deserialize_with = "deserialize_schema_version_v2")]
+    pub schema_version: u16,
+    pub expected_revision: i64,
+    pub groups: Vec<NavigationGroupMutationV2>,
+    pub destinations: Vec<NavigationDestinationMutationV2>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NavigationGroupMutationV2 {
+    pub id: String,
+    pub label: String,
+    pub order: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NavigationDestinationMutationV2 {
+    pub id: String,
+    pub group_id: String,
+    pub visible: bool,
+    pub order: i32,
+}
+
+impl From<&NavigationPolicyResponseV2> for UpdateNavigationPolicyRequestV2 {
+    fn from(policy: &NavigationPolicyResponseV2) -> Self {
+        Self {
+            schema_version: 2,
+            expected_revision: policy.revision,
+            groups: policy
+                .groups
+                .iter()
+                .map(|group| NavigationGroupMutationV2 {
+                    id: group.id.clone(),
+                    label: group.label.clone(),
+                    order: group.order,
+                })
+                .collect(),
+            destinations: policy
+                .destinations
+                .iter()
+                .map(|destination| NavigationDestinationMutationV2 {
+                    id: destination.id.clone(),
+                    group_id: destination.group_id.clone(),
+                    visible: destination.visible,
+                    order: destination.order,
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

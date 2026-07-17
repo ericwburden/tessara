@@ -18,7 +18,7 @@ pub mod utils;
 pub use features::modules::{
     MODULE_MANAGEMENT_BOOTSTRAP_SCRIPT_ID, ModuleDetailResponseV1, ModuleInventoryResponseV1,
     ModuleManagementAccessV1, ModuleManagementRouteBootstrapV1, ModuleManagementSurfaceV1,
-    NavigationPolicyBootstrapV1, NavigationPolicyResponseV1,
+    NavigationPolicyBootstrapV1, NavigationPolicyResponseV2,
 };
 pub use state::shell_navigation::{
     ShellNavigationGroupV1, ShellNavigationItemOwnerV1, ShellNavigationItemV1,

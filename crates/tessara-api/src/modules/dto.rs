@@ -9,6 +9,7 @@ use tessara_module_contract::{
 use uuid::Uuid;
 
 pub(crate) const MODULE_HTTP_SCHEMA_VERSION_V1: u16 = 1;
+pub(crate) const NAVIGATION_POLICY_SCHEMA_VERSION_V2: u16 = 2;
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ModuleInventoryResponseV1 {
@@ -40,6 +41,7 @@ pub(crate) struct ModuleDetailResponseV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[cfg(test)]
 pub(crate) struct NavigationPolicyResponseV1 {
     pub(crate) schema_version: u16,
     pub(crate) installation_id: Uuid,
@@ -51,6 +53,7 @@ pub(crate) struct NavigationPolicyResponseV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[cfg(test)]
 pub(crate) struct ImmutableCoreNavigationItemV1 {
     pub(crate) id: String,
     pub(crate) label: String,
@@ -60,6 +63,7 @@ pub(crate) struct ImmutableCoreNavigationItemV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[cfg(test)]
 pub(crate) struct NavigationPolicyContributionV1 {
     pub(crate) id: String,
     pub(crate) definition_id: String,
@@ -76,6 +80,7 @@ pub(crate) struct NavigationPolicyContributionV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 pub(crate) struct UpdateNavigationPolicyRequestV1 {
     pub(crate) schema_version: u16,
     pub(crate) expected_revision: i64,
@@ -84,10 +89,91 @@ pub(crate) struct UpdateNavigationPolicyRequestV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 pub(crate) struct NavigationPolicyMutationV1 {
     pub(crate) id: String,
     pub(crate) group: String,
     pub(crate) reorder_band: String,
+    pub(crate) visible: bool,
+    pub(crate) order: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct NavigationPolicyResponseV2 {
+    pub(crate) schema_version: u16,
+    pub(crate) installation_id: Uuid,
+    pub(crate) revision: i64,
+    pub(crate) can_manage_navigation: bool,
+    pub(crate) groups: Vec<NavigationGroupV2>,
+    pub(crate) destinations: Vec<NavigationDestinationV2>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum NavigationGroupOwnerV2 {
+    Core,
+    Custom,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct NavigationGroupV2 {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) order: i32,
+    pub(crate) owner: NavigationGroupOwnerV2,
+    pub(crate) can_rename: bool,
+    pub(crate) can_move: bool,
+    pub(crate) can_delete: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum NavigationDestinationOwnerV2 {
+    Core,
+    Contribution,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct NavigationDestinationV2 {
+    pub(crate) id: String,
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) route: String,
+    pub(crate) semantic_destination: Option<String>,
+    pub(crate) definition_id: Option<String>,
+    pub(crate) owner: NavigationDestinationOwnerV2,
+    pub(crate) required_capabilities_any_of: Vec<String>,
+    pub(crate) group_id: String,
+    pub(crate) visible: bool,
+    pub(crate) order: i32,
+    pub(crate) available: bool,
+    pub(crate) can_hide: bool,
+    pub(crate) can_move_between_groups: bool,
+    pub(crate) can_reorder: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UpdateNavigationPolicyRequestV2 {
+    pub(crate) schema_version: u16,
+    pub(crate) expected_revision: i64,
+    pub(crate) groups: Vec<NavigationGroupMutationV2>,
+    pub(crate) destinations: Vec<NavigationDestinationMutationV2>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NavigationGroupMutationV2 {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) order: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NavigationDestinationMutationV2 {
+    pub(crate) id: String,
+    pub(crate) group_id: String,
     pub(crate) visible: bool,
     pub(crate) order: i32,
 }

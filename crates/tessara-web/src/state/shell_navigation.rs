@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-pub const SHELL_NAVIGATION_SCHEMA_VERSION_V1: u16 = 1;
+pub const SHELL_NAVIGATION_SCHEMA_VERSION_V1: u16 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -30,6 +30,7 @@ pub struct ShellNavigationResponseV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShellNavigationGroupV1 {
+    pub id: String,
     pub name: String,
     pub items: Vec<ShellNavigationItemV1>,
 }
@@ -94,39 +95,44 @@ impl ShellNavigationResponseV1 {
             ShellNavigationStateV1::Available => {}
         }
 
-        if self.groups.is_empty() || self.groups.len() > 2 {
+        if self.groups.is_empty() {
             return false;
         }
 
         let mut seen_keys = BTreeSet::new();
-        for (group_index, group) in self.groups.iter().enumerate() {
-            let expected_group = if group_index == 0 { "Main" } else { "Admin" };
-            if group.name != expected_group || group.items.is_empty() {
+        let mut seen_group_ids = BTreeSet::new();
+        let mut seen_group_names = BTreeSet::new();
+        for group in &self.groups {
+            if group.id.trim().is_empty()
+                || group.name.trim().is_empty()
+                || group.items.is_empty()
+                || !seen_group_ids.insert(group.id.as_str())
+                || !seen_group_names.insert(group.name.to_lowercase())
+                || (group.id == "core.main" && group.name != "Main")
+                || (group.id == "core.admin" && group.name != "Admin")
+            {
                 return false;
             }
 
-            let mut previous_rank = None;
             for item in &group.items {
                 let Some(spec) = item_spec(&item.key) else {
                     return false;
                 };
                 if !seen_keys.insert(item.key.as_str())
-                    || spec.group != group.name
+                    || spec.locked_group.is_some_and(|id| id != group.id)
                     || spec.label != item.label
                     || spec.href != item.href
                     || spec.owner != item.owner
                     || spec.contribution_id != item.contribution_id.as_deref()
-                    || previous_rank.is_some_and(|rank| spec.rank < rank)
                     || (self.state == ShellNavigationStateV1::Unavailable
                         && item.owner == ShellNavigationItemOwnerV1::Contribution)
                 {
                     return false;
                 }
-                previous_rank = Some(spec.rank);
             }
         }
 
-        true
+        seen_keys.contains("home")
     }
 }
 
@@ -134,8 +140,7 @@ impl ShellNavigationResponseV1 {
 struct ItemSpec {
     label: &'static str,
     href: &'static str,
-    group: &'static str,
-    rank: u8,
+    locked_group: Option<&'static str>,
     owner: ShellNavigationItemOwnerV1,
     contribution_id: Option<&'static str>,
 }
@@ -147,88 +152,91 @@ fn item_spec(key: &str) -> Option<ItemSpec> {
         "home" => ItemSpec {
             label: "Home",
             href: "/",
-            group: "Main",
-            rank: 0,
+            locked_group: Some("core.main"),
             owner: core,
             contribution_id: None,
         },
         "organization" => ItemSpec {
             label: "Organization",
             href: "/organization",
-            group: "Main",
-            rank: 1,
+            locked_group: Some("core.main"),
             owner: core,
             contribution_id: None,
         },
         "forms" => ItemSpec {
             label: "Forms",
             href: "/forms",
-            group: "Main",
-            rank: 2,
+            locked_group: None,
             owner: contribution,
             contribution_id: Some("tessara.forms.navigation"),
         },
         "workflows" => ItemSpec {
             label: "Workflows",
             href: "/workflows",
-            group: "Main",
-            rank: 2,
+            locked_group: None,
             owner: contribution,
             contribution_id: Some("tessara.workflows.navigation"),
         },
         "responses" => ItemSpec {
             label: "Responses",
             href: "/responses",
-            group: "Main",
-            rank: 2,
+            locked_group: None,
             owner: contribution,
             contribution_id: Some("tessara.responses.navigation"),
         },
         "operations" => ItemSpec {
             label: "Operations",
             href: "/operations",
-            group: "Main",
-            rank: 3,
+            locked_group: None,
             owner: core,
             contribution_id: None,
         },
         "components" => ItemSpec {
             label: "Components",
             href: "/components",
-            group: "Main",
-            rank: 4,
+            locked_group: None,
             owner: contribution,
             contribution_id: Some("tessara.components.navigation"),
         },
         "dashboards" => ItemSpec {
             label: "Dashboards",
             href: "/dashboards",
-            group: "Main",
-            rank: 4,
+            locked_group: None,
             owner: contribution,
             contribution_id: Some("tessara.dashboards.navigation"),
-        },
-        "administration" => ItemSpec {
-            label: "Administration",
-            href: "/administration",
-            group: "Admin",
-            rank: 0,
-            owner: core,
-            contribution_id: None,
         },
         "datasets" => ItemSpec {
             label: "Datasets",
             href: "/datasets",
-            group: "Admin",
-            rank: 1,
+            locked_group: None,
             owner: contribution,
             contribution_id: Some("tessara.datasets.navigation"),
+        },
+        "user_management" => ItemSpec {
+            label: "User Management",
+            href: "/administration/users",
+            locked_group: Some("core.admin"),
+            owner: core,
+            contribution_id: None,
+        },
+        "roles_access" => ItemSpec {
+            label: "Roles & Access",
+            href: "/administration/roles",
+            locked_group: Some("core.admin"),
+            owner: core,
+            contribution_id: None,
+        },
+        "node_types" => ItemSpec {
+            label: "Node Types",
+            href: "/administration/node-types",
+            locked_group: Some("core.admin"),
+            owner: core,
+            contribution_id: None,
         },
         "module_management" => ItemSpec {
             label: "Module Management",
             href: "/administration/modules",
-            group: "Admin",
-            rank: 2,
+            locked_group: Some("core.admin"),
             owner: core,
             contribution_id: None,
         },
@@ -253,11 +261,12 @@ mod tests {
 
     fn available() -> ShellNavigationResponseV1 {
         ShellNavigationResponseV1 {
-            schema_version: 1,
+            schema_version: 2,
             policy_revision: Some(3),
             state: ShellNavigationStateV1::Available,
             groups: vec![
                 ShellNavigationGroupV1 {
+                    id: "core.main".into(),
                     name: "Main".into(),
                     items: vec![
                         item("home"),
@@ -269,10 +278,13 @@ mod tests {
                     ],
                 },
                 ShellNavigationGroupV1 {
+                    id: "core.admin".into(),
                     name: "Admin".into(),
                     items: vec![
-                        item("administration"),
                         item("datasets"),
+                        item("user_management"),
+                        item("roles_access"),
+                        item("node_types"),
                         item("module_management"),
                     ],
                 },
@@ -282,12 +294,20 @@ mod tests {
     }
 
     #[test]
-    fn supported_projection_preserves_core_anchors_and_band_local_reordering() {
+    fn supported_projection_accepts_policy_order_and_cross_group_movement() {
         assert!(available().is_supported());
 
-        let mut crossed_anchor = available();
-        crossed_anchor.groups[0].items.swap(2, 4);
-        assert!(!crossed_anchor.is_supported());
+        let mut reordered = available();
+        reordered.groups[0].items.swap(2, 4);
+        assert!(reordered.is_supported());
+
+        let workflow = reordered.groups[0].items.remove(2);
+        reordered.groups[1].items.insert(0, workflow);
+        assert!(reordered.is_supported());
+
+        let home = reordered.groups[0].items.remove(0);
+        reordered.groups[1].items.insert(0, home);
+        assert!(!reordered.is_supported());
     }
 
     #[test]
@@ -322,7 +342,7 @@ mod tests {
         assert!(!response.is_supported());
 
         let mut response = available();
-        response.schema_version = 2;
+        response.schema_version = 3;
         assert!(!response.is_supported());
     }
 

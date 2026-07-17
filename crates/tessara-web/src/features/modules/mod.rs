@@ -21,6 +21,6 @@ pub use bootstrap::{
 pub use models::*;
 pub use pages::{ModuleManagementDetailPage, ModuleManagementDirectoryPage};
 pub use policy::{
-    PolicyMove, can_move_contribution, move_contribution, ordered_contributions,
-    set_contribution_visibility,
+    PolicyMove, destinations_for_group, move_destination, move_destination_to_group,
+    ordered_groups, set_destination_visibility,
 };

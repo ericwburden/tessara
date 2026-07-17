@@ -61,6 +61,7 @@ pub(crate) struct StoredNavigationContribution {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg(test)]
 pub(crate) struct NavigationPolicyEntryRow {
     pub(crate) contribution_id: String,
     pub(crate) definition_id: String,
@@ -73,6 +74,22 @@ pub(crate) struct NavigationPolicyEntryRow {
     pub(crate) required_capabilities_any_of: Value,
     pub(crate) visible: bool,
     pub(crate) policy_order: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct NavigationGroupRow {
+    pub(crate) group_id: String,
+    pub(crate) label: String,
+    pub(crate) display_order: i32,
+    pub(crate) owner: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct NavigationPlacementRow {
+    pub(crate) destination_id: String,
+    pub(crate) group_id: String,
+    pub(crate) visible: bool,
+    pub(crate) display_order: i32,
 }
 
 #[derive(Clone, Debug)]
@@ -618,6 +635,186 @@ pub(crate) async fn ensure_navigation_policy(
     Ok(())
 }
 
+pub(crate) async fn load_navigation_groups(
+    tx: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+) -> Result<Vec<NavigationGroupRow>, sqlx::Error> {
+    sqlx::query(
+        r#"
+        SELECT group_id, label, display_order, owner
+        FROM navigation_groups
+        WHERE installation_id = $1
+        ORDER BY display_order, group_id
+        "#,
+    )
+    .bind(installation_id)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NavigationGroupRow {
+            group_id: row.try_get("group_id")?,
+            label: row.try_get("label")?,
+            display_order: row.try_get("display_order")?,
+            owner: row.try_get("owner")?,
+        })
+    })
+    .collect()
+}
+
+pub(crate) async fn load_navigation_placements(
+    tx: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+) -> Result<Vec<NavigationPlacementRow>, sqlx::Error> {
+    sqlx::query(
+        r#"
+        SELECT destination_id, group_id, visible, display_order
+        FROM navigation_destination_placements
+        WHERE installation_id = $1
+        ORDER BY group_id, display_order, destination_id
+        "#,
+    )
+    .bind(installation_id)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NavigationPlacementRow {
+            destination_id: row.try_get("destination_id")?,
+            group_id: row.try_get("group_id")?,
+            visible: row.try_get("visible")?,
+            display_order: row.try_get("display_order")?,
+        })
+    })
+    .collect()
+}
+
+pub(crate) async fn seed_navigation_composition(
+    tx: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+    groups: &[NavigationGroupRow],
+    placements: &[NavigationPlacementRow],
+) -> Result<(), sqlx::Error> {
+    for group in groups {
+        sqlx::query(
+            r#"
+            INSERT INTO navigation_groups (
+                installation_id, group_id, label, display_order, owner
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (installation_id, group_id) DO NOTHING
+            "#,
+        )
+        .bind(installation_id)
+        .bind(&group.group_id)
+        .bind(&group.label)
+        .bind(group.display_order)
+        .bind(&group.owner)
+        .execute(&mut **tx)
+        .await?;
+    }
+    for placement in placements {
+        sqlx::query(
+            r#"
+            INSERT INTO navigation_destination_placements (
+                installation_id, destination_id, group_id, visible, display_order
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (installation_id, destination_id) DO NOTHING
+            "#,
+        )
+        .bind(installation_id)
+        .bind(&placement.destination_id)
+        .bind(&placement.group_id)
+        .bind(placement.visible)
+        .bind(placement.display_order)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn replace_navigation_composition(
+    tx: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+    groups: &[NavigationGroupRow],
+    placements: &[NavigationPlacementRow],
+) -> Result<(), sqlx::Error> {
+    // Move existing orders out of the requested dense range so swaps never
+    // violate the installation/group uniqueness constraints mid-update.
+    sqlx::query(
+        "UPDATE navigation_groups SET display_order = display_order + 1000000 WHERE installation_id = $1",
+    )
+    .bind(installation_id)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "UPDATE navigation_destination_placements SET display_order = display_order + 1000000 WHERE installation_id = $1",
+    )
+    .bind(installation_id)
+    .execute(&mut **tx)
+    .await?;
+
+    for group in groups {
+        sqlx::query(
+            r#"
+            INSERT INTO navigation_groups (
+                installation_id, group_id, label, display_order, owner
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (installation_id, group_id) DO UPDATE SET
+                label = EXCLUDED.label,
+                display_order = EXCLUDED.display_order,
+                updated_at = now()
+            "#,
+        )
+        .bind(installation_id)
+        .bind(&group.group_id)
+        .bind(&group.label)
+        .bind(group.display_order)
+        .bind(&group.owner)
+        .execute(&mut **tx)
+        .await?;
+    }
+    for placement in placements {
+        sqlx::query(
+            r#"
+            UPDATE navigation_destination_placements
+            SET group_id = $3,
+                visible = $4,
+                display_order = $5,
+                updated_at = now()
+            WHERE installation_id = $1 AND destination_id = $2
+            "#,
+        )
+        .bind(installation_id)
+        .bind(&placement.destination_id)
+        .bind(&placement.group_id)
+        .bind(placement.visible)
+        .bind(placement.display_order)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    let retained_group_ids = groups
+        .iter()
+        .map(|group| group.group_id.as_str())
+        .collect::<Vec<_>>();
+    sqlx::query(
+        r#"
+        DELETE FROM navigation_groups
+        WHERE installation_id = $1
+          AND owner = 'custom'
+          AND NOT (group_id = ANY($2))
+        "#,
+    )
+    .bind(installation_id)
+    .bind(&retained_group_ids)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub(crate) async fn ensure_navigation_contribution(
     tx: &mut Transaction<'_, Postgres>,
     record: NavigationRecord<'_>,
@@ -760,6 +957,7 @@ pub(crate) async fn load_navigation_policy_revision(
         .await
 }
 
+#[cfg(test)]
 pub(crate) async fn load_navigation_policy_entries(
     tx: &mut Transaction<'_, Postgres>,
     installation_id: Uuid,
@@ -815,6 +1013,7 @@ pub(crate) async fn load_navigation_policy_entries(
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) async fn update_navigation_policy_entry(
     tx: &mut Transaction<'_, Postgres>,
     installation_id: Uuid,

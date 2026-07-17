@@ -368,8 +368,8 @@ async fn populated_sprint_5a_upgrade_preserves_invariants_and_replaces_seed_atom
 
     let upgraded = db::connect_and_prepare(&config)
         .await
-        .expect("migration 3 and the transition catalog should apply");
-    assert_eq!(applied_migrations(&upgraded).await, vec![1, 2, 3]);
+        .expect("migrations 3 and 4 plus the transition catalog should apply");
+    assert_eq!(applied_migrations(&upgraded).await, vec![1, 2, 3, 4]);
     let upgraded_preexisting_ledger = migration_ledger_snapshot(&upgraded, 2).await;
     assert_eq!(
         upgraded_preexisting_ledger, pre_control_plane_ledger,
@@ -388,9 +388,9 @@ async fn populated_sprint_5a_upgrade_preserves_invariants_and_replaces_seed_atom
         fixture_request_json(&upgraded, &config, "/api/shell/navigation").await;
     assert_available_operator_navigation(&upgraded_navigation);
     assert_eq!(
-        navigation_snapshot(&upgraded_navigation),
-        pre_upgrade_navigation,
-        "resolved Sprint 6A navigation must preserve the fixture actor's characterized Sprint 5A sequence"
+        pre_upgrade_navigation.admin,
+        vec!["datasets"],
+        "the characterized Sprint 5A fixture must prove the old Admin placement before migration"
     );
     let stable_catalog = control_plane_snapshot(&upgraded).await;
     upgraded.close().await;
@@ -476,11 +476,11 @@ async fn populated_sprint_5a_upgrade_preserves_invariants_and_replaces_seed_atom
     assert_eq!(control_plane_snapshot(&repaired).await, stable_catalog);
     repaired.close().await;
 
-    // Deliberately leave this representative populated fixture at migration 3
+    // Deliberately leave this representative populated fixture at migration 4
     // for invariant and CompatibilityOnUpgraded inspection. Closing-build
     // smoke, UAT, and browser acceptance use a separate Sprint 5A demo clone:
     // restore it, prove OriginalAfterRestore, then let the closing startup apply
-    // migration 3 with demo seeding disabled.
+    // migrations 3 and 4 with demo seeding disabled.
 }
 
 #[tokio::test]
@@ -518,7 +518,7 @@ async fn fresh_startup_and_seed_assignment_lock_order_use_a_separate_database() 
     let fresh = db::connect_and_prepare(&config)
         .await
         .expect("fresh Sprint 6A startup should remain healthy after lock-order proof");
-    assert_eq!(applied_migrations(&fresh).await, vec![1, 2, 3]);
+    assert_eq!(applied_migrations(&fresh).await, vec![1, 2, 3, 4]);
     assert_seed_role_updates(&fresh).await;
     assert_control_plane_shape(&fresh).await;
     fresh.close().await;
@@ -764,7 +764,7 @@ fn pre_control_plane_navigation(actor: &PreservedActorSnapshot) -> NavigationSna
 }
 
 fn assert_available_operator_navigation(response: &Value) {
-    assert_eq!(response["schema_version"], 1);
+    assert_eq!(response["schema_version"], 2);
     assert_eq!(response["state"], "available");
     assert_eq!(response["policy_revision"], 0);
     assert!(response["unavailable"].is_null());
@@ -777,11 +777,12 @@ fn assert_available_operator_navigation(response: &Value) {
             "workflows",
             "responses",
             "operations",
+            "datasets",
             "components",
             "dashboards",
         ]
     );
-    assert_eq!(navigation_keys(response, "Admin"), vec!["datasets"]);
+    assert!(navigation_keys(response, "Admin").is_empty());
 }
 
 fn navigation_keys<'a>(response: &'a Value, group_name: &str) -> Vec<&'a str> {
@@ -802,19 +803,6 @@ fn navigation_keys<'a>(response: &'a Value, group_name: &str) -> Vec<&'a str> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn navigation_snapshot(response: &Value) -> NavigationSnapshot {
-    NavigationSnapshot {
-        main: navigation_keys(response, "Main")
-            .into_iter()
-            .map(str::to_string)
-            .collect(),
-        admin: navigation_keys(response, "Admin")
-            .into_iter()
-            .map(str::to_string)
-            .collect(),
-    }
 }
 
 fn json_owned_string_array(value: &Value) -> Vec<String> {
@@ -1199,6 +1187,11 @@ async fn assert_control_plane_shape(pool: &PgPool) {
             "policy_entries",
             count(pool, "navigation_policy_entries").await,
         ),
+        ("groups", count(pool, "navigation_groups").await),
+        (
+            "placements",
+            count(pool, "navigation_destination_placements").await,
+        ),
         (
             "sync_audits",
             count(pool, "core_control_plane_audit_events").await,
@@ -1212,7 +1205,9 @@ async fn assert_control_plane_shape(pool: &PgPool) {
     assert_eq!(counts["navigation_contributions"], 6);
     assert_eq!(counts["policies"], 1);
     assert_eq!(counts["policy_entries"], 6);
-    assert_eq!(counts["sync_audits"], 1);
+    assert_eq!(counts["groups"], 2);
+    assert_eq!(counts["placements"], 13);
+    assert_eq!(counts["sync_audits"], 2);
 
     let module_capabilities: Vec<(String, String)> = sqlx::query_as(
         r#"

@@ -117,7 +117,7 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
         authorized_request("GET", "/api/shell/navigation", &reader.token, None),
     )
     .await;
-    assert_eq!(reader_shell["schema_version"], 1);
+    assert_eq!(reader_shell["schema_version"], 2);
     assert_eq!(reader_shell["state"], "available");
     assert!(shell_item(&reader_shell, "module_management").is_some());
     assert!(shell_item(&reader_shell, "administration").is_none());
@@ -145,7 +145,10 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     )
     .await;
     assert!(shell_item(&admin_shell, "module_management").is_some());
-    assert!(shell_item(&admin_shell, "administration").is_some());
+    assert!(shell_item(&admin_shell, "administration").is_none());
+    for key in ["user_management", "roles_access", "node_types"] {
+        assert!(shell_item(&admin_shell, key).is_some(), "missing {key}");
+    }
 
     for (name, actor) in [
         ("scoped read", &scoped_reader),
@@ -416,28 +419,32 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     )
     .await;
     assert_eq!(reader_policy["can_manage_navigation"], false);
+    assert_eq!(reader_policy["schema_version"], 2);
+    assert_eq!(reader_policy["groups"].as_array().map(Vec::len), Some(2));
     assert_eq!(
-        reader_policy["contributions"].as_array().map(Vec::len),
-        Some(6)
+        reader_policy["destinations"].as_array().map(Vec::len),
+        Some(13)
     );
     assert!(
-        reader_policy["immutable_core_items"]
+        reader_policy["groups"]
             .as_array()
-            .expect("immutable items")
+            .expect("policy groups")
             .iter()
-            .any(|item| {
-                item["id"] == "module_management"
-                    && item["group"] == "Admin"
-                    && item["route"] == "/administration/modules"
-                    && item["policy_mutable"] == false
+            .map(|group| group["id"].as_str().expect("group id"))
+            .eq(["core.main", "core.admin"])
+    );
+    assert!(
+        reader_policy["destinations"]
+            .as_array()
+            .expect("policy destinations")
+            .iter()
+            .any(|entry| {
+                entry["id"] == "core.admin.modules"
+                    && entry["group_id"] == "core.admin"
+                    && entry["route"] == "/administration/modules"
+                    && entry["can_hide"] == false
+                    && entry["can_move_between_groups"] == false
             })
-    );
-    assert!(
-        !reader_policy["contributions"]
-            .as_array()
-            .expect("policy contributions")
-            .iter()
-            .any(|entry| entry["id"] == "module_management")
     );
 
     let (scoped_policy_status, scoped_policy_body) = request_status_and_json(
@@ -544,91 +551,84 @@ async fn navigation_policy_http_rejections_are_atomic_and_exactly_audited() {
     let successes_before =
         control_plane_audit_count(&pool, "navigation_policy.updated", manager.account_id).await;
 
-    let mut wrong_group = original_request.clone();
-    navigation_mutation_mut(&mut wrong_group, "tessara.forms.navigation")["group"] = json!("Admin");
+    let mut missing_required_group = original_request.clone();
+    missing_required_group["groups"]
+        .as_array_mut()
+        .expect("policy groups should be an array")
+        .retain(|group| group["id"] != "core.admin");
 
-    let mut cross_anchor_band = original_request.clone();
-    navigation_mutation_mut(&mut cross_anchor_band, "tessara.forms.navigation")["reorder_band"] =
-        json!("main_after_operations");
+    let mut duplicate_group_label = original_request.clone();
+    navigation_group_mut(&mut duplicate_group_label, "core.admin")["label"] = json!("Main");
 
     let mut partial_collection = original_request.clone();
-    partial_collection["contributions"]
+    partial_collection["destinations"]
         .as_array_mut()
         .expect("policy mutations should be an array")
         .pop();
 
     let mut duplicate_id = original_request.clone();
-    let duplicate = duplicate_id["contributions"]
+    let duplicate = duplicate_id["destinations"]
         .as_array()
         .expect("policy mutations should be an array")[0]
         .clone();
-    duplicate_id["contributions"]
+    duplicate_id["destinations"]
         .as_array_mut()
         .expect("policy mutations should be an array")
         .push(duplicate);
 
     let mut unknown_id = original_request.clone();
-    unknown_id["contributions"]
+    unknown_id["destinations"]
         .as_array_mut()
         .expect("policy mutations should be an array")
         .push(json!({
             "id": "tessara.unknown.navigation",
-            "group": "Main",
-            "reorder_band": "main_after_operations",
+            "group_id": "core.main",
             "visible": true,
-            "order": 2
+            "order": 9
         }));
 
     let mut core_module_management = original_request.clone();
-    core_module_management["contributions"]
-        .as_array_mut()
-        .expect("policy mutations should be an array")
-        .push(json!({
-            "id": "module_management",
-            "group": "Admin",
-            "reorder_band": "core_anchor",
-            "visible": false,
-            "order": 0
-        }));
+    navigation_mutation_mut(&mut core_module_management, "core.admin.modules")["visible"] =
+        json!(false);
 
     let mut non_dense_order = original_request.clone();
-    navigation_mutation_mut(&mut non_dense_order, "tessara.forms.navigation")["order"] = json!(1);
+    navigation_mutation_mut(&mut non_dense_order, "tessara.forms.navigation")["order"] = json!(99);
 
     let rejection_cases = [
         (
-            "group mutation",
-            wrong_group,
-            "navigation_policy_group_change_forbidden",
+            "missing required group",
+            missing_required_group,
+            "navigation_policy_groups_invalid",
         ),
         (
-            "cross-Operations anchor band mutation",
-            cross_anchor_band,
-            "navigation_policy_band_change_forbidden",
+            "duplicate group label",
+            duplicate_group_label,
+            "navigation_policy_groups_invalid",
         ),
         (
-            "partial collection",
+            "partial destination collection",
             partial_collection,
-            "navigation_policy_missing_contribution",
+            "navigation_policy_destinations_invalid",
         ),
         (
-            "duplicate contribution ID",
+            "duplicate destination ID",
             duplicate_id,
-            "navigation_policy_duplicate_contribution",
+            "navigation_policy_destinations_invalid",
         ),
         (
-            "unknown contribution ID",
+            "unknown destination ID",
             unknown_id,
-            "navigation_policy_unknown_contribution",
+            "navigation_policy_destinations_invalid",
         ),
         (
-            "Core Module Management mutation",
+            "protected Module Management visibility mutation",
             core_module_management,
-            "navigation_policy_core_item_immutable",
+            "navigation_policy_destination_protected",
         ),
         (
-            "non-dense band order",
+            "non-dense destination order",
             non_dense_order,
-            "navigation_policy_order_invalid",
+            "navigation_policy_destinations_invalid",
         ),
     ];
 
@@ -649,9 +649,9 @@ async fn navigation_policy_http_rejections_are_atomic_and_exactly_audited() {
     }
 
     let mut changed_request = original_request.clone();
-    navigation_mutation_mut(&mut changed_request, "tessara.forms.navigation")["order"] = json!(1);
+    navigation_mutation_mut(&mut changed_request, "tessara.forms.navigation")["order"] = json!(3);
     navigation_mutation_mut(&mut changed_request, "tessara.workflows.navigation")["order"] =
-        json!(0);
+        json!(2);
     navigation_mutation_mut(&mut changed_request, "tessara.dashboards.navigation")["visible"] =
         json!(false);
     let changed_policy = request_json(
@@ -714,27 +714,12 @@ async fn navigation_policy_http_rejections_are_atomic_and_exactly_audited() {
     assert_eq!(
         success_payload,
         json!({
-            "schema_version": 1,
+            "schema_version": 2,
             "installation_id": expected_installation_id,
             "before_revision": original_policy["revision"],
             "after_revision": changed_policy["revision"],
-            "changes": [
-                expected_policy_change(
-                    &original_policy,
-                    &changed_policy,
-                    "tessara.forms.navigation",
-                ),
-                expected_policy_change(
-                    &original_policy,
-                    &changed_policy,
-                    "tessara.workflows.navigation",
-                ),
-                expected_policy_change(
-                    &original_policy,
-                    &changed_policy,
-                    "tessara.dashboards.navigation",
-                ),
-            ],
+            "groups": policy_audit_groups(&changed_policy),
+            "placements": policy_audit_placements(&changed_policy),
             "success": true,
         })
     );
@@ -771,9 +756,10 @@ async fn navigation_policy_http_rejections_are_atomic_and_exactly_audited() {
             .as_i64()
             .map(|revision| revision + 2)
     );
+    assert_eq!(restored_policy["groups"], original_policy["groups"]);
     assert_eq!(
-        restored_policy["contributions"],
-        original_policy["contributions"]
+        restored_policy["destinations"],
+        original_policy["destinations"]
     );
     assert_eq!(
         control_plane_audit_count(&pool, "navigation_policy.update_denied", manager.account_id,)
@@ -1573,7 +1559,7 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
     assert_eq!(reader_status, StatusCode::OK);
     assert_private_native_headers(&reader_headers);
     assert!(reader_html.contains("<title>Tessara Module Management</title>"));
-    assert!(reader_html.contains("7 contributions"));
+    assert!(reader_html.contains("7 definitions"));
     assert!(reader_html.contains("Transitional — not independently deployable"));
     assert!(reader_html.contains("No Module Release"));
     assert!(reader_html.contains("No Module Instance"));
@@ -1906,16 +1892,25 @@ fn shell_item<'a>(shell: &'a Value, key: &str) -> Option<&'a Value> {
 
 fn policy_update_request(policy: &Value) -> Value {
     json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "expected_revision": policy["revision"],
-        "contributions": policy["contributions"]
+        "groups": policy["groups"]
             .as_array()
-            .expect("policy contributions should be an array")
+            .expect("policy groups should be an array")
             .iter()
             .map(|entry| json!({
                 "id": entry["id"],
-                "group": entry["group"],
-                "reorder_band": entry["reorder_band"],
+                "label": entry["label"],
+                "order": entry["order"]
+            }))
+            .collect::<Vec<_>>(),
+        "destinations": policy["destinations"]
+            .as_array()
+            .expect("policy destinations should be an array")
+            .iter()
+            .map(|entry| json!({
+                "id": entry["id"],
+                "group_id": entry["group_id"],
                 "visible": entry["visible"],
                 "order": entry["order"]
             }))
@@ -1923,42 +1918,53 @@ fn policy_update_request(policy: &Value) -> Value {
     })
 }
 
-fn navigation_mutation_mut<'a>(request: &'a mut Value, contribution_id: &str) -> &'a mut Value {
-    request["contributions"]
+fn navigation_mutation_mut<'a>(request: &'a mut Value, destination_id: &str) -> &'a mut Value {
+    request["destinations"]
         .as_array_mut()
         .expect("policy mutations should be an array")
         .iter_mut()
-        .find(|entry| entry["id"] == contribution_id)
-        .unwrap_or_else(|| panic!("missing navigation mutation {contribution_id}"))
+        .find(|entry| entry["id"] == destination_id)
+        .unwrap_or_else(|| panic!("missing navigation mutation {destination_id}"))
 }
 
-fn policy_contribution<'a>(policy: &'a Value, contribution_id: &str) -> &'a Value {
-    policy["contributions"]
+fn navigation_group_mut<'a>(request: &'a mut Value, group_id: &str) -> &'a mut Value {
+    request["groups"]
+        .as_array_mut()
+        .expect("policy groups should be an array")
+        .iter_mut()
+        .find(|entry| entry["id"] == group_id)
+        .unwrap_or_else(|| panic!("missing navigation group {group_id}"))
+}
+
+fn policy_audit_groups(policy: &Value) -> Vec<Value> {
+    policy["groups"]
         .as_array()
-        .expect("policy contributions should be an array")
+        .expect("policy groups should be an array")
         .iter()
-        .find(|entry| entry["id"] == contribution_id)
-        .unwrap_or_else(|| panic!("missing policy contribution {contribution_id}"))
+        .map(|group| {
+            json!({
+                "id": group["id"],
+                "label": group["label"],
+                "order": group["order"],
+            })
+        })
+        .collect()
 }
 
-fn expected_policy_change(before: &Value, after: &Value, contribution_id: &str) -> Value {
-    let before = policy_contribution(before, contribution_id);
-    let after = policy_contribution(after, contribution_id);
-    json!({
-        "contribution_id": contribution_id,
-        "before": {
-            "group": before["group"],
-            "reorder_band": before["reorder_band"],
-            "visible": before["visible"],
-            "order": before["order"],
-        },
-        "after": {
-            "group": after["group"],
-            "reorder_band": after["reorder_band"],
-            "visible": after["visible"],
-            "order": after["order"],
-        },
-    })
+fn policy_audit_placements(policy: &Value) -> Vec<Value> {
+    policy["destinations"]
+        .as_array()
+        .expect("policy destinations should be an array")
+        .iter()
+        .map(|destination| {
+            json!({
+                "id": destination["id"],
+                "group_id": destination["group_id"],
+                "visible": destination["visible"],
+                "order": destination["order"],
+            })
+        })
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]

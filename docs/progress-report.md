@@ -5,7 +5,17 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. The current roadmap position is Sprint 6A-UI: Navigation Composition And Module Management Harmonization `(Next)`; Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete with formal closeout pending; Sprint 6B follows with its runtime scope unchanged.
+
+## 2026-07-16 - Sprint 6A-UI Implementation Complete; Closeout Pending
+
+- Implemented the approved Direction 1 Module Management directory controls as working trimmed, case-insensitive display-name/definition-ID search plus conjunctive status filtering with canonical order, responsive cards, a distinct clearable no-match state, and the canonical `Blocks` shell glyph.
+- Added migration 004 and schema-v2 navigation management around stable required/custom groups and complete destination placements. The service enforces dense order, complete membership, protected placement/visibility, UUID-v4 custom identities, empty-only deletion, optimistic revision conflicts, and atomic audit-backed replacement while retaining legacy band rows only as inert rollback data.
+- Replaced the actor shell's Administration landing item with capability-filtered direct User Management, Roles & Access, Node Types, and Module Management destinations. The shell now consumes arbitrary ordered groups, omits empty or unavailable groups/items, and retains Core-only fail-closed behavior.
+- Implemented the responsive manager/reader composer with group carets, accessible lock-icon-only protection, exact capability-list eligibility in reader mode, cross-group/select and explicit ordering controls, mobile action sheets, dirty Save/Discard, revision reload recovery, and post-movement focus restoration.
+- Added role capability Scope/Provenance columns and the approved non-redundant source labels with abbreviated reveal/copy digests. Exposed durable role-assignment creation time as `Assigned on`, preserving the earliest timestamp across assignment rewrites and showing pending/unassigned states without expanding assignment authority.
+- Retained the current ordinary mixed-scope role restriction and recorded mixed-scope roles as future work requiring unambiguous per-capability or equivalent assignment semantics; a user can continue receiving separate scoped and installation-global roles.
+- Closing proof passed for native API/web compilation, the WASM hydrate target, strict affected-target Clippy, focused Playwright, smoke/UAT, the full locked workspace suite, and reviewed desktop/tablet/mobile interaction and containment in both themes. Fresh migration 004 initialization and a populated migration-3-to-4 clone preserve data and produce two groups, all 13 dense placements, and the versioned schema fingerprint audit. Formal sprint closeout remains separate.
 
 ## 2026-07-16 - Sprint 6A-UI UX-Led Scope Clarification
 

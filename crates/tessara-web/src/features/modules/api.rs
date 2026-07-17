@@ -7,10 +7,10 @@
 
 use super::bootstrap::NavigationPolicyBootstrapV1;
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-use super::models::UpdateNavigationPolicyRequestV1;
+use super::models::UpdateNavigationPolicyRequestV2;
 use super::models::{
     ModuleDetailResponseV1, ModuleInventoryResponseV1, ModuleManagementAccessV1,
-    NavigationPolicyResponseV1,
+    NavigationPolicyResponseV2,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -18,6 +18,7 @@ pub enum ModuleManagementClientError {
     Authentication,
     Restricted,
     NotFound,
+    Conflict(String),
     Unavailable(String),
     Failed(String),
 }
@@ -30,7 +31,9 @@ impl ModuleManagementClientError {
                 "Global Module Management read access is required for this surface.".into()
             }
             Self::NotFound => "The requested module definition was not found.".into(),
-            Self::Unavailable(message) | Self::Failed(message) => message.clone(),
+            Self::Conflict(message) | Self::Unavailable(message) | Self::Failed(message) => {
+                message.clone()
+            }
         }
     }
 }
@@ -55,6 +58,7 @@ fn classify(error: tessara_web_http::RequestError) -> ModuleManagementClientErro
         Some(401) => ModuleManagementClientError::Authentication,
         Some(403) => ModuleManagementClientError::Restricted,
         Some(404) => ModuleManagementClientError::NotFound,
+        Some(409) => ModuleManagementClientError::Conflict(error.into_message()),
         _ if error.is_retryable() => ModuleManagementClientError::Unavailable(error.into_message()),
         _ => ModuleManagementClientError::Failed(error.into_message()),
     }
@@ -89,7 +93,7 @@ pub async fn fetch_module_directory()
         // Successful guarded reads prove global read. Only the policy API's
         // authoritative scope-aware flag may enable mutation controls.
         let (access, navigation_policy) =
-            match tessara_web_http::fetch_json::<NavigationPolicyResponseV1>(
+            match tessara_web_http::fetch_json::<NavigationPolicyResponseV2>(
                 "/api/admin/navigation-policy",
                 "Navigation policy",
             )
@@ -139,7 +143,7 @@ pub async fn fetch_module_detail(
         .await
         .map_err(classify)?;
         let (access, navigation_policy) =
-            match tessara_web_http::fetch_json::<NavigationPolicyResponseV1>(
+            match tessara_web_http::fetch_json::<NavigationPolicyResponseV2>(
                 "/api/admin/navigation-policy",
                 "Navigation policy",
             )
@@ -176,14 +180,32 @@ pub async fn fetch_module_detail(
     }
 }
 
-/// Replaces the complete mutable contribution policy using optimistic revision
-/// control. Core destinations never enter the request projection.
-pub async fn put_navigation_policy(
-    policy: &NavigationPolicyResponseV1,
-) -> Result<NavigationPolicyResponseV1, ModuleManagementClientError> {
+/// Loads the current complete navigation composition.
+pub async fn fetch_navigation_policy()
+-> Result<NavigationPolicyResponseV2, ModuleManagementClientError> {
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     {
-        let request = UpdateNavigationPolicyRequestV1::from(policy);
+        return tessara_web_http::fetch_json::<NavigationPolicyResponseV2>(
+            "/api/admin/navigation-policy",
+            "Navigation policy",
+        )
+        .await
+        .map_err(classify);
+    }
+    #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
+    Err(ModuleManagementClientError::Unavailable(
+        "Navigation policy reload requires an interactive browser session.".into(),
+    ))
+}
+
+/// Replaces the complete navigation composition using optimistic revision
+/// control. Catalog-owned metadata is never accepted from the browser.
+pub async fn put_navigation_policy(
+    policy: &NavigationPolicyResponseV2,
+) -> Result<NavigationPolicyResponseV2, ModuleManagementClientError> {
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    {
+        let request = UpdateNavigationPolicyRequestV2::from(policy);
         return tessara_web_http::send_json(
             gloo_net::http::Request::put("/api/admin/navigation-policy"),
             &request,

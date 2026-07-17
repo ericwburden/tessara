@@ -14,7 +14,7 @@ use super::detail::ModuleDetailPeerSections;
 use super::directory::ModuleInventoryDirectory;
 use super::models::{
     ModuleDetailResponseV1, ModuleInventoryResponseV1, ModuleManagementAccessV1,
-    NavigationContributionDeclarationV1, NavigationPolicyResponseV1,
+    NavigationContributionDeclarationV1, NavigationPolicyResponseV2,
 };
 use super::policy::ModuleNavigationPolicyView;
 use crate::ui::{
@@ -51,8 +51,8 @@ impl Params for ModuleDefinitionRouteParams {
 pub fn ModuleManagementDirectoryPage() -> impl IntoView {
     let inventory = RwSignal::new(None::<ModuleInventoryResponseV1>);
     let access = RwSignal::new(ModuleManagementAccessV1::restricted());
-    let policy = RwSignal::new(None::<NavigationPolicyResponseV1>);
-    let persisted_policy = RwSignal::new(None::<NavigationPolicyResponseV1>);
+    let policy = RwSignal::new(None::<NavigationPolicyResponseV2>);
+    let persisted_policy = RwSignal::new(None::<NavigationPolicyResponseV2>);
     let policy_unavailable = RwSignal::new(None::<String>);
     let initial = initialize_directory(
         module_management_route_bootstrap(),
@@ -63,6 +63,7 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
         policy_unavailable,
     );
     let route_state = RwSignal::new(initial);
+    let active_section = RwSignal::new("modules");
 
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     if route_state.get_untracked() == ModuleRouteState::Loading {
@@ -98,6 +99,41 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
                     description="Inspect Core runtime context, transition contributions, exact descriptors, and navigation display policy."
                 />
 
+                <div class="module-section-switcher" aria-label="Module Management section">
+                    <div class="module-section-tabs" role="tablist" aria-label="Module Management sections">
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected=move || active_section.get() == "modules"
+                            class:active=move || active_section.get() == "modules"
+                            on:click=move |_| active_section.set("modules")
+                        >"Modules"</button>
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected=move || active_section.get() == "navigation"
+                            class:active=move || active_section.get() == "navigation"
+                            on:click=move |_| active_section.set("navigation")
+                        >"Navigation"</button>
+                    </div>
+                    <label class="module-section-select">
+                        <span>"Section"</span>
+                        <select
+                            prop:value=move || active_section.get()
+                            on:change=move |event| {
+                                active_section.set(if event_target_value(&event) == "navigation" {
+                                    "navigation"
+                                } else {
+                                    "modules"
+                                });
+                            }
+                        >
+                            <option value="modules">"Modules"</option>
+                            <option value="navigation">"Navigation"</option>
+                        </select>
+                    </label>
+                </div>
+
                 {move || match route_state.get() {
                     ModuleRouteState::Loading => loading_state(
                         "Loading module inventory",
@@ -124,8 +160,16 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
                             );
                         };
                         view! {
-                            <div class="organization-detail-content module-management-content">
+                            <div
+                                class="organization-detail-content module-management-content module-management-section"
+                                data-section-visible=move || (active_section.get() == "modules").to_string()
+                            >
                                 <ModuleInventoryDirectory inventory=current_inventory/>
+                            </div>
+                            <div
+                                class="module-management-section"
+                                data-section-visible=move || (active_section.get() == "navigation").to_string()
+                            >
                                 <ModuleNavigationPolicyView
                                     policy
                                     persisted_policy
@@ -150,8 +194,8 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
         .unwrap_or_default();
     let detail = RwSignal::new(None::<ModuleDetailResponseV1>);
     let access = RwSignal::new(ModuleManagementAccessV1::restricted());
-    let policy = RwSignal::new(None::<NavigationPolicyResponseV1>);
-    let persisted_policy = RwSignal::new(None::<NavigationPolicyResponseV1>);
+    let policy = RwSignal::new(None::<NavigationPolicyResponseV2>);
+    let persisted_policy = RwSignal::new(None::<NavigationPolicyResponseV2>);
     let policy_unavailable = RwSignal::new(None::<String>);
     let initial = initialize_detail(
         module_management_route_bootstrap(),
@@ -167,6 +211,7 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
     } else {
         initial
     });
+    let active_detail_section = RwSignal::new("overview");
 
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     if route_state.get_untracked() == ModuleRouteState::Loading {
@@ -236,7 +281,51 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
                                 title=display_name
                                 description="Inspect the transition descriptor as separate discovery, dependency, capability, resource, and navigation dimensions."
                             />
-                            <div class="organization-detail-content module-detail-peer-sections">
+                            <div class="module-section-switcher" aria-label="Module detail section">
+                                <div class="module-section-tabs" role="tablist" aria-label="Module detail sections">
+                                    {[
+                                        ("overview", "Overview"),
+                                        ("dependencies", "Dependencies"),
+                                        ("capabilities", "Capabilities"),
+                                        ("resources", "Resources/Destinations"),
+                                        ("navigation", "Navigation"),
+                                    ].into_iter().map(|(value, label)| view! {
+                                        <button
+                                            type="button"
+                                            role="tab"
+                                            aria-selected=move || active_detail_section.get() == value
+                                            class:active=move || active_detail_section.get() == value
+                                            on:click=move |_| active_detail_section.set(value)
+                                        >{label}</button>
+                                    }).collect_view()}
+                                </div>
+                                <label class="module-section-select">
+                                    <span>"Section"</span>
+                                    <select
+                                        prop:value=move || active_detail_section.get()
+                                        on:change=move |event| {
+                                            let value = event_target_value(&event);
+                                            active_detail_section.set(match value.as_str() {
+                                                "dependencies" => "dependencies",
+                                                "capabilities" => "capabilities",
+                                                "resources" => "resources",
+                                                "navigation" => "navigation",
+                                                _ => "overview",
+                                            });
+                                        }
+                                    >
+                                        <option value="overview">"Overview"</option>
+                                        <option value="dependencies">"Dependencies"</option>
+                                        <option value="capabilities">"Capabilities"</option>
+                                        <option value="resources">"Resources/Destinations"</option>
+                                        <option value="navigation">"Navigation"</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div
+                                class="organization-detail-content module-detail-peer-sections module-detail-sections"
+                                data-active-section=move || active_detail_section.get()
+                            >
                                 <div class="organization-detail-content__grid">
                                     <ModuleDetailPeerSections entry=current_detail.entry/>
                                     <ModuleNavigationPolicyView
@@ -262,8 +351,8 @@ fn initialize_directory(
     bootstrap: Option<ModuleManagementRouteBootstrapV1>,
     inventory: RwSignal<Option<ModuleInventoryResponseV1>>,
     access: RwSignal<ModuleManagementAccessV1>,
-    policy: RwSignal<Option<NavigationPolicyResponseV1>>,
-    persisted_policy: RwSignal<Option<NavigationPolicyResponseV1>>,
+    policy: RwSignal<Option<NavigationPolicyResponseV2>>,
+    persisted_policy: RwSignal<Option<NavigationPolicyResponseV2>>,
     policy_unavailable: RwSignal<Option<String>>,
 ) -> ModuleRouteState {
     match bootstrap {
@@ -308,8 +397,8 @@ fn initialize_detail(
     requested_definition_id: &str,
     detail: RwSignal<Option<ModuleDetailResponseV1>>,
     access: RwSignal<ModuleManagementAccessV1>,
-    policy: RwSignal<Option<NavigationPolicyResponseV1>>,
-    persisted_policy: RwSignal<Option<NavigationPolicyResponseV1>>,
+    policy: RwSignal<Option<NavigationPolicyResponseV2>>,
+    persisted_policy: RwSignal<Option<NavigationPolicyResponseV2>>,
     policy_unavailable: RwSignal<Option<String>>,
 ) -> ModuleRouteState {
     match bootstrap {
@@ -365,8 +454,8 @@ fn initialize_detail(
 
 fn set_policy_bootstrap(
     bootstrap: NavigationPolicyBootstrapV1,
-    policy: RwSignal<Option<NavigationPolicyResponseV1>>,
-    persisted_policy: RwSignal<Option<NavigationPolicyResponseV1>>,
+    policy: RwSignal<Option<NavigationPolicyResponseV2>>,
+    persisted_policy: RwSignal<Option<NavigationPolicyResponseV2>>,
     unavailable: RwSignal<Option<String>>,
 ) {
     match bootstrap {
@@ -392,6 +481,9 @@ fn apply_client_error(error: ModuleManagementClientError, state: RwSignal<Module
         }
         ModuleManagementClientError::Restricted => state.set(ModuleRouteState::Restricted),
         ModuleManagementClientError::NotFound => state.set(ModuleRouteState::NotFound),
+        ModuleManagementClientError::Conflict(message) => {
+            state.set(ModuleRouteState::Error(message));
+        }
         ModuleManagementClientError::Unavailable(message) => {
             state.set(ModuleRouteState::Unavailable(message));
         }

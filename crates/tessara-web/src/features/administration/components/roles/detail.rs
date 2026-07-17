@@ -5,7 +5,8 @@ use crate::features::administration::models::{
 };
 use leptos::prelude::*;
 
-use super::super::capability_metadata::AdminCapabilityMetadata;
+use super::super::capability_metadata::AdminCapabilityProvenance;
+use crate::features::administration::display::admin_capability_scope_label;
 
 #[component]
 pub(crate) fn AdministrationRoleDetailPanel(
@@ -77,7 +78,14 @@ fn AdminRoleCapabilityList(capabilities: Vec<AdminCapabilitySummary>) -> impl In
         view! { <p class="muted">"No capabilities assigned."</p> }.into_any()
     } else {
         view! {
-            <table class="info-list-table">
+            <table class="data-table administration-role-capability-table">
+                <thead>
+                    <tr>
+                        <th scope="col">"Capability"</th>
+                        <th scope="col">"Scope"</th>
+                        <th scope="col">"Provenance"</th>
+                    </tr>
+                </thead>
                 <tbody>
                 {capabilities
                     .into_iter()
@@ -86,15 +94,12 @@ fn AdminRoleCapabilityList(capabilities: Vec<AdminCapabilitySummary>) -> impl In
                         let provenance = capability.provenance;
                         view! {
                             <tr>
-                                <th scope="row">{capability.key}</th>
-                                <td>
-                                    <p>{capability.description}</p>
-                                    <AdminCapabilityMetadata
-                                        scope_mode
-                                        provenance
-                                        show_digest=true
-                                    />
-                                </td>
+                                <th scope="row">
+                                    <code>{capability.key}</code>
+                                    <span class="data-table__secondary-text">{capability.description}</span>
+                                </th>
+                                <td><span class="status-badge">{admin_capability_scope_label(scope_mode)}</span></td>
+                                <td><AdminCapabilityProvenance provenance show_digest=true/></td>
                             </tr>
                         }
                     })

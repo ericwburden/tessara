@@ -24,7 +24,7 @@ use crate::{
 #[cfg(feature = "ssr")]
 use super::{
     dto::{MODULE_HTTP_SCHEMA_VERSION_V1, ModuleDetailResponseV1},
-    routes::{inventory_response, navigation_policy_response},
+    routes::{inventory_response, navigation_policy_response_v2},
     service::{self, CatalogReadError},
     shell_navigation,
 };
@@ -196,18 +196,11 @@ async fn navigation_policy_bootstrap(
     state: &AppState,
     account: &AccountContext,
 ) -> tessara_web::NavigationPolicyBootstrapV1 {
-    let policy = match service::load_navigation_policy(&state.pool).await {
-        Ok(policy) => match navigation_policy_response(
+    let policy = match service::load_navigation_policy_v2(&state.pool).await {
+        Ok(policy) => navigation_policy_response_v2(
             policy,
             account.has_global_capability("modules:manage_navigation"),
-        ) {
-            Ok(policy) => policy,
-            Err(_) => {
-                return tessara_web::NavigationPolicyBootstrapV1::unavailable(
-                    "Navigation policy integrity validation failed.",
-                );
-            }
-        },
+        ),
         Err(_) => {
             return tessara_web::NavigationPolicyBootstrapV1::unavailable(
                 "Navigation policy is temporarily unavailable.",
@@ -245,10 +238,11 @@ async fn shell_navigation_bootstrap(
 #[cfg(feature = "ssr")]
 fn fail_closed_shell_navigation() -> tessara_web::ShellNavigationResponseV1 {
     tessara_web::ShellNavigationResponseV1 {
-        schema_version: 1,
+        schema_version: 2,
         policy_revision: None,
         state: tessara_web::ShellNavigationStateV1::Unavailable,
         groups: vec![tessara_web::ShellNavigationGroupV1 {
+            id: "core.main".to_string(),
             name: "Main".to_string(),
             items: vec![tessara_web::ShellNavigationItemV1 {
                 key: "home".to_string(),

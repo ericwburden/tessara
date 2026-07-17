@@ -43,12 +43,19 @@ pub(crate) fn load_admin_user_edit_context(
                     let loaded_user = user_response.json::<AdminUserDetail>().await;
                     let loaded_roles = roles_response.json::<Vec<AdminRoleSummary>>().await;
                     match (loaded_user, loaded_roles) {
-                        (Ok(user), Ok(available_roles)) => {
+                        (Ok(user), Ok(mut available_roles)) => {
                             email.set(user.email.clone());
                             display_name.set(user.display_name.clone());
                             is_active.set(user.is_active);
                             selected_role_ids
                                 .set(user.roles.iter().map(|role| role.id.clone()).collect());
+                            for available_role in &mut available_roles {
+                                available_role.assigned_at = user
+                                    .roles
+                                    .iter()
+                                    .find(|assigned_role| assigned_role.id == available_role.id)
+                                    .and_then(|assigned_role| assigned_role.assigned_at.clone());
+                            }
                             detail.set(Some(user));
                             roles.set(available_roles);
                             is_loading.set(false);

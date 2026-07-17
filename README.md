@@ -326,13 +326,12 @@ http://localhost:8080/components
 http://localhost:8080/dashboards
 ```
 
-Core administration routes are also mounted at root-level paths. Module
-Management is a fixed `Admin`-group Core item gated independently by effective
-global `modules:read`; the separate Administration landing/item remains gated
-by `admin:all`:
+Core administration destinations are mounted directly. The redundant exact
+`/administration` landing route is intentionally absent. Module Management is
+an `Admin`-group Core item gated independently by effective global
+`modules:read`:
 
 ```text
-http://localhost:8080/administration
 http://localhost:8080/administration/users
 http://localhost:8080/administration/node-types
 http://localhost:8080/administration/roles
@@ -381,10 +380,11 @@ To rebuild and relaunch the user-testing stack with the latest UI/backend code:
 The local shell now covers the main demo workflow surfaces through native
 Leptos SSR routes:
 
-- Route inventory at `/`, with direct navigation to product and administration
-  surfaces.
-- Root-level organization, forms, workflows, responses, administration, dataset,
-  dashboard, and component paths.
+- Route inventory at `/`, with direct navigation to product surfaces and to
+  User Management, Roles & Access, Node Types, and Module Management.
+- Root-level organization, forms, workflows, responses, dataset, dashboard,
+  and component paths plus direct `/administration/*` management paths. The
+  aggregate `/administration` landing route does not exist.
 - Workflow revision, assignment, response, user administration, node type, role,
   and metadata management surfaces rebuilt as native Tessara routes.
 - Dataset, component, and dashboard routes for analytical assets.

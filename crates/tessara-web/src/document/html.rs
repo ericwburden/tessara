@@ -230,10 +230,11 @@ mod tests {
     #[test]
     fn shell_navigation_json_cannot_terminate_its_script_tag() {
         let bootstrap = ShellNavigationResponseV1 {
-            schema_version: 1,
+            schema_version: 2,
             policy_revision: None,
             state: ShellNavigationStateV1::Unavailable,
             groups: vec![ShellNavigationGroupV1 {
+                id: "core.main".into(),
                 name: "Main".into(),
                 items: vec![ShellNavigationItemV1 {
                     key: "home".into(),

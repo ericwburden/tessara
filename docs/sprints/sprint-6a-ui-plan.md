@@ -6,8 +6,8 @@ Status: scope amended on 2026-07-15 after product review of the Sprint 6A naviga
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6a-ui`
 - Baseline inventory: `docs/sprints/sprint-6a-ui-baseline-inventory.md`
 - Test change log: `docs/sprints/sprint-6a-ui-test-change-log.md`
-- Roadmap source: `Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Next)`
-- Production status: no Sprint 6A-UI production or test code has been changed. Decision Gate 1 is resolved, and the selected Direction 1 mockup suite is the current implementation visual checkpoint.
+- Roadmap source: `Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Implementation Complete; Closeout Pending)`
+- Production status: implementation and proportional proof are complete from the approved Direction 1 contract. Module directory/detail switching and filtering, schema-v2 navigation persistence/API/shell composition, direct Admin destinations, role capability provenance, assignment-date readback, browser comparison, migration proof, smoke/UAT, focused Playwright, and the full workspace regression suite pass. Formal sprint closeout remains a separate workflow.
 
 ## Sprint Summary
 
@@ -219,6 +219,8 @@ The Module directory search/status controls are approved behavior. Their initial
 The expected first implementation filters the already-authorized loaded projection and leaves the complete SSR/no-JavaScript inventory useful. A different technical approach remains possible if it preserves the same contract and receives the proportional wire/security proof its footprint requires.
 
 User-role assignment presentation may expose the existing durable `role_assignments.created_at` value through a narrowly extended read model. The assignment UI labels this `Assigned on`, shows `Pending save` before a new selection is persisted, and does not add assignment-history, actor-attribution, or audit-log scope.
+
+Mixed ordinary scope-aware and installation-global capabilities remain invalid within one role because v1 role assignments carry one scope for the complete role. Administrators may assign multiple roles to one user, including separate scoped product and installation-global module roles. A future authorization-model slice should consider mixed-scope roles only after defining unambiguous per-capability or equivalent assignment semantics; Sprint 6A-UI does not weaken the current fail-closed restriction.
 
 Unrelated feature expansion must be approved before inclusion. Approval must update this plan, acceptance criteria, and proof inventory before the corresponding production or durable-test change lands.
 

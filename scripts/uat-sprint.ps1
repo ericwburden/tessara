@@ -277,35 +277,48 @@ if (
 }
 
 $modulePolicy = Invoke-RestMethod -Uri "$BaseUrl/api/admin/navigation-policy" -Headers $headers -TimeoutSec 30
-$fixedModuleItem = $modulePolicy.immutable_core_items | Where-Object {
-    $_.id -eq "module_management" `
-    -and $_.group -eq "Admin" `
+$moduleDestination = $modulePolicy.destinations | Where-Object {
+    $_.id -eq "core.admin.modules" `
+    -and $_.group_id -eq "core.admin" `
     -and $_.route -eq "/administration/modules" `
-    -and -not $_.policy_mutable
+    -and -not $_.can_hide `
+    -and -not $_.can_move_between_groups
 } | Select-Object -First 1
 if (
-    -not $modulePolicy.can_manage_navigation `
-    -or -not $fixedModuleItem `
-    -or ($modulePolicy.contributions | Where-Object { $_.id -eq "module_management" })
+    $modulePolicy.schema_version -ne 2 `
+    -or -not $modulePolicy.can_manage_navigation `
+    -or @($modulePolicy.groups).Count -lt 2 `
+    -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.main" }) `
+    -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.admin" }) `
+    -or @($modulePolicy.destinations).Count -ne 13 `
+    -or -not $moduleDestination
 ) {
-    throw "Sprint UAT failure: Module Management was not exposed as a fixed Core navigation item outside mutable policy members."
+    throw "Sprint UAT failure: schema-v2 navigation policy did not preserve required groups, exact membership, and protected Module Management."
 }
 
 $shellNavigation = Invoke-RestMethod -Uri "$BaseUrl/api/shell/navigation" -Headers $headers -TimeoutSec 30
 $shellItems = @($shellNavigation.groups | ForEach-Object { $_.items })
 if (
-    $shellNavigation.schema_version -ne 1 `
+    $shellNavigation.schema_version -ne 2 `
     -or $shellNavigation.state -ne "available" `
     -or -not ($shellItems | Where-Object { $_.key -eq "module_management" }) `
-    -or -not ($shellItems | Where-Object { $_.key -eq "administration" })
+    -or ($shellItems | Where-Object { $_.key -eq "administration" }) `
+    -or -not ($shellItems | Where-Object { $_.key -eq "user_management" }) `
+    -or -not ($shellItems | Where-Object { $_.key -eq "roles_access" }) `
+    -or -not ($shellItems | Where-Object { $_.key -eq "node_types" })
 ) {
-    throw "Sprint UAT failure: administrator shell navigation did not include the independent Administration and Module Management Core items."
+    throw "Sprint UAT failure: schema-v2 administrator shell did not expose the four direct Core Admin destinations."
+}
+
+$removedAdministration = & curl.exe -sS -o NUL -D - -b $adminBrowserSession -w "STATUS:%{http_code}" "$BaseUrl/administration"
+if ($LASTEXITCODE -ne 0 -or $removedAdministration -notcontains "STATUS:404" -or ($removedAdministration -match '^Location:')) {
+    throw "Sprint UAT failure: /administration must be an ordinary 404 without redirect."
 }
 
 $moduleDirectory = Invoke-Html -Uri "$BaseUrl/administration/modules" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $moduleDirectory -Needles @(
     "Module inventory",
-    "7 contributions",
+    "7 definitions",
     "Transitional — not independently deployable",
     "No Module Release",
     "No Module Instance",

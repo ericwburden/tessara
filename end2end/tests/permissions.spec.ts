@@ -899,7 +899,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     }
   });
 
-  test("non-admin shell hides Administration navigation", async ({ page }) => {
+  test("non-admin shell contains only eligible configured destinations", async ({ page }) => {
     const assertNativeRouteGuard = attachNativeRouteGuard(page);
     const login = await page.request.post("/api/auth/login", {
       data: {
@@ -910,7 +910,10 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(login.ok()).toBeTruthy();
 
     await expectHydratedRoute(page, { path: "/", expectedText: "Home" });
-    await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Module Management" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "User Management" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Roles & Access" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Node Types" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Operations" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Forms" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Responses" })).toBeVisible();
@@ -2051,7 +2054,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
   });
 
-  test("JavaScript-disabled Core, Organization, and Administration routes preserve native SSR ownership", async ({
+  test("JavaScript-disabled Core, Organization, and direct Admin routes preserve native SSR ownership", async ({
     browser,
   }) => {
     await withNoJavaScriptPage(browser, async (page) => {
@@ -2065,6 +2068,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       ]);
 
       await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+      const removedAdministration = await page.request.get("/administration", {
+        maxRedirects: 0,
+      });
+      expect(removedAdministration.status()).toBe(404);
+      expect(removedAdministration.headers().location).toBeUndefined();
       await expectNoJavaScriptRoutes(page, [
         { path: "/", expectedText: "Home" },
         { path: "/operations", expectedText: "Operations" },
@@ -2078,7 +2086,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           path: `/organization/${fixtures.inScopeNodeId}/edit`,
           expectedText: "Edit Organization Node",
         },
-        { path: "/administration", expectedText: "Administration" },
         { path: "/administration/users", expectedText: "Users" },
         {
           path: `/administration/users/${fixtures.userIds.owner}`,
@@ -2094,6 +2101,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         },
         { path: "/administration/node-types", expectedText: "Node Types" },
         { path: "/administration/roles", expectedText: "Roles" },
+        { path: "/administration/modules", expectedText: "Module Management" },
       ]);
     });
   });

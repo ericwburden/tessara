@@ -261,10 +261,11 @@ mod tests {
         assert_eq!(parse_module_bootstrap_json(&module_json), Some(module));
 
         let shell = ShellNavigationResponseV1 {
-            schema_version: 1,
+            schema_version: 2,
             policy_revision: Some(0),
             state: ShellNavigationStateV1::Available,
             groups: vec![ShellNavigationGroupV1 {
+                id: "core.main".into(),
                 name: "Main".into(),
                 items: vec![ShellNavigationItemV1 {
                     key: "home".into(),

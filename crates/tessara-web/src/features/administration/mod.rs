@@ -10,7 +10,6 @@ mod models;
 mod pages;
 mod state;
 pub(crate) use pages::{
-    AdministrationNodeTypesPage, AdministrationPage, AdministrationRolesPage,
-    AdministrationUserAccessPage, AdministrationUserDetailPage, AdministrationUserEditPage,
-    AdministrationUsersPage,
+    AdministrationNodeTypesPage, AdministrationRolesPage, AdministrationUserAccessPage,
+    AdministrationUserDetailPage, AdministrationUserEditPage, AdministrationUsersPage,
 };

@@ -9,22 +9,29 @@ use axum::{
 };
 use uuid::Uuid;
 
+#[cfg(test)]
+use super::dto::{
+    ImmutableCoreNavigationItemV1, NavigationPolicyContributionV1, NavigationPolicyResponseV1,
+};
+#[cfg(test)]
+use super::service::NavigationPolicyReadModel;
+
 use crate::{auth::AuthenticatedRequest, db::AppState};
 
 use super::{
     destination,
     dto::{
         ApplicationInstallationV1, CoreRuntimeObservationV1, CreateResourceReferenceRequestV1,
-        ImmutableCoreNavigationItemV1, MODULE_HTTP_SCHEMA_VERSION_V1, ModuleDetailResponseV1,
-        ModuleInventoryResponseV1, NavigationPolicyContributionV1, NavigationPolicyMutationV1,
-        NavigationPolicyResponseV1, ResolveDestinationRequestV1, ResolveResourceReferenceRequestV1,
-        UpdateNavigationPolicyRequestV1,
+        MODULE_HTTP_SCHEMA_VERSION_V1, ModuleDetailResponseV1, ModuleInventoryResponseV1,
+        NAVIGATION_POLICY_SCHEMA_VERSION_V2, NavigationPolicyResponseV2,
+        ResolveDestinationRequestV1, ResolveResourceReferenceRequestV1,
+        UpdateNavigationPolicyRequestV2,
     },
     error::{ModuleHttpError, ModuleHttpResult},
     reference,
     service::{
-        self, CatalogReadError, ModuleInventoryReadModel, NavigationPolicyReadModel,
-        NavigationPolicyUpdateEntry, NavigationPolicyUpdateError,
+        self, CatalogReadError, ModuleInventoryReadModel, NavigationDestinationUpdateV2,
+        NavigationGroupUpdateV2, NavigationPolicyReadModelV2, NavigationPolicyUpdateError,
     },
 };
 
@@ -142,23 +149,23 @@ fn if_none_match_matches(value: &HeaderValue, source_digest: &str) -> bool {
 async fn get_navigation_policy(
     State(state): State<AppState>,
     auth: AuthenticatedRequest,
-) -> ModuleHttpResult<Json<NavigationPolicyResponseV1>> {
+) -> ModuleHttpResult<Json<NavigationPolicyResponseV2>> {
     require_global_read(&auth)?;
-    let policy = service::load_navigation_policy(&state.pool)
+    let policy = service::load_navigation_policy_v2(&state.pool)
         .await
         .map_err(map_catalog_error)?;
-    Ok(Json(navigation_policy_response(
+    Ok(Json(navigation_policy_response_v2(
         policy,
         auth.account
             .has_global_capability("modules:manage_navigation"),
-    )?))
+    )))
 }
 
 async fn update_navigation_policy(
     State(state): State<AppState>,
     auth: AuthenticatedRequest,
-    payload: Result<Json<UpdateNavigationPolicyRequestV1>, JsonRejection>,
-) -> ModuleHttpResult<Json<NavigationPolicyResponseV1>> {
+    payload: Result<Json<UpdateNavigationPolicyRequestV2>, JsonRejection>,
+) -> ModuleHttpResult<Json<NavigationPolicyResponseV2>> {
     let correlation_id = Uuid::new_v4();
     if let Err(error) = require_global_navigation_manage(&auth) {
         service::record_navigation_policy_authorization_denial(
@@ -170,22 +177,37 @@ async fn update_navigation_policy(
         return Err(error);
     }
     let Json(payload) = strict_json(payload)?;
-    ensure_schema_v1(payload.schema_version)?;
-    let entries = payload
-        .contributions
+    ensure_navigation_schema_v2(payload.schema_version)?;
+    let groups = payload
+        .groups
         .into_iter()
-        .map(policy_update_entry)
+        .map(|group| NavigationGroupUpdateV2 {
+            id: group.id,
+            label: group.label,
+            order: group.order,
+        })
         .collect();
-    let policy = service::update_navigation_policy(
+    let destinations = payload
+        .destinations
+        .into_iter()
+        .map(|destination| NavigationDestinationUpdateV2 {
+            id: destination.id,
+            group_id: destination.group_id,
+            visible: destination.visible,
+            order: destination.order,
+        })
+        .collect();
+    let policy = service::update_navigation_policy_v2(
         &state.pool,
         auth.account.account_id,
         correlation_id,
         payload.expected_revision,
-        entries,
+        groups,
+        destinations,
     )
     .await
     .map_err(map_policy_error)?;
-    Ok(Json(navigation_policy_response(policy, true)?))
+    Ok(Json(navigation_policy_response_v2(policy, true)))
 }
 
 async fn resolve_destination(
@@ -258,6 +280,17 @@ fn ensure_schema_v1(schema_version: u16) -> ModuleHttpResult<()> {
         Err(ModuleHttpError::bad_request(
             "platform_schema_version_unsupported",
             "Only platform HTTP schema version 1 is supported.",
+        ))
+    }
+}
+
+fn ensure_navigation_schema_v2(schema_version: u16) -> ModuleHttpResult<()> {
+    if schema_version == NAVIGATION_POLICY_SCHEMA_VERSION_V2 {
+        Ok(())
+    } else {
+        Err(ModuleHttpError::bad_request(
+            "platform_schema_version_unsupported",
+            "Only navigation policy schema version 2 is supported.",
         ))
     }
 }
@@ -341,16 +374,7 @@ pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleI
     }
 }
 
-fn policy_update_entry(entry: NavigationPolicyMutationV1) -> NavigationPolicyUpdateEntry {
-    NavigationPolicyUpdateEntry {
-        contribution_id: entry.id,
-        group: entry.group,
-        reorder_band: entry.reorder_band,
-        visible: entry.visible,
-        order: entry.order,
-    }
-}
-
+#[cfg(test)]
 pub(super) fn navigation_policy_response(
     policy: NavigationPolicyReadModel,
     can_manage_navigation: bool,
@@ -386,6 +410,73 @@ pub(super) fn navigation_policy_response(
     })
 }
 
+pub(super) fn navigation_policy_response_v2(
+    policy: NavigationPolicyReadModelV2,
+    can_manage_navigation: bool,
+) -> NavigationPolicyResponseV2 {
+    use super::dto::{
+        NavigationDestinationOwnerV2, NavigationDestinationV2, NavigationGroupOwnerV2,
+        NavigationGroupV2,
+    };
+    use super::navigation_catalog::NavigationCatalogOwner;
+    use super::service::NavigationGroupOwnerV2 as ServiceGroupOwner;
+
+    NavigationPolicyResponseV2 {
+        schema_version: NAVIGATION_POLICY_SCHEMA_VERSION_V2,
+        installation_id: policy.installation_id,
+        revision: policy.revision,
+        can_manage_navigation,
+        groups: policy
+            .groups
+            .into_iter()
+            .map(|group| {
+                let is_custom = group.owner == ServiceGroupOwner::Custom;
+                NavigationGroupV2 {
+                    id: group.id,
+                    label: group.label,
+                    order: group.order,
+                    owner: if is_custom {
+                        NavigationGroupOwnerV2::Custom
+                    } else {
+                        NavigationGroupOwnerV2::Core
+                    },
+                    can_rename: can_manage_navigation && is_custom,
+                    can_move: can_manage_navigation,
+                    can_delete: can_manage_navigation && is_custom,
+                }
+            })
+            .collect(),
+        destinations: policy
+            .destinations
+            .into_iter()
+            .map(|destination| NavigationDestinationV2 {
+                id: destination.id,
+                key: destination.key,
+                label: destination.label,
+                route: destination.route,
+                semantic_destination: destination.semantic_destination,
+                definition_id: destination.definition_id,
+                owner: match destination.owner {
+                    NavigationCatalogOwner::Core => NavigationDestinationOwnerV2::Core,
+                    NavigationCatalogOwner::Contribution => {
+                        NavigationDestinationOwnerV2::Contribution
+                    }
+                },
+                required_capabilities_any_of: destination.required_capabilities_any_of,
+                group_id: destination.group_id,
+                visible: destination.visible,
+                order: destination.order,
+                available: destination.available,
+                can_hide: can_manage_navigation && destination.can_hide,
+                can_move_between_groups: can_manage_navigation
+                    && destination.can_move_between_groups,
+                can_reorder: can_manage_navigation,
+            })
+            .collect(),
+    }
+}
+
+#[cfg(test)]
 fn band_anchors(reorder_band: &str) -> ModuleHttpResult<(&'static str, &'static str)> {
     match reorder_band {
         "main_between_organization_and_operations" => Ok(("operations", "organization")),
@@ -399,6 +490,7 @@ fn band_anchors(reorder_band: &str) -> ModuleHttpResult<(&'static str, &'static 
     }
 }
 
+#[cfg(test)]
 fn immutable_core_items() -> Vec<ImmutableCoreNavigationItemV1> {
     [
         ("home", "Home", "Main", "/"),

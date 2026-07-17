@@ -28,7 +28,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
 
     view! {
         <>
-            <section class="organization-detail-card" aria-labelledby="module-overview-heading">
+            <section class="organization-detail-card" data-module-section="overview" aria-labelledby="module-overview-heading">
                 <div class="module-detail__heading">
                     <div>
                         <h2 id="module-overview-heading">"Overview"</h2>
@@ -81,12 +81,12 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
                 </dl>
                 <div class="form-actions">
                     <a class="button button--secondary" href=descriptor_href>
-                        "Open exact source descriptor"
+                        "View source descriptor (JSON)"
                     </a>
                 </div>
             </section>
 
-            <section class="organization-detail-card" aria-labelledby="module-features-heading">
+            <section class="organization-detail-card" data-module-section="overview" aria-labelledby="module-features-heading">
                 <h2 id="module-features-heading">"Feature Declarations"</h2>
                 {if features.is_empty() {
                     empty_declaration("No feature declarations", "This contribution declares no current features.")
@@ -99,7 +99,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
                 }}
             </section>
 
-            <section class="organization-detail-card" aria-labelledby="module-contracts-heading">
+            <section class="organization-detail-card" data-module-section="overview" aria-labelledby="module-contracts-heading">
                 <h2 id="module-contracts-heading">"Contracts"</h2>
                 {if contracts.is_empty() {
                     empty_declaration("No provided contracts", "This contribution provides no functional contracts.")
@@ -118,7 +118,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
                 }}
             </section>
 
-            <section class="organization-detail-card" aria-labelledby="module-capabilities-heading">
+            <section class="organization-detail-card" data-module-section="capabilities" aria-labelledby="module-capabilities-heading">
                 <h2 id="module-capabilities-heading">"Capabilities"</h2>
                 <p>"Core owns role assignment and capability authorization; this descriptor supplies provenance only."</p>
                 {if capabilities.is_empty() {
@@ -139,6 +139,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
 
             <section
                 class="organization-detail-card"
+                data-module-section="dependencies"
                 aria-labelledby="module-dependencies-heading"
                 data-module-dimension="dependency"
             >
@@ -168,6 +169,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
 
             <section
                 class="organization-detail-card"
+                data-module-section="dependencies"
                 aria-labelledby="module-compatibility-heading"
                 data-module-dimension="compatibility"
             >
@@ -177,6 +179,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
 
             <section
                 class="organization-detail-card"
+                data-module-section="dependencies"
                 aria-labelledby="module-configuration-heading"
                 data-module-dimension="configuration"
             >
@@ -186,6 +189,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
 
             <section
                 class="organization-detail-card"
+                data-module-section="dependencies"
                 aria-labelledby="module-readiness-heading"
                 data-module-dimension="readiness"
             >
@@ -195,6 +199,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
 
             <section
                 class="organization-detail-card"
+                data-module-section="dependencies"
                 aria-labelledby="module-health-heading"
                 data-module-dimension="health"
             >
@@ -202,7 +207,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
                 {dimension_state(dimensions.health)}
             </section>
 
-            <section class="organization-detail-card" aria-labelledby="module-findings-heading">
+            <section class="organization-detail-card" data-module-section="dependencies" aria-labelledby="module-findings-heading">
                 <h2 id="module-findings-heading">"Findings"</h2>
                 {if findings.is_empty() {
                     view! { <p>"No catalog findings were reported."</p> }.into_any()
@@ -224,7 +229,7 @@ pub fn ModuleDetailPeerSections(entry: ModuleInventoryEntryV1) -> impl IntoView 
                 }}
             </section>
 
-            <section class="organization-detail-card" aria-labelledby="module-resources-heading">
+            <section class="organization-detail-card" data-module-section="resources" aria-labelledby="module-resources-heading">
                 <h2 id="module-resources-heading">"Resources/Destinations"</h2>
                 <section aria-labelledby="module-resource-types-heading">
                     <h3 id="module-resource-types-heading">"Resource types"</h3>

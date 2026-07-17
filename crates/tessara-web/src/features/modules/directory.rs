@@ -9,21 +9,101 @@ pub const TRANSITION_PRESENTATION_LABEL: &str = "Transitional — not independen
 pub const NO_MODULE_RELEASE_LABEL: &str = "No Module Release";
 pub const NO_MODULE_INSTANCE_LABEL: &str = "No Module Instance";
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum ModuleDirectoryStatusFilter {
+    #[default]
+    All,
+    ActiveInCoreProcess,
+    Unavailable,
+    Retired,
+}
+
+impl ModuleDirectoryStatusFilter {
+    fn from_value(value: &str) -> Self {
+        match value {
+            "active_in_core_process" => Self::ActiveInCoreProcess,
+            "unavailable" => Self::Unavailable,
+            "retired" => Self::Retired,
+            _ => Self::All,
+        }
+    }
+
+    const fn value(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::ActiveInCoreProcess => "active_in_core_process",
+            Self::Unavailable => "unavailable",
+            Self::Retired => "retired",
+        }
+    }
+
+    const fn matches(self, availability: TransitionAvailabilityV1) -> bool {
+        match self {
+            Self::All => true,
+            Self::ActiveInCoreProcess => {
+                matches!(availability, TransitionAvailabilityV1::ActiveInProcess)
+            }
+            Self::Unavailable => matches!(availability, TransitionAvailabilityV1::Unavailable),
+            Self::Retired => matches!(availability, TransitionAvailabilityV1::Retired),
+        }
+    }
+}
+
+fn module_matches_filters(
+    entry: &ModuleInventoryEntryV1,
+    query: &str,
+    status: ModuleDirectoryStatusFilter,
+) -> bool {
+    let normalized_query = query.trim().to_lowercase();
+    let descriptor = entry.descriptor();
+    let matches_text = normalized_query.is_empty()
+        || descriptor
+            .display_name
+            .to_lowercase()
+            .contains(&normalized_query)
+        || descriptor
+            .reserved_definition_id
+            .to_lowercase()
+            .contains(&normalized_query);
+
+    matches_text && status.matches(descriptor.availability)
+}
+
 #[component]
 pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl IntoView {
     let installation = inventory.installation;
     let core_runtime = inventory.core_runtime;
     let entries = inventory.entries;
+    let entry_count = entries.len();
+    let search = RwSignal::new(String::new());
+    let status = RwSignal::new(ModuleDirectoryStatusFilter::All);
+    let entries_for_results = entries.clone();
+    let filtered_entries = move || {
+        let query = search.get();
+        let selected_status = status.get();
+        entries_for_results
+            .iter()
+            .filter(|entry| module_matches_filters(entry, &query, selected_status))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
 
     view! {
         <div class="module-management-directory">
             <section class="organization-detail-card" aria-labelledby="module-core-runtime-heading">
                 <h2 id="module-core-runtime-heading">"Core runtime context"</h2>
-                <p>
-                    "This installation is the stable owner of current in-process transition resources. "
-                    "The observed runtime is not presented as a fabricated exact Core Release."
+                <p class="module-runtime-summary">
+                    <strong>{format!("Observed Core {}", core_runtime.observed_version.clone())}</strong>
+                    <span>{core_runtime.provenance.clone()}</span>
+                    <span>{format!("{} module definitions", entry_count)}</span>
                 </p>
-                <dl class="organization-detail-list">
+                <details class="module-runtime-details">
+                    <summary>"View runtime details"</summary>
+                    <p>
+                        "This installation is the stable owner of current in-process transition resources. "
+                        "The observed runtime is not presented as a fabricated exact Core Release."
+                    </p>
+                    <dl class="organization-detail-list">
                     <div>
                         <dt>"Application Installation"</dt>
                         <dd><code>{installation.id}</code></dd>
@@ -48,7 +128,8 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                         <dt>"Observed at"</dt>
                         <dd><time datetime=core_runtime.observed_at.clone()>{core_runtime.observed_at.clone()}</time></dd>
                     </div>
-                </dl>
+                    </dl>
+                </details>
             </section>
 
             <section class="organization-detail-card" aria-labelledby="module-directory-heading">
@@ -57,8 +138,11 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                         <h2 id="module-directory-heading">"Module inventory"</h2>
                         <p>"Inspect Core-owned transition contributions and their exact descriptor provenance."</p>
                     </div>
-                    <span aria-live="polite">{format!("{} contributions", entries.len())}</span>
+                    <span aria-live="polite">{format!("{entry_count} definitions")}</span>
                 </div>
+                <p class="module-directory__legend">
+                    <span class="status-badge is-info">{TRANSITION_PRESENTATION_LABEL}</span>
+                </p>
 
                 {if entries.is_empty() {
                     view! {
@@ -70,20 +154,78 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                     .into_any()
                 } else {
                     view! {
-                        <DataTable>
-                            <thead>
-                                <tr>
-                                    <th scope="col">"Contribution"</th>
-                                    <th scope="col">"Type"</th>
-                                    <th scope="col">"Availability"</th>
-                                    <th scope="col">"Release / Instance"</th>
-                                    <th scope="col">"Findings"</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {entries.into_iter().map(module_directory_row).collect_view()}
-                            </tbody>
-                        </DataTable>
+                        <div class="module-directory__toolbar" aria-label="Filter module definitions">
+                            <label class="searchable-data-table__control searchable-data-table__search">
+                                <span class="sr-only">"Search module name or ID"</span>
+                                <input
+                                    type="search"
+                                    placeholder="Search module name or ID"
+                                    prop:value=move || search.get()
+                                    on:input=move |event| search.set(event_target_value(&event))
+                                />
+                            </label>
+                            <label class="searchable-data-table__control searchable-data-table__filter">
+                                <span class="sr-only">"Filter by module status"</span>
+                                <select
+                                    prop:value=move || status.get().value()
+                                    on:change=move |event| {
+                                        status.set(ModuleDirectoryStatusFilter::from_value(
+                                            &event_target_value(&event),
+                                        ));
+                                    }
+                                >
+                                    <option value="all">"All statuses"</option>
+                                    <option value="active_in_core_process">"Active in Core process"</option>
+                                    <option value="unavailable">"Unavailable"</option>
+                                    <option value="retired">"Retired"</option>
+                                </select>
+                            </label>
+                        </div>
+                        {move || {
+                            let results = filtered_entries();
+                            if results.is_empty() {
+                                view! {
+                                    <section class="empty-state module-directory__no-match" aria-live="polite">
+                                        <h3>"No module definitions match the current filters"</h3>
+                                        <p>"Try another module name, definition ID, or status."</p>
+                                        <button
+                                            class="button button--secondary"
+                                            type="button"
+                                            on:click=move |_| {
+                                                search.set(String::new());
+                                                status.set(ModuleDirectoryStatusFilter::All);
+                                            }
+                                        >
+                                            "Clear filters"
+                                        </button>
+                                    </section>
+                                }
+                                .into_any()
+                            } else {
+                                let mobile_results = results.clone();
+                                view! {
+                                    <div class="module-directory__table">
+                                        <DataTable>
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">"Module / definition and source"</th>
+                                                    <th scope="col">"Availability"</th>
+                                                    <th scope="col">"Release / Instance"</th>
+                                                    <th scope="col">"Findings"</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {results.into_iter().map(module_directory_row).collect_view()}
+                                            </tbody>
+                                        </DataTable>
+                                    </div>
+                                    <div class="module-directory__mobile-cards">
+                                        {mobile_results.into_iter().map(module_directory_mobile_card).collect_view()}
+                                    </div>
+                                }
+                                .into_any()
+                            }
+                        }}
                     }
                     .into_any()
                 }}
@@ -112,9 +254,6 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
                 <span class="data-table__secondary-text">{source_digest}</span>
             </th>
             <td>
-                <span class="status-badge is-info">{TRANSITION_PRESENTATION_LABEL}</span>
-            </td>
-            <td>
                 <span class=availability_class>{descriptor.availability.label()}</span>
                 <span class="data-table__secondary-text">{descriptor.availability.explanation()}</span>
             </td>
@@ -131,14 +270,53 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
     }
 }
 
+fn module_directory_mobile_card(entry: ModuleInventoryEntryV1) -> impl IntoView {
+    let descriptor = entry.descriptor().clone();
+    let definition_id = descriptor.reserved_definition_id.clone();
+    let detail_href = format!("/administration/modules/{definition_id}");
+    let finding_count = entry.findings().len();
+    let source_digest = entry.source_digest().to_string();
+    let availability_class = match descriptor.availability {
+        TransitionAvailabilityV1::ActiveInProcess => "status-badge is-success",
+        TransitionAvailabilityV1::Unavailable => "status-badge is-warning",
+        TransitionAvailabilityV1::Retired => "status-badge is-info",
+    };
+
+    view! {
+        <article class="module-directory-card" data-module-definition=definition_id.clone()>
+            <header>
+                <div>
+                    <h3><a href=detail_href>{descriptor.display_name}</a></h3>
+                    <code>{definition_id.clone()}</code>
+                </div>
+                <span class=availability_class>{descriptor.availability.label()}</span>
+            </header>
+            <dl>
+                <div>
+                    <dt>"Source digest"</dt>
+                    <dd><code>{source_digest}</code></dd>
+                </div>
+                <div>
+                    <dt>"Release / Instance"</dt>
+                    <dd>{format!("{NO_MODULE_RELEASE_LABEL} / {NO_MODULE_INSTANCE_LABEL}")}</dd>
+                </div>
+                <div>
+                    <dt>"Findings"</dt>
+                    <dd>{finding_count}</dd>
+                </div>
+            </dl>
+        </article>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use leptos::prelude::*;
     use serde_json::json;
 
     use super::{
-        ModuleInventoryDirectory, NO_MODULE_INSTANCE_LABEL, NO_MODULE_RELEASE_LABEL,
-        TRANSITION_PRESENTATION_LABEL,
+        ModuleDirectoryStatusFilter, ModuleInventoryDirectory, NO_MODULE_INSTANCE_LABEL,
+        NO_MODULE_RELEASE_LABEL, TRANSITION_PRESENTATION_LABEL, module_matches_filters,
     };
     use crate::features::modules::models::{
         ApplicationInstallationV1, CoreRuntimeObservationV1, ModuleInventoryEntryV1,
@@ -201,5 +379,43 @@ mod tests {
         assert!(html.contains("No module contributions"));
         assert!(html.contains("empty module inventory"));
         assert!(!html.contains("Module Management restricted"));
+    }
+
+    #[test]
+    fn populated_directory_exposes_filter_controls() {
+        let html = Owner::new()
+            .with(|| view! { <ModuleInventoryDirectory inventory=inventory()/> }.to_html());
+
+        assert!(html.contains("Search module name or ID"));
+        assert!(html.contains("All statuses"));
+        assert!(html.contains("Active in Core process"));
+        assert!(html.contains("Unavailable"));
+        assert!(html.contains("Retired"));
+    }
+
+    #[test]
+    fn directory_filters_trim_case_fold_combine_and_preserve_entry_identity() {
+        let entry = inventory().entries.remove(0);
+
+        assert!(module_matches_filters(
+            &entry,
+            "  FoRmS  ",
+            ModuleDirectoryStatusFilter::All,
+        ));
+        assert!(module_matches_filters(
+            &entry,
+            " TESSARA.FORMS ",
+            ModuleDirectoryStatusFilter::ActiveInCoreProcess,
+        ));
+        assert!(!module_matches_filters(
+            &entry,
+            "forms",
+            ModuleDirectoryStatusFilter::Retired,
+        ));
+        assert!(!module_matches_filters(
+            &entry,
+            "migration",
+            ModuleDirectoryStatusFilter::ActiveInCoreProcess,
+        ));
     }
 }

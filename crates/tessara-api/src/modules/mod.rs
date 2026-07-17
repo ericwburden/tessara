@@ -8,6 +8,7 @@ mod destination;
 mod dto;
 mod error;
 mod native;
+mod navigation_catalog;
 mod reference;
 mod repository;
 mod routes;

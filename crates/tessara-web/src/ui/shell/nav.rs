@@ -10,8 +10,8 @@ use crate::state::shell_navigation::{
 };
 use crate::ui::empty_view;
 use icons::{
-    CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks, LogOut,
-    PanelRight, Pencil, SlidersHorizontal,
+    Blocks, CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks,
+    LogOut, Network, PanelRight, Pencil, ShieldCheck, SlidersHorizontal, Users,
 };
 use leptos::prelude::*;
 
@@ -243,11 +243,43 @@ pub(crate) fn nav_section_for(
     }
     fallback_capabilities.sort();
     fallback_capabilities.dedup();
-    let items = navigation::resolve_navigation(&[], None, &fallback_capabilities)
+    let mut items = navigation::resolve_navigation(&[], None, &fallback_capabilities)
         .items
         .into_iter()
+        .filter(|item| item.key != "administration")
         .filter(|item| item.section.as_str() == section)
         .collect::<Vec<_>>();
+    if section == "Admin"
+        && fallback_capabilities
+            .iter()
+            .any(|capability| capability == "admin:all")
+    {
+        let insert_at = items
+            .iter()
+            .position(|item| item.key == "module_management")
+            .unwrap_or(items.len());
+        items.splice(
+            insert_at..insert_at,
+            [
+                (
+                    "user_management",
+                    "/administration/users",
+                    "User Management",
+                ),
+                ("roles_access", "/administration/roles", "Roles & Access"),
+                ("node_types", "/administration/node-types", "Node Types"),
+            ]
+            .into_iter()
+            .map(|(key, href, label)| navigation::ResolvedNavigationItem {
+                key: key.to_string(),
+                href: href.to_string(),
+                label: label.to_string(),
+                section: navigation::NavigationSection::Admin,
+                owner: navigation::NavigationItemOwner::Core,
+                contribution_id: None,
+            }),
+        );
+    }
 
     if items.is_empty() {
         return empty_view();
@@ -298,6 +330,10 @@ fn nav_icon_for(route_key: &str) -> impl IntoView + use<> {
         "dashboards" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><LayoutDashboard class="sidebar-link__icon"/></span> }.into_any(),
         "datasets" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Database class="sidebar-link__icon"/></span> }.into_any(),
         "administration" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><SlidersHorizontal class="sidebar-link__icon"/></span> }.into_any(),
+        "user_management" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Users class="sidebar-link__icon"/></span> }.into_any(),
+        "roles_access" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><ShieldCheck class="sidebar-link__icon"/></span> }.into_any(),
+        "node_types" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Network class="sidebar-link__icon"/></span> }.into_any(),
+        "module_management" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Blocks class="sidebar-link__icon"/></span> }.into_any(),
         _ => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><File class="sidebar-link__icon"/></span> }.into_any(),
     }
 }
@@ -387,7 +423,19 @@ mod tests {
         });
 
         assert!(html.contains("Module Management"));
-        assert!(html.contains("Administration"));
+        assert!(html.contains("User Management"));
+        assert!(html.contains("Roles &amp; Access"));
+        assert!(html.contains("Node Types"));
+        assert!(!html.contains("href=\"/administration\""));
         assert!(html.contains("Contribution navigation is temporarily unavailable."));
+    }
+
+    #[test]
+    fn module_management_uses_the_canonical_blocks_icon() {
+        let html = Owner::new().with(|| nav_icon_for("module_management").to_html());
+
+        assert!(html.contains("M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"));
+        assert!(html.contains("x=\"14\""));
+        assert!(html.contains("y=\"2\""));
     }
 }

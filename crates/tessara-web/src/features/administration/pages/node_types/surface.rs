@@ -97,11 +97,11 @@ pub(super) fn AdministrationNodeTypesSurface() -> impl IntoView {
     };
 
     view! {
-        <AppShell active_route="administration" title="Node Types">
+        <AppShell active_route="node_types" title="Node Types">
             <section class="route-panel administration-node-types-page">
                 <Breadcrumb>
                     <BreadcrumbItem>
-                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
+                        <BreadcrumbLink href="/">"Home"</BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator/>
                     <BreadcrumbItem>
