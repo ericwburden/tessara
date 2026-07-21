@@ -5,7 +5,140 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete with formal closeout pending; Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete, but formal closeout is blocked on missing state-specific evidence publishers, a UI manifest, and two failing browser identities; Sprint 6B follows with its runtime scope unchanged.
+
+## 2026-07-21 - Sprint 6A-UI Closeout Blocked
+
+- Completed:
+  - Closed the approved configuration-driven navigation composition, direct Core Admin routes, protected placement rules, responsive reader/manager workflows, Module Management directory/detail harmonization, role provenance, assignment-date readback, and the final directory/policy state treatments.
+  - Preserved the Sprint 6A platform boundary: no Module Release/Instance persistence, materialization, Supervisor, gateway, OCI, module database, or runtime work entered this slice.
+- Deferred follow-up (not Sprint 6A-UI scope):
+  - Sweep established screens for visually similar controls that should consolidate into reusable, shared components; retain behavior while removing incidental styling drift.
+  - Introduce the approved Sonner-based transient notification system for alert messages.
+- Validation completed against final implementation commit `e57a3426`:
+  - Local stack rebuild: `scripts/local-launch.ps1` rebuilt the API image and started healthy `api` and `postgres` services; `GET http://localhost:8080/health` returned `ok`.
+  - Development-mode smoke and Sprint UAT: passed. These are useful local checks but deliberately do not publish closing deployment evidence.
+  - `validate.ps1 -Fast`: passed with a disposable `TEST_DATABASE_URL`; this includes the 131 API, 70 web, module-contract, formatting, source, and Sprint 6A evidence self-tests.
+  - `cargo fmt --all -- --check` and `git diff --check`: passed.
+  - `npm --prefix .\\end2end test -- --list`: found 60 browser scenarios. The subsequent full suite did not pass: 33 passed, 2 failed, and 25 did not run after the failures.
+    - `modules.spec.ts:897` expects the obsolete visible text `Any of` in the Module Management policy row.
+    - `permissions.spec.ts:950` expects to select both scope-aware `forms:read` and installation-global `modules:read` in one role; the approved mutually-exclusive scope behavior hides the second capability.
+- Formal closeout blockers:
+  - The approved Sprint 6A-UI plan requires `scripts/capture-sprint-6a-ui-deployment-evidence.ps1`, fresh/upgraded artifacts under `artifacts/sprint-6a-ui/`, and `end2end/sprint-6a-ui-ui-manifest.json`. None exists, so the required fresh, populated-upgrade, rollback/restore, evidence-bound smoke/UAT, canonical Playwright, and UI-manifest gates cannot be truthfully run.
+  - The two browser failures above need deliberate durable-proof reconciliation; they will not be weakened, skipped, or retried into a pass.
+  - Owner: Sprint 6A-UI implementation owner. Next step (2026-07-22): add the missing state-specific evidence publisher and UI manifest; reconcile the two browser identities against the approved interaction contract; then rerun every closing state gate and replace this blocked record with a certified closeout.
+- Next Sprint: Sprint 6B - Module Runtime And Installation Infrastructure, after the Sprint 6A-UI closeout evidence is certified.
+
+### Sprint Handoff / Demo Instructions
+
+### Navigation composition and protection
+
+- Role: navigation manager (`modules:manage_navigation`).
+- Paths:
+  - `http://localhost:8080/administration/modules` → **Navigation**
+- Steps:
+  1. Inspect Main and Admin, then add a custom group, rename it, and move an optional destination into it.
+  2. Reorder an optional destination, toggle its visibility, save, refresh, then move it back and delete the now-empty group.
+  3. Attempt protected Main/Admin/Home and Admin-destination operations.
+- Expected: custom changes persist atomically; protected operations remain unavailable or produce a clear non-mutating explanation; display changes never grant route access.
+- Acceptance check: pass when a manager can complete optional-item/group work, but cannot delete required groups or violate protected placement/visibility rules.
+- Evidence location: `scripts/uat-sprint.ps1`, `scripts/smoke.ps1`, `end2end/acceptance-manifest.json`; the required Sprint 6A-UI UI manifest is a closeout blocker recorded above.
+
+### Reader access and direct Core Admin routes
+
+- Role: module reader (`modules:read`) and a non-admin/no-capability comparison actor.
+- Paths:
+  - `http://localhost:8080/administration/modules`
+  - `http://localhost:8080/administration/users`
+  - `http://localhost:8080/administration/roles`
+  - `http://localhost:8080/administration/node-types`
+  - `http://localhost:8080/administration`
+- Steps:
+  1. Open Module Management as a reader and inspect Navigation without mutation controls.
+  2. Direct-load each Core Admin route and request the removed `/administration` path.
+  3. Repeat as the constrained non-admin actor.
+- Expected: allowed routes retain SSR/direct-load ownership; `/administration` is an ordinary unmatched 404; display policy does not bypass authorization.
+- Acceptance check: pass when reader/manager/no-capability gating and the removed landing route behave independently of the composed navigation display.
+- Evidence location: smoke/UAT route assertions, permission scenarios, and the canonical Playwright run identified above.
+
+### Module Management directory, details, and states
+
+- Role: module reader; navigation manager for localized policy retry/save feedback.
+- Paths:
+  - `http://localhost:8080/administration/modules`
+  - `http://localhost:8080/administration/modules/tessara.forms`
+  - `http://localhost:8080/administration/modules/tessara.migration`
+- Steps:
+  1. Search by trimmed name and stable definition ID, combine status filters, trigger a no-match state, and clear filters.
+  2. Inspect Forms, Responses, and retired Migration; use descriptor/digest reveal/copy controls.
+  3. On Navigation, save an allowed change and observe saving/saved feedback; direct-load a nonexistent definition to inspect the not-found recovery action.
+- Expected: canonical order is preserved, no-match differs from an empty inventory, retry/return actions are usable without JavaScript, and responsive cards remain operable at 1280/768/390 widths.
+- Acceptance check: pass when search/status behavior adds no authority, state treatments remain distinct, and module detail/provenance information is readable and accessible.
+- Evidence location: focused web tests, development-mode smoke/UAT checks, failing canonical Playwright output under `end2end/test-results/`, and the final local stack at `http://localhost:8080`; evidence-bound closing artifacts remain blocked.
+
+### Roles and assignments
+
+- Role: admin.
+- Paths:
+  - `http://localhost:8080/administration/roles`
+  - `http://localhost:8080/administration/users/<user-id>/edit`
+- Steps:
+  1. Inspect capability scope/provenance, digest reveal/copy controls, and assigned-user affordances.
+  2. Edit a user’s roles, observe `Assigned on` for saved assignments and `Pending save` for a new selection, then save or cancel.
+- Expected: ordinary mixed scope-aware/installation-global role bundles remain rejected; users may receive separate roles; existing assignment authorization and scope behavior are unchanged.
+- Acceptance check: pass when scope/provenance and assignment timestamps are visible without granting additional capability or weakening the mixed-scope restriction.
+- Evidence location: API/web tests, smoke/UAT role assertions, and the canonical Playwright run identified above.
+
+### Acceptance Mapping
+
+- Exit condition 1 — deterministic fresh/migrated layout:
+  - Manual demonstration: Navigation composition and protection, step 1.
+  - Automated check: fresh and upgraded deployment evidence plus `validate.ps1`.
+- Exit condition 2 — stable required groups and atomic migration:
+  - Manual demonstration: Navigation composition and protection, step 3.
+  - Automated check: migration/deployment evidence and API tests.
+- Exit condition 3 — required/custom group lifecycle:
+  - Manual demonstration: Navigation composition and protection, steps 1–3.
+  - Automated check: UAT and canonical Playwright group CRUD/protection identities.
+- Exit condition 4 — Main, Home, and Organization rules:
+  - Manual demonstration: Navigation composition and protection, step 3.
+  - Automated check: smoke/UAT and UI manifest protection identities.
+- Exit condition 5 — Admin destination protection:
+  - Manual demonstration: Navigation composition and protection, step 3.
+  - Automated check: smoke/UAT and canonical Playwright protection identities.
+- Exit condition 6 — optional destination placement, order, and visibility:
+  - Manual demonstration: Navigation composition and protection, steps 1–2.
+  - Automated check: UAT and canonical Playwright placement identities.
+- Exit condition 7 — persisted group labels/order:
+  - Manual demonstration: Navigation composition and protection, steps 1–2.
+  - Automated check: API tests and UAT refresh assertion.
+- Exit condition 8 — composition remains separate from authorization:
+  - Manual demonstration: Reader access and direct Core Admin routes, step 3.
+  - Automated check: permission scenarios, smoke/UAT, and browser acceptance identities.
+- Exit condition 9 — removed Administration landing route:
+  - Manual demonstration: Reader access and direct Core Admin routes, step 2.
+  - Automated check: smoke/UAT and canonical 404/direct-route assertions.
+- Exit condition 10 — reader/manager policy access, conflict, and audit:
+  - Manual demonstration: Navigation composition and protection, steps 1–3.
+  - Automated check: API tests, UAT, and conflict/retry browser identities.
+- Exit condition 11 — fail-closed responsive shell projection:
+  - Manual demonstration: Reader access and direct Core Admin routes, steps 1–3.
+  - Automated check: web tests, hydrate check, and UI manifest desktop/tablet/mobile identities.
+- Exit condition 12 — accessible responsive Module Management hierarchy:
+  - Manual demonstration: Module Management directory, details, and states, steps 1–3.
+  - Automated check: web tests and the Sprint 6A-UI UI manifest.
+- Exit condition 13 — deterministic directory search/status and no-JavaScript usefulness:
+  - Manual demonstration: Module Management directory, details, and states, step 1.
+  - Automated check: focused directory tests, smoke/UAT, and browser filter identities.
+- Exit condition 14 — role assignment timestamp and pending state:
+  - Manual demonstration: Roles and assignments, step 2.
+  - Automated check: API/web tests and canonical Playwright role identities.
+- Exit condition 15 — durable proof reconciliation:
+  - Manual demonstration: review `docs/sprints/sprint-6a-ui-test-change-log.md`.
+  - Automated check: `validate.ps1`, manifest validation, and `git diff --check`.
+- Exit condition 16 — closing deployment, source, SSR/hydration, and UI gates:
+  - Manual demonstration: all handoff paths above on the running local stack.
+  - Automated check: fresh/upgraded evidence, smoke/UAT, canonical/UI Playwright, API/web tests, formatting, and source validation recorded below.
 
 ## 2026-07-16 - Sprint 6A-UI Implementation Complete; Closeout Pending
 

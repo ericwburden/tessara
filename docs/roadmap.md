@@ -765,7 +765,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** an actor with global `modules:read` can discover fixed Module Management in the `Admin` group and inspect Forms, Workflows, Responses, Datasets, Components, and Dashboards as clearly labeled in-process contributions rather than Module Instances; understand their advertised Feature Declarations; and review their contracts, security capabilities, and current navigation policy without receiving mutation controls. An actor with global `modules:manage_navigation` can change contribution visibility/order without changing authorization. The same directory shows Migration as retired historical/support inventory with no route, navigation item, provider, Feature Declaration, contract, capability, or action, while every current product route continues to work.
 
-### Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Implementation Complete; Closeout Pending)
+### Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Implementation Complete; Closeout Blocked)
 
 **Outcome:** Tessara navigation is composed from revisioned, configuration-driven ordered groups and item placements instead of hard-coded `Main`/`Admin` sections, Core anchors, and reorder bands. Core protects its required groups and destinations while administrators can manage custom groups and freely place optional destinations. The redundant `/administration` page and route are removed, and the Sprint 6A Module Management surfaces are harmonized with the existing Tessara UI through a UX-led pass that may include approved supporting behavior rather than only markup/CSS changes.
 
@@ -797,7 +797,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a global Module Management reader can inspect the navigation configuration without mutation controls and can narrow the exact canonical Module directory by name/ID and availability status, combine those criteria, and clear a distinct no-match state without gaining authority. A global navigation manager can create, rename, reorder, and delete empty custom groups; reorder Main and Admin; move any optional destination between groups; and show, hide, or reorder optional destinations without changing authorization. Main, Admin, Home, Organization, User Management, Roles & Access, Node Types, and Module Management enforce their approved protection rules. `/administration` has no route or navigation item. The migrated policy preserves compatible prior choices, invalid mutations fail atomically with stable audited errors, the harmonized Module Management pages remain complete and responsive, and the reconciled acceptance inventory passes without skips, retries, weakened unrelated expectations, or unexplained test rewrites.
 
-### Sprint 6B: Module Runtime And Installation Infrastructure Slice
+### Sprint 6B: Module Runtime And Installation Infrastructure Slice (Next — pending Sprint 6A-UI closeout evidence)
 
 **Outcome:** Tessara can securely materialize a Core Release and install/operate an independently deployed full-stack module inside one Supervisor-rooted application installation.
 

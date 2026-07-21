@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "expected_total": 5,
+  "files": [
+    {
+      "path": "modules.spec.ts",
+      "tests": [
+        "Sprint 6A Module Management › global read exposes protected Module Management without an aggregate Administration item and remains read-only",
+        "Sprint 6A Module Management › scoped module authority, product-only authority, and no access stay hidden and restricted",
+        "Sprint 6A Module Management › directory and detail preserve human-machine parity and explicit route states",
+        "Sprint 6A Module Management › keyboard group and placement edits retain focus and persist in desktop and mobile shells",
+        "Sprint 6A Module Management › native directory and detail remain useful without JavaScript or bridge requests"
+      ]
+    }
+  ]
+}

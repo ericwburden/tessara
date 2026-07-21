@@ -213,6 +213,50 @@ function Resolve-RepositoryPath {
     return [IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
 }
 
+function Get-ManifestPlaywrightTestPaths {
+    param(
+        [Parameter(Mandatory)][object]$Manifest,
+        [Parameter(Mandatory)][string]$TestsRoot
+    )
+
+    if ($Manifest.PSObject.Properties['files'] -eq $null -or
+        $Manifest.files -isnot [array] -or
+        @($Manifest.files).Count -lt 1) {
+        throw "The Playwright acceptance manifest files must be a nonempty JSON array."
+    }
+
+    $testsRootFullPath = [IO.Path]::GetFullPath($TestsRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $testsRootPrefix = "$testsRootFullPath$([IO.Path]::DirectorySeparatorChar)"
+    $paths = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($entry in @($Manifest.files)) {
+        if ($null -eq $entry -or $entry.PSObject.Properties['path'] -eq $null -or
+            $entry.path -isnot [string]) {
+            throw "The Playwright acceptance manifest contains an invalid file entry."
+        }
+        $path = [string]$entry.path
+        if ([string]::IsNullOrWhiteSpace($path) -or
+            $path -cne $path.Trim() -or
+            $path -notmatch '^[A-Za-z0-9][A-Za-z0-9._/-]*\.spec\.ts$' -or
+            $path.Contains('..') -or
+            $path.Contains('\')) {
+            throw "The Playwright acceptance manifest contains invalid file path '$path'."
+        }
+
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $testsRootFullPath $path))
+        if (-not $fullPath.StartsWith($testsRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "The Playwright acceptance manifest file path '$path' escapes the tests directory."
+        }
+        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+            throw "The Playwright acceptance manifest names a missing test file '$path'."
+        }
+        if ($seen.Add($path)) {
+            $paths.Add("tests/$path")
+        }
+    }
+    return @($paths)
+}
+
 function Get-EvidenceSiblingPath {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -888,6 +932,9 @@ try {
         throw "Could not find durable Playwright acceptance manifest at $manifestFullPath"
     }
     $manifest = Get-Content -LiteralPath $manifestFullPath -Raw | ConvertFrom-Json
+    $manifestTestPaths = @(Get-ManifestPlaywrightTestPaths `
+        -Manifest $manifest `
+        -TestsRoot (Join-Path $endToEndDir "tests"))
     $evidenceDirectory = [IO.Path]::GetDirectoryName($evidenceFullPath)
     [IO.Directory]::CreateDirectory($evidenceDirectory) | Out-Null
     $temporaryArtifactDirectory = Join-Path `
@@ -909,7 +956,7 @@ try {
     $env:PLAYWRIGHT_JSON_OUTPUT_FILE = $temporaryDiscoveryPath
     Remove-ProcessEnvironmentVariable -Name "PLAYWRIGHT_JUNIT_OUTPUT_FILE"
     Invoke-CheckedStep -Label "Discovering the complete Playwright acceptance inventory" -Command {
-        npm --prefix $endToEndDir test -- --list --reporter=json
+        npm --prefix $endToEndDir test -- @manifestTestPaths --list --reporter=json
     }
     $discovery = Read-PlaywrightReport -Path $temporaryDiscoveryPath
     Assert-ExpectedInventory `
@@ -928,7 +975,7 @@ try {
     $env:PLAYWRIGHT_JSON_OUTPUT_FILE = $temporaryEvidencePath
     $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE = $temporaryJunitPath
     Invoke-CheckedStep -Label "Running the complete Playwright acceptance suite with one worker and zero retries" -Command {
-        npm --prefix $endToEndDir test
+        npm --prefix $endToEndDir test -- @manifestTestPaths
     }
 
     $result = Read-PlaywrightReport -Path $temporaryEvidencePath -RequireResults
