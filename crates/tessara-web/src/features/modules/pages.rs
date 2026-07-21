@@ -1,5 +1,6 @@
 //! Native Module Management route pages.
 
+use icons::ExternalLink;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params;
 use leptos_router::params::{Params, ParamsError, ParamsMap};
@@ -14,7 +15,7 @@ use super::detail::ModuleDetailPeerSections;
 use super::directory::ModuleInventoryDirectory;
 use super::models::{
     ModuleDetailResponseV1, ModuleInventoryResponseV1, ModuleManagementAccessV1,
-    NavigationContributionDeclarationV1, NavigationPolicyResponseV2,
+    NavigationContributionDeclarationV1, NavigationPolicyResponseV2, TransitionAvailabilityV1,
 };
 use super::policy::ModuleNavigationPolicyView;
 use crate::ui::{
@@ -100,23 +101,25 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
                 />
 
                 <div class="module-section-switcher" aria-label="Module Management section">
-                    <div class="module-section-tabs" role="tablist" aria-label="Module Management sections">
+                    <div class="module-section-tabs--directory tabs-list" role="tablist" aria-label="Module Management sections">
                         <button
+                            class="tabs-trigger"
                             type="button"
                             role="tab"
                             aria-selected=move || active_section.get() == "modules"
-                            class:active=move || active_section.get() == "modules"
+                            class:is-active=move || active_section.get() == "modules"
                             on:click=move |_| active_section.set("modules")
                         >"Modules"</button>
                         <button
+                            class="tabs-trigger"
                             type="button"
                             role="tab"
                             aria-selected=move || active_section.get() == "navigation"
-                            class:active=move || active_section.get() == "navigation"
+                            class:is-active=move || active_section.get() == "navigation"
                             on:click=move |_| active_section.set("navigation")
                         >"Navigation"</button>
                     </div>
-                    <label class="module-section-select">
+                    <label class="module-section-select module-section-select--directory">
                         <span>"Section"</span>
                         <select
                             prop:value=move || active_section.get()
@@ -244,7 +247,14 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
                         <BreadcrumbLink href="/administration/modules">"Module Management"</BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator/>
-                    <BreadcrumbItem><BreadcrumbPage>"Contribution detail"</BreadcrumbPage></BreadcrumbItem>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>
+                            {move || detail
+                                .get()
+                                .map(|current| current.entry.descriptor().display_name.clone())
+                                .unwrap_or_else(|| "Contribution detail".into())}
+                        </BreadcrumbPage>
+                    </BreadcrumbItem>
                 </Breadcrumb>
 
                 {move || match route_state.get() {
@@ -274,60 +284,101 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
                         };
                         let descriptor = current_detail.entry.descriptor().clone();
                         let display_name = descriptor.display_name.clone();
+                        let definition_id_for_heading = descriptor.reserved_definition_id.clone();
+                        let definition_id_for_copy = definition_id_for_heading.clone();
+                        let availability_label = descriptor.availability.label();
+                        let availability_class = match descriptor.availability {
+                            TransitionAvailabilityV1::ActiveInProcess => "status-badge is-success",
+                            TransitionAvailabilityV1::Unavailable => "status-badge is-warning",
+                            TransitionAvailabilityV1::Retired => "status-badge is-danger",
+                        };
                         let declarations: Vec<NavigationContributionDeclarationV1> =
                             descriptor.navigation;
                         view! {
-                            <PageHeader
-                                title=display_name
-                                description="Inspect the transition descriptor as separate discovery, dependency, capability, resource, and navigation dimensions."
-                            />
+                            <div class="module-detail-page-heading">
+                                <div>
+                                    <h1>{display_name.clone()}</h1>
+                                    <div class="module-detail-page-heading__identity">
+                                        <code>{definition_id_for_heading}</code>
+                                        <super::directory::CopyValue
+                                            value=definition_id_for_copy
+                                            label="Copy module definition ID"
+                                        />
+                                    </div>
+                                    <div class="module-detail-page-heading__lifecycle">
+                                        <span class="status-badge is-info">"Transitional"</span>
+                                        <span class=availability_class>{availability_label}</span>
+                                        <p>{super::directory::TRANSITION_PRESENTATION_LABEL}</p>
+                                    </div>
+                                </div>
+                                <a
+                                    class="button button--secondary module-detail-page-heading__descriptor"
+                                    href=format!("/api/admin/modules/{}/descriptor", definition_id.clone())
+                                >
+                                    <ExternalLink class="module-detail-page-heading__descriptor-icon"/>
+                                    "View source descriptor (JSON)"
+                                </a>
+                            </div>
                             <div class="module-section-switcher" aria-label="Module detail section">
-                                <div class="module-section-tabs" role="tablist" aria-label="Module detail sections">
+                                <div class="module-section-tabs--detail tabs-list" role="tablist" aria-label="Module detail sections">
                                     {[
                                         ("overview", "Overview"),
-                                        ("dependencies", "Dependencies"),
+                                        ("declarations", "Declarations"),
+                                        ("contracts", "Contracts"),
                                         ("capabilities", "Capabilities"),
-                                        ("resources", "Resources/Destinations"),
+                                        ("dependencies", "Dependencies"),
+                                        ("resources", "Resources"),
                                         ("navigation", "Navigation"),
+                                        ("findings", "Findings"),
                                     ].into_iter().map(|(value, label)| view! {
                                         <button
+                                            class="tabs-trigger"
                                             type="button"
                                             role="tab"
                                             aria-selected=move || active_detail_section.get() == value
-                                            class:active=move || active_detail_section.get() == value
+                                            class:is-active=move || active_detail_section.get() == value
                                             on:click=move |_| active_detail_section.set(value)
                                         >{label}</button>
                                     }).collect_view()}
                                 </div>
-                                <label class="module-section-select">
-                                    <span>"Section"</span>
-                                    <select
+                                <select
+                                    class="module-section-select module-section-select--detail form-control"
+                                    aria-label="Module detail section"
                                         prop:value=move || active_detail_section.get()
                                         on:change=move |event| {
                                             let value = event_target_value(&event);
                                             active_detail_section.set(match value.as_str() {
+                                                "declarations" => "declarations",
+                                                "contracts" => "contracts",
                                                 "dependencies" => "dependencies",
                                                 "capabilities" => "capabilities",
                                                 "resources" => "resources",
                                                 "navigation" => "navigation",
+                                                "findings" => "findings",
                                                 _ => "overview",
                                             });
                                         }
                                     >
                                         <option value="overview">"Overview"</option>
+                                        <option value="declarations">"Declarations"</option>
+                                        <option value="contracts">"Contracts"</option>
                                         <option value="dependencies">"Dependencies"</option>
                                         <option value="capabilities">"Capabilities"</option>
-                                        <option value="resources">"Resources/Destinations"</option>
+                                        <option value="resources">"Resources"</option>
                                         <option value="navigation">"Navigation"</option>
-                                    </select>
-                                </label>
+                                        <option value="findings">"Findings"</option>
+                                </select>
                             </div>
                             <div
                                 class="organization-detail-content module-detail-peer-sections module-detail-sections"
                                 data-active-section=move || active_detail_section.get()
                             >
                                 <div class="organization-detail-content__grid">
-                                    <ModuleDetailPeerSections entry=current_detail.entry/>
+                                    <ModuleDetailPeerSections
+                                        entry=current_detail.entry
+                                        policy
+                                        active_detail_section
+                                    />
                                     <ModuleNavigationPolicyView
                                         policy
                                         persisted_policy

@@ -753,11 +753,13 @@ fn validate_navigation_policy_v2_request(
     {
         return Err(NavigationPolicyUpdateError::InvalidGroupCollection);
     }
+    // Validate deletion against the requested placements, not the persisted
+    // composition. A manager can move the final destination out of a custom
+    // group and remove that now-empty group in one atomic policy update.
     for existing in current.groups.iter().filter(|group| {
         group.owner == NavigationGroupOwnerV2::Custom && !seen_ids.contains(&group.id)
     }) {
-        if current
-            .destinations
+        if destinations
             .iter()
             .any(|destination| destination.group_id == existing.id)
         {
@@ -1916,7 +1918,7 @@ mod tests {
                 .expect("fixture with a populated custom group is valid");
         let current = navigation_policy_v2_model(Uuid::nil(), 1, group_rows, placement_rows)
             .expect("validated fixture projects back to schema v2");
-        let groups_without_custom = current
+        let groups_without_custom: Vec<NavigationGroupUpdateV2> = current
             .groups
             .iter()
             .filter(|group| group.id != custom_group_id())
@@ -1929,11 +1931,29 @@ mod tests {
 
         let error = validate_navigation_policy_v2_request(
             &current,
-            groups_without_custom,
+            groups_without_custom.clone(),
             v2_updates(&current).1,
         )
         .expect_err("a custom group containing a destination cannot be deleted");
         assert_eq!(error.stable_code(), "navigation_policy_group_not_empty");
+
+        let mut destinations_without_custom = v2_updates(&current).1;
+        let main_destination_count = destinations_without_custom
+            .iter()
+            .filter(|destination| destination.group_id == "core.main")
+            .count() as i32;
+        let moved = destinations_without_custom
+            .iter_mut()
+            .find(|destination| destination.id == "tessara.forms.navigation")
+            .expect("Forms is the custom group's only destination");
+        moved.group_id = "core.main".to_string();
+        moved.order = main_destination_count;
+        validate_navigation_policy_v2_request(
+            &current,
+            groups_without_custom,
+            destinations_without_custom,
+        )
+        .expect("moving the final destination out and deleting the group is one valid update");
     }
 
     #[test]

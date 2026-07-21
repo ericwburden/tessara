@@ -99,4 +99,81 @@ The final Dashboard-directory annotation identified a P2 table-geometry mismatch
 - Decide whether shared presentation primitives should also own the column selector and header filter popovers while client-backed and server-backed table state remains separate.
 - Schedule focused decomposition of the large Dashboard editor and Component viewer modules when that refactor can receive dedicated regression coverage.
 
+## Sprint 6A-UI corrective implementation QA (2026-07-17)
+
+Status: **passed**
+
+Source visual truth was the approved Direction 1 suite in
+`docs/mockups/sprint-6a-ui/direction-1/`. The implementation was inspected
+through the local deployed application at `/administration/modules`,
+`/administration/roles`, and `/administration/users` rather than through
+static markup.
+
+### Comparison evidence
+
+- Full desktop comparisons: approved assets 01, 06, and 13 alongside deployed
+  captures `tmp/design-qa-2026-07-17/21-directory-deployed-final.png`,
+  `09-composer-desktop-final.png`, and `10-role-provenance-final.png`.
+- Focused desktop checks: deployed role editor
+  `11-role-editor-final.png`, user-role assignment
+  `16-user-assignment-desktop-final.png`, and the Module Forms overview and
+  migration detail captures `02-forms-overview-desktop.png` and
+  `03-migration-overview-desktop.png`.
+- Responsive checks: 390 px captures
+  `12-directory-mobile-final.png`, `13-detail-mobile-final.png`,
+  `14-composer-mobile-final.png`, and `15-user-assignment-mobile-final.png`,
+  plus the 768 px composer capture `17-composer-tablet-final.png`.
+
+The comparison preserves approved application-level decisions: the existing
+shell/header and Tessara token palette remain, and each route retains the
+standard `<section>` panel treatment. The Direction 1 content and interaction
+contract is authoritative within that shell.
+
+### Corrective result
+
+- Module Management uses the canonical Blocks glyph in the live navigation.
+- The module directory has working case-insensitive name/ID search and
+  conjunctive status filtering, a clear-filters empty-filter state, compact
+  desktop inventory rows, and responsive mobile controls.
+- Module detail has the approved richer section selector: Overview,
+  Declarations, Contracts, Capabilities, Dependencies, Resources, Navigation,
+  and Findings.
+- The navigation composer exposes native expanded/collapsed group carets,
+  initially collapses Admin, uses lock-only protected-placement affordances,
+  and keeps the action bar from covering editable rows. Mobile and tablet
+  retain usable movement controls without horizontal overflow.
+- Roles now show an exact capability/provenance treatment. The editor presents
+  source/provenance without collisions, and user-role assignments expose role,
+  scope, assigned-on date, and details. The supporting read model supplies the
+  assigned role's derived scope mode without expanding write behavior.
+
+### Interaction, accessibility, and regression evidence
+
+- Search/status controls, tab/section selection, disclosure controls, select
+  fields, and action buttons are native interactive controls with visible
+  focus styling; no decorative replacement controls were introduced.
+- Desktop and 390/768 px checks found no horizontal page overflow in the
+  reviewed module, composer, or assignment states. Browser console error logs
+  were empty.
+- `cargo fmt --all -- --check`, `git diff --check`, Tailwind compilation,
+  `cargo check -p tessara-api -p tessara-web --all-features --locked`, focused
+  module and administration web suites, the navigation-policy suite, and the
+  affected API DTO test passed. The narrow read-model evidence is recorded in
+  `docs/sprints/sprint-6a-ui-test-change-log.md`; durable tests remain proof
+  of correctness and were not weakened.
+
+### P0/P1/P2 comparison history
+
+- P0: none found.
+- P1: resolved the former role-editor text collision and composer action-bar
+  overlap before the final capture pass.
+- P2: resolved missing composer carets, protected-placement label noise,
+  absent detail grouping, missing assignment metadata, and directory density.
+  The final directory pass keeps stable ID/digest evidence on a shared metadata
+  line so the authorized inventory remains visible above the fold.
+
+No P0, P1, or P2 visual defects remain. Minor visual differences limited to
+the pre-existing shell/header hierarchy and palette are intentionally retained
+by product direction.
+
 final result: passed

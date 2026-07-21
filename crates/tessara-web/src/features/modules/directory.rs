@@ -1,6 +1,8 @@
 //! Module Management directory presentation.
 
+use icons::{BoxIcon, ChevronRight, Clock, Copy, Info, List, Search, Tag};
 use leptos::prelude::*;
+use tessara_web_ui::{SideSheet, SideSheetSide};
 
 use super::models::{ModuleInventoryEntryV1, ModuleInventoryResponseV1, TransitionAvailabilityV1};
 use crate::ui::{DataTable, EmptyState};
@@ -77,6 +79,8 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
     let entry_count = entries.len();
     let search = RwSignal::new(String::new());
     let status = RwSignal::new(ModuleDirectoryStatusFilter::All);
+    let runtime_details_open = RwSignal::new(false);
+    let close_runtime_details = Callback::new(move |_| runtime_details_open.set(false));
     let entries_for_results = entries.clone();
     let filtered_entries = move || {
         let query = search.get();
@@ -90,55 +94,97 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
 
     view! {
         <div class="module-management-directory">
-            <section class="organization-detail-card" aria-labelledby="module-core-runtime-heading">
-                <h2 id="module-core-runtime-heading">"Core runtime context"</h2>
-                <p class="module-runtime-summary">
-                    <strong>{format!("Observed Core {}", core_runtime.observed_version.clone())}</strong>
-                    <span>{core_runtime.provenance.clone()}</span>
-                    <span>{format!("{} module definitions", entry_count)}</span>
-                </p>
-                <details class="module-runtime-details">
-                    <summary>"View runtime details"</summary>
-                    <p>
-                        "This installation is the stable owner of current in-process transition resources. "
-                        "The observed runtime is not presented as a fabricated exact Core Release."
-                    </p>
-                    <dl class="organization-detail-list">
+            <section class="module-runtime-strip" aria-labelledby="module-core-runtime-heading">
+                <h2 id="module-core-runtime-heading" class="sr-only">"Core runtime context"</h2>
+                <div class="module-runtime-strip__item">
+                    <Info/>
                     <div>
-                        <dt>"Application Installation"</dt>
-                        <dd><code>{installation.id}</code></dd>
+                        <span>"Installation ID"</span>
+                        <code>{compact_value(&installation.id)}</code>
+                        <CopyValue value=installation.id.clone() label="Copy installation ID"/>
                     </div>
+                </div>
+                <div class="module-runtime-strip__item">
+                    <BoxIcon/>
                     <div>
-                        <dt>"Installation created"</dt>
-                        <dd><time datetime=installation.created_at.clone()>{installation.created_at.clone()}</time></dd>
+                        <span>"Observed Core version"</span>
+                        <strong>{core_runtime.observed_version.clone()}</strong>
                     </div>
+                </div>
+                <div class="module-runtime-strip__item">
+                    <Tag/>
                     <div>
-                        <dt>"Observed Core version"</dt>
-                        <dd>{core_runtime.observed_version}</dd>
+                        <span>"Release provenance"</span>
+                        <strong>{core_runtime.provenance.clone()}</strong>
                     </div>
+                </div>
+                <div class="module-runtime-strip__item">
+                    <List/>
+                    <div><span>{format!("{entry_count} definitions")}</span></div>
+                </div>
+                <div class="module-runtime-strip__item">
+                    <Clock/>
                     <div>
-                        <dt>"Release provenance"</dt>
-                        <dd>{core_runtime.provenance}</dd>
+                        <span>"Observed at"</span>
+                        <time datetime=core_runtime.observed_at.clone()>{core_runtime.observed_at.clone()}</time>
                     </div>
-                    <div>
-                        <dt>"Runtime finding"</dt>
-                        <dd><code>{core_runtime.finding_code}</code></dd>
-                    </div>
-                    <div>
-                        <dt>"Observed at"</dt>
-                        <dd><time datetime=core_runtime.observed_at.clone()>{core_runtime.observed_at.clone()}</time></dd>
-                    </div>
-                    </dl>
-                </details>
+                </div>
+                <button
+                    class="module-runtime-strip__details-button"
+                    type="button"
+                    on:click=move |_| runtime_details_open.set(true)
+                >
+                    "Runtime details" <ChevronRight/>
+                </button>
             </section>
+
+            <SideSheet
+                id="module-runtime-details"
+                title="Core runtime details"
+                description="This installation is the stable owner of current in-process transition resources. The observed runtime is not presented as a fabricated exact Core Release."
+                eyebrow="Module Management"
+                open=Signal::derive(move || runtime_details_open.get())
+                on_close=close_runtime_details
+                side=SideSheetSide::End
+                close_label="Close Core runtime details"
+                class="module-runtime-details-sheet"
+            >
+                <section class="sheet-panel__section">
+                    <h3>"Runtime observation"</h3>
+                    <table class="info-list-table module-runtime-details-table">
+                        <tbody>
+                            <tr>
+                                <th scope="row">"Application Installation"</th>
+                                <td><code>{installation.id.clone()}</code></td>
+                            </tr>
+                            <tr>
+                                <th scope="row">"Installation created"</th>
+                                <td><time datetime=installation.created_at.clone()>{installation.created_at.clone()}</time></td>
+                            </tr>
+                            <tr>
+                                <th scope="row">"Observed Core version"</th>
+                                <td>{core_runtime.observed_version.clone()}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">"Release provenance"</th>
+                                <td>{core_runtime.provenance.clone()}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">"Runtime finding"</th>
+                                <td><code>{core_runtime.finding_code.clone()}</code></td>
+                            </tr>
+                            <tr>
+                                <th scope="row">"Observed at"</th>
+                                <td><time datetime=core_runtime.observed_at.clone()>{core_runtime.observed_at.clone()}</time></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+            </SideSheet>
 
             <section class="organization-detail-card" aria-labelledby="module-directory-heading">
                 <div class="module-directory__heading">
-                    <div>
-                        <h2 id="module-directory-heading">"Module inventory"</h2>
-                        <p>"Inspect Core-owned transition contributions and their exact descriptor provenance."</p>
-                    </div>
-                    <span aria-live="polite">{format!("{entry_count} definitions")}</span>
+                    <h2 id="module-directory-heading">"Module definitions"</h2>
                 </div>
                 <p class="module-directory__legend">
                     <span class="status-badge is-info">{TRANSITION_PRESENTATION_LABEL}</span>
@@ -156,6 +202,7 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                     view! {
                         <div class="module-directory__toolbar" aria-label="Filter module definitions">
                             <label class="searchable-data-table__control searchable-data-table__search">
+                                <Search class="searchable-data-table__control-icon"/>
                                 <span class="sr-only">"Search module name or ID"</span>
                                 <input
                                     type="search"
@@ -212,6 +259,7 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                                                     <th scope="col">"Availability"</th>
                                                     <th scope="col">"Release / Instance"</th>
                                                     <th scope="col">"Findings"</th>
+                                                    <th scope="col"><span class="sr-only">"Open module detail"</span></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -240,6 +288,10 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
     let detail_href = format!("/administration/modules/{definition_id}");
     let finding_count = entry.findings().len();
     let source_digest = entry.source_digest().to_string();
+    let source_digest_preview = compact_value(&source_digest);
+    let source_digest_for_copy = source_digest.clone();
+    let detail_href_for_row = detail_href.clone();
+    let detail_href_for_key = detail_href.clone();
     let availability_class = match descriptor.availability {
         TransitionAvailabilityV1::ActiveInProcess => "status-badge is-success",
         TransitionAvailabilityV1::Unavailable => "status-badge is-warning",
@@ -247,35 +299,119 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
     };
 
     view! {
-        <tr data-module-definition=definition_id.clone()>
+        <tr
+            class="module-directory__row-link"
+            data-module-definition=definition_id.clone()
+            role="link"
+            tabindex="0"
+            on:click=move |_| navigate_to_module_detail(detail_href_for_row.clone())
+            on:keydown=move |event| {
+                if event.key() == "Enter" || event.key() == " " {
+                    event.prevent_default();
+                    navigate_to_module_detail(detail_href_for_key.clone());
+                }
+            }
+        >
             <th scope="row" class="data-table__stacked-label">
-                <a href=detail_href><strong>{descriptor.display_name}</strong></a>
+                <a href=detail_href.clone()><strong>{descriptor.display_name.clone()}</strong></a>
                 <code class="data-table__secondary-text">{definition_id.clone()}</code>
-                <span class="data-table__secondary-text">{source_digest}</span>
+                <span class="module-directory__digest">
+                    <code class="data-table__secondary-text">{source_digest_preview}</code>
+                    <CopyValue value=source_digest_for_copy label="Copy complete source digest"/>
+                </span>
             </th>
             <td>
                 <span class=availability_class>{descriptor.availability.label()}</span>
-                <span class="data-table__secondary-text">{descriptor.availability.explanation()}</span>
             </td>
             <td>
                 <span>{NO_MODULE_RELEASE_LABEL}</span>
                 <span class="data-table__secondary-text">{NO_MODULE_INSTANCE_LABEL}</span>
             </td>
-            <td>{if finding_count == 1 {
-                "1 finding".to_string()
-            } else {
-                format!("{finding_count} findings")
-            }}</td>
+            <td>{finding_count}</td>
+            <td class="data-table__actions">
+                <a href=detail_href aria-label=format!("Open {} module detail", descriptor.display_name)>
+                    <ChevronRight/>
+                </a>
+            </td>
         </tr>
     }
 }
+
+#[component]
+pub(super) fn CopyValue(value: String, label: &'static str) -> impl IntoView {
+    let value_for_copy = value.clone();
+    view! {
+        <button
+            class="icon-button module-directory__copy"
+            type="button"
+            aria-label=label
+            title=label
+            on:click=move |event| {
+                event.stop_propagation();
+                copy_value(value_for_copy.clone());
+            }
+        >
+            <Copy/>
+        </button>
+    }
+}
+
+pub(super) fn compact_value(value: &str) -> String {
+    let value = value.strip_prefix("sha256:").unwrap_or(value);
+    if value.chars().count() > 13 {
+        let start = value.chars().take(8).collect::<String>();
+        let end = value
+            .chars()
+            .rev()
+            .take(5)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>();
+        format!("{start}…{end}")
+    } else {
+        value.to_string()
+    }
+}
+
+#[cfg(feature = "hydrate")]
+fn copy_value(value: String) {
+    if let Some(window) = web_sys::window() {
+        let clipboard = window.navigator().clipboard();
+        wasm_bindgen_futures::spawn_local(async move {
+            let _ = wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&value)).await;
+        });
+    }
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn copy_value(_value: String) {}
+
+#[cfg(feature = "hydrate")]
+fn navigate_to_module_detail(href: String) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(&href);
+    }
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn navigate_to_module_detail(_href: String) {}
 
 fn module_directory_mobile_card(entry: ModuleInventoryEntryV1) -> impl IntoView {
     let descriptor = entry.descriptor().clone();
     let definition_id = descriptor.reserved_definition_id.clone();
     let detail_href = format!("/administration/modules/{definition_id}");
+    let detail_href_for_heading = detail_href.clone();
+    let display_name = descriptor.display_name.clone();
     let finding_count = entry.findings().len();
     let source_digest = entry.source_digest().to_string();
+    let source_digest_preview = compact_value(&source_digest);
+    let source_digest_for_copy = source_digest.clone();
+    let finding_label = if finding_count == 1 {
+        "finding"
+    } else {
+        "findings"
+    };
     let availability_class = match descriptor.availability {
         TransitionAvailabilityV1::ActiveInProcess => "status-badge is-success",
         TransitionAvailabilityV1::Unavailable => "status-badge is-warning",
@@ -286,25 +422,34 @@ fn module_directory_mobile_card(entry: ModuleInventoryEntryV1) -> impl IntoView 
         <article class="module-directory-card" data-module-definition=definition_id.clone()>
             <header>
                 <div>
-                    <h3><a href=detail_href>{descriptor.display_name}</a></h3>
-                    <code>{definition_id.clone()}</code>
+                    <h3><a href=detail_href_for_heading>{display_name.clone()}</a></h3>
+                    <span class="module-directory-card__identity">
+                        <code>{definition_id.clone()}</code>
+                        <CopyValue value=definition_id.clone() label="Copy module definition ID"/>
+                    </span>
                 </div>
-                <span class=availability_class>{descriptor.availability.label()}</span>
+                <a
+                    class="module-directory-card__detail"
+                    href=detail_href
+                    aria-label=format!("Open {display_name} module detail")
+                >
+                    <ChevronRight/>
+                </a>
             </header>
-            <dl>
-                <div>
-                    <dt>"Source digest"</dt>
-                    <dd><code>{source_digest}</code></dd>
-                </div>
-                <div>
-                    <dt>"Release / Instance"</dt>
-                    <dd>{format!("{NO_MODULE_RELEASE_LABEL} / {NO_MODULE_INSTANCE_LABEL}")}</dd>
-                </div>
-                <div>
-                    <dt>"Findings"</dt>
-                    <dd>{finding_count}</dd>
-                </div>
-            </dl>
+            <div class="module-directory-card__badges">
+                <span class="status-badge is-info">"Transitional"</span>
+                <span class=availability_class>{descriptor.availability.label()}</span>
+            </div>
+            <p class="module-directory-card__release">
+                {NO_MODULE_RELEASE_LABEL} " · " {NO_MODULE_INSTANCE_LABEL}
+            </p>
+            <footer>
+                <span>{format!("{finding_count} {finding_label}")}</span>
+                <span class="module-directory-card__digest">
+                    <code>{source_digest_preview}</code>
+                    <CopyValue value=source_digest_for_copy label="Copy complete source digest"/>
+                </span>
+            </footer>
         </article>
     }
 }
@@ -316,7 +461,8 @@ mod tests {
 
     use super::{
         ModuleDirectoryStatusFilter, ModuleInventoryDirectory, NO_MODULE_INSTANCE_LABEL,
-        NO_MODULE_RELEASE_LABEL, TRANSITION_PRESENTATION_LABEL, module_matches_filters,
+        NO_MODULE_RELEASE_LABEL, TRANSITION_PRESENTATION_LABEL, compact_value,
+        module_matches_filters,
     };
     use crate::features::modules::models::{
         ApplicationInstallationV1, CoreRuntimeObservationV1, ModuleInventoryEntryV1,
@@ -368,6 +514,11 @@ mod tests {
         assert!(!html.contains("Install module"));
         assert!(!html.contains("Enable module"));
         assert!(html.contains("tessara.forms"));
+        assert!(html.contains("71bebdd0…b493e"));
+        assert!(html.contains("Copy complete source digest"));
+        assert!(html.contains("Open Forms module detail"));
+        assert!(html.contains("Runtime details"));
+        assert!(!html.contains("<details class=\"module-runtime-details\""));
     }
 
     #[test]
@@ -417,5 +568,16 @@ mod tests {
             "migration",
             ModuleDirectoryStatusFilter::ActiveInCoreProcess,
         ));
+    }
+
+    #[test]
+    fn compact_value_uses_the_directory_digest_presentation() {
+        assert_eq!(
+            compact_value(
+                "sha256:71bebdd07ff0028cc0da8bbd9707c393bade9951e5cedb265a4b8465d54b493e"
+            ),
+            "71bebdd0…b493e"
+        );
+        assert_eq!(compact_value("short-value"), "short-value");
     }
 }

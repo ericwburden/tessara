@@ -348,8 +348,40 @@ fn map_policy_error(error: NavigationPolicyUpdateError) -> ModuleHttpError {
         }
         rejected => ModuleHttpError::bad_request(
             rejected.stable_code(),
-            "The navigation policy update is invalid.",
+            navigation_policy_rejection_message(&rejected),
         ),
+    }
+}
+
+fn navigation_policy_rejection_message(error: &NavigationPolicyUpdateError) -> &'static str {
+    match error {
+        NavigationPolicyUpdateError::NonEmptyGroupDeletion { .. } => {
+            "Move every destination out of the custom group before deleting it."
+        }
+        NavigationPolicyUpdateError::ProtectedDestination { .. } => {
+            "A protected destination cannot be hidden or moved from its required placement."
+        }
+        NavigationPolicyUpdateError::InvalidGroupCollection => {
+            "Navigation groups must keep Main and Admin, with unique labels and consecutive order."
+        }
+        NavigationPolicyUpdateError::InvalidDestinationCollection => {
+            "Every destination must have a valid group and consecutive order."
+        }
+        NavigationPolicyUpdateError::CoreItemImmutable { .. }
+        | NavigationPolicyUpdateError::DuplicateContribution { .. }
+        | NavigationPolicyUpdateError::UnknownContribution { .. }
+        | NavigationPolicyUpdateError::MissingContribution { .. }
+        | NavigationPolicyUpdateError::GroupChangeForbidden { .. }
+        | NavigationPolicyUpdateError::BandChangeForbidden { .. }
+        | NavigationPolicyUpdateError::InvalidBandOrder { .. }
+        | NavigationPolicyUpdateError::InvalidRevision => {
+            "The navigation policy update is invalid."
+        }
+        NavigationPolicyUpdateError::RevisionConflict { .. }
+        | NavigationPolicyUpdateError::Integrity
+        | NavigationPolicyUpdateError::Database(_) => {
+            unreachable!("these errors are handled before request validation failures")
+        }
     }
 }
 

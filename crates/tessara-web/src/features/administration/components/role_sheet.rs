@@ -11,7 +11,7 @@ use icons::{Search, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 
-use super::capability_metadata::AdminCapabilityMetadata;
+use super::capability_metadata::AdminCapabilityProvenance;
 
 #[component]
 pub(crate) fn AdminRoleSheet(
@@ -115,10 +115,8 @@ pub(crate) fn AdminRoleSheet(
                                                                 <small>{capability.description}</small>
                                                             </label>
                                                             <div id=metadata_id class="administration-role-capability-metadata">
-                                                                <AdminCapabilityMetadata
-                                                                    scope_mode
-                                                                    provenance
-                                                                />
+                                                                <small>"Provenance"</small>
+                                                                <AdminCapabilityProvenance provenance show_digest=false/>
                                                             </div>
                                                         </div>
                                                     </div>

@@ -70,9 +70,15 @@ pub async fn list_roles(
             roles.id,
             roles.name,
             COUNT(DISTINCT role_capabilities.capability_id) AS capability_count,
-            COUNT(DISTINCT role_assignments.account_id) AS account_count
+            COUNT(DISTINCT role_assignments.account_id) AS account_count,
+            CASE
+                WHEN COUNT(DISTINCT role_capabilities.capability_id) = 0 THEN NULL
+                WHEN BOOL_OR(capabilities.scope_mode = 'installation_global') THEN 'installation_global'
+                ELSE 'scope_aware'
+            END AS scope_mode
         FROM roles
         LEFT JOIN role_capabilities ON role_capabilities.role_id = roles.id
+        LEFT JOIN capabilities ON capabilities.id = role_capabilities.capability_id
         LEFT JOIN role_assignments ON role_assignments.role_id = roles.id
         GROUP BY roles.id, roles.name
         ORDER BY name, id
@@ -87,6 +93,7 @@ pub async fn list_roles(
             name: row.try_get("name")?,
             capability_count: row.try_get("capability_count")?,
             account_count: row.try_get("account_count")?,
+            scope_mode: parse_role_scope_mode(row.try_get("scope_mode")?),
             assigned_at: None,
         })
     })
@@ -450,10 +457,16 @@ async fn load_roles_for_account(pool: &PgPool, account_id: Uuid) -> ApiResult<Ve
             roles.name,
             COUNT(DISTINCT role_capabilities.capability_id) AS capability_count,
             COUNT(DISTINCT all_assignments.account_id) AS account_count,
+            CASE
+                WHEN COUNT(DISTINCT role_capabilities.capability_id) = 0 THEN NULL
+                WHEN BOOL_OR(capabilities.scope_mode = 'installation_global') THEN 'installation_global'
+                ELSE 'scope_aware'
+            END AS scope_mode,
             MIN(role_assignments.created_at) AS assigned_at
         FROM role_assignments
         JOIN roles ON roles.id = role_assignments.role_id
         LEFT JOIN role_capabilities ON role_capabilities.role_id = roles.id
+        LEFT JOIN capabilities ON capabilities.id = role_capabilities.capability_id
         LEFT JOIN role_assignments AS all_assignments ON all_assignments.role_id = roles.id
         WHERE role_assignments.account_id = $1
         GROUP BY roles.id, roles.name
@@ -470,10 +483,19 @@ async fn load_roles_for_account(pool: &PgPool, account_id: Uuid) -> ApiResult<Ve
             name: row.try_get("name")?,
             capability_count: row.try_get("capability_count")?,
             account_count: row.try_get("account_count")?,
+            scope_mode: parse_role_scope_mode(row.try_get("scope_mode")?),
             assigned_at: Some(row.try_get("assigned_at")?),
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?)
+}
+
+fn parse_role_scope_mode(value: Option<String>) -> Option<CapabilityScopeMode> {
+    match value.as_deref() {
+        Some("installation_global") => Some(CapabilityScopeMode::InstallationGlobal),
+        Some("scope_aware") => Some(CapabilityScopeMode::ScopeAware),
+        _ => None,
+    }
 }
 
 async fn load_capabilities(pool: &PgPool) -> ApiResult<Vec<CapabilitySummary>> {

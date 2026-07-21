@@ -1,6 +1,7 @@
 //! Administration user account edit form.
 
 use crate::features::administration::api::submit_update_admin_user;
+use crate::features::administration::display::admin_capability_scope_label;
 use crate::features::administration::models::AdminRoleSummary;
 use crate::features::administration::state::toggle_string_selection;
 use crate::ui::{PageHeader, Timestamp};
@@ -95,7 +96,13 @@ pub(crate) fn AdministrationUserAccountForm(
                         <strong>"Role scope behavior"</strong>
                         <p>"Installation-global roles are always assigned across this installation; organization scope nodes do not limit them. Use a dedicated global module role for modules:read or modules:manage_navigation. It can coexist with separate scoped product roles on the same user."</p>
                     </aside>
-                    <div class="checkbox-list">
+                    <div class="checkbox-list administration-role-assignment-list">
+                        <div class="administration-role-assignment__header" aria-hidden="true">
+                            <span>"Role"</span>
+                            <span>"Scope"</span>
+                            <span>"Assigned on"</span>
+                            <span>"Details"</span>
+                        </div>
                         {move || {
                             let selected = selected_role_ids.get();
                             roles
@@ -117,25 +124,27 @@ pub(crate) fn AdministrationUserAccountForm(
                                                     );
                                                 }
                                             />
-                                            <span>
-                                                <strong>{role.name}</strong>
-                                                <small>{format!("{} capabilities", role.capability_count)}</small>
-                                                <span class="administration-role-assignment__metadata">
-                                                    <span>
-                                                        <small>"Assigned on"</small>
-                                                        {if checked {
-                                                            match role.assigned_at {
-                                                                Some(assigned_at) => view! { <Timestamp value=assigned_at/> }.into_any(),
-                                                                None => view! { <strong>"Pending save"</strong> }.into_any(),
-                                                            }
-                                                        } else {
-                                                            view! { <span aria-label="Not assigned">"—"</span> }.into_any()
-                                                        }}
-                                                    </span>
-                                                    <span>
-                                                        <small>"Details"</small>
-                                                        <span>{format!("{} assigned users", role.account_count)}</span>
-                                                    </span>
+                                            <span class="administration-role-assignment__row">
+                                                <span class="administration-role-assignment__identity">
+                                                    <strong>{role.name}</strong>
+                                                </span>
+                                                <span data-label="Scope">
+                                                    {role.scope_mode
+                                                        .map(admin_capability_scope_label)
+                                                        .unwrap_or("No capabilities")}
+                                                </span>
+                                                <span data-label="Assigned on">
+                                                    {if checked {
+                                                        match role.assigned_at {
+                                                            Some(assigned_at) => view! { <Timestamp value=assigned_at/> }.into_any(),
+                                                            None => view! { <strong>"Pending save"</strong> }.into_any(),
+                                                        }
+                                                    } else {
+                                                        view! { <span aria-label="Not assigned">"—"</span> }.into_any()
+                                                    }}
+                                                </span>
+                                                <span data-label="Details">
+                                                    {format!("{} capabilities", role.capability_count)}
                                                 </span>
                                             </span>
                                         </label>
@@ -176,6 +185,7 @@ mod tests {
                 name: "Module reader".into(),
                 capability_count: 1,
                 account_count: 0,
+                scope_mode: Some(crate::features::administration::models::AdminCapabilityScopeMode::InstallationGlobal),
                 assigned_at: None,
             }]);
 
@@ -202,6 +212,7 @@ mod tests {
         assert!(html.contains("modules:manage_navigation"));
         assert!(html.contains("separate scoped product roles"));
         assert!(html.contains("Assigned on"));
+        assert!(html.contains("Installation-global"));
         assert!(html.contains("Details"));
     }
 }

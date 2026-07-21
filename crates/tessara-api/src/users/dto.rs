@@ -12,6 +12,8 @@ pub struct RoleSummary {
     pub capability_count: i64,
     pub account_count: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_mode: Option<CapabilityScopeMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_at: Option<DateTime<Utc>>,
 }
 
@@ -224,6 +226,7 @@ mod tests {
             name: "Module reader".into(),
             capability_count: 1,
             account_count: 1,
+            scope_mode: Some(CapabilityScopeMode::InstallationGlobal),
             assigned_at: Some(assigned_at),
         };
         let assigned_wire = serde_json::to_value(&assigned).expect("serialize assignment");
@@ -233,6 +236,7 @@ mod tests {
         let catalog_wire = serde_json::to_value(&catalog).expect("serialize catalog role");
 
         assert_eq!(assigned_wire["assigned_at"], json!("2026-07-01T12:30:00Z"));
+        assert_eq!(assigned_wire["scope_mode"], json!("installation_global"));
         assert!(catalog_wire.get("assigned_at").is_none());
     }
 }

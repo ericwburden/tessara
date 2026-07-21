@@ -49,11 +49,11 @@ pub(crate) fn AdministrationRoleDetailPanel(
                     </tbody>
                 </table>
                 <div class="administration-role-detail-grid">
-                    <section class="organization-detail-card">
+                    <section class="organization-detail-card administration-role-capabilities">
                         <h3>"Capabilities"</h3>
                         <AdminRoleCapabilityList capabilities/>
                     </section>
-                    <section class="organization-detail-card">
+                    <section class="organization-detail-card administration-role-assigned-users">
                         <h3>"Assigned Users"</h3>
                         <AdminRoleAssignedAccounts accounts/>
                     </section>

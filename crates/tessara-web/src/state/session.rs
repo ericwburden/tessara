@@ -89,6 +89,31 @@ pub(crate) fn load_shell_state(
     });
 }
 
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+/// Refreshes the rendered shell navigation after a successful composition save.
+/// The existing projection stays visible until its replacement is verified.
+pub(crate) fn refresh_shell_navigation(navigation: RwSignal<ShellNavigationLoadState>) {
+    spawn_local(async move {
+        let projection = tessara_web_http::fetch_json::<ShellNavigationResponseV1>(
+            "/api/shell/navigation",
+            "Shell navigation",
+        )
+        .await;
+        navigation.set(match projection {
+            Ok(projection) if projection.is_supported() => {
+                ShellNavigationLoadState::Ready(projection)
+            }
+            Ok(_) | Err(_) => ShellNavigationLoadState::Failed,
+        });
+    });
+}
+
+#[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
+#[allow(dead_code)]
+pub(crate) fn refresh_shell_navigation(navigation: RwSignal<ShellNavigationLoadState>) {
+    let _ = navigation;
+}
+
 #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
 #[allow(dead_code)]
 pub(crate) fn load_shell_state(
