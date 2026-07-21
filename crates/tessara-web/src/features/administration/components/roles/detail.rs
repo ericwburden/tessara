@@ -3,7 +3,9 @@
 use crate::features::administration::models::{
     AdminAccountAssignmentSummary, AdminCapabilitySummary, AdminRoleDetail,
 };
+use icons::Pencil;
 use leptos::prelude::*;
+use tessara_web_ui::{SideSheet, SideSheetSide};
 
 use super::super::capability_metadata::AdminCapabilityProvenance;
 use crate::features::administration::display::admin_capability_scope_label;
@@ -25,40 +27,62 @@ pub(crate) fn AdministrationRoleDetailPanel(
     } else if let Some(detail) = detail {
         let capabilities = detail.capabilities.clone();
         let accounts = detail.assigned_accounts.clone();
+        let accounts_for_sheet = accounts.clone();
+        let assigned_user_count = accounts.len();
+        let assigned_users_open = RwSignal::new(false);
+        let close_assigned_users = Callback::new(move |_| assigned_users_open.set(false));
+        let role_name = detail.name.clone();
+        let assigned_users_sheet_id = format!("role-{}-assigned-users", detail.id);
         view! {
             <section
                 class="organization-detail-card organization-detail-card--wide administration-role-detail-card"
                 style="margin-top: 1rem;"
             >
-                <div class="organization-detail-card__header">
-                    <h2>{detail.name}</h2>
-                    <button class="button button--secondary" type="button" on:click=on_edit>
-                        "Edit Capabilities"
-                    </button>
+                <div class="organization-detail-card__header administration-role-detail-card__header">
+                    <div class="administration-role-detail-card__heading">
+                        <h2>{detail.name}</h2>
+                        <p class="administration-role-detail-card__summary">
+                            {detail.capabilities.len()} " Capabilities"
+                            <span aria-hidden="true">" · "</span>
+                            {assigned_user_count} " Assigned User" {if assigned_user_count == 1 { "" } else { "s" }}
+                        </p>
+                    </div>
+                    <div class="administration-role-detail-card__actions">
+                        <button class="button button--secondary" type="button" on:click=on_edit>
+                            <Pencil class="button__icon"/>
+                            "Edit Capabilities"
+                        </button>
+                        <button
+                            class="button button--secondary"
+                            type="button"
+                            on:click=move |_| assigned_users_open.set(true)
+                        >
+                            "Assigned Users"
+                        </button>
+                    </div>
                 </div>
-                <table class="info-list-table">
-                    <tbody>
-                        <tr>
-                            <th scope="row">"Capabilities"</th>
-                            <td>{detail.capabilities.len()}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">"Assigned Users"</th>
-                            <td>{detail.assigned_accounts.len()}</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="administration-role-detail-grid">
-                    <section class="organization-detail-card administration-role-capabilities">
-                        <h3>"Capabilities"</h3>
-                        <AdminRoleCapabilityList capabilities/>
-                    </section>
-                    <section class="organization-detail-card administration-role-assigned-users">
-                        <h3>"Assigned Users"</h3>
-                        <AdminRoleAssignedAccounts accounts/>
-                    </section>
-                </div>
+                <section class="organization-detail-card administration-role-capabilities">
+                    <h3>"Capabilities"</h3>
+                    <AdminRoleCapabilityList capabilities/>
+                </section>
             </section>
+
+            <SideSheet
+                id=assigned_users_sheet_id
+                title=format!("{role_name} assigned users")
+                description="Accounts currently assigned this role."
+                eyebrow="Roles"
+                open=Signal::derive(move || assigned_users_open.get())
+                on_close=close_assigned_users
+                side=SideSheetSide::End
+                close_label="Close assigned users"
+                class="administration-role-assigned-users-sheet"
+            >
+                <section class="sheet-panel__section">
+                    <h3>"Assigned users"</h3>
+                    <AdminRoleAssignedAccounts accounts=accounts_for_sheet.clone()/>
+                </section>
+            </SideSheet>
         }
         .into_any()
     } else {
@@ -90,6 +114,7 @@ fn AdminRoleCapabilityList(capabilities: Vec<AdminCapabilitySummary>) -> impl In
                 {capabilities
                     .into_iter()
                     .map(|capability| {
+                        let capability_key = capability.key.clone();
                         let scope_mode = capability.scope_mode;
                         let provenance = capability.provenance;
                         view! {
@@ -99,7 +124,7 @@ fn AdminRoleCapabilityList(capabilities: Vec<AdminCapabilitySummary>) -> impl In
                                     <span class="data-table__secondary-text">{capability.description}</span>
                                 </th>
                                 <td><span class="status-badge">{admin_capability_scope_label(scope_mode)}</span></td>
-                                <td><AdminCapabilityProvenance provenance show_digest=true/></td>
+                                <td><AdminCapabilityProvenance provenance show_digest=true context_id=capability_key/></td>
                             </tr>
                         }
                     })

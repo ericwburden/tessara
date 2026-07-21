@@ -110,10 +110,7 @@ pub(super) fn AdministrationRolesSurface() -> impl IntoView {
                     </BreadcrumbItem>
                 </Breadcrumb>
 
-                <PageHeader
-                    title="Roles"
-                    description="Manage reusable capability templates for Tessara users."
-                >
+                <PageHeader title="Roles">
                     <button class="button" type="button" on:click=open_create_sheet>
                         "New Role"
                     </button>

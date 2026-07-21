@@ -77,17 +77,25 @@ pub(crate) fn AdministrationUserAccountForm(
                             on:input=move |event| password.set(event_target_value(&event))
                         />
                     </label>
-                    <label class="form-field">
-                        <span>"Active"</span>
-                        <label class="toggle-row toggle-row--compact">
-                            <input
-                                type="checkbox"
-                                prop:checked=move || is_active.get()
-                                on:change=move |event| is_active.set(event_target_checked(&event))
-                            />
-                            <span>{move || if is_active.get() { "Active" } else { "Inactive" }}</span>
-                        </label>
-                    </label>
+                    <div class="form-field administration-user-status-field">
+                        <span id="admin-user-status-label">"Status"</span>
+                        <button
+                            id="admin-user-status"
+                            class=move || {
+                                if is_active.get() {
+                                    "button administration-user-status-toggle is-active"
+                                } else {
+                                    "button administration-user-status-toggle is-inactive"
+                                }
+                            }
+                            type="button"
+                            aria-pressed=move || is_active.get()
+                            aria-labelledby="admin-user-status-label admin-user-status"
+                            on:click=move |_| is_active.update(|active| *active = !*active)
+                        >
+                            {move || if is_active.get() { "Active" } else { "Inactive" }}
+                        </button>
+                    </div>
                 </div>
 
                 <section class="form-section">
@@ -214,5 +222,7 @@ mod tests {
         assert!(html.contains("Assigned on"));
         assert!(html.contains("Installation-global"));
         assert!(html.contains("Details"));
+        assert!(html.contains("administration-user-status-toggle is-active"));
+        assert!(html.contains("Active"));
     }
 }

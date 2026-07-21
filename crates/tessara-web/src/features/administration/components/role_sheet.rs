@@ -3,8 +3,8 @@
 use super::super::state::toggle_string_selection;
 use crate::features::administration::display::admin_capability_scope_label;
 use crate::features::administration::models::{
-    AdminCapabilitySummary, AdminRoleCapabilityScopeSelection, MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE,
-    admin_role_capability_scope_selection,
+    AdminCapabilityScopeMode, AdminCapabilitySummary, AdminRoleCapabilityScopeSelection,
+    MIXED_ROLE_CAPABILITY_SCOPE_MESSAGE, admin_role_capability_scope_selection,
 };
 use crate::utils::text::text_matches;
 use icons::{Search, X};
@@ -71,13 +71,8 @@ pub(crate) fn AdminRoleSheet(
                                 {move || {
                                     let query = capability_search.get();
                                     let selected = selected_capability_ids.get();
-                                    let visible = capabilities
-                                        .get()
-                                        .into_iter()
-                                        .filter(|capability| {
-                                            text_matches(&query, &[capability.key.as_str(), capability.description.as_str()])
-                                        })
-                                        .collect::<Vec<_>>();
+                                    let catalog = capabilities.get();
+                                    let visible = visible_role_capabilities(&catalog, &selected, &query);
                                     if visible.is_empty() {
                                         view! { <p class="forms-list-mobile-empty">"No Capabilities to Display"</p> }.into_any()
                                     } else {
@@ -165,6 +160,47 @@ pub(crate) fn AdminRoleSheet(
     }
 }
 
+/// Returns the capability choices that remain valid for the role's current
+/// scope mode. Once a role has selected its first ordinary capability, the
+/// picker retains only that scope mode. This keeps either invalid mixed-scope
+/// path out of the editor rather than waiting until save to reject it. Empty
+/// roles and the `admin:all` exception retain the complete catalog.
+fn visible_role_capabilities(
+    catalog: &[AdminCapabilitySummary],
+    selected_capability_ids: &[String],
+    query: &str,
+) -> Vec<AdminCapabilitySummary> {
+    let allowed_scope =
+        match admin_role_capability_scope_selection(catalog, selected_capability_ids) {
+            AdminRoleCapabilityScopeSelection::ScopeAware => {
+                Some(AdminCapabilityScopeMode::ScopeAware)
+            }
+            AdminRoleCapabilityScopeSelection::InstallationGlobal => {
+                Some(AdminCapabilityScopeMode::InstallationGlobal)
+            }
+            AdminRoleCapabilityScopeSelection::Empty
+            | AdminRoleCapabilityScopeSelection::AdminAllMixedException
+            | AdminRoleCapabilityScopeSelection::Mixed => None,
+        };
+
+    catalog
+        .iter()
+        .filter(|capability| {
+            let scope_matches = match allowed_scope {
+                Some(scope_mode) => capability.scope_mode == scope_mode,
+                None => true,
+            };
+
+            scope_matches
+                && text_matches(
+                    query,
+                    &[capability.key.as_str(), capability.description.as_str()],
+                )
+        })
+        .cloned()
+        .collect()
+}
+
 #[component]
 fn AdminRoleScopeSelectionNotice(selection: AdminRoleCapabilityScopeSelection) -> impl IntoView {
     let (heading, detail, is_error) = match selection {
@@ -213,8 +249,24 @@ fn AdminRoleScopeSelectionNotice(selection: AdminRoleCapabilityScopeSelection) -
 mod tests {
     use leptos::prelude::*;
 
-    use super::AdminRoleScopeSelectionNotice;
-    use crate::features::administration::models::AdminRoleCapabilityScopeSelection;
+    use super::{AdminRoleScopeSelectionNotice, visible_role_capabilities};
+    use crate::features::administration::models::{
+        AdminCapabilityScopeMode, AdminCapabilitySummary, AdminRoleCapabilityScopeSelection,
+    };
+
+    fn capability(
+        id: &str,
+        key: &str,
+        scope_mode: AdminCapabilityScopeMode,
+    ) -> AdminCapabilitySummary {
+        AdminCapabilitySummary {
+            id: id.into(),
+            key: key.into(),
+            description: key.into(),
+            scope_mode,
+            provenance: Vec::new(),
+        }
+    }
 
     #[test]
     fn scope_selection_notice_explains_global_and_rejects_mixed_roles() {
@@ -242,5 +294,55 @@ mod tests {
         assert!(html.contains("Mixed scope modes are not allowed"));
         assert!(html.contains("dedicated installation-global role for module permissions"));
         assert!(html.contains("role=\"alert\""));
+    }
+
+    #[test]
+    fn scope_aware_role_picker_omits_installation_global_capabilities() {
+        let catalog = vec![
+            capability(
+                "forms-read",
+                "forms:read",
+                AdminCapabilityScopeMode::ScopeAware,
+            ),
+            capability(
+                "modules-read",
+                "modules:read",
+                AdminCapabilityScopeMode::InstallationGlobal,
+            ),
+        ];
+
+        let visible = visible_role_capabilities(&catalog, &["forms-read".into()], "");
+        assert_eq!(
+            visible
+                .iter()
+                .map(|capability| capability.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["forms:read"]
+        );
+    }
+
+    #[test]
+    fn installation_global_role_picker_omits_scope_aware_capabilities() {
+        let catalog = vec![
+            capability(
+                "forms-read",
+                "forms:read",
+                AdminCapabilityScopeMode::ScopeAware,
+            ),
+            capability(
+                "modules-read",
+                "modules:read",
+                AdminCapabilityScopeMode::InstallationGlobal,
+            ),
+        ];
+
+        let visible = visible_role_capabilities(&catalog, &["modules-read".into()], "");
+        assert_eq!(
+            visible
+                .iter()
+                .map(|capability| capability.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["modules:read"]
+        );
     }
 }

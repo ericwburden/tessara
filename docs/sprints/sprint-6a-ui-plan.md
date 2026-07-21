@@ -222,6 +222,8 @@ User-role assignment presentation may expose the existing durable `role_assignme
 
 Mixed ordinary scope-aware and installation-global capabilities remain invalid within one role because v1 role assignments carry one scope for the complete role. Administrators may assign multiple roles to one user, including separate scoped product and installation-global module roles. A future authorization-model slice should consider mixed-scope roles only after defining unambiguous per-capability or equivalent assignment semantics; Sprint 6A-UI does not weaken the current fail-closed restriction.
 
+After the approved Sprint 6A-UI screens are established, perform a cross-screen UI consolidation review. Identify repeated controls, panels, tables, action bars, status treatments, and responsive patterns that differ only in local styling, then converge them on reusable components and shared semantic tokens. This is deferred follow-up work: it must preserve the accepted screen behavior and visual hierarchy rather than reopen the route-by-route review or introduce a broad redesign.
+
 Unrelated feature expansion must be approved before inclusion. Approval must update this plan, acceptance criteria, and proof inventory before the corresponding production or durable-test change lands.
 
 ## Preserved Behavior And Non-Goals
