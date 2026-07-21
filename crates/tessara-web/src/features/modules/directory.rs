@@ -5,7 +5,7 @@ use leptos::prelude::*;
 use tessara_web_ui::{SideSheet, SideSheetSide};
 
 use super::models::{ModuleInventoryEntryV1, ModuleInventoryResponseV1, TransitionAvailabilityV1};
-use crate::ui::{DataTable, EmptyState};
+use crate::ui::DataTable;
 
 pub const TRANSITION_PRESENTATION_LABEL: &str = "Transitional — not independently deployable";
 pub const NO_MODULE_RELEASE_LABEL: &str = "No Module Release";
@@ -192,10 +192,11 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
 
                 {if entries.is_empty() {
                     view! {
-                        <EmptyState
-                            title="No module contributions"
-                            message="The current installation returned an empty module inventory."
-                        />
+                        <section class="empty-state module-directory__empty" aria-live="polite">
+                            <span class="module-state__label">"Directory · empty"</span>
+                            <h3>"No module definitions"</h3>
+                            <p>"No transition contributions are currently registered."</p>
+                        </section>
                     }
                     .into_any()
                 } else {
@@ -233,6 +234,7 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                             if results.is_empty() {
                                 view! {
                                     <section class="empty-state module-directory__no-match" aria-live="polite">
+                                        <span class="module-state__label">"Directory · filtered"</span>
                                         <h3>"No module definitions match the current filters"</h3>
                                         <p>"Try another module name, definition ID, or status."</p>
                                         <button
@@ -527,8 +529,9 @@ mod tests {
         inventory.entries.clear();
         let html = Owner::new().with(|| view! { <ModuleInventoryDirectory inventory/> }.to_html());
 
-        assert!(html.contains("No module contributions"));
-        assert!(html.contains("empty module inventory"));
+        assert!(html.contains("No module definitions"));
+        assert!(html.contains("No transition contributions are currently registered."));
+        assert!(html.contains("Directory · empty"));
         assert!(!html.contains("Module Management restricted"));
     }
 

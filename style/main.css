@@ -2968,6 +2968,7 @@ input {
   color: var(--color-text);
 }
 
+.module-directory__empty,
 .module-directory__no-match {
   display: grid;
   justify-items: start;
@@ -2976,6 +2977,8 @@ input {
   padding: 1rem;
 }
 
+.module-directory__empty h3,
+.module-directory__empty p,
 .module-directory__no-match h3,
 .module-directory__no-match p {
   margin: 0;
@@ -7582,6 +7585,145 @@ input {
 .organization-state.is-error {
   border-color: var(--semantic-danger-border);
   background: var(--semantic-danger-soft);
+}
+
+.module-state__label {
+  width: fit-content;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: calc(var(--radius) * 0.7);
+  background: var(--semantic-info-soft);
+  color: var(--semantic-info);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 0.35rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.module-management-state {
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.85fr);
+  align-items: start;
+  gap: 0.9rem 1.25rem;
+  padding: 1.25rem;
+}
+
+.module-management-state > .module-state__label {
+  grid-column: 1 / -1;
+}
+
+.module-management-state__copy {
+  display: grid;
+  justify-items: start;
+  gap: 0.45rem;
+}
+
+.module-management-state__copy h2,
+.module-management-state__copy p {
+  margin: 0;
+}
+
+.module-management-state__copy .button {
+  margin-top: 0.35rem;
+}
+
+.module-management-state__skeleton {
+  display: grid;
+  align-self: stretch;
+  gap: 0.65rem;
+}
+
+.module-management-state__skeleton span {
+  min-height: 0.9rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-muted) 22%, transparent);
+}
+
+.module-management-state__skeleton span:nth-child(2) {
+  width: 86%;
+}
+
+.module-management-state__skeleton span:nth-child(3) {
+  width: 66%;
+}
+
+.module-management-state.module-management-restricted .module-state__label {
+  border-color: var(--semantic-info-border);
+  background: var(--semantic-info-soft);
+  color: var(--semantic-info);
+}
+
+.module-management-state.is-error .module-state__label {
+  border-color: var(--semantic-danger-border);
+  background: var(--semantic-danger-soft);
+  color: var(--semantic-danger);
+}
+
+.module-navigation-policy__localized-state {
+  justify-items: start;
+  gap: 0.6rem;
+  border-color: var(--semantic-warning-border);
+  background: var(--semantic-warning-soft);
+}
+
+.module-navigation-policy__localized-state h3,
+.module-navigation-policy__localized-state p {
+  margin: 0;
+}
+
+.module-navigation-policy__localized-state .module-state__label {
+  border-color: var(--semantic-warning-border);
+  background: transparent;
+  color: var(--semantic-warning);
+}
+
+.module-navigation-save-state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  border: 1px solid var(--semantic-success-border);
+  border-radius: var(--radius);
+  background: var(--semantic-success-soft);
+  padding: 0.85rem 1rem;
+}
+
+.module-navigation-save-state.is-saving {
+  grid-template-columns: minmax(0, 1fr);
+  border-color: var(--semantic-info-border);
+  background: var(--semantic-info-soft);
+}
+
+.module-navigation-save-state > div {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.module-navigation-save-state h3,
+.module-navigation-save-state p {
+  margin: 0;
+}
+
+.module-navigation-save-state p {
+  color: var(--color-muted);
+}
+
+.module-navigation-save-state__icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--semantic-success);
+}
+
+@media (max-width: 760px) {
+  .module-management-state,
+  .module-navigation-save-state {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .module-navigation-save-state .button {
+    justify-self: start;
+  }
 }
 
 .breadcrumb {

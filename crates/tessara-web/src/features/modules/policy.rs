@@ -1,9 +1,9 @@
 //! Group-aware navigation composer for reader and manager modes.
 
 use icons::{
-    ArrowDown, ArrowUp, Blocks, ChevronRight, CircleAlert, CircleHelp, Database, Ellipsis, Eye,
-    EyeOff, File, FileText, GitBranch, House, Info, LayoutDashboard, ListChecks, Lock, PanelRight,
-    Pencil, Plus, Trash2,
+    ArrowDown, ArrowUp, Blocks, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Database,
+    Ellipsis, Eye, EyeOff, File, FileText, GitBranch, House, Info, LayoutDashboard, ListChecks,
+    Lock, PanelRight, Pencil, Plus, Trash2,
 };
 use leptos::prelude::*;
 use tessara_web_ui::ModalDialog;
@@ -323,9 +323,16 @@ pub fn ModuleNavigationPolicyView(
             {move || {
                 if let Some(unavailable) = unavailable_message.get() {
                     view! {
-                        <section class="organization-state" aria-live="polite">
+                        <section class="organization-state module-navigation-policy__localized-state" aria-live="polite">
+                            <span class="module-state__label">"Navigation · localized"</span>
                             <h3>"Navigation policy unavailable"</h3>
                             <p>{unavailable}</p>
+                            <button
+                                class="button button--warning"
+                                type="button"
+                                disabled=move || is_saving.get()
+                                on:click=reload
+                            >"Retry navigation"</button>
                         </section>
                     }.into_any()
                 } else if let Some(current) = policy.get() {
@@ -455,10 +462,52 @@ pub fn ModuleNavigationPolicyView(
                 }
             }}
             {move || {
+                if is_saving.get() {
+                    return Some(
+                        view! {
+                            <section class="module-navigation-save-state is-saving" aria-live="polite" aria-busy="true">
+                                <span class="module-state__label">"Navigation · saving"</span>
+                                <div>
+                                    <h3>"Saving navigation…"</h3>
+                                    <p>"The current policy revision is being updated atomically."</p>
+                                </div>
+                            </section>
+                        }
+                        .into_any(),
+                    );
+                }
+
+                if message.get().as_deref() == Some("Navigation policy saved.") {
+                    let revision = policy.get().map(|current| current.revision).unwrap_or_default();
+                    return Some(
+                        view! {
+                            <section class="module-navigation-save-state is-saved" aria-live="polite">
+                                <CircleCheck class="module-navigation-save-state__icon"/>
+                                <div>
+                                    <span class="module-state__label">"Navigation · saved"</span>
+                                    <h3>"Navigation saved"</h3>
+                                    <p>{format!("Revision {revision} is now active.")}</p>
+                                </div>
+                                <button
+                                    class="button button--secondary"
+                                    type="button"
+                                    on:click=move |_| message.set(None)
+                                >"Continue"</button>
+                            </section>
+                        }
+                        .into_any(),
+                    );
+                }
+
+                None
+            }}
+            {move || {
                 (!has_conflict.get())
                     .then(|| message.get())
                     .flatten()
-                    .filter(|message| !message.trim().is_empty())
+                    .filter(|message| {
+                        !message.trim().is_empty() && message != "Navigation policy saved."
+                    })
                     .map(|message| view! {
                         <p class="form-message" aria-live="polite">{message}</p>
                     })

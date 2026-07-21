@@ -146,20 +146,27 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
                     ModuleRouteState::NotFound => error_state(
                         "Module inventory not found",
                         "No module inventory was returned for this installation.",
+                        "Retry",
+                        "/administration/modules",
                     ),
                     ModuleRouteState::Unavailable(message) => unavailable_state(
                         "Module Management unavailable",
                         &message,
+                        "/administration/modules",
                     ),
                     ModuleRouteState::Error(message) => error_state(
                         "Unable to load Module Management",
                         &message,
+                        "Retry",
+                        "/administration/modules",
                     ),
                     ModuleRouteState::Ready => {
                         let Some(current_inventory) = inventory.get() else {
                             return error_state(
                                 "Module inventory unavailable",
                                 "The authorized route returned no inventory projection.",
+                                "Retry",
+                                "/administration/modules",
                             );
                         };
                         view! {
@@ -215,6 +222,7 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
         initial
     });
     let active_detail_section = RwSignal::new("overview");
+    let detail_retry_href = format!("/administration/modules/{definition_id}");
 
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     if route_state.get_untracked() == ModuleRouteState::Loading {
@@ -263,23 +271,28 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
                         "Fetching the authorized descriptor projection and navigation policy.",
                     ),
                     ModuleRouteState::Restricted => restricted_state(),
-                    ModuleRouteState::NotFound => error_state(
+                    ModuleRouteState::NotFound => not_found_state(
                         "Module definition not found",
                         "No transition contribution exists for this definition identifier.",
                     ),
                     ModuleRouteState::Unavailable(message) => unavailable_state(
                         "Contribution detail unavailable",
                         &message,
+                        &detail_retry_href,
                     ),
                     ModuleRouteState::Error(message) => error_state(
                         "Unable to load contribution detail",
                         &message,
+                        "Retry",
+                        &detail_retry_href,
                     ),
                     ModuleRouteState::Ready => {
                         let Some(current_detail) = detail.get() else {
                             return error_state(
                                 "Contribution detail unavailable",
                                 "The authorized route returned no detail projection.",
+                                "Retry",
+                                &detail_retry_href,
                             );
                         };
                         let descriptor = current_detail.entry.descriptor().clone();
@@ -545,40 +558,99 @@ fn apply_client_error(error: ModuleManagementClientError, state: RwSignal<Module
 }
 
 fn loading_state(title: &'static str, message: &'static str) -> AnyView {
-    view! {
-        <section class="organization-state" aria-live="polite" aria-busy="true">
-            <h2>{title}</h2>
-            <p>{message}</p>
-        </section>
-    }
-    .into_any()
+    module_route_state(
+        title,
+        message,
+        "Directory · loading",
+        "is-loading",
+        None,
+        true,
+    )
 }
 
 fn restricted_state() -> AnyView {
-    view! {
-        <section class="organization-state module-management-restricted" role="alert">
-            <h2>"Module Management restricted"</h2>
-            <p>"This account does not have installation-global Module Management read access."</p>
-        </section>
-    }
-    .into_any()
+    module_route_state(
+        "Module Management restricted",
+        "This account does not have installation-global Module Management read access.",
+        "Route · restricted",
+        "module-management-restricted",
+        Some(("Return home", "/".into())),
+        false,
+    )
 }
 
-fn unavailable_state(title: &'static str, message: &str) -> AnyView {
-    view! {
-        <section class="organization-state module-management-unavailable" role="status">
-            <h2>{title}</h2>
-            <p>{message.to_string()}</p>
-        </section>
-    }
-    .into_any()
+fn unavailable_state(title: &'static str, message: &str, retry_href: &str) -> AnyView {
+    module_route_state(
+        title,
+        message,
+        "Directory · unavailable",
+        "module-management-unavailable",
+        Some(("Retry", retry_href.into())),
+        false,
+    )
 }
 
-fn error_state(title: &'static str, message: &str) -> AnyView {
+fn error_state(
+    title: &'static str,
+    message: &str,
+    action_label: &'static str,
+    action_href: &str,
+) -> AnyView {
+    module_route_state(
+        title,
+        message,
+        "Route · error",
+        "is-error",
+        Some((action_label, action_href.into())),
+        false,
+    )
+}
+
+fn not_found_state(title: &'static str, message: &str) -> AnyView {
+    module_route_state(
+        title,
+        message,
+        "Detail · not found",
+        "module-management-not-found",
+        Some((
+            "Back to Module Management",
+            "/administration/modules".into(),
+        )),
+        false,
+    )
+}
+
+fn module_route_state(
+    title: &'static str,
+    message: &str,
+    label: &'static str,
+    class_name: &'static str,
+    action: Option<(&'static str, String)>,
+    is_loading: bool,
+) -> AnyView {
+    let class = format!("organization-state module-management-state {class_name}");
+    let message = message.to_string();
+
     view! {
-        <section class="organization-state is-error" role="alert">
-            <h2>{title}</h2>
-            <p>{message.to_string()}</p>
+        <section
+            class=class
+            role=if class_name == "is-error" || class_name == "module-management-restricted" { "alert" } else { "status" }
+            aria-live="polite"
+            aria-busy=if is_loading { "true" } else { "false" }
+        >
+            <span class="module-state__label">{label}</span>
+            <div class="module-management-state__copy">
+                <h2>{title}</h2>
+                <p>{message}</p>
+                {action.map(|(action_label, href)| view! {
+                    <a class="button button--secondary" href=href>{action_label}</a>
+                })}
+            </div>
+            {is_loading.then(|| view! {
+                <div class="module-management-state__skeleton" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </div>
+            })}
         </section>
     }
     .into_any()
@@ -588,24 +660,44 @@ fn error_state(title: &'static str, message: &str) -> AnyView {
 mod tests {
     use leptos::prelude::*;
 
-    use super::{error_state, loading_state, restricted_state, unavailable_state};
+    use super::{error_state, loading_state, not_found_state, restricted_state, unavailable_state};
 
     #[test]
     fn route_states_remain_semantically_distinct() {
-        let (loading, restricted, unavailable, error) = Owner::new().with(|| {
+        let (loading, restricted, unavailable, not_found, error) = Owner::new().with(|| {
             (
                 loading_state("Loading module inventory", "Fetching modules.").to_html(),
                 restricted_state().to_html(),
-                unavailable_state("Module Management unavailable", "Try again later.").to_html(),
-                error_state("Unable to load Module Management", "Invalid response.").to_html(),
+                unavailable_state(
+                    "Module Management unavailable",
+                    "Try again later.",
+                    "/administration/modules",
+                )
+                .to_html(),
+                not_found_state(
+                    "Module definition not found",
+                    "No transition contribution exists for this definition identifier.",
+                )
+                .to_html(),
+                error_state(
+                    "Unable to load Module Management",
+                    "Invalid response.",
+                    "Retry",
+                    "/administration/modules",
+                )
+                .to_html(),
             )
         });
 
         assert!(loading.contains("aria-busy=\"true\""));
         assert!(restricted.contains("restricted"));
         assert!(restricted.contains("installation-global"));
+        assert!(restricted.contains("href=\"/\""));
         assert!(unavailable.contains("Try again later"));
         assert!(!unavailable.contains("access"));
+        assert!(unavailable.contains("href=\"/administration/modules\""));
+        assert!(not_found.contains("Detail · not found"));
+        assert!(not_found.contains("Back to Module Management"));
         assert!(error.contains("is-error"));
     }
 }

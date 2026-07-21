@@ -224,6 +224,8 @@ Mixed ordinary scope-aware and installation-global capabilities remain invalid w
 
 After the approved Sprint 6A-UI screens are established, perform a cross-screen UI consolidation review. Identify repeated controls, panels, tables, action bars, status treatments, and responsive patterns that differ only in local styling, then converge them on reusable components and shared semantic tokens. This is deferred follow-up work: it must preserve the accepted screen behavior and visual hierarchy rather than reopen the route-by-route review or introduce a broad redesign.
 
+After the screen and component consolidation review, define a notification-system slice using the Rust/UI [Sonner](https://rust-ui.com/docs/components/sonner) component for transient alert messages. Establish the semantic variants, announcement behavior, dismissal/timing policy, and route-level ownership before replacing existing inline state, validation, or persistence feedback. This is future work and does not alter the currently accepted state treatments.
+
 Unrelated feature expansion must be approved before inclusion. Approval must update this plan, acceptance criteria, and proof inventory before the corresponding production or durable-test change lands.
 
 ## Preserved Behavior And Non-Goals
