@@ -779,7 +779,8 @@ fn destination_view(
     // Module Management is a canonical protected placement.  The reader view
     // must retain the same lock treatment even though it does not expose the
     // manager-only action metadata used for the generic protected predicate.
-    let protected = row.id == "core.admin.modules" || (!row.can_hide && !row.can_move_between_groups);
+    let protected =
+        row.id == "core.admin.modules" || (!row.can_hide && !row.can_move_between_groups);
     let next_visible = !row.visible;
     view! {
         <article class="module-navigation-item" data-navigation-destination=destination_id.clone()>
@@ -965,19 +966,22 @@ fn destination_view(
                 }.into_any()
             } else {
                 view! {
-                    <span class="module-navigation-item__reader-visibility" data-label="Visible">
-                        {if protected {
-                            view! {
-                                <span
-                                    class="module-navigation-item__protected"
-                                    aria-label="Protected placement"
-                                    title="Protected placement"
-                                ><Lock/></span>
-                            }.into_any()
-                        } else {
-                            view! { <span>{if row.visible { "Shown" } else { "Hidden" }}</span> }.into_any()
-                        }}
-                    </span>
+                    {if protected {
+                        view! {
+                            <span
+                                class="module-navigation-item__reader-visibility module-navigation-item__protected"
+                                data-label="Visible"
+                                aria-label="Protected placement"
+                                title="Protected placement"
+                            ><Lock/></span>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <span class="module-navigation-item__reader-visibility" data-label="Visible">
+                                {if row.visible { "Shown" } else { "Hidden" }}
+                            </span>
+                        }.into_any()
+                    }}
                     <div class="module-navigation-eligibility" data-label="Eligibility">
                         {if row.required_capabilities_any_of.is_empty() {
                             view! { <span>"Always eligible"</span> }.into_any()
