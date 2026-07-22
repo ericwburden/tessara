@@ -1184,9 +1184,12 @@ test.describe.serial("Sprint 6A Module Management", () => {
     ]) {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
     }
-    await expect(
-      page.getByRole("link", { name: "View source descriptor (JSON)", exact: true }),
-    ).toHaveAttribute("href", `/api/admin/modules/${FORMS_DEFINITION}/descriptor`);
+    const descriptorLink = page.locator("a.module-detail-page-heading__descriptor");
+    await expect(descriptorLink).toContainText("View source descriptor (JSON)");
+    await expect(descriptorLink).toHaveAttribute(
+      "href",
+      `/api/admin/modules/${FORMS_DEFINITION}/descriptor`,
+    );
     await page.getByRole("tab", { name: "Declarations" }).click();
     for (const exactText of ["Feature Declarations", "Contracts"]) {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
