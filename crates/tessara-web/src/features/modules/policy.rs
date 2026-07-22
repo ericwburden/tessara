@@ -560,7 +560,9 @@ fn group_view(
     let is_custom = group.owner == NavigationGroupOwnerV2::Custom;
     let can_rename = can_manage && is_custom && group.can_rename;
     let can_manage_custom_group = can_manage && is_custom;
-    let initially_open = group.id != "core.admin";
+    // Readers cannot alter the policy, so expose every required group rather than
+    // hiding the protected Module Management placement inside a collapsed Admin group.
+    let initially_open = !can_manage || group.id != "core.admin";
     let has_items = !rows.is_empty();
     let delete_blocker_message = match rows.as_slice() {
         [] => None,
