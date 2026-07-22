@@ -1195,14 +1195,11 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
     }
     await page.getByRole("tab", { name: "Dependencies" }).click();
-    for (const exactText of [
-      "Dependencies",
-      "Compatibility",
-      "Configuration",
-      "Readiness",
-      "Health",
-      "Findings",
-    ]) {
+    for (const exactText of ["Dependencies", "Compatibility"]) {
+      await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
+    }
+    await page.getByRole("tab", { name: "Findings" }).click();
+    for (const exactText of ["Configuration", "Readiness", "Health", "Findings"]) {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
     }
     await page.getByRole("tab", { name: "Capabilities" }).click();
