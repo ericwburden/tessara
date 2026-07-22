@@ -613,24 +613,28 @@ async function expectRenderedModuleDetailMatchesProjection(
   await expect(overview.locator(".module-detail__heading p")).toHaveText(
     descriptor.description,
   );
-  const overviewValues = await overview
-    .locator("dl.organization-detail-list > div")
-    .evaluateAll((rows) =>
-      Object.fromEntries(
-        rows.map((row) => [
-          row.querySelector("dt")?.textContent?.trim() ?? "",
-          row.querySelector("dd")?.textContent?.trim() ?? "",
-        ]),
-      ),
-    );
-  expect(overviewValues["Reserved Module Definition"]).toBe(
+  const overviewRows = overview.locator("dl.organization-detail-list > div");
+  const digestWithoutAlgorithm = entry.source_digest.replace(/^sha256:/, "");
+  const sourceDigestPreview =
+    digestWithoutAlgorithm.length > 13
+      ? `${digestWithoutAlgorithm.slice(0, 8)}…${digestWithoutAlgorithm.slice(-5)}`
+      : digestWithoutAlgorithm;
+  await expect(overviewRows.nth(0).locator("dd code")).toHaveText(
     descriptor.reserved_definition_id,
   );
-  expect(overviewValues.Availability).toBe(
-    availabilityLabels[descriptor.availability],
-  );
-  expect(overviewValues["Source digest"]).toBe(entry.source_digest);
-  expect(overviewValues["Descriptor configuration schema"]).toBe(
+  await expect(overviewRows.nth(1).locator("dd code")).toHaveText(sourceDigestPreview);
+  await expect(
+    overview.getByRole("button", { name: "Copy complete source digest", exact: true }),
+  ).toBeVisible();
+  await expect(
+    overview.getByRole("button", { name: "View complete source digest", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator(".module-detail-page-heading__lifecycle")
+      .getByText(availabilityLabels[descriptor.availability], { exact: true }),
+  ).toBeVisible();
+  await expect(overviewRows.nth(2).locator("dd")).toHaveText(
     descriptor.configuration_schema === null ? "Not declared" : "Declared",
   );
 
@@ -662,7 +666,7 @@ async function expectRenderedModuleDetailMatchesProjection(
   ];
   for (const [index, feature] of descriptor.features.entries()) {
     const rendered = featureNodes.nth(index);
-    await expect(rendered.getByRole("heading", { level: 3 })).toHaveText(feature.name);
+    await expect(rendered.locator("h3")).toHaveText(feature.name);
     await expect(rendered.locator(":scope > code")).toHaveText(feature.id);
     await expect(rendered.locator(":scope > p")).toHaveText(feature.description);
     for (const [field, label] of featureFields) {
@@ -673,7 +677,7 @@ async function expectRenderedModuleDetailMatchesProjection(
         continue;
       }
       await expect(list).toHaveCount(1);
-      await expect(list.getByRole("heading", { level: 4 })).toHaveText(label);
+      await expect(list.locator("h4")).toHaveText(label);
       expect(await list.locator("li").allTextContents()).toEqual(values);
     }
   }
@@ -707,13 +711,14 @@ async function expectRenderedModuleDetailMatchesProjection(
   ).toEqual(descriptor.dependencies.map((dependency) => dependency.binding_key));
   for (const [index, dependency] of descriptor.dependencies.entries()) {
     const rendered = dependencyNodes.nth(index);
-    await expect(rendered.locator(":scope > strong > code")).toHaveText(
-      dependency.binding_key,
+    await expect(rendered.locator("th code")).toHaveText(dependency.binding_key);
+    await expect(rendered.locator("td").nth(0).locator("code")).toHaveText(
+      dependency.contract_id,
     );
-    await expect(rendered.locator(":scope > span").nth(0)).toHaveText(
-      `requires ${dependency.contract_id} ${dependency.version_requirement}`,
+    await expect(rendered.locator("td").nth(1).locator("code")).toHaveText(
+      dependency.version_requirement,
     );
-    await expect(rendered.locator(":scope > span").nth(1)).toHaveText(
+    await expect(rendered.locator("td").nth(2)).toHaveText(
       dependency.optional ? "Optional" : "Required",
     );
   }
@@ -815,11 +820,16 @@ async function expectRenderedModuleDetailMatchesProjection(
       .toEqual(declaration.required_capabilities_any_of);
   }
 
-  const findingNodes = page.locator("[data-finding-code]");
-  expect(await markerValues(page, "[data-finding-code]", "data-finding-code")).toEqual(
+  const findingsSection = page.locator('section[data-module-section="findings"]');
+  const findingNodes = findingsSection.locator("[data-finding-code]");
+  expect(await findingNodes.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-finding-code")),
+  )).toEqual(
     entry.findings.map((finding) => finding.code),
   );
-  expect(await markerValues(page, "[data-finding-code]", "data-finding-path")).toEqual(
+  expect(await findingNodes.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-finding-path")),
+  )).toEqual(
     entry.findings.map((finding) => finding.path),
   );
   for (const [index, finding] of entry.findings.entries()) {
@@ -1195,21 +1205,22 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
     }
     await page.getByRole("tab", { name: "Dependencies" }).click();
-    for (const exactText of ["Dependencies", "Compatibility"]) {
-      await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
+    for (const dimension of ["dependency", "compatibility"]) {
+      await expect(page.locator(`[data-module-dimension="${dimension}"]`)).toBeVisible();
     }
     await page.getByRole("tab", { name: "Findings" }).click();
-    for (const exactText of ["Configuration", "Readiness", "Health", "Findings"]) {
-      await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
+    for (const dimension of ["configuration", "readiness", "health"]) {
+      await expect(page.locator(`[data-module-dimension="${dimension}"]`)).toBeVisible();
     }
+    await expect(page.locator('[aria-labelledby="module-findings-heading"]')).toBeVisible();
     await page.getByRole("tab", { name: "Capabilities" }).click();
     await expect(page.getByRole("heading", { name: "Capabilities", exact: true })).toBeVisible();
-    await page.getByRole("tab", { name: "Resources/Destinations" }).click();
+    await page.getByRole("tab", { name: "Resources" }).click();
     await expect(
       page.getByRole("heading", { name: "Resources/Destinations", exact: true }),
     ).toBeVisible();
     await page.getByRole("tab", { name: "Navigation" }).click();
-    await expect(page.getByRole("heading", { name: "Navigation", exact: true })).toBeVisible();
+    await expect(page.locator("section.module-navigation-policy")).toBeVisible();
     await page.getByRole("tab", { name: "Dependencies" }).click();
     for (const dimension of [
       "dependency",
@@ -1221,7 +1232,9 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await expect(page.locator(`[data-module-dimension="${dimension}"]`)).toHaveCount(1);
     }
     await expect(
-      page.getByText("Not applicable — no Module Release/Instance", { exact: true }),
+      page
+        .locator("[data-module-dimension]")
+        .getByText("Not applicable — no Module Release/Instance", { exact: true }),
     ).toHaveCount(4);
     await expect(
       page
@@ -1237,7 +1250,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     await gotoHydrated(page, `/administration/modules/${RESPONSES_DEFINITION}`);
     await expect(page.getByRole("heading", { level: 1, name: "Responses" })).toBeVisible();
     await page.getByRole("tab", { name: "Dependencies" }).click();
-    const responseDependencies = page.locator('[data-module-dimension="dependency"]');
+    const responseDependencies = page.locator(".module-detail-dependencies");
     await expect(
       responseDependencies.getByText("Transition-internal only", { exact: true }),
     ).toBeVisible();
@@ -1283,9 +1296,6 @@ test.describe.serial("Sprint 6A Module Management", () => {
         'section.organization-detail-card[aria-labelledby="module-overview-heading"]',
       );
       await expect(overview.getByText(definitionId, { exact: true })).toBeVisible();
-      await expect(
-        overview.getByText(inventoryEntry.source_digest, { exact: true }),
-      ).toBeVisible();
       await expectRenderedModuleDetailMatchesProjection(page, detail.entry);
 
       const descriptorResponse = await fixtures.reader.context.get(
