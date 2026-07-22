@@ -5,7 +5,7 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete, but formal closeout is blocked on missing state-specific evidence publishers, a UI manifest, and two failing browser identities; Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete, but formal closeout remains blocked on populated-upgrade/rollback evidence and two unreconciled browser identities; Sprint 6B follows with its runtime scope unchanged.
 
 ## 2026-07-21 - Sprint 6A-UI Closeout Blocked
 
@@ -24,9 +24,10 @@ project direction.
     - `modules.spec.ts:897` expects the obsolete visible text `Any of` in the Module Management policy row.
     - `permissions.spec.ts:950` expects to select both scope-aware `forms:read` and installation-global `modules:read` in one role; the approved mutually-exclusive scope behavior hides the second capability.
 - Formal closeout blockers:
-  - The approved Sprint 6A-UI plan requires `scripts/capture-sprint-6a-ui-deployment-evidence.ps1`, fresh/upgraded artifacts under `artifacts/sprint-6a-ui/`, and `end2end/sprint-6a-ui-ui-manifest.json`. None exists, so the required fresh, populated-upgrade, rollback/restore, evidence-bound smoke/UAT, canonical Playwright, and UI-manifest gates cannot be truthfully run.
+  - Committed closeout scaffolding now provides `scripts/capture-sprint-6a-ui-deployment-evidence.ps1`, which preserves the retained Sprint 6A evidence schema while requiring successful migrations 1--4, and `end2end/sprint-6a-ui-ui-manifest.json`, which declares the five exact Module Management identities. Fresh evidence was captured under `artifacts/sprint-6a-ui/deployment-fresh.json` from a clean release image and validated with its SHA-256 sidecar. A real populated pre-upgrade database and a verified rollback/restore source are still required for truthful upgraded and recovery artifacts; the fresh local database must not be relabeled or reused as either state.
+  - Evidence-bound smoke, UAT, and Playwright wrappers still need the Sprint 6A-UI migration-1--4 binding while retaining their historical Sprint 6A migration-1--3 behavior. This is a closeout-support change, not a substitute for state-specific evidence.
   - The two browser failures above need deliberate durable-proof reconciliation; they will not be weakened, skipped, or retried into a pass.
-  - Owner: Sprint 6A-UI implementation owner. Next step (2026-07-22): add the missing state-specific evidence publisher and UI manifest; reconcile the two browser identities against the approved interaction contract; then rerun every closing state gate and replace this blocked record with a certified closeout.
+  - Owner: Sprint 6A-UI implementation owner. Next step: obtain the dedicated populated pre-upgrade/rollback source, approve the exact durable-test reconciliation recorded in `docs/sprints/sprint-6a-ui-test-change-log.md`, then rerun every closing state gate and replace this blocked record with a certified closeout.
 - Next Sprint: Sprint 6B - Module Runtime And Installation Infrastructure, after the Sprint 6A-UI closeout evidence is certified.
 
 ### Sprint Handoff / Demo Instructions

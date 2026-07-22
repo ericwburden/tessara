@@ -85,6 +85,24 @@ Additive Module directory proof must cover default exact content/order, trimmed 
 
 ## Closeout Reconciliation
 
+### Pending reviewer decision — 2026-07-21
+
+The following are proposed replacements only. Neither test source nor the
+historical acceptance manifest has been changed. The proposals preserve the
+no-skips/no-retries policy and add behavior proof; they do not make a failing
+expectation disappear.
+
+| Exact identity | Current failure | Proposed equal-or-stronger reconciliation | Decision needed |
+| --- | --- | --- | --- |
+| `end2end/tests/modules.spec.ts` — `Sprint 6A Module Management › global read exposes protected Module Management without an aggregate Administration item and remains read-only` | The identity requires the literal eligibility text `Any of` in the protected Module Management row. That copy was deliberately removed during the approved compact table/lock-only treatment. | Replace the retired text assertion with semantic protected-placement proof: `core.admin.modules` is present in Admin, identifies Module Management, exposes the canonical protected lock treatment, grants the global reader discovery/read-only access, and continues to reject the navigation-policy write with `modules_manage_navigation_global_required`. Retain the existing direct-route, no-aggregate-Administration, descriptor, and denied-write assertions. | Approve replacing only the obsolete literal phrase with the protected-state assertion above. |
+| `end2end/tests/permissions.spec.ts` — `admin can create a role and load the roles route` | The identity selects scope-aware `forms:read`, then expects installation-global `modules:read` to remain selectable in the same role. The approved picker now filters the opposite scope after either kind is selected. | Split the proof into two fresh-picker branches: select `forms:read` and require installation-global `modules:read` to be unavailable plus the scope-aware explanation; then reopen a fresh picker, select `modules:read`, and require `forms:read` to be unavailable plus the installation-global explanation. Retain a separate `admin:all` exception assertion and separate-role assignment proof, so users may receive a scoped product role and a global Module role without allowing a mixed ordinary role. | Approve the bidirectional mutual-exclusion proof and separate-role coverage. |
+
+The dedicated UI manifest currently names the five existing Module Management
+identities. Before certification, its proportional proof must also make the
+1280, 768, and 390 viewport coverage and the supported theme behavior explicit
+in one or more declared identities. This is additive coverage, not an excuse to
+remove existing desktop/mobile or native-route checks.
+
 Before closeout:
 
 - compare this table with the complete Git diff for test, fixture, manifest, script, and visual-baseline paths;
