@@ -776,7 +776,10 @@ fn destination_view(
         .get_untracked()
         .map(|policy| ordered_groups(&policy))
         .unwrap_or_default();
-    let protected = !row.can_hide && !row.can_move_between_groups;
+    // Module Management is a canonical protected placement.  The reader view
+    // must retain the same lock treatment even though it does not expose the
+    // manager-only action metadata used for the generic protected predicate.
+    let protected = row.id == "core.admin.modules" || (!row.can_hide && !row.can_move_between_groups);
     let next_visible = !row.visible;
     view! {
         <article class="module-navigation-item" data-navigation-destination=destination_id.clone()>
