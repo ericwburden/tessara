@@ -1181,10 +1181,12 @@ test.describe.serial("Sprint 6A Module Management", () => {
       "Transitional — not independently deployable",
       "No Module Release",
       "No Module Instance",
-      "Feature Declarations",
-      "Contracts",
       "View source descriptor (JSON)",
     ]) {
+      await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
+    }
+    await page.getByRole("tab", { name: "Declarations" }).click();
+    for (const exactText of ["Feature Declarations", "Contracts"]) {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
     }
     await page.getByRole("tab", { name: "Dependencies" }).click();
