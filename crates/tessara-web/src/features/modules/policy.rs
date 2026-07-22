@@ -962,7 +962,19 @@ fn destination_view(
                 }.into_any()
             } else {
                 view! {
-                    <span class="module-navigation-item__reader-visibility" data-label="Visible">{if row.visible { "Shown" } else { "Hidden" }}</span>
+                    <span class="module-navigation-item__reader-visibility" data-label="Visible">
+                        {if protected {
+                            view! {
+                                <span
+                                    class="module-navigation-item__protected"
+                                    aria-label="Protected placement"
+                                    title="Protected placement"
+                                ><Lock/></span>
+                            }.into_any()
+                        } else {
+                            view! { <span>{if row.visible { "Shown" } else { "Hidden" }}</span> }.into_any()
+                        }}
+                    </span>
                     <div class="module-navigation-eligibility" data-label="Eligibility">
                         {if row.required_capabilities_any_of.is_empty() {
                             view! { <span>"Always eligible"</span> }.into_any()
