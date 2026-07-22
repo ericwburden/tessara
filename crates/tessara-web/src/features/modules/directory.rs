@@ -319,6 +319,7 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
                 <code class="data-table__secondary-text">{definition_id.clone()}</code>
                 <span class="module-directory__digest">
                     <code class="data-table__secondary-text">{source_digest_preview}</code>
+                    <span class="sr-only data-table__secondary-text">{source_digest.clone()}</span>
                     <CopyValue value=source_digest_for_copy label="Copy complete source digest"/>
                 </span>
             </th>
