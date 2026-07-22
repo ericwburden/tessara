@@ -3471,6 +3471,12 @@ input {
   justify-self: center;
 }
 
+.module-navigation-item__protected-icon {
+  display: block;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
 .module-navigation-item__placement.is-protected {
   justify-content: center;
 }

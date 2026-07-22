@@ -973,7 +973,7 @@ fn destination_view(
                                 data-label="Visible"
                                 aria-label="Protected placement"
                                 title="Protected placement"
-                            ><Lock/></span>
+                            ><Lock class="module-navigation-item__protected-icon"/></span>
                         }.into_any()
                     } else {
                         view! {
