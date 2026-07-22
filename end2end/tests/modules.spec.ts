@@ -1443,6 +1443,11 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await expect(policy.getByText("Read-only", { exact: true })).toHaveCount(0);
       await expect(policy.getByRole("button", { name: "Save navigation" })).toBeDisabled();
       await expect(policy.getByRole("button", { name: "Discard changes" })).toBeDisabled();
+      const adminGroup = policy
+        .locator("details.module-navigation-group")
+        .filter({ hasText: "core.admin" });
+      await expect(adminGroup).toHaveCount(1);
+      await adminGroup.locator("summary").click();
       await expect(
         policy.locator('[data-navigation-destination="core.admin.modules"]'),
       ).toContainText("Module Management");
@@ -1484,16 +1489,19 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await policy.getByRole("button", { name: "Add group" }).focus();
       await page.keyboard.press("Enter");
       const customGroup = policy.locator(
-        ".module-navigation-group:has(.module-navigation-group__rename)",
-      ).last();
+        "details.module-navigation-group",
+      ).filter({ hasText: "Custom group" }).last();
       await expect(customGroup).toBeVisible();
-      const groupName = customGroup.getByLabel("Group name");
+      await customGroup.getByRole("button", { name: /Open actions for/ }).click();
+      await page.getByRole("menuitem", { name: "Rename group" }).click();
+      const groupName = page.getByLabel("Group name");
       await groupName.fill("Insights");
+      await page.getByRole("button", { name: "Save name" }).click();
 
       const formsRow = policy.locator(
         '[data-navigation-destination="tessara.forms.navigation"]',
       );
-      const moveFormsToGroup = formsRow.getByLabel("Move to group");
+      const moveFormsToGroup = formsRow.getByLabel("Move Forms to group");
       await moveFormsToGroup.selectOption({ label: "Insights" });
       await expect(
         moveFormsToGroup,
@@ -1505,16 +1513,18 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await expect(save).toBeEnabled();
       await save.focus();
       await page.keyboard.press("Enter");
-      await expect(policy.getByText("Navigation policy saved.", { exact: true })).toBeVisible();
+      await expect(
+        policy.getByRole("heading", { name: "Navigation saved", exact: true }),
+      ).toBeVisible();
       await expect(save).toBeDisabled();
 
       await page.reload();
       await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
       await page.getByRole("tab", { name: "Navigation" }).click();
       const persistedCustomGroup = policy.locator(
-        ".module-navigation-group:has(.module-navigation-group__rename)",
-      );
-      await expect(persistedCustomGroup.getByLabel("Group name")).toHaveValue("Insights");
+        "details.module-navigation-group",
+      ).filter({ hasText: "Custom group" });
+      await expect(persistedCustomGroup).toContainText("Insights");
       await expect(persistedCustomGroup).toContainText("Forms");
       const persistedPolicy = await getJson<NavigationPolicyResponse>(
         fixtures.manager.context,
