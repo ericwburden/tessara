@@ -1,1 +1,224 @@
--- Sprint 5A establishes a hard per-dashboard placement capacity before the-- application begins relying on bounded grid fallback and viewer execution.-- Close the preflight-to-trigger race with old application writers. This lock-- conflicts with INSERT/UPDATE/DELETE and is held by the migration transaction-- through trigger installation.LOCK TABLE dashboard_components IN SHARE ROW EXCLUSIVE MODE;-- Validity includes the current Component kind because kind-specific minimums-- can turn previously valid placement geometry into fallback state. Prevent a-- current-published update-in-place from changing that classifier between the-- preflight snapshot and migration commit.LOCK TABLE component_versions IN SHARE MODE;DO $$DECLARE    violations text;BEGIN    SELECT string_agg(        format('%s (%s placements)', dashboard_id, placement_count),        ', '        ORDER BY dashboard_id    )    INTO violations    FROM (        SELECT dashboard_id, COUNT(*) AS placement_count        FROM dashboard_components        GROUP BY dashboard_id        HAVING COUNT(*) > 240    ) AS over_capacity;    IF violations IS NOT NULL THEN        RAISE EXCEPTION USING            ERRCODE = '23514',            MESSAGE = 'dashboard placement capacity preflight failed: ' || violations,            HINT = 'Back up/export affected dashboards, reduce each to at most 240 placements, and rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';    END IF;END$$;-- The runtime gives every legacy, malformed, or future-schema placement a-- full-width fallback row which must avoid every row touched by valid V1-- geometry. Count alone is therefore insufficient: a mixed dashboard can be-- below 240 stored rows while having no legal display fallback. Decode only-- bounded JSON integers so malformed payloads remain data, not migration-- errors.CREATE FUNCTION pg_temp.dashboard_json_i32(value jsonb)RETURNS integerLANGUAGE plpgsqlIMMUTABLESTRICTAS $$DECLARE    decoded text;    numeric_value numeric;BEGIN    IF jsonb_typeof(value) <> 'number' THEN        RETURN NULL;    END IF;    decoded := value #>> '{}';    IF decoded !~ '^-?[0-9]+$' THEN        RETURN NULL;    END IF;    numeric_value := decoded::numeric;    IF numeric_value < -2147483648 OR numeric_value > 2147483647 THEN        RETURN NULL;    END IF;    RETURN numeric_value::integer;END$$;CREATE TEMPORARY TABLE dashboard_placement_layout_preflightON COMMIT DROPASWITH decoded AS (    SELECT dashboard_components.dashboard_id,           dashboard_components.id AS placement_id,           dashboard_components.config,           component_versions.component_type::text AS component_type,           pg_temp.dashboard_json_i32(               dashboard_components.config -> 'schema_version'           ) AS schema_version,           pg_temp.dashboard_json_i32(               dashboard_components.config -> 'grid_row'           ) AS grid_row,           pg_temp.dashboard_json_i32(               dashboard_components.config -> 'grid_column'           ) AS grid_column,           pg_temp.dashboard_json_i32(               dashboard_components.config -> 'grid_width'           ) AS grid_width,           pg_temp.dashboard_json_i32(               dashboard_components.config -> 'grid_height'           ) AS grid_height    FROM dashboard_components    JOIN component_versions      ON component_versions.id = dashboard_components.component_version_id)SELECT dashboard_id,       placement_id,       grid_row,       grid_column,       grid_width,       grid_height,       (           jsonb_typeof(config) = 'object'           AND schema_version = 1           AND (               NOT config ? 'title'               OR config -> 'title' = 'null'::jsonb               OR jsonb_typeof(config -> 'title') = 'string'           )           AND grid_row >= 1           AND grid_column >= 1           AND grid_width >= CASE WHEN component_type = 'table' THEN 6 ELSE 1 END           AND grid_height >= CASE WHEN component_type = 'table' THEN 4 ELSE 1 END           AND grid_column::bigint + grid_width::bigint - 1 <= 12           AND grid_row::bigint + grid_height::bigint - 1 <= 240       ) IS TRUE AS valid_v1FROM decoded;DO $$DECLARE    violations text;BEGIN    SELECT string_agg(DISTINCT left_placement.dashboard_id::text, ', ')    INTO violations    FROM dashboard_placement_layout_preflight AS left_placement    JOIN dashboard_placement_layout_preflight AS right_placement      ON right_placement.dashboard_id = left_placement.dashboard_id     AND right_placement.placement_id > left_placement.placement_id     AND right_placement.valid_v1     AND left_placement.valid_v1     AND left_placement.grid_column             <= right_placement.grid_column + right_placement.grid_width - 1     AND right_placement.grid_column             <= left_placement.grid_column + left_placement.grid_width - 1     AND left_placement.grid_row             <= right_placement.grid_row + right_placement.grid_height - 1     AND right_placement.grid_row             <= left_placement.grid_row + left_placement.grid_height - 1;    IF violations IS NOT NULL THEN        RAISE EXCEPTION USING            ERRCODE = '23514',            MESSAGE = 'dashboard placement layout preflight found overlapping valid V1 geometry: ' || violations,            HINT = 'Repair or remove the overlapping placements, then rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';    END IF;END$$;DO $$DECLARE    violations text;BEGIN    WITH occupied_rows AS (        SELECT DISTINCT placement.dashboard_id,               generate_series(                   placement.grid_row,                   placement.grid_row + placement.grid_height - 1               ) AS grid_row        FROM dashboard_placement_layout_preflight AS placement        WHERE placement.valid_v1    ),    occupied_counts AS (        SELECT dashboard_id, COUNT(*) AS occupied_row_count        FROM occupied_rows        GROUP BY dashboard_id    ),    requirements AS (        SELECT placement.dashboard_id,               COUNT(*) FILTER (WHERE NOT placement.valid_v1) AS fallback_row_count,               COALESCE(occupied_counts.occupied_row_count, 0) AS occupied_row_count        FROM dashboard_placement_layout_preflight AS placement        LEFT JOIN occupied_counts          ON occupied_counts.dashboard_id = placement.dashboard_id        GROUP BY placement.dashboard_id, occupied_counts.occupied_row_count    )    SELECT string_agg(        format(            '%s (%s occupied rows + %s fallback rows)',            dashboard_id,            occupied_row_count,            fallback_row_count        ),        ', '        ORDER BY dashboard_id    )    INTO violations    FROM requirements    WHERE occupied_row_count + fallback_row_count > 240;    IF violations IS NOT NULL THEN        RAISE EXCEPTION USING            ERRCODE = '23514',            MESSAGE = 'dashboard placement display-layout preflight failed: ' || violations,            HINT = 'Repair or remove placements until every fallback row fits outside valid V1 geometry, then rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';    END IF;END$$;DROP FUNCTION pg_temp.dashboard_json_i32(jsonb);CREATE INDEX dashboard_components_dashboard_position_idx    ON dashboard_components (dashboard_id, position, id);CREATE OR REPLACE FUNCTION enforce_dashboard_component_capacity()RETURNS triggerLANGUAGE plpgsqlAS $$DECLARE    existing_count bigint;BEGIN    IF TG_OP = 'UPDATE' AND NEW.dashboard_id = OLD.dashboard_id THEN        RETURN NEW;    END IF;    -- Serialize inserts/moves for one dashboard so concurrent requests cannot    -- both observe the same final capacity.    PERFORM 1    FROM dashboards    WHERE id = NEW.dashboard_id    FOR UPDATE;    SELECT COUNT(*)    INTO existing_count    FROM dashboard_components    WHERE dashboard_id = NEW.dashboard_id      AND (TG_OP <> 'UPDATE' OR id <> OLD.id);    IF existing_count >= 240 THEN        RAISE EXCEPTION USING            ERRCODE = '23514',            MESSAGE = format(                'dashboard %s already has the maximum 240 placements',                NEW.dashboard_id            ),            CONSTRAINT = 'dashboard_components_capacity_chk';    END IF;    RETURN NEW;END$$;CREATE TRIGGER dashboard_components_capacity_triggerBEFORE INSERT OR UPDATE OF dashboard_id ON dashboard_componentsFOR EACH ROWEXECUTE FUNCTION enforce_dashboard_component_capacity();
+-- Historical Sprint 5A migration preflight retained solely for direct
+-- regression tests. It is intentionally not a deployable migration after the
+-- Sprint 6A-UI fresh-baseline squash.
+--
+-- The original migration established a hard per-dashboard placement capacity
+-- before the application began relying on bounded grid fallback and viewer
+-- execution. Keep its complete preflight and trigger contract here so tests
+-- inspect history without treating it as a live migration input.
+
+-- Close the preflight-to-trigger race with old application writers. This lock
+-- conflicts with INSERT/UPDATE/DELETE and is held by the migration transaction
+-- through trigger installation.
+LOCK TABLE dashboard_components IN SHARE ROW EXCLUSIVE MODE;
+
+-- Validity includes the current Component kind because kind-specific minimums
+-- can turn previously valid placement geometry into fallback state. Prevent a
+-- current-published update-in-place from changing that classifier between the
+-- preflight snapshot and migration commit.
+LOCK TABLE component_versions IN SHARE MODE;
+
+DO $$
+DECLARE
+    violations text;
+BEGIN
+    SELECT string_agg(
+        format('%s (%s placements)', dashboard_id, placement_count),
+        ', ' ORDER BY dashboard_id
+    )
+    INTO violations
+    FROM (
+        SELECT dashboard_id, COUNT(*) AS placement_count
+        FROM dashboard_components
+        GROUP BY dashboard_id
+        HAVING COUNT(*) > 240
+    ) AS over_capacity;
+
+    IF violations IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'dashboard placement capacity preflight failed: ' || violations,
+            HINT = 'Back up/export affected dashboards, reduce each to at most 240 placements, and rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';
+    END IF;
+END
+$$;
+
+-- The runtime gives every legacy, malformed, or future-schema placement a
+-- full-width fallback row which must avoid every row touched by valid V1
+-- geometry. Count alone is therefore insufficient: a mixed dashboard can be
+-- below 240 stored rows while having no legal display fallback. Decode only
+-- bounded JSON integers so malformed payloads remain data, not migration
+-- errors.
+CREATE FUNCTION pg_temp.dashboard_json_i32(value jsonb)
+RETURNS integer
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+AS $$
+DECLARE
+    decoded text;
+    numeric_value numeric;
+BEGIN
+    IF jsonb_typeof(value) <> 'number' THEN
+        RETURN NULL;
+    END IF;
+    decoded := value #>> '{}';
+    IF decoded !~ '^-?[0-9]+$' THEN
+        RETURN NULL;
+    END IF;
+    numeric_value := decoded::numeric;
+    IF numeric_value < -2147483648 OR numeric_value > 2147483647 THEN
+        RETURN NULL;
+    END IF;
+    RETURN numeric_value::integer;
+END
+$$;
+
+CREATE TEMPORARY TABLE dashboard_placement_layout_preflight
+ON COMMIT DROP
+AS
+WITH decoded AS (
+    SELECT dashboard_components.dashboard_id,
+           dashboard_components.id AS placement_id,
+           dashboard_components.config,
+           component_versions.component_type::text AS component_type,
+           pg_temp.dashboard_json_i32(dashboard_components.config -> 'schema_version') AS schema_version,
+           pg_temp.dashboard_json_i32(dashboard_components.config -> 'grid_row') AS grid_row,
+           pg_temp.dashboard_json_i32(dashboard_components.config -> 'grid_column') AS grid_column,
+           pg_temp.dashboard_json_i32(dashboard_components.config -> 'grid_width') AS grid_width,
+           pg_temp.dashboard_json_i32(dashboard_components.config -> 'grid_height') AS grid_height
+    FROM dashboard_components
+    JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
+)
+SELECT dashboard_id,
+       placement_id,
+       grid_row,
+       grid_column,
+       grid_width,
+       grid_height,
+       (
+           jsonb_typeof(config) = 'object'
+           AND schema_version = 1
+           AND (NOT config ? 'title' OR config -> 'title' = 'null'::jsonb OR jsonb_typeof(config -> 'title') = 'string')
+           AND grid_row >= 1
+           AND grid_column >= 1
+           AND grid_width >= CASE WHEN component_type = 'table' THEN 6 ELSE 1 END
+           AND grid_height >= CASE WHEN component_type = 'table' THEN 4 ELSE 1 END
+           AND grid_column::bigint + grid_width::bigint - 1 <= 12
+           AND grid_row::bigint + grid_height::bigint - 1 <= 240
+       ) IS TRUE AS valid_v1
+FROM decoded;
+
+DO $$
+DECLARE
+    violations text;
+BEGIN
+    SELECT string_agg(DISTINCT left_placement.dashboard_id::text, ', ')
+    INTO violations
+    FROM dashboard_placement_layout_preflight AS left_placement
+    JOIN dashboard_placement_layout_preflight AS right_placement
+      ON right_placement.dashboard_id = left_placement.dashboard_id
+     AND right_placement.placement_id > left_placement.placement_id
+     AND right_placement.valid_v1
+     AND left_placement.valid_v1
+     AND left_placement.grid_column <= right_placement.grid_column + right_placement.grid_width - 1
+     AND right_placement.grid_column <= left_placement.grid_column + left_placement.grid_width - 1
+     AND left_placement.grid_row <= right_placement.grid_row + right_placement.grid_height - 1
+     AND right_placement.grid_row <= left_placement.grid_row + left_placement.grid_height - 1;
+
+    IF violations IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'dashboard placement layout preflight found overlapping valid V1 geometry: ' || violations,
+            HINT = 'Repair or remove the overlapping placements, then rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';
+    END IF;
+END
+$$;
+
+DO $$
+DECLARE
+    violations text;
+BEGIN
+    WITH occupied_rows AS (
+        SELECT DISTINCT placement.dashboard_id,
+               generate_series(placement.grid_row, placement.grid_row + placement.grid_height - 1) AS grid_row
+        FROM dashboard_placement_layout_preflight AS placement
+        WHERE placement.valid_v1
+    ),
+    occupied_counts AS (
+        SELECT dashboard_id, COUNT(*) AS occupied_row_count
+        FROM occupied_rows
+        GROUP BY dashboard_id
+    ),
+    requirements AS (
+        SELECT placement.dashboard_id,
+               COUNT(*) FILTER (WHERE NOT placement.valid_v1) AS fallback_row_count,
+               COALESCE(occupied_counts.occupied_row_count, 0) AS occupied_row_count
+        FROM dashboard_placement_layout_preflight AS placement
+        LEFT JOIN occupied_counts ON occupied_counts.dashboard_id = placement.dashboard_id
+        GROUP BY placement.dashboard_id, occupied_counts.occupied_row_count
+    )
+    SELECT string_agg(
+        format('%s (%s occupied rows + %s fallback rows)', dashboard_id, occupied_row_count, fallback_row_count),
+        ', ' ORDER BY dashboard_id
+    )
+    INTO violations
+    FROM requirements
+    WHERE occupied_row_count + fallback_row_count > 240;
+
+    IF violations IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'dashboard placement display-layout preflight failed: ' || violations,
+            HINT = 'Repair or remove placements until every fallback row fits outside valid V1 geometry, then rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';
+    END IF;
+END
+$$;
+
+DROP FUNCTION pg_temp.dashboard_json_i32(jsonb);
+
+CREATE INDEX dashboard_components_dashboard_position_idx
+    ON dashboard_components (dashboard_id, position, id);
+
+CREATE OR REPLACE FUNCTION enforce_dashboard_component_capacity()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    existing_count bigint;
+BEGIN
+    IF TG_OP = 'UPDATE' AND NEW.dashboard_id = OLD.dashboard_id THEN
+        RETURN NEW;
+    END IF;
+
+    -- Serialize inserts/moves for one dashboard so concurrent requests cannot
+    -- both observe the same final capacity.
+    PERFORM 1
+    FROM dashboards
+    WHERE id = NEW.dashboard_id
+    FOR UPDATE;
+
+    SELECT COUNT(*)
+    INTO existing_count
+    FROM dashboard_components
+    WHERE dashboard_id = NEW.dashboard_id
+      AND (TG_OP <> 'UPDATE' OR id <> OLD.id);
+
+    IF existing_count >= 240 THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = format(
+                'dashboard %s already has the maximum 240 placements',
+                NEW.dashboard_id
+            ),
+            CONSTRAINT = 'dashboard_components_capacity_chk';
+    END IF;
+
+    RETURN NEW;
+END
+$$;
+
+CREATE TRIGGER dashboard_components_capacity_trigger
+BEFORE INSERT OR UPDATE OF dashboard_id ON dashboard_components
+FOR EACH ROW
+EXECUTE FUNCTION enforce_dashboard_component_capacity();

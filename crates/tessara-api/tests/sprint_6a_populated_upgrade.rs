@@ -268,14 +268,9 @@ const CURRENT_SEED_SHA256: &str =
 
 const FIXTURE_ACCOUNT_ID: &str = "60000000-0000-0000-0000-000000000002";
 const FIXTURE_SESSION_TOKEN: &str = "60000000-0000-0000-0000-000000000301";
-const DESTRUCTIVE_RESET_ACKNOWLEDGEMENT_ENV: &str = "SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET";
+const DESTRUCTIVE_RESET_ACKNOWLEDGEMENT_ENV: &str = "SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET";
 const DESTRUCTIVE_RESET_ACKNOWLEDGEMENT: &str = "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET";
 const FRESH_DATABASE_URL_ENV: &str = "SPRINT_6A_FRESH_DATABASE_URL";
-const REQUIRED_DATABASE_URL_ENVS: [&str; 3] = [
-    "TEST_DATABASE_URL",
-    "SPRINT_6A_UPGRADE_DATABASE_URL",
-    FRESH_DATABASE_URL_ENV,
-];
 
 #[test]
 fn disposable_database_names_require_token_boundaries() {
@@ -324,7 +319,7 @@ async fn historical_populated_sprint_5a_upgrade_preserves_invariants_and_replace
         !database_url.trim().is_empty(),
         "SPRINT_6A_UPGRADE_DATABASE_URL must not be empty"
     );
-    assert_destructive_upgrade_reset_acknowledged();
+    assert_destructive_fresh_reset_acknowledged();
     let config = Config {
         database_url: database_url.clone(),
         bind_addr: "127.0.0.1:0".to_string(),
@@ -341,7 +336,6 @@ async fn historical_populated_sprint_5a_upgrade_preserves_invariants_and_replace
         .await
         .expect("test database should be reachable");
     assert_disposable_proof_database(&pool).await;
-    assert_required_proof_databases_are_pairwise_distinct().await;
     reset_database(&pool).await;
 
     let pre_control_plane_migrations = PreControlPlaneMigrations::create();
@@ -494,7 +488,7 @@ async fn historical_populated_sprint_5a_upgrade_preserves_invariants_and_replace
 #[tokio::test]
 async fn fresh_startup_and_seed_assignment_lock_order_use_a_separate_database() {
     assert_declared_current_seed_contract();
-    assert_destructive_upgrade_reset_acknowledged();
+    assert_destructive_fresh_reset_acknowledged();
     let database_url = std::env::var(FRESH_DATABASE_URL_ENV).unwrap_or_else(|_| {
         panic!(
             "{FRESH_DATABASE_URL_ENV} is required; fresh-start and lock-order proof must never reset the populated upgrade clone"
@@ -519,7 +513,6 @@ async fn fresh_startup_and_seed_assignment_lock_order_use_a_separate_database() 
         .await
         .expect("fresh proof database should be reachable");
     assert_disposable_proof_database(&pool).await;
-    assert_required_proof_databases_are_pairwise_distinct().await;
     pool.close().await;
 
     prove_seed_and_assignment_lock_order_is_deadlock_free(&config).await;
@@ -1421,7 +1414,7 @@ async fn snapshot(pool: &PgPool, queries: &[(&str, &str)]) -> Vec<String> {
 }
 
 async fn reset_database(pool: &PgPool) {
-    assert_destructive_upgrade_reset_acknowledged();
+    assert_destructive_fresh_reset_acknowledged();
     assert_disposable_proof_database(pool).await;
 
     let tables: Vec<String> = sqlx::query_scalar(
@@ -1470,56 +1463,11 @@ async fn assert_disposable_proof_database(pool: &PgPool) {
     );
 }
 
-fn assert_destructive_upgrade_reset_acknowledged() {
+fn assert_destructive_fresh_reset_acknowledged() {
     let acknowledgement = std::env::var(DESTRUCTIVE_RESET_ACKNOWLEDGEMENT_ENV).unwrap_or_default();
     assert_eq!(
         acknowledgement, DESTRUCTIVE_RESET_ACKNOWLEDGEMENT,
-        "{DESTRUCTIVE_RESET_ACKNOWLEDGEMENT_ENV} must equal '{DESTRUCTIVE_RESET_ACKNOWLEDGEMENT}' before the populated upgrade proof may reset its database"
-    );
-}
-
-async fn assert_required_proof_databases_are_pairwise_distinct() {
-    let mut database_names = BTreeMap::<String, String>::new();
-    let mut configured_names = BTreeSet::new();
-
-    for database_url_env in REQUIRED_DATABASE_URL_ENVS {
-        let database_url = std::env::var(database_url_env).unwrap_or_else(|_| {
-            panic!("{database_url_env} is required for every destructive Sprint 6A database proof")
-        });
-        assert!(
-            !database_url.trim().is_empty(),
-            "{database_url_env} must not be empty"
-        );
-        let pool = PgPoolOptions::new()
-            .max_connections(1)
-            .connect(&database_url)
-            .await
-            .unwrap_or_else(|error| panic!("{database_url_env} should be reachable: {error}"));
-        let database_name: String = sqlx::query_scalar("SELECT current_database()")
-            .fetch_one(&pool)
-            .await
-            .unwrap_or_else(|error| {
-                panic!("{database_url_env} database identity should be readable: {error}")
-            });
-        assert!(
-            is_disposable_database_name(&database_name),
-            "{database_url_env} must resolve to a token-bounded disposable database; got '{database_name}'"
-        );
-        if let Some(first_env) =
-            database_names.insert(database_name.clone(), database_url_env.into())
-        {
-            panic!(
-                "{first_env} and {database_url_env} both resolve to database '{database_name}'; all three proof databases must be distinct"
-            );
-        }
-        configured_names.insert(database_name);
-        pool.close().await;
-    }
-
-    assert_eq!(
-        configured_names.len(),
-        REQUIRED_DATABASE_URL_ENVS.len(),
-        "Sprint 6A proof databases must be pairwise distinct"
+        "{DESTRUCTIVE_RESET_ACKNOWLEDGEMENT_ENV} must equal '{DESTRUCTIVE_RESET_ACKNOWLEDGEMENT}' before the fresh-baseline proof may reset its database"
     );
 }
 

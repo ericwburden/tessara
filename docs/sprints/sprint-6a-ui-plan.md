@@ -6,8 +6,8 @@ Status: scope amended on 2026-07-15 after product review of the Sprint 6A naviga
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6a-ui`
 - Baseline inventory: `docs/sprints/sprint-6a-ui-baseline-inventory.md`
 - Test change log: `docs/sprints/sprint-6a-ui-test-change-log.md`
-- Roadmap source: `Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Implementation Complete; Closeout Pending)`
-- Production status: implementation and proportional proof are complete from the approved Direction 1 contract. Module directory/detail switching and filtering, schema-v2 navigation persistence/API/shell composition, direct Admin destinations, role capability provenance, assignment-date readback, browser comparison, migration proof, smoke/UAT, focused Playwright, and the full workspace regression suite pass. Formal sprint closeout remains a separate workflow.
+- Roadmap source: `Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Complete)`
+- Production status: implementation and formal closeout are complete. The final 2026-07-22 closeout runs one freshly seeded database against commit `4d1103fc91e93aacd201e03bfd8e479cd163faa0`, with only `001_baseline.sql`; upgrade and rollback evidence are not part of the fresh-sprint lifecycle.
 
 ## Sprint Summary
 
@@ -331,7 +331,7 @@ The supported iteration commands are:
 - `npm --prefix .\end2end test -- --list` and focused `npm --prefix .\end2end test -- <spec/grep>` runs
 - `.\scripts\validate.ps1 -Fast`
 
-Bare root `npx playwright test` is unsupported in this repository and records no acceptance proof. Unqualified `cargo test -p tessara-api` includes destructive database targets; run it only through the full validation path with `TEST_DATABASE_URL`, a distinct disposable `SPRINT_6A_FRESH_DATABASE_URL`, and `SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET`. The approved closeout policy squashes all current schema into migration `001_baseline.sql`, destroys prior-sprint databases, and starts the next sprint from a freshly seeded database. `.\scripts\validate.ps1` is the authoritative full source/test command.
+Bare root `npx playwright test` is unsupported in this repository and records no acceptance proof. Unqualified `cargo test -p tessara-api` includes destructive database targets; run it only through the full validation path with `TEST_DATABASE_URL`, a distinct disposable `SPRINT_6A_FRESH_DATABASE_URL`, and `SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET`. The approved closeout policy squashes all current schema into migration `001_baseline.sql`, destroys prior-sprint databases, and starts the next sprint from a freshly seeded database. `.\scripts\validate.ps1` is the authoritative full source/test command.
 
 The Sprint 6A-UI deployment/acceptance publisher requires the sole migration `001_baseline.sql` and writes only under `artifacts/sprint-6a-ui/`. Retained Sprint 6A artifacts are historical records and are not inputs to this closeout. Launch one freshly seeded closing state:
 

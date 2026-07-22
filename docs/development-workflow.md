@@ -182,17 +182,18 @@ itself authorization to change the test.
 
 ## Canonical Closeout Validation
 
-Run the check-only and reproducible gate from the repository root. Full
-validation requires three independently provisioned disposable databases;
-`scripts/validate.ps1` intentionally refuses to run without all three URLs and
-the exact destructive-reset acknowledgement so database-backed assertions
-cannot silently skip, fresh-start proof cannot erase the representative
-populated-upgrade fixture, and the destructive populated upgrade proof cannot
-race the general integration suite. Gate 4 uses a separate restored Sprint 5A
-demo target; it is not one of these three validation databases.
-`scripts/validate.ps1 -Fast` is only an inner-loop, non-database check: its API
-step is explicitly `cargo test -p tessara-api --lib --locked`, so it neither
-runs nor claims the populated-upgrade integration proof.
+Run the check-only and reproducible gate from the repository root. The
+fresh-sprint lifecycle uses two independently provisioned disposable databases:
+one general test target and one distinct fresh-start/seed-lock target.
+`scripts/validate.ps1` intentionally refuses to run without both URLs and the
+exact destructive-reset acknowledgement so database-backed assertions cannot
+silently skip and the fresh-start proof cannot reset the general test target.
+Each sprint starts from one squashed baseline migration and a freshly seeded
+database; upgrade and rollback evidence are not current closeout inputs.
+`scripts/validate.ps1 -Fast` is an inner-loop check. Its API step runs
+`cargo test -p tessara-api --lib --locked`; provide `TEST_DATABASE_URL` when
+that library suite includes an intentional database-backed catalog-sync proof.
+Fast mode never claims the destructive fresh-start proof.
 
 ```powershell
 cargo fmt --all -- --check
@@ -203,9 +204,8 @@ npm --prefix .\end2end ci
 npm --prefix .\end2end run install-browsers
 
 $env:TEST_DATABASE_URL = '<disposable-test-database-url>'
-$env:SPRINT_6A_UPGRADE_DATABASE_URL = '<second-dedicated-disposable-upgrade-database-url>'
-$env:SPRINT_6A_FRESH_DATABASE_URL = '<third-dedicated-disposable-fresh-database-url>'
-$env:SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
+$env:SPRINT_6A_FRESH_DATABASE_URL = '<second-dedicated-disposable-fresh-database-url>'
+$env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
 .\scripts\validate.ps1
 cargo test --workspace --all-features --locked
 
@@ -215,8 +215,9 @@ git diff --check
 git status --short
 ```
 
-The final `git status --short` must emit no lines. Intentional but uncommitted
-files are still a failed closing cleanliness gate.
+The final `git status --short` must emit no unreviewed implementation or
+closeout changes. Explicitly preserved user diagnostics may remain unstaged and
+must be identified in the handoff.
 
 The non-Fast `validate.ps1` path also invokes the exact optimized
 resource-reference timing proof:
@@ -228,8 +229,15 @@ cargo test -p tessara-api --test modules --release --locked resource_reference_r
 The timing test is compiled only for optimized builds; a debug return/skip is
 not release evidence.
 
-For migration or catalog-synchronization work, also retain evidence that a
-populated prior-sprint database upgrades without reset, restart is safe, and
+### Historical pre-fresh-baseline upgrade and rollback protocol
+
+The following procedure records the superseded pre-fresh-baseline migration
+protocol. It is retained only to interpret historical Sprint 5A/6A evidence;
+it is not a current closeout requirement and must not be used in place of the
+single-migration, freshly seeded lifecycle above.
+
+For historical migration or catalog-synchronization work, retain evidence that
+a populated prior-sprint database upgrades without reset, restart is safe, and
 repeated and concurrent synchronization is deterministic and failure-atomic.
 User-managed roles, capability mappings, assignments, sessions, and product
 identities are upgrade invariants. Deterministic built-in `admin`, `operator`,

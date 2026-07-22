@@ -5,9 +5,9 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete; closeout now follows the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
-## 2026-07-21 - Sprint 6A-UI Fresh-Baseline Closeout In Progress
+## 2026-07-22 - Sprint 6A-UI Fresh-Baseline Closeout
 
 - Completed:
   - Closed the approved configuration-driven navigation composition, direct Core Admin routes, protected placement rules, responsive reader/manager workflows, Module Management directory/detail harmonization, role provenance, assignment-date readback, and the final directory/policy state treatments.
@@ -15,17 +15,16 @@ project direction.
 - Deferred follow-up (not Sprint 6A-UI scope):
   - Sweep established screens for visually similar controls that should consolidate into reusable, shared components; retain behavior while removing incidental styling drift.
   - Introduce the approved Sonner-based transient notification system for alert messages.
-- Validation completed against final implementation commit `e57a3426`:
-  - Local stack rebuild: `scripts/local-launch.ps1` rebuilt the API image and started healthy `api` and `postgres` services; `GET http://localhost:8080/health` returned `ok`.
-  - Development-mode smoke and Sprint UAT: passed. These are useful local checks but deliberately do not publish closing deployment evidence.
-  - `validate.ps1 -Fast`: passed with a disposable `TEST_DATABASE_URL`; this includes the 131 API, 70 web, module-contract, formatting, source, and Sprint 6A evidence self-tests.
-  - `cargo fmt --all -- --check` and `git diff --check`: passed.
-  - `npm --prefix .\\end2end test -- --list`: found 60 browser scenarios. The former literal-eligibility and one-way scope-picker failures have approved equal-or-stronger replacements in the test-change log.
-- Approved closeout policy and evidence:
-  - Prior-sprint databases are destroyed; the current migration directory contains only the squashed `001_baseline.sql` and the local stack is freshly seeded.
-  - `scripts/capture-sprint-6a-ui-deployment-evidence.ps1` accepts only a successful migration-1 ledger and a fresh deployment state. The stale migration-1–4 fresh artifact is invalidated and will be replaced after the new stack is launched.
+- Final fresh-baseline evidence was captured against implementation commit `4d1103fc91e93aacd201e03bfd8e479cd163faa0`:
+  - Prior closeout databases and compose volumes were destroyed. The final local stack was launched with `scripts/local-launch.ps1 -FreshData`, applied only `001_baseline.sql`, seeded its authorized inventory, and exposed healthy API and Postgres services at `http://localhost:8080`.
+  - `artifacts/sprint-6a-ui/deployment-fresh.json`, `smoke-fresh.json`, and `uat-fresh.json` passed with the required fresh data state.
+  - `validate-e2e.ps1` passed all five reconciled UI scenarios with zero retries, skips, or failures, and published `end2end/sprint-6a-ui-ui-manifest.json` plus `artifacts/sprint-6a-ui/playwright-ui-fresh.json`.
+  - `validate-resource-reference-nondisclosure.ps1` passed restricted known-versus-random reference timing checks and published `artifacts/sprint-6a-ui/resource-reference-nondisclosure-fresh.json`.
+  - The final bounded source gate passed with disposable `TEST_DATABASE_URL`: evidence-script contracts, formatting, API/web/module-contract checks, 42 module-contract tests, 70 web tests, and 131 API library tests. Targeted fresh-start, SSR route, and historical-capacity proofs also passed.
+  - The durable browser reconciliation replaces the obsolete literal reader/Any-of proof with protected Module Management placement, canonical lock treatment, reader access, and denied-write proof. It also proves both directions of the mixed-scope picker restriction, retains the `admin:all` exception, and verifies separate scoped/global role assignment.
+- Fresh-sprint policy used for closeout:
+  - This sprint starts from one squashed baseline migration and a freshly seeded database. Upgrade and rollback evidence are intentionally not produced; historical migration fixtures are not deployment inputs.
   - Historical dashboard capacity SQL remains only under a test fixture for direct preflight behavior; it is not a runnable migration or deployment-evidence input.
-  - Owner: Sprint 6A-UI implementation owner. Next step: rebuild the clean stack, capture fresh evidence, then run the required source, smoke, UAT, and reconciled browser gates.
 - Next Sprint: Sprint 6B - Module Runtime And Installation Infrastructure, after the fresh-baseline Sprint 6A-UI closeout evidence is certified.
 
 ### Sprint Handoff / Demo Instructions
@@ -41,7 +40,7 @@ project direction.
   3. Attempt protected Main/Admin/Home and Admin-destination operations.
 - Expected: custom changes persist atomically; protected operations remain unavailable or produce a clear non-mutating explanation; display changes never grant route access.
 - Acceptance check: pass when a manager can complete optional-item/group work, but cannot delete required groups or violate protected placement/visibility rules.
-- Evidence location: `scripts/uat-sprint.ps1`, `scripts/smoke.ps1`, `end2end/acceptance-manifest.json`; the required Sprint 6A-UI UI manifest is a closeout blocker recorded above.
+- Evidence location: `scripts/uat-sprint.ps1`, `scripts/smoke.ps1`, `end2end/acceptance-manifest.json`, `end2end/sprint-6a-ui-ui-manifest.json`, and `artifacts/sprint-6a-ui/playwright-ui-fresh.json`.
 
 ### Reader access and direct Core Admin routes
 
@@ -73,7 +72,7 @@ project direction.
   3. On Navigation, save an allowed change and observe saving/saved feedback; direct-load a nonexistent definition to inspect the not-found recovery action.
 - Expected: canonical order is preserved, no-match differs from an empty inventory, retry/return actions are usable without JavaScript, and responsive cards remain operable at 1280/768/390 widths.
 - Acceptance check: pass when search/status behavior adds no authority, state treatments remain distinct, and module detail/provenance information is readable and accessible.
-- Evidence location: focused web tests, development-mode smoke/UAT checks, failing canonical Playwright output under `end2end/test-results/`, and the final local stack at `http://localhost:8080`; evidence-bound closing artifacts remain blocked.
+- Evidence location: focused web tests, fresh smoke/UAT evidence, `end2end/sprint-6a-ui-ui-manifest.json`, `artifacts/sprint-6a-ui/playwright-ui-fresh.json`, and the final local stack at `http://localhost:8080`.
 
 ### Roles and assignments
 
@@ -139,7 +138,7 @@ project direction.
   - Manual demonstration: all handoff paths above on the running local stack.
   - Automated check: fresh evidence, smoke/UAT, canonical/UI Playwright, API/web tests, formatting, and source validation recorded below.
 
-## 2026-07-16 - Sprint 6A-UI Implementation Complete; Closeout Pending
+## 2026-07-16 - Sprint 6A-UI Implementation Complete (Historical Pre-Closeout Record)
 
 - Implemented the approved Direction 1 Module Management directory controls as working trimmed, case-insensitive display-name/definition-ID search plus conjunctive status filtering with canonical order, responsive cards, a distinct clearable no-match state, and the canonical `Blocks` shell glyph.
 - Added migration 004 and schema-v2 navigation management around stable required/custom groups and complete destination placements. The service enforces dense order, complete membership, protected placement/visibility, UUID-v4 custom identities, empty-only deletion, optimistic revision conflicts, and atomic audit-backed replacement while retaining legacy band rows only as inert rollback data.
@@ -147,7 +146,7 @@ project direction.
 - Implemented the responsive manager/reader composer with group carets, accessible lock-icon-only protection, exact capability-list eligibility in reader mode, cross-group/select and explicit ordering controls, mobile action sheets, dirty Save/Discard, revision reload recovery, and post-movement focus restoration.
 - Added role capability Scope/Provenance columns and the approved non-redundant source labels with abbreviated reveal/copy digests. Exposed durable role-assignment creation time as `Assigned on`, preserving the earliest timestamp across assignment rewrites and showing pending/unassigned states without expanding assignment authority.
 - Retained the current ordinary mixed-scope role restriction and recorded mixed-scope roles as future work requiring unambiguous per-capability or equivalent assignment semantics; a user can continue receiving separate scoped and installation-global roles.
-- Closing proof passed for native API/web compilation, the WASM hydrate target, strict affected-target Clippy, focused Playwright, smoke/UAT, the full locked workspace suite, and reviewed desktop/tablet/mobile interaction and containment in both themes. Fresh migration 004 initialization and a populated migration-3-to-4 clone preserve data and produce two groups, all 13 dense placements, and the versioned schema fingerprint audit. Formal sprint closeout remains separate.
+- This pre-closeout proof was later superseded by the 2026-07-22 fresh-baseline closeout above: the migration history was squashed to `001_baseline.sql`, previous sprint databases were destroyed, and the final evidence ran against a newly seeded installation.
 
 ## 2026-07-16 - Sprint 6A-UI UX-Led Scope Clarification
 

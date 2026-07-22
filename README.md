@@ -220,9 +220,8 @@ Useful checks:
 ```powershell
 .\scripts\validate.ps1 -Fast
 $env:TEST_DATABASE_URL = '<disposable-test-database-url>'
-$env:SPRINT_6A_UPGRADE_DATABASE_URL = '<second-dedicated-disposable-upgrade-database-url>'
-$env:SPRINT_6A_FRESH_DATABASE_URL = '<third-dedicated-disposable-fresh-database-url>'
-$env:SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
+$env:SPRINT_6A_FRESH_DATABASE_URL = '<second-dedicated-disposable-fresh-database-url>'
+$env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
 .\scripts\validate.ps1
 .\scripts\validate-e2e.ps1 -DevelopmentMode -BaseUrl "http://127.0.0.1:8080"
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
@@ -235,18 +234,16 @@ cargo audit --quiet
 runs formatting, the framework-neutral module-contract check/tests, API checks,
 the API SSR check, web checks, wasm hydrate checks, and API/web tests
 sequentially so Windows Cargo builds do not fight over the same artifact locks.
-Full validation requires `TEST_DATABASE_URL`, a distinct
-`SPRINT_6A_UPGRADE_DATABASE_URL` for the destructive populated-upgrade proof,
-and a third distinct `SPRINT_6A_FRESH_DATABASE_URL` for fresh-start/seed-lock
-proof. All three must resolve to token-bounded disposable database names, and
-the exact reset acknowledgement is mandatory. Validation fails instead of
-silently skipping database-backed assertions when any URL is absent or any two
-resolve to the same live database. Use
-`-Fast` only for the inner loop when SSR, wasm hydrate, and database checks are
-not relevant to the change. Closing browser acceptance additionally restores a
-Sprint 5A demo source into a fourth disposable target, validates it with
-`OriginalAfterRestore`, and starts the closing image with `-SkipSeed`; it does
-not repurpose or post-upgrade-seed the representative fixture database.
+Full validation requires `TEST_DATABASE_URL` and a distinct
+`SPRINT_6A_FRESH_DATABASE_URL` for the destructive fresh-start/seed-lock proof.
+Both must resolve to token-bounded disposable database names, and the exact
+reset acknowledgement is mandatory. Validation fails instead of silently
+skipping database-backed assertions when either URL is absent or both resolve
+to the same live database. The fresh-sprint closeout lifecycle intentionally
+does not run upgrade or rollback evidence. Use `-Fast` only for the inner loop
+when SSR, wasm hydrate, and the destructive fresh-start proof are not relevant;
+provide `TEST_DATABASE_URL` when its API library suite includes the intentional
+database-backed catalog-sync proof.
 
 Testing should focus on behavior that protects domain and workflow boundaries:
 validation rules, capability scope and ownership behavior, projection contracts,

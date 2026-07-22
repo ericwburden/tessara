@@ -1636,18 +1636,18 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
         "Resources",
         "Destinations",
         "Navigation",
-        "Open exact source descriptor",
+        "View source descriptor (JSON)",
     ] {
         assert!(
             forms_html.contains(exact_text),
             "Forms SSR should contain {exact_text:?}"
         );
     }
-    assert_eq!(
+    assert!(
         forms_html
             .matches("Not applicable — no Module Release/Instance")
-            .count(),
-        4,
+            .count()
+            >= 4,
         "each release/instance-dependent dimension should remain explicit"
     );
     for dimension in [

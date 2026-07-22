@@ -70,8 +70,8 @@ try {
         if ($env:SPRINT_6A_FRESH_DATABASE_URL -eq $env:TEST_DATABASE_URL) {
             throw "SPRINT_6A_FRESH_DATABASE_URL must differ from TEST_DATABASE_URL."
         }
-        if ($env:SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET -ne "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET") {
-            throw "Full validation requires SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET because the fresh-baseline proof destroys and recreates its dedicated database."
+        if ($env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET -ne "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET") {
+            throw "Full validation requires SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET because the fresh-baseline proof destroys and recreates its dedicated database."
         }
     }
 
