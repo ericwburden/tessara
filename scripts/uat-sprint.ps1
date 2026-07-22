@@ -2,7 +2,7 @@
 param(
     [string]$BaseUrl = "http://localhost:8080",
     [string]$DeploymentEvidencePath,
-    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [ValidateSet("fresh")][string]$ExpectedDataState,
     [string]$AcceptanceEvidencePath,
     [switch]$OverwriteAcceptanceEvidence,
     [switch]$DevelopmentMode
@@ -30,7 +30,7 @@ if ($DevelopmentMode -and -not [string]::IsNullOrWhiteSpace($AcceptanceEvidenceP
 }
 if (-not $DevelopmentMode) {
     if ([string]::IsNullOrWhiteSpace($DeploymentEvidencePath) -or [string]::IsNullOrWhiteSpace($ExpectedDataState)) {
-        throw "Sprint acceptance UAT requires -DeploymentEvidencePath and -ExpectedDataState upgraded|fresh. Use -DevelopmentMode only for non-acceptance local diagnostics."
+        throw "Sprint acceptance UAT requires -DeploymentEvidencePath and -ExpectedDataState fresh. Use -DevelopmentMode only for non-acceptance local diagnostics."
     }
     if (-not (Test-Path -LiteralPath $deploymentEvidenceCommon -PathType Leaf)) {
         throw "Could not find Sprint 6A deployment evidence validator at $deploymentEvidenceCommon"
@@ -63,7 +63,7 @@ if (-not $DevelopmentMode) {
 Write-Host "`n== Sprint UAT (1) Local deployment sanity ==" -ForegroundColor Cyan
 Write-Host "Use after local deployment refresh:"
 Write-Host "  .\scripts\local-launch.ps1"
-Write-Host "  .\scripts\uat-sprint.ps1 -BaseUrl '$BaseUrl' -DeploymentEvidencePath '<path>' -ExpectedDataState upgraded|fresh -AcceptanceEvidencePath '<state-specific path>'"
+Write-Host "  .\scripts\uat-sprint.ps1 -BaseUrl '$BaseUrl' -DeploymentEvidencePath '<path>' -ExpectedDataState fresh -AcceptanceEvidencePath '<state-specific path>'"
 
 function Assert-Contains {
     param(

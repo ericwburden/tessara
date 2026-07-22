@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "http://127.0.0.1:8080",
-    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [ValidateSet("fresh")][string]$ExpectedDataState,
     [string]$OutputPath,
     [string]$AdminEmail = "admin@tessara.local",
     [string]$AdminPassword = "tessara-dev-admin",
@@ -220,16 +220,16 @@ if ($SelfTest) {
         throw "Self-test failed: built-in seed canonical digest changed."
     }
 
-    $expectedMigrations = @(1..3 | ForEach-Object {
-        [pscustomobject]@{ version = $_; file = "00$($_)_test.sql"; checksum_sha384 = "d" * 96 }
-    })
-    $databaseMigrations = @(1..3 | ForEach-Object {
-        [pscustomobject]@{ version = $_; success = $true; checksum_sha384 = "d" * 96 }
-    })
+    $expectedMigrations = @(
+        [pscustomobject]@{ version = 1; file = "001_test.sql"; checksum_sha384 = "d" * 96 }
+    )
+    $databaseMigrations = @(
+        [pscustomobject]@{ version = 1; success = $true; checksum_sha384 = "d" * 96 }
+    )
     Assert-Sprint6AMigrationLedger `
         -DatabaseMigrations $databaseMigrations `
         -ExpectedMigrations $expectedMigrations
-    $databaseMigrations[2].checksum_sha384 = "e" * 96
+    $databaseMigrations[0].checksum_sha384 = "e" * 96
     $migrationMismatchRejected = $false
     try {
         Assert-Sprint6AMigrationLedger `
@@ -370,31 +370,31 @@ if ($SelfTest) {
                 version = "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68"
                 canonical_sha256 = "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600"
             }
-            data = [pscustomobject]@{ state = "upgraded" }
+            data = [pscustomobject]@{ state = "fresh" }
         }
     }
     Assert-Sprint6ADeploymentEvidenceDocument `
         -Evidence $sample `
-        -ExpectedDataState upgraded `
+        -ExpectedDataState fresh `
         -BaseUrl "http://127.0.0.1:8080"
     $rejected = $false
     try {
         Assert-Sprint6ADeploymentEvidenceDocument `
             -Evidence $sample `
-            -ExpectedDataState fresh `
+            -ExpectedDataState upgraded `
             -BaseUrl "http://127.0.0.1:8080"
     } catch {
         $rejected = $true
     }
     if (-not $rejected) {
-        throw "Self-test failed: upgraded evidence was accepted as fresh evidence."
+        throw "Self-test failed: fresh evidence was accepted as the retired upgraded state."
     }
     $sample.snapshot.database_runtime.database_user = 7
     $rejected = $false
     try {
         Assert-Sprint6ADeploymentEvidenceDocument `
             -Evidence $sample `
-            -ExpectedDataState upgraded `
+            -ExpectedDataState fresh `
             -BaseUrl "http://127.0.0.1:8080"
     } catch {
         $rejected = $true
@@ -407,7 +407,7 @@ if ($SelfTest) {
     try {
         Assert-Sprint6ADeploymentEvidenceDocument `
             -Evidence $sample `
-            -ExpectedDataState upgraded `
+            -ExpectedDataState fresh `
             -BaseUrl "http://127.0.0.1:8080"
     } catch {
         $rejected = $true
@@ -420,7 +420,7 @@ if ($SelfTest) {
 }
 
 if ([string]::IsNullOrWhiteSpace($ExpectedDataState)) {
-    throw "-ExpectedDataState upgraded|fresh is required. The value is verified against database history; it is not self-attested."
+    throw "-ExpectedDataState fresh is required. The value is verified against database history; it is not self-attested."
 }
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = "artifacts/sprint-6a/deployment-$ExpectedDataState.json"

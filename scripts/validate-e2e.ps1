@@ -8,7 +8,7 @@ param(
     [string]$AcceptanceManifestPath = "end2end/acceptance-manifest.json",
     [string]$EvidencePath,
     [string]$DeploymentEvidencePath,
-    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [ValidateSet("fresh")][string]$ExpectedDataState,
     [switch]$OverwriteEvidence,
     [switch]$SelfTest
 )
@@ -805,7 +805,7 @@ if ($SelfTest) {
         if ($nodeCommands.Count -ne 1) {
             throw "Self-test requires one unambiguous Node.js executable; found $($nodeCommands.Count)."
         }
-        Invoke-CheckedStep -Label "Validating Playwright upgraded demo-seed guard and endpoint inventory" -Command {
+        Invoke-CheckedStep -Label "Validating Playwright fresh demo-seed guard and endpoint inventory" -Command {
             & $nodeCommands[0].Source --no-warnings $demoSeedSelfTest
         }
     } finally {
@@ -832,7 +832,7 @@ if (-not $DevelopmentMode -and $Seed) {
 }
 if (-not $DevelopmentMode) {
     if ([string]::IsNullOrWhiteSpace($DeploymentEvidencePath) -or [string]::IsNullOrWhiteSpace($ExpectedDataState)) {
-        throw "Playwright acceptance requires -DeploymentEvidencePath and -ExpectedDataState upgraded|fresh. Use -DevelopmentMode only for targeted non-acceptance diagnostics."
+        throw "Playwright acceptance requires -DeploymentEvidencePath and -ExpectedDataState fresh. Use -DevelopmentMode only for targeted non-acceptance diagnostics."
     }
     if (-not (Test-Path -LiteralPath $deploymentEvidenceCommon -PathType Leaf)) {
         throw "Could not find Sprint 6A deployment evidence validator at $deploymentEvidenceCommon"

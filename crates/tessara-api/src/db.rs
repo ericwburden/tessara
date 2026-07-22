@@ -342,8 +342,6 @@ mod tests {
     };
 
     const BASELINE: &[u8] = include_bytes!("../migrations/001_baseline.sql");
-    const DASHBOARD_PLACEMENT_CAPACITY: &[u8] =
-        include_bytes!("../migrations/002_dashboard_placement_capacity.sql");
 
     #[test]
     fn built_in_role_capability_seed_contract_is_exact_and_review_versioned() {
@@ -365,7 +363,7 @@ mod tests {
 
     #[test]
     fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0xb2f5_7278_25e1_d5b9);
+        assert_eq!(fnv1a(BASELINE), 0xb88c_b9a9_7495_2776);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains(
             "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
@@ -378,15 +376,16 @@ mod tests {
     }
 
     #[test]
-    fn pre_control_plane_migration_bytes_remain_immutable() {
+    fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "a61f5192ad8e14bdcbbd26203301030fd57b647a237218c1e5443936944e9ca0"
+            "c7d962e878717f5958482841c9744ef589e1f36c347be9eb1aa0328739c5cbe9"
         );
-        assert_eq!(
-            sha256_hex(DASHBOARD_PLACEMENT_CAPACITY),
-            "c26a100e7fcd7aba4a74622c03f6c8e809219022595206da3ba7ddc86313550e"
-        );
+        let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
+        assert!(baseline.contains("CREATE TABLE application_installations"));
+        assert!(baseline.contains("CREATE TABLE transition_descriptor_sources"));
+        assert!(baseline.contains("CREATE TABLE navigation_groups"));
+        assert!(baseline.contains("CREATE TABLE navigation_destination_placements"));
     }
 
     fn sha256_hex(bytes: &[u8]) -> String {

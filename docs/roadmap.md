@@ -19,27 +19,16 @@ Every future sprint is a full vertical slice.
 - Run a local deployment refresh with `.\scripts\local-launch.ps1` for standard
   updates, or `.\scripts\local-launch.ps1 -FreshData` only when the current
   sprint's ordered protocol has reached its destructive fresh-install step.
-- Sprint 6A closeout is governed by the plan's
-  [ordered required Gates 1–6](./sprints/sprint-6a-plan.md#ordered-required-gates),
-  not by a single fresh-deployment command or this roadmap summary. Execute the
-  gates in order: source/contract checks, three-database integration,
-  populated-upgrade plus compatibility/restore proof, closing-build regression
-  on the restored Sprint 5A demo target after the closing startup upgrades it
-  with seeding disabled, fresh installation, and final cleanliness. The
-  representative populated-upgrade fixture remains a separate compatibility
-  proof database and is not the Gate 4 browser candidate.
-- Sprint 6A must retain two non-interchangeable acceptance sets. Gate 4 produces
-  `deployment-upgraded.json` plus upgraded smoke, UAT, exact-manifest Playwright,
-  and nondisclosure evidence before any fresh reset. Gate 5 then produces a
-  separate `deployment-fresh.json` plus fresh smoke, UAT, exact-manifest
-  Playwright, and nondisclosure evidence. Gate 3's rollback package and verified
-  backup/restore evidence are also mandatory; neither state-specific set
-  substitutes for them.
+- Sprint 6A-UI closeout follows the approved fresh-sprint lifecycle in
+  [its final validation gates](./sprints/sprint-6a-ui-plan.md#final-validation-gates):
+  squash the sprint schema to one `001_baseline.sql`, destroy prior-sprint
+  databases, launch a freshly seeded stack, then run the commit-bound source,
+  smoke, UAT, and browser checks. Historical upgrade/rollback artifacts are not
+  acceptance inputs for this closing lifecycle.
 - Print and run the sprint UAT, smoke, Playwright, and any sprint-specific
   release/conformance commands with the exact deployment-evidence path and data
-  state required by that sprint's ordered plan. For Sprint 6A, use the commands
-  and state-specific output paths in Gates 4 and 5 without filters or a
-  development-mode bypass.
+  state required by that sprint's ordered plan. For Sprint 6A-UI, use the
+  migration-1 fresh evidence path without filters or a development-mode bypass.
 - Confirm the UAT script output includes current route ownership and role-gated behavior before closing the sprint.
 - Confirm any sprint that adds or changes permission-controlled behavior updates `docs/playwright-permissions-scenarios.md` and includes positive and negative Playwright coverage where currently executable.
 - Confirm every route surface touched in the sprint remains under native SSR ownership before closing the sprint.
@@ -765,7 +754,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** an actor with global `modules:read` can discover fixed Module Management in the `Admin` group and inspect Forms, Workflows, Responses, Datasets, Components, and Dashboards as clearly labeled in-process contributions rather than Module Instances; understand their advertised Feature Declarations; and review their contracts, security capabilities, and current navigation policy without receiving mutation controls. An actor with global `modules:manage_navigation` can change contribution visibility/order without changing authorization. The same directory shows Migration as retired historical/support inventory with no route, navigation item, provider, Feature Declaration, contract, capability, or action, while every current product route continues to work.
 
-### Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Implementation Complete; Closeout Blocked)
+### Sprint 6A-UI: Navigation Composition And Module Management Harmonization Slice (Implementation Complete; Fresh-Baseline Closeout In Progress)
 
 **Outcome:** Tessara navigation is composed from revisioned, configuration-driven ordered groups and item placements instead of hard-coded `Main`/`Admin` sections, Core anchors, and reorder bands. Core protects its required groups and destinations while administrators can manage custom groups and freely place optional destinations. The redundant `/administration` page and route are removed, and the Sprint 6A Module Management surfaces are harmonized with the existing Tessara UI through a UX-led pass that may include approved supporting behavior rather than only markup/CSS changes.
 
@@ -773,7 +762,7 @@ This section records the completed foundation sequence that led to the current n
 
 **Build:**
 
-- introduce a forward-only migration from the Sprint 6A contribution-only band policy to a revisioned group-and-placement model covering Core and contributed destinations; preserve every compatible visibility/order choice and reject ambiguous or orphaned state
+- close out with one squashed fresh baseline migration containing the revisioned group-and-placement schema; prior-sprint databases are intentionally destroyed rather than upgraded in place
 - define a Core-owned built-in destination catalog with stable identities, routes, capability requirements, default placements, and independent protection flags for removal, visibility, and group movement
 - require stable `core.main` and `core.admin` groups; protect Home in Main, allow Organization to be hidden but not removed or moved out of Main, and protect User Management, Roles & Access, Node Types, and Module Management in Admin while allowing all protected items to reorder inside their group
 - let effective global `modules:manage_navigation` create, rename, delete, and reorder custom groups and show, hide, reorder, or move every non-protected destination between groups; block deletion of non-empty groups and preserve atomic revision-conflict/audit behavior
@@ -785,7 +774,7 @@ This section records the completed foundation sequence that led to the current n
 - treat UX outcomes, security boundaries, and the Sprint 6B platform boundary as the implementation constraints rather than limiting work to markup/CSS; unrelated feature expansion must be approved before inclusion and documented with matching acceptance proof
 - preserve native Leptos SSR, hydration, direct-load/refresh ownership, useful no-JavaScript documents, clean browser consoles, semantic HTML, and the prohibition on `/bridge/*`, route-level HTML-string injection, and JavaScript controller ownership
 - preserve tests as durable proof: record every intentionally superseded Sprint 6A assertion before editing it, retain all unrelated identities unchanged, and add equal-or-stronger migration, invariant, authorization, group CRUD, cross-group placement, concurrency, SSR, accessibility, and viewport proof
-- use proportional targeted validation during implementation, then run the reconciled complete browser inventory, fresh and populated-upgrade deployment proof, smoke/UAT, rollback compatibility, SSR/hydration/console, accessibility, responsive, and source-quality gates against the closing commit
+- use proportional targeted validation during implementation, then run the reconciled complete browser inventory, fresh deployment proof, smoke/UAT, SSR/hydration/console, accessibility, responsive, and source-quality gates against the closing commit
 - keep Module Release/Instance persistence, materialization, Supervisor, gateway, OCI, module databases, and runtime work out of scope; Sprint 6B remains unchanged
 
 **Application UI delivered this sprint:**

@@ -1736,17 +1736,11 @@ mod tests {
     }
 
     #[test]
-    fn historical_migrations_remain_byte_identical() {
+    fn squashed_baseline_migration_remains_byte_identical() {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
-        let dashboard_capacity =
-            include_bytes!("../../migrations/002_dashboard_placement_capacity.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "a61f5192ad8e14bdcbbd26203301030fd57b647a237218c1e5443936944e9ca0"
-        );
-        assert_eq!(
-            format!("{:x}", Sha256::digest(dashboard_capacity)),
-            "c26a100e7fcd7aba4a74622c03f6c8e809219022595206da3ba7ddc86313550e"
+            "c7d962e878717f5958482841c9744ef589e1f36c347be9eb1aa0328739c5cbe9"
         );
     }
 

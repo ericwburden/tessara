@@ -973,23 +973,24 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expect(formsRead).toHaveAttribute("aria-describedby", /-metadata$/);
     await expect(modulesRead).toHaveAttribute("aria-describedby", /-metadata$/);
     await sheet.getByText("forms:read", { exact: true }).click();
-    await sheet.getByText("modules:read", { exact: true }).click();
     await expect(formsRead).toBeChecked();
-    await expect(modulesRead).toBeChecked();
-
-    await expect(sheet.getByRole("alert")).toContainText(
-      "A role cannot combine scope-aware and installation-global capabilities unless it contains admin:all.",
-    );
-    await expect(sheet.getByRole("alert")).toContainText(
-      "Create a dedicated installation-global role for module permissions and keep scoped product capabilities in a separate role.",
-    );
-    await expect(sheet.getByRole("button", { name: "Save Role" })).toBeDisabled();
+    await expect(sheet.getByRole("checkbox", { name: /modules:read/ })).toHaveCount(0);
+    await expect(adminAll).toBeVisible();
 
     await sheet.getByText("admin:all", { exact: true }).click();
     await expect(adminAll).toBeChecked();
     await expect(sheet.getByText("Global admin exception", { exact: true })).toBeVisible();
     await expect(sheet.getByText(/complete role is installation-global/)).toBeVisible();
+    await expect(sheet.getByRole("checkbox", { name: /modules:read/ })).toBeVisible();
     await expect(sheet.getByRole("button", { name: "Save Role" })).toBeEnabled();
+
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "New Role" }).click();
+    const globalSheet = page.locator(".sheet-panel");
+    await globalSheet.getByText("modules:read", { exact: true }).click();
+    await expect(globalSheet.getByRole("checkbox", { name: /modules:read/ })).toBeChecked();
+    await expect(globalSheet.getByRole("checkbox", { name: /forms:read/ })).toHaveCount(0);
+    await expect(globalSheet.getByRole("checkbox", { name: /admin:all/ })).toBeVisible();
     await expectHydratedRoute(page, {
       path: "/administration/roles",
       expectedText: "Roles",

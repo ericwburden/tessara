@@ -151,21 +151,7 @@ function Get-Sprint6ADatabaseDocument {
     }
 
     $sql = @'
-WITH migration_3 AS (
-    SELECT installed_on
-    FROM _sqlx_migrations
-    WHERE version = 3 AND success
-),
-pre_migration_rows AS (
-    SELECT
-        (SELECT count(*) FROM forms, migration_3 WHERE forms.created_at < migration_3.installed_on) AS forms,
-        (SELECT count(*) FROM workflows, migration_3 WHERE workflows.created_at < migration_3.installed_on) AS workflows,
-        (SELECT count(*) FROM submissions, migration_3 WHERE submissions.created_at < migration_3.installed_on) AS submissions,
-        (SELECT count(*) FROM datasets, migration_3 WHERE datasets.created_at < migration_3.installed_on) AS datasets,
-        (SELECT count(*) FROM components, migration_3 WHERE components.created_at < migration_3.installed_on) AS components,
-        (SELECT count(*) FROM dashboards, migration_3 WHERE dashboards.created_at < migration_3.installed_on) AS dashboards
-),
-seed_roles AS (
+WITH seed_roles AS (
     SELECT r.name,
            COALESCE(jsonb_agg(c.key ORDER BY c.key) FILTER (WHERE c.key IS NOT NULL), '[]'::jsonb) AS capabilities
     FROM roles r
@@ -237,18 +223,6 @@ SELECT jsonb_build_object(
             ) ORDER BY definition_id), '[]'::jsonb)
             FROM catalog_rows
         )
-    ),
-    'pre_migration_3_product_rows', (
-        SELECT jsonb_build_object(
-            'forms', forms,
-            'workflows', workflows,
-            'submissions', submissions,
-            'datasets', datasets,
-            'components', components,
-            'dashboards', dashboards,
-            'total', forms + workflows + submissions + datasets + components + dashboards
-        )
-        FROM pre_migration_rows
     )
 )::text;
 '@
@@ -308,8 +282,8 @@ function Get-Sprint6AExpectedMigrationLedger {
             checksum_sha384 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA384).Hash.ToLowerInvariant()
         }
     }
-    if (($rows.version -join ",") -cne "1,2,3") {
-        throw "Sprint 6A deployment evidence requires repository migrations exactly 1,2,3; found '$($rows.version -join ",")'."
+    if (($rows.version -join ",") -cne "1") {
+        throw "Fresh-sprint deployment evidence requires repository migration exactly 1; found '$($rows.version -join ",")'."
     }
     $rows
 }
@@ -342,10 +316,10 @@ function Assert-Sprint6AMigrationLedger {
         [Parameter(Mandatory)][object[]]$ExpectedMigrations
     )
 
-    if ($DatabaseMigrations.Count -ne 3 -or ($DatabaseMigrations.version -join ",") -cne "1,2,3") {
-        throw "The live database migration ledger must contain exactly successful versions 1,2,3."
+    if ($DatabaseMigrations.Count -ne 1 -or ($DatabaseMigrations.version -join ",") -cne "1") {
+        throw "The live database migration ledger must contain exactly successful version 1."
     }
-    for ($index = 0; $index -lt 3; $index++) {
+    for ($index = 0; $index -lt 1; $index++) {
         $database = $DatabaseMigrations[$index]
         $expected = $ExpectedMigrations[$index]
         if (-not [bool]$database.success -or
@@ -762,8 +736,6 @@ function Get-Sprint6ADeploymentSnapshot {
             -Inventory $inventory `
             -ExpectedEntries $expectedCatalogEntries
     )
-    $preMigrationRows = $database.pre_migration_3_product_rows
-    $dataState = if ([int64]$preMigrationRows.total -gt 0) { "upgraded" } else { "fresh" }
 
     [pscustomobject][ordered]@{
         base_url = $normalizedBaseUrl
@@ -833,9 +805,8 @@ function Get-Sprint6ADeploymentSnapshot {
             immutable_fixture_entries = $expectedCatalogEntries
         }
         data = [pscustomobject][ordered]@{
-            state = $dataState
-            classification_rule = "upgraded iff at least one Forms/Workflows/Submissions/Datasets/Components/Dashboards row predates successful migration 3; otherwise fresh"
-            pre_migration_3_product_rows = $preMigrationRows
+            state = "fresh"
+            classification_rule = "Sprint closeout uses the single migration-1 baseline and a freshly seeded database; no upgrade state is accepted."
         }
         service = [pscustomobject][ordered]@{
             health_status = 200
@@ -850,7 +821,7 @@ function Get-Sprint6ADeploymentSnapshot {
 function Assert-Sprint6ADeploymentEvidenceDocument {
     param(
         [Parameter(Mandatory)][object]$Evidence,
-        [Parameter(Mandatory)][ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+        [Parameter(Mandatory)][ValidateSet("fresh")][string]$ExpectedDataState,
         [Parameter(Mandatory)][string]$BaseUrl
     )
 
@@ -884,7 +855,7 @@ function Assert-Sprint6ADeploymentEvidence {
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$EvidencePath,
         [Parameter(Mandatory)][string]$BaseUrl,
-        [Parameter(Mandatory)][ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+        [Parameter(Mandatory)][ValidateSet("fresh")][string]$ExpectedDataState,
         [string]$AdminEmail = "admin@tessara.local",
         [string]$AdminPassword = "tessara-dev-admin"
     )

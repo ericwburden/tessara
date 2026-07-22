@@ -978,8 +978,10 @@ test.describe.serial("Sprint 6A Module Management", () => {
       '[data-navigation-destination="core.admin.modules"]',
     );
     await expect(moduleDestination).toContainText("Module Management");
-    await expect(moduleDestination.getByText("Any of", { exact: true })).toBeVisible();
-    await expect(moduleDestination.getByText("modules:read", { exact: true })).toBeVisible();
+    await expect(
+      moduleDestination.locator('[aria-label="Protected placement"]'),
+    ).toBeVisible();
+    await expect(moduleDestination.getByRole("button")).toHaveCount(0);
 
     const readerPolicy = await getJson<NavigationPolicyResponse>(
       fixtures.reader.context,

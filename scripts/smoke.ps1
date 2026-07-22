@@ -5,7 +5,7 @@ param(
     [string]$BaseUrl = "http://127.0.0.1:8080",
     [int]$ApiTimeoutSeconds = 600,
     [string]$DeploymentEvidencePath,
-    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [ValidateSet("fresh")][string]$ExpectedDataState,
     [string]$AcceptanceEvidencePath,
     [switch]$OverwriteAcceptanceEvidence,
     [switch]$DevelopmentMode
@@ -47,7 +47,7 @@ if ($DevelopmentMode -and -not [string]::IsNullOrWhiteSpace($AcceptanceEvidenceP
 }
 if (-not $DevelopmentMode) {
     if ([string]::IsNullOrWhiteSpace($DeploymentEvidencePath) -or [string]::IsNullOrWhiteSpace($ExpectedDataState)) {
-        throw "Sprint acceptance smoke requires -DeploymentEvidencePath and -ExpectedDataState upgraded|fresh. Use -DevelopmentMode only for non-acceptance local diagnostics."
+        throw "Sprint acceptance smoke requires -DeploymentEvidencePath and -ExpectedDataState fresh. Use -DevelopmentMode only for non-acceptance local diagnostics."
     }
     if (-not (Test-Path -LiteralPath $deploymentEvidenceCommon -PathType Leaf)) {
         throw "Could not find Sprint 6A deployment evidence validator at $deploymentEvidenceCommon"

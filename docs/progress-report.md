@@ -5,9 +5,9 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete, but formal closeout remains blocked on populated-upgrade/rollback evidence and two unreconciled browser identities; Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI implementation is complete; closeout now follows the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
-## 2026-07-21 - Sprint 6A-UI Closeout Blocked
+## 2026-07-21 - Sprint 6A-UI Fresh-Baseline Closeout In Progress
 
 - Completed:
   - Closed the approved configuration-driven navigation composition, direct Core Admin routes, protected placement rules, responsive reader/manager workflows, Module Management directory/detail harmonization, role provenance, assignment-date readback, and the final directory/policy state treatments.
@@ -20,15 +20,13 @@ project direction.
   - Development-mode smoke and Sprint UAT: passed. These are useful local checks but deliberately do not publish closing deployment evidence.
   - `validate.ps1 -Fast`: passed with a disposable `TEST_DATABASE_URL`; this includes the 131 API, 70 web, module-contract, formatting, source, and Sprint 6A evidence self-tests.
   - `cargo fmt --all -- --check` and `git diff --check`: passed.
-  - `npm --prefix .\\end2end test -- --list`: found 60 browser scenarios. The subsequent full suite did not pass: 33 passed, 2 failed, and 25 did not run after the failures.
-    - `modules.spec.ts:897` expects the obsolete visible text `Any of` in the Module Management policy row.
-    - `permissions.spec.ts:950` expects to select both scope-aware `forms:read` and installation-global `modules:read` in one role; the approved mutually-exclusive scope behavior hides the second capability.
-- Formal closeout blockers:
-  - Committed closeout scaffolding now provides `scripts/capture-sprint-6a-ui-deployment-evidence.ps1`, which preserves the retained Sprint 6A evidence schema while requiring successful migrations 1--4, and `end2end/sprint-6a-ui-ui-manifest.json`, which declares the five exact Module Management identities. Fresh evidence was captured under `artifacts/sprint-6a-ui/deployment-fresh.json` from a clean release image and validated with its SHA-256 sidecar. A real populated pre-upgrade database and a verified rollback/restore source are still required for truthful upgraded and recovery artifacts; the fresh local database must not be relabeled or reused as either state.
-  - Evidence-bound smoke, UAT, and Playwright wrappers still need the Sprint 6A-UI migration-1--4 binding while retaining their historical Sprint 6A migration-1--3 behavior. This is a closeout-support change, not a substitute for state-specific evidence.
-  - The two browser failures above need deliberate durable-proof reconciliation; they will not be weakened, skipped, or retried into a pass.
-  - Owner: Sprint 6A-UI implementation owner. Next step: obtain the dedicated populated pre-upgrade/rollback source, approve the exact durable-test reconciliation recorded in `docs/sprints/sprint-6a-ui-test-change-log.md`, then rerun every closing state gate and replace this blocked record with a certified closeout.
-- Next Sprint: Sprint 6B - Module Runtime And Installation Infrastructure, after the Sprint 6A-UI closeout evidence is certified.
+  - `npm --prefix .\\end2end test -- --list`: found 60 browser scenarios. The former literal-eligibility and one-way scope-picker failures have approved equal-or-stronger replacements in the test-change log.
+- Approved closeout policy and evidence:
+  - Prior-sprint databases are destroyed; the current migration directory contains only the squashed `001_baseline.sql` and the local stack is freshly seeded.
+  - `scripts/capture-sprint-6a-ui-deployment-evidence.ps1` accepts only a successful migration-1 ledger and a fresh deployment state. The stale migration-1–4 fresh artifact is invalidated and will be replaced after the new stack is launched.
+  - Historical dashboard capacity SQL remains only under a test fixture for direct preflight behavior; it is not a runnable migration or deployment-evidence input.
+  - Owner: Sprint 6A-UI implementation owner. Next step: rebuild the clean stack, capture fresh evidence, then run the required source, smoke, UAT, and reconciled browser gates.
+- Next Sprint: Sprint 6B - Module Runtime And Installation Infrastructure, after the fresh-baseline Sprint 6A-UI closeout evidence is certified.
 
 ### Sprint Handoff / Demo Instructions
 
@@ -92,9 +90,9 @@ project direction.
 
 ### Acceptance Mapping
 
-- Exit condition 1 — deterministic fresh/migrated layout:
+- Exit condition 1 — deterministic fresh baseline layout:
   - Manual demonstration: Navigation composition and protection, step 1.
-  - Automated check: fresh and upgraded deployment evidence plus `validate.ps1`.
+  - Automated check: fresh deployment evidence plus `validate.ps1`.
 - Exit condition 2 — stable required groups and atomic migration:
   - Manual demonstration: Navigation composition and protection, step 3.
   - Automated check: migration/deployment evidence and API tests.
@@ -137,9 +135,9 @@ project direction.
 - Exit condition 15 — durable proof reconciliation:
   - Manual demonstration: review `docs/sprints/sprint-6a-ui-test-change-log.md`.
   - Automated check: `validate.ps1`, manifest validation, and `git diff --check`.
-- Exit condition 16 — closing deployment, source, SSR/hydration, and UI gates:
+- Exit condition 16 — fresh closing deployment, source, SSR/hydration, and UI gates:
   - Manual demonstration: all handoff paths above on the running local stack.
-  - Automated check: fresh/upgraded evidence, smoke/UAT, canonical/UI Playwright, API/web tests, formatting, and source validation recorded below.
+  - Automated check: fresh evidence, smoke/UAT, canonical/UI Playwright, API/web tests, formatting, and source validation recorded below.
 
 ## 2026-07-16 - Sprint 6A-UI Implementation Complete; Closeout Pending
 

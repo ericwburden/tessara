@@ -1,3 +1,6 @@
+-- Sprint 6A-UI closeout baseline. This is the sole migration for a freshly seeded sprint database.
+-- Historical migrations 002-004 were intentionally squashed at closeout.
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE SCHEMA IF NOT EXISTS dataset_materialized;
@@ -614,3 +617,670 @@ CREATE INDEX workflow_instances_status_idx
     ON workflow_instances (status, created_at);
 CREATE INDEX workflow_step_instances_instance_status_idx
     ON workflow_step_instances (workflow_instance_id, status);
+
+-- Sprint 5A establishes a hard per-dashboard placement capacity before the
+-- application begins relying on bounded grid fallback and viewer execution.
+
+-- Close the preflight-to-trigger race with old application writers. This lock
+-- conflicts with INSERT/UPDATE/DELETE and is held by the migration transaction
+-- through trigger installation.
+LOCK TABLE dashboard_components IN SHARE ROW EXCLUSIVE MODE;
+
+-- Validity includes the current Component kind because kind-specific minimums
+-- can turn previously valid placement geometry into fallback state. Prevent a
+-- current-published update-in-place from changing that classifier between the
+-- preflight snapshot and migration commit.
+LOCK TABLE component_versions IN SHARE MODE;
+
+DO $$
+DECLARE
+    violations text;
+BEGIN
+    SELECT string_agg(
+        format('%s (%s placements)', dashboard_id, placement_count),
+        ', '
+        ORDER BY dashboard_id
+    )
+    INTO violations
+    FROM (
+        SELECT dashboard_id, COUNT(*) AS placement_count
+        FROM dashboard_components
+        GROUP BY dashboard_id
+        HAVING COUNT(*) > 240
+    ) AS over_capacity;
+
+    IF violations IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'dashboard placement capacity preflight failed: ' || violations,
+            HINT = 'Back up/export affected dashboards, reduce each to at most 240 placements, and rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';
+    END IF;
+END
+$$;
+
+-- The runtime gives every legacy, malformed, or future-schema placement a
+-- full-width fallback row which must avoid every row touched by valid V1
+-- geometry. Count alone is therefore insufficient: a mixed dashboard can be
+-- below 240 stored rows while having no legal display fallback. Decode only
+-- bounded JSON integers so malformed payloads remain data, not migration
+-- errors.
+CREATE FUNCTION pg_temp.dashboard_json_i32(value jsonb)
+RETURNS integer
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+AS $$
+DECLARE
+    decoded text;
+    numeric_value numeric;
+BEGIN
+    IF jsonb_typeof(value) <> 'number' THEN
+        RETURN NULL;
+    END IF;
+
+    decoded := value #>> '{}';
+    IF decoded !~ '^-?[0-9]+$' THEN
+        RETURN NULL;
+    END IF;
+
+    numeric_value := decoded::numeric;
+    IF numeric_value < -2147483648 OR numeric_value > 2147483647 THEN
+        RETURN NULL;
+    END IF;
+    RETURN numeric_value::integer;
+END
+$$;
+
+CREATE TEMPORARY TABLE dashboard_placement_layout_preflight
+ON COMMIT DROP
+AS
+WITH decoded AS (
+    SELECT dashboard_components.dashboard_id,
+           dashboard_components.id AS placement_id,
+           dashboard_components.config,
+           component_versions.component_type::text AS component_type,
+           pg_temp.dashboard_json_i32(
+               dashboard_components.config -> 'schema_version'
+           ) AS schema_version,
+           pg_temp.dashboard_json_i32(
+               dashboard_components.config -> 'grid_row'
+           ) AS grid_row,
+           pg_temp.dashboard_json_i32(
+               dashboard_components.config -> 'grid_column'
+           ) AS grid_column,
+           pg_temp.dashboard_json_i32(
+               dashboard_components.config -> 'grid_width'
+           ) AS grid_width,
+           pg_temp.dashboard_json_i32(
+               dashboard_components.config -> 'grid_height'
+           ) AS grid_height
+    FROM dashboard_components
+    JOIN component_versions
+      ON component_versions.id = dashboard_components.component_version_id
+)
+SELECT dashboard_id,
+       placement_id,
+       grid_row,
+       grid_column,
+       grid_width,
+       grid_height,
+       (
+           jsonb_typeof(config) = 'object'
+           AND schema_version = 1
+           AND (
+               NOT config ? 'title'
+               OR config -> 'title' = 'null'::jsonb
+               OR jsonb_typeof(config -> 'title') = 'string'
+           )
+           AND grid_row >= 1
+           AND grid_column >= 1
+           AND grid_width >= CASE WHEN component_type = 'table' THEN 6 ELSE 1 END
+           AND grid_height >= CASE WHEN component_type = 'table' THEN 4 ELSE 1 END
+           AND grid_column::bigint + grid_width::bigint - 1 <= 12
+           AND grid_row::bigint + grid_height::bigint - 1 <= 240
+       ) IS TRUE AS valid_v1
+FROM decoded;
+
+DO $$
+DECLARE
+    violations text;
+BEGIN
+    SELECT string_agg(DISTINCT left_placement.dashboard_id::text, ', ')
+    INTO violations
+    FROM dashboard_placement_layout_preflight AS left_placement
+    JOIN dashboard_placement_layout_preflight AS right_placement
+      ON right_placement.dashboard_id = left_placement.dashboard_id
+     AND right_placement.placement_id > left_placement.placement_id
+     AND right_placement.valid_v1
+     AND left_placement.valid_v1
+     AND left_placement.grid_column
+             <= right_placement.grid_column + right_placement.grid_width - 1
+     AND right_placement.grid_column
+             <= left_placement.grid_column + left_placement.grid_width - 1
+     AND left_placement.grid_row
+             <= right_placement.grid_row + right_placement.grid_height - 1
+     AND right_placement.grid_row
+             <= left_placement.grid_row + left_placement.grid_height - 1;
+
+    IF violations IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'dashboard placement layout preflight found overlapping valid V1 geometry: ' || violations,
+            HINT = 'Repair or remove the overlapping placements, then rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';
+    END IF;
+END
+$$;
+
+DO $$
+DECLARE
+    violations text;
+BEGIN
+    WITH occupied_rows AS (
+        SELECT DISTINCT placement.dashboard_id,
+               generate_series(
+                   placement.grid_row,
+                   placement.grid_row + placement.grid_height - 1
+               ) AS grid_row
+        FROM dashboard_placement_layout_preflight AS placement
+        WHERE placement.valid_v1
+    ),
+    occupied_counts AS (
+        SELECT dashboard_id, COUNT(*) AS occupied_row_count
+        FROM occupied_rows
+        GROUP BY dashboard_id
+    ),
+    requirements AS (
+        SELECT placement.dashboard_id,
+               COUNT(*) FILTER (WHERE NOT placement.valid_v1) AS fallback_row_count,
+               COALESCE(occupied_counts.occupied_row_count, 0) AS occupied_row_count
+        FROM dashboard_placement_layout_preflight AS placement
+        LEFT JOIN occupied_counts
+          ON occupied_counts.dashboard_id = placement.dashboard_id
+        GROUP BY placement.dashboard_id, occupied_counts.occupied_row_count
+    )
+    SELECT string_agg(
+        format(
+            '%s (%s occupied rows + %s fallback rows)',
+            dashboard_id,
+            occupied_row_count,
+            fallback_row_count
+        ),
+        ', '
+        ORDER BY dashboard_id
+    )
+    INTO violations
+    FROM requirements
+    WHERE occupied_row_count + fallback_row_count > 240;
+
+    IF violations IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'dashboard placement display-layout preflight failed: ' || violations,
+            HINT = 'Repair or remove placements until every fallback row fits outside valid V1 geometry, then rerun the migration. See docs/sprints/sprint-5a-dashboard-capacity-runbook.md.';
+    END IF;
+END
+$$;
+
+DROP FUNCTION pg_temp.dashboard_json_i32(jsonb);
+
+CREATE INDEX dashboard_components_dashboard_position_idx
+    ON dashboard_components (dashboard_id, position, id);
+
+CREATE OR REPLACE FUNCTION enforce_dashboard_component_capacity()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    existing_count bigint;
+BEGIN
+    IF TG_OP = 'UPDATE' AND NEW.dashboard_id = OLD.dashboard_id THEN
+        RETURN NEW;
+    END IF;
+
+    -- Serialize inserts/moves for one dashboard so concurrent requests cannot
+    -- both observe the same final capacity.
+    PERFORM 1
+    FROM dashboards
+    WHERE id = NEW.dashboard_id
+    FOR UPDATE;
+
+    SELECT COUNT(*)
+    INTO existing_count
+    FROM dashboard_components
+    WHERE dashboard_id = NEW.dashboard_id
+      AND (TG_OP <> 'UPDATE' OR id <> OLD.id);
+
+    IF existing_count >= 240 THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = format(
+                'dashboard %s already has the maximum 240 placements',
+                NEW.dashboard_id
+            ),
+            CONSTRAINT = 'dashboard_components_capacity_chk';
+    END IF;
+
+    RETURN NEW;
+END
+$$;
+
+CREATE TRIGGER dashboard_components_capacity_trigger
+BEFORE INSERT OR UPDATE OF dashboard_id ON dashboard_components
+FOR EACH ROW
+EXECUTE FUNCTION enforce_dashboard_component_capacity();
+
+-- Sprint 6A adds Core-owned discovery and policy state for the current
+-- in-process transition catalog. Module Release and Module Instance
+-- persistence deliberately begins in Sprint 6B, so neither table appears in
+-- this migration.
+
+ALTER TABLE capabilities
+    ADD COLUMN scope_mode text NOT NULL DEFAULT 'scope_aware';
+
+ALTER TABLE capabilities
+    ADD CONSTRAINT capabilities_scope_mode_chk
+    CHECK (scope_mode IN ('scope_aware', 'installation_global'));
+
+INSERT INTO capabilities (key, description, scope_mode)
+VALUES ('admin:all', 'Full administration access', 'installation_global')
+ON CONFLICT (key) DO UPDATE SET
+    scope_mode = EXCLUDED.scope_mode
+WHERE capabilities.scope_mode IS DISTINCT FROM EXCLUDED.scope_mode;
+
+CREATE TABLE application_installations (
+    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+    id uuid NOT NULL UNIQUE DEFAULT uuid_generate_v4(),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO application_installations (singleton)
+VALUES (true)
+ON CONFLICT (singleton) DO NOTHING;
+
+CREATE TABLE core_runtime_observations (
+    installation_id uuid PRIMARY KEY
+        REFERENCES application_installations(id) ON DELETE RESTRICT,
+    provenance text NOT NULL,
+    observed_version text NOT NULL,
+    finding_code text NOT NULL,
+    observed_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT core_runtime_observations_provenance_chk
+        CHECK (provenance = 'development_unresolved'),
+    CONSTRAINT core_runtime_observations_finding_chk
+        CHECK (finding_code = 'core_release_provenance_unresolved'),
+    CONSTRAINT core_runtime_observations_version_chk
+        CHECK (btrim(observed_version) <> '')
+);
+
+CREATE TABLE module_definition_reservations (
+    definition_id text PRIMARY KEY,
+    display_name text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT module_definition_reservations_id_chk
+        CHECK (
+            definition_id ~ '^[a-z0-9]+([.:_-][a-z0-9]+)*$'
+            AND definition_id !~ '[.:_-]{2}'
+        ),
+    CONSTRAINT module_definition_reservations_display_name_chk
+        CHECK (btrim(display_name) <> '')
+);
+
+CREATE TABLE transition_descriptor_sources (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    definition_id text NOT NULL
+        REFERENCES module_definition_reservations(definition_id) ON DELETE RESTRICT,
+    schema_version integer NOT NULL,
+    source_digest text NOT NULL,
+    source_bytes bytea NOT NULL,
+    content_type text NOT NULL DEFAULT 'application/json',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (definition_id, source_digest),
+    UNIQUE (id, definition_id),
+    CONSTRAINT transition_descriptor_sources_schema_chk
+        CHECK (schema_version = 1),
+    CONSTRAINT transition_descriptor_sources_digest_chk
+        CHECK (source_digest ~ '^sha256:[0-9a-f]{64}$'),
+    CONSTRAINT transition_descriptor_sources_bytes_chk
+        CHECK (octet_length(source_bytes) > 0),
+    CONSTRAINT transition_descriptor_sources_content_type_chk
+        CHECK (content_type = 'application/json')
+);
+
+CREATE TABLE transition_catalog_projections (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_id uuid NOT NULL UNIQUE
+        REFERENCES transition_descriptor_sources(id) ON DELETE RESTRICT,
+    installation_id uuid NOT NULL
+        REFERENCES application_installations(id) ON DELETE RESTRICT,
+    normalized_projection jsonb NOT NULL,
+    provider_eligible boolean NOT NULL DEFAULT false CHECK (NOT provider_eligible),
+    supervisor_materializable boolean NOT NULL DEFAULT false
+        CHECK (NOT supervisor_materializable),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (id, source_id),
+    CONSTRAINT transition_catalog_projections_shape_chk
+        CHECK (
+            jsonb_typeof(normalized_projection) = 'object'
+            AND normalized_projection ->> 'kind' = 'transitional_in_process'
+        )
+);
+
+CREATE TABLE transition_catalog_current (
+    definition_id text PRIMARY KEY
+        REFERENCES module_definition_reservations(definition_id) ON DELETE RESTRICT,
+    source_id uuid NOT NULL UNIQUE,
+    projection_id uuid NOT NULL UNIQUE,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT transition_catalog_current_source_definition_fk
+        FOREIGN KEY (source_id, definition_id)
+        REFERENCES transition_descriptor_sources(id, definition_id) ON DELETE RESTRICT,
+    CONSTRAINT transition_catalog_current_projection_source_fk
+        FOREIGN KEY (projection_id, source_id)
+        REFERENCES transition_catalog_projections(id, source_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE module_catalog_findings (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    projection_id uuid NOT NULL
+        REFERENCES transition_catalog_projections(id) ON DELETE RESTRICT,
+    ordinal integer NOT NULL CHECK (ordinal >= 0),
+    code text NOT NULL,
+    path text NOT NULL,
+    message text NOT NULL,
+    UNIQUE (projection_id, ordinal),
+    CONSTRAINT module_catalog_findings_code_chk CHECK (btrim(code) <> ''),
+    CONSTRAINT module_catalog_findings_path_chk CHECK (btrim(path) <> ''),
+    CONSTRAINT module_catalog_findings_message_chk CHECK (btrim(message) <> '')
+);
+
+CREATE TABLE capability_provenance (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    capability_id uuid NOT NULL
+        REFERENCES capabilities(id) ON DELETE RESTRICT,
+    source_kind text NOT NULL,
+    source_key text NOT NULL,
+    definition_id text
+        REFERENCES module_definition_reservations(definition_id) ON DELETE RESTRICT,
+    descriptor_source_id uuid,
+    provider_state text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (capability_id, source_key),
+    CONSTRAINT capability_provenance_source_kind_chk
+        CHECK (source_kind IN ('core', 'transition_contribution')),
+    CONSTRAINT capability_provenance_source_key_chk
+        CHECK (btrim(source_key) <> ''),
+    CONSTRAINT capability_provenance_provider_state_chk
+        CHECK (provider_state IN ('core_authoritative', 'transitional_in_process')),
+    CONSTRAINT capability_provenance_source_definition_fk
+        FOREIGN KEY (descriptor_source_id, definition_id)
+        REFERENCES transition_descriptor_sources(id, definition_id) ON DELETE RESTRICT,
+    CONSTRAINT capability_provenance_shape_chk
+        CHECK (
+            (
+                source_kind = 'core'
+                AND source_key = 'core'
+                AND definition_id IS NULL
+                AND descriptor_source_id IS NULL
+                AND provider_state = 'core_authoritative'
+            )
+            OR
+            (
+                source_kind = 'transition_contribution'
+                AND definition_id IS NOT NULL
+                AND source_key = definition_id
+                AND descriptor_source_id IS NOT NULL
+                AND provider_state = 'transitional_in_process'
+            )
+        )
+);
+
+CREATE TABLE module_navigation_contributions (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    contribution_id text NOT NULL UNIQUE,
+    definition_id text NOT NULL
+        REFERENCES module_definition_reservations(definition_id) ON DELETE RESTRICT,
+    descriptor_source_id uuid NOT NULL,
+    destination text NOT NULL,
+    label text NOT NULL,
+    group_name text NOT NULL,
+    reorder_band text NOT NULL,
+    source_order_hint integer NOT NULL,
+    default_policy_order integer NOT NULL CHECK (default_policy_order >= 0),
+    required_capabilities_any_of jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT module_navigation_contributions_id_chk
+        CHECK (
+            contribution_id ~ '^[a-z0-9]+([.:_-][a-z0-9]+)*$'
+            AND contribution_id !~ '[.:_-]{2}'
+        ),
+    CONSTRAINT module_navigation_contributions_destination_chk
+        CHECK (
+            destination ~ '^[a-z0-9]+([.:_-][a-z0-9]+)*$'
+            AND destination !~ '[.:_-]{2}'
+        ),
+    CONSTRAINT module_navigation_contributions_label_chk CHECK (btrim(label) <> ''),
+    CONSTRAINT module_navigation_contributions_group_chk
+        CHECK (group_name IN ('Main', 'Admin')),
+    CONSTRAINT module_navigation_contributions_band_chk
+        CHECK (
+            reorder_band IN (
+                'main_between_organization_and_operations',
+                'main_after_operations',
+                'admin_between_administration_and_module_management'
+            )
+        ),
+    CONSTRAINT module_navigation_contributions_capabilities_chk
+        CHECK (
+            jsonb_typeof(required_capabilities_any_of) = 'array'
+            AND jsonb_array_length(required_capabilities_any_of) > 0
+        ),
+    CONSTRAINT module_navigation_contributions_source_definition_fk
+        FOREIGN KEY (descriptor_source_id, definition_id)
+        REFERENCES transition_descriptor_sources(id, definition_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE navigation_policies (
+    installation_id uuid PRIMARY KEY
+        REFERENCES application_installations(id) ON DELETE RESTRICT,
+    revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE navigation_policy_entries (
+    installation_id uuid NOT NULL
+        REFERENCES navigation_policies(installation_id) ON DELETE RESTRICT,
+    contribution_id text NOT NULL
+        REFERENCES module_navigation_contributions(contribution_id) ON DELETE RESTRICT,
+    visible boolean NOT NULL DEFAULT true,
+    policy_order integer NOT NULL CHECK (policy_order >= 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, contribution_id)
+);
+
+CREATE TABLE core_control_plane_audit_events (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    installation_id uuid
+        REFERENCES application_installations(id) ON DELETE RESTRICT,
+    event_type text NOT NULL,
+    actor_kind text NOT NULL,
+    actor_account_id uuid REFERENCES accounts(id) ON DELETE RESTRICT,
+    correlation_id uuid NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT core_control_plane_audit_events_type_chk CHECK (btrim(event_type) <> ''),
+    CONSTRAINT core_control_plane_audit_events_actor_kind_chk
+        CHECK (actor_kind IN ('system', 'account')),
+    CONSTRAINT core_control_plane_audit_events_actor_chk
+        CHECK (
+            (actor_kind = 'system' AND actor_account_id IS NULL)
+            OR (actor_kind = 'account' AND actor_account_id IS NOT NULL)
+        ),
+    CONSTRAINT core_control_plane_audit_events_payload_chk
+        CHECK (jsonb_typeof(payload) = 'object')
+);
+
+CREATE INDEX transition_descriptor_sources_definition_created_idx
+    ON transition_descriptor_sources (definition_id, created_at, id);
+CREATE INDEX module_catalog_findings_projection_ordinal_idx
+    ON module_catalog_findings (projection_id, ordinal);
+CREATE INDEX capability_provenance_definition_idx
+    ON capability_provenance (definition_id, capability_id);
+CREATE INDEX module_navigation_contributions_group_band_idx
+    ON module_navigation_contributions (group_name, reorder_band, default_policy_order, contribution_id);
+CREATE INDEX core_control_plane_audit_events_type_created_idx
+    ON core_control_plane_audit_events (event_type, created_at, id);
+
+-- Sprint 6A-UI: replace the effective reorder-band policy with generic groups
+-- and one complete placement collection. Descriptor group/band columns remain
+-- immutable catalog provenance and the legacy policy rows remain rollback data;
+-- neither is an effective navigation source after this migration.
+
+CREATE TABLE navigation_groups (
+    installation_id uuid NOT NULL
+        REFERENCES navigation_policies(installation_id) ON DELETE RESTRICT,
+    group_id text NOT NULL,
+    label text NOT NULL,
+    display_order integer NOT NULL CHECK (display_order >= 0),
+    owner text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, group_id),
+    UNIQUE (installation_id, display_order),
+    CONSTRAINT navigation_groups_owner_chk CHECK (owner IN ('core', 'custom')),
+    CONSTRAINT navigation_groups_identity_chk CHECK (
+        (owner = 'core' AND group_id IN ('core.main', 'core.admin'))
+        OR
+        (
+            owner = 'custom'
+            AND group_id ~ '^custom\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        )
+    ),
+    CONSTRAINT navigation_groups_label_chk CHECK (
+        label = btrim(label)
+        AND char_length(label) BETWEEN 1 AND 64
+        AND label !~ '[[:cntrl:]]'
+    )
+);
+
+CREATE UNIQUE INDEX navigation_groups_label_unique
+    ON navigation_groups (installation_id, lower(label));
+
+CREATE TABLE navigation_destination_placements (
+    installation_id uuid NOT NULL
+        REFERENCES navigation_policies(installation_id) ON DELETE RESTRICT,
+    destination_id text NOT NULL,
+    group_id text NOT NULL,
+    visible boolean NOT NULL,
+    display_order integer NOT NULL CHECK (display_order >= 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, destination_id),
+    UNIQUE (installation_id, group_id, display_order),
+    CONSTRAINT navigation_destination_placements_group_fk
+        FOREIGN KEY (installation_id, group_id)
+        REFERENCES navigation_groups(installation_id, group_id) ON DELETE RESTRICT,
+    CONSTRAINT navigation_destination_placements_identity_chk CHECK (
+        destination_id ~ '^[a-z0-9]+([.:_-][a-z0-9]+)*$'
+        AND destination_id !~ '[.:_-]{2}'
+    )
+);
+
+-- A fresh database has no installation at migration time; startup catalog
+-- reconciliation seeds the same collection. A populated Sprint 6A database
+-- receives the approved deterministic two-group layout atomically here.
+INSERT INTO navigation_groups (installation_id, group_id, label, display_order, owner)
+SELECT installation_id, 'core.main', 'Main', 0, 'core'
+FROM navigation_policies
+UNION ALL
+SELECT installation_id, 'core.admin', 'Admin', 1, 'core'
+FROM navigation_policies;
+
+INSERT INTO navigation_destination_placements (
+    installation_id,
+    destination_id,
+    group_id,
+    visible,
+    display_order
+)
+SELECT installation_id, destination_id, group_id, visible, display_order
+FROM (
+    SELECT installation_id, 'core.home'::text AS destination_id,
+           'core.main'::text AS group_id, true AS visible, 0 AS display_order
+    FROM navigation_policies
+    UNION ALL
+    SELECT installation_id, 'core.organization', 'core.main', true, 1
+    FROM navigation_policies
+    UNION ALL
+    SELECT entries.installation_id, entries.contribution_id, 'core.main', entries.visible,
+           2 + entries.policy_order
+    FROM navigation_policy_entries AS entries
+    JOIN module_navigation_contributions AS contributions
+      ON contributions.contribution_id = entries.contribution_id
+    WHERE contributions.reorder_band = 'main_between_organization_and_operations'
+    UNION ALL
+    SELECT installation_id, 'core.operations', 'core.main', true, 5
+    FROM navigation_policies
+    UNION ALL
+    SELECT entries.installation_id, entries.contribution_id, 'core.main', entries.visible, 6
+    FROM navigation_policy_entries AS entries
+    WHERE entries.contribution_id = 'tessara.datasets.navigation'
+    UNION ALL
+    SELECT entries.installation_id, entries.contribution_id, 'core.main', entries.visible,
+           7 + entries.policy_order
+    FROM navigation_policy_entries AS entries
+    JOIN module_navigation_contributions AS contributions
+      ON contributions.contribution_id = entries.contribution_id
+    WHERE contributions.reorder_band = 'main_after_operations'
+    UNION ALL
+    SELECT installation_id, 'core.admin.users', 'core.admin', true, 0
+    FROM navigation_policies
+    UNION ALL
+    SELECT installation_id, 'core.admin.roles', 'core.admin', true, 1
+    FROM navigation_policies
+    UNION ALL
+    SELECT installation_id, 'core.admin.node_types', 'core.admin', true, 2
+    FROM navigation_policies
+    UNION ALL
+    SELECT installation_id, 'core.admin.modules', 'core.admin', true, 3
+    FROM navigation_policies
+) AS approved_layout;
+
+INSERT INTO core_control_plane_audit_events (
+    installation_id,
+    event_type,
+    actor_kind,
+    actor_account_id,
+    correlation_id,
+    payload
+)
+SELECT
+    policies.installation_id,
+    'navigation_policy_schema_migrated',
+    'system',
+    NULL,
+    uuid_generate_v4(),
+    jsonb_build_object(
+        'from_schema_version', 1,
+        'to_schema_version', 2,
+        'old_policy_fingerprint', md5(COALESCE((
+            SELECT string_agg(
+                concat_ws(':', contribution_id, visible, policy_order),
+                '|' ORDER BY contribution_id
+            )
+            FROM navigation_policy_entries
+            WHERE installation_id = policies.installation_id
+        ), '')),
+        'new_policy_fingerprint', md5(COALESCE((
+            SELECT string_agg(
+                concat_ws(':', destination_id, group_id, visible, display_order),
+                '|' ORDER BY destination_id
+            )
+            FROM navigation_destination_placements
+            WHERE installation_id = policies.installation_id
+        ), ''))
+    )
+FROM navigation_policies AS policies;

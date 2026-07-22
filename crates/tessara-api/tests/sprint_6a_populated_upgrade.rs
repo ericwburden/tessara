@@ -1,3 +1,8 @@
+#![allow(dead_code)]
+// The pre-squash populated-upgrade helpers below are retained only as forensic
+// history. The executable closeout test is the fresh baseline test further
+// down, as required by the approved fresh-sprint lifecycle policy.
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -23,7 +28,7 @@ use database_safety::is_disposable_database_name;
 
 const BASELINE: &[u8] = include_bytes!("../migrations/001_baseline.sql");
 const DASHBOARD_CAPACITY: &[u8] =
-    include_bytes!("../migrations/002_dashboard_placement_capacity.sql");
+    include_bytes!("fixtures/historical/dashboard_placement_capacity_preflight.sql");
 const POPULATED_SPRINT_5A: &str = include_str!("fixtures/sprint_5a_populated.sql");
 const POPULATED_SPRINT_5A_SHA256: &str =
     "29db015ddcd7206a548c5839b958a937c03aab78d2c53047a55483a7aef31172";
@@ -305,8 +310,11 @@ fn disposable_database_names_require_token_boundaries() {
     }
 }
 
-#[tokio::test]
-async fn populated_sprint_5a_upgrade_preserves_invariants_and_replaces_seed_atomically() {
+// Historical upgrade proof is intentionally retained as an uninvoked helper.
+// Sprint closeout now uses a single fresh baseline; no prior-sprint database is
+// carried into the current sprint's acceptance path.
+async fn historical_populated_sprint_5a_upgrade_preserves_invariants_and_replaces_seed_atomically()
+{
     assert_declared_current_seed_contract();
     assert_populated_sprint_5a_fixture_identity();
     let database_url = std::env::var("SPRINT_6A_UPGRADE_DATABASE_URL").expect(
@@ -476,11 +484,11 @@ async fn populated_sprint_5a_upgrade_preserves_invariants_and_replaces_seed_atom
     assert_eq!(control_plane_snapshot(&repaired).await, stable_catalog);
     repaired.close().await;
 
-    // Deliberately leave this representative populated fixture at migration 4
-    // for invariant and CompatibilityOnUpgraded inspection. Closing-build
-    // smoke, UAT, and browser acceptance use a separate Sprint 5A demo clone:
-    // restore it, prove OriginalAfterRestore, then let the closing startup apply
-    // migrations 3 and 4 with demo seeding disabled.
+    // This helper preserves the historical pre-closeout upgrade fixture for
+    // forensic comparison only. It is not an acceptance path: Sprint 6A-UI
+    // closeout intentionally squashes the schema to one fresh baseline and
+    // destroys prior-sprint databases. The following executable fresh-start
+    // test is the durable proof for the supported lifecycle.
 }
 
 #[tokio::test]
@@ -518,7 +526,7 @@ async fn fresh_startup_and_seed_assignment_lock_order_use_a_separate_database() 
     let fresh = db::connect_and_prepare(&config)
         .await
         .expect("fresh Sprint 6A startup should remain healthy after lock-order proof");
-    assert_eq!(applied_migrations(&fresh).await, vec![1, 2, 3, 4]);
+    assert_eq!(applied_migrations(&fresh).await, vec![1]);
     assert_seed_role_updates(&fresh).await;
     assert_control_plane_shape(&fresh).await;
     fresh.close().await;

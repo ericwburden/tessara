@@ -23,8 +23,8 @@ Existing retained evidence is never replaced unless -Overwrite is explicit.
 .EXAMPLE
 .\scripts\validate-resource-reference-nondisclosure.ps1 `
   -BaseUrl 'http://127.0.0.1:8080' `
-  -DeploymentEvidencePath 'artifacts/sprint-6a/deployment-upgraded.json' `
-  -ExpectedDataState upgraded
+  -DeploymentEvidencePath 'artifacts/sprint-6a-ui/deployment-fresh.json' `
+  -ExpectedDataState fresh
 
 .EXAMPLE
 .\scripts\validate-resource-reference-nondisclosure.ps1 -SelfTest
@@ -52,7 +52,7 @@ param(
     [string]$KnownFormId,
     [string]$OutputPath,
     [string]$DeploymentEvidencePath,
-    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [ValidateSet("fresh")][string]$ExpectedDataState,
     [switch]$Overwrite,
     [switch]$SelfTest
 )
@@ -721,7 +721,7 @@ function Assert-NondisclosureEvidenceDocument {
         [string]$ExpectedDeploymentEvidenceSha256,
 
         [Parameter(Mandatory)]
-        [ValidateSet("upgraded", "fresh")]
+        [ValidateSet("fresh")]
         [string]$ExpectedDeploymentDataState,
 
         [Parameter(Mandatory)]
@@ -1271,7 +1271,7 @@ function Write-ValidatedNondisclosureEvidenceSet {
         [string]$ExpectedDeploymentEvidenceSha256,
 
         [Parameter(Mandatory)]
-        [ValidateSet("upgraded", "fresh")]
+        [ValidateSet("fresh")]
         [string]$ExpectedDeploymentDataState,
 
         [Parameter(Mandatory)]
@@ -1982,7 +1982,7 @@ if ([string]::IsNullOrWhiteSpace($DeploymentEvidencePath)) {
     throw "-DeploymentEvidencePath is required for retained nondisclosure evidence."
 }
 if ([string]::IsNullOrWhiteSpace($ExpectedDataState)) {
-    throw "-ExpectedDataState upgraded|fresh is required for retained nondisclosure evidence."
+    throw "-ExpectedDataState fresh is required for retained nondisclosure evidence."
 }
 
 $baseUri = [Uri]$BaseUrl

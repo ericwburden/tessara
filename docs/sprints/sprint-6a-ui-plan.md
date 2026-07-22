@@ -122,8 +122,8 @@ Migration requirements:
 6. retain the existing policy revision because the conversion preserves semantic configuration, and insert exactly one system `navigation_policy_schema_migrated` audit event containing from/to schema versions plus old/new policy fingerprints;
 7. make a rerun a no-op or fail with an exact integrity code rather than duplicating state;
 8. retain `module_navigation_contributions.group_name` and `reorder_band` unchanged as frozen descriptor/catalog provenance during Sprint 6A-UI, but remove them from effective policy reads, writes, and shell composition; and
-9. prove fresh creation, populated Sprint 6A upgrade, interrupted/atomic failure, backup/restore, and rollback-package compatibility; and
-10. pin the historical `003_module_control_plane.sql` SHA-256 as `a3489240633b6019ec9aa7acc0ee41b1f54ba625c02e30c8e925fd8b429ee50b` so upgrade proof cannot silently rewrite Sprint 6A history.
+9. prove fresh creation, the squashed baseline fingerprint, interrupted/atomic failure, and deterministic fresh seeding; and
+10. pin the sole `001_baseline.sql` SHA-256 so the approved fresh baseline cannot silently rewrite Sprint 6A schema history.
 
 Fresh reconciliation creates the deterministic policy once and records a system initialization audit. Subsequent reconciliation preserves every valid administrator group/order/visibility choice. A newly recognized catalog destination is appended once under the rule frozen above. A required group or placement missing from an already-current catalog/policy is corruption: startup fails closed with an exact integrity code rather than silently repairing or resetting policy.
 
@@ -258,7 +258,7 @@ Search and status filtering are approved. Sorting, pagination, saved views, bulk
 13. Module directory search/status controls preserve the exact default inventory and canonical order, combine deterministically, provide semantic result-count/no-match/reset behavior, remain keyboard/touch operable and responsive, add no authority, and leave the complete SSR/no-JavaScript inventory useful.
 14. User-role assignment rows expose the persisted assignment creation date, distinguish an unsaved new selection as `Pending save`, and preserve assignment authorization, scope, save, and removal behavior unchanged.
 15. Every existing proof edit has a pre-approved test-log row and equal-or-stronger replacement; all unrelated accepted identities remain unchanged.
-16. Fresh, populated-upgrade, rollback/restore, smoke/UAT, reconciled browser, source, SSR/hydration/console, and targeted UI gates pass against the closing commit without skips, retries, unexplained baseline churn, or weakened unrelated assertions.
+16. Fresh-baseline, smoke/UAT, reconciled browser, source, SSR/hydration/console, and targeted UI gates pass against the closing commit without skips, retries, unexplained baseline churn, or weakened unrelated assertions.
 
 ## Durable Test Contract
 
@@ -282,9 +282,9 @@ Expected intentional proof replacements include:
 - the fixed Admin ordering around Datasets/Module Management; and
 - deployment counts tied specifically to contribution-only policy entries.
 
-Required new proof includes:
+Required closeout proof includes:
 
-- migration from populated Sprint 6A policy, fresh defaults, idempotent reconciliation, and exact backup/restore;
+- a single fresh migration baseline, deterministic fresh defaults, idempotent reconciliation, and a fresh seeded database ledger of exactly version `1`;
 - built-in catalog collision and protection matrices;
 - custom group create/rename/reorder/delete and non-empty deletion rejection;
 - free cross-group optional-item movement and dense ordering;
@@ -311,7 +311,7 @@ New visual/UI identities remain in a separate manifest-bound UI suite. Behaviora
 Do not run the entire closeout battery after every UI or code tweak.
 
 - Catalog/model validation: targeted navigation resolver, DTO, service, repository, and API tests.
-- Migration work: focused fresh/upgrade/atomic-failure tests on disposable databases plus migration self-tests.
+- Migration work: focused fresh-baseline/atomic-failure tests on disposable databases plus migration self-tests. Historical upgrade fixtures are retained only outside acceptance paths.
 - Shell projection: `tessara-web` unit tests, hydrate check, and focused desktop/mobile browser scenarios.
 - Composer UI: targeted web tests and separate semantic/keyboard/accessibility/viewport UI identities.
 - Module pages and directory behavior: targeted Module web/filter tests plus focused default, name/ID search, status, combined, no-match/reset, keyboard, SSR/no-JavaScript, and visual/overflow cases.
@@ -331,31 +331,28 @@ The supported iteration commands are:
 - `npm --prefix .\end2end test -- --list` and focused `npm --prefix .\end2end test -- <spec/grep>` runs
 - `.\scripts\validate.ps1 -Fast`
 
-Bare root `npx playwright test` is unsupported in this repository and records no acceptance proof. Unqualified `cargo test -p tessara-api` includes destructive database targets; run it only through the full validation path with `TEST_DATABASE_URL`, distinct disposable `SPRINT_6A_UPGRADE_DATABASE_URL` and `SPRINT_6A_FRESH_DATABASE_URL`, and `SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET`. The sprint implementation must version those guards/evidence checks for migration 004 before closeout, then `.\scripts\validate.ps1` is the authoritative full source/test command.
+Bare root `npx playwright test` is unsupported in this repository and records no acceptance proof. Unqualified `cargo test -p tessara-api` includes destructive database targets; run it only through the full validation path with `TEST_DATABASE_URL`, a distinct disposable `SPRINT_6A_FRESH_DATABASE_URL`, and `SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET`. The approved closeout policy squashes all current schema into migration `001_baseline.sql`, destroys prior-sprint databases, and starts the next sprint from a freshly seeded database. `.\scripts\validate.ps1` is the authoritative full source/test command.
 
-The implementation must add Sprint 6A-UI deployment/acceptance publishers that require migrations 1–4 and write only under `artifacts/sprint-6a-ui/`; retained Sprint 6A publishers and artifacts remain unchanged. Launch and capture the two closing states separately:
+The Sprint 6A-UI deployment/acceptance publisher requires the sole migration `001_baseline.sql` and writes only under `artifacts/sprint-6a-ui/`. Retained Sprint 6A artifacts are historical records and are not inputs to this closeout. Launch one freshly seeded closing state:
 
-- fresh: `.\scripts\local-launch.ps1 -FreshData`, then `.\scripts\capture-sprint-6a-ui-deployment-evidence.ps1 -BaseUrl "http://127.0.0.1:8080" -ExpectedDataState fresh -OutputPath "artifacts/sprint-6a-ui/deployment-fresh.json"`;
-- upgraded: `.\scripts\local-launch.ps1 -ExternalDatabaseUrl "<dedicated-populated-upgrade-url>" -SkipSeed`, then `.\scripts\capture-sprint-6a-ui-deployment-evidence.ps1 -BaseUrl "http://127.0.0.1:8080" -ExpectedDataState upgraded -OutputPath "artifacts/sprint-6a-ui/deployment-upgraded.json"`.
+- fresh: `.\scripts\local-launch.ps1 -FreshData`, then `.\scripts\capture-sprint-6a-ui-deployment-evidence.ps1 -BaseUrl "http://127.0.0.1:8080" -ExpectedDataState fresh -OutputPath "artifacts/sprint-6a-ui/deployment-fresh.json"`.
 
-For each `<state>` equal to `fresh` and `upgraded`, run these manifest/evidence-bound commands with the matching deployment path:
+Run the matching evidence-bound commands only against that fresh deployment:
 
-- `.\scripts\smoke.ps1 -UseExistingService -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath "artifacts/sprint-6a-ui/deployment-<state>.json" -ExpectedDataState <state> -AcceptanceEvidencePath "artifacts/sprint-6a-ui/smoke-<state>.json"`
-- `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath "artifacts/sprint-6a-ui/deployment-<state>.json" -ExpectedDataState <state> -AcceptanceEvidencePath "artifacts/sprint-6a-ui/uat-<state>.json"`
-- `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath "artifacts/sprint-6a-ui/deployment-<state>.json" -ExpectedDataState <state> -AcceptanceManifestPath "end2end/acceptance-manifest.json" -EvidencePath "artifacts/sprint-6a-ui/playwright-acceptance-<state>.json"`
+- `.\scripts\smoke.ps1 -UseExistingService -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath "artifacts/sprint-6a-ui/deployment-fresh.json" -ExpectedDataState fresh -AcceptanceEvidencePath "artifacts/sprint-6a-ui/smoke-fresh.json"`
+- `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath "artifacts/sprint-6a-ui/deployment-fresh.json" -ExpectedDataState fresh -AcceptanceEvidencePath "artifacts/sprint-6a-ui/uat-fresh.json"`
+- `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath "artifacts/sprint-6a-ui/deployment-fresh.json" -ExpectedDataState fresh -AcceptanceManifestPath "end2end/acceptance-manifest.json" -EvidencePath "artifacts/sprint-6a-ui/playwright-acceptance-fresh.json"`
 
 Run the separate UI suite against the fresh closing deployment with `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080" -DeploymentEvidencePath "artifacts/sprint-6a-ui/deployment-fresh.json" -ExpectedDataState fresh -AcceptanceManifestPath "end2end/sprint-6a-ui-ui-manifest.json" -EvidencePath "artifacts/sprint-6a-ui/playwright-ui-fresh.json"`. Its manifest is created from reviewed semantic, keyboard/focus, accessibility, theme, and 1280/768/390 identities, not a bulk screenshot update.
 
 Command failures are fixed or explicitly classified; none are filtered, retried into a pass, or removed from the evidence set.
 
 1. run formatting, `validate.ps1 -Fast`, locked all-feature check/Clippy, WASM hydrate check, relevant workspace/web/API tests, boundary checks, dependency audit, and diff hygiene;
-2. run the populated Sprint 6A upgrade path through the new migration, verify policy transformation and protected catalog reconciliation, and retain exact database-derived evidence;
-3. create and verify a backup/restore rollback package that can restore the pre-upgrade state for the closed Sprint 6A executable/evidence contract;
-4. launch a separate fresh database and verify deterministic required/default group and placement state;
-5. against both required deployment states, run smoke/UAT and the reconciled canonical browser manifest with zero skipped, filtered, flaky, retried, or unexpected results;
-6. run the separate UI manifest for semantics, keyboard/focus, accessibility, themes, and 1280/768/390 viewports;
-7. reconcile every test-log row and tracked visual baseline; commit the closing tree; then repeat the canonical commit-bound source/deployment gates required by the closeout evidence contract; and
-8. require a clean worktree and prove no retained file under `artifacts/sprint-6a/` changed.
+2. squash the schema to the sole baseline, destroy the prior stack/database, and verify the fresh migration ledger and deterministic required/default group and placement state;
+3. against the fresh deployment, run smoke/UAT and the reconciled canonical browser manifest with zero skipped, filtered, flaky, retried, or unexpected results;
+4. run the separate UI manifest for semantics, keyboard/focus, accessibility, themes, and 1280/768/390 viewports;
+5. reconcile every test-log row and tracked visual baseline; commit the closing tree; then repeat the canonical commit-bound source/deployment gates required by the closeout evidence contract; and
+6. require a clean worktree and prove no retained file under `artifacts/sprint-6a/` changed.
 
 Tracked production or proof changes after the canonical final pass invalidate the affected proof and require the relevant targeted and closing gates again. Routine iteration before stabilization does not.
 
@@ -376,20 +373,20 @@ Tracked production or proof changes after the canonical final pass invalidate th
 0. Freeze Decision Gate 1, exact migration mapping, group-composer visual direction, and accepted proof-replacement rows.
 1. Add characterization proof for the v1 policy, shell projection, populated database, direct Admin routes, and current behavior that must survive.
 2. Add the Core built-in catalog, generic group/placement domain model, protection validation, and fail-closed composition tests.
-3. Implement the forward migration, fresh reconciliation, repository/service transaction, revision/audit behavior, and populated upgrade/rollback proof.
+3. Consolidate the fresh baseline migration, implement fresh reconciliation, repository/service transaction, revision/audit behavior, and atomic-failure proof.
 4. Introduce versioned group-aware management and shell DTOs/endpoints; retain authorization and stable-error behavior.
 5. Update desktop/mobile shell composition for arbitrary groups and direct Admin active states; remove Administration page/route/nav item.
 6. Implement the reader/manager group composer with semantic keyboard-capable controls and responsive states.
 7. Harmonize Module Management directory/detail and capability provenance using the selected existing-Tessara direction, including the approved functional directory search/status controls and no-match/reset state.
 8. Run targeted accessibility, SSR/no-JavaScript, hydration, console, theme, responsive, migration, and failure hardening; reconcile all test changes.
-9. Stabilize the final candidate, execute the ordered fresh/upgrade/rollback/reconciled acceptance gates, and close out without changing Sprint 6A artifacts.
+9. Stabilize the final candidate, execute the ordered fresh and reconciled acceptance gates, and close out without changing Sprint 6A artifacts.
 
 ## Risks And Abort Rules
 
 | Risk | Prevention | Response |
 | --- | --- | --- |
 | Seed resets administrator choices | Idempotent reconciliation tests with customized policies | Block release; never repair by overwriting valid configuration. |
-| Incomplete migration | Exact membership/fingerprint and atomic failure proof | Roll back transaction and restore the pre-upgrade backup. |
+| Incomplete baseline | Exact membership/fingerprint and atomic failure proof | Block closeout; correct the squashed baseline and recreate the disposable fresh database. |
 | Navigation grants access | Independent capability/route/API tests | Treat as a security defect; stop rollout. |
 | Required destination becomes unreachable | Protection matrix plus actor-specific shell tests | Fail the mutation atomically and preserve prior revision. |
 | Arbitrary groups break shell hydration | Versioned projection validation and desktop/mobile/no-JS tests | Fail closed to Core fallback and correct the projection. |

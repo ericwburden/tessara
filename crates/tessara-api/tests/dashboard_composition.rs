@@ -1615,7 +1615,7 @@ async fn placement_capacity_migration_preflight_aborts_without_mutation() {
     assert_eq!(before_count, 241);
 
     let migration_error = sqlx::raw_sql(include_str!(
-        "../migrations/002_dashboard_placement_capacity.sql"
+        "fixtures/historical/dashboard_placement_capacity_preflight.sql"
     ))
     .execute(&mut *tx)
     .await
@@ -1694,7 +1694,7 @@ async fn placement_capacity_migration_rejects_overlapping_valid_v1_without_mutat
     .expect("install overlapping valid V1 fixture");
 
     let migration_error = sqlx::raw_sql(include_str!(
-        "../migrations/002_dashboard_placement_capacity.sql"
+        "fixtures/historical/dashboard_placement_capacity_preflight.sql"
     ))
     .execute(&mut *tx)
     .await
@@ -1781,7 +1781,7 @@ async fn placement_capacity_migration_rejects_fallback_exhaustion_without_mutati
     .expect("install all-row valid V1 fixture");
 
     let migration_error = sqlx::raw_sql(include_str!(
-        "../migrations/002_dashboard_placement_capacity.sql"
+        "fixtures/historical/dashboard_placement_capacity_preflight.sql"
     ))
     .execute(&mut *tx)
     .await

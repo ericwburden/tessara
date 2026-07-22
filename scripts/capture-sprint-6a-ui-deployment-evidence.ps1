@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "http://127.0.0.1:8080",
-    [ValidateSet("upgraded", "fresh")][string]$ExpectedDataState,
+    [ValidateSet("fresh")][string]$ExpectedDataState,
     [string]$OutputPath,
     [string]$AdminEmail = "admin@tessara.local",
     [string]$AdminPassword = "tessara-dev-admin",
@@ -29,9 +29,8 @@ function Assert-Sprint6AUiArtifactPath {
     return $fullPath
 }
 
-# The retained Sprint 6A publisher stays pinned to migrations 1--3.  This
-# publisher deliberately reuses its schema and runtime checks while pinning
-# the Sprint 6A-UI closing ledger to migrations 1--4.
+# Sprint closeout resets the prior stack and captures only a freshly seeded
+# database using the one squashed baseline migration.
 function Get-Sprint6AExpectedMigrationLedger {
     param([Parameter(Mandatory)][string]$RepositoryRoot)
 
@@ -47,8 +46,8 @@ function Get-Sprint6AExpectedMigrationLedger {
             checksum_sha384 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA384).Hash.ToLowerInvariant()
         }
     }
-    if (($rows.version -join ",") -cne "1,2,3,4") {
-        throw "Sprint 6A-UI deployment evidence requires repository migrations exactly 1,2,3,4; found '$($rows.version -join ",")'."
+    if (($rows.version -join ",") -cne "1") {
+        throw "Sprint 6A-UI deployment evidence requires repository migration exactly 1; found '$($rows.version -join ",")'."
     }
     return $rows
 }
@@ -59,10 +58,10 @@ function Assert-Sprint6AMigrationLedger {
         [Parameter(Mandatory)][object[]]$ExpectedMigrations
     )
 
-    if ($DatabaseMigrations.Count -ne 4 -or ($DatabaseMigrations.version -join ",") -cne "1,2,3,4") {
-        throw "The live database migration ledger must contain exactly successful versions 1,2,3,4."
+    if ($DatabaseMigrations.Count -ne 1 -or ($DatabaseMigrations.version -join ",") -cne "1") {
+        throw "The live database migration ledger must contain exactly successful version 1."
     }
-    for ($index = 0; $index -lt 4; $index++) {
+    for ($index = 0; $index -lt 1; $index++) {
         $database = $DatabaseMigrations[$index]
         $expected = $ExpectedMigrations[$index]
         if (-not [bool]$database.success -or
@@ -100,10 +99,10 @@ function Publish-Sprint6AUiEvidencePair {
 }
 
 if ($SelfTest) {
-    $expected = @(1..4 | ForEach-Object { [pscustomobject]@{ version = $_; file = "00$($_)_test.sql"; checksum_sha384 = "d" * 96 } })
-    $database = @(1..4 | ForEach-Object { [pscustomobject]@{ version = $_; success = $true; checksum_sha384 = "d" * 96 } })
+    $expected = @([pscustomobject]@{ version = 1; file = "001_test.sql"; checksum_sha384 = "d" * 96 })
+    $database = @([pscustomobject]@{ version = 1; success = $true; checksum_sha384 = "d" * 96 })
     Assert-Sprint6AMigrationLedger -DatabaseMigrations $database -ExpectedMigrations $expected
-    $database[3].checksum_sha384 = "e" * 96
+    $database[0].checksum_sha384 = "e" * 96
     $rejected = $false
     try {
         Assert-Sprint6AMigrationLedger -DatabaseMigrations $database -ExpectedMigrations $expected
@@ -111,11 +110,11 @@ if ($SelfTest) {
         $rejected = $true
     }
     if (-not $rejected) {
-        throw "Sprint 6A-UI deployment-evidence self-test failed: a migration-four checksum mismatch was accepted."
+        throw "Sprint 6A-UI deployment-evidence self-test failed: a baseline checksum mismatch was accepted."
     }
     $rejected = $false
     try {
-        Assert-Sprint6AUiArtifactPath -Path "artifacts/sprint-6a/deployment-upgraded.json" | Out-Null
+        Assert-Sprint6AUiArtifactPath -Path "artifacts/sprint-6a/deployment-other-state.json" | Out-Null
     } catch {
         $rejected = $true
     }
@@ -127,7 +126,7 @@ if ($SelfTest) {
 }
 
 if ([string]::IsNullOrWhiteSpace($ExpectedDataState)) {
-    throw "-ExpectedDataState upgraded|fresh is required. The database-derived value is independently verified."
+    throw "-ExpectedDataState fresh is required. Sprint closeout accepts only a freshly seeded database."
 }
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = "artifacts/sprint-6a-ui/deployment-$ExpectedDataState.json"

@@ -170,6 +170,12 @@ fn visible_role_capabilities(
     selected_capability_ids: &[String],
     query: &str,
 ) -> Vec<AdminCapabilitySummary> {
+    let admin_all_selected = catalog.iter().any(|capability| {
+        capability.key == "admin:all"
+            && selected_capability_ids
+                .iter()
+                .any(|selected_id| selected_id == &capability.id)
+    });
     let allowed_scope =
         match admin_role_capability_scope_selection(catalog, selected_capability_ids) {
             AdminRoleCapabilityScopeSelection::ScopeAware => {
@@ -186,10 +192,12 @@ fn visible_role_capabilities(
     catalog
         .iter()
         .filter(|capability| {
-            let scope_matches = match allowed_scope {
-                Some(scope_mode) => capability.scope_mode == scope_mode,
-                None => true,
-            };
+            let scope_matches = admin_all_selected
+                || capability.key == "admin:all"
+                || match allowed_scope {
+                    Some(scope_mode) => capability.scope_mode == scope_mode,
+                    None => true,
+                };
 
             scope_matches
                 && text_matches(

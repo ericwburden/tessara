@@ -283,10 +283,10 @@ function Test-Sprint6AShouldInvokeDemoSeed {
     param([AllowNull()][AllowEmptyString()][string]$ExpectedDataState)
 
     if (-not [string]::IsNullOrWhiteSpace($ExpectedDataState) -and
-        $ExpectedDataState -notin @('upgraded', 'fresh')) {
+        $ExpectedDataState -cne 'fresh') {
         throw "Demo seed strategy received unsupported data state '$ExpectedDataState'."
     }
-    $ExpectedDataState -cne 'upgraded'
+    $true
 }
 
 function Assert-Sprint6AExactInteger {
@@ -334,7 +334,7 @@ function Assert-Sprint6AAcceptanceEvidenceDocument {
     }
     if ([int64]$Evidence.schema_version -ne $script:Sprint6AAcceptanceEvidenceSchemaVersion -or
         $Evidence.status -cne 'passed' -or
-        $Evidence.expected_data_state -notin @('upgraded', 'fresh')) {
+        $Evidence.expected_data_state -cne 'fresh') {
         throw 'Acceptance evidence has an invalid schema version, status, or data state.'
     }
 

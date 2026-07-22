@@ -64,21 +64,14 @@ try {
         if ([string]::IsNullOrWhiteSpace($env:TEST_DATABASE_URL)) {
             throw "Full validation requires TEST_DATABASE_URL so database integration tests cannot silently skip. Use -Fast for a non-database development check."
         }
-        if ([string]::IsNullOrWhiteSpace($env:SPRINT_6A_UPGRADE_DATABASE_URL)) {
-            throw "Full validation requires SPRINT_6A_UPGRADE_DATABASE_URL pointing at a second dedicated disposable database. The populated migration proof resets that database and must not share TEST_DATABASE_URL."
-        }
-        if ($env:SPRINT_6A_UPGRADE_DATABASE_URL -eq $env:TEST_DATABASE_URL) {
-            throw "SPRINT_6A_UPGRADE_DATABASE_URL must not equal TEST_DATABASE_URL. Provision a second disposable database for the destructive upgrade proof."
-        }
         if ([string]::IsNullOrWhiteSpace($env:SPRINT_6A_FRESH_DATABASE_URL)) {
-            throw "Full validation requires SPRINT_6A_FRESH_DATABASE_URL pointing at a third dedicated disposable database. Fresh-start and lock-order proof must not reset the populated upgrade clone."
+            throw "Full validation requires SPRINT_6A_FRESH_DATABASE_URL pointing at a second dedicated disposable database. The fresh-baseline proof resets that database and must not share TEST_DATABASE_URL."
         }
-        if ($env:SPRINT_6A_FRESH_DATABASE_URL -eq $env:TEST_DATABASE_URL -or
-            $env:SPRINT_6A_FRESH_DATABASE_URL -eq $env:SPRINT_6A_UPGRADE_DATABASE_URL) {
-            throw "SPRINT_6A_FRESH_DATABASE_URL must differ from both TEST_DATABASE_URL and SPRINT_6A_UPGRADE_DATABASE_URL."
+        if ($env:SPRINT_6A_FRESH_DATABASE_URL -eq $env:TEST_DATABASE_URL) {
+            throw "SPRINT_6A_FRESH_DATABASE_URL must differ from TEST_DATABASE_URL."
         }
         if ($env:SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET -ne "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET") {
-            throw "Full validation requires SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET because the populated upgrade proof destroys and recreates its dedicated database."
+            throw "Full validation requires SPRINT_6A_CONFIRM_DESTRUCTIVE_UPGRADE_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET because the fresh-baseline proof destroys and recreates its dedicated database."
         }
     }
 
@@ -104,8 +97,6 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Playwright-evidence self-test failed with exit code $LASTEXITCODE" }
         & .\scripts\validate-resource-reference-nondisclosure.ps1 -SelfTest
         if ($LASTEXITCODE -ne 0) { throw "nondisclosure-evidence self-test failed with exit code $LASTEXITCODE" }
-        & .\scripts\test-sprint-6a-rollback-package.ps1 -SelfTest
-        if ($LASTEXITCODE -ne 0) { throw "rollback-evidence self-test failed with exit code $LASTEXITCODE" }
         & .\scripts\test-sprint-6a-acceptance-evidence.ps1
         if ($LASTEXITCODE -ne 0) { throw "smoke/UAT acceptance-evidence self-test failed with exit code $LASTEXITCODE" }
     }

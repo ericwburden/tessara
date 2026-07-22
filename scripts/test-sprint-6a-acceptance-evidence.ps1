@@ -43,7 +43,7 @@ function Write-JsonPair {
 function New-TestDeploymentPair {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [ValidateSet('upgraded', 'fresh')][string]$DataState = 'upgraded'
+        [ValidateSet('fresh')][string]$DataState = 'fresh'
     )
     $document = [pscustomobject][ordered]@{
         schema_version = 1
@@ -130,14 +130,14 @@ $junctionPath = $null
 try {
     [IO.Directory]::CreateDirectory($testRoot) | Out-Null
     Assert-True `
-        (-not (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState upgraded)) `
-        'Upgraded acceptance must never invoke the demo seed endpoint.'
-    Assert-True `
         (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState fresh) `
         'Fresh acceptance must retain the demo seed path.'
     Assert-True `
         (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $null) `
         'Development diagnostics must retain the established demo seed path.'
+    Assert-ThrowsLike {
+        Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState upgraded | Out-Null
+    } '*unsupported data state*' 'The retired upgraded acceptance state was not rejected.'
     Assert-ThrowsLike {
         Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState unexpected | Out-Null
     } '*unsupported data state*' 'An unknown demo seed strategy state was not rejected.'
@@ -167,8 +167,8 @@ try {
         Assert-Sprint6ADemoSeedRefusal -StatusCode 400 -ResponseBody $wrongDemoSeedRefusal -Context 'Acceptance self-test demo seed'
     } '*exact populated-database*' 'A different HTTP 400 was accepted as the demo seed refusal.'
 
-    $deployment = New-TestDeploymentPair -Path (Join-Path $testRoot 'deployment-upgraded.json')
-    $evidencePath = Join-Path $testRoot 'smoke-upgraded.json'
+    $deployment = New-TestDeploymentPair -Path (Join-Path $testRoot 'deployment-fresh.json')
+    $evidencePath = Join-Path $testRoot 'smoke-fresh.json'
     $firstEvidence = New-TestEvidence -Deployment $deployment
     $published = Publish-Sprint6AAcceptanceEvidence `
         -EvidencePath $evidencePath `
@@ -182,7 +182,7 @@ try {
     Assert-True ($verifiedDigest -ceq $published.sha256) 'Success evidence/sidecar validation did not match publication.'
     Assert-NoPublishTemps -Directory $testRoot
 
-    $uatDeployment = New-TestDeploymentPair -Path (Join-Path $testRoot 'deployment-fresh.json') -DataState fresh
+    $uatDeployment = New-TestDeploymentPair -Path (Join-Path $testRoot 'deployment-uat-fresh.json') -DataState fresh
     $uatPath = Join-Path $testRoot 'uat-fresh.json'
     Publish-Sprint6AAcceptanceEvidence `
         -EvidencePath $uatPath `
@@ -209,7 +209,7 @@ try {
     } '*refuses to replace*' 'Orphan sidecar was not refused.'
     Assert-True (-not (Test-Path -LiteralPath $orphanPath)) 'Orphan refusal created evidence.'
 
-    foreach ($aliasPath in @($deployment.path, "$($deployment.path).sha256", (Join-Path $testRoot '.\deployment-upgraded.json'))) {
+    foreach ($aliasPath in @($deployment.path, "$($deployment.path).sha256", (Join-Path $testRoot '.\deployment-fresh.json'))) {
         Assert-ThrowsLike {
             Assert-Sprint6AAcceptanceEvidenceTargetAvailable -EvidencePath $aliasPath -DeploymentEvidencePath $deployment.path -Overwrite | Out-Null
         } '*distinct*' "Deployment/acceptance alias '$aliasPath' was not rejected before mutation."
