@@ -6,6 +6,7 @@
 /.output/
 /.vercel/
 node_modules/
+/end2end/test-results/
 
 # Local configuration
 .env
