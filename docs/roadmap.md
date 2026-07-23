@@ -786,7 +786,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a global Module Management reader can inspect the navigation configuration without mutation controls and can narrow the exact canonical Module directory by name/ID and availability status, combine those criteria, and clear a distinct no-match state without gaining authority. A global navigation manager can create, rename, reorder, and delete empty custom groups; reorder Main and Admin; move any optional destination between groups; and show, hide, or reorder optional destinations without changing authorization. Main, Admin, Home, Organization, User Management, Roles & Access, Node Types, and Module Management enforce their approved protection rules. `/administration` has no route or navigation item. The migrated policy preserves compatible prior choices, invalid mutations fail atomically with stable audited errors, the harmonized Module Management pages remain complete and responsive, and the reconciled acceptance inventory passes without skips, retries, weakened unrelated expectations, or unexplained test rewrites.
 
-### Sprint 6B1: Container Deployment Foundation Slice (Closeout Verification)
+### Sprint 6B1: Container Deployment Foundation Slice (Complete)
 
 **Outcome:** Tessara can validate and apply a curated, single-host container deployment through established infrastructure, then route to and observe one independently deployed reference module without making Core a container control plane.
 
@@ -813,7 +813,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** using the curated 6B1 release fixture, an operator can validate and plan the exact deployment, apply it through Docker Compose, observe the Core, Traefik, PostgreSQL, and reference-module containers, reach the reference module through the single Tessara origin, stop it without breaking Core, inspect the contained fallback and diagnostics, restore it, apply a compatible upgrade, and roll back. The one PostgreSQL container contains separate Core, deployment-control, and Module Instance databases, and prohibited cross-database access fails.
 
-### Sprint 6B2: Secure Module Operation Slice
+### Sprint 6B2: Secure Module Operation Slice (Next)
 
 **Outcome:** Tessara can securely enroll its first administrator and authorize scoped user activity across the independently deployed module boundary established in Sprint 6B1.
 

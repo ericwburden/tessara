@@ -7,13 +7,36 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
-## 2026-07-23 - Sprint 6B1 Closeout Candidate
+## 2026-07-23 - Sprint 6B1 Closeout
 
-- Status: closeout verification in progress after the approved implementation commit `97148b4a`.
-- Completed the final implementation gate: the curated deployment contract and receipt now carry the complete `ModuleManifestV1`; Core persists it transactionally with configuration and route evidence; descriptor download reads it back; and the shared module-detail page derives declarations, contracts, capabilities, dependencies, resources, navigation, diagnostics, and configuration from the authoritative persisted projection.
-- Squashed the Sprint 6B1 schema into the single fresh-install `001_baseline.sql`; superseded incremental migrations are not closeout inputs.
-- Preserved backward deserialization for historical local receipts while requiring full manifest evidence for every newly imported curated receipt.
-- Contract, deploy, and web test suites pass after the change. The complete fresh-stack, API database integration, smoke, UAT, and browser verification results will be recorded here before the sprint is marked complete.
+- Status: complete. Sprint 6B1 establishes the curated, single-host container deployment foundation and the first independently deployed reference module without turning Core into a container control plane.
+- The deployment contract, `tessara-deploy` CLI, Compose/Traefik topology, isolated PostgreSQL databases and roles, scoped-records reference module, transactional receipt import, typed Module Management projections, and approved Screen A–C UI deltas are complete.
+- The development schema was squashed before closeout: the final fresh deployment applies only `migrations/001_baseline.sql`. Superseded 002–004 files are removed and are not deployment inputs.
+- The same parameterized module route now uses one shared page structure and styling for transition contributions and independently deployed modules, populated by a normalized typed view model. Serving state and deployment-change semantics come from authoritative projections rather than parallel view logic.
+- Complete persisted `ModuleManifestV1` evidence supplies descriptor download and all detail tabs. Browser acceptance proves that each displayed source digest hashes the exact downloaded descriptor bytes.
+- Verified third-party container admission, distribution, and lifecycle management are intentionally future development. Sprint 6B1 uses curated Tessara releases and does not require Cosign on the deployment host.
+
+### Sprint Handoff / Demo Instructions
+
+1. Open `http://localhost:8080` and sign in with the seeded local administrator account (`admin@tessara.local` / `tessara-dev-admin`).
+2. Open **Module Management**. On **Modules**, verify the eight-row shared directory, independently deployed **Scoped Records**, authoritative serving badges, filters, copy controls, and the Runtime details side sheet.
+3. Open **Scoped Records**. Compare its shared Definition and lifecycle panels with a transition contribution such as Forms; use the desktop tabs or mobile full-width selector, and verify explicit empty states where a module supplies no data.
+4. Use **View source descriptor (JSON)** and **View deployment receipt**. Confirm the descriptor digest matches the source digest shown in the directory and detail view.
+5. Open **Deployment**. Review resolved components, receipt history, applied change, provenance, health, local-time timestamps, and receipt download.
+6. Visit `/reference/scoped-records/` through the same Tessara origin. The reference module, health probes, API, and retained record data are live; stopping the module produces the Core-rendered fallback while Module Management remains available.
+
+### Acceptance Mapping
+
+- **Curated contract and CLI:** deterministic validate/plan/apply/status/rollback behavior, stale or mismatched plans rejected, and sanitized receipts bound to installation/revision/idempotency evidence. Proven by module-contract/deploy tests plus `test-sprint-6b1-contract.ps1` and `test-sprint-6b1-live.ps1`.
+- **Single-host runtime:** Core, Traefik, PostgreSQL, and scoped-records run under Compose with default-deny exposure and one Tessara origin. Proven by fresh deployment capture, Compose health, smoke, and live lifecycle checks.
+- **Database isolation:** one PostgreSQL container hosts separate Core, deployment-control, and Module Instance databases with migration/runtime roles and negative cross-database proof. Proven by fresh baseline capture, API integration tests, UAT, and live lifecycle checks.
+- **Module Management:** shared directory/detail composition presents persisted release, instance, manifest, configuration, diagnostics, navigation, and deployment receipt data without mutation authority. Proven by API/web tests and the complete canonical Playwright suite, including native no-JavaScript and responsive behavior.
+- **Upgrade and rollback:** compatible upgrade and rollback retain Module Instance identity, database binding, route behavior, and stored record data. Proven by the live lifecycle script and deployment-ledger readback.
+- **UI delta discipline:** only the approved Screen A–C additions and changes were implemented; existing route structure, components, icons, actions, and responsive patterns remain authoritative. Proven by the approved mockup records and browser acceptance.
+- **Closeout evidence:** `artifacts/sprint-6b1/deployment-fresh.json`, `smoke-fresh.json`, `uat-fresh.json`, and `playwright-acceptance-fresh.json` are bound to the final fresh deployment and source commit.
+- **Runner note:** bare root `npx playwright test` is not supported because `@playwright/test` is intentionally package-local. `scripts/validate-e2e.ps1` is the canonical manifest-bound runner and passes the complete suite.
+
+- Next Sprint: Sprint 6B2 - Secure Module Operation Slice.
 
 ## 2026-07-22 - Sprint 6B1 Kickoff
 

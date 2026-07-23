@@ -1,11 +1,11 @@
 # Sprint 6B1 Plan: Container Deployment Foundation
 
-Status: closeout verification in progress on 2026-07-23. Core implementation, local vertical-slice acceptance, and complete curated-manifest persistence/readback are implemented. Verified-container distribution and lifecycle management were explicitly deferred to future platform work.
+Status: complete on 2026-07-23. Core implementation, the local vertical slice, curated-manifest persistence/readback, the approved Module Management UI deltas, and closeout verification are complete. Verified-container distribution and lifecycle management remain explicitly deferred to future platform work.
 
 - Branch: `codex/sprint-6b1`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6b1`
-- Roadmap source: `Sprint 6B1: Container Deployment Foundation Slice (Active)`
-- Follow-on: `Sprint 6B2: Secure Module Operation Slice`
+- Roadmap source: `Sprint 6B1: Container Deployment Foundation Slice (Complete)`
+- Follow-on: `Sprint 6B2: Secure Module Operation Slice (Next)`
 
 ## Sprint Summary
 
@@ -97,6 +97,15 @@ The sprint is a full vertical slice: an operator can validate, plan, apply, obse
   - `.\scripts\smoke.ps1`
   - `.\scripts\local-launch.ps1`
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+
+## Closeout Result
+
+- The development schema is squashed into one authoritative `001_baseline.sql`; migrations 002–004 were folded into that baseline and removed before final fresh-stack verification.
+- The curated install, compatible upgrade, rollback, module stop/fallback, restart, same-origin routing, database isolation, and retained-data lifecycle all pass against the local Compose deployment.
+- Module Management uses one shared parameterized detail-page structure and typed projections for transition contributions and independently deployed modules. The directory, detail tabs, responsive selector/action menu, empty states, status semantics, tooltips, and deployment ledger implement only the reviewed Screen A–C deltas.
+- Curated manifest bytes are persisted and downloadable. The rendered source digest is verified against those exact bytes in browser acceptance.
+- Formatting, API, web, deployment-contract, deployment CLI, reference-module, smoke, UAT, and canonical Playwright acceptance checks pass with the final fresh deployment evidence.
+- Root-level `npx playwright test` is not a supported runner because Playwright is package-local under `end2end`; `scripts/validate-e2e.ps1` is the authoritative manifest-bound closeout runner.
 
 ## Ordered Implementation Plan
 
