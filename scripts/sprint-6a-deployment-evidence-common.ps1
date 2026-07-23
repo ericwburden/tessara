@@ -565,7 +565,12 @@ function Get-Sprint6ADeploymentSnapshot {
         throw "Sprint 6A deployment evidence requires running API and database containers."
     }
     $apiPortBindings = @($apiInspect.NetworkSettings.Ports."8080/tcp")
-    $apiPublishedPorts = @($apiPortBindings | ForEach-Object { $_.HostPort } | Sort-Object -Unique)
+    $apiPublishedPorts = @(
+        $apiPortBindings |
+            Where-Object { $null -ne $_ -and $null -ne $_.PSObject.Properties["HostPort"] } |
+            ForEach-Object { $_.HostPort } |
+            Sort-Object -Unique
+    )
     $publishedBaseUrlContainerId = [string]$apiInspect.Id
     if ($apiPublishedPorts.Count -ne 1 -or [int]$apiPublishedPorts[0] -ne $baseUri.Port) {
         if ([string]::IsNullOrWhiteSpace($GatewayContainerId)) {
@@ -576,7 +581,12 @@ function Get-Sprint6ADeploymentSnapshot {
             throw "Sprint 6A deployment evidence requires the supplied gateway container to be running."
         }
         $gatewayPortBindings = @($gatewayInspect.NetworkSettings.Ports."8080/tcp")
-        $gatewayPublishedPorts = @($gatewayPortBindings | ForEach-Object { $_.HostPort } | Sort-Object -Unique)
+        $gatewayPublishedPorts = @(
+            $gatewayPortBindings |
+                Where-Object { $null -ne $_ -and $null -ne $_.PSObject.Properties["HostPort"] } |
+                ForEach-Object { $_.HostPort } |
+                Sort-Object -Unique
+        )
         $apiGatewayNetworks = @(
             $apiInspect.NetworkSettings.Networks.PSObject.Properties.Name |
                 Where-Object { $gatewayInspect.NetworkSettings.Networks.PSObject.Properties.Name -contains $_ }
@@ -673,7 +683,12 @@ function Get-Sprint6ADeploymentSnapshot {
         $sharedNetworkNames.Count -gt 0 -and
         @($resolvedDatabaseIps | Where-Object { $databaseNetworkIps -contains $_ }).Count -gt 0
     $databasePortBindings = @($databaseInspect.NetworkSettings.Ports."5432/tcp")
-    $databasePublishedPorts = @($databasePortBindings.HostPort | Sort-Object -Unique)
+    $databasePublishedPorts = @(
+        $databasePortBindings |
+            Where-Object { $null -ne $_ -and $null -ne $_.PSObject.Properties["HostPort"] } |
+            ForEach-Object { $_.HostPort } |
+            Sort-Object -Unique
+    )
     $publishedHostBinding = $databaseUri.Host -in @("host.docker.internal", "gateway.docker.internal") -and
         $databasePublishedPorts.Count -eq 1 -and
         [int]$databasePublishedPorts[0] -eq $databaseUri.Port
