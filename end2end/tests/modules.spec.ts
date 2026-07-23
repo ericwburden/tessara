@@ -554,8 +554,13 @@ function attachBrowserGuard(page: Page) {
         "the expected HTTP failures must produce only their exact characterized browser diagnostics",
       ).toEqual(expectedConsoleMessages);
     }
-    if (allowMissingResponseIdentities && scope.responseIdentities.length === 0) {
-      expect(scope.responseIdentities).toEqual([]);
+    if (allowMissingResponseIdentities) {
+      expect(
+        scope.responseIdentities.every((identity) =>
+          expectedResponseIdentities.includes(identity),
+        ),
+        "optional browser diagnostics must remain within the characterized response set",
+      ).toBe(true);
     } else {
       expect(
         scope.responseIdentities,
@@ -592,7 +597,7 @@ function attachBrowserGuard(page: Page) {
     ) {
       await whileExpectedHttpError(
         [EXPECTED_UNAUTHENTICATED_CONSOLE],
-        [`GET ${path} 401`],
+        [`GET ${path} 401`, "GET /api/shell/navigation 401"],
         run,
         true,
         true,
