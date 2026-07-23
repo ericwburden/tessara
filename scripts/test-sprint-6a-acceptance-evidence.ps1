@@ -55,7 +55,7 @@ function New-TestDeploymentPair {
             release_image = [pscustomobject][ordered]@{ image_id = 'sha256:' + ('e' * 64) }
             database_runtime = [pscustomobject][ordered]@{ current_database = "self_test_$DataState" }
             installation = [pscustomobject][ordered]@{ id = '11111111-2222-3333-4444-555555555555' }
-            catalog = [pscustomobject][ordered]@{ definition_count = 7 }
+            catalog = [pscustomobject][ordered]@{ definition_count = 8 }
             built_in_seed = [pscustomobject][ordered]@{ canonical_sha256 = $script:Sprint6AAcceptanceEvidenceBuiltInSeedSha256 }
             data = [pscustomobject][ordered]@{ state = $DataState }
         }

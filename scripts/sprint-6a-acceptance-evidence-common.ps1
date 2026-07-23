@@ -408,7 +408,7 @@ function Assert-Sprint6AAcceptanceEvidenceDocument {
         $Evidence.deployment.database_name -cne [string]$snapshot.database_runtime.current_database -or
         $Evidence.deployment.installation_id -cne [string]$snapshot.installation.id -or
         [int64]$Evidence.deployment.catalog_entries -ne [int64]$snapshot.catalog.definition_count -or
-        [int64]$Evidence.deployment.catalog_entries -ne 7 -or
+        [int64]$Evidence.deployment.catalog_entries -ne 8 -or
         $Evidence.deployment.built_in_seed_sha256 -cne [string]$snapshot.built_in_seed.canonical_sha256 -or
         $Evidence.deployment.built_in_seed_sha256 -cne $script:Sprint6AAcceptanceEvidenceBuiltInSeedSha256) {
         throw 'Acceptance evidence deployment identity does not exactly match the retained deployment evidence.'
