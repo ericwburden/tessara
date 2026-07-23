@@ -151,12 +151,6 @@ async fn grant_runtime_privileges(pool: &PgPool, runtime_role: &str) -> anyhow::
         for statement in [
             format!("GRANT USAGE, CREATE ON SCHEMA \"{schema}\" TO {runtime_role}"),
             format!(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO {runtime_role}"
-            ),
-            format!(
-                "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"{schema}\" TO {runtime_role}"
-            ),
-            format!(
                 "ALTER DEFAULT PRIVILEGES IN SCHEMA \"{schema}\" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {runtime_role}"
             ),
             format!(
@@ -165,6 +159,50 @@ async fn grant_runtime_privileges(pool: &PgPool, runtime_role: &str) -> anyhow::
         ] {
             sqlx::query(&statement).execute(pool).await?;
         }
+    }
+
+    let owned_tables = sqlx::query_as::<_, (String, String)>(
+        "SELECT namespace.nspname, relation.relname
+         FROM pg_class relation
+         JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+         WHERE relation.relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+           AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+           AND namespace.nspname <> 'information_schema'
+           AND namespace.nspname NOT LIKE 'pg_%'
+         ORDER BY namespace.nspname, relation.relname",
+    )
+    .fetch_all(pool)
+    .await?;
+    for (schema, table) in owned_tables {
+        let schema = schema.replace('"', "\"\"");
+        let table = table.replace('"', "\"\"");
+        sqlx::query(&format!(
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"{schema}\".\"{table}\" TO {runtime_role}"
+        ))
+        .execute(pool)
+        .await?;
+    }
+
+    let owned_sequences = sqlx::query_as::<_, (String, String)>(
+        "SELECT namespace.nspname, relation.relname
+         FROM pg_class relation
+         JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+         WHERE relation.relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+           AND relation.relkind = 'S'
+           AND namespace.nspname <> 'information_schema'
+           AND namespace.nspname NOT LIKE 'pg_%'
+         ORDER BY namespace.nspname, relation.relname",
+    )
+    .fetch_all(pool)
+    .await?;
+    for (schema, sequence) in owned_sequences {
+        let schema = schema.replace('"', "\"\"");
+        let sequence = sequence.replace('"', "\"\"");
+        sqlx::query(&format!(
+            "GRANT USAGE, SELECT ON SEQUENCE \"{schema}\".\"{sequence}\" TO {runtime_role}"
+        ))
+        .execute(pool)
+        .await?;
     }
     Ok(())
 }
