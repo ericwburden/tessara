@@ -127,7 +127,7 @@
         },
         "shell_contribution_contracts": null
       },
-      "manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "manifest_digest": "sha256:7a4514b6e5a00b93a517fd09f9e2662526b53c3d4cf363b115034ef096f59175",
       "runtime_image": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "publisher": "tessara.first_party",
       "database_name": "tessara_module_scoped_records",

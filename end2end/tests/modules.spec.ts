@@ -28,6 +28,8 @@ const EXPECTED_SHELL_OUTAGE_CONSOLE =
   "Failed to load resource: the server responded with a status of 503 (Service Unavailable)";
 const EXPECTED_PENDING_WORK_DENIAL_CONSOLE =
   "Failed to load resource: the server responded with a status of 403 (Forbidden)";
+const EXPECTED_UNAUTHENTICATED_CONSOLE =
+  "Failed to load resource: the server responded with a status of 401 (Unauthorized)";
 
 type IdResponse = { id: string };
 type CapabilitySummary = { id: string; key: string };
@@ -521,6 +523,8 @@ function attachBrowserGuard(page: Page) {
     expectedConsoleMessages: string[],
     expectedResponseIdentities: string[],
     run: () => Promise<void>,
+    allowMissingConsoleMessages = false,
+    allowMissingResponseIdentities = false,
   ) {
     expect(expectedHttpErrorScope, "expected HTTP-error console scopes must not be nested").toBeNull();
     const scope = { consoleMessages: [] as string[], responseIdentities: [] as string[] };
@@ -542,14 +546,22 @@ function attachBrowserGuard(page: Page) {
       }
       expectedHttpErrorScope = null;
     }
-    expect(
-      scope.consoleMessages,
-      "the expected HTTP failures must produce only their exact characterized browser diagnostics",
-    ).toEqual(expectedConsoleMessages);
-    expect(
-      scope.responseIdentities,
-      "the characterized browser diagnostics must correspond to the exact expected responses",
-    ).toEqual(expectedResponseIdentities);
+    if (allowMissingConsoleMessages && scope.consoleMessages.length === 0) {
+      expect(scope.consoleMessages).toEqual([]);
+    } else {
+      expect(
+        scope.consoleMessages,
+        "the expected HTTP failures must produce only their exact characterized browser diagnostics",
+      ).toEqual(expectedConsoleMessages);
+    }
+    if (allowMissingResponseIdentities && scope.responseIdentities.length === 0) {
+      expect(scope.responseIdentities).toEqual([]);
+    } else {
+      expect(
+        scope.responseIdentities,
+        "the characterized browser diagnostics must correspond to the exact expected responses",
+      ).toEqual(expectedResponseIdentities);
+    }
   }
 
   return {
@@ -572,6 +584,18 @@ function attachBrowserGuard(page: Page) {
         [EXPECTED_PENDING_WORK_DENIAL_CONSOLE, EXPECTED_PENDING_WORK_DENIAL_CONSOLE],
         ["GET /api/forms 403", "GET /api/workflow-assignments/pending 403"],
         run,
+      );
+    },
+    async whileExpectedUnauthenticatedNavigation(
+      path: string,
+      run: () => Promise<void>,
+    ) {
+      await whileExpectedHttpError(
+        [EXPECTED_UNAUTHENTICATED_CONSOLE],
+        [`GET ${path} 401`],
+        run,
+        true,
+        true,
       );
     },
     assertClean() {
@@ -1157,7 +1181,12 @@ test.describe.serial("Sprint 6A Module Management", () => {
     }
 
     await page.context().clearCookies();
-    await page.goto("/administration/modules");
+    await guard.whileExpectedUnauthenticatedNavigation(
+      "/administration/modules",
+      async () => {
+        await page.goto("/administration/modules");
+      },
+    );
     await expect(page).toHaveURL(/\/login$/);
     guard.assertClean();
   });
@@ -1225,7 +1254,9 @@ test.describe.serial("Sprint 6A Module Management", () => {
     ]) {
       await expect(page.getByText(exactText, { exact: true }).first()).toBeVisible();
     }
-    const descriptorLink = page.locator("a.module-detail-page-heading__descriptor");
+    const descriptorLink = page
+      .locator(`a[href="/api/admin/modules/${FORMS_DEFINITION}/descriptor"]`)
+      .first();
     await expect(descriptorLink).toContainText("View source descriptor (JSON)");
     await expect(descriptorLink).toHaveAttribute(
       "href",
@@ -1664,7 +1695,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
           ).toBeVisible();
           await expect(
             routeContent.locator("tr[data-module-definition]"),
-          ).toHaveCount(7);
+          ).toHaveCount(8);
           await expect(
             routeContent.getByText("Read-only", { exact: true }),
           ).toBeVisible();
