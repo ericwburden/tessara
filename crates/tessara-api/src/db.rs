@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0xb88c_b9a9_7495_2776);
+        assert_eq!(fnv1a(BASELINE), 0xb2ee_c480_5e23_7198);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains(
             "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
@@ -425,13 +425,17 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "c7d962e878717f5958482841c9744ef589e1f36c347be9eb1aa0328739c5cbe9"
+            "692f7bd17326b05cbba77983f575827d9f30e0d582b44ded57690655e4f2b843"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));
         assert!(baseline.contains("CREATE TABLE transition_descriptor_sources"));
         assert!(baseline.contains("CREATE TABLE navigation_groups"));
         assert!(baseline.contains("CREATE TABLE navigation_destination_placements"));
+        assert!(baseline.contains("CREATE TABLE module_releases"));
+        assert!(baseline.contains("CREATE TABLE module_instances"));
+        assert!(baseline.contains("CREATE TABLE deployment_receipts"));
+        assert!(baseline.contains("manifest JSONB"));
     }
 
     fn sha256_hex(bytes: &[u8]) -> String {

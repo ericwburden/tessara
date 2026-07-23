@@ -139,6 +139,8 @@ Validation completed:
 - `scripts/test-sprint-6b1-live.ps1 -BaseUrl http://127.0.0.1:8180`
 - legacy smoke and Sprint UAT scripts against the canonical application stack
 
+Closeout uses one squashed `001_baseline.sql`; migrations 002–004 were implementation-time steps and are not shipped as closing deployment inputs.
+
 The 6B1 fixture is a curated Tessara development release. It retains exact digest and publisher-provenance fields for forward compatibility but does not claim cryptographic verification. Verified-container admission, registry/catalog distribution, signature policy, and production destructive lifecycle management are recorded as future platform work rather than Sprint 6B1 closeout gates.
 
 The independently deployed detail projection now persists the complete validated curated `ModuleManifestV1` together with the sanitized release/instance/receipt/configuration/diagnostics read model. Descriptor download returns that persisted manifest, and the Declarations, Contracts, Capabilities, Dependencies, Resources, and Navigation tabs project the same authoritative content rather than parallel placeholder objects. Final closeout remains contingent on the recorded fresh-stack verification suite.
