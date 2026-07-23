@@ -43,7 +43,10 @@ When a kickoff plan exists under `docs/sprints/`, use it as supporting scope inp
    - `.\scripts\local-launch.ps1` (or `.\scripts\local-launch.ps1 -FreshData` when seed-sensitive)
 5. Run `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
 6. Run smoke checks `.\scripts\smoke.ps1` and targeted crate tests.
-7. Run Playwright coverage for the application routes touched by the sprint.
+7. Run Playwright coverage for the application routes touched by the sprint:
+   - direct runner check from the repository root: `npm --prefix .\end2end test`
+   - retained acceptance evidence: `.\scripts\validate-e2e.ps1 ...`
+   - never run bare `npx playwright test` from the repository root; the Playwright dependency and configuration belong to `end2end`
 8. Run formatting check `cargo fmt --all`.
 9. Add the **Sprint Handoff / Demo Instructions** subsection to the progress report entry using the required template below.
 10. For each sprint acceptance/exit condition:
@@ -56,7 +59,8 @@ When a kickoff plan exists under `docs/sprints/`, use it as supporting scope inp
 - `cargo fmt --all`
 - `cargo test -p tessara-api`
 - `cargo test -p tessara-web`
-- `npx playwright test`
+- `npm --prefix .\end2end test`
+- `.\scripts\validate-e2e.ps1 ...` with the sprint's deployment evidence, expected data state, and evidence output path
 - `.\scripts\smoke.ps1`
 - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
 
@@ -140,6 +144,10 @@ For every sprint user-testable exit condition, include:
   - sprint UAT: `D:/Projects/tessara/scripts/uat-sprint.ps1`
   - smoke: `D:/Projects/tessara/scripts/smoke.ps1`
   - Playwright: `D:/Projects/tessara/end2end/tests`
+- Direct Playwright execution must resolve the repository-owned runner with
+  `npm --prefix .\end2end test` from the repository root, or by running
+  `npx playwright test` only after changing the working directory to `end2end`.
+  The root package does not own `@playwright/test` or its configuration.
 - Add one constrained non-admin validation where role gating is relevant.
 - Attach at least one evidence artifact for each functional area: screenshot, transcript, or test/log output.
 - Any unsupported or deferred demo scenario must be explicitly marked as blocked with owner and next-step date.

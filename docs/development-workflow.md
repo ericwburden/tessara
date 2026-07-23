@@ -498,7 +498,12 @@ worker, zero retries, `forbidOnly`, every expected test passing once, and zero
 skipped, flaky, retried, filtered, or unexpected results. It retains JSON, JUnit, discovery,
 and digest-summary evidence. `-DevelopmentMode` explicitly permits targeted
 diagnostic filters, but such a run is not acceptance evidence. A root-level
-`npx playwright test` invocation is not the repository validation path. Record
+`npx playwright test` invocation is not the repository validation path. For a
+direct non-evidence run from the repository root, use
+`npm --prefix .\end2end test`; alternatively, change into `end2end` before
+running `npx playwright test`. The root package intentionally does not own the
+Playwright dependency or configuration, so a bare root invocation may resolve
+a second, incompatible runner. Record
 the closing commit, environment, exact commands, evidence digests, and test
 counts with the closeout; do not normalize a red gate by changing or skipping
 the test unless an approved product/contract decision is recorded with stronger

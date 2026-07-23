@@ -91,7 +91,9 @@ The sprint is a full vertical slice: an operator can validate, plan, apply, obse
   - `cargo test -p tessara-reference-scoped-records`
   - `cargo test -p tessara-api` with isolated disposable `TEST_DATABASE_URL`
   - `cargo test -p tessara-web`
-  - repository-qualified `npx playwright test` through the canonical manifest wrapper; bare root execution remains unsupported
+  - `npm --prefix .\end2end test` for the direct repository-owned runner, plus
+    `.\scripts\validate-e2e.ps1 ...` for canonical manifest-bound acceptance
+    evidence; bare root `npx playwright test` remains unsupported
   - `.\scripts\smoke.ps1`
   - `.\scripts\local-launch.ps1`
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`

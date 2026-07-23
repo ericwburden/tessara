@@ -215,6 +215,18 @@ npm --prefix .\end2end run install-browsers
 .\scripts\validate-e2e.ps1 -DevelopmentMode -BaseUrl "http://127.0.0.1:8080"
 ```
 
+For a direct, non-evidence Playwright run from the repository root, use the
+package-qualified command:
+
+```powershell
+npm --prefix .\end2end test
+```
+
+Equivalently, change into `end2end` before running `npx playwright test`.
+Do not run bare `npx playwright test` from the repository root: the root package
+does not own `@playwright/test` or `playwright.config.ts`, so `npx` can resolve a
+second runner that conflicts with the version imported by the test files.
+
 Useful checks:
 
 ```powershell
@@ -274,7 +286,8 @@ failure rolls the prior set back. Use `-DevelopmentMode` explicitly for targeted
 local diagnosis; that output is never acceptance evidence. The wrapper restores
 every Playwright environment variable it touches and runs Playwright from the
 `end2end` package and includes `end2end/tests/permissions.spec.ts`; do not
-substitute a root-level `npx playwright test` command. Update
+substitute a root-level `npx playwright test` command. Use
+`npm --prefix .\end2end test` only for a direct non-evidence run. Update
 `docs/playwright-permissions-scenarios.md` alongside new permission scenarios.
 
 The default smoke script uses Docker for Postgres and runs the API locally with
