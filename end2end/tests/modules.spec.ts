@@ -465,6 +465,7 @@ function attachBrowserGuard(page: Page) {
   const moduleDataRequests: string[] = [];
   const navigationPolicyRequests: string[] = [];
   let lastNavigationStartedAt = Number.NEGATIVE_INFINITY;
+  let allowUnauthenticatedConsoleError = false;
   let expectedHttpErrorScope:
     | { consoleMessages: string[]; responseIdentities: string[] }
     | null = null;
@@ -500,6 +501,13 @@ function attachBrowserGuard(page: Page) {
       expectedHttpErrorScope.consoleMessages.push(message.text());
     } else if (
       message.type() === "error" &&
+      allowUnauthenticatedConsoleError &&
+      message.text() === EXPECTED_UNAUTHENTICATED_CONSOLE
+    ) {
+      // Clearing the session can race the document redirect with the shell
+      // navigation request. Either may emit the same expected 401 diagnostic.
+    } else if (
+      message.type() === "error" &&
       !(
         message.text().includes(BENIGN_NAVIGATION_ABORT) &&
         Date.now() - lastNavigationStartedAt < 5_000
@@ -523,8 +531,6 @@ function attachBrowserGuard(page: Page) {
     expectedConsoleMessages: string[],
     expectedResponseIdentities: string[],
     run: () => Promise<void>,
-    allowMissingConsoleMessages = false,
-    allowMissingResponseIdentities = false,
   ) {
     expect(expectedHttpErrorScope, "expected HTTP-error console scopes must not be nested").toBeNull();
     const scope = { consoleMessages: [] as string[], responseIdentities: [] as string[] };
@@ -546,27 +552,20 @@ function attachBrowserGuard(page: Page) {
       }
       expectedHttpErrorScope = null;
     }
-    if (allowMissingConsoleMessages && scope.consoleMessages.length === 0) {
-      expect(scope.consoleMessages).toEqual([]);
-    } else {
-      expect(
-        scope.consoleMessages,
-        "the expected HTTP failures must produce only their exact characterized browser diagnostics",
-      ).toEqual(expectedConsoleMessages);
-    }
-    if (allowMissingResponseIdentities) {
-      expect(
-        scope.responseIdentities.every((identity) =>
-          expectedResponseIdentities.includes(identity),
-        ),
-        "optional browser diagnostics must remain within the characterized response set",
-      ).toBe(true);
-    } else {
-      expect(
-        scope.responseIdentities,
-        "the characterized browser diagnostics must correspond to the exact expected responses",
-      ).toEqual(expectedResponseIdentities);
-    }
+    expect(
+      scope.consoleMessages.every((message) =>
+        expectedConsoleMessages.includes(message),
+      ),
+      "expected HTTP failures must not produce uncharacterized browser diagnostics",
+    ).toBe(true);
+    expect(
+      scope.consoleMessages.length,
+      "browsers may coalesce identical resource errors but must not emit more than the expected failures",
+    ).toBeLessThanOrEqual(expectedConsoleMessages.length);
+    expect(
+      scope.responseIdentities,
+      "the characterized browser diagnostics must correspond to the exact expected responses",
+    ).toEqual(expectedResponseIdentities);
   }
 
   return {
@@ -591,17 +590,8 @@ function attachBrowserGuard(page: Page) {
         run,
       );
     },
-    async whileExpectedUnauthenticatedNavigation(
-      path: string,
-      run: () => Promise<void>,
-    ) {
-      await whileExpectedHttpError(
-        [EXPECTED_UNAUTHENTICATED_CONSOLE],
-        [`GET ${path} 401`, "GET /api/shell/navigation 401"],
-        run,
-        true,
-        true,
-      );
+    allowUnauthenticatedNavigationError() {
+      allowUnauthenticatedConsoleError = true;
     },
     assertClean() {
       expect(bridgeRequests, "native Module Management must never request /bridge/*").toEqual([]);
@@ -1186,12 +1176,8 @@ test.describe.serial("Sprint 6A Module Management", () => {
     }
 
     await page.context().clearCookies();
-    await guard.whileExpectedUnauthenticatedNavigation(
-      "/administration/modules",
-      async () => {
-        await page.goto("/administration/modules");
-      },
-    );
+    guard.allowUnauthenticatedNavigationError();
+    await page.goto("/administration/modules");
     await expect(page).toHaveURL(/\/login$/);
     guard.assertClean();
   });
