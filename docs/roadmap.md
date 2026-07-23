@@ -786,7 +786,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a global Module Management reader can inspect the navigation configuration without mutation controls and can narrow the exact canonical Module directory by name/ID and availability status, combine those criteria, and clear a distinct no-match state without gaining authority. A global navigation manager can create, rename, reorder, and delete empty custom groups; reorder Main and Admin; move any optional destination between groups; and show, hide, or reorder optional destinations without changing authorization. Main, Admin, Home, Organization, User Management, Roles & Access, Node Types, and Module Management enforce their approved protection rules. `/administration` has no route or navigation item. The migrated policy preserves compatible prior choices, invalid mutations fail atomically with stable audited errors, the harmonized Module Management pages remain complete and responsive, and the reconciled acceptance inventory passes without skips, retries, weakened unrelated expectations, or unexplained test rewrites.
 
-### Sprint 6B1: Container Deployment Foundation Slice (Active)
+### Sprint 6B1: Container Deployment Foundation Slice (Closeout Verification)
 
 **Outcome:** Tessara can validate and apply a curated, single-host container deployment through established infrastructure, then route to and observe one independently deployed reference module without making Core a container control plane.
 
@@ -800,6 +800,7 @@ This section records the completed foundation sequence that led to the current n
 - configure Traefik with default-deny exposure and only validated generated labels; keep Core Module Management reachable and route unavailable module requests to a Core-rendered same-origin fallback
 - retain exact digest identifiers and publisher provenance in the curated release contract without representing them as cryptographically verified; verified container admission is deferred
 - persist real Module Releases and Instances plus sanitized deployment receipts while keeping provenance, compatibility, identity, operation, data, configuration, readiness, health, authorization, navigation visibility, and routing enablement as separate dimensions
+- persist each curated release's complete validated `ModuleManifestV1`, serve that manifest through descriptor readback, and populate module detail declarations, contracts, capabilities, dependencies, resources, and navigation from the same authoritative source
 - create a minimal non-production `tessara.reference.scoped-records` full-stack module with its own container image, migration command, SSR product route, administration route, API, probes, diagnostics, and logical database in the shared PostgreSQL cluster
 - create and review runnable HTML/CSS mockups, grounded in the completed application and production stylesheet, for proposed runtime-enabled Module Management additions and changes; treat the application as the authoritative baseline, record bounded approved deltas per screen, and never use mockup omissions or approximations as replacement instructions
 - add local deployment, startup, shutdown, status, diagnostic, failure, restore, upgrade, rollback, and conformance workflows without granting Core or the browser Docker-socket access

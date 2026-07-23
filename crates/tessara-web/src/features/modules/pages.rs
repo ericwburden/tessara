@@ -504,6 +504,7 @@ fn independent_module_sections(
 ) -> AnyView {
     let (definition, release, instance, configuration, diagnostics) =
         entry.independent().expect("independent module projection");
+    let manifest = entry.manifest().cloned();
     let definition = definition.clone();
     let release = release.clone();
     let instance = instance.clone();
@@ -513,6 +514,7 @@ fn independent_module_sections(
     let runtime_image = release.runtime_image.clone();
     let instance_id = instance.id.clone();
     let serving_state = entry.serving_state();
+    let manifest_sections = independent_manifest_sections(manifest.as_ref());
     view! {
         <div class="module-detail-sections" data-active-section=move || active_section.get()>
             <div data-module-section="overview" class="module-detail-independent-overview">
@@ -561,17 +563,143 @@ fn independent_module_sections(
                 </div>
             </div>
             <section data-module-section="configuration" class="organization-detail-card module-detail-overview-card"><h2>"Configuration"</h2><dl class="module-detail-overview__list"><div><dt>"Display label"</dt><dd>{configuration.display_label}</dd></div><div><dt>"Retention mode"</dt><dd>{configuration.retention_mode.replace('_', " ")}</dd></div><div><dt>"Validation"</dt><dd>{if configuration.valid { format!("Valid for release {} · No findings", release.version) } else { "A configuration finding was reported; review the Findings tab for its path and resolution.".into() }}</dd></div></dl></section>
-            {[
-                ("declarations", "Declarations", "No declarations were reported for this module."),
-                ("contracts", "Contracts", "No contracts were declared for this module."),
-                ("capabilities", "Capabilities", "No capabilities were declared for this module."),
-                ("dependencies", "Dependencies", "No dependencies were declared for this module."),
-                ("resources", "Resources", "No resources were declared for this module."),
-                ("navigation", "Navigation", "No navigation contribution was declared for this module."),
-                ("findings", "Findings", "No module findings were reported."),
-            ].into_iter().map(|(section,title,message)| view! { <section data-module-section=section class="organization-detail-card module-detail-empty-section"><h2>{title}</h2><p>{message}</p></section> }).collect_view()}
+            {manifest_sections}
+            <section data-module-section="findings" class="organization-detail-card module-detail-empty-section"><h2>"Findings"</h2><p>"No module findings were reported."</p></section>
         </div>
     }.into_any()
+}
+
+fn independent_manifest_sections(
+    manifest: Option<&super::models::ModuleManifestV1>,
+) -> Vec<AnyView> {
+    let Some(manifest) = manifest else {
+        return [
+            ("declarations", "Declarations", "No persisted module manifest is available."),
+            ("contracts", "Contracts", "No persisted module manifest is available."),
+            ("capabilities", "Capabilities", "No persisted module manifest is available."),
+            ("dependencies", "Dependencies", "No persisted module manifest is available."),
+            ("resources", "Resources", "No persisted module manifest is available."),
+            ("navigation", "Navigation", "No persisted module manifest is available."),
+        ]
+        .into_iter()
+        .map(|(section, title, message)| view! {
+            <section data-module-section=section class="organization-detail-card module-detail-empty-section">
+                <h2>{title}</h2><p>{message}</p>
+            </section>
+        }.into_any())
+        .collect();
+    };
+
+    let sections = vec![
+        (
+            "declarations",
+            "Declarations",
+            manifest
+                .features
+                .iter()
+                .map(|item| {
+                    (
+                        item.name.clone(),
+                        format!("{} · {}", item.id, item.description),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            "No feature declarations were reported.",
+        ),
+        (
+            "contracts",
+            "Contracts",
+            manifest
+                .provided_contracts
+                .iter()
+                .map(|item| {
+                    (
+                        item.id.to_string(),
+                        format!("{} · {}", item.version, item.description),
+                    )
+                })
+                .collect(),
+            "No contracts were declared.",
+        ),
+        (
+            "capabilities",
+            "Capabilities",
+            manifest
+                .security_capabilities
+                .iter()
+                .map(|item| (item.id.to_string(), item.description.clone()))
+                .collect(),
+            "No capabilities were declared.",
+        ),
+        (
+            "dependencies",
+            "Dependencies",
+            manifest
+                .dependencies
+                .iter()
+                .map(|item| {
+                    (
+                        item.contract_id.to_string(),
+                        format!(
+                            "{} · binding {}",
+                            item.version_requirement, item.binding_key
+                        ),
+                    )
+                })
+                .collect(),
+            "No dependencies were declared.",
+        ),
+        (
+            "resources",
+            "Resources",
+            manifest
+                .resource_types
+                .iter()
+                .map(|item| (item.id.to_string(), item.description.clone()))
+                .collect(),
+            "No resources were declared.",
+        ),
+        (
+            "navigation",
+            "Navigation",
+            manifest
+                .navigation
+                .iter()
+                .map(|item| {
+                    (
+                        item.label.clone(),
+                        format!("{} · {}", item.destination, item.group),
+                    )
+                })
+                .collect(),
+            "No navigation contribution was declared.",
+        ),
+    ];
+    sections
+        .into_iter()
+        .map(|(section, title, rows, empty)| {
+            if rows.is_empty() {
+                view! {
+                    <section data-module-section=section class="organization-detail-card module-detail-empty-section">
+                        <h2>{title}</h2><p>{empty}</p>
+                    </section>
+                }
+                .into_any()
+            } else {
+                view! {
+                    <section data-module-section=section class="organization-detail-card module-detail-overview-card">
+                        <h2>{title}</h2>
+                        <dl class="module-detail-overview__list">
+                            {rows.into_iter().map(|(label, value)| view! {
+                                <div><dt>{label}</dt><dd>{value}</dd></div>
+                            }).collect_view()}
+                        </dl>
+                    </section>
+                }
+                .into_any()
+            }
+        })
+        .collect()
 }
 
 fn state(value: bool) -> &'static str {

@@ -10,6 +10,7 @@ use serde_json::Value;
 pub use tessara_module_contract::{
     AppliedComponentV1, AppliedModuleV1, DeploymentReceiptV1, IndependentConfigurationV1,
     IndependentDefinitionV1, IndependentDiagnosticsV1, IndependentInstanceV1, IndependentReleaseV1,
+    ModuleManifestV1,
 };
 
 pub const MODULE_HTTP_SCHEMA_VERSION_V1: u16 = 1;
@@ -104,6 +105,7 @@ pub enum ModuleInventoryEntryV1 {
         instance: IndependentInstanceV1,
         configuration: IndependentConfigurationV1,
         diagnostics: IndependentDiagnosticsV1,
+        manifest: Option<ModuleManifestV1>,
         findings: Vec<ModuleFindingV1>,
     },
 }
@@ -219,6 +221,13 @@ impl ModuleInventoryEntryV1 {
                 diagnostics,
                 ..
             } => Some((definition, release, instance, configuration, diagnostics)),
+            Self::TransitionalInProcess { .. } => None,
+        }
+    }
+
+    pub fn manifest(&self) -> Option<&ModuleManifestV1> {
+        match self {
+            Self::IndependentlyDeployed { manifest, .. } => manifest.as_ref(),
             Self::TransitionalInProcess { .. } => None,
         }
     }

@@ -20,6 +20,10 @@ function Write-Deployment([int]$Revision, [string]$Version, [string]$ManifestCha
     $desired.modules[0].version = $Version
     $desired.modules[0].manifest_digest = "sha256:" + ($ManifestCharacter * 64)
     $desired.modules[0].runtime_image = "sha256:" + ($RuntimeCharacter * 64)
+    $desired.modules[0].manifest.release_version = $Version
+    $desired.modules[0].manifest.deployment.declaration.runtime_image.digest = $desired.modules[0].runtime_image
+    $desired.modules[0].manifest.deployment.declaration.runtime_image.image_reference =
+        "registry.example/tessara/scoped-records@$($desired.modules[0].runtime_image)"
     $path = Join-Path $working "deployment-$Revision.json"
     $desired | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $path -Encoding utf8
 

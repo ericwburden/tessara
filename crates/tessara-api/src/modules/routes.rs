@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use tessara_module_contract::DeploymentReceiptV1;
+use tessara_module_contract::{DeploymentProfile, DeploymentReceiptV1};
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -211,6 +211,12 @@ async fn import_deployment_receipt(
         .await?;
 
     for module in &receipt.modules {
+        let manifest = module.manifest.as_ref().ok_or_else(|| {
+            ModuleHttpError::bad_request(
+                "deployment_receipt_manifest_required",
+                "Every curated module receipt must include its complete validated manifest.",
+            )
+        })?;
         let display_name = module
             .definition_id
             .as_str()
@@ -220,10 +226,10 @@ async fn import_deployment_receipt(
             .replace(['-', '_'], " ");
         sqlx::query("INSERT INTO module_definition_reservations (definition_id, display_name) VALUES ($1, $2) ON CONFLICT (definition_id) DO NOTHING")
             .bind(module.definition_id.as_str()).bind(display_name).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO module_releases (id, definition_id, version, manifest_digest, runtime_image_digest, publisher, trust_state, compatibility_state) VALUES ($1,$2,$3,$4,$5,$6,'curated','compatible') ON CONFLICT (definition_id, manifest_digest) DO UPDATE SET version=EXCLUDED.version, runtime_image_digest=EXCLUDED.runtime_image_digest, publisher=EXCLUDED.publisher, trust_state='curated', compatibility_state='compatible'")
-            .bind(module.release_id).bind(module.definition_id.as_str()).bind(module.version.to_string()).bind(module.manifest_digest.as_str()).bind(module.runtime_image.as_str()).bind(module.publisher.as_str()).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO module_instances (id, installation_id, definition_id, release_id, identity_state, data_state, database_name, installed, deployed, configured, ready, enabled, healthy, last_observed_at) VALUES ($1,$2,$3,$4,'live','retained',$5,true,true,true,true,true,true,$6) ON CONFLICT (installation_id, definition_id) DO UPDATE SET release_id=EXCLUDED.release_id, identity_state='live', data_state='retained', database_name=EXCLUDED.database_name, installed=true, deployed=true, configured=true, ready=true, enabled=true, healthy=true, last_observed_at=EXCLUDED.last_observed_at")
-            .bind(module.instance_id).bind(receipt.installation_id).bind(module.definition_id.as_str()).bind(module.release_id).bind(&module.database_name).bind(applied_at).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO module_releases (id, definition_id, version, manifest_digest, manifest, runtime_image_digest, publisher, trust_state, compatibility_state) VALUES ($1,$2,$3,$4,$5,$6,$7,'curated','compatible') ON CONFLICT (definition_id, manifest_digest) DO UPDATE SET version=EXCLUDED.version, manifest=EXCLUDED.manifest, runtime_image_digest=EXCLUDED.runtime_image_digest, publisher=EXCLUDED.publisher, trust_state='curated', compatibility_state='compatible'")
+            .bind(module.release_id).bind(module.definition_id.as_str()).bind(module.version.to_string()).bind(module.manifest_digest.as_str()).bind(sqlx::types::Json(manifest)).bind(module.runtime_image.as_str()).bind(module.publisher.as_str()).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO module_instances (id, installation_id, definition_id, release_id, identity_state, data_state, database_name, configuration, route_prefix, installed, deployed, configured, ready, enabled, healthy, last_observed_at) VALUES ($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,true,true,true,$8) ON CONFLICT (installation_id, definition_id) DO UPDATE SET release_id=EXCLUDED.release_id, identity_state='live', data_state='retained', database_name=EXCLUDED.database_name, configuration=EXCLUDED.configuration, route_prefix=EXCLUDED.route_prefix, installed=true, deployed=true, configured=true, ready=true, enabled=true, healthy=true, last_observed_at=EXCLUDED.last_observed_at")
+            .bind(module.instance_id).bind(receipt.installation_id).bind(module.definition_id.as_str()).bind(module.release_id).bind(&module.database_name).bind(sqlx::types::Json(&module.configuration)).bind(&module.route_prefix).bind(applied_at).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -590,6 +596,16 @@ pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleI
 pub(super) fn independent_entry_value(
     module: super::service::IndependentModuleReadModel,
 ) -> serde_json::Value {
+    let manifest = module.manifest.map(|manifest| manifest.0);
+    let (readiness_path, liveness_path) = manifest
+        .as_ref()
+        .map(|manifest| match &manifest.deployment {
+            DeploymentProfile::TessaraOciV1(deployment) => (
+                deployment.readiness_path.clone(),
+                deployment.liveness_path.clone(),
+            ),
+        })
+        .unwrap_or_else(|| ("Not reported".into(), "Not reported".into()));
     serde_json::to_value(IndependentModuleEntryV1::IndependentlyDeployed {
         definition: IndependentDefinitionV1 {
             id: module.definition_id,
@@ -621,18 +637,25 @@ pub(super) fn independent_entry_value(
             observed_at: module.observed_at.to_rfc3339(),
         },
         configuration: IndependentConfigurationV1 {
-            // The receipt records whether configuration completed, but it
-            // does not carry the descriptor schema itself.
-            declared: false,
+            declared: manifest.is_some(),
             valid: module.configured,
-            display_label: module.display_name,
-            retention_mode: "Not reported".into(),
+            display_label: module
+                .configuration
+                .get("display_label")
+                .cloned()
+                .unwrap_or(module.display_name),
+            retention_mode: module
+                .configuration
+                .get("retention_mode")
+                .cloned()
+                .unwrap_or_else(|| "Not reported".into()),
         },
         diagnostics: IndependentDiagnosticsV1 {
-            readiness_path: "Not reported".into(),
-            liveness_path: "Not reported".into(),
-            public_route: "Not reported".into(),
+            readiness_path,
+            liveness_path,
+            public_route: module.route_prefix.unwrap_or_else(|| "Not reported".into()),
         },
+        manifest,
         findings: Vec::new(),
     })
     .expect("typed independent module projection must serialize")

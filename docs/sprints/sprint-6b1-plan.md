@@ -1,6 +1,6 @@
 # Sprint 6B1 Plan: Container Deployment Foundation
 
-Status: core implementation and local vertical-slice acceptance complete on 2026-07-22; full curated-manifest readback remains the closeout gate. Verified-container distribution and lifecycle management were explicitly deferred to future platform work.
+Status: closeout verification in progress on 2026-07-23. Core implementation, local vertical-slice acceptance, and complete curated-manifest persistence/readback are implemented. Verified-container distribution and lifecycle management were explicitly deferred to future platform work.
 
 - Branch: `codex/sprint-6b1`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6b1`
@@ -141,4 +141,4 @@ Validation completed:
 
 The 6B1 fixture is a curated Tessara development release. It retains exact digest and publisher-provenance fields for forward compatibility but does not claim cryptographic verification. Verified-container admission, registry/catalog distribution, signature policy, and production destructive lifecycle management are recorded as future platform work rather than Sprint 6B1 closeout gates.
 
-The independently deployed detail projection currently persists the sanitized release/instance/receipt/configuration/diagnostics read model, but it does not yet persist the complete curated `ModuleManifestV1`. Consequently, the preserved Declarations, Contracts, Capabilities, Dependencies, Resources, and Navigation tabs cannot yet project the same complete authoritative content available for transition descriptors. Full manifest persistence, descriptor download, and tab projection remain the closeout gate; placeholder explanatory content must not be treated as accepted final behavior.
+The independently deployed detail projection now persists the complete validated curated `ModuleManifestV1` together with the sanitized release/instance/receipt/configuration/diagnostics read model. Descriptor download returns that persisted manifest, and the Declarations, Contracts, Capabilities, Dependencies, Resources, and Navigation tabs project the same authoritative content rather than parallel placeholder objects. Final closeout remains contingent on the recorded fresh-stack verification suite.

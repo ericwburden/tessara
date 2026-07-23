@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
-use tessara_module_contract::DeploymentReceiptV1;
+use tessara_module_contract::{DeploymentReceiptV1, ModuleManifestV1};
 use uuid::Uuid;
 
 use super::{
@@ -70,6 +70,7 @@ pub(crate) struct IndependentModuleReadModel {
     pub(crate) release_id: Uuid,
     pub(crate) version: String,
     pub(crate) manifest_digest: String,
+    pub(crate) manifest: Option<sqlx::types::Json<ModuleManifestV1>>,
     pub(crate) runtime_image: String,
     pub(crate) publisher: String,
     pub(crate) trust: String,
@@ -78,6 +79,8 @@ pub(crate) struct IndependentModuleReadModel {
     pub(crate) identity: String,
     pub(crate) data: String,
     pub(crate) database_name: String,
+    pub(crate) configuration: sqlx::types::Json<BTreeMap<String, String>>,
+    pub(crate) route_prefix: Option<String>,
     pub(crate) installed: bool,
     pub(crate) deployed: bool,
     pub(crate) configured: bool,
@@ -368,13 +371,32 @@ pub(crate) async fn load_descriptor_document(
     pool: &PgPool,
     definition_id: &str,
 ) -> Result<Option<DescriptorDocumentReadModel>, CatalogReadError> {
-    Ok(load_transition_detail(pool, definition_id)
-        .await?
-        .map(|entry| DescriptorDocumentReadModel {
+    if let Some(entry) = load_transition_detail(pool, definition_id).await? {
+        return Ok(Some(DescriptorDocumentReadModel {
             source_digest: entry.source_digest,
             content_type: entry.content_type,
             source_bytes: entry.source_bytes,
-        }))
+        }));
+    }
+    let release = sqlx::query_as::<_, (String, sqlx::types::Json<ModuleManifestV1>)>(
+        "SELECT releases.manifest_digest, releases.manifest
+         FROM module_instances instances
+         JOIN module_releases releases ON releases.id = instances.release_id
+         WHERE instances.definition_id = $1 AND releases.manifest IS NOT NULL
+         ORDER BY instances.last_observed_at DESC
+         LIMIT 1",
+    )
+    .bind(definition_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(
+        release.map(|(source_digest, manifest)| DescriptorDocumentReadModel {
+            source_digest,
+            content_type: "application/json".into(),
+            source_bytes: serde_json::to_vec_pretty(&manifest.0)
+                .expect("validated module manifest must serialize"),
+        }),
+    )
 }
 
 #[cfg(test)]
@@ -1041,6 +1063,7 @@ async fn load_module_inventory_in_transaction(
             releases.id AS release_id,
             releases.version,
             releases.manifest_digest,
+            releases.manifest,
             releases.runtime_image_digest AS runtime_image,
             releases.publisher,
             releases.trust_state AS trust,
@@ -1049,6 +1072,8 @@ async fn load_module_inventory_in_transaction(
             instances.identity_state AS identity,
             instances.data_state AS data,
             instances.database_name,
+            instances.configuration,
+            instances.route_prefix,
             instances.installed,
             instances.deployed,
             instances.configured,

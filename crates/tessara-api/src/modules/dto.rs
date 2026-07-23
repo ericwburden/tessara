@@ -4,7 +4,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tessara_module_contract::{
-    DeploymentReceiptV1, ResourceOwner, ResourceTypeId, SemanticDestination, TypedResourceReference,
+    DeploymentReceiptV1, ModuleManifestV1, ResourceOwner, ResourceTypeId, SemanticDestination,
+    TypedResourceReference,
 };
 pub(crate) use tessara_module_contract::{
     IndependentConfigurationV1, IndependentDefinitionV1, IndependentDiagnosticsV1,
@@ -48,6 +49,7 @@ pub(crate) enum IndependentModuleEntryV1 {
         instance: IndependentInstanceV1,
         configuration: IndependentConfigurationV1,
         diagnostics: IndependentDiagnosticsV1,
+        manifest: Option<ModuleManifestV1>,
         findings: Vec<Value>,
     },
 }

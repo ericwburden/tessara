@@ -7,9 +7,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::{ArtifactDigest, ModuleDefinitionId, PublisherId};
+use crate::{
+    ArtifactDigest, DeploymentProfile, ManifestNamespaceAuthority, ModuleDefinitionId,
+    ModuleManifestV1, PublisherId,
+};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TessaraDeploymentV1 {
     pub api_version: String,
@@ -24,11 +27,12 @@ pub struct TessaraDeploymentV1 {
     pub modules: Vec<DesiredModuleV1>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesiredModuleV1 {
     pub definition_id: ModuleDefinitionId,
     pub version: Version,
+    pub manifest: ModuleManifestV1,
     pub manifest_digest: ArtifactDigest,
     pub runtime_image: ArtifactDigest,
     pub publisher: PublisherId,
@@ -54,7 +58,7 @@ pub enum DeploymentFindingSeverityV1 {
     Warning,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DeploymentActionV1 {
     InstallCore {
@@ -75,7 +79,7 @@ pub enum DeploymentActionV1 {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeploymentPlanV1 {
     pub api_version: String,
@@ -96,10 +100,12 @@ pub struct AppliedComponentV1 {
     pub healthy: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AppliedModuleV1 {
     pub definition_id: ModuleDefinitionId,
+    #[serde(default)]
+    pub manifest: Option<ModuleManifestV1>,
     pub manifest_digest: ArtifactDigest,
     pub runtime_image: ArtifactDigest,
     pub publisher: PublisherId,
@@ -107,9 +113,13 @@ pub struct AppliedModuleV1 {
     pub instance_id: Uuid,
     pub version: Version,
     pub database_name: String,
+    #[serde(default)]
+    pub route_prefix: Option<String>,
+    #[serde(default)]
+    pub configuration: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeploymentReceiptV1 {
     pub api_version: String,
@@ -258,6 +268,61 @@ impl TessaraDeploymentV1 {
         let mut routes = BTreeSet::new();
         for (index, module) in self.modules.iter().enumerate() {
             let base = format!("/modules/{index}");
+            let short_namespace = module
+                .definition_id
+                .as_str()
+                .rsplit('.')
+                .next()
+                .unwrap_or(module.definition_id.as_str());
+            let authority = ManifestNamespaceAuthority::new(
+                module.definition_id.clone(),
+                module.publisher.clone(),
+                [module.definition_id.as_str(), short_namespace],
+            );
+            if module.manifest.definition_id != module.definition_id {
+                findings.push(error(
+                    "deployment_manifest_definition_mismatch",
+                    format!("{base}/manifest/definition_id"),
+                    "manifest definition_id must match the selected module",
+                ));
+            }
+            if module.manifest.release_version != module.version {
+                findings.push(error(
+                    "deployment_manifest_version_mismatch",
+                    format!("{base}/manifest/release_version"),
+                    "manifest release_version must match the selected module version",
+                ));
+            }
+            if module.manifest.publisher != module.publisher {
+                findings.push(error(
+                    "deployment_manifest_publisher_mismatch",
+                    format!("{base}/manifest/publisher"),
+                    "manifest publisher must match the selected module publisher",
+                ));
+            }
+            match authority {
+                Ok(authority) if module.manifest.validate(&authority).is_err() => {
+                    findings.push(error(
+                        "deployment_manifest_invalid",
+                        format!("{base}/manifest"),
+                        "manifest declarations failed contract validation",
+                    ));
+                }
+                Err(_) => findings.push(error(
+                    "deployment_manifest_authority_invalid",
+                    format!("{base}/manifest"),
+                    "module namespace cannot establish manifest authority",
+                )),
+                Ok(_) => {}
+            }
+            let DeploymentProfile::TessaraOciV1(deployment) = &module.manifest.deployment;
+            if deployment.runtime_image.digest != module.runtime_image {
+                findings.push(error(
+                    "deployment_manifest_runtime_mismatch",
+                    format!("{base}/runtime_image"),
+                    "selected runtime image must match the manifest runtime image",
+                ));
+            }
             if !definitions.insert(module.definition_id.as_str()) {
                 findings.push(error(
                     "deployment_module_duplicate",
@@ -395,6 +460,8 @@ mod tests {
     }
 
     fn deployment() -> TessaraDeploymentV1 {
+        let manifest: ModuleManifestV1 =
+            serde_json::from_str(include_str!("../tests/fixtures/valid-manifest-v1.json")).unwrap();
         TessaraDeploymentV1 {
             api_version: "tessara.io/deployment/v1".into(),
             installation_id: Uuid::nil(),
@@ -405,10 +472,15 @@ mod tests {
             gateway_image: digest('b'),
             database_image: digest('f'),
             modules: vec![DesiredModuleV1 {
-                definition_id: ModuleDefinitionId::new("tessara.reference.scoped-records").unwrap(),
+                definition_id: manifest.definition_id.clone(),
                 version: Version::new(1, 0, 0),
+                manifest: manifest.clone(),
                 manifest_digest: digest('c'),
-                runtime_image: digest('d'),
+                runtime_image: match &manifest.deployment {
+                    DeploymentProfile::TessaraOciV1(deployment) => {
+                        deployment.runtime_image.digest.clone()
+                    }
+                },
                 publisher: PublisherId::new("tessara.first_party").unwrap(),
                 database_name: "tessara_module_scoped_records".into(),
                 route_prefix: "/reference/scoped-records".into(),
@@ -438,6 +510,12 @@ mod tests {
             error
                 .findings
                 .iter()
+                .filter(|finding| {
+                    matches!(
+                        finding.code.as_str(),
+                        "deployment_database_duplicate" | "deployment_route_prefix_duplicate"
+                    )
+                })
                 .map(|finding| finding.code.as_str())
                 .collect::<Vec<_>>(),
             vec![
@@ -461,6 +539,7 @@ mod tests {
             components: Vec::new(),
             modules: vec![AppliedModuleV1 {
                 definition_id: ModuleDefinitionId::new("tessara.reference.scoped-records").unwrap(),
+                manifest: None,
                 manifest_digest: digest('c'),
                 runtime_image: digest('d'),
                 publisher: PublisherId::new("tessara.first_party").unwrap(),
@@ -468,6 +547,8 @@ mod tests {
                 instance_id,
                 version: Version::new(1, 0, 0),
                 database_name: database_name.into(),
+                route_prefix: None,
+                configuration: BTreeMap::new(),
             }],
         }
     }

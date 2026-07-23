@@ -7,6 +7,13 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-23 - Sprint 6B1 Closeout Candidate
+
+- Status: closeout verification in progress after the approved implementation commit `97148b4a`.
+- Completed the final implementation gate: the curated deployment contract and receipt now carry the complete `ModuleManifestV1`; Core persists it transactionally with configuration and route evidence; descriptor download reads it back; and the shared module-detail page derives declarations, contracts, capabilities, dependencies, resources, navigation, diagnostics, and configuration from the authoritative persisted projection.
+- Preserved backward deserialization for historical local receipts while requiring full manifest evidence for every newly imported curated receipt.
+- Contract, deploy, and web test suites pass after the change. The complete fresh-stack, API database integration, smoke, UAT, and browser verification results will be recorded here before the sprint is marked complete.
+
 ## 2026-07-22 - Sprint 6B1 Kickoff
 
 - Status: kicked off Container Deployment Foundation from clean post-6A-UI `main` commit `a0cac408`.

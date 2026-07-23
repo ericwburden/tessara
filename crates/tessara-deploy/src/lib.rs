@@ -141,6 +141,7 @@ pub fn apply_curated_plan(
         .iter()
         .map(|module| AppliedModuleV1 {
             definition_id: module.definition_id.clone(),
+            manifest: Some(module.manifest.clone()),
             manifest_digest: module.manifest_digest.clone(),
             runtime_image: module.runtime_image.clone(),
             publisher: module.publisher.clone(),
@@ -170,6 +171,8 @@ pub fn apply_curated_plan(
                 }),
             version: module.version.clone(),
             database_name: module.database_name.clone(),
+            route_prefix: Some(module.route_prefix.clone()),
+            configuration: module.configuration.clone(),
         })
         .collect();
     Ok(DeploymentReceiptV1 {
@@ -248,33 +251,46 @@ mod tests {
     use semver::Version;
     use std::collections::BTreeMap;
     use tessara_module_contract::{
-        ArtifactDigest, DesiredModuleV1, ModuleDefinitionId, PublisherId,
+        ArtifactDigest, DeploymentProfile, DesiredModuleV1, ModuleManifestV1,
     };
 
     fn digest(c: char) -> ArtifactDigest {
         ArtifactDigest::new(format!("sha256:{}", c.to_string().repeat(64))).unwrap()
     }
     fn desired(revision: u64, version: Version) -> TessaraDeploymentV1 {
-        let manifest = if version.major == 0 {
+        let manifest_digest = if version.major == 0 {
             digest('c')
         } else {
             digest('e')
         };
+        let mut manifest: ModuleManifestV1 = serde_json::from_str(include_str!(
+            "../../tessara-module-contract/tests/fixtures/valid-manifest-v1.json"
+        ))
+        .unwrap();
+        manifest.release_version = version.clone();
+        let DeploymentProfile::TessaraOciV1(deployment) = &mut manifest.deployment;
+        deployment.runtime_image.digest = digest('d');
+        deployment.runtime_image.image_reference = format!(
+            "registry.example/tessara/forms@{}",
+            deployment.runtime_image.digest
+        );
         TessaraDeploymentV1 {
             api_version: "tessara.io/deployment/v1".into(),
             installation_id: Uuid::nil(),
             revision,
-            expires_at: "2026-07-23T00:00:00Z".into(),
+            expires_at: "2030-01-01T00:00:00Z".into(),
             core_version: Version::new(1, 0, 0),
             core_image: digest('a'),
             gateway_image: digest('b'),
             database_image: digest('f'),
             modules: vec![DesiredModuleV1 {
-                definition_id: ModuleDefinitionId::new("tessara.reference.scoped-records").unwrap(),
+                definition_id: manifest.definition_id.clone(),
                 version,
-                manifest_digest: manifest,
+                manifest,
+                manifest_digest,
                 runtime_image: digest('d'),
-                publisher: PublisherId::new("tessara.first_party").unwrap(),
+                publisher: tessara_module_contract::PublisherId::new("tessara.first_party")
+                    .unwrap(),
                 database_name: "tessara_module_scoped_records".into(),
                 route_prefix: "/reference/scoped-records".into(),
                 configuration: BTreeMap::new(),
