@@ -39,20 +39,26 @@ When a kickoff plan exists under `docs/sprints/`, use it as supporting scope inp
    - achievements
    - validation status
    - next focus
-4. Run environment bootstrap:
+4. If the sprint changed the database schema, finalize migrations before the final build or validation cycle:
+   - squash the development migration history into the repository baseline migration
+   - reset the development database and apply the squashed baseline from scratch
+   - verify the migration ledger contains only the expected baseline entry
+   - commit the finalized migration state before capturing deployment or acceptance evidence
+5. Run environment bootstrap:
    - `.\scripts\local-launch.ps1` (or `.\scripts\local-launch.ps1 -FreshData` when seed-sensitive)
-5. Run `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
-6. Run smoke checks `.\scripts\smoke.ps1` and targeted crate tests.
-7. Run Playwright coverage for the application routes touched by the sprint:
+6. Capture deployment evidence from the clean, final source commit. Any subsequent source change invalidates that evidence and requires a new build, deployment capture, and acceptance run.
+7. Run `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
+8. Run smoke checks `.\scripts\smoke.ps1` and targeted crate tests.
+9. Run Playwright coverage for the application routes touched by the sprint:
    - direct runner check from the repository root: `npm --prefix .\end2end test`
    - retained acceptance evidence: `.\scripts\validate-e2e.ps1 ...`
    - never run bare `npx playwright test` from the repository root; the Playwright dependency and configuration belong to `end2end`
-8. Run formatting check `cargo fmt --all`.
-9. Add the **Sprint Handoff / Demo Instructions** subsection to the progress report entry using the required template below.
-10. For each sprint acceptance/exit condition:
+10. Run formatting check `cargo fmt --all`.
+11. Add the **Sprint Handoff / Demo Instructions** subsection to the progress report entry using the required template below.
+12. For each sprint acceptance/exit condition:
     - capture at least one manual demo step
     - capture at least one automated/scripted assertion
-11. Leave the application running in a user-testable state at the close of the workflow unless the user explicitly asks to shut it down.
+13. Leave the application running in a user-testable state at the close of the workflow unless the user explicitly asks to shut it down.
 
 ## Mandatory verification commands
 
@@ -151,6 +157,8 @@ For every sprint user-testable exit condition, include:
 - Add one constrained non-admin validation where role gating is relevant.
 - Attach at least one evidence artifact for each functional area: screenshot, transcript, or test/log output.
 - Any unsupported or deferred demo scenario must be explicitly marked as blocked with owner and next-step date.
+- When schema changes are in scope, migration squashing and a from-scratch migration check must precede the final source-exact build and all retained evidence.
+- Retained deployment, smoke, UAT, and Playwright evidence is valid only for the exact clean source commit it records. A later source change requires rebuilding and recapturing the affected evidence.
 - Unless the user says otherwise, finish with the application still reachable at `http://localhost:8080` for manual walkthrough.
 
 ## Standard functionality checklist
@@ -169,6 +177,7 @@ For every sprint user-testable exit condition, include:
 Do not finalize closeout if:
 
 - roadmap/progress updates are missing
+- schema-changing sprint migrations have not been squashed and verified from scratch before final evidence capture
 - uat/smoke/test/format checks are not recorded
 - at least one functionality in the sprint has no handoff demo step
 - any acceptance condition lacks both a manual and scripted evidence entry
