@@ -149,7 +149,7 @@ async fn grant_runtime_privileges(pool: &PgPool, runtime_role: &str) -> anyhow::
     for schema in schemas {
         let schema = schema.replace('"', "\"\"");
         for statement in [
-            format!("GRANT USAGE ON SCHEMA \"{schema}\" TO {runtime_role}"),
+            format!("GRANT USAGE, CREATE ON SCHEMA \"{schema}\" TO {runtime_role}"),
             format!(
                 "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO {runtime_role}"
             ),

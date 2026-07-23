@@ -103,12 +103,35 @@ type ModuleDescriptor = Record<string, unknown> & {
   security_capabilities: SecurityCapabilityDeclaration[];
   configuration_schema: unknown | null;
 };
-type ModuleInventoryEntry = {
+type TransitionalModuleInventoryEntry = {
   kind: "transitional_in_process";
   descriptor: ModuleDescriptor;
   source_digest: string;
   findings: ModuleFinding[];
 };
+type IndependentModuleInventoryEntry = {
+  kind: "independently_deployed";
+  definition: {
+    id: string;
+    display_name: string;
+    description: string;
+  };
+  release: {
+    manifest_digest: string;
+    version: string;
+  };
+  instance: {
+    id: string;
+    ready: boolean;
+    enabled: boolean;
+    healthy: boolean;
+  };
+  manifest: Record<string, unknown> | null;
+  findings: ModuleFinding[];
+};
+type ModuleInventoryEntry =
+  | TransitionalModuleInventoryEntry
+  | IndependentModuleInventoryEntry;
 type ModuleInventoryResponse = {
   schema_version: number;
   installation: Record<string, unknown>;
@@ -559,6 +582,12 @@ function attachBrowserGuard(page: Page) {
 }
 
 function moduleIdentity(entry: ModuleInventoryEntry): ModuleIdentity {
+  if (entry.kind === "independently_deployed") {
+    return {
+      definition_id: entry.definition.id,
+      source_digest: entry.release.manifest_digest,
+    };
+  }
   return {
     definition_id: entry.descriptor.reserved_definition_id,
     source_digest: entry.source_digest,
@@ -591,7 +620,7 @@ async function markerValues(
 
 async function expectRenderedModuleDetailMatchesProjection(
   page: Page,
-  entry: ModuleInventoryEntry,
+  entry: TransitionalModuleInventoryEntry,
 ) {
   const descriptor = entry.descriptor;
   const availabilityLabels: Record<TransitionAvailability, string> = {
@@ -1147,7 +1176,9 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
     await gotoHydrated(page, "/administration/modules");
 
-    await expect(page.locator("tr[data-module-definition]")).toHaveCount(7);
+    await expect(page.locator("tr[data-module-definition]")).toHaveCount(
+      inventory.entries.length,
+    );
     const directoryBootstrap = await moduleBootstrap(page);
     expect(directoryBootstrap.route).toBe("directory");
     if (directoryBootstrap.route !== "directory") {
@@ -1270,7 +1301,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     ).toBeVisible();
 
     for (const inventoryEntry of inventory.entries) {
-      const definitionId = inventoryEntry.descriptor.reserved_definition_id;
+      const definitionId = moduleIdentity(inventoryEntry).definition_id;
       const detail = await getJson<ModuleDetailResponse>(
         fixtures.reader.context,
         `/api/admin/modules/${definitionId}`,
@@ -1292,11 +1323,26 @@ test.describe.serial("Sprint 6A Module Management", () => {
         `${definitionId} SSR bootstrap must match its detail API projection`,
       ).toEqual(detail);
 
-      const overview = page.locator(
-        'section.organization-detail-card[aria-labelledby="module-overview-heading"]',
-      );
-      await expect(overview.getByText(definitionId, { exact: true })).toBeVisible();
-      await expectRenderedModuleDetailMatchesProjection(page, detail.entry);
+      if (detail.entry.kind === "transitional_in_process") {
+        const overview = page.locator(
+          'section.organization-detail-card[aria-labelledby="module-overview-heading"]',
+        );
+        await expect(overview.getByText(definitionId, { exact: true })).toBeVisible();
+        await expectRenderedModuleDetailMatchesProjection(page, detail.entry);
+      } else {
+        await expect(
+          page.getByRole("heading", {
+            level: 1,
+            name: detail.entry.definition.display_name,
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(page.getByText(definitionId, { exact: true }).first()).toBeVisible();
+        await expect(
+          page.getByText("Independently deployed", { exact: true }),
+        ).toBeVisible();
+        await expect(page.getByText("Healthy and enabled", { exact: true })).toBeVisible();
+      }
 
       const descriptorResponse = await fixtures.reader.context.get(
         `/api/admin/modules/${definitionId}/descriptor`,
@@ -1309,15 +1355,22 @@ test.describe.serial("Sprint 6A Module Management", () => {
       expect(
         descriptorResponse.headers().etag,
         `${definitionId} ETag must quote the exact source digest as an HTTP entity tag`,
-      ).toBe(`"${inventoryEntry.source_digest}"`);
+      ).toBe(`"${moduleIdentity(inventoryEntry).source_digest}"`);
       expect(
         descriptorDigest,
         `${definitionId} descriptor bytes must hash to the rendered source digest`,
-      ).toBe(inventoryEntry.source_digest);
-      expect(
-        JSON.parse(descriptorBytes.toString("utf8")),
-        `${definitionId} descriptor bytes must decode to the detail descriptor`,
-      ).toEqual(detail.entry.descriptor);
+      ).toBe(moduleIdentity(inventoryEntry).source_digest);
+      if (detail.entry.kind === "transitional_in_process") {
+        expect(
+          JSON.parse(descriptorBytes.toString("utf8")),
+          `${definitionId} descriptor bytes must decode to the detail descriptor`,
+        ).toEqual(detail.entry.descriptor);
+      } else {
+        expect(
+          JSON.parse(descriptorBytes.toString("utf8")),
+          `${definitionId} descriptor bytes must decode to the persisted manifest`,
+        ).toEqual(detail.entry.manifest);
+      }
     }
 
     await gotoHydrated(page, `/administration/modules/${UNKNOWN_DEFINITION}`);
