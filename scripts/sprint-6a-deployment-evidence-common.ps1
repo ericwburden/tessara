@@ -455,12 +455,14 @@ function Assert-Sprint6ACatalog {
     }
     $databaseEntries = @($DatabaseCatalog.entries | Sort-Object definition_id)
     $expectedEntriesSorted = @($ExpectedEntries | Sort-Object definition_id)
-    $apiEntries = @($Inventory.entries | ForEach-Object {
-        [pscustomobject][ordered]@{
-            definition_id = [string]$_.descriptor.reserved_definition_id
-            source_digest = [string]$_.source_digest
-        }
-    } | Sort-Object definition_id)
+    $apiEntries = @($Inventory.entries |
+        Where-Object { $null -ne $_.PSObject.Properties["descriptor"] } |
+        ForEach-Object {
+            [pscustomobject][ordered]@{
+                definition_id = [string]$_.descriptor.reserved_definition_id
+                source_digest = [string]$_.source_digest
+            }
+        } | Sort-Object definition_id)
     if (($databaseEntries.definition_id -join ",") -cne ($script:Sprint6AExpectedDefinitions -join ",") -or
         ($apiEntries.definition_id -join ",") -cne ($script:Sprint6AExpectedDefinitions -join ",")) {
         throw "The live database/API catalog identities differ from the exact seven Sprint 6A transition definitions."
