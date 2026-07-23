@@ -1235,13 +1235,18 @@ async fn assert_control_plane_shape(pool: &PgPool) {
         ]
     );
 
-    for table in ["module_releases", "module_instances"] {
+    for table in ["module_releases", "module_instances", "deployment_receipts"] {
         let exists: bool = sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
             .bind(format!("public.{table}"))
             .fetch_one(pool)
             .await
             .expect("table existence should be queryable");
-        assert!(!exists, "Sprint 6A must not persist {table}");
+        assert!(exists, "the Sprint 6B1 baseline must include {table}");
+        assert_eq!(
+            count(pool, table).await,
+            0,
+            "a fresh Core-only start must not fabricate {table} rows"
+        );
     }
 }
 
