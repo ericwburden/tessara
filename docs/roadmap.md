@@ -786,47 +786,66 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a global Module Management reader can inspect the navigation configuration without mutation controls and can narrow the exact canonical Module directory by name/ID and availability status, combine those criteria, and clear a distinct no-match state without gaining authority. A global navigation manager can create, rename, reorder, and delete empty custom groups; reorder Main and Admin; move any optional destination between groups; and show, hide, or reorder optional destinations without changing authorization. Main, Admin, Home, Organization, User Management, Roles & Access, Node Types, and Module Management enforce their approved protection rules. `/administration` has no route or navigation item. The migrated policy preserves compatible prior choices, invalid mutations fail atomically with stable audited errors, the harmonized Module Management pages remain complete and responsive, and the reconciled acceptance inventory passes without skips, retries, weakened unrelated expectations, or unexplained test rewrites.
 
-### Sprint 6B: Module Runtime And Installation Infrastructure Slice (Next — pending Sprint 6A-UI closeout evidence)
+### Sprint 6B1: Container Deployment Foundation Slice (Active)
 
-**Outcome:** Tessara can securely materialize a Core Release and install/operate an independently deployed full-stack module inside one Supervisor-rooted application installation.
+**Outcome:** Tessara can validate and apply a curated, single-host container deployment through established infrastructure, then route to and observe one independently deployed reference module without making Core a container control plane.
 
 **Build:**
 
-- introduce same-origin gateway routing and service discovery for separately deployed module UI and API routes
-- define the foundational deterministic Materialization Plan schema/digest plus separate Apply Authorization Envelope in 6B, with a hand-authored resolved lockfile/plan fixture, detached signature, first-apply envelope, and verifier; the Supervisor consumes this stable contract now and Sprint 6D embeds the same plan unchanged in generated Application Lockfiles
-- introduce an installation-local Supervisor process and bootstrap CLI outside Core; before Core exists it creates the stable installation identifier, trust anchors, and authoritative ledger, then owns locked Core Release component (including gateway) and Module Release materialization, database provisioning, migrations, health gates, traffic switching, rollback, and recovery
-- define a versioned Core Administration Capability Floor and require every resolved composition to designate an Administrator Enrollment Role that includes the floor; reject missing or weakened designations, assign it globally during enrollment, and use the same active/authenticable identity plus global floor predicate to determine whether a Viable Core Administrator exists
-- after first Core health, let the Supervisor issue installation-bound, single-use, expiring Administrator Enrollment Claims under local operator/host authorization and a current Core decision that no Viable Core Administrator exists: `initial` only until one has ever existed, and `recovery` only with additional explicit audited break-glass authorization
-- allow at most one issued or reserved claim generation per installation; implement `issued -> reserved -> consumed` plus expiry/revocation, make replacement revoke the prior generation, persist only a one-way verifier and non-secret lifecycle/reservation metadata, and show the secret once outside Blueprints, lockfiles, receipts, logs, diagnostics, status/read-back, Core audit, and recovery output
-- implement idempotent enrollment: Core reserves the current generation with the Supervisor, locally transacts identity create/bind plus global designated-role assignment plus redemption record, and returns a signed result for Supervisor consumption/reconciliation; every redemption checks current Supervisor state so restore of a pre-redemption Core backup cannot revive an old claim
-- require mutually authenticated Core/CLI-to-Supervisor handoff bound to installation, base receipt, target plan digest, monotonic desired/apply revision, nonce/idempotency key, initiator/approver evidence, expiry, and destructive-action scope; reject replay/stale/concurrent plans, serialize mutation, and reconcile the authoritative ledger into Core after startup
-- define a versioned authenticated Shell Context and SDK through which each route-owning module server-renders a complete coherent document, plus a Core-rendered gateway fallback when that module is unavailable
-- propagate verifiable installation and user context plus scope-bound Authorization Grants or exact Core decisions while preserving server-managed browser sessions; prohibit independent capability/scope sets
-- define descendant-aware scope expansion, Organization/authorization revision freshness, delegation/ownership assertions, and per-downstream-audience exchange bound to the original actor, presenting service identity, declared dependency/contract/action, and installation without sharing browser cookies, bearer credentials, or database credentials between modules; restrict service-only grants to explicitly authorized system jobs
-- enforce the v1 single-cluster installation topology and provision one PostgreSQL database per module instance beside the Core database; do not add multi-cluster or module-selected external relational database placement
-- provision separate runtime and migration roles, scoped credentials, module-owned migrations, and explicit undeploy/reactivation/data-destruction behavior that preserves or tombstones durable Module Instance identity correctly
-- implement the sole v1 `tessara-oci-v1` Deployment Profile and Supervisor adapter: digest-pinned runtime/optional migration images, platform/architecture, commands, listen/service registration, config/secret injection, separate runtime/migration identities, probes, graceful shutdown, and resource declarations; reject unsupported profiles and conformance-test every field
-- add trusted artifact-source configuration, publisher/signature or provenance verification, and digest-pinned OCI acquisition without relying on Core to replace itself
-- define the gateway as a separately running component artifact versioned and selected only inside its Core Release; prove a Supervisor-driven Core Release patch upgrade/rollback, including its gateway, while Supervisor status remains available, and define the Supervisor's separate non-self-replacing upgrade procedure
-- make upgrade select a new compatible Module Release while preserving the Module Instance identifier, database binding, references, configuration identity, and rollback record
-- prohibit cross-module database access, cross-database foreign keys, shared writable schemas, FDW shortcuts, and shared runtime credentials
-- define module SDK conventions for manifests, `tessara-oci-v1`, configuration APIs, administration UI, route integration, request context, health/readiness, diagnostics, generated clients, and conformance tests
-- require human and machine configuration to use the same module-owned validation contract
-- add local multi-process development, testing, startup, shutdown, and diagnostic workflows
-- implement explicit timeout, unavailable, disabled, and degraded-state behavior at the gateway and shell
-- keep Core Module Management and eligible module administration/configuration/diagnostics destinations reachable while a product destination is disabled, unconfigured, or unhealthy
-- ship a full-stack conformance/reference module with its own administration screen and database before moving a product feature
-- define the conformance timing methodology, normalized test environment, sample size, and pass/fail tolerance for known-versus-random non-disclosure tests
-- add negative conformance scenarios proving (1) one actor with capability A only for subtree X and capability B only for subtree Y cannot obtain A/Y or B/X, (2) undeclared or declared-but-wrong-audience/action services cannot exchange or replay that actor's authority, (3) grants/exchanges issued before role, subtree, ownership, or delegation revision changes are rejected as stale without leaking existence, and (4) unauthorized resolution of known and random identifiers is indistinguishable under the defined status/shape/timing contract
+- adopt a buy/integrate-before-build rule: Docker Compose owns container lifecycle, dependencies, networking, probes, restart behavior, and resource limits; Traefik owns same-origin routing and upstream health handling; PostgreSQL owns durable Core, deployment-control, and module state
+- retain `tessara-oci-v1` as the versioned portable container declaration while explicitly rejecting a custom Supervisor, custom gateway, generic runtime-adapter framework, Kubernetes implementation, or duplicated scheduler/health state machine in this slice
+- add a thin cross-platform `tessara-deploy` CLI with deterministic `validate`, `plan`, `apply`, `status`, and compatible `rollback` workflows for the curated development release and emit stable machine-readable findings and sanitized receipts
+- bind apply records to installation identity, current revision, desired plan digest, expiry, and idempotency key; verified third-party container admission and destructive production lifecycle management remain future platform work
+- run exactly one PostgreSQL container and cluster per installation, containing separate logical databases for Core, deployment control, and each Module Instance; provision distinct owner, migration, and runtime roles and prohibit cross-module credentials, shared writable schemas, FDWs, and other cross-database shortcuts
+- configure Traefik with default-deny exposure and only validated generated labels; keep Core Module Management reachable and route unavailable module requests to a Core-rendered same-origin fallback
+- retain exact digest identifiers and publisher provenance in the curated release contract without representing them as cryptographically verified; verified container admission is deferred
+- persist real Module Releases and Instances plus sanitized deployment receipts while keeping provenance, compatibility, identity, operation, data, configuration, readiness, health, authorization, navigation visibility, and routing enablement as separate dimensions
+- create a minimal non-production `tessara.reference.scoped-records` full-stack module with its own container image, migration command, SSR product route, administration route, API, probes, diagnostics, and logical database in the shared PostgreSQL cluster
+- create and review runnable HTML/CSS mockups, grounded in the completed application and production stylesheet, for proposed runtime-enabled Module Management additions and changes; treat the application as the authoritative baseline, record bounded approved deltas per screen, and never use mockup omissions or approximations as replacement instructions
+- add local deployment, startup, shutdown, status, diagnostic, failure, restore, upgrade, rollback, and conformance workflows without granting Core or the browser Docker-socket access
 
 **Application UI delivered this sprint:**
 
-- installation, configuration, enablement, health, and diagnostics flows for the reference module
-- read-only Supervisor ledger, active Materialization Plan/apply, and Core Release status in Core administration
-- a one-time administrator-enrollment surface distinct from normal sign-in, with local-user and external-identity paths, initial/recovery context, capability-floor-safe assignment, and no secret redisplay
-- coherent unavailable and disabled states in navigation and routing
+- runtime-enabled Module Management directory/detail readback for Definitions, Releases, Instances, curated artifact provenance, deployment receipt, configuration presence, readiness, health, and diagnostics
+- coherent Core-rendered disabled, unconfigured, unhealthy, unavailable, timeout, and failed-deployment states while Module Management remains reachable
+- approved per-screen UI delta contract for the 6B1 runtime surfaces at desktop, tablet, and mobile widths, with unchanged application UI explicitly retained
 
-**User-testable exit condition:** using the signed 6B release fixture, a tester can establish the Supervisor-rooted installation; use a once-displayed initial claim to enroll a Viable Core Administrator into the locked floor-compliant role; prove concurrent/replacement, replay, expiry, revocation, cross-installation, interrupted reconciliation, and pre-redemption-restore cases fail or resume as specified; install/configure/authorize/enable/navigate to/disable/diagnose the `tessara-oci-v1` reference module; reject a replayed or stale apply envelope; and complete a Core Release patch upgrade/rollback. Module data remains isolated in its own database, and stopping it produces a contained degraded state rather than breaking Core.
+**User-testable exit condition:** using the curated 6B1 release fixture, an operator can validate and plan the exact deployment, apply it through Docker Compose, observe the Core, Traefik, PostgreSQL, and reference-module containers, reach the reference module through the single Tessara origin, stop it without breaking Core, inspect the contained fallback and diagnostics, restore it, apply a compatible upgrade, and roll back. The one PostgreSQL container contains separate Core, deployment-control, and Module Instance databases, and prohibited cross-database access fails.
+
+### Sprint 6B2: Secure Module Operation Slice
+
+**Outcome:** Tessara can securely enroll its first administrator and authorize scoped user activity across the independently deployed module boundary established in Sprint 6B1.
+
+**Build:**
+
+- add installation-bound, single-use administrator enrollment claims backed by the deployment-control database outside the Core backup boundary, including issued, reserved, consumed, expired, revoked, and replaced states
+- define and enforce the versioned Core Administration Capability Floor and floor-compliant enrollment role for local Argon2id identity and signed fixture external-identity binding paths
+- define `ShellContextV1` and the module SDK conventions required for complete native SSR module documents that match the Core shell without sharing browser cookies or Core credentials
+- issue short-lived, audience/action/installation-bound Core authorization decisions or grants with original actor, presenting service, declared dependency/contract, descendant-aware scope, ownership/delegation assertions, authorization/organization revisions, expiry, and replay protection
+- complete Scoped Records as an organization-owned directory/detail workflow with separate scoped read/manage capabilities and one module-owned configuration-validation contract shared by UI and machine clients
+- add Core configuration, authorization, enablement, enrollment, health, and diagnostics UI from the approved HTML/CSS contract while keeping container deployment in `tessara-deploy`
+- prove A/X versus B/Y isolation, wrong or undeclared audience/action rejection, stale role/subtree/ownership/delegation rejection, known-versus-random nondisclosure, enrollment restore safety, and stable Module Instance identity/data binding through upgrade and rollback
+
+**Application UI delivered this sprint:**
+
+- one-time administrator enrollment distinct from normal sign-in, with local and fixture-external identity paths and no secret redisplay
+- complete Scoped Records configuration, authorization, enablement, directory, detail, health, and diagnostics flows
+- clear scoped denial, stale authorization, disabled, degraded, and recovery states across Core and module-owned routes
+
+**User-testable exit condition:** an operator can issue a once-displayed enrollment claim, enroll a viable floor-compliant administrator, configure and enable Scoped Records, grant disjoint subtree access, and prove users receive only their authorized record/action combinations across the process boundary. Expired, revoked, replayed, cross-installation, wrong-audience, stale-revision, and pre-redemption-restore cases fail without leaking existence, while upgrade and rollback preserve Module Instance identity and isolated data.
+
+### Future Platform Work: Verified Module Distribution And Lifecycle
+
+**Outcome:** third-party modules can be admitted, distributed, installed, upgraded, rolled back, and removed with cryptographic publisher and artifact verification while keeping the operator experience to a Tessara-owned workflow.
+
+- introduce an approved module catalog and immutable release lockfile that bind Module Definition, publisher identity, signed manifest, exact OCI digests, compatibility, and attestations
+- automate signing and conformance in publisher CI rather than asking module authors or VPS operators to manage keys manually
+- make `tessara-deploy` own a verifier abstraction with a bundled or embedded initial implementation; do not require operators to separately install and understand Cosign
+- verify downloaded image digests and publisher identity before mutation, retain auditable verification receipts, and fail closed on mismatch, revocation, unsupported policy, or stale evidence
+- add explicit production confirmation, backup verification, recovery, destructive undeploy, and data-destruction workflows
+- keep an unmistakable local-development policy for unsigned locally built modules without allowing that policy in production
+
+**User-testable exit condition:** an operator can install an approved third-party module with one Tessara command and no separately managed verification utility; an unsigned, altered, unapproved, revoked, or incompatible release fails before container mutation, while a local-development module remains possible only under an explicit non-production policy.
 
 ### Sprint 6C: Independently Deployed Dashboard Module Slice
 

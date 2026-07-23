@@ -194,6 +194,8 @@ mod tests {
         let bootstrap = ModuleManagementRouteBootstrapV1::directory(
             ModuleManagementAccessV1::restricted(),
             ModuleInventoryResponseV1 {
+                deployment: None,
+                deployment_history: Vec::new(),
                 schema_version: 1,
                 installation: ApplicationInstallationV1 {
                     id: "must-not-leak".into(),
@@ -223,6 +225,8 @@ mod tests {
         let bootstrap = ModuleManagementRouteBootstrapV1::directory(
             ModuleManagementAccessV1::read_only(),
             ModuleInventoryResponseV1 {
+                deployment: None,
+                deployment_history: Vec::new(),
                 schema_version: 1,
                 installation: ApplicationInstallationV1 {
                     id: "installation-1".into(),

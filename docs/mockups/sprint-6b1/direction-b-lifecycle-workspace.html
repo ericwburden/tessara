@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Module Management — Lifecycle workspace</title>
+    <link rel="stylesheet" href="../../../target/site/pkg/tessara-web.css">
+    <link rel="stylesheet" href="./prototype.css">
+  </head>
+  <body class="mock-app">
+    <div class="mock-shell">
+      <aside class="mock-sidebar" aria-label="Application navigation">
+        <a class="mock-brand" href="./direction-b-lifecycle-workspace.html"><img src="../../../crates/tessara-web/assets/tessara-icon-256.svg" alt=""><span>Tessara</span></a>
+        <nav class="mock-nav"><section><h2>Main</h2><a href="#" data-short-label="H">Home</a><a href="#" data-short-label="O">Organization</a><a href="#" data-short-label="F">Forms</a><a href="#" data-short-label="W">Workflows</a><a href="#" data-short-label="R">Responses</a><a href="#" data-short-label="P">Operations</a><a href="#" data-short-label="D">Datasets</a><a href="#" data-short-label="C">Components</a><a href="#" data-short-label="B">Dashboards</a></section><section><h2>Admin</h2><a href="#" data-short-label="U">User Management</a><a href="#" data-short-label="A">Roles &amp; Access</a><a href="#" data-short-label="N">Node Types</a><a href="./direction-b-lifecycle-workspace.html" data-short-label="M" aria-current="page">Module Management</a></section></nav>
+        <div class="mock-account"><strong>Tessara Admin</strong><span>admin@tessara.local</span></div>
+      </aside>
+      <main class="mock-main">
+        <header class="mock-app-header"><button class="mock-button-secondary mock-mobile-menu" type="button">Menu</button><strong>Module Management</strong><div class="mock-global-tools"><label><span class="sr-only">Search Tessara</span><input class="mock-input mock-global-search" type="search" placeholder="Search Tessara"></label><button class="mock-utility-button" type="button">Theme</button><button class="mock-utility-button" type="button">Notifications</button><button class="mock-utility-button" type="button">Help</button></div></header>
+        <section class="route-panel module-management-page module-management-detail-page">
+          <nav class="mock-breadcrumb" aria-label="Breadcrumb"><a href="#">Home</a><span aria-hidden="true">/</span><a href="./direction-a-operational-inventory.html">Module Management</a><span aria-hidden="true">/</span><span>Scoped Records</span></nav>
+          <header class="mock-page-header"><div><h1>Scoped Records</h1><div class="mock-detail-identity"><code>tessara.reference.scoped-records</code><button class="mock-copy-action" type="button">Copy</button></div><div class="mock-badge-row"><span class="mock-status mock-status--info mock-tooltip" tabindex="0" aria-describedby="independent-deployment-tooltip">Independently deployed<span id="independent-deployment-tooltip" class="mock-tooltip__content" role="tooltip">Runs as a separately deployed process with its own Module Release and Module Instance.</span></span><span class="mock-status mock-tooltip" tabindex="0" aria-describedby="healthy-enabled-tooltip">Healthy and enabled<span id="healthy-enabled-tooltip" class="mock-tooltip__content" role="tooltip">Health checks are passing and the module's application route is currently enabled.</span></span></div></div><div class="mock-inline-actions"><a class="mock-button-secondary mock-icon-link" href="#"><img src="./assets/external-link.svg" alt="">View source descriptor (JSON)</a><a class="mock-button-secondary mock-icon-link" href="./direction-c-deployment-ledger.html"><img src="./assets/external-link.svg" alt="">View deployment receipt</a></div></header>
+          <nav class="mock-tabs" aria-label="Scoped Records sections"><a href="#overview" aria-current="page">Overview</a><a href="#configuration">Configuration</a><a href="#declarations">Declarations</a><a href="#contracts">Contracts</a><a href="#capabilities">Capabilities</a><a href="#dependencies">Dependencies</a><a href="#resources">Resources</a><a href="#navigation">Navigation</a><a href="#findings">Findings</a></nav>
+          <div class="mock-tab-view" id="overview" data-mock-tab-panel="overview">
+          <div class="mock-grid-2 mock-grid-2--equal">
+            <div class="mock-stack">
+              <section class="mock-panel"><header class="mock-panel-header"><div><h2>Definition</h2><p>Minimal non-production reference module for scoped record behavior.</p></div></header><dl class="mock-definition-list"><div><dt>Definition ID</dt><dd><code>tessara.reference.scoped-records</code> <button class="mock-copy-action" type="button">Copy</button></dd></div><div><dt>Source digest</dt><dd><code>498af210…f210</code> <button class="mock-copy-action" type="button">Copy</button> <button class="mock-copy-action" type="button">View complete</button></dd></div><div><dt>Descriptor configuration schema</dt><dd>Declared · <a href="#configuration">Review configuration</a></dd></div><div><dt>Module Release</dt><dd>1.0.0 · Trusted · Compatible</dd></div><div><dt>Module Instance</dt><dd>Live · <code>0f4a…9512</code> <button class="mock-copy-action" type="button">Copy</button></dd></div></dl></section>
+              <section class="mock-panel"><header class="mock-panel-header"><div><h2>Lifecycle assessment</h2><p>Independent dimensions explain why the route is available.</p></div><span class="mock-status mock-tooltip" tabindex="0" aria-describedby="lifecycle-ready-tooltip">Ready<span id="lifecycle-ready-tooltip" class="mock-tooltip__content" role="tooltip">All required lifecycle checks currently permit this module to serve requests.</span></span></header><dl class="mock-definition-list"><div><dt>Dependencies</dt><dd>All required contracts satisfied</dd></div><div><dt>Compatibility</dt><dd>Release 1.0.0 is compatible with this installation</dd></div><div><dt>Instance continuity</dt><dd>Live · Durable instance retained</dd></div><div><dt>Deployment</dt><dd>Installed · Deployed · Container healthy</dd></div><div><dt>Configuration</dt><dd>Valid</dd></div><div><dt>Readiness</dt><dd>Passing</dd></div><div><dt>Health</dt><dd>Healthy</dd></div><div><dt>Application</dt><dd>Enabled · Route available</dd></div><div><dt>Data</dt><dd>Retained in <code>tessara_module_0f4a9512</code></dd></div></dl></section>
+              <section class="mock-panel" id="diagnostics"><header class="mock-panel-header"><div><h2>Diagnostics</h2></div></header><dl class="mock-definition-list"><div><dt>Readiness</dt><dd class="mock-status-value"><span class="mock-status mock-tooltip" tabindex="0" aria-describedby="readiness-passing-tooltip">Passing<span id="readiness-passing-tooltip" class="mock-tooltip__content" role="tooltip">The module passed its readiness check and is available to receive traffic.</span></span><code>/health/ready</code></dd></div><div><dt>Liveness</dt><dd class="mock-status-value"><span class="mock-status mock-tooltip" tabindex="0" aria-describedby="liveness-passing-tooltip">Passing<span id="liveness-passing-tooltip" class="mock-tooltip__content" role="tooltip">The module passed its liveness check and is running.</span></span><code>/health/live</code></dd></div><div><dt>Last observation</dt><dd>2026-07-22 14:32 EDT</dd></div><div><dt>Public route</dt><dd><code>/reference/scoped-records</code></dd></div></dl></section>
+            </div>
+            <aside class="mock-stack mock-stack--content">
+              <section class="mock-panel"><header class="mock-panel-header"><div><h2>Artifact provenance</h2></div></header><dl class="mock-definition-list"><div><dt>Manifest</dt><dd><code>sha256:498a…f210</code> <button class="mock-copy-action" type="button">Copy</button></dd></div><div><dt>Runtime image</dt><dd><code>sha256:71fe…2a08</code> <button class="mock-copy-action" type="button">Copy</button></dd></div><div><dt>Publisher</dt><dd>tessara.first_party · Curated release</dd></div></dl></section>
+              <section class="mock-panel" id="declarations"><header class="mock-panel-header"><div><h2>Declaration summary</h2></div></header><dl class="mock-definition-list"><div><dt>Features</dt><dd>1</dd></div><div><dt>Contracts</dt><dd>2</dd></div><div><dt>Capabilities</dt><dd>2</dd></div><div><dt>Resources</dt><dd>1</dd></div><div><dt>Destinations</dt><dd>2</dd></div></dl></section>
+              <section class="mock-panel" id="navigation"><header class="mock-panel-header"><div><h2>Current navigation</h2></div></header><dl class="mock-definition-list"><div><dt>Placement</dt><dd>Main · after Organization</dd></div><div><dt>Visibility</dt><dd>Shown</dd></div><div><dt>Destination</dt><dd><code>scoped-records.directory</code></dd></div></dl><p><a class="mock-button-secondary" href="#">Configure navigation</a></p></section>
+            </aside>
+          </div>
+          <section class="mock-callout mock-callout--success" id="findings"><h3>No catalog or deployment findings were reported</h3><p>Definition, release, instance, routing, and health observations are current.</p></section>
+          </div>
+          <section class="mock-panel mock-tab-view" id="configuration" data-mock-tab-panel="configuration" hidden><header class="mock-panel-header"><div><h2>Configuration</h2></div></header><dl class="mock-definition-list"><div><dt>Display label</dt><dd>Scoped Records</dd></div><div><dt>Retention mode</dt><dd>Retain on undeploy</dd></div><div><dt>Validation</dt><dd>Valid for release 1.0.0</dd></div><div><dt>Configuration findings</dt><dd>None</dd></div></dl></section>
+        </section>
+      </main>
+    </div>
+    <script>
+      (() => {
+        const tabs = Array.from(document.querySelectorAll(".mock-tabs a"));
+        const panels = Array.from(document.querySelectorAll("[data-mock-tab-panel]"));
+        const selectTab = () => {
+          const target = window.location.hash.slice(1) || "overview";
+          const panelTarget = target === "configuration" ? target : "overview";
+          panels.forEach((panel) => { panel.hidden = panel.dataset.mockTabPanel !== panelTarget; });
+          tabs.forEach((tab) => {
+            if (tab.getAttribute("href") === `#${target}` || (target === "overview" && tab.getAttribute("href") === "#overview")) {
+              tab.setAttribute("aria-current", "page");
+            } else {
+              tab.removeAttribute("aria-current");
+            }
+          });
+        };
+        window.addEventListener("hashchange", selectTab);
+        selectTab();
+      })();
+    </script>
+  </body>
+</html>

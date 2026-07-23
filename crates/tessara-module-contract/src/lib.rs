@@ -7,11 +7,23 @@
 //! Instance, executable artifact, or provider/materialization claim.
 
 mod dependency;
+mod deployment;
+mod inventory;
 
 pub use dependency::{
     DependencyEvaluationFindingCode, DependencyEvaluationInput, DependencyRelationshipKind,
     FunctionalDependencyEvaluation, FunctionalProviderCandidate, FunctionalProviderCandidateOrigin,
     ResolvedFunctionalDependencyBinding, evaluate_functional_dependency,
+};
+pub use deployment::{
+    AppliedComponentV1, AppliedModuleChangeV1, AppliedModuleV1, DeploymentActionV1,
+    DeploymentChangeV1, DeploymentFindingSeverityV1, DeploymentFindingV1, DeploymentOperationV1,
+    DeploymentPlanV1, DeploymentReceiptV1, DeploymentValidationError, DesiredModuleV1,
+    IdentityChangeV1, ReleaseChangeV1, TessaraDeploymentV1, canonical_sha256,
+};
+pub use inventory::{
+    IndependentConfigurationV1, IndependentDefinitionV1, IndependentDiagnosticsV1,
+    IndependentInstanceV1, IndependentReleaseV1,
 };
 
 use std::{collections::BTreeSet, fmt, str::FromStr};

@@ -7,6 +7,14 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-22 - Sprint 6B1 Kickoff
+
+- Status: kicked off Container Deployment Foundation from clean post-6A-UI `main` commit `a0cac408`.
+- Branch/worktree: `codex/sprint-6b1` at `C:\Users\eric-dev\Projects\tessara-sprint-6b1`.
+- Plan: `docs/sprints/sprint-6b1-plan.md`; roadmap now splits deployment foundation (6B1) from secure module operation (6B2).
+- Planned verification: formatting; module-contract, deploy CLI, reference-module, API, and web tests; canonical Playwright; smoke; local launch; and sprint UAT.
+- Immediate focus: freeze external-tool ownership and refine three runnable HTML/CSS Module Management review screens into bounded per-screen delta records before deployment implementation. The existing application remains the baseline; mockup omissions and approximations are not implementation instructions.
+
 ## 2026-07-22 - Sprint 6A-UI Fresh-Baseline Closeout
 
 - Completed:
@@ -5020,3 +5028,26 @@ Next UI steps:
   - workflow response starts no longer retarget a step to a descendant node solely because the form had a legacy scope node type
 - Added `workflow_available_nodes` so assignment candidates are driven by explicit workflow/node availability.
 - Left persisted form `scope_node_type_id` and workflow `workflow_node_type_id` in place temporarily because generated single-form workflow creation still needs an explicit replacement for choosing default workflow availability.
+
+## 2026-07-22 - Sprint 6B1 container foundation implementation
+
+- Implemented the first independently deployed module vertical slice on `codex/sprint-6b1`:
+  - versioned deterministic deployment/plan/receipt/rollback contracts;
+  - `tessara-deploy` validate, plan, apply, status, and rollback commands;
+  - one PostgreSQL cluster with isolated Core, deployment-control, and Scoped Records databases and distinct roles;
+  - Traefik same-origin routing with default-deny discovery and a Core-rendered unavailable fallback;
+  - a non-production Scoped Records full-stack module with migrations, SSR routes, CRUD API, probes, diagnostics, and retained data;
+  - persisted Module Release, Module Instance, and deployment receipt history readback;
+  - the approved additive Screen A, B, and C Module Management changes, including database component readback and direct receipt navigation.
+- Regression and local acceptance evidence:
+  - contract/deploy tests passed;
+  - reference-module and web tests passed;
+  - API/web checks and formatting passed;
+  - existing Module Management Playwright suite passed all 5 scenarios;
+  - contract acceptance and live install/upgrade/rollback/outage/recovery/database-isolation acceptance passed;
+  - legacy smoke and UAT passed against the canonical application stack.
+- The disposable canonical smoke stack and its disposable test volume were removed after browser verification. The Sprint 6B1 stack remains available at `http://127.0.0.1:8180` for review.
+- Product direction changed after implementation review: Sprint 6B1 uses a curated Tessara development release and does not require operators to install Cosign. Cryptographic admission, catalog distribution, and production lifecycle management of verified third-party containers are future platform work.
+- Removed recorded publisher-verification input from the current `tessara-deploy apply` workflow and changed UI readback from `verified` to explicit `curated release` provenance so the product does not overstate its trust evidence.
+- Rebuilt the Sprint 6B1 images, deleted the development PostgreSQL volume, recreated the cluster from migrations 001–003, and reran live install/upgrade/rollback/outage/recovery acceptance against the fresh schema. The resulting database contains three current-format receipts, two curated releases, no legacy publisher-verification fields, and retained Scoped Records data created by the current acceptance flow.
+- Closeout remains gated only on persisting the complete curated `ModuleManifestV1` for real releases and projecting it through descriptor download plus the preserved Declarations, Contracts, Capabilities, Dependencies, Resources, and Navigation tabs. The current sanitized read model proves lifecycle/deployment behavior but its explanatory tab placeholders are not final accepted Screen B behavior.

@@ -1,11 +1,11 @@
 //! Module Management directory presentation.
 
-use icons::{BoxIcon, ChevronRight, Clock, Copy, Info, List, Search, Tag};
+use icons::{BoxIcon, ChevronRight, Clock, Copy, Info, List, Search, Tag, TriangleAlert};
 use leptos::prelude::*;
 use tessara_web_ui::{SideSheet, SideSheetSide};
 
 use super::models::{ModuleInventoryEntryV1, ModuleInventoryResponseV1, TransitionAvailabilityV1};
-use crate::ui::DataTable;
+use crate::ui::{DataTable, TablePaginationFooter};
 
 pub const TRANSITION_PRESENTATION_LABEL: &str = "Transitional — not independently deployable";
 pub const NO_MODULE_RELEASE_LABEL: &str = "No Module Release";
@@ -18,6 +18,7 @@ enum ModuleDirectoryStatusFilter {
     ActiveInCoreProcess,
     Unavailable,
     Retired,
+    Ready,
 }
 
 impl ModuleDirectoryStatusFilter {
@@ -26,6 +27,7 @@ impl ModuleDirectoryStatusFilter {
             "active_in_core_process" => Self::ActiveInCoreProcess,
             "unavailable" => Self::Unavailable,
             "retired" => Self::Retired,
+            "ready" => Self::Ready,
             _ => Self::All,
         }
     }
@@ -36,6 +38,7 @@ impl ModuleDirectoryStatusFilter {
             Self::ActiveInCoreProcess => "active_in_core_process",
             Self::Unavailable => "unavailable",
             Self::Retired => "retired",
+            Self::Ready => "ready",
         }
     }
 
@@ -47,6 +50,7 @@ impl ModuleDirectoryStatusFilter {
             }
             Self::Unavailable => matches!(availability, TransitionAvailabilityV1::Unavailable),
             Self::Retired => matches!(availability, TransitionAvailabilityV1::Retired),
+            Self::Ready => false,
         }
     }
 }
@@ -57,32 +61,48 @@ fn module_matches_filters(
     status: ModuleDirectoryStatusFilter,
 ) -> bool {
     let normalized_query = query.trim().to_lowercase();
-    let descriptor = entry.descriptor();
     let matches_text = normalized_query.is_empty()
-        || descriptor
-            .display_name
+        || entry
+            .display_name()
             .to_lowercase()
             .contains(&normalized_query)
-        || descriptor
-            .reserved_definition_id
+        || entry
+            .definition_id()
             .to_lowercase()
             .contains(&normalized_query);
-
-    matches_text && status.matches(descriptor.availability)
+    let matches_status = match entry {
+        ModuleInventoryEntryV1::TransitionalInProcess { descriptor, .. } => {
+            status.matches(descriptor.availability)
+        }
+        ModuleInventoryEntryV1::IndependentlyDeployed { .. } => {
+            status == ModuleDirectoryStatusFilter::All
+                || (status == ModuleDirectoryStatusFilter::Ready
+                    && entry.serving_state().is_ready())
+        }
+    };
+    matches_text && matches_status
 }
 
 #[component]
-pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl IntoView {
+pub fn ModuleInventoryDirectory(
+    inventory: ModuleInventoryResponseV1,
+    #[prop(optional)] on_view_deployment: Option<Callback<()>>,
+) -> impl IntoView {
     let installation = inventory.installation;
     let core_runtime = inventory.core_runtime;
+    let deployment = inventory.deployment;
+    let deployment_for_installation = deployment.clone();
+    let deployment_for_runtime_details = deployment.clone();
     let entries = inventory.entries;
     let entry_count = entries.len();
     let search = RwSignal::new(String::new());
     let status = RwSignal::new(ModuleDirectoryStatusFilter::All);
+    let page_size = RwSignal::new(10_usize);
+    let page_index = RwSignal::new(0_usize);
     let runtime_details_open = RwSignal::new(false);
     let close_runtime_details = Callback::new(move |_| runtime_details_open.set(false));
     let entries_for_results = entries.clone();
-    let filtered_entries = move || {
+    let filtered_entries = Memo::new(move |_| {
         let query = search.get();
         let selected_status = status.get();
         entries_for_results
@@ -90,7 +110,8 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
             .filter(|entry| module_matches_filters(entry, &query, selected_status))
             .cloned()
             .collect::<Vec<_>>()
-    };
+    });
+    let total_count = Memo::new(move |_| filtered_entries.get().len());
 
     view! {
         <div class="module-management-directory">
@@ -100,8 +121,18 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                     <Info/>
                     <div>
                         <span>"Installation ID"</span>
-                        <code>{compact_value(&installation.id)}</code>
-                        <CopyValue value=installation.id.clone() label="Copy installation ID"/>
+                        <span class="module-runtime-strip__identity">
+                            <code>{compact_value(&installation.id)}</code>
+                            <CopyValue value=installation.id.clone() label="Copy installation ID"/>
+                        </span>
+                        {deployment_for_installation.map(|receipt| {
+                            let healthy = receipt.components.iter().all(|component| component.healthy);
+                            view! {
+                                <span class=if healthy { "status-badge is-success" } else { "status-badge is-danger" } title=if healthy { "All deployed components passed their current health checks." } else { "One or more deployed components failed their current health check." }>
+                                    {if healthy { "Healthy" } else { "Attention required" }}
+                                </span>
+                            }
+                        })}
                     </div>
                 </div>
                 <div class="module-runtime-strip__item">
@@ -180,9 +211,44 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                         </tbody>
                     </table>
                 </section>
+                {deployment_for_runtime_details.clone().map(|receipt| {
+                    let healthy_count = receipt.components.iter().filter(|component| component.healthy).count();
+                    let database_count = receipt.modules.len() + 2;
+                    view! {
+                        <section class="sheet-panel__section">
+                            <h3>"Deployment runtime"</h3>
+                            <table class="info-list-table module-runtime-details-table">
+                                <tbody>
+                                    <tr>
+                                        <th scope="row">"Containers"</th>
+                                        <td>{format!("{healthy_count} of {} healthy", receipt.components.len())}</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">"Database"</th>
+                                        <td>{format!("{database_count} databases · 1 cluster")}</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">"Applied Receipt:"</th>
+                                        <td>
+                                            <button
+                                                class="link-button"
+                                                type="button"
+                                                on:click=move |_| {
+                                                    if let Some(callback) = on_view_deployment {
+                                                        callback.run(());
+                                                    }
+                                                }
+                                            >{format!("Revision {}", receipt.revision)}</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </section>
+                    }
+                })}
             </SideSheet>
 
-            <section class="organization-detail-card" aria-labelledby="module-directory-heading">
+            <section class="module-directory" aria-labelledby="module-directory-heading">
                 <div class="module-directory__heading">
                     <h2 id="module-directory-heading">"Module definitions"</h2>
                 </div>
@@ -209,7 +275,10 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                                     type="search"
                                     placeholder="Search module name or ID"
                                     prop:value=move || search.get()
-                                    on:input=move |event| search.set(event_target_value(&event))
+                                    on:input=move |event| {
+                                        search.set(event_target_value(&event));
+                                        page_index.set(0);
+                                    }
                                 />
                             </label>
                             <label class="searchable-data-table__control searchable-data-table__filter">
@@ -220,17 +289,19 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                                         status.set(ModuleDirectoryStatusFilter::from_value(
                                             &event_target_value(&event),
                                         ));
+                                        page_index.set(0);
                                     }
                                 >
                                     <option value="all">"All statuses"</option>
                                     <option value="active_in_core_process">"Active in Core process"</option>
                                     <option value="unavailable">"Unavailable"</option>
                                     <option value="retired">"Retired"</option>
+                                    <option value="ready">"Ready"</option>
                                 </select>
                             </label>
                         </div>
                         {move || {
-                            let results = filtered_entries();
+                            let results = filtered_entries.get();
                             if results.is_empty() {
                                 view! {
                                     <section class="empty-state module-directory__no-match" aria-live="polite">
@@ -243,6 +314,7 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                                             on:click=move |_| {
                                                 search.set(String::new());
                                                 status.set(ModuleDirectoryStatusFilter::All);
+                                                page_index.set(0);
                                             }
                                         >
                                             "Clear filters"
@@ -251,7 +323,14 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                                 }
                                 .into_any()
                             } else {
-                                let mobile_results = results.clone();
+                                let page_size_value = page_size.get().max(1);
+                                let page_count = results.len().max(1).div_ceil(page_size_value);
+                                let current_page =
+                                    page_index.get().min(page_count.saturating_sub(1));
+                                let start = current_page * page_size_value;
+                                let end = (start + page_size_value).min(results.len());
+                                let page_results = results[start..end].to_vec();
+                                let mobile_results = page_results.clone();
                                 view! {
                                     <div class="module-directory__table">
                                         <DataTable>
@@ -260,18 +339,30 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
                                                     <th scope="col">"Module / definition and source"</th>
                                                     <th scope="col">"Availability"</th>
                                                     <th scope="col">"Release / Instance"</th>
+                                                    <th scope="col">"Serving state"</th>
                                                     <th scope="col">"Findings"</th>
-                                                    <th scope="col"><span class="sr-only">"Open module detail"</span></th>
+                                                    <th scope="col" class="data-table__actions">
+                                                        <span class="sr-only">"Details"</span>
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {results.into_iter().map(module_directory_row).collect_view()}
+                                                {page_results.into_iter().map(module_directory_row).collect_view()}
                                             </tbody>
                                         </DataTable>
                                     </div>
                                     <div class="module-directory__mobile-cards">
                                         {mobile_results.into_iter().map(module_directory_mobile_card).collect_view()}
                                     </div>
+                                    <TablePaginationFooter
+                                        aria_label="Module definitions table pagination"
+                                        item_label="module definitions"
+                                        empty_item_label="module definitions"
+                                        class="module-directory__pagination"
+                                        total_count
+                                        page_size
+                                        page_index
+                                    />
                                 }
                                 .into_any()
                             }
@@ -285,6 +376,36 @@ pub fn ModuleInventoryDirectory(inventory: ModuleInventoryResponseV1) -> impl In
 }
 
 fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
+    let serving_state = entry.serving_state();
+    if let ModuleInventoryEntryV1::IndependentlyDeployed {
+        definition,
+        release,
+        instance,
+        findings,
+        ..
+    } = entry
+    {
+        let detail_href = format!("/administration/modules/{}", definition.id);
+        let detail_href_row = detail_href.clone();
+        let detail_href_key = detail_href.clone();
+        let warning = !findings.is_empty();
+        return view! {
+            <tr class="module-directory__row-link" data-module-definition=definition.id.clone() role="link" tabindex="0"
+                on:click=move |_| navigate_to_module_detail(detail_href_row.clone())
+                on:keydown=move |event| { if event.key() == "Enter" || event.key() == " " { event.prevent_default(); navigate_to_module_detail(detail_href_key.clone()); } }>
+                <th scope="row" class="data-table__stacked-label"><span><a href=detail_href.clone()><strong>{definition.display_name.clone()}</strong></a>{if warning { Some(view! { <span title="Configuration needs review" aria-label="Configuration needs review"><TriangleAlert class="module-directory__configuration-warning"/></span> }) } else { None }}</span><code class="data-table__secondary-text">{definition.id.clone()}</code><span class="module-directory__digest"><code class="data-table__secondary-text">{compact_value(&release.manifest_digest)}</code><CopyValue value=release.manifest_digest label="Copy complete manifest digest"/></span></th>
+                <td><span class="status-badge is-success" title="This module runs outside the Core process as its own deployment.">"Independently deployed"</span></td>
+                <td><strong>{release.version}</strong><span class="data-table__secondary-text">{format!("Live · {}", compact_value(&instance.id))}</span></td>
+                <td><span class=serving_state.badge_class() title=serving_state.explanation()>{serving_state.label()}</span></td>
+                <td>{findings.len()}</td>
+                <td class="data-table__actions">
+                    <a href=detail_href aria-label=format!("Open {} module detail", definition.display_name)>
+                        <ChevronRight/>
+                    </a>
+                </td>
+            </tr>
+        }.into_any();
+    }
     let descriptor = entry.descriptor().clone();
     let definition_id = descriptor.reserved_definition_id.clone();
     let detail_href = format!("/administration/modules/{definition_id}");
@@ -297,7 +418,7 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
     let availability_class = match descriptor.availability {
         TransitionAvailabilityV1::ActiveInProcess => "status-badge is-success",
         TransitionAvailabilityV1::Unavailable => "status-badge is-warning",
-        TransitionAvailabilityV1::Retired => "status-badge is-info",
+        TransitionAvailabilityV1::Retired => "status-badge is-danger",
     };
 
     view! {
@@ -330,6 +451,7 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
                 <span>{NO_MODULE_RELEASE_LABEL}</span>
                 <span class="data-table__secondary-text">{NO_MODULE_INSTANCE_LABEL}</span>
             </td>
+            <td><span class=serving_state.badge_class() title=serving_state.explanation()>{serving_state.label()}</span></td>
             <td>{finding_count}</td>
             <td class="data-table__actions">
                 <a href=detail_href aria-label=format!("Open {} module detail", descriptor.display_name)>
@@ -337,7 +459,7 @@ fn module_directory_row(entry: ModuleInventoryEntryV1) -> impl IntoView {
                 </a>
             </td>
         </tr>
-    }
+    }.into_any()
 }
 
 #[component]
@@ -401,6 +523,23 @@ fn navigate_to_module_detail(href: String) {
 fn navigate_to_module_detail(_href: String) {}
 
 fn module_directory_mobile_card(entry: ModuleInventoryEntryV1) -> impl IntoView {
+    let serving_state = entry.serving_state();
+    if let ModuleInventoryEntryV1::IndependentlyDeployed {
+        definition,
+        release,
+        findings,
+        ..
+    } = entry
+    {
+        let detail_href = format!("/administration/modules/{}", definition.id);
+        return view! {
+            <article class="module-directory-card" data-module-definition=definition.id.clone()>
+                <header><div><h3><a href=detail_href.clone()>{definition.display_name}</a></h3><code>{definition.id.clone()}</code></div><a class="module-directory-card__detail" href=detail_href aria-label="Open module detail"><ChevronRight/></a></header>
+                <div class="module-directory-card__badges"><span class="status-badge is-success" title="This module runs outside the Core process as its own deployment.">"Independently deployed"</span><span class=serving_state.badge_class() title=serving_state.explanation()>{serving_state.label()}</span></div>
+                <p>{release.version} " · Live instance"</p><footer><span>{format!("{} findings", findings.len())}</span><span><code>{compact_value(&release.manifest_digest)}</code><CopyValue value=release.manifest_digest label="Copy complete manifest digest"/></span></footer>
+            </article>
+        }.into_any();
+    }
     let descriptor = entry.descriptor().clone();
     let definition_id = descriptor.reserved_definition_id.clone();
     let detail_href = format!("/administration/modules/{definition_id}");
@@ -418,7 +557,7 @@ fn module_directory_mobile_card(entry: ModuleInventoryEntryV1) -> impl IntoView 
     let availability_class = match descriptor.availability {
         TransitionAvailabilityV1::ActiveInProcess => "status-badge is-success",
         TransitionAvailabilityV1::Unavailable => "status-badge is-warning",
-        TransitionAvailabilityV1::Retired => "status-badge is-info",
+        TransitionAvailabilityV1::Retired => "status-badge is-danger",
     };
 
     view! {
@@ -455,6 +594,7 @@ fn module_directory_mobile_card(entry: ModuleInventoryEntryV1) -> impl IntoView 
             </footer>
         </article>
     }
+    .into_any()
 }
 
 #[cfg(test)]
@@ -491,6 +631,8 @@ mod tests {
         }))
         .expect("entry parses");
         ModuleInventoryResponseV1 {
+            deployment: None,
+            deployment_history: Vec::new(),
             schema_version: 1,
             installation: ApplicationInstallationV1 {
                 id: "installation-1".into(),
@@ -519,7 +661,10 @@ mod tests {
         assert!(html.contains("tessara.forms"));
         assert!(html.contains("71bebdd0…b493e"));
         assert!(html.contains("Copy complete source digest"));
-        assert!(html.contains("Open Forms module detail"));
+        assert!(html.contains("href=\"/administration/modules/tessara.forms\""));
+        assert!(html.contains("aria-label=\"Open Forms module detail\""));
+        assert!(html.contains("Module definitions table pagination"));
+        assert!(html.contains("Showing 1-1 of 1 module definitions"));
         assert!(html.contains("Runtime details"));
         assert!(!html.contains("<details class=\"module-runtime-details\""));
     }

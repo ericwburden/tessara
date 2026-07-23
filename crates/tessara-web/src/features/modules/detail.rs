@@ -212,6 +212,15 @@ pub fn ModuleDetailPeerSections(
                 }}
             </div>
 
+            <section
+                class="organization-detail-card module-detail-empty-section"
+                data-module-section="configuration"
+                aria-labelledby="module-configuration-heading"
+            >
+                <h2 id="module-configuration-heading">"Configuration"</h2>
+                <p>"No Module Instance configuration exists for this transitional contribution."</p>
+            </section>
+
             <section class="organization-detail-card" data-module-section="declarations" aria-labelledby="module-features-heading">
                 <h2 id="module-features-heading">"Feature Declarations"</h2>
                 {if features.is_empty() {

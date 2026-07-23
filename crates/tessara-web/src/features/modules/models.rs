@@ -7,6 +7,10 @@
 
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use serde_json::Value;
+pub use tessara_module_contract::{
+    AppliedComponentV1, AppliedModuleV1, DeploymentReceiptV1, IndependentConfigurationV1,
+    IndependentDefinitionV1, IndependentDiagnosticsV1, IndependentInstanceV1, IndependentReleaseV1,
+};
 
 pub const MODULE_HTTP_SCHEMA_VERSION_V1: u16 = 1;
 
@@ -46,6 +50,10 @@ pub struct ModuleInventoryResponseV1 {
     pub installation: ApplicationInstallationV1,
     pub core_runtime: CoreRuntimeObservationV1,
     pub entries: Vec<ModuleInventoryEntryV1>,
+    #[serde(default)]
+    pub deployment: Option<DeploymentReceiptV1>,
+    #[serde(default)]
+    pub deployment_history: Vec<DeploymentReceiptV1>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -90,28 +98,158 @@ pub enum ModuleInventoryEntryV1 {
         supervisor_materializable: bool,
         findings: Vec<ModuleFindingV1>,
     },
+    IndependentlyDeployed {
+        definition: IndependentDefinitionV1,
+        release: IndependentReleaseV1,
+        instance: IndependentInstanceV1,
+        configuration: IndependentConfigurationV1,
+        diagnostics: IndependentDiagnosticsV1,
+        findings: Vec<ModuleFindingV1>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModuleServingStateV1 {
+    CoreManaged,
+    Ready,
+    Blocked,
+}
+
+impl ModuleServingStateV1 {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::CoreManaged => "Core-managed",
+            Self::Ready => "Ready",
+            Self::Blocked => "Blocked",
+        }
+    }
+
+    pub const fn badge_class(self) -> &'static str {
+        match self {
+            Self::CoreManaged => "status-badge is-info",
+            Self::Ready => "status-badge is-success",
+            Self::Blocked => "status-badge is-danger",
+        }
+    }
+
+    pub const fn explanation(self) -> &'static str {
+        match self {
+            Self::CoreManaged => {
+                "This contribution is served by the Core process and has no independent runtime."
+            }
+            Self::Ready => "The module is healthy, ready, enabled, and serving its product route.",
+            Self::Blocked => {
+                "At least one health, readiness, or enablement condition prevents the module from serving."
+            }
+        }
+    }
+
+    pub const fn is_ready(self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModuleDetailPresentationV1 {
+    Transitional {
+        availability: TransitionAvailabilityV1,
+    },
+    IndependentlyDeployed,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModuleDetailViewModelV1 {
+    pub display_name: String,
+    pub definition_id: String,
+    pub presentation: ModuleDetailPresentationV1,
+    pub serving_state: ModuleServingStateV1,
+    pub entry: ModuleInventoryEntryV1,
+}
+
+impl From<ModuleInventoryEntryV1> for ModuleDetailViewModelV1 {
+    fn from(entry: ModuleInventoryEntryV1) -> Self {
+        let display_name = entry.display_name().to_string();
+        let definition_id = entry.definition_id().to_string();
+        let presentation = match &entry {
+            ModuleInventoryEntryV1::TransitionalInProcess { descriptor, .. } => {
+                ModuleDetailPresentationV1::Transitional {
+                    availability: descriptor.availability,
+                }
+            }
+            ModuleInventoryEntryV1::IndependentlyDeployed { .. } => {
+                ModuleDetailPresentationV1::IndependentlyDeployed
+            }
+        };
+        let serving_state = entry.serving_state();
+        Self {
+            display_name,
+            definition_id,
+            presentation,
+            serving_state,
+            entry,
+        }
+    }
 }
 
 impl ModuleInventoryEntryV1 {
     pub fn descriptor(&self) -> &TransitionalContributionDescriptorV1 {
         match self {
             Self::TransitionalInProcess { descriptor, .. } => descriptor,
+            Self::IndependentlyDeployed { .. } => {
+                panic!("an independently deployed module has no transition descriptor")
+            }
+        }
+    }
+
+    pub fn independent(
+        &self,
+    ) -> Option<(
+        &IndependentDefinitionV1,
+        &IndependentReleaseV1,
+        &IndependentInstanceV1,
+        &IndependentConfigurationV1,
+        &IndependentDiagnosticsV1,
+    )> {
+        match self {
+            Self::IndependentlyDeployed {
+                definition,
+                release,
+                instance,
+                configuration,
+                diagnostics,
+                ..
+            } => Some((definition, release, instance, configuration, diagnostics)),
+            Self::TransitionalInProcess { .. } => None,
+        }
+    }
+
+    pub fn display_name(&self) -> &str {
+        match self {
+            Self::TransitionalInProcess { descriptor, .. } => &descriptor.display_name,
+            Self::IndependentlyDeployed { definition, .. } => &definition.display_name,
         }
     }
 
     pub fn definition_id(&self) -> &str {
-        self.descriptor().reserved_definition_id.as_str()
+        match self {
+            Self::TransitionalInProcess { descriptor, .. } => {
+                descriptor.reserved_definition_id.as_str()
+            }
+            Self::IndependentlyDeployed { definition, .. } => definition.id.as_str(),
+        }
     }
 
     pub fn source_digest(&self) -> &str {
         match self {
             Self::TransitionalInProcess { source_digest, .. } => source_digest,
+            Self::IndependentlyDeployed { release, .. } => &release.manifest_digest,
         }
     }
 
     pub fn findings(&self) -> &[ModuleFindingV1] {
         match self {
             Self::TransitionalInProcess { findings, .. } => findings,
+            Self::IndependentlyDeployed { findings, .. } => findings,
         }
     }
 
@@ -119,9 +257,78 @@ impl ModuleInventoryEntryV1 {
         matches!(self, Self::TransitionalInProcess { .. })
     }
 
+    pub fn serving_state(&self) -> ModuleServingStateV1 {
+        match self {
+            Self::TransitionalInProcess { .. } => ModuleServingStateV1::CoreManaged,
+            Self::IndependentlyDeployed { instance, .. }
+                if instance.ready && instance.enabled && instance.healthy =>
+            {
+                ModuleServingStateV1::Ready
+            }
+            Self::IndependentlyDeployed { .. } => ModuleServingStateV1::Blocked,
+        }
+    }
+
     /// Projects lifecycle dimensions independently so transition metadata can
     /// never be mistaken for a Module Release or Module Instance observation.
     pub fn detail_dimensions(&self) -> ModuleDetailDimensionsV1 {
+        if let Self::IndependentlyDeployed {
+            release,
+            instance,
+            configuration,
+            ..
+        } = self
+        {
+            return ModuleDetailDimensionsV1 {
+                dependency: ModuleDetailDimensionV1 {
+                    state: ModuleDetailDimensionStateV1::Ready,
+                    evidence: "All required contracts are satisfied.".into(),
+                },
+                compatibility: ModuleDetailDimensionV1 {
+                    state: ModuleDetailDimensionStateV1::Ready,
+                    evidence: format!(
+                        "Release {} is {} with this installation.",
+                        release.version, release.compatibility
+                    ),
+                },
+                configuration: ModuleDetailDimensionV1 {
+                    state: if configuration.valid {
+                        ModuleDetailDimensionStateV1::Ready
+                    } else {
+                        ModuleDetailDimensionStateV1::Attention
+                    },
+                    evidence: if configuration.valid {
+                        "Configuration is valid.".into()
+                    } else {
+                        "Configuration has a reported finding.".into()
+                    },
+                },
+                readiness: ModuleDetailDimensionV1 {
+                    state: if instance.ready {
+                        ModuleDetailDimensionStateV1::Ready
+                    } else {
+                        ModuleDetailDimensionStateV1::Attention
+                    },
+                    evidence: if instance.ready {
+                        "Readiness probe is passing.".into()
+                    } else {
+                        "Readiness probe is not passing.".into()
+                    },
+                },
+                health: ModuleDetailDimensionV1 {
+                    state: if instance.healthy {
+                        ModuleDetailDimensionStateV1::Ready
+                    } else {
+                        ModuleDetailDimensionStateV1::Attention
+                    },
+                    evidence: if instance.healthy {
+                        "Module is healthy.".into()
+                    } else {
+                        "Module is unhealthy.".into()
+                    },
+                },
+            };
+        }
         let descriptor = self.descriptor();
         let dependency = if descriptor.dependencies.is_empty() {
             ModuleDetailDimensionV1 {
@@ -204,6 +411,8 @@ pub enum ModuleDetailDimensionStateV1 {
     TransitionInternalOnly,
     NoDeclaration,
     NotApplicableNoReleaseInstance,
+    Ready,
+    Attention,
 }
 
 impl ModuleDetailDimensionStateV1 {
@@ -212,6 +421,8 @@ impl ModuleDetailDimensionStateV1 {
             Self::TransitionInternalOnly => "Transition-internal only",
             Self::NoDeclaration => "No functional dependencies declared",
             Self::NotApplicableNoReleaseInstance => NOT_APPLICABLE_NO_MODULE_RELEASE_INSTANCE_LABEL,
+            Self::Ready => "Ready",
+            Self::Attention => "Attention required",
         }
     }
 }
@@ -862,5 +1073,29 @@ mod tests {
                 .to_string()
                 .contains("unsupported Module Management schema version 2")
         );
+    }
+
+    #[test]
+    fn independently_deployed_projection_keeps_lifecycle_dimensions_separate() {
+        let mut entry: super::ModuleInventoryEntryV1 = serde_json::from_value(json!({
+            "kind": "independently_deployed",
+            "definition": {"id":"tessara.reference.scoped-records","display_name":"Scoped Records","description":"Reference module"},
+            "release": {"id":"00000000-0000-0000-0000-000000000002","version":"1.0.0","manifest_digest":format!("sha256:{}", "c".repeat(64)),"runtime_image":format!("sha256:{}", "d".repeat(64)),"publisher":"tessara.first_party","trust":"trusted","compatibility":"compatible"},
+            "instance": {"id":"00000000-0000-0000-0000-000000000003","identity":"live","data":"retained","database_name":"tessara_module_scoped_records","installed":true,"deployed":true,"configured":true,"ready":true,"enabled":true,"healthy":true,"observed_at":"2026-07-22T18:30:00Z"},
+            "configuration": {"declared":true,"valid":true,"display_label":"Scoped Records","retention_mode":"retain_on_undeploy"},
+            "diagnostics": {"readiness_path":"/health/ready","liveness_path":"/health/live","public_route":"/reference/scoped-records"},
+            "findings": []
+        })).expect("independent projection parses");
+        let dimensions = entry.detail_dimensions();
+        assert_eq!(entry.definition_id(), "tessara.reference.scoped-records");
+        assert_eq!(dimensions.readiness.state.label(), "Ready");
+        assert_eq!(dimensions.health.state.label(), "Ready");
+        assert!(entry.independent().is_some());
+        assert_eq!(entry.serving_state(), super::ModuleServingStateV1::Ready);
+
+        if let super::ModuleInventoryEntryV1::IndependentlyDeployed { instance, .. } = &mut entry {
+            instance.healthy = false;
+        }
+        assert_eq!(entry.serving_state(), super::ModuleServingStateV1::Blocked);
     }
 }

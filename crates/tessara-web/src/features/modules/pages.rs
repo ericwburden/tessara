@@ -11,16 +11,18 @@ use super::bootstrap::{
     ModuleManagementRouteBootstrapV1, NavigationPolicyBootstrapV1,
     module_management_route_bootstrap,
 };
+use super::deployment::DeploymentLedger;
 use super::detail::ModuleDetailPeerSections;
 use super::directory::ModuleInventoryDirectory;
 use super::models::{
-    ModuleDetailResponseV1, ModuleInventoryResponseV1, ModuleManagementAccessV1,
-    NavigationContributionDeclarationV1, NavigationPolicyResponseV2, TransitionAvailabilityV1,
+    ModuleDetailPresentationV1, ModuleDetailResponseV1, ModuleDetailViewModelV1,
+    ModuleInventoryEntryV1, ModuleInventoryResponseV1, ModuleManagementAccessV1,
+    NavigationPolicyResponseV2,
 };
 use super::policy::ModuleNavigationPolicyView;
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    PageHeader,
+    DropdownMenu, PageHeader,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -65,6 +67,19 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
     );
     let route_state = RwSignal::new(initial);
     let active_section = RwSignal::new("modules");
+
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    Effect::new(move |_| {
+        if let Some(window) = web_sys::window()
+            && let Ok(hash) = window.location().hash()
+        {
+            match hash.as_str() {
+                "#navigation" => active_section.set("navigation"),
+                "#deployment" => active_section.set("deployment"),
+                _ => {}
+            }
+        }
+    });
 
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     if route_state.get_untracked() == ModuleRouteState::Loading {
@@ -118,21 +133,30 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
                             class:is-active=move || active_section.get() == "navigation"
                             on:click=move |_| active_section.set("navigation")
                         >"Navigation"</button>
+                        <button
+                            class="tabs-trigger"
+                            type="button"
+                            role="tab"
+                            aria-selected=move || active_section.get() == "deployment"
+                            class:is-active=move || active_section.get() == "deployment"
+                            on:click=move |_| active_section.set("deployment")
+                        >"Deployment"</button>
                     </div>
                     <label class="module-section-select module-section-select--directory">
                         <span>"Section"</span>
                         <select
                             prop:value=move || active_section.get()
                             on:change=move |event| {
-                                active_section.set(if event_target_value(&event) == "navigation" {
-                                    "navigation"
-                                } else {
-                                    "modules"
+                                active_section.set(match event_target_value(&event).as_str() {
+                                    "navigation" => "navigation",
+                                    "deployment" => "deployment",
+                                    _ => "modules",
                                 });
                             }
                         >
                             <option value="modules">"Modules"</option>
                             <option value="navigation">"Navigation"</option>
+                            <option value="deployment">"Deployment"</option>
                         </select>
                     </label>
                 </div>
@@ -169,12 +193,17 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
                                 "/administration/modules",
                             );
                         };
+                        let deployment = current_inventory.deployment.clone();
+                        let deployment_history = current_inventory.deployment_history.clone();
                         view! {
                             <div
                                 class="organization-detail-content module-management-content module-management-section"
                                 data-section-visible=move || (active_section.get() == "modules").to_string()
                             >
-                                <ModuleInventoryDirectory inventory=current_inventory/>
+                                <ModuleInventoryDirectory
+                                    inventory=current_inventory
+                                    on_view_deployment=Callback::new(move |_| active_section.set("deployment"))
+                                />
                             </div>
                             <div
                                 class="module-management-section"
@@ -186,6 +215,12 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
                                     unavailable_message=policy_unavailable
                                     access=access.get()
                                 />
+                            </div>
+                            <div
+                                class="module-management-section"
+                                data-section-visible=move || (active_section.get() == "deployment").to_string()
+                            >
+                                <DeploymentLedger receipt=deployment.clone() history=deployment_history.clone()/>
                             </div>
                         }
                         .into_any()
@@ -259,7 +294,7 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
                         <BreadcrumbPage>
                             {move || detail
                                 .get()
-                                .map(|current| current.entry.descriptor().display_name.clone())
+                                .map(|current| current.entry.display_name().to_string())
                                 .unwrap_or_else(|| "Contribution detail".into())}
                         </BreadcrumbPage>
                     </BreadcrumbItem>
@@ -295,120 +330,252 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
                                 &detail_retry_href,
                             );
                         };
-                        let descriptor = current_detail.entry.descriptor().clone();
-                        let display_name = descriptor.display_name.clone();
-                        let definition_id_for_heading = descriptor.reserved_definition_id.clone();
-                        let definition_id_for_copy = definition_id_for_heading.clone();
-                        let availability_label = descriptor.availability.label();
-                        let availability_class = match descriptor.availability {
-                            TransitionAvailabilityV1::ActiveInProcess => "status-badge is-success",
-                            TransitionAvailabilityV1::Unavailable => "status-badge is-warning",
-                            TransitionAvailabilityV1::Retired => "status-badge is-danger",
-                        };
-                        let declarations: Vec<NavigationContributionDeclarationV1> =
-                            descriptor.navigation;
-                        view! {
-                            <div class="module-detail-page-heading">
-                                <div>
-                                    <h1>{display_name.clone()}</h1>
-                                    <div class="module-detail-page-heading__identity">
-                                        <code>{definition_id_for_heading}</code>
-                                        <super::directory::CopyValue
-                                            value=definition_id_for_copy
-                                            label="Copy module definition ID"
-                                        />
-                                    </div>
-                                    <div class="module-detail-page-heading__lifecycle">
-                                        <span class="status-badge is-info">"Transitional"</span>
-                                        <span class=availability_class>{availability_label}</span>
-                                        <p>{super::directory::TRANSITION_PRESENTATION_LABEL}</p>
-                                    </div>
-                                </div>
-                                <a
-                                    class="button button--secondary module-detail-page-heading__descriptor"
-                                    href=format!("/api/admin/modules/{}/descriptor", definition_id.clone())
-                                >
-                                    <ExternalLink class="module-detail-page-heading__descriptor-icon"/>
-                                    "View source descriptor (JSON)"
-                                </a>
-                            </div>
-                            <div class="module-section-switcher" aria-label="Module detail section">
-                                <div class="module-section-tabs--detail tabs-list" role="tablist" aria-label="Module detail sections">
-                                    {[
-                                        ("overview", "Overview"),
-                                        ("declarations", "Declarations"),
-                                        ("contracts", "Contracts"),
-                                        ("capabilities", "Capabilities"),
-                                        ("dependencies", "Dependencies"),
-                                        ("resources", "Resources"),
-                                        ("navigation", "Navigation"),
-                                        ("findings", "Findings"),
-                                    ].into_iter().map(|(value, label)| view! {
-                                        <button
-                                            class="tabs-trigger"
-                                            type="button"
-                                            role="tab"
-                                            aria-selected=move || active_detail_section.get() == value
-                                            class:is-active=move || active_detail_section.get() == value
-                                            on:click=move |_| active_detail_section.set(value)
-                                        >{label}</button>
-                                    }).collect_view()}
-                                </div>
-                                <select
-                                    class="module-section-select module-section-select--detail form-control"
-                                    aria-label="Module detail section"
-                                        prop:value=move || active_detail_section.get()
-                                        on:change=move |event| {
-                                            let value = event_target_value(&event);
-                                            active_detail_section.set(match value.as_str() {
-                                                "declarations" => "declarations",
-                                                "contracts" => "contracts",
-                                                "dependencies" => "dependencies",
-                                                "capabilities" => "capabilities",
-                                                "resources" => "resources",
-                                                "navigation" => "navigation",
-                                                "findings" => "findings",
-                                                _ => "overview",
-                                            });
-                                        }
-                                    >
-                                        <option value="overview">"Overview"</option>
-                                        <option value="declarations">"Declarations"</option>
-                                        <option value="contracts">"Contracts"</option>
-                                        <option value="dependencies">"Dependencies"</option>
-                                        <option value="capabilities">"Capabilities"</option>
-                                        <option value="resources">"Resources"</option>
-                                        <option value="navigation">"Navigation"</option>
-                                        <option value="findings">"Findings"</option>
-                                </select>
-                            </div>
-                            <div
-                                class="organization-detail-content module-detail-peer-sections module-detail-sections"
-                                data-active-section=move || active_detail_section.get()
-                            >
-                                <div class="organization-detail-content__grid">
-                                    <ModuleDetailPeerSections
-                                        entry=current_detail.entry
-                                        policy
-                                        active_detail_section
-                                    />
-                                    <ModuleNavigationPolicyView
-                                        policy
-                                        persisted_policy
-                                        unavailable_message=policy_unavailable
-                                        access=access.get()
-                                        definition_id=definition_id.clone()
-                                        declared_navigation=declarations
-                                    />
-                                </div>
-                            </div>
-                        }
-                        .into_any()
+                        module_detail_page(
+                            current_detail.entry.into(),
+                            active_detail_section,
+                            policy,
+                            persisted_policy,
+                            policy_unavailable,
+                            access.get(),
+                        )
                     }
                 }}
             </section>
         </AppShell>
     }
+}
+
+fn module_detail_page(
+    detail: ModuleDetailViewModelV1,
+    active_section: RwSignal<&'static str>,
+    policy: RwSignal<Option<NavigationPolicyResponseV2>>,
+    persisted_policy: RwSignal<Option<NavigationPolicyResponseV2>>,
+    policy_unavailable: RwSignal<Option<String>>,
+    access: ModuleManagementAccessV1,
+) -> AnyView {
+    const SECTIONS: [(&str, &str); 9] = [
+        ("overview", "Overview"),
+        ("configuration", "Configuration"),
+        ("declarations", "Declarations"),
+        ("contracts", "Contracts"),
+        ("capabilities", "Capabilities"),
+        ("dependencies", "Dependencies"),
+        ("resources", "Resources"),
+        ("navigation", "Navigation"),
+        ("findings", "Findings"),
+    ];
+
+    let definition_id = detail.definition_id;
+    let display_name = detail.display_name;
+    let entry = detail.entry;
+    let descriptor_href = format!("/api/admin/modules/{definition_id}/descriptor");
+    let mobile_descriptor_href = descriptor_href.clone();
+    let desktop_descriptor_href = descriptor_href.clone();
+    let definition_id_for_copy = definition_id.clone();
+    let is_independent = matches!(
+        detail.presentation,
+        ModuleDetailPresentationV1::IndependentlyDeployed
+    );
+    let declarations = match &entry {
+        ModuleInventoryEntryV1::TransitionalInProcess { descriptor, .. } => {
+            descriptor.navigation.clone()
+        }
+        ModuleInventoryEntryV1::IndependentlyDeployed { .. } => Vec::new(),
+    };
+    let lifecycle = match detail.presentation {
+        ModuleDetailPresentationV1::Transitional { availability } => {
+            let availability_class = match availability {
+                super::models::TransitionAvailabilityV1::ActiveInProcess => {
+                    "status-badge is-success"
+                }
+                super::models::TransitionAvailabilityV1::Unavailable => {
+                    "status-badge is-warning"
+                }
+                super::models::TransitionAvailabilityV1::Retired => "status-badge is-danger",
+            };
+            view! {
+                <span class="status-badge is-info">"Transitional"</span>
+                <span class=availability_class>{availability.label()}</span>
+                <p>{super::directory::TRANSITION_PRESENTATION_LABEL}</p>
+            }
+            .into_any()
+        }
+        ModuleDetailPresentationV1::IndependentlyDeployed => view! {
+            <span class="status-badge is-info" title="This module runs as an independently deployed service.">"Independently deployed"</span>
+            <span class=detail.serving_state.badge_class() title=detail.serving_state.explanation()>
+                {if detail.serving_state.is_ready() { "Healthy and enabled" } else { "Attention required" }}
+            </span>
+        }
+        .into_any(),
+    };
+
+    view! {
+        <div class="module-detail-page-heading">
+            <div>
+                <div class="module-detail-page-heading__title-row">
+                    <h1>{display_name}</h1>
+                    <div class="module-detail-page-heading__actions-menu">
+                        <DropdownMenu
+                            label="Open module actions"
+                            trigger_icon=view! { <ExternalLink class="icon-button__icon"/> }.into_any()
+                        >
+                            <a class="dropdown-menu__item" role="menuitem" href=mobile_descriptor_href>
+                                <ExternalLink class="dropdown-menu__item-icon"/>
+                                <span>"View source descriptor (JSON)"</span>
+                            </a>
+                            {is_independent.then(|| view! {
+                                <a class="dropdown-menu__item" role="menuitem" href="/administration/modules#deployment">
+                                    <ExternalLink class="dropdown-menu__item-icon"/>
+                                    <span>"View deployment receipt"</span>
+                                </a>
+                            })}
+                        </DropdownMenu>
+                    </div>
+                </div>
+                <div class="module-detail-page-heading__identity">
+                    <code>{definition_id.clone()}</code>
+                    <super::directory::CopyValue value=definition_id_for_copy label="Copy module definition ID"/>
+                </div>
+                <div class="module-detail-page-heading__lifecycle">{lifecycle}</div>
+            </div>
+            <div class="module-detail-page-heading__actions">
+                <div class="module-detail-page-heading__actions-desktop">
+                    <a class="button button--secondary" href=desktop_descriptor_href>
+                        <ExternalLink/>"View source descriptor (JSON)"
+                    </a>
+                    {is_independent.then(|| view! {
+                        <a class="button button--secondary" href="/administration/modules#deployment">
+                            <ExternalLink/>"View deployment receipt"
+                        </a>
+                    })}
+                </div>
+            </div>
+        </div>
+        <div class="module-section-switcher" aria-label="Module detail section">
+            <div class="module-section-tabs--detail tabs-list" role="tablist" aria-label="Module detail sections">
+                {SECTIONS.into_iter().map(|(value,label)| view! {
+                    <button class="tabs-trigger" type="button" role="tab"
+                        aria-selected=move || active_section.get()==value
+                        class:is-active=move || active_section.get()==value
+                        on:click=move |_| active_section.set(value)>{label}</button>
+                }).collect_view()}
+            </div>
+            <select class="module-section-select module-section-select--detail form-control"
+                aria-label="Module detail section"
+                prop:value=move || active_section.get()
+                on:change=move |event| {
+                    let value = event_target_value(&event);
+                    active_section.set(SECTIONS.into_iter()
+                        .find_map(|(candidate, _)| (candidate == value).then_some(candidate))
+                        .unwrap_or("overview"));
+                }>
+                {SECTIONS.into_iter().map(|(value, label)| view! {
+                    <option value=value>{label}</option>
+                }).collect_view()}
+            </select>
+        </div>
+        {if is_independent {
+            independent_module_sections(entry, active_section)
+        } else {
+            view! {
+                <div class="organization-detail-content module-detail-peer-sections module-detail-sections"
+                    data-active-section=move || active_section.get()>
+                    <div class="organization-detail-content__grid">
+                        <ModuleDetailPeerSections entry=entry policy active_detail_section=active_section/>
+                        <ModuleNavigationPolicyView
+                            policy
+                            persisted_policy
+                            unavailable_message=policy_unavailable
+                            access
+                            definition_id
+                            declared_navigation=declarations
+                        />
+                    </div>
+                </div>
+            }.into_any()
+        }}
+    }
+    .into_any()
+}
+
+fn independent_module_sections(
+    entry: ModuleInventoryEntryV1,
+    active_section: RwSignal<&'static str>,
+) -> AnyView {
+    let (definition, release, instance, configuration, diagnostics) =
+        entry.independent().expect("independent module projection");
+    let definition = definition.clone();
+    let release = release.clone();
+    let instance = instance.clone();
+    let configuration = configuration.clone();
+    let diagnostics = diagnostics.clone();
+    let manifest_digest = release.manifest_digest.clone();
+    let runtime_image = release.runtime_image.clone();
+    let instance_id = instance.id.clone();
+    let serving_state = entry.serving_state();
+    view! {
+        <div class="module-detail-sections" data-active-section=move || active_section.get()>
+            <div data-module-section="overview" class="module-detail-independent-overview">
+                <div class="organization-detail-content__grid module-detail-independent-grid">
+                    <div class="module-detail-independent-stack">
+                        <section class="organization-detail-card module-detail-overview-card">
+                            <div class="module-detail__heading">
+                                <div>
+                                    <h2>"Definition"</h2>
+                                    <p>{definition.description}</p>
+                                </div>
+                            </div>
+                            <dl class="module-detail-overview__list">
+                                <div><dt>"Definition ID"</dt><dd class="module-detail-overview__value-with-action"><code>{definition.id.clone()}</code><super::directory::CopyValue value=definition.id label="Copy module definition ID"/></dd></div>
+                                <div><dt>"Source digest"</dt><dd class="module-detail-overview__value-with-action"><code>{super::directory::compact_value(&manifest_digest)}</code><super::directory::CopyValue value=manifest_digest.clone() label="Copy complete source digest"/></dd></div>
+                                <div><dt>"Descriptor configuration schema"</dt><dd>{if configuration.declared { "Declared" } else { "Not declared" }}</dd></div>
+                                <div><dt>"Module Release"</dt><dd>{format!("{} · {} · {}", release.version, release.trust, release.compatibility)}</dd></div>
+                                <div><dt>"Module Instance"</dt><dd class="module-detail-overview__value-with-action">{format!("Live · {}", super::directory::compact_value(&instance_id))}<super::directory::CopyValue value=instance_id.clone() label="Copy module instance ID"/></dd></div>
+                            </dl>
+                        </section>
+                        <section class="organization-detail-card module-detail-overview-card">
+                            <header class="module-detail__heading"><div><h2>"Lifecycle assessment"</h2><p>"Independent dimensions explain why the route is available."</p></div><span class=serving_state.badge_class() title=serving_state.explanation()>{if serving_state.is_ready() { "Ready" } else { "Attention required" }}</span></header>
+                            <dl class="module-detail-overview__assessment-list">
+                                <div><dt>"Dependencies"</dt><dd>"All required contracts satisfied"</dd></div>
+                                <div><dt>"Compatibility"</dt><dd>{format!("Release {} is {} with this installation", release.version, release.compatibility)}</dd></div>
+                                <div><dt>"Instance continuity"</dt><dd>{format!("{} · Durable instance retained", instance.identity)}</dd></div>
+                                <div><dt>"Deployment"</dt><dd>{format!("{} · {} · Container {}", state(instance.installed), state(instance.deployed), if instance.healthy { "healthy" } else { "unhealthy" })}</dd></div>
+                                <div><dt>"Configuration"</dt><dd>{if configuration.valid { "Valid" } else { "Finding reported" }}</dd></div>
+                                <div><dt>"Readiness"</dt><dd>{if instance.ready { "Passing" } else { "Failing" }}</dd></div>
+                                <div><dt>"Health"</dt><dd>{if instance.healthy { "Healthy" } else { "Unhealthy" }}</dd></div>
+                                <div><dt>"Application"</dt><dd>{format!("{} · Route {}", state(instance.enabled), if instance.ready { "available" } else { "unavailable" })}</dd></div>
+                                <div><dt>"Data"</dt><dd>{format!("{} in {}", instance.data, instance.database_name)}</dd></div>
+                            </dl>
+                        </section>
+                        <section class="organization-detail-card module-detail-overview-card">
+                            <h2>"Diagnostics"</h2>
+                            <dl class="module-detail-overview__list">
+                                <div><dt>"Readiness"</dt><dd class="module-detail-status-value"><span class=if instance.ready { "status-badge is-success" } else { "status-badge is-danger" } title="Result of the module readiness probe.">{if instance.ready { "Passing" } else { "Failing" }}</span><code>{diagnostics.readiness_path}</code></dd></div>
+                                <div><dt>"Liveness"</dt><dd class="module-detail-status-value"><span class=if instance.healthy { "status-badge is-success" } else { "status-badge is-danger" } title="Result of the module liveness probe.">{if instance.healthy { "Passing" } else { "Failing" }}</span><code>{diagnostics.liveness_path}</code></dd></div>
+                                <div><dt>"Last observation"</dt><dd><time datetime=instance.observed_at.clone()>{instance.observed_at.clone()}</time></dd></div>
+                                <div><dt>"Public route"</dt><dd><code>{diagnostics.public_route}</code></dd></div>
+                            </dl>
+                        </section>
+                    </div>
+                    <aside class="module-detail-independent-stack"><section class="organization-detail-card module-detail-overview-card module-detail-artifact-verification"><h2>"Artifact provenance"</h2><dl class="module-detail-overview__summary-list"><div><dt>"Manifest"</dt><dd class="module-detail-overview__value-with-action"><code>{super::directory::compact_value(&manifest_digest)}</code><super::directory::CopyValue value=manifest_digest label="Copy manifest digest"/></dd></div><div><dt>"Runtime image"</dt><dd class="module-detail-overview__value-with-action"><code>{super::directory::compact_value(&runtime_image)}</code><super::directory::CopyValue value=runtime_image label="Copy runtime image digest"/></dd></div><div><dt>"Publisher"</dt><dd>{format!("{} · curated release", release.publisher)}</dd></div></dl></section></aside>
+                </div>
+            </div>
+            <section data-module-section="configuration" class="organization-detail-card module-detail-overview-card"><h2>"Configuration"</h2><dl class="module-detail-overview__list"><div><dt>"Display label"</dt><dd>{configuration.display_label}</dd></div><div><dt>"Retention mode"</dt><dd>{configuration.retention_mode.replace('_', " ")}</dd></div><div><dt>"Validation"</dt><dd>{if configuration.valid { format!("Valid for release {} · No findings", release.version) } else { "A configuration finding was reported; review the Findings tab for its path and resolution.".into() }}</dd></div></dl></section>
+            {[
+                ("declarations", "Declarations", "No declarations were reported for this module."),
+                ("contracts", "Contracts", "No contracts were declared for this module."),
+                ("capabilities", "Capabilities", "No capabilities were declared for this module."),
+                ("dependencies", "Dependencies", "No dependencies were declared for this module."),
+                ("resources", "Resources", "No resources were declared for this module."),
+                ("navigation", "Navigation", "No navigation contribution was declared for this module."),
+                ("findings", "Findings", "No module findings were reported."),
+            ].into_iter().map(|(section,title,message)| view! { <section data-module-section=section class="organization-detail-card module-detail-empty-section"><h2>{title}</h2><p>{message}</p></section> }).collect_view()}
+        </div>
+    }.into_any()
+}
+
+fn state(value: bool) -> &'static str {
+    if value { "Enabled" } else { "Disabled" }
 }
 
 fn initialize_directory(

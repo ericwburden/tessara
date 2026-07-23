@@ -1,0 +1,229 @@
+:root {
+  --ink: #111827;
+  --muted: #526070;
+  --rule: #cfd6df;
+  --panel: #f1f4f7;
+  --accent: #3d8dff;
+  --accent-soft: #dcecff;
+  --canvas: #ffffff;
+}
+
+.reveal {
+  color: var(--ink);
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 30px;
+}
+
+.reveal .slides { text-align: left; }
+
+.reveal .slides section {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 54px 64px 48px 74px;
+  background: var(--canvas);
+  border-left: 10px solid var(--accent);
+}
+
+.reveal h1,
+.reveal h2,
+.reveal h3,
+.reveal p { margin: 0; }
+
+.reveal h1 {
+  max-width: 1000px;
+  font-size: 76px;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  text-transform: none;
+}
+
+.reveal h2 {
+  max-width: 1160px;
+  font-size: 42px;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  text-transform: none;
+}
+
+.reveal h3 {
+  font-size: 27px;
+  line-height: 1.15;
+  text-transform: none;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dek {
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1.35;
+}
+
+.lead {
+  font-size: 28px;
+  line-height: 1.38;
+}
+
+.strong { font-weight: 750; }
+.accent { color: var(--accent); }
+
+.cover {
+  display: grid !important;
+  grid-template-rows: auto 1fr auto;
+}
+
+.cover h1 { align-self: end; }
+.cover .dek { width: 650px; margin-bottom: 18px; }
+
+.slide-head {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 34px;
+}
+
+.outcome-copy { margin-bottom: 32px; }
+.outcome-copy .lead { margin-top: 12px; max-width: 1150px; }
+.outcome-copy .strong { margin-top: 12px; font-size: 20px; }
+
+.three-up {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.panel {
+  box-sizing: border-box;
+  min-height: 275px;
+  padding: 30px 28px;
+  background: var(--panel);
+}
+
+.panel p {
+  margin-top: 18px;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.42;
+}
+
+.panel .decision {
+  margin-top: 40px;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.panel .question {
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 750;
+}
+
+.workstreams,
+.risks {
+  display: grid;
+  grid-template-columns: 0.72fr 1.28fr;
+  gap: 74px;
+  align-items: start;
+}
+
+.thesis h3 { color: var(--accent); font-size: 31px; }
+.thesis p { margin-top: 19px; font-size: 22px; line-height: 1.42; }
+.thesis .small { font-size: 18px; }
+
+.rows { display: grid; gap: 26px; }
+.row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.row .num { color: var(--accent); font-size: 21px; font-weight: 800; }
+.row p { font-size: 20px; line-height: 1.35; }
+
+.timeline {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 42px;
+  margin-top: 122px;
+}
+.timeline::before {
+  position: absolute;
+  top: 43px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--ink);
+  content: "";
+}
+.milestone { position: relative; }
+.milestone::before {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  content: "";
+}
+.milestone .gate { color: var(--accent); font-size: 17px; font-weight: 800; }
+.milestone h3 { margin-top: 76px; }
+.milestone p { margin-top: 14px; font-size: 19px; line-height: 1.38; }
+
+.done-grid {
+  display: grid;
+  grid-template-columns: 1fr 0.88fr;
+  gap: 70px;
+  margin-top: 44px;
+}
+.done-grid .accent { font-size: 31px; font-weight: 800; line-height: 1.25; }
+.done-grid .narrative { margin-top: 42px; font-size: 20px; line-height: 1.45; }
+.checks { display: grid; gap: 21px; padding-top: 10px; }
+.check {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 15px;
+  align-items: start;
+  font-size: 19px;
+  line-height: 1.35;
+}
+.check::before {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  content: "✓";
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.slide-no {
+  position: absolute;
+  right: 40px;
+  bottom: 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.reveal .progress { color: var(--accent); height: 4px; }
+.reveal .controls { color: var(--accent); }
+
+@media (max-width: 900px) {
+  .reveal { font-size: 24px; }
+}
+
+@media print {
+  .reveal .slides section { border-left-color: var(--accent); }
+}

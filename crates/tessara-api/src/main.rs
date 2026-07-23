@@ -15,6 +15,11 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     let pool = db::connect_and_prepare(&config).await?;
 
+    if args.iter().any(|arg| arg == "prepare") {
+        tracing::info!("database preparation completed");
+        return Ok(());
+    }
+
     if args.iter().any(|arg| arg == "seed-demo") {
         let summary = tessara_api::demo::seed_demo(&pool).await?;
         println!("{}", serde_json::to_string_pretty(&summary)?);

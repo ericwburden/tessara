@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use tessara_module_contract::DeploymentReceiptV1;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -22,6 +23,8 @@ use super::{
     destination,
     dto::{
         ApplicationInstallationV1, CoreRuntimeObservationV1, CreateResourceReferenceRequestV1,
+        IndependentConfigurationV1, IndependentDefinitionV1, IndependentDiagnosticsV1,
+        IndependentInstanceV1, IndependentModuleEntryV1, IndependentReleaseV1,
         MODULE_HTTP_SCHEMA_VERSION_V1, ModuleDetailResponseV1, ModuleInventoryResponseV1,
         NAVIGATION_POLICY_SCHEMA_VERSION_V2, NavigationPolicyResponseV2,
         ResolveDestinationRequestV1, ResolveResourceReferenceRequestV1,
@@ -39,6 +42,14 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/admin/modules", get(list_modules))
         .route("/api/admin/modules/{definition_id}", get(get_module))
+        .route(
+            "/api/internal/deployment-receipts",
+            post(import_deployment_receipt),
+        )
+        .route(
+            "/api/admin/deployment-receipts/{revision}",
+            get(download_deployment_receipt),
+        )
         .route(
             "/api/admin/modules/{definition_id}/descriptor",
             get(get_descriptor),
@@ -59,6 +70,163 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/platform/resource-references/resolve",
             post(resolve_resource_reference),
         )
+}
+
+async fn download_deployment_receipt(
+    State(state): State<AppState>,
+    auth: AuthenticatedRequest,
+    Path(revision): Path<i64>,
+) -> ModuleHttpResult<Response> {
+    require_global_read(&auth)?;
+    if revision <= 0 {
+        return Err(ModuleHttpError::bad_request(
+            "deployment_receipt_revision_invalid",
+            "Receipt revision must be greater than zero.",
+        ));
+    }
+    let installation_id = current_installation_id(&state).await?;
+    let receipt = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT receipt FROM deployment_receipts WHERE installation_id = $1 AND revision = $2",
+    )
+    .bind(installation_id)
+    .bind(revision)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| {
+        ModuleHttpError::not_found(
+            "deployment_receipt_not_found",
+            "The requested deployment receipt was not found.",
+        )
+    })?;
+    let bytes = serde_json::to_vec_pretty(&receipt)
+        .map_err(|_| ModuleHttpError::Internal("deployment receipt serialization failed"))?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!(
+            "attachment; filename=deployment-receipt-{revision}.json"
+        ))
+        .map_err(|_| ModuleHttpError::Internal("deployment receipt filename is invalid"))?,
+    );
+    Ok((headers, bytes).into_response())
+}
+
+async fn import_deployment_receipt(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(receipt): Json<DeploymentReceiptV1>,
+) -> ModuleHttpResult<StatusCode> {
+    let expected = std::env::var("TESSARA_DEPLOY_TOKEN").map_err(|_| {
+        ModuleHttpError::Internal("deployment receipt import token is not configured")
+    })?;
+    let presented = headers
+        .get("x-tessara-deploy-token")
+        .and_then(|value| value.to_str().ok());
+    if presented != Some(expected.as_str()) {
+        return Err(ModuleHttpError::forbidden(
+            "deployment_receipt_import_forbidden",
+            "A valid deployment receipt import token is required.",
+        ));
+    }
+    if receipt.api_version != "tessara.io/deployment-receipt/v1" {
+        return Err(ModuleHttpError::bad_request(
+            "deployment_receipt_version_unsupported",
+            "Only deployment receipt version 1 is supported.",
+        ));
+    }
+    let installation_id = current_installation_id(&state).await?;
+    if receipt.installation_id != installation_id {
+        return Err(ModuleHttpError::conflict(
+            "deployment_receipt_installation_mismatch",
+            "The receipt belongs to a different installation.",
+        ));
+    }
+    let applied_at = chrono::DateTime::parse_from_rfc3339(&receipt.applied_at)
+        .map_err(|_| {
+            ModuleHttpError::bad_request(
+                "deployment_receipt_applied_at_invalid",
+                "Receipt applied_at must be RFC 3339.",
+            )
+        })?
+        .with_timezone(&chrono::Utc);
+    let receipt_json = serde_json::to_value(&receipt)
+        .map_err(|_| ModuleHttpError::Internal("deployment receipt serialization failed"))?;
+    let revision = i64::try_from(receipt.revision).map_err(|_| {
+        ModuleHttpError::bad_request(
+            "deployment_receipt_revision_invalid",
+            "Receipt revision is too large.",
+        )
+    })?;
+    let previous_revision = receipt
+        .previous_revision
+        .map(i64::try_from)
+        .transpose()
+        .map_err(|_| {
+            ModuleHttpError::bad_request(
+                "deployment_receipt_revision_invalid",
+                "Receipt previous revision is too large.",
+            )
+        })?;
+
+    let mut tx = state.pool.begin().await?;
+    let accepted = sqlx::query("INSERT INTO deployment_receipts (installation_id, revision, plan_digest, applied_at, operator_name, idempotency_key, previous_revision, receipt) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (installation_id, revision) DO NOTHING")
+        .bind(receipt.installation_id)
+        .bind(revision)
+        .bind(receipt.plan_digest.as_str())
+        .bind(applied_at)
+        .bind(&receipt.operator)
+        .bind(&receipt.idempotency_key)
+        .bind(previous_revision)
+        .bind(receipt_json.clone())
+        .execute(&mut *tx)
+        .await?;
+    if accepted.rows_affected() == 0 {
+        let existing = sqlx::query_as::<_, (String, serde_json::Value)>(
+            "SELECT idempotency_key, receipt FROM deployment_receipts WHERE installation_id = $1 AND revision = $2 FOR UPDATE",
+        )
+        .bind(receipt.installation_id)
+        .bind(revision)
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.rollback().await?;
+        if existing.0 == receipt.idempotency_key && existing.1 == receipt_json {
+            return Ok(StatusCode::NO_CONTENT);
+        }
+        return Err(ModuleHttpError::conflict(
+            "deployment_receipt_revision_conflict",
+            "This deployment revision is already bound to different receipt evidence.",
+        ));
+    }
+
+    // The accepted receipt is the complete current deployment projection.
+    // Rebuild instances from that evidence so modules omitted by a later
+    // receipt cannot remain visible as if they were still deployed.
+    sqlx::query("DELETE FROM module_instances WHERE installation_id = $1")
+        .bind(receipt.installation_id)
+        .execute(&mut *tx)
+        .await?;
+
+    for module in &receipt.modules {
+        let display_name = module
+            .definition_id
+            .as_str()
+            .rsplit(['.', ':'])
+            .next()
+            .unwrap_or(module.definition_id.as_str())
+            .replace(['-', '_'], " ");
+        sqlx::query("INSERT INTO module_definition_reservations (definition_id, display_name) VALUES ($1, $2) ON CONFLICT (definition_id) DO NOTHING")
+            .bind(module.definition_id.as_str()).bind(display_name).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO module_releases (id, definition_id, version, manifest_digest, runtime_image_digest, publisher, trust_state, compatibility_state) VALUES ($1,$2,$3,$4,$5,$6,'curated','compatible') ON CONFLICT (definition_id, manifest_digest) DO UPDATE SET version=EXCLUDED.version, runtime_image_digest=EXCLUDED.runtime_image_digest, publisher=EXCLUDED.publisher, trust_state='curated', compatibility_state='compatible'")
+            .bind(module.release_id).bind(module.definition_id.as_str()).bind(module.version.to_string()).bind(module.manifest_digest.as_str()).bind(module.runtime_image.as_str()).bind(module.publisher.as_str()).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO module_instances (id, installation_id, definition_id, release_id, identity_state, data_state, database_name, installed, deployed, configured, ready, enabled, healthy, last_observed_at) VALUES ($1,$2,$3,$4,'live','retained',$5,true,true,true,true,true,true,$6) ON CONFLICT (installation_id, definition_id) DO UPDATE SET release_id=EXCLUDED.release_id, identity_state='live', data_state='retained', database_name=EXCLUDED.database_name, installed=true, deployed=true, configured=true, ready=true, enabled=true, healthy=true, last_observed_at=EXCLUDED.last_observed_at")
+            .bind(module.instance_id).bind(receipt.installation_id).bind(module.definition_id.as_str()).bind(module.release_id).bind(&module.database_name).bind(applied_at).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn list_modules(
@@ -87,12 +255,20 @@ async fn get_module(
     let entry = inventory
         .transitions
         .into_iter()
-        .find(|entry| entry.definition_id == definition_id)
+        .map(|entry| entry.normalized_projection)
+        .chain(inventory.modules.into_iter().map(independent_entry_value))
+        .find(|entry| {
+            entry
+                .pointer("/descriptor/reserved_definition_id")
+                .or_else(|| entry.pointer("/definition/id"))
+                .and_then(|value| value.as_str())
+                == Some(definition_id.as_str())
+        })
         .ok_or_else(module_not_found)?;
     Ok(Json(ModuleDetailResponseV1 {
         schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
         installation_id,
-        entry: entry.normalized_projection,
+        entry,
     }))
 }
 
@@ -386,6 +562,8 @@ fn navigation_policy_rejection_message(error: &NavigationPolicyUpdateError) -> &
 }
 
 pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleInventoryResponseV1 {
+    let deployment = inventory.deployment;
+    let deployment_history = inventory.deployment_history;
     ModuleInventoryResponseV1 {
         schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
         installation: ApplicationInstallationV1 {
@@ -402,8 +580,62 @@ pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleI
             .transitions
             .into_iter()
             .map(|entry| entry.normalized_projection)
+            .chain(inventory.modules.into_iter().map(independent_entry_value))
             .collect(),
+        deployment,
+        deployment_history,
     }
+}
+
+pub(super) fn independent_entry_value(
+    module: super::service::IndependentModuleReadModel,
+) -> serde_json::Value {
+    serde_json::to_value(IndependentModuleEntryV1::IndependentlyDeployed {
+        definition: IndependentDefinitionV1 {
+            id: module.definition_id,
+            display_name: module.display_name.clone(),
+            description:
+                "Independently deployed module observed from the current deployment receipt."
+                    .into(),
+        },
+        release: IndependentReleaseV1 {
+            id: module.release_id.to_string(),
+            version: module.version,
+            manifest_digest: module.manifest_digest,
+            runtime_image: module.runtime_image,
+            publisher: module.publisher,
+            trust: module.trust,
+            compatibility: module.compatibility,
+        },
+        instance: IndependentInstanceV1 {
+            id: module.instance_id.to_string(),
+            identity: module.identity,
+            data: module.data,
+            database_name: module.database_name,
+            installed: module.installed,
+            deployed: module.deployed,
+            configured: module.configured,
+            ready: module.ready,
+            enabled: module.enabled,
+            healthy: module.healthy,
+            observed_at: module.observed_at.to_rfc3339(),
+        },
+        configuration: IndependentConfigurationV1 {
+            // The receipt records whether configuration completed, but it
+            // does not carry the descriptor schema itself.
+            declared: false,
+            valid: module.configured,
+            display_label: module.display_name,
+            retention_mode: "Not reported".into(),
+        },
+        diagnostics: IndependentDiagnosticsV1 {
+            readiness_path: "Not reported".into(),
+            liveness_path: "Not reported".into(),
+            public_route: "Not reported".into(),
+        },
+        findings: Vec::new(),
+    })
+    .expect("typed independent module projection must serialize")
 }
 
 #[cfg(test)]

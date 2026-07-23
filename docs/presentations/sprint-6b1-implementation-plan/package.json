@@ -1,0 +1,13 @@
+{
+  "name": "tessara-sprint-6b1-executive-briefing",
+  "private": true,
+  "scripts": {
+    "start": "http-server . -p 8000 -c-1"
+  },
+  "dependencies": {
+    "reveal.js": "^5.2.1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

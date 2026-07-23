@@ -1,0 +1,28 @@
+http:
+  routers:
+    scoped-records:
+      entryPoints: [web]
+      rule: PathPrefix(`/reference/scoped-records`)
+      priority: 100
+      middlewares: [scoped-records-strip, scoped-records-fallback]
+      service: scoped-records
+
+  middlewares:
+    scoped-records-strip:
+      stripPrefix:
+        prefixes: [/reference/scoped-records]
+    scoped-records-fallback:
+      errors:
+        status: ["500-599"]
+        service: tessara-core-fallback
+        query: /api/module-unavailable
+
+  services:
+    scoped-records:
+      loadBalancer:
+        servers:
+          - url: http://scoped-records:8090
+    tessara-core-fallback:
+      loadBalancer:
+        servers:
+          - url: http://core:8080

@@ -1,0 +1,115 @@
+name: tessara
+
+services:
+  gateway:
+    image: ${TESSARA_TRAEFIK_IMAGE:-traefik:v3.6}
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=tessara_tessara-edge
+      - --providers.file.filename=/etc/traefik/tessara-dynamic.yaml
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:8080
+      - --api.dashboard=false
+    ports: ["${TESSARA_HTTP_PORT:-8080}:8080"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik-dynamic.yaml:/etc/traefik/tessara-dynamic.yaml:ro
+    networks: [tessara-edge]
+    restart: unless-stopped
+
+  postgres:
+    image: ${TESSARA_POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: tessara_bootstrap
+      POSTGRES_PASSWORD: ${TESSARA_BOOTSTRAP_PASSWORD:-local-bootstrap-only}
+      TESSARA_CORE_OWNER_PASSWORD: ${TESSARA_CORE_OWNER_PASSWORD:-local-core-owner}
+      TESSARA_CORE_MIGRATION_PASSWORD: ${TESSARA_CORE_MIGRATION_PASSWORD:-local-core-migration}
+      TESSARA_CORE_RUNTIME_PASSWORD: ${TESSARA_CORE_RUNTIME_PASSWORD:-local-core-runtime}
+      TESSARA_DEPLOY_OWNER_PASSWORD: ${TESSARA_DEPLOY_OWNER_PASSWORD:-local-deploy-owner}
+      TESSARA_DEPLOY_MIGRATION_PASSWORD: ${TESSARA_DEPLOY_MIGRATION_PASSWORD:-local-deploy-migration}
+      TESSARA_DEPLOY_RUNTIME_PASSWORD: ${TESSARA_DEPLOY_RUNTIME_PASSWORD:-local-deploy-runtime}
+      TESSARA_SCOPED_OWNER_PASSWORD: ${TESSARA_SCOPED_OWNER_PASSWORD:-local-scoped-owner}
+      TESSARA_SCOPED_MIGRATION_PASSWORD: ${TESSARA_SCOPED_MIGRATION_PASSWORD:-local-scoped-migration}
+      TESSARA_SCOPED_RUNTIME_PASSWORD: ${TESSARA_SCOPED_RUNTIME_PASSWORD:-local-scoped-runtime}
+    volumes:
+      - tessara-postgres:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tessara_bootstrap -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [tessara-data]
+    restart: unless-stopped
+
+  core-migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["tessara-api", "prepare"]
+    environment:
+      DATABASE_URL: postgres://tessara_core_migration:${TESSARA_CORE_MIGRATION_PASSWORD:-local-core-migration}@postgres:5432/tessara_core
+      TESSARA_DEV_ADMIN_EMAIL: admin@tessara.local
+      TESSARA_DEV_ADMIN_PASSWORD: tessara-dev-admin
+      TESSARA_RUNTIME_DATABASE_ROLE: tessara_core_runtime
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+
+  core:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://tessara_core_runtime:${TESSARA_CORE_RUNTIME_PASSWORD:-local-core-runtime}@postgres:5432/tessara_core
+      TESSARA_BIND_ADDR: 0.0.0.0:8080
+      TESSARA_DEV_ADMIN_EMAIL: admin@tessara.local
+      TESSARA_DEV_ADMIN_PASSWORD: tessara-dev-admin
+      TESSARA_DEPLOY_TOKEN: ${TESSARA_DEPLOY_TOKEN:-local-deploy-import-token}
+      TESSARA_SKIP_PREPARE: "true"
+    depends_on:
+      core-migrate: { condition: service_completed_successfully }
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.tessara-core.rule: PathPrefix(`/`)
+      traefik.http.routers.tessara-core.priority: "1"
+      traefik.http.services.tessara-core.loadbalancer.server.port: "8080"
+    networks: [tessara-edge, tessara-data]
+    restart: unless-stopped
+
+  scoped-records-migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.scoped-records
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://tessara_scoped_migration:${TESSARA_SCOPED_MIGRATION_PASSWORD:-local-scoped-migration}@postgres:5432/tessara_module_scoped_records
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+
+  scoped-records:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.scoped-records
+    environment:
+      DATABASE_URL: postgres://tessara_scoped_runtime:${TESSARA_SCOPED_RUNTIME_PASSWORD:-local-scoped-runtime}@postgres:5432/tessara_module_scoped_records
+      SCOPED_RECORDS_BIND_ADDR: 0.0.0.0:8090
+    depends_on:
+      scoped-records-migrate: { condition: service_completed_successfully }
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-edge, tessara-data]
+    restart: unless-stopped
+
+networks:
+  tessara-edge: {}
+  tessara-data:
+    internal: true
+
+volumes:
+  tessara-postgres: {}

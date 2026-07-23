@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sprint 6B1 — Executive Implementation Plan</title>
+    <link rel="stylesheet" href="./node_modules/reveal.js/dist/reveal.css" />
+    <link rel="stylesheet" href="./node_modules/reveal.js/dist/theme/white.css" />
+    <link rel="stylesheet" href="./theme.css" />
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section class="cover">
+          <p class="eyebrow">Tessara · Executive implementation brief</p>
+          <h1>Sprint 6B1<br />implementation plan</h1>
+          <p class="dek">Container deployment foundation · Approved product surfaces<br />Release-gated delivery · 22 July 2026</p>
+          <aside class="notes">Sprint 6B1 is the point where Tessara's modular architecture becomes an operated runtime. This briefing explains the outcome, the approved product scope, the workstreams, the evidence gates, and the release decision.</aside>
+        </section>
+
+        <section>
+          <header class="slide-head">
+            <h2>6B1 turns modular architecture into an operable runtime</h2>
+          </header>
+          <div class="outcome-copy">
+            <p class="eyebrow">Executive outcome</p>
+            <p class="lead">Validate and apply a signed, single-host container deployment; route to one independently deployed reference module; observe it without making Core a container control plane.</p>
+            <p class="strong">The sprint closes only when deployment, containment, recovery, upgrade, and rollback work end to end.</p>
+          </div>
+          <div class="three-up">
+            <article class="panel"><h3>Deploy with trust</h3><p>Verify digest-pinned OCI artifacts and publisher identity before Docker Compose mutates the installation.</p></article>
+            <article class="panel"><h3>Operate with containment</h3><p>Use same-origin routing and Core-rendered fallback so a failed module never takes Core down with it.</p></article>
+            <article class="panel"><h3>Explain what changed</h3><p>Persist exact releases, instances, health dimensions, and sanitized receipts for operator readback.</p></article>
+          </div>
+          <span class="slide-no">2</span>
+          <aside class="notes">The implementation has three executive outcomes. Trust is established before mutation. Runtime failures remain contained. Operators can see the exact applied state and supporting evidence.</aside>
+        </section>
+
+        <section>
+          <header class="slide-head"><h2>The approved product scope is one operator journey across three screens</h2></header>
+          <div class="three-up">
+            <article class="panel"><h3>A · Operational inventory</h3><p>Extend the existing directory with independently deployed modules, serving state, runtime health, and exception signals.</p><p class="decision">Primary decision</p><p class="question">Which module needs attention?</p></article>
+            <article class="panel"><h3>B · Lifecycle workspace</h3><p>Extend the existing detail view with release, instance, configuration, diagnostics, trust, deployment, and data readback.</p><p class="decision">Primary decision</p><p class="question">Is this module ready?</p></article>
+            <article class="panel"><h3>C · Deployment ledger</h3><p>Add a read-only sibling for the current receipt, resolved components, applied change, history, and verification evidence.</p><p class="decision">Primary decision</p><p class="question">What changed?</p></article>
+          </div>
+          <span class="slide-no">3</span>
+          <aside class="notes">These screens are complementary, not alternatives. A and B are bounded additions to approved application screens. C is the new deployment view. The live application remains the authoritative baseline; mockup omissions do not authorize removal.</aside>
+        </section>
+
+        <section>
+          <header class="slide-head"><h2>Four workstreams deliver the capability without creating a new control plane</h2></header>
+          <div class="workstreams">
+            <div class="thesis"><h3>Build outside-in</h3><p>Start with verifiable contracts and operator-owned execution, then expose only supported readback in Core.</p><p class="small">Each workstream is independently testable; integration proceeds only when its upstream contract is stable.</p></div>
+            <div class="rows">
+              <div class="row"><span class="num">01</span><p><strong>Deployment contract</strong> · tessara-oci-v1, signed manifests, stable findings, sanitized receipts</p></div>
+              <div class="row"><span class="num">02</span><p><strong>Local execution</strong> · thin tessara-deploy over installed Compose and Cosign; idempotent apply and rollback</p></div>
+              <div class="row"><span class="num">03</span><p><strong>Runtime platform</strong> · Traefik routing; one PostgreSQL cluster; isolated databases, owners, and roles</p></div>
+              <div class="row"><span class="num">04</span><p><strong>Reference proof + UI</strong> · Scoped Records module, Core read model, and approved A/B/C deltas</p></div>
+            </div>
+          </div>
+          <span class="slide-no">4</span>
+          <aside class="notes">The work is intentionally outside-in. We establish a portable declaration and reliable evidence first, then operator-owned execution, then the runtime platform, and finally the reference module and Core readback. Testing runs within each workstream and at their integration boundaries.</aside>
+        </section>
+
+        <section>
+          <header class="slide-head"><h2>Delivery advances through evidence gates—not UI completion alone</h2></header>
+          <div class="timeline">
+            <article class="milestone"><p class="gate">GATE 1</p><h3>Contracts &amp; persistence</h3><p>Freeze declaration, finding, receipt, installation-identity, and database boundaries. Prove deterministic validate and plan.</p></article>
+            <article class="milestone"><p class="gate">GATES 2–3</p><h3>Materialize &amp; contain</h3><p>Apply signed artifacts through Compose; migrate, health-gate, route, stop, fall back, and restore.</p></article>
+            <article class="milestone"><p class="gate">GATES 4–5</p><h3>Expose &amp; prove</h3><p>Persist readback; implement approved A/B/C deltas; execute upgrade, rollback, responsive review, and conformance.</p></article>
+          </div>
+          <span class="slide-no">5</span>
+          <aside class="notes">There are no speculative calendar dates in this plan. Progress is gated by evidence. The UI cannot outrun the contracts it explains, and the sprint cannot close on screenshots alone.</aside>
+        </section>
+
+        <section>
+          <header class="slide-head"><h2>The largest risks are controlled by explicit ownership boundaries</h2></header>
+          <div class="risks">
+            <div class="thesis"><h3>Hard boundaries</h3><p>No custom scheduler. No Docker socket in Core or the browser. No cross-database shortcuts.</p><p class="small strong">The approved mockups authorize bounded deltas—not a rewrite of the existing application.</p></div>
+            <div class="rows">
+              <div class="row"><span class="num">01</span><p><strong>Scope drift</strong> · Treat each approved screen record as the implementation contract; preserve everything else</p></div>
+              <div class="row"><span class="num">02</span><p><strong>Authority leakage</strong> · Only tessara-deploy and the host operator mutate deployment; Core and UI read status</p></div>
+              <div class="row"><span class="num">03</span><p><strong>Irrecoverable apply</strong> · Bind receipt, plan digest, expiry, idempotency, confirmation, backup, and rollback</p></div>
+              <div class="row"><span class="num">04</span><p><strong>State ambiguity</strong> · Keep trust, compatibility, identity, deployment, config, readiness, and health separate</p></div>
+            </div>
+          </div>
+          <span class="slide-no">6</span>
+          <aside class="notes">The risk posture comes from ownership. Compose owns lifecycle, Traefik owns routing, Cosign owns signature verification, PostgreSQL owns durable state, and tessara-deploy owns operator mutation. Core explains status without becoming the control plane.</aside>
+        </section>
+
+        <section>
+          <header class="slide-head"><h2>The sprint is done only when the operator completes the full recovery loop</h2></header>
+          <div class="done-grid">
+            <div><p class="accent">One signed fixture. One origin. One auditable receipt chain.</p><p class="narrative">Demo the path: validate → plan → apply → observe → stop module → inspect fallback and diagnostics → restore → compatible upgrade → rollback.<br /><br />Acceptance also proves one PostgreSQL container with separate Core, deployment-control, and Module Instance databases—and prohibited cross-database access fails.</p></div>
+            <div class="checks">
+              <div class="check">Exact artifacts verified before mutation</div>
+              <div class="check">Core remains reachable during module failure</div>
+              <div class="check">Identity and data survive upgrade and rollback</div>
+              <div class="check">Screens A, B, and C match approved deltas</div>
+              <div class="check">All workflows pass without skipped proof</div>
+            </div>
+          </div>
+          <span class="slide-no">7</span>
+          <aside class="notes">The executive release decision is simple: approve completion only when this loop works with the signed fixture and the UI shows the supported evidence. The immediate next step is Gate 1—freeze the contracts and persistence boundaries.</aside>
+        </section>
+      </div>
+    </div>
+    <script src="./node_modules/reveal.js/dist/reveal.js"></script>
+    <script src="./node_modules/reveal.js/plugin/notes/notes.js"></script>
+    <script>
+      Reveal.initialize({
+        hash: true,
+        controls: true,
+        progress: true,
+        center: false,
+        transition: "fade",
+        backgroundTransition: "fade",
+        width: 1280,
+        height: 720,
+        margin: 0,
+        plugins: [RevealNotes]
+      });
+    </script>
+  </body>
+</html>

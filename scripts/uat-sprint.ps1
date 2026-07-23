@@ -258,8 +258,9 @@ if ($seedSummary.seed_version -ne "uat-demo-v2") {
 $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
 $moduleInventory = Invoke-RestMethod -Uri "$BaseUrl/api/admin/modules" -Headers $headers -TimeoutSec 30
-if ($moduleInventory.schema_version -ne 1 -or @($moduleInventory.entries).Count -ne 7) {
-    throw "Sprint UAT failure: Module inventory did not return schema v1 with exactly seven transition contributions."
+$transitionEntries = @($moduleInventory.entries | Where-Object { $_.kind -eq "transitional_in_process" })
+if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne 7) {
+    throw "Sprint UAT failure: Module inventory did not preserve the seven transition contributions alongside real modules."
 }
 $migrationContribution = $moduleInventory.entries | Where-Object {
     $_.descriptor.reserved_definition_id -eq "tessara.migration"
@@ -318,7 +319,7 @@ if ($LASTEXITCODE -ne 0 -or $removedAdministration -notcontains "STATUS:404" -or
 $moduleDirectory = Invoke-Html -Uri "$BaseUrl/administration/modules" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $moduleDirectory -Needles @(
     "Module inventory",
-    "7 definitions",
+    "definitions",
     "Transitional — not independently deployable",
     "No Module Release",
     "No Module Instance",

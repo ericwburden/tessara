@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
+use tessara_module_contract::DeploymentReceiptV1;
 use uuid::Uuid;
 
 use super::{
@@ -62,12 +63,39 @@ pub(crate) struct TransitionCatalogReadModel {
     pub(crate) normalized_projection: Value,
 }
 
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub(crate) struct IndependentModuleReadModel {
+    pub(crate) definition_id: String,
+    pub(crate) display_name: String,
+    pub(crate) release_id: Uuid,
+    pub(crate) version: String,
+    pub(crate) manifest_digest: String,
+    pub(crate) runtime_image: String,
+    pub(crate) publisher: String,
+    pub(crate) trust: String,
+    pub(crate) compatibility: String,
+    pub(crate) instance_id: Uuid,
+    pub(crate) identity: String,
+    pub(crate) data: String,
+    pub(crate) database_name: String,
+    pub(crate) installed: bool,
+    pub(crate) deployed: bool,
+    pub(crate) configured: bool,
+    pub(crate) ready: bool,
+    pub(crate) enabled: bool,
+    pub(crate) healthy: bool,
+    pub(crate) observed_at: DateTime<Utc>,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ModuleInventoryReadModel {
     pub(crate) installation_id: Uuid,
     pub(crate) installation_created_at: DateTime<Utc>,
     pub(crate) core_runtime: CoreRuntimeReadModel,
     pub(crate) transitions: Vec<TransitionCatalogReadModel>,
+    pub(crate) modules: Vec<IndependentModuleReadModel>,
+    pub(crate) deployment: Option<DeploymentReceiptV1>,
+    pub(crate) deployment_history: Vec<DeploymentReceiptV1>,
 }
 
 #[derive(Clone, Debug)]
@@ -1006,6 +1034,57 @@ async fn load_module_inventory_in_transaction(
         });
     }
 
+    let modules = sqlx::query_as::<_, IndependentModuleReadModel>(
+        "SELECT
+            instances.definition_id,
+            definitions.display_name,
+            releases.id AS release_id,
+            releases.version,
+            releases.manifest_digest,
+            releases.runtime_image_digest AS runtime_image,
+            releases.publisher,
+            releases.trust_state AS trust,
+            releases.compatibility_state AS compatibility,
+            instances.id AS instance_id,
+            instances.identity_state AS identity,
+            instances.data_state AS data,
+            instances.database_name,
+            instances.installed,
+            instances.deployed,
+            instances.configured,
+            instances.ready,
+            instances.enabled,
+            instances.healthy,
+            instances.last_observed_at AS observed_at
+        FROM module_instances instances
+        JOIN module_releases releases ON releases.id = instances.release_id
+        JOIN module_definition_reservations definitions
+            ON definitions.definition_id = instances.definition_id
+        WHERE instances.installation_id = $1
+        ORDER BY instances.definition_id",
+    )
+    .bind(installation.id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let deployment = sqlx::query_scalar::<_, sqlx::types::Json<DeploymentReceiptV1>>(
+        "SELECT receipt FROM deployment_receipts WHERE installation_id = $1 ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(installation.id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .map(|receipt| receipt.0);
+
+    let deployment_history = sqlx::query_scalar::<_, sqlx::types::Json<DeploymentReceiptV1>>(
+        "SELECT receipt FROM deployment_receipts WHERE installation_id = $1 ORDER BY revision DESC",
+    )
+    .bind(installation.id)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(|receipt| receipt.0)
+    .collect();
+
     Ok(ModuleInventoryReadModel {
         installation_id: installation.id,
         installation_created_at: installation.created_at,
@@ -1016,6 +1095,9 @@ async fn load_module_inventory_in_transaction(
             observed_at: observation.observed_at,
         },
         transitions,
+        modules,
+        deployment,
+        deployment_history,
     })
 }
 

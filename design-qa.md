@@ -1,179 +1,213 @@
-# Sprint 6A-UI Navigation And Module Management Design QA
+# Sprint 6B1 Directory And Screen B Regression QA
 
-Status: **passed on 2026-07-16 for the approved Direction 1 implementation**
+## Directory, Deployment, And Shared Detail Fidelity Pass
 
-References:
+- Source visual truth:
+  `docs/mockups/sprint-6b1/direction-c-deployment-ledger.html`,
+  `docs/mockups/sprint-6b1/direction-b-lifecycle-workspace.html`, the live
+  Forms detail at `/administration/modules/tessara.forms`, and the ten supplied
+  1922 × 794 browser annotations. The annotations are scoped change requests;
+  unaffected application chrome and behavior remain the approved baseline.
+- Implementation evidence:
+  `outputs/post-fidelity-directory-final-1922x794.png`,
+  `outputs/post-fidelity-scoped-final-1922x794.png`,
+  `outputs/post-fidelity-deployment-final-1922x794.png`, and the below-fold
+  deployment capture
+  `outputs/post-fidelity-deployment-final-full.png`.
+- Viewport normalization: the three primary implementation captures use a
+  1922 × 794 CSS viewport, 1922 × 794 image pixels, and device scale factor 1.
+  The source annotations use the same reported browser viewport. Focused
+  annotation crops were judged against the corresponding regions in the
+  implementation captures rather than against unrelated browser chrome.
+- Directory full-view comparison: the search and status controls now consume
+  the complete toolbar width in a measured 3:1 ratio (1137.75 px to
+  379.25 px), with a 12 px gap before the table and zero document overflow.
+  Search still filters to one Scoped Records result and restores all eight
+  rows when cleared.
+- Screen B focused comparison: Scoped Records now uses the same shared
+  module-detail card contract as Forms. Both Definition cards measure
+  `padding: 0`, `gap: 0`, the same one-pixel token border, a
+  `16px 16px 10.4px` heading inset, and `10.4px 16px` divided rows.
+  Diagnostics uses an inline status-value treatment with a measured 7.19 px
+  gap between the badge and route.
+- Screen C full-view and focused comparison: the receipt download action is
+  inside the Resolved Components header at its upper-right corner and uses the
+  standard button icon spacing. Plan and artifact digests keep their copy
+  controls on the same line. Applied change, Receipt history, Release
+  provenance, and Module identities all use the shared zero-padding card plus
+  divided-row treatment; their row counts and padding were verified in the
+  rendered DOM.
+- Time-zone behavior: deployment timestamps are parsed as instants and
+  rendered with the browser's default locale/time zone. The displayed
+  `7/22/2026, 3:30:00 PM` value is therefore local to this browser; the control
+  also exposes the title “Displayed in your local time zone.”
+- Fonts and typography: existing Tessara font families, weights, display
+  hierarchy, machine-value treatment, and badge typography are unchanged.
+- Spacing and layout rhythm: shared card, row, toolbar, button, and inline
+  value patterns replace the earlier one-off spacing. No horizontal overflow
+  was measured at 1922 × 794.
+- Colors and visual tokens: all surfaces, borders, foregrounds, statuses, and
+  controls continue to use existing Tessara tokens; no new palette was added.
+- Image and icon fidelity: no raster assets changed. The canonical Rust/UI
+  Download and Copy icons are retained and aligned through existing button
+  icon conventions.
+- Copy and content: dynamic receipt/module values are unchanged. Only the
+  approved layout and grouping changed.
+- Primary interactions tested: directory search/filtering, Deployment tab
+  activation, independently deployed detail rendering, copy-button placement,
+  and deployment download placement. Browser logs contained no errors.
+- Comparison history:
+  1. The initial implementation constrained the directory search to 22 rem,
+     placed deployment copy controls in separate grid rows, rendered receipt
+     metadata as plain card content, and gave Scoped Records one-off panel
+     padding.
+  2. The first correction introduced the shared row structures and moved the
+     download action, but inherited selector specificity kept the independent
+     detail cards at 16 px outer padding and the search control at 352 px.
+  3. The final correction removed the inherited search cap and raised the
+     shared card selector specificity. Post-fix measurements match the Forms
+     card geometry, the toolbar ratio is exactly 3, and no actionable P0, P1,
+     or P2 differences remain.
 
-- `docs/mockups/sprint-6a-ui/direction-1/01-module-directory-manager-desktop.png`
-- `docs/mockups/sprint-6a-ui/direction-1/06-navigation-composer-manager-clean-desktop.png`
-- `docs/mockups/sprint-6a-ui/direction-1/09-navigation-composer-manager-tablet.png`
-- `docs/mockups/sprint-6a-ui/direction-1/10-module-directory-mobile.png`
-- `docs/mockups/sprint-6a-ui/direction-1/11-module-detail-forms-mobile.png`
-- `docs/mockups/sprint-6a-ui/direction-1/12-navigation-composer-manager-mobile.png`
-- `docs/mockups/sprint-6a-ui/direction-1/13-role-capability-provenance-desktop.png`
-- `docs/mockups/sprint-6a-ui/direction-1/15-user-role-assignment-provenance-desktop.png`
+## Screen B Mobile Actions Follow-up
 
-Implementation: `/administration/modules`, `/administration/modules/:definition_id`, `/administration/roles`, `/administration/users/:account_id/edit`, and the shared desktop/mobile shell at `http://localhost:8081`.
+- Source visual truth: the supplied 594 × 912 browser annotation showing the
+  two full-text module actions stacked below the lifecycle badges, followed by
+  the refinement annotation requesting the compact trigger in the heading row
+  at its right edge.
+- Implementation evidence:
+  `outputs/sprint-6b1-mobile-module-actions-title-row-final.png` (594 × 912
+  CSS px and image pixels, device scale factor 1), dark theme, Scoped Records
+  Overview.
+- Full-view comparison: the heading, identity, lifecycle badges, section
+  selector, Definition card, typography, colors, spacing, and surrounding
+  mobile shell remain unchanged. Only the annotated action area changed.
+- Focused action-region comparison: the two 40 px-tall text buttons were
+  replaced by one canonical 40 × 40 Tessara ExternalLink icon button. It uses
+  the desktop “View…” action's dark control surface, light border, and light
+  text/icon tokens, and sits at the far-right edge of the same flex row as the
+  “scoped records” heading. The closed state removes mobile wrapping pressure
+  without changing the information hierarchy above or below it.
+- The menu uses the shared `DropdownMenu` interaction and tokens. It retains
+  the exact “View source descriptor (JSON)” and “View deployment receipt”
+  labels, their canonical ExternalLink icons, and their original destinations.
+  The trigger exposes `aria-haspopup="menu"`, a descriptive accessible name,
+  and dynamic expanded state.
+- Responsive verification at 594 × 912 confirmed the desktop action group is
+  hidden, the mobile menu is visible, and document overflow is zero. The title
+  row measured 489 px wide; its trigger's right edge exactly matched the row's
+  right edge at x = 534 px. At 1280 × 720 the two desktop buttons remain
+  visible and the mobile trigger is hidden. The shared dropdown was exercised
+  through open and close transitions; both menu items and their destination
+  URLs were inspected in the rendered DOM. Browser logs contained no errors.
+- No actionable P0, P1, or P2 differences remain for this annotation.
 
-## Comparison result
+## Screen B Empty-State And Responsive Follow-up
 
-The approved Direction 1 rasters and the rebuilt branch were reviewed at matching 1440 × 1024 desktop and 390 × 844 mobile viewports in the in-app Browser. The implementation intentionally uses Tessara's existing semantic tokens, standard route panel, typography, spacing, borders, radii, controls, and canonical icon library; no raster-specific colors were introduced. The standard route `<section>` panel is treated as an application implementation requirement across the suite even where an approved raster omitted it.
+- Source visual truth: the supplied browser annotations at 1433 × 912 for the
+  blank Configuration and Navigation tab states, and at 579 × 912 for the
+  missing mobile section control.
+- Configuration was not actually empty. Its existing read-only values were
+  present in the document but omitted from the active-section display rule.
+  The running application now shows Display label, Retention mode, and
+  Validation when Configuration is selected.
+- Navigation has no declared contribution for this fixture. The running
+  application now shows the explicit empty state, “No navigation contribution
+  was declared for this module.”
+- The independent module detail now uses the same responsive section-control
+  pattern as the existing module detail: desktop tabs remain visible above
+  780 px; at 780 px and below the tabs are hidden and a full-width native
+  select is shown. The select contains all nine detail sections and drives the
+  same active-section state.
+- Browser verification on the rebuilt local container confirmed both desktop
+  states at a 1295 × 912 viewport with zero document overflow. Responsive CSS
+  inspection confirmed `display: none` for the detail tabs and
+  `display: block; width: 100%` for the detail select at the 780 px breakpoint.
+  Browser logs contained no errors; only the pre-existing wasm initialization
+  deprecation warning was present.
 
-The directory preserves the seven-definition canonical order, compact Core runtime disclosure, working desktop/mobile name-or-ID search, exact status selector, result count, responsive cards, and distinct clearable no-match state. The detail route uses working desktop tabs and a mobile section selector, the approved `View source descriptor (JSON)` label, one-column mobile values, wrapped lifecycle badges, and no page-level horizontal overflow.
+## Evidence
 
-The schema-v2 composer preserves required/custom group identity, stateful group carets, one accessible lock icon for protected placement, explicit keyboard-capable ordering and cross-group controls, dirty Save/Discard, revision recovery, and reader capability lists. Desktop controls are one exposed semantic control set; at the mobile breakpoint that same set is revealed through the approved action-sheet trigger. Role capability rows distinguish Scope from Provenance and retain reveal/copy access to complete digests. User assignment rows show the persisted assignment date, pending-save state, or an em dash without restoring the removed Usage/New assignment treatment.
+- Directory source visual truth:
+  `docs/mockups/sprint-6a-ui/direction-1/01-module-directory-manager-desktop.png`
+  (1487 × 1058 px), specifically the approved contained table, row chevrons,
+  and non-scrolling desktop treatment. Sprint 6B1's approved Screen A adds the
+  Serving state column and independently deployed module without replacing
+  those 6A-UI behaviors.
+- Screen B source visual truth: the approved 1394 × 912 browser-annotation
+  capture for `docs/mockups/sprint-6b1/direction-b-lifecycle-workspace.html`
+  supplied in the review thread, plus its approved HTML structure. The mockup
+  is a bounded change reference, not a 1:1 replacement for unaffected live UI.
+- Directory implementation: `outputs/sprint-6b1-directory-final.png`
+  (1920 × 1080 desktop capture containing the 1394 × 912 in-app Browser
+  viewport) and focused combined comparison
+  `outputs/sprint-6b1-directory-comparison.png` (2672 × 910).
+- Screen B implementation: `outputs/sprint-6b1-detail-final.png`
+  (1920 × 1080 desktop capture containing the 1394 × 912 in-app Browser
+  viewport).
+- Theme/state: dark theme, populated Modules directory and independently
+  deployed Scoped Records Overview.
+- Density normalization: device scale factor 1. The focused directory
+  comparison scales the 6A-UI source to the 910 px implementation crop height;
+  browser chrome and Codex workspace chrome are excluded from the comparison
+  judgment.
 
-## Accessibility and interaction result
+## Required Fidelity Surfaces
 
-- Search, status, section switching, group/item movement, visibility, Save/Discard, source-digest copy, and Clear filters are working controls rather than decorative placeholders.
-- Optional movement never depends on drag-and-drop; all group and destination operations have labeled keyboard controls and focus-restoration behavior.
-- Protected placements expose one lock icon with an accessible name and do not render redundant disabled movement controls.
-- Reader eligibility uses semantic unordered lists of exact capability keys; manager mode omits eligibility density.
-- Desktop and mobile consume the same shell projection, and both omit unauthorized, hidden, unavailable, and empty-group output.
+- Fonts and typography: existing Tessara DM Sans/system treatments, weights,
+  badges, machine-value typography, and compact metadata are retained. The
+  Screen B Ready badge is explicitly non-wrapping.
+- Spacing and layout rhythm: the directory is a contained standard data table
+  with six tracks including the detail action; the inner table wrapper and
+  document both measured zero horizontal overflow at 1394 px. Screen B
+  measured two equal 492.5 px columns, and Definition rows resolve to a
+  155.875 px label track plus a 290.625 px value track.
+- Colors and visual tokens: only existing Tessara surface, border, text,
+  primary, information, success, warning, and danger tokens are used.
+- Image and icon fidelity: no raster product assets changed. The canonical
+  Rust/UI `ChevronRight` icon is restored once per directory row.
+- Copy and content: the Scoped Records description now matches the approved
+  mockup; Definition, Lifecycle assessment, Diagnostics, and Artifact
+  provenance use the approved label/value hierarchy. Existing tabs, actions,
+  and surrounding application content remain intact.
 
-## Final verification
+## Comparison History
 
-- The rebuilt desktop composer exposes one inline semantic control set; the 390 px mobile composer keeps those controls hidden until its item action-sheet trigger opens, then exposes the same labeled actions.
-- The directory, detail, and composer remain contained at 1440, 1280, 768, and 390 px widths in the reviewed states, including both Tessara themes and a 200% zoom-equivalent containment check.
-- Add-group, rename, cross-group move, visibility/order controls, dirty Save/Discard, conflict recovery, section switching, search/status filtering, and Clear filters were exercised in the deployed branch without page-level horizontal overflow or new browser-console errors.
-- `cargo test --workspace --locked`, affected-target strict Clippy, focused Playwright, smoke, UAT, fresh initialization, and populated migration proof all pass. No P0, P1, or P2 visual defect remains in the approved Sprint 6A-UI scope.
+1. The earlier Sprint 6B1 implementation removed the 6A-UI row chevrons and
+   incorrectly reported horizontal overflow fixed after measuring the outer
+   directory container rather than the inner `.table-wrap`.
+2. The correction restored one chevron per row and moved the directory onto
+   the shared `DataTable` plus `TablePaginationFooter` pattern. The post-fix
+   browser measurement at the narrower 1394 px viewport was
+   `clientWidth = 999`, `scrollWidth = 999`, with eight rows and eight action
+   links. Search reduced the result to one row and updated the footer to
+   `Showing 1-1 of 1 module definitions`; clearing search restored all eight.
+3. The initial Screen B correction exposed the correct two-column row layout,
+   but its Ready badge wrapped in the narrow left panel. The badge was made
+   non-wrapping; the post-fix measurement is 71.09 × 32 px with
+   `white-space: nowrap`.
 
----
+## Findings
 
-# Sprint 5A Dashboard Design QA
+- No actionable P0, P1, or P2 differences remain for the annotated directory
+  and Screen B regressions.
+- The Sprint 6B1 Serving state column is an intentional approved addition to
+  the 6A-UI baseline, not visual drift.
 
-Status: **passed on 2026-07-13 after the approved soft-surface, standard-Table, half-strength shared-gradient, and Dashboard-row action follow-ups**
+## Primary Interactions Tested
 
-References:
+- Filtered by `scoped`, confirmed one rendered result and the updated shared
+  pagination summary, then cleared the filter.
+- Activated the restored Scoped Records row chevron and confirmed navigation
+  to `/administration/modules/tessara.reference.scoped-records`.
+- Confirmed the detail route renders Definition, Lifecycle assessment,
+  Diagnostics, and Artifact provenance with equal-width parent columns and
+  side-by-side label/value rows.
+- Checked in-app Browser logs after both routes. No errors were reported; the
+  existing wasm initialization deprecation warning remains unrelated.
 
-- `docs/mockups/sprint-5a-dashboard-symbolic-builder-approved.png`
-- `docs/mockups/sprint-5a-dashboard-viewer-chrome-approved.png`
-- `docs/mockups/sprint-5a-dashboard-soft-surfaces-approved.png`
+## Follow-up Polish
 
-Implementation: `/dashboards`, `/dashboards/:dashboard_id/edit`, and `/dashboards/:dashboard_id/view`, with Forms and Components directories used as application-level comparison surfaces.
-
-Evidence: `docs/audits/sprint-5a-ui-review-2026-07-13/README.md`
-
-## Visual and interaction result
-
-The live seeded 5A deployment was reviewed in the in-app Browser at 1951 × 806 for the approved viewer comparison, at 1440 × 1000 for the minimum `6 x 4` Table treatment, and at 390 × 844 for the phone treatment. The established 1280 × 720 editor and directory surfaces were also rechecked so this viewer-only change did not remove their large outer route panels.
-
-The editor now follows a canvas-first interpretation of the approved symbolic-builder direction. The 12-column grid and symbolic placement tiles retain the established Tessara dark theme, borders, radii, spacing, typography, and teal accent vocabulary. Components open in a left shared side sheet; Placement details open in a right shared side sheet after selection. The full-width canvas no longer pays a permanent three-pane width penalty, while both secondary tasks remain directly discoverable above it.
-
-The focused viewer retains the established outer route panel by explicit product direction. Within it, charts use the approved subdued blue-to-teal rounded surface without a hard border or shadow, and each placement title is the chart title inside the reclaimed visualization area. Stat Cards have no placement chrome and keep their Component-configured semantic fill and radius. Tables now use the same subdued rounded surface without a Dashboard-specific header. The standard route-free Component Table renderer owns the optional title and `View fullscreen` action in its normal toolbar beside Reset and Columns, while preserving complete server-backed paging and bounded scrolling.
-
-The approved soft-surface reference and deployed capture were compared together at 1951 × 806, followed by a focused reference-versus-Table comparison at the same viewport. Surface color, radius, border removal, intrinsic title placement, Stat Card fill behavior, and toolbar ordering match the chosen direction; saved placement geometry intentionally determines the live composition. The outer route panel is an intentional clarification from the user rather than a visual defect. Evidence: `26-viewer-soft-chart-surfaces.png`, `27-viewer-standard-table-toolbar.png`, `28-viewer-compact-table-toolbar.png`, and `29-viewer-table-fullscreen-toolbar.png` in the audit folder.
-
-The subsequent Browser annotation was clarified after the first implementation: the requested treatment was the existing blue-to-teal gradient at 50% of its original visual strength, not a neutral overlay, and it should be shared by charts and Tables. The full-strength gradient reference, neutral-overlay intermediate state, and corrected implementation were compared at the same 1168 × 912 viewport. The final token preserves the original gradient stops and direction, mixes each resolved stop 50% with transparency, and leaves the containing element and all chart/Table content at opacity `1`. The dark computed stop alphas therefore move from approximately `0.690`/`0.783` to `0.345`/`0.391`, exactly halving the original contribution without fading SVG marks, labels, Table controls, or rows. The same token automatically follows light-theme constituent tokens and is used by all chart placements plus embedded and standard Table surfaces; Stat Cards retain their configured fill. Evidence: `36-chart-opacity-annotation-reference.png`, `40-neutral-overlay-before-gradient-correction.png`, `41-half-gradient-charts-and-tables-dark.png`, `42-half-gradient-charts-and-tables-light.png`, `44-half-gradient-inline-table-dark.png`, and `45-half-gradient-mobile-dark.png` in the audit folder.
-
-Placement height is no longer capped at six rows. A placement may use every remaining row through row 240; per-kind minimums, collision rules, the 240-row grid bound, and the 240-placement storage bound remain enforced. Repair mode can replace a malformed fallback rectangle with valid kind-conforming geometry without weakening ordinary resize validation.
-
-The Dashboard directory now matches the established Forms and Components list hierarchy: shared page header, search, semantic table, row-header link, count disclosure, compact actions, and shared pagination. Desktop actions remain visible without a horizontal-scroll detour. At narrow widths the row becomes a semantic card; name and description stack without one-character wrapping, and every action remains exposed.
-
-The final Dashboard-directory annotation identified a P2 table-geometry mismatch: the desktop Actions `<td>` was itself `display: flex`, so it no longer occupied the full table-row height and appeared as a detached field. The source state and corrected deployment were compared together at the annotated 1262 × 912 light-theme viewport. The cell now remains `display: table-cell`, exactly shares the row's top, bottom, and 67.8-pixel height, and centers a reusable inline action group containing Eye and Pencil icon links. Matching dashboard-specific accessible names and native titles preserve View/Edit meaning without visible text. The action column contracts from 22% to 16% and returns that width to the primary Dashboard column. Typography, copy, theme colors, row borders/radii, and imagery remain unchanged; the icons come from the established application icon library rather than custom assets. Dark-theme contrast and the 390 × 844 card layout were also reviewed: the mobile Actions label and 40-pixel buttons occupy the same grid row, all content stays inside the card, and page overflow remains zero. Evidence: `46-dashboard-actions-annotation-before.png`, `47-dashboard-actions-icon-row-light.png`, `48-dashboard-actions-icon-row-dark.png`, and `49-dashboard-actions-icon-row-mobile.png` in the audit folder.
-
-## Accessibility and reuse result
-
-- Shared side-sheet/modal infrastructure owns Portal placement, Escape handling, Tab trapping, background inertness, body scroll lock, nested-dialog coordination, and opener focus restoration, including conditionally unmounted sheets.
-- Dashboard scope, editor sheets, selected preview, and standard Component Table full-screen triggers expose stable dialog relationships and reactive expanded state.
-- Available Table placements pass only a route-free title/full-screen presentation policy into the shared renderer. Charts and Stat Cards ignore that policy, while unavailable placements retain generic redacted presentation without Component metadata or controls.
-- Noninteractive placement grid guides are hidden from the accessibility tree instead of announcing hundreds of decorative row/column cells.
-- Dashboard, Forms, and Workflow surfaces reuse the shared side sheet and search controls; interactive tables compose shared search and pagination primitives.
-- Keyboard close behavior and paging-state continuity were exercised in the deployed browser. No full WCAG claim is made without a dedicated screen-reader, contrast, zoom, and high-contrast-mode pass.
-
-## Validation completed
-
-- Affected native/all-feature checks, the root WASM hydration graph, strict Clippy, formatting, Tailwind compilation, and diff checks passed.
-- Focused core, Dashboard-domain, and Dashboard-web suites passed 23/23, 24/24, and 25/25; the Component viewer passed 18/18.
-- All 12 database-backed Dashboard composition/API tests passed against a disposable isolated database, including the 240-row boundary and full-height Table case.
-- The saved-viewer Table/chart/Stat presentation contract now asserts that Tables have no Dashboard placement header, that optional title/full-screen controls live in the standard toolbar, that action order is Reset -> Columns -> Fullscreen, and that fullscreen contains no nested trigger.
-- Tailwind 4.2.4 compiled the production stylesheet without unresolved imports.
-- The final release image was rebuilt and health-checked with only the Sprint 5A API and Postgres containers running.
-- Deployed desktop, minimum `6 x 4`, phone, Table, and full-screen captures plus semantic snapshots were reviewed. Column and header-filter popovers remained within the viewport and passed corner hit-testing; Escape restored focus. Fullscreen preserved page size and rows, exposed no nested trigger, and restored focus to the inline trigger. Browser output contains no runtime errors; the only message is the pre-existing WASM initialization deprecation warning.
-- The clarified shared-gradient annotation passed deployed visual and computed-style checks at 1168 × 912 in dark and light themes and at 390 × 844 in dark mode. All four chart kinds and every mounted standard/embedded Table surface use the half-strength gradient while remaining fully opaque; the phone page has no horizontal overflow and Stat Card presentation remains isolated. The intermediate neutral overlay is removed. No P0, P1, or P2 visual defects remain from this iteration.
-- The Dashboard-row action correction passed deployed light/dark visual checks, exact desktop row/cell geometry assertions at 1262 × 912, named-link and tooltip checks, and the 390 × 844 card reflow. The Dashboard crate passed 25/25 tests, the eight-scenario Dashboard Playwright file passed discovery and TypeScript transformation, and the updated native-routes scenario passed against the deployed service. No P0, P1, or P2 visual defects remain from this iteration.
-
-## Remaining non-blocking organization decisions
-
-- Sequence migration of the remaining legacy Forms, Workflow, Dataset, and Component hand-rolled sheets/modals.
-- Decide whether shared presentation primitives should also own the column selector and header filter popovers while client-backed and server-backed table state remains separate.
-- Schedule focused decomposition of the large Dashboard editor and Component viewer modules when that refactor can receive dedicated regression coverage.
-
-## Sprint 6A-UI corrective implementation QA (2026-07-17)
-
-Status: **passed**
-
-Source visual truth was the approved Direction 1 suite in
-`docs/mockups/sprint-6a-ui/direction-1/`. The implementation was inspected
-through the local deployed application at `/administration/modules`,
-`/administration/roles`, and `/administration/users` rather than through
-static markup.
-
-### Comparison evidence
-
-- Full desktop comparisons: approved assets 01, 06, and 13 alongside deployed
-  captures `tmp/design-qa-2026-07-17/21-directory-deployed-final.png`,
-  `09-composer-desktop-final.png`, and `10-role-provenance-final.png`.
-- Focused desktop checks: deployed role editor
-  `11-role-editor-final.png`, user-role assignment
-  `16-user-assignment-desktop-final.png`, and the Module Forms overview and
-  migration detail captures `02-forms-overview-desktop.png` and
-  `03-migration-overview-desktop.png`.
-- Responsive checks: 390 px captures
-  `12-directory-mobile-final.png`, `13-detail-mobile-final.png`,
-  `14-composer-mobile-final.png`, and `15-user-assignment-mobile-final.png`,
-  plus the 768 px composer capture `17-composer-tablet-final.png`.
-
-The comparison preserves approved application-level decisions: the existing
-shell/header and Tessara token palette remain, and each route retains the
-standard `<section>` panel treatment. The Direction 1 content and interaction
-contract is authoritative within that shell.
-
-### Corrective result
-
-- Module Management uses the canonical Blocks glyph in the live navigation.
-- The module directory has working case-insensitive name/ID search and
-  conjunctive status filtering, a clear-filters empty-filter state, compact
-  desktop inventory rows, and responsive mobile controls.
-- Module detail has the approved richer section selector: Overview,
-  Declarations, Contracts, Capabilities, Dependencies, Resources, Navigation,
-  and Findings.
-- The navigation composer exposes native expanded/collapsed group carets,
-  initially collapses Admin, uses lock-only protected-placement affordances,
-  and keeps the action bar from covering editable rows. Mobile and tablet
-  retain usable movement controls without horizontal overflow.
-- Roles now show an exact capability/provenance treatment. The editor presents
-  source/provenance without collisions, and user-role assignments expose role,
-  scope, assigned-on date, and details. The supporting read model supplies the
-  assigned role's derived scope mode without expanding write behavior.
-
-### Interaction, accessibility, and regression evidence
-
-- Search/status controls, tab/section selection, disclosure controls, select
-  fields, and action buttons are native interactive controls with visible
-  focus styling; no decorative replacement controls were introduced.
-- Desktop and 390/768 px checks found no horizontal page overflow in the
-  reviewed module, composer, or assignment states. Browser console error logs
-  were empty.
-- `cargo fmt --all -- --check`, `git diff --check`, Tailwind compilation,
-  `cargo check -p tessara-api -p tessara-web --all-features --locked`, focused
-  module and administration web suites, the navigation-policy suite, and the
-  affected API DTO test passed. The narrow read-model evidence is recorded in
-  `docs/sprints/sprint-6a-ui-test-change-log.md`; durable tests remain proof
-  of correctness and were not weakened.
-
-### P0/P1/P2 comparison history
-
-- P0: none found.
-- P1: resolved the former role-editor text collision and composer action-bar
-  overlap before the final capture pass.
-- P2: resolved missing composer carets, protected-placement label noise,
-  absent detail grouping, missing assignment metadata, and directory density.
-  The final directory pass keeps stable ID/digest evidence on a shared metadata
-  line so the authorized inventory remains visible above the fold.
-
-No P0, P1, or P2 visual defects remain. Minor visual differences limited to
-the pre-existing shell/header hierarchy and palette are intentionally retained
-by product direction.
+- None required for this annotation set.
 
 final result: passed

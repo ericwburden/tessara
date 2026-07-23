@@ -6,6 +6,7 @@
 
 mod api;
 mod bootstrap;
+mod deployment;
 mod detail;
 mod directory;
 mod models;

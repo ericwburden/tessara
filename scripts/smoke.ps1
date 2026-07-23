@@ -416,7 +416,7 @@ try {
     $modulesShell = Invoke-Html -Uri "$baseUrl/administration/modules" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $modulesShell -Needles @(
         "Module inventory",
-        "7 definitions",
+        "definitions",
         "Transitional — not independently deployable",
         "No Module Release",
         "No Module Instance",
@@ -449,8 +449,9 @@ try {
     Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$login.token)
     $headers = @{ Authorization = "Bearer $($login.token)" }
     $moduleInventory = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/modules" -Headers $headers
-    if ($moduleInventory.schema_version -ne 1 -or @($moduleInventory.entries).Count -ne 7) {
-        throw "Smoke failure: Module inventory did not expose schema v1 with exactly seven transition contributions"
+    $transitionEntries = @($moduleInventory.entries | Where-Object { $_.kind -eq "transitional_in_process" })
+    if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne 7) {
+        throw "Smoke failure: Module inventory did not preserve the seven transition contributions alongside real modules"
     }
     $migrationContribution = $moduleInventory.entries | Where-Object {
         $_.descriptor.reserved_definition_id -eq "tessara.migration"

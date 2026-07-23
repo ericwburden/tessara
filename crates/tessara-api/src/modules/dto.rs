@@ -4,7 +4,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tessara_module_contract::{
-    ResourceOwner, ResourceTypeId, SemanticDestination, TypedResourceReference,
+    DeploymentReceiptV1, ResourceOwner, ResourceTypeId, SemanticDestination, TypedResourceReference,
+};
+pub(crate) use tessara_module_contract::{
+    IndependentConfigurationV1, IndependentDefinitionV1, IndependentDiagnosticsV1,
+    IndependentInstanceV1, IndependentReleaseV1,
 };
 use uuid::Uuid;
 
@@ -17,6 +21,8 @@ pub(crate) struct ModuleInventoryResponseV1 {
     pub(crate) installation: ApplicationInstallationV1,
     pub(crate) core_runtime: CoreRuntimeObservationV1,
     pub(crate) entries: Vec<Value>,
+    pub(crate) deployment: Option<DeploymentReceiptV1>,
+    pub(crate) deployment_history: Vec<DeploymentReceiptV1>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -31,6 +37,19 @@ pub(crate) struct CoreRuntimeObservationV1 {
     pub(crate) observed_version: String,
     pub(crate) finding_code: String,
     pub(crate) observed_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub(crate) enum IndependentModuleEntryV1 {
+    IndependentlyDeployed {
+        definition: IndependentDefinitionV1,
+        release: IndependentReleaseV1,
+        instance: IndependentInstanceV1,
+        configuration: IndependentConfigurationV1,
+        diagnostics: IndependentDiagnosticsV1,
+        findings: Vec<Value>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize)]

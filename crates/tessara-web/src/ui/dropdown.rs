@@ -23,7 +23,11 @@ fn scroll_app_main_by(delta_y: f64) {
 }
 
 #[component]
-pub fn DropdownMenu(#[prop(into)] label: String, children: Children) -> impl IntoView {
+pub fn DropdownMenu(
+    #[prop(into)] label: String,
+    #[prop(optional)] trigger_icon: Option<AnyView>,
+    children: Children,
+) -> impl IntoView {
     let is_open = RwSignal::new(false);
     let menu_class = move || {
         if is_open.get() {
@@ -45,7 +49,9 @@ pub fn DropdownMenu(#[prop(into)] label: String, children: Children) -> impl Int
                 on:click=move |_| is_open.update(|open| *open = !*open)
             >
                 <span aria-hidden="true">
-                    <Ellipsis class="icon-button__icon"/>
+                    {trigger_icon.unwrap_or_else(|| {
+                        view! { <Ellipsis class="icon-button__icon"/> }.into_any()
+                    })}
                 </span>
             </button>
             <button

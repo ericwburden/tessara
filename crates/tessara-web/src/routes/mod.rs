@@ -9,6 +9,7 @@ pub mod datasets;
 pub mod forms;
 pub mod home;
 pub mod login;
+pub mod module_unavailable;
 pub mod not_found;
 pub mod operations;
 pub mod organization;
@@ -25,6 +26,7 @@ pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
     (
         home::home_routes(),
         login::login_routes(),
+        module_unavailable::module_unavailable_routes(),
         organization::organization_routes(),
         forms::form_routes(),
         workflows::workflow_routes(),

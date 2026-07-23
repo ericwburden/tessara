@@ -1572,6 +1572,10 @@ Before adding or designing a UI element, engineers MUST check whether Rust/UI al
 
 New page components SHOULD default to reusable shared primitives instead of one-off route markup, especially for page structure, navigation aids, overlays, controls, data display, forms, and status feedback. Before introducing a route-local component, review existing shared primitives for a small extension that would cover the need cleanly. If it is unclear whether a new component should be reusable, ask before committing to route-local markup.
 
+Parameterized routes MUST use one shared page structure and styling contract for every record resolved by that route. For example, `/route/to/A` and `/route/to/B` must render the same page component populated by different data; record kind, lifecycle state, ownership, or source must not select a parallel page implementation. Differences belong in typed data, optional sections, explicit empty states, and shared component variants. A materially different workflow requires a distinct route and a documented product or architecture exception.
+
+The same source fact MUST have one authoritative semantic projection for the UI. Desktop, mobile, directory, detail, summary, and history views may format that projection differently, but they must not independently re-derive lifecycle or status meaning from the same raw fields. Shared route view models or domain projection methods should own labels, badges, availability decisions, and other derived state.
+
 When in doubt, favor:
 
 - calmer surfaces over decorative styling

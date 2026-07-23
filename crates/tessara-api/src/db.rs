@@ -113,14 +113,60 @@ pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
         .connect(&config.database_url)
         .await?;
 
-    Migrator::new(migrations_dir().as_path())
-        .await?
-        .run(&pool)
-        .await?;
-    seed_dev_admin(&pool, config).await?;
-    modules::synchronize_catalog(&pool).await?;
+    let skip_prepare = std::env::var("TESSARA_SKIP_PREPARE")
+        .is_ok_and(|value| value.eq_ignore_ascii_case("true") || value == "1");
+    if !skip_prepare {
+        Migrator::new(migrations_dir().as_path())
+            .await?
+            .run(&pool)
+            .await?;
+        if let Ok(runtime_role) = std::env::var("TESSARA_RUNTIME_DATABASE_ROLE") {
+            grant_runtime_privileges(&pool, &runtime_role).await?;
+        }
+        seed_dev_admin(&pool, config).await?;
+        modules::synchronize_catalog(&pool).await?;
+    }
 
     Ok(pool)
+}
+
+async fn grant_runtime_privileges(pool: &PgPool, runtime_role: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !runtime_role.is_empty()
+            && runtime_role.len() <= 63
+            && runtime_role
+                .chars()
+                .all(|character| character.is_ascii_lowercase()
+                    || character.is_ascii_digit()
+                    || character == '_'),
+        "TESSARA_RUNTIME_DATABASE_ROLE must be a lower-case PostgreSQL identifier"
+    );
+    let schemas = sqlx::query_scalar::<_, String>(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name <> 'information_schema' AND schema_name NOT LIKE 'pg_%' ORDER BY schema_name",
+    )
+    .fetch_all(pool)
+    .await?;
+    for schema in schemas {
+        let schema = schema.replace('"', "\"\"");
+        for statement in [
+            format!("GRANT USAGE ON SCHEMA \"{schema}\" TO {runtime_role}"),
+            format!(
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO {runtime_role}"
+            ),
+            format!(
+                "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"{schema}\" TO {runtime_role}"
+            ),
+            format!(
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA \"{schema}\" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {runtime_role}"
+            ),
+            format!(
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA \"{schema}\" GRANT USAGE, SELECT ON SEQUENCES TO {runtime_role}"
+            ),
+        ] {
+            sqlx::query(&statement).execute(pool).await?;
+        }
+    }
+    Ok(())
 }
 
 fn migrations_dir() -> PathBuf {

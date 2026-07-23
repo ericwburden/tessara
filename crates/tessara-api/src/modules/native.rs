@@ -165,14 +165,27 @@ async fn detail_bootstrap(
     let Some(entry) = inventory
         .transitions
         .into_iter()
-        .find(|entry| entry.definition_id == definition_id)
+        .map(|entry| entry.normalized_projection)
+        .chain(
+            inventory
+                .modules
+                .into_iter()
+                .map(super::routes::independent_entry_value),
+        )
+        .find(|entry| {
+            entry
+                .pointer("/descriptor/reserved_definition_id")
+                .or_else(|| entry.pointer("/definition/id"))
+                .and_then(|value| value.as_str())
+                == Some(definition_id)
+        })
     else {
         return tessara_web::ModuleManagementRouteBootstrapV1::not_found(definition_id);
     };
     let detail = ModuleDetailResponseV1 {
         schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
         installation_id,
-        entry: entry.normalized_projection,
+        entry,
     };
     let detail = match web_projection(detail) {
         Ok(detail) => detail,
