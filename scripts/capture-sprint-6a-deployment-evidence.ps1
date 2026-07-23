@@ -6,6 +6,7 @@ param(
     [string]$AdminEmail = "admin@tessara.local",
     [string]$AdminPassword = "tessara-dev-admin",
     [string]$ApiContainerId,
+    [string]$GatewayContainerId,
     [string]$DatabaseContainerId,
     [switch]$Overwrite,
     [switch]$SelfTest
@@ -437,6 +438,7 @@ $snapshot = Get-Sprint6ADeploymentSnapshot `
     -AdminEmail $AdminEmail `
     -AdminPassword $AdminPassword `
     -ApiContainerId $ApiContainerId `
+    -GatewayContainerId $GatewayContainerId `
     -DatabaseContainerId $DatabaseContainerId
 if ([string]$snapshot.data.state -cne $ExpectedDataState) {
     throw "The database-derived data state is '$($snapshot.data.state)', not requested '$ExpectedDataState'."

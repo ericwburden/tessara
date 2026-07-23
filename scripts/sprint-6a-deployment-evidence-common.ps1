@@ -531,6 +531,7 @@ function Get-Sprint6ADeploymentSnapshot {
         [string]$AdminEmail = "admin@tessara.local",
         [string]$AdminPassword = "tessara-dev-admin",
         [string]$ApiContainerId,
+        [string]$GatewayContainerId,
         [string]$DatabaseContainerId
     )
 
@@ -564,9 +565,28 @@ function Get-Sprint6ADeploymentSnapshot {
         throw "Sprint 6A deployment evidence requires running API and database containers."
     }
     $apiPortBindings = @($apiInspect.NetworkSettings.Ports."8080/tcp")
-    $apiPublishedPorts = @($apiPortBindings.HostPort | Sort-Object -Unique)
+    $apiPublishedPorts = @($apiPortBindings | ForEach-Object { $_.HostPort } | Sort-Object -Unique)
+    $publishedBaseUrlContainerId = [string]$apiInspect.Id
     if ($apiPublishedPorts.Count -ne 1 -or [int]$apiPublishedPorts[0] -ne $baseUri.Port) {
-        throw "The live BaseUrl port is not the unique published port of the inspected API container's port 8080."
+        if ([string]::IsNullOrWhiteSpace($GatewayContainerId)) {
+            throw "The live BaseUrl port is not published by the inspected API container and no gateway container was supplied."
+        }
+        $gatewayInspect = Get-Sprint6AContainerInspect -ContainerId $GatewayContainerId -Context "gateway"
+        if (-not [bool]$gatewayInspect.State.Running) {
+            throw "Sprint 6A deployment evidence requires the supplied gateway container to be running."
+        }
+        $gatewayPortBindings = @($gatewayInspect.NetworkSettings.Ports."8080/tcp")
+        $gatewayPublishedPorts = @($gatewayPortBindings | ForEach-Object { $_.HostPort } | Sort-Object -Unique)
+        $apiGatewayNetworks = @(
+            $apiInspect.NetworkSettings.Networks.PSObject.Properties.Name |
+                Where-Object { $gatewayInspect.NetworkSettings.Networks.PSObject.Properties.Name -contains $_ }
+        )
+        if ($gatewayPublishedPorts.Count -ne 1 -or
+            [int]$gatewayPublishedPorts[0] -ne $baseUri.Port -or
+            $apiGatewayNetworks.Count -lt 1) {
+            throw "The supplied gateway does not uniquely publish the live BaseUrl port or share a network with the API container."
+        }
+        $publishedBaseUrlContainerId = [string]$gatewayInspect.Id
     }
     $imageInspect = Get-Sprint6AImageInspect -ImageId ([string]$apiInspect.Image)
     $labels = $imageInspect.Config.Labels
@@ -744,6 +764,7 @@ function Get-Sprint6ADeploymentSnapshot {
         }
         release_image = [pscustomobject][ordered]@{
             api_container_id = [string]$apiInspect.Id
+            published_base_url_container_id = $publishedBaseUrlContainerId
             published_base_url_port = [int]$baseUri.Port
             image_id = [string]$imageInspect.Id
             image_reference = [string]$apiInspect.Config.Image
@@ -881,6 +902,7 @@ function Assert-Sprint6ADeploymentEvidence {
         -AdminEmail $AdminEmail `
         -AdminPassword $AdminPassword `
         -ApiContainerId ([string]$evidence.snapshot.release_image.api_container_id) `
+        -GatewayContainerId ([string]$evidence.snapshot.release_image.published_base_url_container_id) `
         -DatabaseContainerId ([string]$evidence.snapshot.database_runtime.container_id)
     $retainedJson = $evidence.snapshot | ConvertTo-Json -Depth 30 -Compress
     $liveJson = $liveSnapshot | ConvertTo-Json -Depth 30 -Compress
