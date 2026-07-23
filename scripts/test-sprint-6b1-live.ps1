@@ -13,12 +13,12 @@ function Invoke-Compose([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "docker compose $($Arguments -join ' ') failed" }
 }
 
-function Write-Deployment([int]$Revision, [string]$Version, [string]$ManifestCharacter, [string]$RuntimeCharacter, [string]$InstallationId) {
+function Write-Deployment([int]$Revision, [string]$Version, [string]$ManifestDigest, [string]$RuntimeCharacter, [string]$InstallationId) {
     $desired = Get-Content -Raw (Join-Path $fixtureRoot "deployment-v1.json") | ConvertFrom-Json
     $desired.installation_id = $InstallationId
     $desired.revision = $Revision
     $desired.modules[0].version = $Version
-    $desired.modules[0].manifest_digest = "sha256:" + ($ManifestCharacter * 64)
+    $desired.modules[0].manifest_digest = $ManifestDigest
     $desired.modules[0].runtime_image = "sha256:" + ($RuntimeCharacter * 64)
     $desired.modules[0].manifest.release_version = $Version
     $desired.modules[0].manifest.deployment.declaration.runtime_image.digest = $desired.modules[0].runtime_image
@@ -45,7 +45,7 @@ try {
     $installationId = (& docker compose -f $composeFile exec -T postgres psql -U tessara_bootstrap -d tessara_core -Atc "SELECT id FROM application_installations WHERE singleton").Trim()
     if ($LASTEXITCODE -ne 0 -or -not $installationId) { throw "installation identity lookup failed" }
 
-    $v1 = Write-Deployment 1 "1.0.0" "c" "d" $installationId
+    $v1 = Write-Deployment 1 "1.0.0" "sha256:7a4514b6e5a00b93a517fd09f9e2662526b53c3d4cf363b115034ef096f59175" "d" $installationId
     $plan1 = Join-Path $working "plan-1.json"
     $receipt1 = Join-Path $working "receipt-1.json"
     foreach ($path in @($plan1, $receipt1)) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } }
@@ -54,7 +54,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "initial live apply failed" }
     $first = Get-Content -Raw $receipt1 | ConvertFrom-Json
 
-    $v2 = Write-Deployment 2 "1.1.0" "e" "f" $installationId
+    $v2 = Write-Deployment 2 "1.1.0" "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" "f" $installationId
     $plan2 = Join-Path $working "plan-2.json"
     $receipt2 = Join-Path $working "receipt-2.json"
     Copy-Item -LiteralPath $receipt1 -Destination $receipt2 -Force
