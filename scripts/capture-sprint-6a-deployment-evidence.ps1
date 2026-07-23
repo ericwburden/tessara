@@ -253,7 +253,7 @@ if ($SelfTest) {
         [pscustomobject]@{ definition_id = $_.definition_id; source_digest = $_.source_digest }
     })
     $catalog = [pscustomobject]@{
-        definition_count = 7
+        definition_count = 8
         source_count = 7
         projection_count = 7
         current_count = 7
