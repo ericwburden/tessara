@@ -447,10 +447,8 @@ function Assert-Sprint6ACatalog {
         [int]$DatabaseCatalog.current_count -ne 7 -or
         [int]$DatabaseCatalog.navigation_contribution_count -ne 6 -or
         [int]$DatabaseCatalog.navigation_policy_count -ne 1 -or
-        @($DatabaseCatalog.policy_entries).Count -ne 6 -or
-        -not [bool]$DatabaseCatalog.release_table_absent -or
-        -not [bool]$DatabaseCatalog.instance_table_absent) {
-        throw "The live database does not expose the exact Sprint 6A transition-only installation/catalog shape."
+        @($DatabaseCatalog.policy_entries).Count -ne 6) {
+        throw "The live database does not expose the exact Sprint 6A transition catalog shape."
     }
     if ([int]$Inventory.schema_version -ne 1) {
         throw "The live module inventory API did not expose schema version 1."
