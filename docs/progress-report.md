@@ -38,6 +38,207 @@ project direction.
 - Next Sprint: Sprint 6D - Application Blueprint And Composition Automation
   Slice.
 
+### Sprint Handoff / Demo Instructions
+
+#### Independent Dashboard Authoring And Viewing
+
+- Role: `admin`
+- Paths:
+  - `http://localhost:8080/dashboards`
+  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205`
+  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205/edit`
+  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205/view`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open **Dashboards**, then open **Demo Operations Dashboard**.
+  3. Visit Detail, Editor, and Viewer; select a placement in the editor and
+     use the placement controls.
+  4. Save the unchanged layout and refresh the viewer.
+- Expected:
+  - All pages remain in the normal Tessara shell and use the existing
+    same-origin URLs.
+  - The Dashboard shows nine placements and the administrator retains the
+    edit affordance.
+- Acceptance check:
+  - Pass when the same Dashboard identity and nine-placement composition
+    survive refresh and the normal directory/detail/editor/viewer flow.
+- Evidence location:
+  - `artifacts/sprint-6c-closeout/smoke-fresh.json`
+  - `artifacts/sprint-6c-closeout/uat-fresh.json`
+  - Dashboard cases in `playwright-acceptance-fresh.json`
+
+#### Module Management And Isolated Operations
+
+- Role: `admin`
+- Paths:
+  - `http://localhost:8080/administration/modules`
+  - `http://localhost:8080/administration/modules/tessara.dashboards`
+- Steps:
+  1. Open Module Management and select **Dashboards**.
+  2. Inspect its independently deployed status, release, instance, database,
+     configuration, health/readiness routes, diagnostics, capabilities,
+     navigation, and Components dependency binding.
+  3. Confirm the diagnostics identify Sprint 8A as the transition-binding
+     migration target.
+- Expected:
+  - Dashboard appears once as an independently deployed module, replacing its
+    transition inventory row without changing unrelated contributions.
+- Acceptance check:
+  - Pass when the module is healthy/enabled, its manifest and deployment
+    projections agree, and no Dashboard product data is exposed in Core
+    administration.
+- Evidence location:
+  - `artifacts/sprint-6c-closeout/deployment-fresh.json`
+  - Module Management cases in `playwright-acceptance-fresh.json`
+  - `scripts/verify-sprint-6c-isolation.ps1`
+
+#### Scoped Access And Nondisclosure
+
+- Role: constrained non-admin actor created by the permissions acceptance
+  fixture; the scripted walkthrough is authoritative because the actor and
+  disjoint Organization scopes are deliberately ephemeral.
+- Paths:
+  - `/api/dashboards`
+  - `/api/dashboards/{dashboard_id}`
+  - `/dashboards/{dashboard_id}/view`
+- Steps:
+  1. Assign Dashboard authority over Organization subtree A and Component
+     authority over disjoint subtree B.
+  2. Compare known and random out-of-scope ComponentVersion references.
+  3. Open an authorized Dashboard containing a restricted placement.
+- Expected:
+  - The actor sees only authorized Dashboards. Both known and random
+    unauthorized references collapse to the same nondisclosing result; the
+    viewer retains only a redacted footprint and never executes hidden data.
+- Acceptance check:
+  - Pass when no identity, lifecycle, metadata, or rendered content leaks.
+- Evidence location:
+  - Permissions cases in
+    `artifacts/sprint-6c-closeout/playwright-acceptance-fresh.json`
+  - Module-contract and Core adapter tests recorded in
+    `docs/sprints/sprint-6c-verification.md`
+
+#### Components Provider Degradation
+
+- Role: `admin`
+- Paths:
+  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205/edit`
+- Steps:
+  1. Recreate Core with
+     `TESSARA_COMPONENTS_PROVIDER_STATE=unavailable`.
+  2. Open the seeded Dashboard editor.
+  3. Activate the warning icon on **Partner Profile**.
+  4. Review the placement-issue side sheet and select **Retry resolution**.
+  5. Restore `TESSARA_COMPONENTS_PROVIDER_STATE=available`.
+- Expected:
+  - Each affected tile retains its saved title, uses full-panel warning
+    coloring, and shows one prominent warning icon with no inline diagnostic
+    copy.
+  - The side sheet contains the complete message, a large centered icon, and
+    a semantic retry button.
+- Acceptance check:
+  - Pass when retry re-resolves the same nine saved footprints without
+    changing the Dashboard or making Core unavailable.
+- Evidence location:
+  - `artifacts/sprint-6c-closeout/browser-outage-responsive-fresh.json`
+  - Dashboard module/web resolution and degraded-editor tests
+
+#### Dashboard Process Outage And Recovery
+
+- Role: `admin`
+- Paths:
+  - `http://localhost:8080/dashboards`
+  - `http://localhost:8080/administration/modules/tessara.dashboards#diagnostics`
+  - `http://localhost:8080/reference/scoped-records`
+- Steps:
+  1. Run
+     `docker compose -f deploy/sprint-6c/compose.yaml stop dashboards`.
+  2. Open **Dashboards**, Module diagnostics, and Scoped Records.
+  3. Run
+     `docker compose -f deploy/sprint-6c/compose.yaml start dashboards`.
+  4. Reopen the seeded Dashboard.
+- Expected:
+  - Dashboard routes show the authenticated Core-shell fallback; Module
+    Management and Scoped Records remain usable.
+  - Recovery restores the same Dashboard ID, nine placements, and manage
+    affordance.
+- Acceptance check:
+  - Pass when there is no raw gateway failure, unrelated modules remain
+    available, and Dashboard data survives the process restart.
+- Evidence location:
+  - `artifacts/sprint-6c-closeout/browser-outage-responsive-fresh.json`
+
+#### Responsive Placement-Issue Sheet
+
+- Role: `admin`
+- Path:
+  - seeded Dashboard editor above
+- Steps:
+  1. Degrade the Components provider and open a placement issue.
+  2. Set the viewport to 390 by 844 pixels.
+  3. Inspect the warning icon, diagnostic copy, and retry action.
+- Expected:
+  - The sheet fills the 390-pixel viewport without horizontal overflow; the
+    96-by-96-pixel icon stays centered and retry remains visible.
+- Acceptance check:
+  - Pass when document/body scroll width remains 390 pixels.
+- Evidence location:
+  - `artifacts/sprint-6c-closeout/browser-outage-responsive-fresh.json`
+
+### Acceptance Mapping
+
+1. Separate Dashboard process, database, identities, manifest, configuration,
+   health/readiness, API, and native UI:
+   - Manual: **Independent Dashboard Authoring And Viewing** and **Module
+     Management And Isolated Operations**.
+   - Automated: deployment evidence, module inventory Playwright cases, and
+     Dashboard module integration tests.
+2. Dashboard credentials cannot read another database:
+   - Manual: inspect the module database projection in **Module Management And
+     Isolated Operations**.
+   - Automated: `scripts/verify-sprint-6c-isolation.ps1`.
+3. Placements use typed references without relational Core dependency:
+   - Manual: inspect the Components binding and Dashboard diagnostics.
+   - Automated: fresh-baseline/repository tests and the zero-Dashboard-table
+     Core baseline check.
+4. The Components adapter is versioned, action-bound, transition-only, and
+   marked for Sprint 8A:
+   - Manual: **Module Management And Isolated Operations**.
+   - Automated: manifest, contract, and adapter tests.
+5. Downstream grants bind actor, service, installation, audience, action,
+   scope, revisions, expiry, and replay:
+   - Manual: **Scoped Access And Nondisclosure**.
+   - Automated: module-contract protocol tests and Core gateway tests.
+6. Unauthorized resolution is nondisclosing and authorized resolution
+   distinguishes every required state:
+   - Manual: **Scoped Access And Nondisclosure** and **Components Provider
+     Degradation**.
+   - Automated: permissions Playwright cases plus the nine-state matrix in
+     `browser-outage-responsive-fresh.json`.
+7. Sprint 5A directory/create/detail/editor/viewer behavior is preserved:
+   - Manual: **Independent Dashboard Authoring And Viewing**.
+   - Automated: smoke, UAT, and all Dashboard Playwright cases.
+8. Configuration/diagnostics remain in Core administration without Core
+   product-data access:
+   - Manual: **Module Management And Isolated Operations**.
+   - Automated: module inventory tests and database-isolation script.
+9. Dashboard and Components outages are contained:
+   - Manual: **Components Provider Degradation** and **Dashboard Process
+     Outage And Recovery**.
+   - Automated: outage/module/web tests and retained browser evidence.
+10. Fresh seed/bootstrap is deterministic and idempotent with expected
+    one-row ledgers:
+    - Manual: rerun `scripts/bootstrap-sprint-6c-deployment.ps1`.
+    - Automated: retained deployment/smoke/UAT records and repeated bootstrap
+      revision-1 proof.
+11. Contract, permission, outage, isolation, API, SSR, responsive, smoke,
+    UAT, and Playwright checks pass on exact clean source:
+    - Manual: **Responsive Placement-Issue Sheet** and the complete handoff
+      walkthrough.
+    - Automated: `docs/sprints/sprint-6c-verification.md` and every artifact
+      under `artifacts/sprint-6c-closeout/`, all bound to implementation and
+      evidence commit `cc7e44fbcead3016b7556eab6e7d9370e11a7999`.
+
 ## 2026-07-25 - Sprint 6C Kickoff
 
 - Kickoff status: started the roadmap-selected Independently Deployed
