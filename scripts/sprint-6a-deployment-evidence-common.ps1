@@ -463,15 +463,36 @@ function Assert-Sprint6ACatalog {
                 source_digest = [string]$_.source_digest
             }
         } | Sort-Object definition_id)
-    if (($databaseEntries.definition_id -join ",") -cne ($script:Sprint6AExpectedDefinitions -join ",") -or
-        ($apiEntries.definition_id -join ",") -cne ($script:Sprint6AExpectedDefinitions -join ",")) {
-        throw "The live database/API catalog identities differ from the exact seven Sprint 6A transition definitions."
+    if (($databaseEntries.definition_id -join ",") -cne ($script:Sprint6AExpectedDefinitions -join ",")) {
+        throw "The live database catalog identities differ from the exact seven Sprint 6A transition definitions."
     }
     for ($index = 0; $index -lt 7; $index++) {
-        if ([string]$databaseEntries[$index].source_digest -cne [string]$apiEntries[$index].source_digest -or
-            [string]$databaseEntries[$index].source_digest -cne [string]$expectedEntriesSorted[$index].source_digest -or
+        if ([string]$databaseEntries[$index].source_digest -cne [string]$expectedEntriesSorted[$index].source_digest -or
             [string]$databaseEntries[$index].definition_id -cne [string]$expectedEntriesSorted[$index].definition_id) {
-            throw "Catalog source provenance differs from the immutable repository fixture, live database, or API for '$($databaseEntries[$index].definition_id)'."
+            throw "Catalog source provenance differs from the immutable repository fixture or live database for '$($databaseEntries[$index].definition_id)'."
+        }
+    }
+    foreach ($apiEntry in $apiEntries) {
+        $expectedEntry = @($expectedEntriesSorted | Where-Object {
+            [string]$_.definition_id -ceq [string]$apiEntry.definition_id
+        })
+        if ($expectedEntry.Count -ne 1 -or
+            [string]$apiEntry.source_digest -cne [string]$expectedEntry[0].source_digest) {
+            throw "The live API transition catalog contains an unexpected identity or source digest for '$($apiEntry.definition_id)'."
+        }
+    }
+    $apiTransitionDefinitions = @($apiEntries.definition_id)
+    $replacedDefinitions = @($script:Sprint6AExpectedDefinitions | Where-Object {
+        $apiTransitionDefinitions -cnotcontains $_
+    })
+    foreach ($definitionId in $replacedDefinitions) {
+        $replacement = @($Inventory.entries | Where-Object {
+            [string]$_.kind -ceq "independently_deployed" -and
+            [string]$_.definition.id -ceq $definitionId -and
+            [string]$_.manifest.definition_id -ceq $definitionId
+        })
+        if ($replacement.Count -ne 1) {
+            throw "Transition definition '$definitionId' is absent from the live API without one independently deployed replacement."
         }
     }
     $databaseEntries
