@@ -8,6 +8,7 @@ members = [
     "crates/tessara-deploy",
     "crates/tessara-datasets",
     "crates/tessara-dashboards",
+    "crates/tessara-dashboard-module",
     "crates/tessara-db",
     "crates/tessara-forms",
     "crates/tessara-hierarchy",
