@@ -17,6 +17,8 @@ use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::PurposeBoundVerifyingKeyV1;
 use uuid::Uuid;
 
+mod product;
+
 pub const MODULE_DEFINITION_ID: &str = "tessara.dashboards";
 pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
@@ -129,6 +131,7 @@ pub fn router(state: DashboardModuleState) -> Router {
             get(get_configuration).put(put_configuration),
         )
         .route("/api/private/security-state", put(update_security_state))
+        .merge(product::routes())
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
         .route("/api/diagnostics", get(diagnostics))
@@ -311,6 +314,12 @@ pub enum DashboardModuleError {
     BadRequest(String),
     #[error("forbidden")]
     Forbidden,
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("conflict: {0}")]
+    Conflict(String),
+    #[error("unavailable: {0}")]
+    Unavailable(String),
     #[error(transparent)]
     Database(#[from] sqlx::Error),
 }
@@ -320,6 +329,9 @@ impl axum::response::IntoResponse for DashboardModuleError {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden".into()),
+            Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
+            Self::Conflict(message) => (StatusCode::CONFLICT, message),
+            Self::Unavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
             Self::Database(error) => {
                 tracing::error!(%error, "Dashboard module database error");
                 (
