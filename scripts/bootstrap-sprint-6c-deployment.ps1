@@ -39,6 +39,9 @@ if ([int64]$existingRevision -gt 0) {
 $desired = Get-Content -LiteralPath $fixturePath -Raw | ConvertFrom-Json
 $manifest = Get-Content -LiteralPath $dashboardManifestPath -Raw | ConvertFrom-Json
 $dashboardImageId = (& docker compose -f $composePath images -q dashboards).Trim()
+if ($dashboardImageId -match "^[0-9a-f]{64}$") {
+    $dashboardImageId = "sha256:$dashboardImageId"
+}
 if ($LASTEXITCODE -ne 0 -or $dashboardImageId -notmatch "^sha256:[0-9a-f]{64}$") {
     throw "The Sprint 6C Dashboard image is not available as an immutable image ID."
 }
