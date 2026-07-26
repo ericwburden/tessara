@@ -7,4 +7,5 @@ edition = "2024"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-core = { path = "../tessara-core" }
+tessara-module-contract = { path = "../tessara-module-contract" }
 thiserror = { workspace = true }

@@ -4658,6 +4658,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tessara-core",
+ "tessara-module-contract",
  "thiserror 2.0.18",
 ]
 
