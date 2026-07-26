@@ -489,7 +489,13 @@ async fn seeded_admin_is_a_global_admin_all_sentinel_with_effective_product_and_
     assert_eq!(session["account"]["capabilities"], json!(["admin:all"]));
     assert_eq!(
         session["account"]["global_capabilities"],
-        json!(["admin:all"])
+        json!([
+            "admin:all",
+            "hierarchy:manage",
+            "hierarchy:read",
+            "modules:manage_navigation",
+            "modules:read"
+        ])
     );
 
     request_json(

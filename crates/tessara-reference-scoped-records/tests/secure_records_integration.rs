@@ -13,7 +13,9 @@ use tessara_module_contract::{
     PurposeBoundSigningKeyV1, SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1,
     ShellThemeV1,
 };
-use tessara_reference_scoped_records::{MANAGE_CAPABILITY, ModuleState, READ_CAPABILITY, router};
+use tessara_reference_scoped_records::{
+    MANAGE_CAPABILITY, ModuleState, OrganizationAccessProjectionV1, READ_CAPABILITY, router,
+};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -93,6 +95,26 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
         })
         .unwrap();
     let shell_header = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&shell).unwrap());
+    let shell_owner = Uuid::new_v4();
+    let shell_grant = signed_grant(
+        &signer,
+        installation_id,
+        module_instance_id,
+        actor_id,
+        Uuid::new_v4(),
+        "records.list",
+        AuthorizationGrantOperationV1::Read,
+        READ_CAPABILITY,
+        shell_owner,
+    );
+    let shell_organizations = URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&vec![OrganizationAccessProjectionV1 {
+            organization_id: shell_owner,
+            label: "Shell Test Organization".into(),
+            can_manage: false,
+        }])
+        .unwrap(),
+    );
     let shell_response = app
         .clone()
         .oneshot(
@@ -100,6 +122,8 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
                 .uri("/")
                 .header("x-tessara-shell-context", shell_header)
                 .header("x-tessara-correlation-id", correlation_id.to_string())
+                .header("x-tessara-authorization", shell_grant)
+                .header("x-tessara-organization-access", shell_organizations)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -120,7 +144,11 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
         .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
-    assert_eq!(direct_page.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        direct_page.status(),
+        StatusCode::NOT_FOUND,
+        "direct module access must not disclose whether a product route exists"
+    );
     let configuration_body = json!({"schema_version": 1, "display_label": "  Regional Records  "});
     let public_configuration = app
         .clone()
