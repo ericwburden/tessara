@@ -96,6 +96,7 @@ services:
       TESSARA_INSTALLATION_CONTROL_SHARED_KEY: ${TESSARA_INSTALLATION_CONTROL_SHARED_KEY:-development-installation-control-only}
       TESSARA_SCOPED_RECORDS_URL: http://scoped-records:8090
       TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+      TESSARA_DEPLOY_TOKEN: ${TESSARA_DEPLOY_TOKEN:-local-deploy-import-token}
     depends_on:
       core-migrate: { condition: service_completed_successfully }
       installation-control: { condition: service_started }
