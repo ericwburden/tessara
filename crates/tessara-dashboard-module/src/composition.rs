@@ -33,7 +33,10 @@ use uuid::Uuid;
 
 use crate::{
     DashboardModuleError, DashboardModuleState, MANAGE_CAPABILITY,
-    product::{DashboardSummaryV1, authorize, authorized_organizations, get_dashboard_summary},
+    product::{
+        DashboardIdResponseV1, DashboardSummaryV1, authorize, authorized_organizations,
+        get_dashboard_summary, load_mutation_replay, mutation_digest, record_mutation_replay,
+    },
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -98,7 +101,7 @@ pub struct DashboardPlacementIdMappingV1 {
     pub placement_id: Uuid,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct DashboardPlacementGeometryV1 {
     pub grid_row: i32,
     pub grid_column: i32,
@@ -106,7 +109,7 @@ pub struct DashboardPlacementGeometryV1 {
     pub grid_height: i32,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DashboardCompositionCommandV1 {
     Retain {
@@ -132,7 +135,7 @@ pub enum DashboardCompositionCommandV1 {
     },
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReconcileDashboardCompositionRequestV1 {
     #[serde(default)]
@@ -265,6 +268,12 @@ async fn reconcile_composition(
         tessara_module_contract::AuthorizationGrantOperationV1::Mutation,
     )
     .await?;
+    let idempotency_key = mutation_idempotency_key(&headers)?;
+    let payload_digest = mutation_digest(
+        "dashboards.reconcile_composition",
+        Some(dashboard_id),
+        &input,
+    )?;
     let manage_scope = authorized_organizations(&grant.payload, MANAGE_CAPABILITY);
     let dashboard_scope = load_dashboard_scope(&state, dashboard_id).await?;
     if dashboard_scope.is_empty()
@@ -498,6 +507,27 @@ async fn reconcile_composition(
         .collect::<BTreeMap<_, _>>();
 
     let mut tx = state.pool.begin().await?;
+    if load_mutation_replay(
+        &mut tx,
+        &grant.payload,
+        "dashboards.reconcile_composition",
+        idempotency_key,
+        &payload_digest,
+    )
+    .await?
+    .is_some()
+    {
+        tx.commit().await?;
+        return load_composition_response(
+            &state,
+            authorization,
+            dashboard_id,
+            &manage_scope,
+            &dashboard_scope,
+            Vec::new(),
+        )
+        .await;
+    }
     let locked = sqlx::query_scalar::<_, Uuid>("SELECT id FROM dashboards WHERE id=$1 FOR UPDATE")
         .bind(dashboard_id)
         .fetch_optional(&mut *tx)
@@ -562,11 +592,40 @@ async fn reconcile_composition(
             }
         }
     }
+    record_mutation_replay(
+        &mut tx,
+        &grant.payload,
+        "dashboards.reconcile_composition",
+        idempotency_key,
+        &payload_digest,
+        &DashboardIdResponseV1 { id: dashboard_id },
+    )
+    .await?;
     tx.commit().await?;
 
-    let summary = get_dashboard_summary_with_grant(&state, dashboard_id, &manage_scope).await?;
+    load_composition_response(
+        &state,
+        authorization,
+        dashboard_id,
+        &manage_scope,
+        &dashboard_scope,
+        new_placement_ids,
+    )
+    .await
+}
+
+async fn load_composition_response(
+    state: &DashboardModuleState,
+    authorization: &str,
+    dashboard_id: Uuid,
+    manage_scope: &BTreeSet<Uuid>,
+    dashboard_scope: &[Uuid],
+    new_placement_ids: Vec<DashboardPlacementIdMappingV1>,
+) -> Result<Json<DashboardCompositionResponseV1>, DashboardModuleError> {
+    let summary = get_dashboard_summary_with_grant(state, dashboard_id, manage_scope).await?;
     let placements =
-        load_placements_with_authorization(&state, authorization, dashboard_id, true).await?;
+        load_placements_with_authorization(state, authorization, dashboard_id, true).await?;
+    let policy = DashboardPlacementSizePolicy::new();
     let catalog = component_catalog(authorization).await?;
     let available_component_versions = catalog
         .components
@@ -968,6 +1027,17 @@ fn authorization_header(headers: &HeaderMap) -> Result<&str, DashboardModuleErro
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
         .ok_or(DashboardModuleError::Forbidden)
+}
+
+fn mutation_idempotency_key(headers: &HeaderMap) -> Result<&str, DashboardModuleError> {
+    headers
+        .get("x-idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.chars().count() <= 200)
+        .ok_or_else(|| {
+            DashboardModuleError::BadRequest("valid x-idempotency-key header is required".into())
+        })
 }
 
 fn geometry_rect(geometry: DashboardPlacementGeometryV1) -> GridRect {

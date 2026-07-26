@@ -602,7 +602,7 @@ fn normalized_optional_text(value: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn mutation_digest<T: Serialize>(
+pub(super) fn mutation_digest<T: Serialize>(
     action: &str,
     dashboard_id: Option<Uuid>,
     input: &T,
@@ -621,7 +621,7 @@ fn mutation_digest<T: Serialize>(
     Ok(format!("sha256:{:x}", digest.finalize()))
 }
 
-async fn load_mutation_replay(
+pub(super) async fn load_mutation_replay(
     tx: &mut Transaction<'_, Postgres>,
     grant: &AuthorizationGrantV1,
     action: &str,
@@ -660,7 +660,7 @@ async fn load_mutation_replay(
         .map_err(|_| DashboardModuleError::Unavailable("stored mutation result is invalid".into()))
 }
 
-async fn record_mutation_replay(
+pub(super) async fn record_mutation_replay(
     tx: &mut Transaction<'_, Postgres>,
     grant: &AuthorizationGrantV1,
     action: &str,

@@ -10,6 +10,7 @@ services:
   core:
     environment:
       TESSARA_DASHBOARD_MODULE_URL: http://dashboards:8091
+      TESSARA_COMPONENTS_PROVIDER_STATE: ${TESSARA_COMPONENTS_PROVIDER_STATE:-available}
     depends_on:
       dashboards: { condition: service_started }
 

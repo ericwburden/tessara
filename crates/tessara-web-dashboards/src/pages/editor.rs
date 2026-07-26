@@ -363,9 +363,13 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                             "The saved footprint and exact ComponentVersion reference are unchanged."
                                         </p>
                                         {state.retryable().then(|| view! {
-                                            <a class="button dashboard-placement-issue-sheet__retry" href=retry_href>
+                                            <button
+                                                type="button"
+                                                class="button dashboard-placement-issue-sheet__retry"
+                                                on:click=move |_| retry_resolution(&retry_href)
+                                            >
                                                 "Retry resolution"
-                                            </a>
+                                            </button>
                                         })}
                                     </div>
                                 }
@@ -408,6 +412,16 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
         </section>
     }
 }
+
+#[cfg(feature = "hydrate")]
+fn retry_resolution(href: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(href);
+    }
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn retry_resolution(_: &str) {}
 
 #[component]
 fn ComponentPalette(
