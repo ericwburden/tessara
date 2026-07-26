@@ -468,7 +468,7 @@ function PlacementCard({ index, title, state, selected = false }) {
             </div>
             <div className="placement-sheet__body">
               <span className="placement-sheet__icon">
-                {current.tone === "danger" ? <ShieldAlert size={28} /> : current.tone === "warning" ? <AlertTriangle size={28} /> : <Activity size={28} />}
+                {current.tone === "danger" ? <ShieldAlert size={48} /> : current.tone === "warning" ? <AlertTriangle size={48} /> : <Activity size={48} />}
               </span>
               <Badge tone={current.tone}>{current.short}</Badge>
               <p>{current.description}</p>

@@ -191,7 +191,7 @@ code { font-family: "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhe
 .placement-sheet__body { align-content: start; display: grid; justify-items: start; gap: 14px; padding: 28px 24px; }
 .placement-sheet__body p { margin: 4px 0 0; font-size: 16px; line-height: 1.5; }
 .placement-sheet__body small { color: var(--muted); font-size: 13px; line-height: 1.5; }
-.placement-sheet__icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--orange) 16%, var(--panel)); color: var(--orange); }
+.placement-sheet__icon { width: 96px; height: 96px; display: grid; place-items: center; justify-self: center; margin: 10px 0 8px; border: 1px solid color-mix(in srgb, var(--orange) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--orange) 18%, var(--panel)); color: var(--orange); box-shadow: 0 0 0 10px color-mix(in srgb, var(--orange) 6%, transparent); }
 .placement-sheet.is-danger .placement-sheet__icon { background: color-mix(in srgb, var(--danger) 16%, var(--panel)); color: var(--danger); }
 .placement-sheet.is-info .placement-sheet__icon { background: color-mix(in srgb, #7e91ec 16%, var(--panel)); color: #9aa8fa; }
 .placement-sheet__footer { display: flex; justify-content: flex-end; padding: 18px 24px; border-top: 1px solid var(--border); }

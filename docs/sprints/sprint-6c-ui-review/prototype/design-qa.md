@@ -87,6 +87,7 @@ All five routes were checked at 1280 × 720, 768 × 900, and 390 × 844. All 15 
 - Final desktop and mobile captures were regenerated after that correction and passed comparison.
 - Product-owner annotation found the original editor degradation card too verbose. The inline badge, title, explanation, and action were removed; the full panel now receives warning color, a single warning icon replaces normal content, and the icon opens a side sheet containing the message and retry action.
 - The first side-sheet capture exposed overlap from the prototype-only review navigator. The sheet layer was raised above review tooling, then desktop and mobile captures were regenerated and passed.
+- A follow-up annotation requested stronger warning emphasis inside the side sheet. The icon container increased from 52 px to 96 px, the warning glyph increased from 28 px to 48 px, and the icon was centered above the diagnostic content. Revised desktop and mobile captures passed without overflow.
 
 ## Follow-up
 
