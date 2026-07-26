@@ -15,6 +15,7 @@ Treat the roadmap as authoritative and make kickoff execution-ready.
 - derive the sprint from the roadmap marker `(Next)` unless the user explicitly overrides it
 - create a separate sprint worktree from `main`
 - write an implementation-ready sprint plan artifact under `docs/sprints/`
+- define a closeout-readiness lane before implementation begins
 - prepend a kickoff entry to `docs/progress-report.md`
 - continue into implementation from the sprint worktree
 
@@ -67,7 +68,8 @@ Keep the worktree as a sibling of the current repo directory. Abort if the branc
 6. Review the sprint roadmap block in planning mode before coding.
 7. Write `docs/sprints/<slug>-plan.md`.
 8. Prepend a kickoff entry to `docs/progress-report.md`.
-9. Begin implementation in the new sprint worktree using the written plan as the execution contract.
+9. Establish the sprint's closeout-readiness checklist and evidence paths.
+10. Begin implementation in the new sprint worktree using the written plan as the execution contract.
 
 ## Sprint plan file requirements
 
@@ -78,10 +80,49 @@ Write the plan file in Markdown and include these sections:
 - acceptance criteria
 - manual test plan
 - automated test plan
+- closeout-readiness plan
 - ordered implementation plan
 - dependencies and blockers
 
 Use the roadmap text directly as the source of scope. Do not invent extra roadmap scope that is not implied by the selected sprint block.
+
+## Closeout-readiness plan
+
+Prevent closeout from becoming a late integration-hardening pass. Record these
+items in the sprint plan before coding:
+
+- the deployment profile or Compose file used by the sprint
+- the repeatable, idempotent bootstrap/materialization command
+- how build images record the exact source commit, tree, and dirty state
+- the migration-squash checkpoint and disposable from-scratch verification
+- the final evidence directory and expected smoke, UAT, and Playwright files
+- one manual and one automated proof for every roadmap exit-condition clause
+- which existing smoke/UAT/Playwright assertions must change as the feature
+  inventory, navigation, roles, routes, or seed data changes
+- the non-admin role/scope scenario required for authorization-sensitive work
+
+Prefer semantic assertions over duplicated literal inventory counts. When an
+exact count is itself a contract, keep its expected source in one shared
+fixture or helper.
+
+## Implementation cadence
+
+Maintain closeout readiness throughout the sprint:
+
+1. Update the relevant smoke, UAT, Playwright, and deployment-bootstrap
+   coverage in the same change that alters a route, capability, navigation
+   contribution, seed, manifest, or deployment topology.
+2. Run the narrowest affected tests after each implementation slice.
+3. Exercise bootstrap/materialization against the sprint stack before UI
+   acceptance begins, and prove a second invocation is a no-op.
+4. After the final schema change, squash migrations and apply each baseline to
+   disposable empty databases before the final source-exact cycle.
+5. Before declaring implementation complete, run a closeout-readiness audit:
+   no acceptance-mapping gaps, no stale harness inventory, valid Compose
+   configuration, working provenance inputs, idempotent bootstrap, and clean
+   targeted tests.
+6. Commit implementation, migrations, bootstrap, and harness corrections
+   before starting the single full source-exact closeout cycle.
 
 ## Kickoff progress entry requirements
 
@@ -104,7 +145,7 @@ Always include at least these planned verification commands in the kickoff artif
 - `cargo fmt --all`
 - `cargo test -p tessara-api`
 - `cargo test -p tessara-web`
-- `npx playwright test`
+- `npm --prefix .\end2end test`
 - `.\scripts\smoke.ps1`
 - `.\scripts\local-launch.ps1`
 - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
@@ -120,4 +161,5 @@ Do not consider kickoff complete if:
 - the sprint branch/worktree was not created
 - the sprint plan file was not written
 - the kickoff progress entry was not prepended
+- the closeout-readiness plan was not recorded
 - implementation did not continue from the sprint worktree
