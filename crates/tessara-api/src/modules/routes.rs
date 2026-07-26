@@ -1,5 +1,7 @@
 //! Axum routes for Sprint 6A Core module discovery and platform adapters.
 
+use std::collections::BTreeSet;
+
 use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
@@ -268,10 +270,15 @@ async fn get_module(
         .map_err(map_catalog_error)?;
     let installation_id = inventory.installation_id;
     let entry = inventory
-        .transitions
+        .modules
         .into_iter()
-        .map(|entry| entry.normalized_projection)
-        .chain(inventory.modules.into_iter().map(independent_entry_value))
+        .map(independent_entry_value)
+        .chain(
+            inventory
+                .transitions
+                .into_iter()
+                .map(|entry| entry.normalized_projection),
+        )
         .find(|entry| {
             entry
                 .pointer("/descriptor/reserved_definition_id")
@@ -579,6 +586,11 @@ fn navigation_policy_rejection_message(error: &NavigationPolicyUpdateError) -> &
 pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleInventoryResponseV1 {
     let deployment = inventory.deployment;
     let deployment_history = inventory.deployment_history;
+    let independent_definition_ids = inventory
+        .modules
+        .iter()
+        .map(|module| module.definition_id.clone())
+        .collect::<BTreeSet<_>>();
     ModuleInventoryResponseV1 {
         schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
         installation: ApplicationInstallationV1 {
@@ -594,6 +606,7 @@ pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleI
         entries: inventory
             .transitions
             .into_iter()
+            .filter(|entry| !independent_definition_ids.contains(&entry.definition_id))
             .map(|entry| entry.normalized_projection)
             .chain(inventory.modules.into_iter().map(independent_entry_value))
             .collect(),

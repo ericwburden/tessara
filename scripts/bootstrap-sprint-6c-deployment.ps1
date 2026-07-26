@@ -55,7 +55,7 @@ $dashboardModule = [pscustomobject]@{
     route_prefix = "/dashboards"
     configuration = [pscustomobject]@{
         display_label = "Dashboards"
-        default_page_size = 25
+        default_page_size = "25"
     }
 }
 $desired.modules = @($desired.modules) + @($dashboardModule)

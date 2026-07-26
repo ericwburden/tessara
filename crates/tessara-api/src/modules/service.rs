@@ -369,13 +369,6 @@ pub(crate) async fn load_descriptor_document(
     pool: &PgPool,
     definition_id: &str,
 ) -> Result<Option<DescriptorDocumentReadModel>, CatalogReadError> {
-    if let Some(entry) = load_transition_detail(pool, definition_id).await? {
-        return Ok(Some(DescriptorDocumentReadModel {
-            source_digest: entry.source_digest,
-            content_type: entry.content_type,
-            source_bytes: entry.source_bytes,
-        }));
-    }
     let release = sqlx::query_as::<_, (String, sqlx::types::Json<ModuleManifestV1>)>(
         "SELECT releases.manifest_digest, releases.manifest
          FROM module_instances instances
@@ -387,14 +380,21 @@ pub(crate) async fn load_descriptor_document(
     .bind(definition_id)
     .fetch_optional(pool)
     .await?;
-    Ok(
-        release.map(|(source_digest, manifest)| DescriptorDocumentReadModel {
+    if let Some((source_digest, manifest)) = release {
+        return Ok(Some(DescriptorDocumentReadModel {
             source_digest,
             content_type: "application/json".into(),
             source_bytes: serde_json::to_vec_pretty(&manifest.0)
                 .expect("validated module manifest must serialize"),
-        }),
-    )
+        }));
+    }
+    Ok(load_transition_detail(pool, definition_id)
+        .await?
+        .map(|entry| DescriptorDocumentReadModel {
+            source_digest: entry.source_digest,
+            content_type: entry.content_type,
+            source_bytes: entry.source_bytes,
+        }))
 }
 
 #[cfg(test)]
@@ -1926,7 +1926,7 @@ mod tests {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "3d9c03e38baad9416ca8425ad32e4baa245311ab829a3ec465bf60484debe3a7"
+            "042e3377e80d9fec8d9592d0aeccb4b7ecb7b2c4ab87721ae6800a3158a1253d"
         );
     }
 

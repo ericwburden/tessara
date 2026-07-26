@@ -163,14 +163,14 @@ async fn detail_bootstrap(
     };
     let installation_id = inventory.installation_id;
     let Some(entry) = inventory
-        .transitions
+        .modules
         .into_iter()
-        .map(|entry| entry.normalized_projection)
+        .map(super::routes::independent_entry_value)
         .chain(
             inventory
-                .modules
+                .transitions
                 .into_iter()
-                .map(super::routes::independent_entry_value),
+                .map(|entry| entry.normalized_projection),
         )
         .find(|entry| {
             entry

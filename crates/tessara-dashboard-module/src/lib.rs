@@ -355,6 +355,7 @@ impl axum::response::IntoResponse for DashboardModuleError {
 
 #[cfg(test)]
 mod tests {
+    use sha2::{Digest, Sha256};
     use tessara_module_contract::ModuleManifestV1;
 
     use super::{DashboardConfigurationV1, validate_configuration};
@@ -399,6 +400,15 @@ mod tests {
                 .security_capabilities
                 .iter()
                 .any(|capability| capability.id.as_str() == "dashboards:read")
+        );
+    }
+
+    #[test]
+    fn dashboard_module_baseline_migration_remains_byte_identical() {
+        let baseline = include_bytes!("../migrations/001_dashboard_module.sql");
+        assert_eq!(
+            format!("{:x}", Sha256::digest(baseline)),
+            "cccbe5738103b6bbe73d74b7e9e1cfd0b40f5474088f0da1b44e6500c152e48b"
         );
     }
 }
