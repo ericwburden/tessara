@@ -7,6 +7,21 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-25 - Sprint 6C Kickoff
+
+- Kickoff status: started the roadmap-selected Independently Deployed
+  Dashboard Module Slice from clean `main` commit `c4e291c3`.
+- Branch/worktree: `codex/sprint-6c` at
+  `C:\Users\eric-dev\Projects\tessara-sprint-6c`.
+- Plan: `docs/sprints/sprint-6c-plan.md`, including clause-level manual and
+  automated acceptance mapping plus source-exact closeout readiness.
+- Planned verification: formatting; module-contract, Dashboard, Dashboard web,
+  API, and web tests; Sprint 6C Compose/bootstrap and database isolation;
+  canonical Playwright; smoke; UAT; and retained source-provenance evidence.
+- Immediate focus: inventory the existing Dashboard/Core/Components coupling,
+  then define the typed transition ComponentVersion compatibility boundary
+  before moving persistence or routes.
+
 ## 2026-07-25 - Sprint 6B2 Closeout
 
 - Status: complete. Sprint 6B2 is closed against implementation/evidence commit
