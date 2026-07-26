@@ -899,6 +899,7 @@
 .module-transition-binding-note {
   display: grid;
   gap: 0.35rem;
+  margin: 1rem;
   border: 1px solid var(--semantic-warning-border);
   border-radius: var(--radius);
   background: var(--semantic-warning-soft);
@@ -915,6 +916,108 @@
 .module-dashboard-diagnostics {
   display: grid;
   gap: 1rem;
+}
+
+.module-dashboard-diagnostics__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin: 0.25rem 0 0;
+}
+
+.module-dashboard-diagnostics__heading h2 {
+  margin: 0.15rem 0 0.25rem;
+  font-size: clamp(1.45rem, 3vw, 1.8rem);
+}
+
+.module-dashboard-diagnostics__heading p {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.module-dashboard-diagnostics__eyebrow {
+  color: var(--semantic-primary) !important;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.module-dashboard-diagnostics__actions {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.6rem;
+  min-width: 13rem;
+}
+
+.module-dashboard-diagnostics__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.module-dashboard-diagnostic-metric {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 1rem;
+}
+
+.module-dashboard-diagnostic-metric > svg {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  color: var(--semantic-primary);
+}
+
+.module-dashboard-diagnostic-metric > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.module-dashboard-diagnostic-metric span,
+.module-dashboard-diagnostic-metric small {
+  color: var(--color-muted);
+}
+
+.module-dashboard-diagnostic-metric strong {
+  font-size: 1.05rem;
+}
+
+.module-dashboard-diagnostic-metric small {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.module-dashboard-dependency-card {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 1100px) {
+  .module-dashboard-diagnostics__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .module-dashboard-diagnostics__heading {
+    display: grid;
+  }
+
+  .module-dashboard-diagnostics__actions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .module-dashboard-diagnostics__metrics {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dashboard-components-sheet .dashboard-component-list {
@@ -3352,6 +3455,12 @@ input {
   gap: 0.2rem;
 }
 
+.module-application-state__enablement-form {
+  display: flex;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .module-application-state__switch {
   position: relative;
   flex: 0 0 auto;
@@ -3361,6 +3470,16 @@ input {
   border-radius: 999px;
   background: var(--color-control);
   padding: 0.15rem;
+  cursor: pointer;
+}
+
+.module-application-state__switch:hover {
+  border-color: var(--color-border-strong);
+}
+
+.module-application-state__switch:focus-visible {
+  outline: 2px solid var(--semantic-primary);
+  outline-offset: 2px;
 }
 
 .module-application-state__switch > span {

@@ -84,6 +84,10 @@ pub(crate) fn routes() -> Router<AppState> {
             post(update_module_configuration_form),
         )
         .route(
+            "/api/modules/instances/{instance_id}/enablement/form",
+            post(update_module_enablement_form),
+        )
+        .route(
             "/reference/scoped-records/api/records",
             get(proxy_record_list).post(proxy_record_create),
         )
@@ -1472,6 +1476,41 @@ async fn sync_scoped_records_security_state(
     Ok(())
 }
 
+async fn sync_dashboard_security_state(
+    installation_id: Uuid,
+    instance_id: Uuid,
+    authorization_revision: i64,
+    organization_revision: i64,
+    enabled: bool,
+    document_state: &str,
+) -> ApiResult<()> {
+    reqwest::Client::new()
+        .put(format!(
+            "{}/api/private/security-state",
+            dashboard_module_url()
+        ))
+        .header(
+            "x-tessara-module-control-key",
+            std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
+                .unwrap_or_else(|_| "development-module-control-only".into()),
+        )
+        .json(&serde_json::json!({
+            "schema_version": 1,
+            "installation_id": installation_id,
+            "module_instance_id": instance_id,
+            "authorization_revision": authorization_revision,
+            "organization_revision": organization_revision,
+            "enabled": enabled,
+            "document_state": document_state
+        }))
+        .send()
+        .await
+        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?
+        .error_for_status()
+        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?;
+    Ok(())
+}
+
 async fn module_response(response: reqwest::Response) -> ApiResult<Response> {
     let status = StatusCode::from_u16(response.status().as_u16())
         .map_err(|error| ApiError::Internal(error.into()))?;
@@ -1558,6 +1597,108 @@ async fn update_module_configuration_form(
     Ok(Redirect::to(&format!(
         "/administration/modules/{definition}#configuration"
     )))
+}
+
+#[derive(Deserialize)]
+struct ModuleEnablementForm {
+    enabled: bool,
+}
+
+async fn update_module_enablement_form(
+    State(state): State<AppState>,
+    request: AuthenticatedRequest,
+    Path(instance_id): Path<Uuid>,
+    Form(input): Form<ModuleEnablementForm>,
+) -> ApiResult<Redirect> {
+    request.require_capability("admin:all")?;
+    let instance = sqlx::query(
+        "SELECT definition_id,installation_id,installed,deployed,configured,healthy
+         FROM module_instances WHERE id=$1 AND identity_state='live'",
+    )
+    .bind(instance_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
+    let definition: String = instance.try_get("definition_id")?;
+    let installation_id: Uuid = instance.try_get("installation_id")?;
+    let installed: bool = instance.try_get("installed")?;
+    let deployed: bool = instance.try_get("deployed")?;
+    let configured: bool = instance.try_get("configured")?;
+    let healthy: bool = instance.try_get("healthy")?;
+    if input.enabled && !(installed && deployed && configured && healthy) {
+        return Err(ApiError::BadRequest(
+            "the module must be installed, deployed, configured, and healthy before it can be enabled"
+                .into(),
+        ));
+    }
+    let revisions = sqlx::query(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    let authorization_revision = revisions.try_get::<i64, _>("authorization_revision")?;
+    let organization_revision = revisions.try_get::<i64, _>("organization_revision")?;
+    sync_module_enablement(
+        &definition,
+        installation_id,
+        instance_id,
+        authorization_revision,
+        organization_revision,
+        input.enabled,
+    )
+    .await?;
+    sqlx::query(
+        "UPDATE module_instances SET enabled=$2,last_observed_at=now()
+         WHERE id=$1 AND identity_state='live'",
+    )
+    .bind(instance_id)
+    .bind(input.enabled)
+    .execute(&state.pool)
+    .await?;
+    Ok(Redirect::to(&format!(
+        "/administration/modules/{definition}#configuration"
+    )))
+}
+
+async fn sync_module_enablement(
+    definition: &str,
+    installation_id: Uuid,
+    instance_id: Uuid,
+    authorization_revision: i64,
+    organization_revision: i64,
+    enabled: bool,
+) -> ApiResult<()> {
+    let document_state = module_document_state(enabled);
+    if definition == tessara_reference_scoped_records::MODULE_DEFINITION_ID {
+        return sync_scoped_records_security_state(
+            installation_id,
+            instance_id,
+            authorization_revision,
+            organization_revision,
+            enabled,
+            document_state,
+        )
+        .await;
+    }
+    if definition == "tessara.dashboards" {
+        return sync_dashboard_security_state(
+            installation_id,
+            instance_id,
+            authorization_revision,
+            organization_revision,
+            enabled,
+            document_state,
+        )
+        .await;
+    }
+    Err(ApiError::BadRequest(
+        "the module does not expose a supported enablement contract".into(),
+    ))
+}
+
+fn module_document_state(enabled: bool) -> &'static str {
+    if enabled { "enabled" } else { "disabled" }
 }
 
 async fn persist_module_configuration(
@@ -2146,6 +2287,12 @@ mod tests {
             operation_text(AuthorizationGrantOperationV1::Mutation),
             "mutation"
         );
+    }
+
+    #[test]
+    fn module_enablement_maps_to_explicit_document_states() {
+        assert_eq!(module_document_state(true), "enabled");
+        assert_eq!(module_document_state(false), "disabled");
     }
 
     #[test]

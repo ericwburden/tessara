@@ -1,95 +1,65 @@
-# Sprint 6B2 Design QA
+# Sprint 6C Design QA
 
-Final result: PASS
+## Source and implementation
 
-## Visual source of truth
+- Approved configuration mockup:
+  `docs/sprints/sprint-6c-ui-review/prototype/screenshots/01-module-configuration-desktop.png`
+- Approved diagnostics mockup:
+  `docs/sprints/sprint-6c-ui-review/prototype/screenshots/02-diagnostics-desktop.png`
+- Final live implementation:
+  `http://127.0.0.1:8080/administration/modules/tessara.dashboards`
+- Matched desktop viewport: 1280 × 720 CSS pixels at 1× density.
+- Responsive viewports: 768 × 900 and 390 × 844 CSS pixels.
+- Theme and state: dark theme, authenticated Tessara administrator, healthy and
+  enabled Dashboard Module Instance.
 
-- Approved Sprint 6B2 review suite:
-  `docs/sprints/sprint-6b2-ui-review/prototype/screenshots/`
-- Live implementation:
-  `http://127.0.0.1:8080`
-- Themes checked: dark and light.
-- Viewports checked: 1280 × 900, 768 × 900, and 390 × 844.
+## Same-input comparisons
 
-## Compared surfaces
+- Configuration:
+  `.codex-run/qa/comparison-module-configuration.png`
+- Findings-based health and diagnostics:
+  `.codex-run/qa/comparison-diagnostics.png`
 
-- Roles directory and Core Administrator detail:
-  `.codex-run/qa/comparison-roles.jpg`
-- Scoped Records directory:
-  `.codex-run/qa/comparison-records.jpg`
-- Module configuration and Application state:
-  `.codex-run/qa/comparison-module-config.jpg`
-- Health:
-  `.codex-run/qa/comparison-health.jpg`
-- Diagnostics:
-  `.codex-run/qa/comparison-diagnostics.jpg`
-- Mobile Roles:
-  `.codex-run/qa/comparison-roles-mobile.jpg`
-- Mobile Scoped Records:
-  `.codex-run/qa/comparison-records-mobile.jpg`
+Each comparison places the approved mockup on the left and the final hydrated
+implementation on the right. Live release numbers, page-size configuration,
+and observed health data intentionally reflect the running Sprint 6C stack.
 
-Each comparison places the approved mockup and the final hydrated live screen
-in one image. Fixture identities and record counts differ intentionally; the
-layout, hierarchy, interaction, and styling contracts were compared.
+## Visual review
 
-## Corrections verified
+- The existing Tessara shell, type system, color tokens, borders, spacing, and
+  Lucide icon treatment remain intact.
+- Module detail exposes the approved nine tabs; Diagnostics is not duplicated
+  as a tenth tab.
+- The transition binding note is the final row of the Configuration card.
+- Application state remains a separate card with the operational enablement
+  control and diagnostics action.
+- Findings now renders the approved Dashboard health composition: heading,
+  refresh/download actions, four metric cards, and the Components compatibility
+  dependency card.
+- Live liveness and dependency timestamps use compact reader-facing copy while
+  preserving the machine-readable observation time.
+- No actionable P0, P1, or P2 visual mismatch remains.
 
-- The Core shell remains authoritative; module routes populate its title and
-  content regions.
-- Loading navigation uses skeleton placeholders and resolves without layout
-  overflow.
-- Module Configuration includes an editable, visibly styled Display label and
-  a distinct Application state panel.
-- Scoped Records supplies standalone directory, detail, create, edit, health,
-  and diagnostics states.
-- Duplicate row actions and the Roles Enrollment column are absent.
-- New Role and New Record use the canonical Plus icon; health cards use
-  Activity icons; refresh actions use RefreshCw; the empty findings state uses
-  CircleCheck.
-- Health-card labels are the prominent headings and redundant status badges
-  are absent.
-- Mobile record rows become stacked cards. Mobile role cards appear before
-  pagination, the New Role action is full width, and capability details stack
-  without overflow.
-- The guided recovery page separates claim labels and values, keeps email and
-  claim secret blank, and exposes the twelve-character password minimum.
-- Health and diagnostics drive the stable Core header `Scoped Records`; their
-  in-panel heading and tabs carry the route-specific context.
+## Interaction and degraded-state review
 
-## Interaction and responsive checks
+- Dashboard and Scoped Records switches were disabled and re-enabled through
+  the rendered controls; Core and each module agreed on the resulting state.
+- The health action updates the hash, selects Findings, and renders diagnostics.
+- A Dashboard-process outage rendered the Core-owned unavailable page and kept
+  Module Management reachable.
+- Components-provider unavailability preserved the Dashboard editor, applied
+  warning treatment to affected placements, opened the issue side sheet from
+  the warning icon, and exposed retry. Recovery restored normal placement
+  selection without changing the saved layout.
+- Document width equaled viewport width at 1280, 768, and 390 CSS pixels.
+- The final browser error log was empty.
 
-- Roles, module configuration tabs, record directory/detail/create/edit,
-  health, diagnostics, theme selection, and the guided enrollment/recovery
-  handoff were exercised in the in-app Browser.
-- No document horizontal overflow was measured at 390, 768, or 1280 CSS
-  pixels on the changed surfaces.
-- The light theme rendered with the expected light body surface and no
-  overflow; dark theme was restored afterward.
-- Browser error log after the changed-route pass was empty.
+## Automated evidence
 
-## Enrollment completion follow-up
+- `cargo check -p tessara-web -p tessara-api`
+- Focused web and API unit tests for diagnostics hash mapping and module
+  enablement document states.
+- Focused Playwright regression:
+  `independent module controls match the approved configuration and diagnostics flow`
 
-- Source and final comparison:
-  `.codex-run/qa/comparison-enrollment-success.jpg`
-- A completed redemption now renders the unambiguous
-  `Enrollment successful` heading and concise account-ready message.
-- The gratuitous enrollment badge and Core-protection information panel are
-  absent from the completed state.
-- The fallback `Continue to sign in` action remains available while the page
-  automatically redirects to `/login` after 1.8 seconds.
-- Browser verification confirmed zero horizontal overflow, the expected
-  accessible status/heading structure, the final sign-in screen, and no
-  console errors.
-
-## Final UI tweak verification
-
-- The active, unavailable, closed, and successful enrollment states no longer
-  render the redundant enrollment kicker badge.
-- At the reported 1107 × 912 viewport, the Roles route, list, stack, and detail
-  cards all remain within the route panel; document `scrollWidth` equals
-  `clientWidth`.
-- A validated module `display_label` now projects through Core as the
-  `Scoped Records!` shell-navigation label after hydration. Static descriptor
-  text remains the fail-closed fallback.
-
-No actionable P0, P1, or P2 visual differences remain.
+final result: passed

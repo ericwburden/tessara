@@ -1,6 +1,8 @@
 //! Native Module Management route pages.
 
-use icons::{ExternalLink, HeartPulse, Pencil};
+use icons::{
+    Activity, Database, Download, ExternalLink, HeartPulse, Pencil, RefreshCw, ShieldCheck,
+};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params;
 use leptos_router::params::{Params, ParamsError, ParamsMap};
@@ -261,6 +263,17 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
     let detail_retry_href = format!("/administration/modules/{definition_id}");
 
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    {
+        let location = leptos_router::hooks::use_location();
+        Effect::new(move |_| {
+            let hash = location.hash.get();
+            if let Some(section) = module_detail_section_from_hash(&hash) {
+                active_detail_section.set(section);
+            }
+        });
+    }
+
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     if route_state.get_untracked() == ModuleRouteState::Loading {
         let requested_definition_id = definition_id.clone();
         leptos::task::spawn_local(async move {
@@ -354,19 +367,6 @@ fn module_detail_page(
     policy_unavailable: RwSignal<Option<String>>,
     access: ModuleManagementAccessV1,
 ) -> AnyView {
-    const SECTIONS: [(&str, &str); 10] = [
-        ("overview", "Overview"),
-        ("configuration", "Configuration"),
-        ("diagnostics", "Diagnostics"),
-        ("declarations", "Declarations"),
-        ("contracts", "Contracts"),
-        ("capabilities", "Capabilities"),
-        ("dependencies", "Dependencies"),
-        ("resources", "Resources"),
-        ("navigation", "Navigation"),
-        ("findings", "Findings"),
-    ];
-
     let definition_id = detail.definition_id;
     let display_name = detail.display_name;
     let entry = detail.entry;
@@ -455,11 +455,11 @@ fn module_detail_page(
         </div>
         <div class="module-section-switcher" aria-label="Module detail section">
             <div class="module-section-tabs--detail tabs-list" role="tablist" aria-label="Module detail sections">
-                {SECTIONS.into_iter().map(|(value,label)| view! {
+                {MODULE_DETAIL_SECTIONS.into_iter().map(|(value,label)| view! {
                     <button class="tabs-trigger" type="button" role="tab"
-                        aria-selected=move || active_section.get()==value
+                        aria-selected=move || (active_section.get() == value).to_string()
                         class:is-active=move || active_section.get()==value
-                        on:click=move |_| active_section.set(value)>{label}</button>
+                        on:click=move |_| select_module_detail_section(active_section, value, value)>{label}</button>
                 }).collect_view()}
             </div>
             <select class="module-section-select module-section-select--detail form-control"
@@ -467,11 +467,12 @@ fn module_detail_page(
                 prop:value=move || active_section.get()
                 on:change=move |event| {
                     let value = event_target_value(&event);
-                    active_section.set(SECTIONS.into_iter()
+                    let section = MODULE_DETAIL_SECTIONS.into_iter()
                         .find_map(|(candidate, _)| (candidate == value).then_some(candidate))
-                        .unwrap_or("overview"));
+                        .unwrap_or("overview");
+                    select_module_detail_section(active_section, section, section);
                 }>
-                {SECTIONS.into_iter().map(|(value, label)| view! {
+                {MODULE_DETAIL_SECTIONS.into_iter().map(|(value, label)| view! {
                     <option value=value>{label}</option>
                 }).collect_view()}
             </select>
@@ -500,6 +501,41 @@ fn module_detail_page(
     .into_any()
 }
 
+const MODULE_DETAIL_SECTIONS: [(&str, &str); 9] = [
+    ("overview", "Overview"),
+    ("configuration", "Configuration"),
+    ("declarations", "Declarations"),
+    ("contracts", "Contracts"),
+    ("capabilities", "Capabilities"),
+    ("dependencies", "Dependencies"),
+    ("resources", "Resources"),
+    ("navigation", "Navigation"),
+    ("findings", "Findings"),
+];
+
+#[cfg(any(test, all(feature = "hydrate", target_arch = "wasm32")))]
+fn module_detail_section_from_hash(hash: &str) -> Option<&'static str> {
+    let requested = hash.trim_start_matches('#');
+    if requested == "diagnostics" {
+        return Some("findings");
+    }
+    MODULE_DETAIL_SECTIONS
+        .into_iter()
+        .find_map(|(section, _)| (section == requested).then_some(section))
+}
+
+fn select_module_detail_section(
+    active_section: RwSignal<&'static str>,
+    section: &'static str,
+    _hash: &'static str,
+) {
+    active_section.set(section);
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_hash(_hash);
+    }
+}
+
 fn independent_module_sections(
     entry: ModuleInventoryEntryV1,
     active_section: RwSignal<&'static str>,
@@ -516,6 +552,7 @@ fn independent_module_sections(
     let runtime_image = release.runtime_image.clone();
     let instance_id = instance.id.clone();
     let configuration_action = format!("/api/modules/instances/{}/configuration/form", instance.id);
+    let enablement_action = format!("/api/modules/instances/{}/enablement/form", instance.id);
     let configuration_editing = RwSignal::new(false);
     let configured_label = configuration.display_label.clone();
     let configured_label_for_edit = configured_label.clone();
@@ -670,6 +707,12 @@ fn independent_module_sections(
                             <button class="button" type="submit">"Save configuration"</button>
                         </div>
                     </form>
+                    {is_dashboard.then(|| view! {
+                        <aside class="module-transition-binding-note">
+                            <strong>"First-party transition binding"</strong>
+                            <p><code>"tessara.dashboards.component-version"</code>" uses Core's installation-owned Components adapter. External Blueprints cannot select it; explicit migration is required in Sprint 8A."</p>
+                        </aside>
+                    })}
                 </section>
                 <aside class="organization-detail-card module-detail-overview-card module-application-state">
                     <div class="module-detail__heading">
@@ -689,55 +732,120 @@ fn independent_module_sections(
                             <strong>"Product route enabled"</strong>
                             <span>{if instance.enabled { "Authorized users can open the module." } else { "Configuration and diagnostics remain available." }}</span>
                         </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked=if instance.enabled { "true" } else { "false" }
-                            class=if instance.enabled { "module-application-state__switch is-on" } else { "module-application-state__switch" }
-                            disabled
-                            title="Enablement changes are applied through deployment."
-                        >
-                            <span></span>
-                        </button>
+                        <form class="module-application-state__enablement-form" method="post" action=enablement_action>
+                            <input type="hidden" name="enabled" value=if instance.enabled { "false" } else { "true" }/>
+                            <button
+                                type="submit"
+                                role="switch"
+                                aria-label=if instance.enabled { "Disable product route" } else { "Enable product route" }
+                                aria-checked=if instance.enabled { "true" } else { "false" }
+                                class=if instance.enabled { "module-application-state__switch is-on" } else { "module-application-state__switch" }
+                                title=if instance.enabled { "Disable the module product route." } else { "Enable the module product route." }
+                            >
+                                <span></span>
+                            </button>
+                        </form>
                     </div>
-                    {is_dashboard.then(|| view! {
-                        <aside class="module-transition-binding-note">
-                            <strong>"First-party transition binding"</strong>
-                            <p><code>"tessara.dashboards.component-version"</code>" uses Core's installation-owned Components adapter. External Blueprints cannot select it; explicit migration is required in Sprint 8A."</p>
-                        </aside>
-                    })}
-                    <a class="button button--secondary module-application-state__action" href=health_href>
+                    <a
+                        class="button button--secondary module-application-state__action"
+                        href=health_href
+                        on:click=move |_| {
+                            if is_dashboard {
+                                select_module_detail_section(active_section, "findings", "diagnostics");
+                            }
+                        }
+                    >
                         <HeartPulse class="button__icon"/>
                         "Open health and diagnostics"
                     </a>
                 </aside>
             </div>
-            <section data-module-section="diagnostics" class="organization-detail-card module-dashboard-diagnostics">
-                    <div class="module-detail__heading">
-                        <div>
-                            <h2>{if is_dashboard { "Dashboard health and diagnostics" } else { "Module health and diagnostics" }}</h2>
-                            <p>"Sanitized Module Instance observations; no cookies, credentials, signed grants, or restricted Component identities."</p>
+            {if is_dashboard {
+                view! {
+                    <section data-module-section="findings" class="module-dashboard-diagnostics">
+                        <div class="module-dashboard-diagnostics__heading">
+                            <div>
+                                <p class="module-dashboard-diagnostics__eyebrow">"Dashboard module"</p>
+                                <h2>"Health and diagnostics"</h2>
+                                <p>"Sanitized operational context for the independently deployed Dashboard service."</p>
+                            </div>
+                            <div class="module-dashboard-diagnostics__actions">
+                                <a class="button button--secondary" href=health_href>
+                                    <RefreshCw class="button__icon"/>
+                                    "Refresh status"
+                                </a>
+                                <a
+                                    class="button button--secondary"
+                                    href="/api/admin/modules/tessara.dashboards"
+                                    download="tessara-dashboards-diagnostics.json"
+                                >
+                                    <Download class="button__icon"/>
+                                    "Download diagnostics"
+                                </a>
+                            </div>
                         </div>
-                        <a class="button button--secondary" href=health_href>"Refresh observations"</a>
-                    </div>
-                    <div class="module-configuration-grid">
-                        <dl class="module-detail-overview__list">
-                            <div><dt>"Readiness"</dt><dd><span class=if instance.ready { "status-badge is-success" } else { "status-badge is-danger" }>{if instance.ready { "Passing" } else { "Failing" }}</span>" "<code>{diagnostics.readiness_path.clone()}</code></dd></div>
-                            <div><dt>"Liveness"</dt><dd><span class=if instance.healthy { "status-badge is-success" } else { "status-badge is-danger" }>{if instance.healthy { "Passing" } else { "Failing" }}</span>" "<code>{diagnostics.liveness_path.clone()}</code></dd></div>
-                            <div><dt>"Isolated database"</dt><dd><span class="status-badge is-success">"Connected"</span>" dashboard_module_instance"</dd></div>
-                            <div><dt>"Authorization exchange"</dt><dd><span class="status-badge is-success">"Current"</span>" Core-signed action grants"</dd></div>
-                        </dl>
-                        {is_dashboard.then(|| view! { <dl class="module-detail-overview__list">
-                            <div><dt>"Components binding"</dt><dd><code>"tessara.dashboards.component-version"</code></dd></div>
-                            <div><dt>"Contract"</dt><dd><code>"tessara.components.component-version"</code></dd></div>
-                            <div><dt>"Provider"</dt><dd>"Core installation"</dd></div>
-                            <div><dt>"Declared actions"</dt><dd><code>"resolve_metadata"</code>" · "<code>"render"</code></dd></div>
-                            <div><dt>"Migration target"</dt><dd>"Sprint 8A"</dd></div>
-                        </dl> })}
-                    </div>
-            </section>
+                        <div class="module-dashboard-diagnostics__metrics">
+                            <article class="module-dashboard-diagnostic-metric">
+                                <HeartPulse/>
+                                <div>
+                                    <span>"Readiness"</span>
+                                    <strong>{if instance.ready { "Ready" } else { "Not ready" }}</strong>
+                                    <small>{if instance.ready { "Configuration, database, and Core authorization exchange are available." } else { "The Dashboard readiness probe is not passing." }}</small>
+                                </div>
+                            </article>
+                            <article class="module-dashboard-diagnostic-metric">
+                                <Activity/>
+                                <div>
+                                    <span>"Liveness"</span>
+                                    <strong>{if instance.healthy { "Healthy" } else { "Unhealthy" }}</strong>
+                                    <small>"Dashboard service responded during the "<time datetime=instance.observed_at.clone()>"latest health check"</time>"."</small>
+                                </div>
+                            </article>
+                            <article class="module-dashboard-diagnostic-metric">
+                                <Database/>
+                                <div>
+                                    <span>"Dashboard database"</span>
+                                    <strong>{if instance.deployed { "Connected" } else { "Unavailable" }}</strong>
+                                    <small>"Instance-scoped runtime identity · baseline 1 applied."</small>
+                                </div>
+                            </article>
+                            <article class="module-dashboard-diagnostic-metric">
+                                <ShieldCheck/>
+                                <div>
+                                    <span>"Core authorization"</span>
+                                    <strong>{if instance.enabled { "Current" } else { "Disabled" }}</strong>
+                                    <small>"Core-signed action grants · no reusable credential exposed."</small>
+                                </div>
+                            </article>
+                        </div>
+                        <section class="organization-detail-card module-dashboard-dependency-card">
+                            <div class="module-detail__heading">
+                                <div>
+                                    <h2>"Components compatibility dependency"</h2>
+                                    <p>"Transition-only first-party Core Release binding."</p>
+                                </div>
+                                <span class="status-badge is-success">"Compatible"</span>
+                            </div>
+                            <dl class="module-detail-overview__list">
+                                <div><dt>"Binding"</dt><dd><code>"tessara.dashboards.component-version"</code></dd></div>
+                                <div><dt>"Contract"</dt><dd><code>"tessara.components.component-version"</code></dd></div>
+                                <div><dt>"Provider"</dt><dd>"Core installation · in-process transition contribution"</dd></div>
+                                <div><dt>"Declared actions"</dt><dd>"Resolve metadata · Render"</dd></div>
+                                <div><dt>"Last successful check"</dt><dd><time datetime=instance.observed_at.clone()>"Latest health check"</time></dd></div>
+                                <div><dt>"Migration target"</dt><dd>"Sprint 8A"</dd></div>
+                            </dl>
+                        </section>
+                    </section>
+                }.into_any()
+            } else {
+                view! {
+                    <section data-module-section="findings" class="organization-detail-card module-detail-empty-section">
+                        <h2>"Findings"</h2>
+                        <p>"No module findings were reported."</p>
+                    </section>
+                }.into_any()
+            }}
             {manifest_sections}
-            <section data-module-section="findings" class="organization-detail-card module-detail-empty-section"><h2>"Findings"</h2><p>"No module findings were reported."</p></section>
         </div>
     }.into_any()
 }
@@ -1128,7 +1236,23 @@ fn module_route_state(
 mod tests {
     use leptos::prelude::*;
 
-    use super::{error_state, loading_state, not_found_state, restricted_state, unavailable_state};
+    use super::{
+        error_state, loading_state, module_detail_section_from_hash, not_found_state,
+        restricted_state, unavailable_state,
+    };
+
+    #[test]
+    fn diagnostics_hash_selects_the_mockup_findings_destination() {
+        assert_eq!(
+            module_detail_section_from_hash("#diagnostics"),
+            Some("findings")
+        );
+        assert_eq!(
+            module_detail_section_from_hash("#configuration"),
+            Some("configuration")
+        );
+        assert_eq!(module_detail_section_from_hash("#unknown"), None);
+    }
 
     #[test]
     fn route_states_remain_semantically_distinct() {
