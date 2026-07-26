@@ -334,6 +334,8 @@ impl axum::response::IntoResponse for DashboardModuleError {
 
 #[cfg(test)]
 mod tests {
+    use tessara_module_contract::ModuleManifestV1;
+
     use super::{DashboardConfigurationV1, validate_configuration};
 
     #[test]
@@ -356,5 +358,26 @@ mod tests {
         });
         assert!(!invalid.valid);
         assert_eq!(invalid.findings.len(), 3);
+    }
+
+    #[test]
+    fn authoritative_manifest_declares_the_independent_dashboard_boundary() {
+        let manifest: ModuleManifestV1 =
+            serde_json::from_str(include_str!("../manifest-v1.json")).expect("valid manifest");
+        assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
+        let tessara_module_contract::DeploymentProfile::TessaraOciV1(deployment) =
+            &manifest.deployment;
+        assert_eq!(deployment.listen.port, 8091);
+        assert_eq!(manifest.dependencies.len(), 1);
+        assert_eq!(
+            manifest.dependencies[0].binding_key.as_str(),
+            "tessara.dashboards.component-version"
+        );
+        assert!(
+            manifest
+                .security_capabilities
+                .iter()
+                .any(|capability| capability.id.as_str() == "dashboards:read")
+        );
     }
 }
