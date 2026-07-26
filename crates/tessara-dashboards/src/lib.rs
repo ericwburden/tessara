@@ -22,7 +22,9 @@ pub use placement_config::{
 };
 pub use transition_component::{
     DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
-    DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentTransitionAction,
+    DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentMetadataV1,
+    DashboardComponentResolutionRequestV1, DashboardComponentResolutionResponseV1,
+    DashboardComponentResolutionValidationError, DashboardComponentTransitionAction,
     DashboardComponentVersionReferenceV1, DashboardComponentVersionReferenceValidationError,
 };
 

@@ -296,7 +296,7 @@ fn require_private_key(headers: &HeaderMap) -> Result<(), DashboardModuleError> 
     let expected = std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
         .unwrap_or_else(|_| "development-module-control-only".into());
     let supplied = headers
-        .get("x-tessara-module-control")
+        .get("x-tessara-module-control-key")
         .and_then(|value| value.to_str().ok());
     if supplied == Some(expected.as_str()) {
         Ok(())

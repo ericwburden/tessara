@@ -6,7 +6,11 @@
 //! for one of the declared actions before resolving it.
 
 use serde::{Deserialize, Serialize};
-use tessara_module_contract::{ResourceOwner, TypedResourceReference};
+use tessara_module_contract::{
+    ContractCompatibilityState, ProviderAvailabilityState, ResourceAccessState,
+    ResourceIdentityState, ResourceOwner, ResourceResolutionV1, TypedResourceReference,
+};
+use uuid::Uuid;
 
 /// Manifest binding key for Dashboard's transition-only Components dependency.
 pub const DASHBOARD_COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
@@ -25,6 +29,118 @@ pub enum DashboardComponentTransitionAction {
     ResolveMetadata,
     /// Render or execute the referenced ComponentVersion for a Dashboard view.
     Render,
+}
+
+/// Versioned request sent to the first-party Core Components adapter.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DashboardComponentResolutionRequestV1 {
+    pub schema_version: u16,
+    pub action: DashboardComponentTransitionAction,
+    pub reference: DashboardComponentVersionReferenceV1,
+}
+
+impl DashboardComponentResolutionRequestV1 {
+    pub fn new(
+        action: DashboardComponentTransitionAction,
+        reference: DashboardComponentVersionReferenceV1,
+    ) -> Self {
+        Self {
+            schema_version: 1,
+            action,
+            reference,
+        }
+    }
+}
+
+/// Authorized metadata projected by the transition Components adapter.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DashboardComponentMetadataV1 {
+    pub component_version_id: Uuid,
+    pub component_id: Uuid,
+    pub component_name: String,
+    pub component_slug: String,
+    pub component_type: String,
+    pub version_number: i32,
+    pub version_label: String,
+    pub version_status: String,
+}
+
+/// Version-one action-bound resolution returned to Dashboard.
+///
+/// Metadata is present only for a fully authorized, resolved, compatible, and
+/// available reference. All restricted outcomes therefore serialize to the
+/// same metadata-free shape.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DashboardComponentResolutionResponseV1 {
+    schema_version: u16,
+    resolution: ResourceResolutionV1,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    metadata: Option<DashboardComponentMetadataV1>,
+}
+
+impl DashboardComponentResolutionResponseV1 {
+    pub fn new(
+        resolution: ResourceResolutionV1,
+        metadata: Option<DashboardComponentMetadataV1>,
+    ) -> Result<Self, DashboardComponentResolutionValidationError> {
+        let may_disclose_metadata = resolution.access_state() == ResourceAccessState::Authorized
+            && resolution.resource_identity_state() == ResourceIdentityState::Resolved
+            && resolution.compatibility_state() == ContractCompatibilityState::Compatible
+            && resolution.availability_state() == ProviderAvailabilityState::Available;
+        if metadata.is_some() != may_disclose_metadata {
+            return Err(
+                DashboardComponentResolutionValidationError::MetadataDoesNotMatchResolution,
+            );
+        }
+        Ok(Self {
+            schema_version: 1,
+            resolution,
+            metadata,
+        })
+    }
+
+    pub const fn resolution(&self) -> &ResourceResolutionV1 {
+        &self.resolution
+    }
+
+    pub const fn metadata(&self) -> Option<&DashboardComponentMetadataV1> {
+        self.metadata.as_ref()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DashboardComponentResolutionResponseV1Wire {
+    schema_version: u16,
+    resolution: ResourceResolutionV1,
+    metadata: Option<DashboardComponentMetadataV1>,
+}
+
+impl<'de> Deserialize<'de> for DashboardComponentResolutionResponseV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = DashboardComponentResolutionResponseV1Wire::deserialize(deserializer)?;
+        if wire.schema_version != 1 {
+            return Err(serde::de::Error::custom(
+                DashboardComponentResolutionValidationError::UnsupportedSchemaVersion(
+                    wire.schema_version,
+                ),
+            ));
+        }
+        Self::new(wire.resolution, wire.metadata).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum DashboardComponentResolutionValidationError {
+    #[error("Dashboard Component resolution schema version {0} is unsupported")]
+    UnsupportedSchemaVersion(u16),
+    #[error("Component metadata presence does not match the resource resolution")]
+    MetadataDoesNotMatchResolution,
 }
 
 impl DashboardComponentTransitionAction {
@@ -110,11 +226,18 @@ pub enum DashboardComponentVersionReferenceValidationError {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use tessara_module_contract::{
+        ContractCompatibilityState, CoreInstallationOwnerState, ProviderAvailabilityState,
+        ResourceAccessState, ResourceIdentityState, ResourceLifecycleState, ResourceOwnerState,
+        ResourceResolutionV1,
+    };
+    use uuid::Uuid;
 
     use super::{
         DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
-        DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentTransitionAction,
-        DashboardComponentVersionReferenceV1,
+        DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentMetadataV1,
+        DashboardComponentResolutionRequestV1, DashboardComponentResolutionResponseV1,
+        DashboardComponentTransitionAction, DashboardComponentVersionReferenceV1,
     };
 
     const INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -221,5 +344,86 @@ mod tests {
             .expect("wrapper object")
             .insert("authority".into(), json!("implied"));
         assert!(serde_json::from_value::<DashboardComponentVersionReferenceV1>(extra).is_err());
+    }
+
+    #[test]
+    fn action_request_is_versioned_and_rejects_unknown_fields() {
+        let wrapped: DashboardComponentVersionReferenceV1 = serde_json::from_value(reference(
+            json!({
+                "kind": "core_installation",
+                "installation_id": INSTALLATION_ID
+            }),
+            DASHBOARD_COMPONENT_RESOURCE_TYPE,
+        ))
+        .expect("reference");
+        let request = DashboardComponentResolutionRequestV1::new(
+            DashboardComponentTransitionAction::ResolveMetadata,
+            wrapped,
+        );
+        let mut wire = serde_json::to_value(request).expect("wire");
+        assert_eq!(wire["schema_version"], 1);
+        assert_eq!(wire["action"], "resolve_metadata");
+        wire.as_object_mut()
+            .expect("object")
+            .insert("provider_hint".into(), json!("components"));
+        assert!(serde_json::from_value::<DashboardComponentResolutionRequestV1>(wire).is_err());
+    }
+
+    #[test]
+    fn restricted_resolution_can_never_carry_metadata() {
+        let restricted =
+            ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized).expect("shape");
+        assert!(
+            DashboardComponentResolutionResponseV1::new(restricted.clone(), Some(metadata()))
+                .is_err()
+        );
+        let response =
+            DashboardComponentResolutionResponseV1::new(restricted, None).expect("restricted");
+        let wire = serde_json::to_value(response).expect("wire");
+        assert!(wire.get("metadata").is_none());
+        assert_eq!(wire["resolution"]["access_state"], "unauthorized");
+    }
+
+    #[test]
+    fn metadata_requires_fully_resolved_compatible_available_state() {
+        let owner_state = ResourceOwnerState::CoreInstallation {
+            state: CoreInstallationOwnerState::Live,
+        };
+        let resolved = ResourceResolutionV1::authorized(
+            owner_state,
+            ResourceIdentityState::Resolved,
+            ResourceLifecycleState::ProviderDefined {
+                state: "published".into(),
+            },
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Available,
+        )
+        .expect("resolved");
+        assert!(DashboardComponentResolutionResponseV1::new(resolved, Some(metadata())).is_ok());
+
+        let unavailable = ResourceResolutionV1::authorized(
+            owner_state,
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Unavailable,
+        )
+        .expect("unavailable");
+        assert!(
+            DashboardComponentResolutionResponseV1::new(unavailable, Some(metadata())).is_err()
+        );
+    }
+
+    fn metadata() -> DashboardComponentMetadataV1 {
+        DashboardComponentMetadataV1 {
+            component_version_id: Uuid::from_u128(1),
+            component_id: Uuid::from_u128(2),
+            component_name: "Program Snapshot".into(),
+            component_slug: "program-snapshot".into(),
+            component_type: "table".into(),
+            version_number: 1,
+            version_label: "v1".into(),
+            version_status: "published".into(),
+        }
     }
 }

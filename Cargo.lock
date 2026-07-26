@@ -4681,6 +4681,7 @@ dependencies = [
  "tessara-core",
  "tessara-module-contract",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
