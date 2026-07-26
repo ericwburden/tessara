@@ -1,0 +1,141 @@
+name: tessara
+
+# Development trust values below are deterministic fixtures. Production must
+# inject distinct signing material and shared keys through Compose/Kubernetes
+# secrets; modules receive Core verification keys only.
+services:
+  gateway:
+    image: ${TESSARA_TRAEFIK_IMAGE:-traefik:v3.6}
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=tessara_tessara-edge
+      - --entrypoints.web.address=:8080
+      - --api.dashboard=false
+    ports: ["${TESSARA_HTTP_PORT:-8080}:8080"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [tessara-edge]
+    restart: unless-stopped
+
+  postgres:
+    image: ${TESSARA_POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: tessara_bootstrap
+      POSTGRES_PASSWORD: ${TESSARA_BOOTSTRAP_PASSWORD:-local-bootstrap-only}
+      TESSARA_CORE_OWNER_PASSWORD: ${TESSARA_CORE_OWNER_PASSWORD:-local-core-owner}
+      TESSARA_CORE_MIGRATION_PASSWORD: ${TESSARA_CORE_MIGRATION_PASSWORD:-local-core-migration}
+      TESSARA_CORE_RUNTIME_PASSWORD: ${TESSARA_CORE_RUNTIME_PASSWORD:-local-core-runtime}
+      TESSARA_DEPLOY_OWNER_PASSWORD: ${TESSARA_DEPLOY_OWNER_PASSWORD:-local-deploy-owner}
+      TESSARA_DEPLOY_MIGRATION_PASSWORD: ${TESSARA_DEPLOY_MIGRATION_PASSWORD:-local-deploy-migration}
+      TESSARA_DEPLOY_RUNTIME_PASSWORD: ${TESSARA_DEPLOY_RUNTIME_PASSWORD:-local-deploy-runtime}
+      TESSARA_SCOPED_OWNER_PASSWORD: ${TESSARA_SCOPED_OWNER_PASSWORD:-local-scoped-owner}
+      TESSARA_SCOPED_MIGRATION_PASSWORD: ${TESSARA_SCOPED_MIGRATION_PASSWORD:-local-scoped-migration}
+      TESSARA_SCOPED_RUNTIME_PASSWORD: ${TESSARA_SCOPED_RUNTIME_PASSWORD:-local-scoped-runtime}
+    volumes:
+      - tessara-postgres:/var/lib/postgresql/data
+      - ../sprint-6b1/postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tessara_bootstrap -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [tessara-data]
+    restart: unless-stopped
+
+  core-migrate:
+    image: tessara-core
+    command: ["tessara-api", "prepare"]
+    environment:
+      DATABASE_URL: postgres://tessara_core_migration:${TESSARA_CORE_MIGRATION_PASSWORD:-local-core-migration}@postgres:5432/tessara_core
+      TESSARA_RUNTIME_DATABASE_ROLE: tessara_core_runtime
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+
+  installation-control-migrate:
+    image: tessara-installation-control
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://tessara_deploy_migration:${TESSARA_DEPLOY_MIGRATION_PASSWORD:-local-deploy-migration}@postgres:5432/tessara_deployment
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+
+  installation-control:
+    build: { context: ../.., dockerfile: Dockerfile.installation-control }
+    environment:
+      DATABASE_URL: postgres://tessara_deploy_runtime:${TESSARA_DEPLOY_RUNTIME_PASSWORD:-local-deploy-runtime}@postgres:5432/tessara_deployment
+      INSTALLATION_CONTROL_BIND_ADDR: 0.0.0.0:8075
+      TESSARA_INSTALLATION_CONTROL_SHARED_KEY: ${TESSARA_INSTALLATION_CONTROL_SHARED_KEY:-development-installation-control-only}
+      TESSARA_CORE_REDEMPTION_PUBLIC_KEY: ${TESSARA_CORE_REDEMPTION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_CORE_ELIGIBILITY_PUBLIC_KEY: ${TESSARA_CORE_ELIGIBILITY_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_RECOVERY_OPERATOR_SIGNING_KEY: ${TESSARA_RECOVERY_OPERATOR_SIGNING_KEY:-Dg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4}
+      TESSARA_RECOVERY_OPERATOR_PUBLIC_KEY: ${TESSARA_RECOVERY_OPERATOR_PUBLIC_KEY:-C-71qeZ55qPhNP4ng3v_MsfLX11E6gm8sOVCutakwMw}
+      TESSARA_CORE_PRIVATE_URL: http://core:8080
+      TESSARA_PUBLIC_URL: http://127.0.0.1:${TESSARA_HTTP_PORT:-8080}
+    depends_on:
+      installation-control-migrate: { condition: service_completed_successfully }
+    networks: [tessara-data, tessara-services]
+    restart: unless-stopped
+
+  core:
+    build: { context: ../.., dockerfile: Dockerfile }
+    environment:
+      DATABASE_URL: postgres://tessara_core_runtime:${TESSARA_CORE_RUNTIME_PASSWORD:-local-core-runtime}@postgres:5432/tessara_core
+      TESSARA_BIND_ADDR: 0.0.0.0:8080
+      TESSARA_DEV_ADMIN_EMAIL: admin@tessara.local
+      TESSARA_DEV_ADMIN_PASSWORD: tessara-dev-admin
+      TESSARA_SKIP_PREPARE: "true"
+      TESSARA_CORE_PROTOCOL_SIGNING_KEY: ${TESSARA_CORE_PROTOCOL_SIGNING_KEY:-DAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw}
+      TESSARA_FIXTURE_EXTERNAL_PUBLIC_KEY: ${TESSARA_FIXTURE_EXTERNAL_PUBLIC_KEY:-kaKKC3Q4FZOk2UaVeSCJJq_IrYLIg5t2RDWbnrqaSzo}
+      TESSARA_INSTALLATION_CONTROL_URL: http://installation-control:8075
+      TESSARA_INSTALLATION_CONTROL_SHARED_KEY: ${TESSARA_INSTALLATION_CONTROL_SHARED_KEY:-development-installation-control-only}
+      TESSARA_SCOPED_RECORDS_URL: http://scoped-records:8090
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+    depends_on:
+      core-migrate: { condition: service_completed_successfully }
+      installation-control: { condition: service_started }
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.tessara-core.rule: PathPrefix(`/`)
+      traefik.http.services.tessara-core.loadbalancer.server.port: "8080"
+    networks: [tessara-edge, tessara-data, tessara-services]
+    restart: unless-stopped
+
+  scoped-records-migrate:
+    image: tessara-scoped-records
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://tessara_scoped_migration:${TESSARA_SCOPED_MIGRATION_PASSWORD:-local-scoped-migration}@postgres:5432/tessara_module_scoped_records
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+
+  scoped-records:
+    build: { context: ../.., dockerfile: Dockerfile.scoped-records }
+    environment:
+      DATABASE_URL: postgres://tessara_scoped_runtime:${TESSARA_SCOPED_RUNTIME_PASSWORD:-local-scoped-runtime}@postgres:5432/tessara_module_scoped_records
+      SCOPED_RECORDS_BIND_ADDR: 0.0.0.0:8090
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+    depends_on:
+      scoped-records-migrate: { condition: service_completed_successfully }
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-data, tessara-services]
+    restart: unless-stopped
+
+networks:
+  tessara-edge: {}
+  tessara-services:
+    internal: true
+  tessara-data:
+    internal: true
+
+volumes:
+  tessara-postgres: {}

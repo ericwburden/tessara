@@ -20,6 +20,8 @@ node_modules/
 /tmp/
 /logs/
 /artifacts/
+/.codex-run/*.log
+/.codex-run/*.pid
 
 # Editors and OS files
 .idea/

@@ -7,6 +7,42 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-23 - Sprint 6B2 Implementation Started
+
+- Product-owner approval of the annotated UI delta records is recorded; production UI remains limited to those deltas.
+- Implemented the first shared signed-protocol foundation in `tessara-module-contract`: purpose-bound Ed25519 envelopes, deterministic canonical signing bytes, `ShellContextV1`, authorization grants, independent capability/scope bindings, revision and audience/action validation, replay identifiers, and 60-second read/30-second mutation limits.
+- Added verification-key-only development trust, valid signed shell/authorization/external-identity fixtures, a tampered negative fixture, and SHA-256 sidecars.
+- Verification: `cargo test -p tessara-module-contract` passes 53 tests and doc-tests; `cargo check --workspace` passes.
+- Next implementation focus: installation-control claim, eligibility, reservation, consumption, reconciliation, and recovery contracts plus the deployment-control migration/process.
+
+## 2026-07-24 - Sprint 6B2 Secure Operation Slice Implemented
+
+- Added signed shared protocol contracts, development trust fixtures, and
+  native module shell validation/rendering helpers.
+- Added the separate installation-control crate, deployment-database schema,
+  operator CLI, private reservation/finalization service, one-way claim
+  verification, and auditable lifecycle.
+- Added Core Capability Floor v1, designated-role/viability enforcement,
+  enrollment transactions, signed fixture-external binding, security
+  revisions, declared authorization exchange, and same-origin module gateway.
+- Expanded Scoped Records into an Organization-owned product slice with one
+  configuration validator, signed-grant enforcement, atomic mutation replay,
+  scoped APIs, and native operational/product routes.
+- Applied the approved Roles, enrollment, module configuration, records,
+  health, and diagnostics UI decisions without restoring rejected duplicate
+  affordances or mixed Enrollment-column treatments.
+- Added the private-network Sprint 6B2 Compose topology and retained database,
+  contract, and regression evidence in
+  `docs/sprints/sprint-6b2-verification.md`.
+
+## 2026-07-23 - Sprint 6B2 Kickoff
+
+- Status: kicked off Secure Module Operation Slice from clean `main` commit `7ed779d6`.
+- Branch/worktree: `codex/sprint-6b2` at `C:\Users\eric-dev\Projects\tessara-sprint-6b2`.
+- Plan: `docs/sprints/sprint-6b2-plan.md`.
+- Planned verification: formatting; module-contract, installation-control, Scoped Records, API, and web tests; authorization/enrollment conformance; canonical Playwright; smoke; local launch; sprint UAT; and live restore/upgrade/rollback evidence.
+- Immediate focus: freeze claim, capability-floor, `ShellContextV1`, authorization-grant, signing/trust, and module-configuration contracts, while producing the Sprint 6B2 HTML/CSS review suite required before visual implementation.
+
 ## 2026-07-23 - Sprint 6B1 Closeout
 
 - Status: complete. Sprint 6B1 establishes the curated, single-host container deployment foundation and the first independently deployed reference module without turning Core into a container control plane.

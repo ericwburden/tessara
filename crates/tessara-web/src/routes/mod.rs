@@ -14,6 +14,7 @@ pub mod not_found;
 pub mod operations;
 pub mod organization;
 pub mod responses;
+pub mod scoped_records;
 pub mod workflows;
 
 use leptos_router::SsrMode;
@@ -31,6 +32,7 @@ pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
         forms::form_routes(),
         workflows::workflow_routes(),
         responses::response_routes(),
+        scoped_records::scoped_records_routes(),
         operations::operation_routes(),
         components::component_routes(),
         dashboards::dashboard_routes(),

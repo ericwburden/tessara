@@ -29,6 +29,7 @@ Confirm all of the following before making sprint artifacts:
 - `docs/progress-report.md` exists
 - `scripts/local-launch.ps1` exists
 - `scripts/uat-sprint.ps1` exists
+- `docs/ui-prototype-review-standard.md` exists when the sprint adds or materially changes application UI
 
 If any precondition fails, stop and explain the corrective action. Do not create a sprint branch, worktree, or plan file from a non-`main` checkout.
 
@@ -83,6 +84,14 @@ Write the plan file in Markdown and include these sections:
 
 Use the roadmap text directly as the source of scope. Do not invent extra roadmap scope that is not implied by the selected sprint block.
 
+When the roadmap block includes new or materially changed application UI, the plan must also:
+
+- adopt `docs/ui-prototype-review-standard.md`
+- identify the required current-product references, screen/state matrix, per-screen delta records, runnable prototype, and design-QA evidence
+- place the UI review artifacts under `docs/sprints/<slug>-ui-review/`
+- make explicit product-owner approval of the recorded deltas a gate before production UI implementation
+- keep non-visual backend work separable from the UI approval gate when the sprint plan permits it
+
 ## Kickoff progress entry requirements
 
 Prepend a new progress report entry with:
@@ -121,3 +130,4 @@ Do not consider kickoff complete if:
 - the sprint plan file was not written
 - the kickoff progress entry was not prepended
 - implementation did not continue from the sprint worktree
+- a UI-bearing sprint began production UI implementation without the required review artifacts and explicit delta approval

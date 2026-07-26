@@ -882,7 +882,9 @@ impl ModuleManagementAccessV1 {
     /// installation-global. Pass the session account's `global_capabilities`
     /// companion set, never its flattened `capabilities` list.
     pub fn from_global_capabilities(capabilities: &[String]) -> Self {
-        let admin = capabilities.iter().any(|value| value == "admin:all");
+        let admin = capabilities
+            .iter()
+            .any(|value| matches!(value.as_str(), "admin:all" | "core:admin"));
         let manage = admin
             || capabilities
                 .iter()
@@ -1008,6 +1010,7 @@ mod tests {
         for capabilities in [
             vec!["modules:manage_navigation".to_string()],
             vec!["admin:all".to_string()],
+            vec!["core:admin".to_string()],
         ] {
             assert_eq!(
                 ModuleManagementAccessV1::from_global_capabilities(&capabilities),

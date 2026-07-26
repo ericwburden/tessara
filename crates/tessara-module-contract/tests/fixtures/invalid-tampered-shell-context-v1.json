@@ -1,0 +1,33 @@
+{
+  "issuer": "tessara.core",
+  "key_id": "shell-context-dev-1",
+  "payload": {
+    "correlation_id": "00000000-0000-0000-0000-000000000004",
+    "document_state": "active",
+    "expires_at": "2026-07-23T16:01:00Z",
+    "installation_id": "00000000-0000-0000-0000-000000000001",
+    "issued_at": "2026-07-23T16:00:00Z",
+    "locale": "en-US",
+    "module_definition_id": "tessara.reference.scoped-records",
+    "module_instance_id": "00000000-0000-0000-0000-000000000002",
+    "navigation": [
+      {
+        "contribution_id": "tessara.reference.scoped-records.main",
+        "href": "/modules/scoped-records/",
+        "label": "Scoped Records"
+      }
+    ],
+    "original_actor": {
+      "actor_id": "00000000-0000-0000-0000-000000000003",
+      "display_name": "Tampered Administrator",
+      "email": "admin@tessara.local"
+    },
+    "return_destination": "/admin/modules",
+    "schema_version": 1,
+    "theme": "dark",
+    "time_zone": "America/New_York"
+  },
+  "purpose": "shell_context",
+  "schema_version": 1,
+  "signature": "AQNDlvfoY7FG_ocGy-vLc1F8LzFFlvEEL9RLO5mE_got-skV5Vb1sGf9e9dSLwrqQpErS8XrDj6HvMTP3NQxDA"
+}

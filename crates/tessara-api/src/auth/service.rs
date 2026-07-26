@@ -16,7 +16,10 @@ use crate::{
 };
 
 use super::{
-    dto::{AccountContext, CapabilityBoundary, CapabilityScope, SessionContext, SessionTransport},
+    dto::{
+        AccountContext, CORE_ADMIN_IMPLIED_CAPABILITIES, CapabilityBoundary, CapabilityScope,
+        SessionContext, SessionTransport,
+    },
     repo,
 };
 
@@ -207,6 +210,16 @@ fn capability_keys(scopes: &[CapabilityScope]) -> Vec<String> {
         .filter_map(|capability| implied_read_capability(capability))
         .collect::<Vec<_>>();
     capabilities.extend(implied_reads);
+    if capabilities
+        .iter()
+        .any(|capability| capability == "core:admin")
+    {
+        capabilities.extend(
+            CORE_ADMIN_IMPLIED_CAPABILITIES
+                .iter()
+                .map(|capability| (*capability).to_string()),
+        );
+    }
     capabilities.sort();
     capabilities.dedup();
     capabilities

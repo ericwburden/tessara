@@ -1,0 +1,16 @@
+FROM rust:1.94-bookworm AS builder
+WORKDIR /app
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release -p tessara-installation-control \
+    && cp /app/target/release/tessara-installation-control /tmp/installation-control
+
+FROM debian:trixie-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /tmp/installation-control /usr/local/bin/installation-control
+EXPOSE 8075
+ENTRYPOINT ["installation-control"]

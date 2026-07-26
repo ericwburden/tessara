@@ -14,6 +14,7 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 | [development-workflow.md](./development-workflow.md) | Local development loops for fast host-run iteration, API-only refresh, and full-stack relaunch |
 | [ui-guidance.md](./ui-guidance.md) | Canonical UI guidance for naming, brand expression, shell behavior, rendering, layout, components, states, shared primitive contracts, and transitional UI rules |
 | [ui-guidance-spec.md](./ui-guidance-spec.md) | Allium behavioral specification companion to the canonical UI guidance |
+| [ui-prototype-review-standard.md](./ui-prototype-review-standard.md) | Required evidence, prototype, visual-QA, and approval workflow for UI-bearing sprints |
 
 ## Authority Rules
 
@@ -48,6 +49,7 @@ Start here if you are orienting:
 5. Read [api-wire-types.md](./api-wire-types.md) before adding a public module contract or JSON/event schema.
 6. Read [ui-guidance.md](./ui-guidance.md) for the canonical UI specification.
 7. Read [ui-guidance-spec.md](./ui-guidance-spec.md) when you need the formal Allium behavior contract for the UI guidance.
+8. Read [ui-prototype-review-standard.md](./ui-prototype-review-standard.md) before planning or implementing a sprint with new or materially changed screens.
 
 ## Reference Inputs
 

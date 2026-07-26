@@ -1207,7 +1207,7 @@ async fn assert_control_plane_shape(pool: &PgPool) {
     assert_eq!(counts["policies"], 1);
     assert_eq!(counts["policy_entries"], 6);
     assert_eq!(counts["groups"], 2);
-    assert_eq!(counts["placements"], 13);
+    assert_eq!(counts["placements"], 14);
     assert_eq!(counts["sync_audits"], 2);
 
     let module_capabilities: Vec<(String, String)> = sqlx::query_as(

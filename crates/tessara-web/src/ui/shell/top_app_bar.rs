@@ -10,7 +10,7 @@ use leptos::prelude::*;
 use crate::state::theme::{DARK_THEME_COLOR, LIGHT_THEME_COLOR, STORAGE_KEY};
 
 #[component]
-pub fn TopAppBar(active_route: &'static str, title: &'static str) -> impl IntoView {
+pub fn TopAppBar(active_route: &'static str, title: String) -> impl IntoView {
     view! {
         <header class="top-app-bar">
             <div class="top-app-bar__title-row">

@@ -1,9 +1,9 @@
 //! Role-management Administration list component.
 
 use crate::features::administration::models::AdminRoleSummary;
-use crate::ui::{DataTable, DropdownMenu, TablePaginationFooter};
+use crate::ui::{DataTable, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
-use icons::{PanelRight, Search};
+use icons::Search;
 use leptos::prelude::*;
 
 #[component]
@@ -43,7 +43,6 @@ pub(crate) fn AdministrationRolesList(
                             <th scope="col">"Role"</th>
                             <th class="data-table__cell--center" scope="col">"Capabilities"</th>
                             <th class="data-table__cell--center" scope="col">"Users"</th>
-                            <th class="data-table__cell--center" scope="col">"Actions"</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -51,7 +50,7 @@ pub(crate) fn AdministrationRolesList(
                             if table_roles.is_empty() {
                                 view! {
                                     <tr>
-                                        <td class="data-table__empty" colspan="4">"No Roles to Display"</td>
+                                        <td class="data-table__empty" colspan="3">"No Roles to Display"</td>
                                     </tr>
                                 }
                                 .into_any()
@@ -63,7 +62,6 @@ pub(crate) fn AdministrationRolesList(
                                     .cloned()
                                     .map(|role| {
                                         let role_id = role.id.clone();
-                                        let role_name = role.name.clone();
                                         view! {
                                             <tr>
                                                 <th scope="row">
@@ -77,19 +75,6 @@ pub(crate) fn AdministrationRolesList(
                                                 </th>
                                                 <td class="data-table__cell--center">{role.capability_count}</td>
                                                 <td class="data-table__cell--center">{role.account_count}</td>
-                                                <td class="data-table__cell--center">
-                                                    <DropdownMenu label=format!("Open actions for {role_name}")>
-                                                        <button
-                                                            class="dropdown-menu__item"
-                                                            type="button"
-                                                            role="menuitem"
-                                                            on:click=move |_| selected_role_id.set(Some(role.id.clone()))
-                                                        >
-                                                            <PanelRight class="dropdown-menu__item-icon"/>
-                                                            <span>"View Details"</span>
-                                                        </button>
-                                                    </DropdownMenu>
-                                                </td>
                                             </tr>
                                         }
                                     })

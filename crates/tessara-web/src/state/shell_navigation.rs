@@ -120,7 +120,7 @@ impl ShellNavigationResponseV1 {
                 };
                 if !seen_keys.insert(item.key.as_str())
                     || spec.locked_group.is_some_and(|id| id != group.id)
-                    || spec.label != item.label
+                    || !item_label_is_supported(&item.key, spec.label, &item.label)
                     || spec.href != item.href
                     || spec.owner != item.owner
                     || spec.contribution_id != item.contribution_id.as_deref()
@@ -133,6 +133,16 @@ impl ShellNavigationResponseV1 {
         }
 
         seen_keys.contains("home")
+    }
+}
+
+fn item_label_is_supported(key: &str, static_label: &str, actual_label: &str) -> bool {
+    if key == "scoped_records" {
+        actual_label == actual_label.trim()
+            && (1..=80).contains(&actual_label.chars().count())
+            && !actual_label.chars().any(char::is_control)
+    } else {
+        actual_label == static_label
     }
 }
 
@@ -212,6 +222,13 @@ fn item_spec(key: &str) -> Option<ItemSpec> {
             owner: contribution,
             contribution_id: Some("tessara.datasets.navigation"),
         },
+        "scoped_records" => ItemSpec {
+            label: "Scoped Records",
+            href: "/reference/scoped-records",
+            locked_group: None,
+            owner: contribution,
+            contribution_id: Some("tessara.reference.scoped-records.navigation"),
+        },
         "user_management" => ItemSpec {
             label: "User Management",
             href: "/administration/users",
@@ -275,6 +292,7 @@ mod tests {
                         item("forms"),
                         item("operations"),
                         item("dashboards"),
+                        item("scoped_records"),
                     ],
                 },
                 ShellNavigationGroupV1 {
@@ -343,6 +361,26 @@ mod tests {
 
         let mut response = available();
         response.schema_version = 3;
+        assert!(!response.is_supported());
+    }
+
+    #[test]
+    fn scoped_records_accepts_a_valid_configured_navigation_label() {
+        let mut response = available();
+        response.groups[0]
+            .items
+            .iter_mut()
+            .find(|item| item.key == "scoped_records")
+            .expect("scoped records item")
+            .label = "Regional Records".into();
+        assert!(response.is_supported());
+
+        response.groups[0]
+            .items
+            .iter_mut()
+            .find(|item| item.key == "scoped_records")
+            .expect("scoped records item")
+            .label = " ".into();
         assert!(!response.is_supported());
     }
 

@@ -10,6 +10,7 @@ mod app_summary;
 mod auth;
 mod components;
 pub mod config;
+mod core_security;
 mod dashboards;
 mod datasets;
 pub mod db;
@@ -86,6 +87,7 @@ pub fn router(state: AppState) -> Router {
             "/login",
             get(|| async { native_app("/login", "Tessara Sign In", "Sign in to Tessara.") }),
         )
+        .route("/enrollment", get(core_security::enrollment_page))
         .route("/api/module-unavailable", get(module_unavailable_fallback))
         .route("/assets/{asset_name}", get(static_asset))
         .nest_service("/pkg", ServeDir::new(shell_pkg_dir()))
@@ -489,6 +491,7 @@ fn api_routes() -> Router<AppState> {
         .route("/api/summary", get(app_summary::get_summary))
         .merge(auth::routes())
         .merge(users::routes())
+        .merge(core_security::routes())
         .merge(hierarchy::routes())
         .merge(operations::routes())
         .merge(forms::routes())
@@ -534,6 +537,7 @@ fn is_protected_ui_request(request: &Request) -> bool {
     let path = request.uri().path();
     !(path == "/"
         || path == "/login"
+        || path == "/enrollment"
         || path == "/health"
         || path == "/api"
         || path.starts_with("/api/")

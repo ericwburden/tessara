@@ -15,9 +15,7 @@ use super::{
         prepare_catalog, prepare_source, source_digest,
     },
     navigation_catalog::{self, DESTINATIONS, NavigationCatalogOwner},
-    repository::{
-        self, CatalogProjectionRow, NavigationGroupRow, NavigationPlacementRow, NavigationRecord,
-    },
+    repository::{self, NavigationGroupRow, NavigationPlacementRow, NavigationRecord},
 };
 
 #[cfg(test)]
@@ -79,7 +77,7 @@ pub(crate) struct IndependentModuleReadModel {
     pub(crate) identity: String,
     pub(crate) data: String,
     pub(crate) database_name: String,
-    pub(crate) configuration: sqlx::types::Json<BTreeMap<String, String>>,
+    pub(crate) configuration: sqlx::types::Json<Value>,
     pub(crate) route_prefix: Option<String>,
     pub(crate) installed: bool,
     pub(crate) deployed: bool,
@@ -465,10 +463,7 @@ pub(crate) async fn load_navigation_policy_v2(
         .map_err(|()| CatalogReadError::Integrity {
             code: "navigation_policy_integrity_mismatch",
         })?;
-    apply_navigation_availability(
-        &mut policy,
-        repository::load_catalog_projections(&mut tx).await?,
-    );
+    apply_navigation_availability(&mut policy, &mut tx).await?;
     tx.commit().await?;
     Ok(policy)
 }
@@ -527,10 +522,7 @@ async fn update_navigation_policy_v2_transaction(
         repository::load_navigation_placements(&mut tx, installation_id).await?,
     )
     .map_err(|()| NavigationPolicyUpdateError::Integrity)?;
-    apply_navigation_availability(
-        &mut current,
-        repository::load_catalog_projections(&mut tx).await?,
-    );
+    apply_navigation_availability(&mut current, &mut tx).await?;
     let (requested_groups, requested_placements) =
         validate_navigation_policy_v2_request(&current, groups, destinations)?;
 
@@ -587,10 +579,7 @@ async fn update_navigation_policy_v2_transaction(
         repository::load_navigation_placements(&mut tx, installation_id).await?,
     )
     .map_err(|()| NavigationPolicyUpdateError::Integrity)?;
-    apply_navigation_availability(
-        &mut updated,
-        repository::load_catalog_projections(&mut tx).await?,
-    );
+    apply_navigation_availability(&mut updated, &mut tx).await?;
     repository::insert_account_audit_event(
         &mut tx,
         installation_id,
@@ -734,11 +723,12 @@ fn navigation_policy_v2_model(
     })
 }
 
-fn apply_navigation_availability(
+async fn apply_navigation_availability(
     policy: &mut NavigationPolicyReadModelV2,
-    projections: Vec<CatalogProjectionRow>,
-) {
-    let availability = projections
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<(), sqlx::Error> {
+    let mut availability = repository::load_catalog_projections(tx)
+        .await?
         .into_iter()
         .map(|projection| {
             let available = projection.current.normalized_projection["descriptor"]["availability"]
@@ -747,13 +737,39 @@ fn apply_navigation_availability(
             (projection.definition_id, available)
         })
         .collect::<BTreeMap<_, _>>();
+    let configured_labels = repository::load_available_independent_module_navigation_labels(tx)
+        .await?
+        .into_iter()
+        .filter_map(|(definition_id, label)| {
+            label
+                .filter(|label| valid_navigation_label(label))
+                .map(|label| (definition_id, label))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for definition_id in repository::load_available_independent_module_definition_ids(tx).await? {
+        availability.insert(definition_id, true);
+    }
     for destination in &mut policy.destinations {
         destination.available = destination
             .definition_id
             .as_ref()
             .map(|definition_id| availability.get(definition_id).copied().unwrap_or(false))
             .unwrap_or(true);
+        if let Some(label) = destination
+            .definition_id
+            .as_ref()
+            .and_then(|definition_id| configured_labels.get(definition_id))
+        {
+            destination.label.clone_from(label);
+        }
     }
+    Ok(())
+}
+
+fn valid_navigation_label(label: &str) -> bool {
+    label == label.trim()
+        && (1..=80).contains(&label.chars().count())
+        && !label.chars().any(char::is_control)
 }
 
 fn validate_navigation_policy_v2_request(
@@ -939,6 +955,69 @@ async fn ensure_navigation_composition_v2(
         .await?;
     } else if groups.is_empty() || placements.is_empty() {
         return Err(CatalogSyncError::StoredNavigationCompositionMismatch);
+    } else {
+        let group_ids = groups
+            .iter()
+            .map(|group| group.group_id.as_str())
+            .collect::<BTreeSet<_>>();
+        let placed_ids = placements
+            .iter()
+            .map(|placement| placement.destination_id.as_str())
+            .collect::<BTreeSet<_>>();
+        let mut next_order_by_group = BTreeMap::<String, i32>::new();
+        for placement in &placements {
+            let next_order = placement.display_order + 1;
+            next_order_by_group
+                .entry(placement.group_id.clone())
+                .and_modify(|current| *current = (*current).max(next_order))
+                .or_insert(next_order);
+        }
+        let mut additions = Vec::new();
+        for destination in DESTINATIONS
+            .iter()
+            .filter(|destination| !placed_ids.contains(destination.id))
+        {
+            if !group_ids.contains(destination.default_group_id) {
+                return Err(CatalogSyncError::StoredNavigationCompositionMismatch);
+            }
+            let order = next_order_by_group
+                .entry(destination.default_group_id.to_string())
+                .or_insert(0);
+            additions.push(NavigationPlacementRow {
+                destination_id: destination.id.to_string(),
+                group_id: destination.default_group_id.to_string(),
+                visible: true,
+                display_order: *order,
+            });
+            *order += 1;
+        }
+        if !additions.is_empty() {
+            repository::seed_navigation_composition(tx, installation_id, &[], &additions).await?;
+            let previous_revision =
+                repository::load_navigation_policy_revision(tx, installation_id).await?;
+            let revision = repository::increment_navigation_policy_revision(
+                tx,
+                installation_id,
+                previous_revision,
+            )
+            .await?;
+            repository::insert_audit_event(
+                tx,
+                Some(installation_id),
+                "navigation_policy.catalog_reconciled",
+                correlation_id,
+                &json!({
+                    "schema_version": 2,
+                    "before_revision": previous_revision,
+                    "after_revision": revision,
+                    "destinations_added": additions
+                        .iter()
+                        .map(|placement| placement.destination_id.as_str())
+                        .collect::<Vec<_>>(),
+                }),
+            )
+            .await?;
+        }
     }
 
     navigation_policy_v2_model(
@@ -1849,6 +1928,15 @@ mod tests {
             format!("{:x}", Sha256::digest(baseline)),
             "692f7bd17326b05cbba77983f575827d9f30e0d582b44ded57690655e4f2b843"
         );
+    }
+
+    #[test]
+    fn configured_navigation_labels_are_bounded_and_sanitized() {
+        assert!(valid_navigation_label("Scoped Records!"));
+        assert!(!valid_navigation_label(""));
+        assert!(!valid_navigation_label(" Scoped Records"));
+        assert!(!valid_navigation_label("Scoped Records\n"));
+        assert!(!valid_navigation_label(&"x".repeat(81)));
     }
 
     #[test]

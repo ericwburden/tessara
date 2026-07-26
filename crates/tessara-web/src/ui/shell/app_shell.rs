@@ -10,7 +10,7 @@ use crate::features::auth;
 #[component]
 pub fn AppShell(
     active_route: &'static str,
-    title: &'static str,
+    #[prop(into)] title: String,
     children: Children,
 ) -> impl IntoView {
     auth::guards::require_authenticated_route(active_route);

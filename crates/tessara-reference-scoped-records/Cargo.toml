@@ -7,11 +7,17 @@ license.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
+base64 = { workspace = true }
 chrono = { workspace = true }
+icons = { version = "0.18.2", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
+tessara-module-contract = { path = "../tessara-module-contract" }
+thiserror = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
 tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

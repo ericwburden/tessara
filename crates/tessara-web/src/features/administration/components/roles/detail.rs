@@ -3,7 +3,7 @@
 use crate::features::administration::models::{
     AdminAccountAssignmentSummary, AdminCapabilitySummary, AdminRoleDetail,
 };
-use icons::Pencil;
+use icons::{Check, CircleHelp, Pencil};
 use leptos::prelude::*;
 use tessara_web_ui::{SideSheet, SideSheetSide};
 
@@ -33,6 +33,7 @@ pub(crate) fn AdministrationRoleDetailPanel(
         let close_assigned_users = Callback::new(move |_| assigned_users_open.set(false));
         let role_name = detail.name.clone();
         let assigned_users_sheet_id = format!("role-{}-assigned-users", detail.id);
+        let is_enrollment_role = detail.name == "Core Administrator";
         view! {
             <section
                 class="organization-detail-card organization-detail-card--wide administration-role-detail-card"
@@ -65,6 +66,28 @@ pub(crate) fn AdministrationRoleDetailPanel(
                     <h3>"Capabilities"</h3>
                     <AdminRoleCapabilityList capabilities/>
                 </section>
+                {is_enrollment_role.then(|| view! {
+                    <div class="administration-role-enrollment-note">
+                        <strong>"Administrator enrollment"</strong>
+                        <span><Check/> "Designated installation-global role"</span>
+                        <p>"Successful initial and recovery enrollment claims assign this role."</p>
+                    </div>
+                    <div class="administration-role-floor-obligations">
+                        <strong>"Floor v1 obligations"</strong>
+                        <span><Check/> "Users and identity"</span>
+                        <span><Check/> "Roles and assignments"</span>
+                        <span><Check/> "Organization administration"</span>
+                        <span><Check/> "Module configuration and enablement"</span>
+                        <span><Check/> "Installation health and recovery"</span>
+                    </div>
+                    <aside class="administration-role-capability-notice">
+                        <CircleHelp/>
+                        <div>
+                            <strong>"Module product capabilities remain separate"</strong>
+                            <span>"Enrollment does not grant Scoped Records read or manage authority."</span>
+                        </div>
+                    </aside>
+                })}
             </section>
 
             <SideSheet

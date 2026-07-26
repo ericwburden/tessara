@@ -426,6 +426,8 @@ mod tests {
     };
 
     const BASELINE: &[u8] = include_bytes!("../migrations/001_baseline.sql");
+    const MODULE_CAPABILITY_BACKFILL: &[u8] =
+        include_bytes!("../migrations/003_register_independent_module_capabilities.sql");
 
     #[test]
     fn built_in_role_capability_seed_contract_is_exact_and_review_versioned() {
@@ -474,6 +476,17 @@ mod tests {
         assert!(baseline.contains("CREATE TABLE module_instances"));
         assert!(baseline.contains("CREATE TABLE deployment_receipts"));
         assert!(baseline.contains("manifest JSONB"));
+    }
+
+    #[test]
+    fn independent_module_capability_backfill_is_manifest_driven_and_scope_aware() {
+        let migration = std::str::from_utf8(MODULE_CAPABILITY_BACKFILL)
+            .expect("module capability migration is UTF-8");
+        assert!(migration.contains("jsonb_array_elements"));
+        assert!(migration.contains("manifest -> 'security_capabilities'"));
+        assert!(migration.contains("'scope_aware'"));
+        assert!(migration.contains("ON CONFLICT (key) DO UPDATE"));
+        assert!(!migration.contains("tessara.reference.scoped-records"));
     }
 
     fn sha256_hex(bytes: &[u8]) -> String {

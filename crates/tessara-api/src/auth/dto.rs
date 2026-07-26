@@ -2,6 +2,17 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub(crate) const CORE_ADMIN_IMPLIED_CAPABILITIES: &[&str] = &[
+    "hierarchy:read",
+    "hierarchy:manage",
+    "modules:read",
+    "modules:manage_navigation",
+];
+
+pub(crate) fn core_admin_implies(required: &str) -> bool {
+    required == "admin:all" || CORE_ADMIN_IMPLIED_CAPABILITIES.contains(&required)
+}
+
 #[derive(Deserialize)]
 pub struct LoginRequest {
     pub email: String,
@@ -114,6 +125,7 @@ impl AccountContext {
         self.capability_scopes.iter().any(|scope| {
             scope.global
                 && (scope.capability == "admin:all"
+                    || (scope.capability == "core:admin" && core_admin_implies(required))
                     || scope.capability == required
                     || implied
                         .as_deref()
@@ -128,17 +140,24 @@ impl AccountContext {
             .filter(|capability| self.has_global_capability(capability))
             .cloned()
             .collect::<Vec<_>>();
+        if self.has_global_capability("core:admin") {
+            capabilities.extend(
+                CORE_ADMIN_IMPLIED_CAPABILITIES
+                    .iter()
+                    .map(|capability| (*capability).to_string()),
+            );
+        }
         capabilities.sort();
         capabilities.dedup();
         capabilities
     }
 
     pub fn matching_capability_scope(&self, required: &str) -> Option<(&CapabilityScope, String)> {
-        if let Some(scope) = self
-            .capability_scopes
-            .iter()
-            .find(|scope| scope.capability == "admin:all" || scope.capability == required)
-        {
+        if let Some(scope) = self.capability_scopes.iter().find(|scope| {
+            scope.capability == "admin:all"
+                || scope.capability == required
+                || (scope.capability == "core:admin" && core_admin_implies(required))
+        }) {
             return Some((scope, scope.capability.clone()));
         }
 
@@ -225,6 +244,39 @@ mod tests {
 
         assert!(account.has_global_capability("modules:read"));
         assert!(account.has_global_capability("modules:manage_navigation"));
+    }
+
+    #[test]
+    fn core_admin_implies_only_core_administration_boundaries() {
+        let mut account = account_with_scopes(vec![CapabilityScope {
+            capability: "core:admin".to_string(),
+            global: true,
+            node_ids: Vec::new(),
+        }]);
+        account.capabilities = vec!["core:admin".to_string()];
+
+        for capability in [
+            "admin:all",
+            "hierarchy:read",
+            "hierarchy:manage",
+            "modules:read",
+            "modules:manage_navigation",
+        ] {
+            assert!(account.has_global_capability(capability), "{capability}");
+        }
+        for capability in ["forms:read", "workflows:manage", "datasets:read"] {
+            assert!(!account.has_capability(capability), "{capability}");
+        }
+        assert_eq!(
+            account.global_capability_keys(),
+            vec![
+                "core:admin".to_string(),
+                "hierarchy:manage".to_string(),
+                "hierarchy:read".to_string(),
+                "modules:manage_navigation".to_string(),
+                "modules:read".to_string(),
+            ]
+        );
     }
 
     #[test]

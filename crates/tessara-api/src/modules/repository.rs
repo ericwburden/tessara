@@ -237,6 +237,36 @@ pub(crate) async fn ensure_module_capability(
         .ok_or(sqlx::Error::RowNotFound)
 }
 
+/// Registers a product capability declared by an installed module manifest.
+///
+/// Module product capabilities are scope-aware by default: Core binds them to
+/// Organization roots when roles are assigned. Updating the description keeps
+/// the assignable catalog aligned with the accepted manifest while preserving
+/// the stable capability identity and existing role memberships.
+pub(crate) async fn ensure_declared_module_capability(
+    tx: &mut Transaction<'_, Postgres>,
+    key: &str,
+    description: &str,
+) -> Result<CapabilityRow, sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO capabilities (key, description, scope_mode)
+        VALUES ($1, $2, 'scope_aware')
+        ON CONFLICT (key) DO UPDATE SET
+            description = EXCLUDED.description,
+            scope_mode = EXCLUDED.scope_mode
+        "#,
+    )
+    .bind(key)
+    .bind(description)
+    .execute(&mut **tx)
+    .await?;
+
+    load_capability(tx, key)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)
+}
+
 pub(crate) async fn load_capability(
     tx: &mut Transaction<'_, Postgres>,
     key: &str,
@@ -420,6 +450,42 @@ pub(crate) async fn load_catalog_projections(
         });
     }
     Ok(projections)
+}
+
+pub(crate) async fn load_available_independent_module_definition_ids(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT definition_id
+        FROM module_instances
+        WHERE installed
+          AND deployed
+          AND configured
+          AND enabled
+        ORDER BY definition_id
+        "#,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub(crate) async fn load_available_independent_module_navigation_labels(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Vec<(String, Option<String>)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT definition_id, configuration ->> 'display_label' AS display_label
+        FROM module_instances
+        WHERE installed
+          AND deployed
+          AND configured
+          AND enabled
+        ORDER BY definition_id
+        "#,
+    )
+    .fetch_all(&mut **tx)
+    .await
 }
 
 pub(crate) async fn ensure_source(
