@@ -7,6 +7,27 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-25 - Sprint 6B2 Closeout
+
+- Status: closeout candidate prepared; final source-exact validation is in progress.
+- Completed:
+  - Secure administrator enrollment and reason-bearing recovery across the
+    independent installation-control boundary.
+  - Capability Floor v1, signed shell and authorization protocol contracts,
+    scoped read/manage grants, revision invalidation, and replay protection.
+  - Scoped Records configuration, directory/detail/create/edit,
+    health/diagnostics, Organization scoping, and native Core-shell
+    integration.
+  - Approved Sprint 6B2 UI review, live conformance corrections, responsive
+    containment, and dynamic module navigation labels.
+  - Core and Scoped Records development migrations folded into their single
+    fresh-install baselines; Installation Control already uses one baseline.
+- Validation:
+  - Final clean database, migration-ledger, build, Rust test, smoke, UAT, and
+    Playwright acceptance cycle pending against the committed closeout
+    candidate.
+- Next Sprint: Sprint 6C - Independently Deployed Dashboard Module Slice.
+
 ## 2026-07-23 - Sprint 6B2 Implementation Started
 
 - Product-owner approval of the annotated UI delta records is recorded; production UI remains limited to those deltas.

@@ -320,18 +320,18 @@ fn module_request(method: &str, path: &str, authorization: &str, body: Value) ->
 }
 
 #[tokio::test]
-async fn compatible_upgrade_and_binary_rollback_preserve_legacy_records() {
+async fn squashed_baseline_preserves_the_legacy_binary_record_shape() {
     let database_url = std::env::var("TEST_SCOPED_RECORDS_UPGRADE_DATABASE_URL")
         .expect("TEST_SCOPED_RECORDS_UPGRADE_DATABASE_URL is required for lifecycle tests");
     let pool = PgPoolOptions::new()
         .max_connections(2)
         .connect(&database_url)
         .await
-        .expect("upgrade test database is reachable");
+        .expect("baseline compatibility test database is reachable");
     sqlx::raw_sql(include_str!("../migrations/001_scoped_records.sql"))
         .execute(&pool)
         .await
-        .expect("Sprint 6B1 schema applies");
+        .expect("Sprint 6B2 baseline applies");
     let original_id = Uuid::new_v4();
     sqlx::query("INSERT INTO scoped_records (id,label,scope) VALUES ($1,$2,$3)")
         .bind(original_id)
@@ -340,11 +340,6 @@ async fn compatible_upgrade_and_binary_rollback_preserve_legacy_records() {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::raw_sql(include_str!("../migrations/002_secure_records.sql"))
-        .execute(&pool)
-        .await
-        .expect("Sprint 6B2 schema applies");
-
     let upgraded: (Uuid, String, String, Uuid) = sqlx::query_as(
         "SELECT id,label,scope,organization_owner_id FROM scoped_records WHERE id=$1",
     )

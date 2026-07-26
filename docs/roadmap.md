@@ -813,7 +813,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** using the curated 6B1 release fixture, an operator can validate and plan the exact deployment, apply it through Docker Compose, observe the Core, Traefik, PostgreSQL, and reference-module containers, reach the reference module through the single Tessara origin, stop it without breaking Core, inspect the contained fallback and diagnostics, restore it, apply a compatible upgrade, and roll back. The one PostgreSQL container contains separate Core, deployment-control, and Module Instance databases, and prohibited cross-database access fails.
 
-### Sprint 6B2: Secure Module Operation Slice (Next)
+### Sprint 6B2: Secure Module Operation Slice (Complete)
 
 **Outcome:** Tessara can securely enroll its first administrator and authorize scoped user activity across the independently deployed module boundary established in Sprint 6B1.
 
@@ -867,7 +867,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** the accepted decision record demonstrates why the selected interface is more appropriate than the rejected alternatives for both single-operator and larger installations. With Core healthy, unavailable, and restored to a pre-recovery backup in separate exercises, an authorized operator can reach the selected restricted interface, complete independent transport authentication and step-up authorization, issue or replace a claim and view its secret exactly once, rotate a referenced deployment secret with an impact preview, and inspect immutable non-secret receipts. An ordinary Core administrator session, client outside the source allowlist, client lacking the deployment-assigned credential or authorized SSH key, replayed request, expired session, or later status lookup cannot reveal or reuse secret material.
 
-### Sprint 6C: Independently Deployed Dashboard Module Slice
+### Sprint 6C: Independently Deployed Dashboard Module Slice (Next)
 
 **Outcome:** Dashboards is the first existing Tessara feature area to operate as a separately deployed, full-stack module.
 

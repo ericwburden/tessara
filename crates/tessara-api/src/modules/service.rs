@@ -1926,7 +1926,7 @@ mod tests {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "692f7bd17326b05cbba77983f575827d9f30e0d582b44ded57690655e4f2b843"
+            "3d9c03e38baad9416ca8425ad32e4baa245311ab829a3ec465bf60484debe3a7"
         );
     }
 
