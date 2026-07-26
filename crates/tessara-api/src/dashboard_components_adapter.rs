@@ -19,9 +19,10 @@ use tessara_dashboards::{
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
     CapabilityScopeBindingV1, ContractCompatibilityState, CoreInstallationOwnerState,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ProtocolSignaturePurposeV1,
-    ProviderAvailabilityState, ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
-    ResourceOwner, ResourceOwnerState, SecurityCapabilityId, SignedEnvelopeV1,
+    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleInstanceOwnerState,
+    OwnerDataState, ProtocolSignaturePurposeV1, ProviderAvailabilityState, ResourceAccessState,
+    ResourceIdentityState, ResourceLifecycleState, ResourceOwner, ResourceOwnerState,
+    SecurityCapabilityId, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -81,32 +82,19 @@ async fn resolve_component(
 
     let provider_state =
         std::env::var("TESSARA_COMPONENTS_PROVIDER_STATE").unwrap_or_else(|_| "available".into());
-    if provider_state == "unavailable" {
+    if let Some(fixture) = provider_fixture(&provider_state) {
         if !globally_authorized {
             return Ok(Json(restricted(ResourceAccessState::NotEvaluated)?));
         }
-        return Ok(Json(authorized_without_metadata(
-            ResourceIdentityState::NotEvaluated,
-            ResourceLifecycleState::NotEvaluated,
-            ContractCompatibilityState::Compatible,
-            ProviderAvailabilityState::Unavailable,
-        )?));
-    }
-    if provider_state == "incompatible" {
-        if !globally_authorized {
-            return Ok(Json(restricted(ResourceAccessState::NotEvaluated)?));
-        }
-        return Ok(Json(authorized_without_metadata(
-            ResourceIdentityState::NotEvaluated,
-            ResourceLifecycleState::NotEvaluated,
-            ContractCompatibilityState::Incompatible,
-            ProviderAvailabilityState::Available,
-        )?));
+        return Ok(Json(fixture?));
     }
 
     let Some(component_version_id) = parse_canonical_uuid(reference.resource_id()) else {
         return if globally_authorized {
             Ok(Json(authorized_without_metadata(
+                ResourceOwnerState::CoreInstallation {
+                    state: CoreInstallationOwnerState::Live,
+                },
                 ResourceIdentityState::UnknownResource,
                 ResourceLifecycleState::NotEvaluated,
                 ContractCompatibilityState::Compatible,
@@ -130,6 +118,9 @@ async fn resolve_component(
     let Some(row) = row else {
         return if globally_authorized {
             Ok(Json(authorized_without_metadata(
+                ResourceOwnerState::CoreInstallation {
+                    state: CoreInstallationOwnerState::Live,
+                },
                 ResourceIdentityState::UnknownResource,
                 ResourceLifecycleState::NotEvaluated,
                 ContractCompatibilityState::Compatible,
@@ -480,15 +471,14 @@ fn restricted(access: ResourceAccessState) -> ApiResult<DashboardComponentResolu
 }
 
 fn authorized_without_metadata(
+    owner: ResourceOwnerState,
     identity: ResourceIdentityState,
     lifecycle: ResourceLifecycleState,
     compatibility: ContractCompatibilityState,
     availability: ProviderAvailabilityState,
 ) -> ApiResult<DashboardComponentResolutionResponseV1> {
     let resolution = tessara_module_contract::ResourceResolutionV1::authorized(
-        ResourceOwnerState::CoreInstallation {
-            state: CoreInstallationOwnerState::Live,
-        },
+        owner,
         identity,
         lifecycle,
         compatibility,
@@ -497,6 +487,76 @@ fn authorized_without_metadata(
     .map_err(|error| ApiError::Internal(error.into()))?;
     DashboardComponentResolutionResponseV1::new(resolution, None)
         .map_err(|error| ApiError::Internal(error.into()))
+}
+
+fn provider_fixture(state: &str) -> Option<ApiResult<DashboardComponentResolutionResponseV1>> {
+    let core_owner = || ResourceOwnerState::CoreInstallation {
+        state: CoreInstallationOwnerState::Live,
+    };
+    let fixture = match state {
+        "available" => return None,
+        "unavailable" => authorized_without_metadata(
+            core_owner(),
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Unavailable,
+        ),
+        "incompatible" => authorized_without_metadata(
+            core_owner(),
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::Incompatible,
+            ProviderAvailabilityState::Available,
+        ),
+        "inactive" | "superseded" | "tombstoned" => authorized_without_metadata(
+            core_owner(),
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::ProviderDefined {
+                state: state.to_string(),
+            },
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Available,
+        ),
+        "owner_tombstoned" => authorized_without_metadata(
+            ResourceOwnerState::ModuleInstance {
+                instance_state: ModuleInstanceOwnerState::OwnerModuleInstanceTombstoned,
+                data_state: OwnerDataState::Retained,
+            },
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Available,
+        ),
+        "owner_data_destroyed" => authorized_without_metadata(
+            ResourceOwnerState::ModuleInstance {
+                instance_state: ModuleInstanceOwnerState::OwnerModuleInstanceTombstoned,
+                data_state: OwnerDataState::OwnerDataDestroyed,
+            },
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Available,
+        ),
+        "missing" => authorized_without_metadata(
+            core_owner(),
+            ResourceIdentityState::UnknownResource,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Available,
+        ),
+        "not_evaluated" => authorized_without_metadata(
+            ResourceOwnerState::NotEvaluated,
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::NotEvaluated,
+            ProviderAvailabilityState::NotEvaluated,
+        ),
+        _ => Err(ApiError::ServiceUnavailable(
+            "Components provider state fixture is invalid".into(),
+        )),
+    };
+    Some(fixture)
 }
 
 fn parse_canonical_uuid(value: &str) -> Option<Uuid> {
@@ -510,12 +570,86 @@ fn restricted_authorization() -> ApiError {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_canonical_uuid;
+    use tessara_module_contract::{
+        ContractCompatibilityState, ModuleInstanceOwnerState, OwnerDataState,
+        ProviderAvailabilityState, ResourceIdentityState, ResourceLifecycleState,
+        ResourceOwnerState,
+    };
+
+    use super::{parse_canonical_uuid, provider_fixture};
 
     #[test]
     fn component_resource_ids_are_canonical_uuids() {
         assert!(parse_canonical_uuid("11111111-1111-4111-8111-111111111111").is_some());
         assert!(parse_canonical_uuid("11111111111141118111111111111111").is_none());
         assert!(parse_canonical_uuid("not-a-uuid").is_none());
+    }
+
+    #[test]
+    fn transition_failure_matrix_is_deterministic_and_distinct() {
+        assert!(provider_fixture("available").is_none());
+        let unavailable = provider_fixture("unavailable")
+            .expect("fixture")
+            .expect("valid fixture");
+        assert_eq!(
+            unavailable.resolution().availability_state(),
+            ProviderAvailabilityState::Unavailable
+        );
+        let incompatible = provider_fixture("incompatible")
+            .expect("fixture")
+            .expect("valid fixture");
+        assert_eq!(
+            incompatible.resolution().compatibility_state(),
+            ContractCompatibilityState::Incompatible
+        );
+        for lifecycle in ["inactive", "superseded", "tombstoned"] {
+            assert_eq!(
+                provider_fixture(lifecycle)
+                    .expect("fixture")
+                    .expect("valid fixture")
+                    .resolution()
+                    .resource_lifecycle_state(),
+                &ResourceLifecycleState::ProviderDefined {
+                    state: lifecycle.into()
+                }
+            );
+        }
+        let owner_tombstoned = provider_fixture("owner_tombstoned")
+            .expect("fixture")
+            .expect("valid fixture");
+        assert!(matches!(
+            owner_tombstoned.resolution().owner_state(),
+            ResourceOwnerState::ModuleInstance {
+                instance_state: ModuleInstanceOwnerState::OwnerModuleInstanceTombstoned,
+                data_state: OwnerDataState::Retained,
+            }
+        ));
+        let destroyed = provider_fixture("owner_data_destroyed")
+            .expect("fixture")
+            .expect("valid fixture");
+        assert!(matches!(
+            destroyed.resolution().owner_state(),
+            ResourceOwnerState::ModuleInstance {
+                data_state: OwnerDataState::OwnerDataDestroyed,
+                ..
+            }
+        ));
+        assert_eq!(
+            provider_fixture("missing")
+                .expect("fixture")
+                .expect("valid fixture")
+                .resolution()
+                .resource_identity_state(),
+            ResourceIdentityState::UnknownResource
+        );
+        assert_eq!(
+            provider_fixture("not_evaluated")
+                .expect("fixture")
+                .expect("valid fixture")
+                .resolution()
+                .availability_state(),
+            ProviderAvailabilityState::NotEvaluated
+        );
+        assert!(provider_fixture("invalid").expect("fixture").is_err());
     }
 }

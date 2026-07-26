@@ -25,9 +25,9 @@ use tessara_dashboards::{
     parse_dashboard_placement_configs, validate_dashboard_layout,
 };
 use tessara_module_contract::{
-    ContractCompatibilityState, ProviderAvailabilityState, ResourceAccessState,
-    ResourceIdentityState, ResourceLifecycleState, ResourceOwner, ResourceTypeId,
-    TypedResourceReference,
+    ContractCompatibilityState, ModuleInstanceOwnerState, OwnerDataState,
+    ProviderAvailabilityState, ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
+    ResourceOwner, ResourceOwnerState, ResourceTypeId, TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -1089,11 +1089,26 @@ fn resolution_state(resolution: &tessara_module_contract::ResourceResolutionV1) 
     if resolution.compatibility_state() == ContractCompatibilityState::Incompatible {
         return "incompatible";
     }
+    match resolution.owner_state() {
+        ResourceOwnerState::ModuleInstance {
+            data_state: OwnerDataState::OwnerDataDestroyed,
+            ..
+        } => return "owner_data_destroyed",
+        ResourceOwnerState::ModuleInstance {
+            instance_state: ModuleInstanceOwnerState::OwnerModuleInstanceTombstoned,
+            ..
+        } => return "owner_tombstoned",
+        _ => {}
+    }
     if resolution.resource_identity_state() == ResourceIdentityState::UnknownResource {
         return "missing";
     }
     match resolution.resource_lifecycle_state() {
-        ResourceLifecycleState::ProviderDefined { state } if state == "draft" => "inactive",
+        ResourceLifecycleState::ProviderDefined { state }
+            if matches!(state.as_str(), "draft" | "inactive") =>
+        {
+            "inactive"
+        }
         ResourceLifecycleState::ProviderDefined { state } if state == "superseded" => "superseded",
         ResourceLifecycleState::ProviderDefined { state } if state == "tombstoned" => "tombstoned",
         ResourceLifecycleState::ProviderDefined { .. } => "available",
