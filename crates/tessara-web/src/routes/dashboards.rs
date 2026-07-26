@@ -11,8 +11,9 @@ use crate::routes::PRIMARY_SSR_MODE;
 use crate::types::route_params::{DashboardRouteParams, require_route_params};
 use crate::ui::AppShell;
 use tessara_web_dashboards::{
-    DashboardCreateContent, DashboardDetailContent, DashboardEditorContent, DashboardViewerContent,
-    DashboardsIndexContent,
+    DashboardCreateContent, DashboardDetailContent, DashboardEditorContent,
+    DashboardRouteBootstrap, DashboardViewerContent, DashboardsIndexContent,
+    dashboard_route_bootstrap,
 };
 
 pub fn dashboard_routes() -> impl MatchNestedRoutes + Clone {
@@ -51,7 +52,7 @@ pub fn dashboard_routes() -> impl MatchNestedRoutes + Clone {
 fn DashboardsPage() -> impl IntoView {
     view! {
         <AppShell active_route="dashboards" title="Dashboards">
-            <DashboardsIndexContent/>
+            {dashboard_route_content(view! { <DashboardsIndexContent/> })}
         </AppShell>
     }
 }
@@ -60,7 +61,7 @@ fn DashboardsPage() -> impl IntoView {
 fn DashboardCreatePage() -> impl IntoView {
     view! {
         <AppShell active_route="dashboards" title="Create Dashboard">
-            <DashboardCreateContent/>
+            {dashboard_route_content(view! { <DashboardCreateContent/> })}
         </AppShell>
     }
 }
@@ -70,7 +71,7 @@ fn DashboardDetailPage() -> impl IntoView {
     let dashboard_id = require_route_params::<DashboardRouteParams>().dashboard_id;
     view! {
         <AppShell active_route="dashboards" title="Dashboard Detail">
-            <DashboardDetailContent dashboard_id/>
+            {dashboard_route_content(view! { <DashboardDetailContent dashboard_id/> })}
         </AppShell>
     }
 }
@@ -80,7 +81,7 @@ fn DashboardEditorPage() -> impl IntoView {
     let dashboard_id = require_route_params::<DashboardRouteParams>().dashboard_id;
     view! {
         <AppShell active_route="dashboards" title="Edit Dashboard">
-            <DashboardEditorContent dashboard_id/>
+            {dashboard_route_content(view! { <DashboardEditorContent dashboard_id/> })}
         </AppShell>
     }
 }
@@ -90,7 +91,29 @@ fn DashboardViewerPage() -> impl IntoView {
     let dashboard_id = require_route_params::<DashboardRouteParams>().dashboard_id;
     view! {
         <AppShell active_route="dashboards" title="Dashboard Viewer">
-            <DashboardViewerContent dashboard_id/>
+            {dashboard_route_content(view! { <DashboardViewerContent dashboard_id/> })}
         </AppShell>
+    }
+}
+
+fn dashboard_route_content(content: impl IntoView) -> AnyView {
+    match dashboard_route_bootstrap() {
+        Some(DashboardRouteBootstrap::Unavailable { retry_href, .. }) => view! {
+            <section class="route-panel dashboards-page dashboard-module-unavailable">
+                <p class="eyebrow">"Dashboard module"</p>
+                <h1>"Dashboards are temporarily unavailable"</h1>
+                <p>
+                    "The Dashboard Module Instance cannot currently be reached. Dashboard data remains in its isolated Module Instance database; Core credentials, browser cookies, configuration, and saved Component references have not been forwarded or replaced."
+                </p>
+                <div class="button-row">
+                    <a class="button" href=retry_href>"Try Dashboards again"</a>
+                    <a class="button button--secondary" href="/administration/modules/tessara.dashboards#diagnostics">
+                        "Open Module diagnostics"
+                    </a>
+                </div>
+            </section>
+        }
+        .into_any(),
+        _ => content.into_any(),
     }
 }

@@ -199,6 +199,28 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_module_outage_stays_inside_the_authenticated_core_shell() {
+        initialize_test_executor();
+        let html = application_html_with_dashboard_bootstrap(
+            "/dashboards",
+            "Dashboard module unavailable",
+            "Dashboard module unavailable.",
+            &DashboardRouteBootstrap::unavailable(
+                SessionAccount {
+                    capabilities: vec!["dashboards:read".into()],
+                },
+                "/dashboards",
+            ),
+        );
+
+        assert!(html.contains(r#"class="app-shell""#));
+        assert!(html.contains("Dashboards are temporarily unavailable"));
+        assert!(html.contains("Try Dashboards again"));
+        assert!(html.contains("Open Module diagnostics"));
+        assert!(html.contains("Dashboard data remains in its isolated Module Instance database"));
+    }
+
+    #[test]
     fn scoped_records_content_is_rendered_inside_the_core_shell() {
         initialize_test_executor();
         let html = application_html_with_scoped_records_bootstrap(

@@ -525,7 +525,7 @@ async fn directory_page(State(state): State<AppState>, request: AuthenticatedReq
             "Browse Tessara dashboards.",
             tessara_web::DashboardRouteBootstrap::directory(web_account(&request), dashboards),
         ),
-        Err(_) => unavailable_document("/dashboards"),
+        Err(_) => unavailable_document("/dashboards", &request),
     }
 }
 
@@ -544,7 +544,7 @@ async fn create_page(State(state): State<AppState>, request: AuthenticatedReques
             "Create a Tessara dashboard.",
             tessara_web::DashboardRouteBootstrap::create(web_account(&request), nodes),
         ),
-        Err(_) => unavailable_document("/dashboards/new"),
+        Err(_) => unavailable_document("/dashboards/new", &request),
     }
 }
 
@@ -600,7 +600,7 @@ async fn dashboard_read_page(
                 bootstrap,
             )
         }
-        Err(_) => unavailable_document(&format!("/dashboards/{dashboard_id}")),
+        Err(_) => unavailable_document(&format!("/dashboards/{dashboard_id}"), request),
     }
 }
 
@@ -630,7 +630,7 @@ async fn editor_page(
             "Edit a Tessara dashboard.",
             tessara_web::DashboardRouteBootstrap::editor(web_account(&request), composition, nodes),
         ),
-        _ => unavailable_document(&format!("/dashboards/{dashboard_id}/edit")),
+        _ => unavailable_document(&format!("/dashboards/{dashboard_id}/edit"), &request),
     }
 }
 
@@ -692,11 +692,13 @@ fn dashboard_document(
     response
 }
 
-fn unavailable_document(route: &str) -> Response {
-    Html(format!(
-        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard module unavailable · Tessara</title><link rel="stylesheet" href="/pkg/tessara-web.css"></head><body class="tessara-app"><main class="login-shell"><section class="login-panel blurred-surface"><a class="login-brand" href="/">Tessara</a><div class="login-panel__header"><p class="eyebrow">Dashboard module</p><h1>Dashboards are temporarily unavailable</h1><p>The Dashboard Module Instance cannot currently be reached. Dashboard data remains in its isolated Module Instance database; Core credentials, browser cookies, configuration, and saved Component references have not been forwarded or replaced.</p></div><div class="button-row"><a class="button" href="{route}">Try Dashboards again</a><a class="button button--secondary" href="/administration/modules/tessara.dashboards#diagnostics">Open Module diagnostics</a></div></section></main></body></html>"#
-    ))
-    .into_response()
+fn unavailable_document(route: &str, request: &AuthenticatedRequest) -> Response {
+    dashboard_document(
+        route,
+        "Dashboard module unavailable",
+        "The Dashboard Module Instance cannot currently be reached.",
+        tessara_web::DashboardRouteBootstrap::unavailable(web_account(request), route),
+    )
 }
 
 async fn module_response(response: reqwest::Response) -> ApiResult<Response> {

@@ -21,6 +21,10 @@ use crate::types::{
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "route", rename_all = "snake_case")]
 pub enum DashboardRouteBootstrap {
+    Unavailable {
+        account: SessionAccount,
+        retry_href: String,
+    },
     Directory {
         account: SessionAccount,
         dashboards: Vec<DashboardSummary>,
@@ -45,6 +49,13 @@ pub enum DashboardRouteBootstrap {
 }
 
 impl DashboardRouteBootstrap {
+    pub fn unavailable(account: SessionAccount, retry_href: impl Into<String>) -> Self {
+        Self::Unavailable {
+            account,
+            retry_href: retry_href.into(),
+        }
+    }
+
     pub fn directory(account: SessionAccount, dashboards: Vec<DashboardSummary>) -> Self {
         Self::Directory {
             account,
