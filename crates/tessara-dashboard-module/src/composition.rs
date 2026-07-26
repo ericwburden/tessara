@@ -283,12 +283,7 @@ async fn reconcile_composition(
                     }
                     _ => encode_dashboard_placement_config(
                         &DashboardPlacementConfigV1::new_with_minimum(
-                            title
-                                .as_deref()
-                                .map(str::trim)
-                                .filter(|value| !value.is_empty())
-                                .map(str::to_string)
-                                .or_else(|| parsed.title.clone()),
+                            reconciled_title(title.as_deref(), parsed.title.as_deref()),
                             requested,
                             policy.minimum_for(kind),
                         )
@@ -899,6 +894,16 @@ fn geometry_rect(geometry: DashboardPlacementGeometryV1) -> GridRect {
     )
 }
 
+fn reconciled_title(requested: Option<&str>, current: Option<&str>) -> Option<String> {
+    match requested {
+        Some(title) => {
+            let title = title.trim();
+            (!title.is_empty()).then(|| title.to_string())
+        }
+        None => current.map(str::to_owned),
+    }
+}
+
 fn core_url() -> String {
     std::env::var("TESSARA_CORE_INTERNAL_URL")
         .unwrap_or_else(|_| "http://core:8080".into())
@@ -950,7 +955,20 @@ mod tests {
         ResourceIdentityState, ResourceLifecycleState, ResourceOwnerState, ResourceResolutionV1,
     };
 
-    use super::resolution_state;
+    use super::{reconciled_title, resolution_state};
+
+    #[test]
+    fn omitted_title_is_retained_and_explicit_blank_title_is_cleared() {
+        assert_eq!(
+            reconciled_title(None, Some("Current title")),
+            Some("Current title".into())
+        );
+        assert_eq!(reconciled_title(Some("  "), Some("Current title")), None);
+        assert_eq!(
+            reconciled_title(Some("  Revised  "), Some("Current title")),
+            Some("Revised".into())
+        );
+    }
 
     #[test]
     fn approved_resolution_states_have_stable_ui_vocabulary() {

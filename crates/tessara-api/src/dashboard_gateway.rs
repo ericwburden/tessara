@@ -7,7 +7,7 @@ use axum::{
     Router,
     body::{Body, Bytes},
     extract::{Path, State},
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
@@ -97,6 +97,7 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn proxy_create_dashboard(
     state: State<AppState>,
     request: AuthenticatedRequest,
+    headers: HeaderMap,
     body: Bytes,
 ) -> ApiResult<Response> {
     proxy_metadata_mutation(
@@ -105,6 +106,7 @@ async fn proxy_create_dashboard(
         "dashboards.create",
         reqwest::Method::POST,
         "api/admin/dashboards".into(),
+        idempotency_key(&headers),
         body,
     )
     .await
@@ -113,6 +115,7 @@ async fn proxy_create_dashboard(
 async fn proxy_update_dashboard(
     state: State<AppState>,
     request: AuthenticatedRequest,
+    headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
     body: Bytes,
 ) -> ApiResult<Response> {
@@ -122,6 +125,7 @@ async fn proxy_update_dashboard(
         "dashboards.update",
         reqwest::Method::PUT,
         format!("api/admin/dashboards/{dashboard_id}"),
+        idempotency_key(&headers),
         body,
     )
     .await
@@ -133,6 +137,7 @@ async fn proxy_metadata_mutation(
     action: &'static str,
     method: reqwest::Method,
     path: String,
+    idempotency_key: String,
     body: Bytes,
 ) -> ApiResult<Response> {
     let mut payload: Value =
@@ -140,10 +145,7 @@ async fn proxy_metadata_mutation(
     let object = payload
         .as_object_mut()
         .ok_or_else(|| ApiError::BadRequest("Dashboard payload must be an object".into()))?;
-    object.insert(
-        "idempotency_key".into(),
-        Value::String(Uuid::new_v4().to_string()),
-    );
+    object.insert("idempotency_key".into(), Value::String(idempotency_key));
     proxy(
         state,
         request,
@@ -161,6 +163,7 @@ async fn proxy_metadata_mutation(
 async fn proxy_delete_dashboard(
     state: State<AppState>,
     request: AuthenticatedRequest,
+    headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
 ) -> ApiResult<Response> {
     proxy_with_idempotency(
@@ -169,6 +172,7 @@ async fn proxy_delete_dashboard(
         "dashboards.delete",
         reqwest::Method::DELETE,
         format!("api/admin/dashboards/{dashboard_id}"),
+        idempotency_key(&headers),
         None,
     )
     .await
@@ -194,6 +198,7 @@ async fn proxy_get_composition(
 async fn proxy_reconcile_composition(
     state: State<AppState>,
     request: AuthenticatedRequest,
+    headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
     body: Bytes,
 ) -> ApiResult<Response> {
@@ -203,6 +208,7 @@ async fn proxy_reconcile_composition(
         "dashboards.reconcile_composition",
         reqwest::Method::PUT,
         format!("api/admin/dashboards/{dashboard_id}/composition"),
+        idempotency_key(&headers),
         Some(body),
     )
     .await
@@ -214,6 +220,7 @@ async fn proxy_with_idempotency(
     action: &'static str,
     method: reqwest::Method,
     path: String,
+    idempotency_key: String,
     body: Option<Bytes>,
 ) -> ApiResult<Response> {
     proxy_with_headers(
@@ -224,9 +231,19 @@ async fn proxy_with_idempotency(
         method,
         path,
         body,
-        Some(Uuid::new_v4().to_string()),
+        Some(idempotency_key),
     )
     .await
+}
+
+fn idempotency_key(headers: &HeaderMap) -> String {
+    headers
+        .get("x-idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.chars().count() <= 200)
+        .map(str::to_owned)
+        .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
 
 async fn proxy(
@@ -688,4 +705,29 @@ fn restricted_authorization() -> ApiError {
 
 fn module_unavailable() -> ApiError {
     ApiError::ServiceUnavailable("Dashboard module unavailable".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::{HeaderMap, HeaderValue};
+
+    use super::idempotency_key;
+
+    #[test]
+    fn valid_client_idempotency_key_survives_the_core_gateway() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-idempotency-key",
+            HeaderValue::from_static("dashboard-save-42"),
+        );
+        assert_eq!(idempotency_key(&headers), "dashboard-save-42");
+    }
+
+    #[test]
+    fn absent_or_invalid_client_idempotency_key_gets_a_safe_fallback() {
+        assert!(!idempotency_key(&HeaderMap::new()).is_empty());
+        let mut headers = HeaderMap::new();
+        headers.insert("x-idempotency-key", HeaderValue::from_static(" "));
+        assert!(!idempotency_key(&headers).is_empty());
+    }
 }

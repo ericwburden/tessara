@@ -718,7 +718,7 @@ fn independent_module_sections(
                             <h2>{if is_dashboard { "Dashboard health and diagnostics" } else { "Module health and diagnostics" }}</h2>
                             <p>"Sanitized Module Instance observations; no cookies, credentials, signed grants, or restricted Component identities."</p>
                         </div>
-                        <a class="button button--secondary" href="/api/modules/instances">"Refresh observations"</a>
+                        <a class="button button--secondary" href=health_href>"Refresh observations"</a>
                     </div>
                     <div class="module-configuration-grid">
                         <dl class="module-detail-overview__list">
