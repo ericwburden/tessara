@@ -8,11 +8,36 @@ services:
       - ../sprint-6c/postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
 
   core:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
     environment:
       TESSARA_DASHBOARD_MODULE_URL: http://dashboards:8091
       TESSARA_COMPONENTS_PROVIDER_STATE: ${TESSARA_COMPONENTS_PROVIDER_STATE:-available}
     depends_on:
       dashboards: { condition: service_started }
+
+  installation-control:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.installation-control
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+
+  scoped-records:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.scoped-records
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
 
   dashboards-migrate:
     image: tessara-dashboards
