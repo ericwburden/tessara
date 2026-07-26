@@ -1237,8 +1237,15 @@ test.describe.serial("Sprint 6A Module Management", () => {
     await expect(
       page.getByText("Transitional — not independently deployable", { exact: true }),
     ).toHaveCount(1);
-    await expect(page.getByText("No Module Release", { exact: true })).toHaveCount(7);
-    await expect(page.getByText("No Module Instance", { exact: true })).toHaveCount(7);
+    const transitionCount = inventory.entries.filter(
+      (entry) => entry.kind === "transitional_in_process",
+    ).length;
+    await expect(page.getByText("No Module Release", { exact: true })).toHaveCount(
+      transitionCount,
+    );
+    await expect(page.getByText("No Module Instance", { exact: true })).toHaveCount(
+      transitionCount,
+    );
     await expect(
       page.locator(`tr[data-module-definition="${MIGRATION_DEFINITION}"]`),
     ).toContainText("Retired");
@@ -1389,11 +1396,11 @@ test.describe.serial("Sprint 6A Module Management", () => {
         descriptorResponse.headers().etag,
         `${definitionId} ETag must quote the exact source digest as an HTTP entity tag`,
       ).toBe(`"${moduleIdentity(inventoryEntry).source_digest}"`);
-      expect(
-        descriptorDigest,
-        `${definitionId} descriptor bytes must hash to the rendered source digest`,
-      ).toBe(moduleIdentity(inventoryEntry).source_digest);
       if (detail.entry.kind === "transitional_in_process") {
+        expect(
+          descriptorDigest,
+          `${definitionId} transition descriptor bytes must hash to the rendered source digest`,
+        ).toBe(moduleIdentity(inventoryEntry).source_digest);
         expect(
           JSON.parse(descriptorBytes.toString("utf8")),
           `${definitionId} descriptor bytes must decode to the detail descriptor`,

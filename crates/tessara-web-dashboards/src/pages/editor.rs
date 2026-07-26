@@ -668,7 +668,7 @@ fn CompositionCanvas(
                         let title = placement.display_title();
                         let subtitle = placement.component.as_ref().map(|component| {
                             format!("{} · {}", kind_label(&component.component_type), version_label(component.version_number, &component.version_label))
-                        }).unwrap_or_else(|| "Redacted placement".into());
+                        });
                         let resolution_state = placement.effective_resolution_state();
                         let has_issue = resolution_state != DashboardPlacementResolutionState::Available;
                         let rect = GridRect::new(
@@ -726,7 +726,10 @@ fn CompositionCanvas(
                             >
                                 <header>
                                     <span class="dashboard-placement-card__order">{placement.position + 1}</span>
-                                    <div><strong>{title}</strong><span>{subtitle}</span></div>
+                                    <div>
+                                        <strong>{title}</strong>
+                                        {subtitle.map(|subtitle| view! { <span>{subtitle}</span> })}
+                                    </div>
                                     <span class="dashboard-composition-tile__grip" aria-hidden="true">
                                         {may_move.then(|| view! { <GripVertical/> })}
                                     </span>
@@ -2112,6 +2115,8 @@ mod tests {
         degraded.placement.availability = DashboardPlacementAvailability::Unavailable;
         degraded.placement.resolution_state =
             Some(DashboardPlacementResolutionState::ProviderUnavailable);
+        degraded.placement.title = Some("Partner Profile".into());
+        degraded.placement.component = None;
         let html = Owner::new().with(|| {
             view! {
                 <CompositionCanvas
@@ -2128,6 +2133,8 @@ mod tests {
 
         assert!(html.contains("placement-state--provider-unavailable"));
         assert!(html.contains("Open issue details for placement 1"));
+        assert!(html.contains("Partner Profile"));
+        assert!(!html.contains("Redacted placement"));
         assert!(!html.contains("This placement cannot be rendered right now"));
         assert!(!html.contains("Retry resolution"));
     }

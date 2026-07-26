@@ -1,6 +1,7 @@
 # Sprint 6C Plan: Independently Deployed Dashboard Module Slice
 
-Status: kicked off on 2026-07-25 from clean `main` commit
+Status: implementation complete and closeout-ready on 2026-07-26. The sprint
+started from clean `main` commit
 `c4e291c32645af65773726ab6a93449f4bef2c4a`.
 
 - Branch: `codex/sprint-6c`
@@ -8,6 +9,7 @@ Status: kicked off on 2026-07-25 from clean `main` commit
 - Roadmap source:
   `Sprint 6C: Independently Deployed Dashboard Module Slice (Next)`
 - Predecessor: `Sprint 6B2: Secure Module Operation Slice (Complete)`
+- Verification record: `docs/sprints/sprint-6c-verification.md`
 
 ## Sprint Summary
 
@@ -97,6 +99,10 @@ Components contribution as a Module Instance.
 - Add clear, contained placement treatments for restricted, unavailable,
   inactive, superseded, tombstoned, destroyed-owner-data, missing,
   incompatible, and not-evaluated states.
+- In the editor, keep an authorized placement's saved title, tint the entire
+  affected tile with warning styling, and replace its normal content with one
+  prominent warning icon. Put the diagnostic text and retry action only in the
+  side sheet opened from that icon; keep the sheet icon large and centered.
 - Add Dashboard configuration and diagnostics panels under Core Module
   Management using the established independently deployed module patterns.
 

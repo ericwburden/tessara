@@ -896,7 +896,7 @@ async fn load_placements_with_authorization(
                 resolution_state: state,
                 resolution: resolution.resolution().clone(),
                 config_state: editor.then_some(parsed.config_state),
-                title: available.then(|| parsed.title.clone()).flatten(),
+                title: disclosed_title(resolution.resolution(), &parsed.title),
                 component: metadata,
                 allowed_operations,
             })
@@ -1116,6 +1116,15 @@ fn resolution_state(resolution: &tessara_module_contract::ResourceResolutionV1) 
     }
 }
 
+fn disclosed_title(
+    resolution: &tessara_module_contract::ResourceResolutionV1,
+    title: &Option<String>,
+) -> Option<String> {
+    (resolution.access_state() == ResourceAccessState::Authorized)
+        .then(|| title.clone())
+        .flatten()
+}
+
 pub(super) fn component_reference(
     installation_id: Uuid,
     component_version_id: Uuid,
@@ -1134,10 +1143,11 @@ pub(super) fn component_reference(
 mod tests {
     use tessara_module_contract::{
         ContractCompatibilityState, CoreInstallationOwnerState, ProviderAvailabilityState,
-        ResourceIdentityState, ResourceLifecycleState, ResourceOwnerState, ResourceResolutionV1,
+        ResourceAccessState, ResourceIdentityState, ResourceLifecycleState, ResourceOwnerState,
+        ResourceResolutionV1,
     };
 
-    use super::{reconciled_title, resolution_state};
+    use super::{disclosed_title, reconciled_title, resolution_state};
 
     #[test]
     fn omitted_title_is_retained_and_explicit_blank_title_is_cleared() {
@@ -1165,5 +1175,17 @@ mod tests {
         )
         .expect("valid");
         assert_eq!(resolution_state(&unavailable), "provider_unavailable");
+        assert_eq!(
+            disclosed_title(&unavailable, &Some("Partner Profile".into())),
+            Some("Partner Profile".into())
+        );
+        assert_eq!(
+            disclosed_title(
+                &ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized)
+                    .expect("valid restricted resolution"),
+                &Some("Restricted title".into())
+            ),
+            None
+        );
     }
 }

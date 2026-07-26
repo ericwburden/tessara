@@ -108,20 +108,6 @@ type ComponentFilterConfig = {
   value?: string;
 };
 
-type DashboardSummary = {
-  id: string;
-  placement_count: number;
-};
-
-type DashboardResponse = {
-  id: string;
-  placements: Array<{
-    placement_id: string;
-    availability: "available" | "unavailable";
-    component?: { component_version_id: string };
-  }>;
-};
-
 function isBenignNavigationAbort(message: string) {
   return BENIGN_NAVIGATION_ABORT_ERRORS.some((pattern) =>
     message.includes(pattern),
@@ -566,15 +552,6 @@ SELECT id FROM components
 WHERE slug LIKE '${COMPONENT_PREFIX}%'
    OR name LIKE 'Playwright Component Workflow %';
 
-DELETE FROM dashboard_components
-WHERE component_version_id IN (
-  SELECT id FROM component_versions
-  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
-);
-
-DELETE FROM dashboards
-WHERE name LIKE 'Playwright Component Workflow Dashboard %';
-
 DELETE FROM component_versions
 WHERE component_id IN (SELECT id FROM pw_cleanup_components);
 
@@ -587,10 +564,6 @@ WHERE id IN (SELECT id FROM pw_cleanup_components);
   } catch (error) {
     console.warn(`component cleanup skipped: ${String(error)}`);
   }
-}
-
-function runComponentSql(sql: string) {
-  runPlaywrightSql(sql);
 }
 
 test.describe.serial("Sprint 4A component workflow", () => {
@@ -689,31 +662,16 @@ test.describe.serial("Sprint 4A component workflow", () => {
           ],
         },
       }),
-      400,
+      409,
     );
     const draftDashboardPlacementBody = JSON.parse(draftDashboardPlacement) as ApiErrorBody;
     expect(draftDashboardPlacementBody).toMatchObject({
-      code: "dashboard_component_version_unavailable",
+      error: expect.stringContaining("scope or lifecycle is incompatible"),
     });
-    runComponentSql(`
-INSERT INTO dashboard_components (dashboard_id, component_version_id, position, config)
-VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
-`);
-    const dashboardsWithLegacyDraftPlacement = await expectJson<DashboardSummary[]>(
-      await page.request.get("/api/dashboards"),
+    await expectStatus(
+      await page.request.delete(`/api/admin/dashboards/${draftDashboard.id}`),
+      200,
     );
-    expect(
-      dashboardsWithLegacyDraftPlacement.find((dashboard) => dashboard.id === draftDashboard.id)
-        ?.placement_count,
-    ).toBe(1);
-    const dashboardWithLegacyDraftPlacement = await expectJson<DashboardResponse>(
-      await page.request.get(`/api/dashboards/${draftDashboard.id}`),
-    );
-    expect(dashboardWithLegacyDraftPlacement.placements).toHaveLength(1);
-    expect(dashboardWithLegacyDraftPlacement.placements[0]).toMatchObject({
-      availability: "unavailable",
-    });
-    expect(dashboardWithLegacyDraftPlacement.placements[0].component).toBeUndefined();
 
     const validValidation = await expectJson<ComponentValidationResponse>(
       await page.request.post("/api/admin/components/validate", {

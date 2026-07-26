@@ -821,15 +821,6 @@ WHERE id IN (SELECT id FROM pw_cleanup_workflow_instances);
 DELETE FROM workflow_assignments
 WHERE id IN (SELECT id FROM pw_cleanup_workflow_assignments);
 
-DELETE FROM dashboards
-WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-DELETE FROM dashboard_components
-WHERE component_version_id IN (
-  SELECT id FROM component_versions
-  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
-);
-
 DELETE FROM component_versions
 WHERE component_id IN (SELECT id FROM pw_cleanup_components);
 
@@ -1632,7 +1623,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.scopedManager,
       "get",
       `/api/dashboards/${fixtures.outOfScopeDashboard.id}`,
-      [403],
+      [404],
     );
 
     const operations = await getJson<OperationsStatus>(fixtures.scopedManager, "/api/operations/status");

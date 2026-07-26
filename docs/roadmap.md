@@ -867,7 +867,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** the accepted decision record demonstrates why the selected interface is more appropriate than the rejected alternatives for both single-operator and larger installations. With Core healthy, unavailable, and restored to a pre-recovery backup in separate exercises, an authorized operator can reach the selected restricted interface, complete independent transport authentication and step-up authorization, issue or replace a claim and view its secret exactly once, rotate a referenced deployment secret with an impact preview, and inspect immutable non-secret receipts. An ordinary Core administrator session, client outside the source allowlist, client lacking the deployment-assigned credential or authorized SSH key, replayed request, expired session, or later status lookup cannot reveal or reuse secret material.
 
-### Sprint 6C: Independently Deployed Dashboard Module Slice (Next)
+### Sprint 6C: Independently Deployed Dashboard Module Slice (Complete)
 
 **Outcome:** Dashboards is the first existing Tessara feature area to operate as a separately deployed, full-stack module.
 
@@ -892,7 +892,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can compose and view a Dashboard through the normal shell while Dashboard runs in a separate process and database, and can observe contained behavior when Dashboard or Components is unavailable.
 
-### Sprint 6D: Application Blueprint And Composition Automation Slice
+### Sprint 6D: Application Blueprint And Composition Automation Slice (Next)
 
 **Outcome:** a Tessara application is a declarative, validated, reproducible composition suitable for human and LLM-driven construction.
 

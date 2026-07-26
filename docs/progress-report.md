@@ -7,6 +7,37 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-26 - Sprint 6C Implementation Complete
+
+- Status: implementation and closeout-readiness verification are complete.
+  Sprint 6C extracts Dashboards into an independently deployed full-stack
+  module while preserving the established same-origin product URLs.
+- Dashboard now owns its baseline migration, database, runtime/migration
+  identities, API, composition reconciliation, native SSR pages,
+  configuration, health, readiness, diagnostics, and deterministic seed.
+  Core owns only routing, signed shell projection, action-bound authorization,
+  Module Management, and the transition Components compatibility adapter.
+- Dashboard placements retain typed Core-owned ComponentVersion references
+  without Core-table joins or foreign keys. Authorized resolution covers the
+  required provider, lifecycle, compatibility, identity, and owner-data
+  states; unauthorized resolution remains nondisclosing.
+- The approved degraded editor treatment is implemented: warning-tinted
+  placement tile, one prominent warning icon in the tile, and a side sheet
+  containing the full diagnostic, a large centered icon, and retry. Authorized
+  provider outages preserve the saved placement title.
+- Fresh Compose bootstrap is repeatable at receipt revision 1; Core,
+  Dashboard, deployment-control, and Scoped Records images carry matching
+  clean source labels; Dashboard database credentials fail against every
+  non-Dashboard database.
+- Validation completed: workspace formatting/clippy and Rust suites,
+  fresh smoke and UAT, all 60 canonical Playwright tests, desktop/mobile
+  degraded-state browser review, retry, Dashboard-process outage containment,
+  and post-restart data preservation. Durable proof is retained under
+  `artifacts/sprint-6c-closeout/`; command-level details are in
+  `docs/sprints/sprint-6c-verification.md`.
+- Next Sprint: Sprint 6D - Application Blueprint And Composition Automation
+  Slice.
+
 ## 2026-07-25 - Sprint 6C Kickoff
 
 - Kickoff status: started the roadmap-selected Independently Deployed
