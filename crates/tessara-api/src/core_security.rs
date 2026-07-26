@@ -1156,7 +1156,7 @@ async fn scoped_records_document(
     #[cfg(feature = "ssr")]
     {
         let title = format!("{} · Tessara", content.title);
-        return Ok(
+        Ok(
             Html(tessara_web::application_html_with_scoped_records_bootstrap(
                 &format!(
                     "/reference/scoped-records{}",
@@ -1171,7 +1171,7 @@ async fn scoped_records_document(
                 &content,
             ))
             .into_response(),
-        );
+        )
     }
     #[cfg(not(feature = "ssr"))]
     {

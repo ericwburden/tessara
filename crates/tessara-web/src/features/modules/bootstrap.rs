@@ -27,7 +27,7 @@ thread_local! {
 pub enum ModuleManagementRouteBootstrapV1 {
     Directory {
         access: ModuleManagementAccessV1,
-        inventory: ModuleInventoryResponseV1,
+        inventory: Box<ModuleInventoryResponseV1>,
         navigation_policy: NavigationPolicyBootstrapV1,
     },
     Detail {
@@ -60,7 +60,7 @@ impl ModuleManagementRouteBootstrapV1 {
         }
         Self::Directory {
             access,
-            inventory,
+            inventory: Box::new(inventory),
             navigation_policy,
         }
     }

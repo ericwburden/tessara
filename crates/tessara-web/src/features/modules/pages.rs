@@ -1002,7 +1002,7 @@ fn initialize_directory(
             navigation_policy,
         }) if authorized_access.may_read() => {
             access.set(authorized_access);
-            inventory.set(Some(initial_inventory));
+            inventory.set(Some(*initial_inventory));
             set_policy_bootstrap(
                 navigation_policy,
                 policy,

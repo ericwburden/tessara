@@ -649,16 +649,20 @@ fn directory_html(
     let options = organizations
         .iter()
         .map(|organization| {
+            let selected = if query
+                .organization
+                .as_deref()
+                .and_then(|value| Uuid::parse_str(value).ok())
+                == Some(organization.organization_id)
+            {
+                " selected"
+            } else {
+                ""
+            };
             format!(
                 "<option value=\"{}\"{}>{}</option>",
                 organization.organization_id,
-                (query
-                    .organization
-                    .as_deref()
-                    .and_then(|value| Uuid::parse_str(value).ok())
-                    == Some(organization.organization_id))
-                .then_some(" selected")
-                .unwrap_or_default(),
+                selected,
                 escape(&organization.label)
             )
         })
@@ -668,14 +672,14 @@ fn directory_html(
         .iter()
         .filter(|organization| organization.can_manage)
         .count();
-    let create_action = (manageable > 0)
-        .then(|| {
-            format!(
-                "<a class=\"button\" href=\"/reference/scoped-records/records/new\">{}New Record</a>",
-                icon_html(IconType::Plus, "button__icon")
-            )
-        })
-        .unwrap_or_default();
+    let create_action = if manageable > 0 {
+        format!(
+            "<a class=\"button\" href=\"/reference/scoped-records/records/new\">{}New Record</a>",
+            icon_html(IconType::Plus, "button__icon")
+        )
+    } else {
+        String::new()
+    };
     let breadcrumb = scoped_records_breadcrumb(&[("Home", Some("/")), ("Scoped Records", None)]);
     format!(
         "{breadcrumb}<div class=\"scoped-records-heading\"><div><h1>Scoped Records</h1><p>Organization-owned reference records available within your assigned read scope.</p></div>{create_action}</div>\
@@ -768,14 +772,14 @@ async fn detail_page(
         .map(|value| escape(&value.label))
         .unwrap_or_else(|| "Unavailable Organization".into());
     let can_manage = organization.is_some_and(|value| value.can_manage);
-    let edit_action = can_manage
-        .then(|| {
-            format!(
-                "<a class=\"button\" href=\"/reference/scoped-records/records/{record_id}/edit\">{}Edit Record</a>",
-                icon_html(IconType::Pencil, "button__icon")
-            )
-        })
-        .unwrap_or_default();
+    let edit_action = if can_manage {
+        format!(
+            "<a class=\"button\" href=\"/reference/scoped-records/records/{record_id}/edit\">{}Edit Record</a>",
+            icon_html(IconType::Pencil, "button__icon")
+        )
+    } else {
+        String::new()
+    };
     let record_id_text = record_id.to_string();
     let breadcrumb = scoped_records_breadcrumb(&[
         ("Home", Some("/")),
@@ -875,15 +879,17 @@ fn record_form_html(
         .iter()
         .filter(|organization| organization.can_manage)
         .map(|organization| {
+            let selected = if record
+                .is_some_and(|record| record.organization_owner_id == organization.organization_id)
+            {
+                " selected"
+            } else {
+                ""
+            };
             format!(
                 "<option value=\"{}\"{}>{}</option>",
                 organization.organization_id,
-                record
-                    .is_some_and(|record| {
-                        record.organization_owner_id == organization.organization_id
-                    })
-                    .then_some(" selected")
-                    .unwrap_or_default(),
+                selected,
                 escape(&organization.label)
             )
         })

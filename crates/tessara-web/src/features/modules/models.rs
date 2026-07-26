@@ -101,11 +101,11 @@ pub enum ModuleInventoryEntryV1 {
     },
     IndependentlyDeployed {
         definition: IndependentDefinitionV1,
-        release: IndependentReleaseV1,
+        release: Box<IndependentReleaseV1>,
         instance: IndependentInstanceV1,
         configuration: IndependentConfigurationV1,
         diagnostics: IndependentDiagnosticsV1,
-        manifest: Option<ModuleManifestV1>,
+        manifest: Box<Option<ModuleManifestV1>>,
         findings: Vec<ModuleFindingV1>,
     },
 }
@@ -227,7 +227,7 @@ impl ModuleInventoryEntryV1 {
 
     pub fn manifest(&self) -> Option<&ModuleManifestV1> {
         match self {
-            Self::IndependentlyDeployed { manifest, .. } => manifest.as_ref(),
+            Self::IndependentlyDeployed { manifest, .. } => manifest.as_ref().as_ref(),
             Self::TransitionalInProcess { .. } => None,
         }
     }
