@@ -619,7 +619,7 @@ async fn list_visibility_nodes(
          FROM dashboard_organization_nodes child
          LEFT JOIN dashboard_organization_nodes parent
            ON parent.node_id=child.parent_node_id
-         WHERE child.node_id=ANY($1)
+         WHERE child.node_id=ANY($1) AND child.active=true
          ORDER BY child.node_path,child.node_id",
     )
     .bind(ids)

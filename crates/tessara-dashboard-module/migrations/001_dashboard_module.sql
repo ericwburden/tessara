@@ -34,6 +34,7 @@ CREATE TABLE dashboard_organization_nodes (
     node_type_name TEXT NOT NULL CHECK (btrim(node_type_name) <> ''),
     parent_node_id UUID,
     node_path TEXT NOT NULL CHECK (btrim(node_path) <> ''),
+    active BOOLEAN NOT NULL DEFAULT true,
     projection_revision BIGINT NOT NULL CHECK (projection_revision > 0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

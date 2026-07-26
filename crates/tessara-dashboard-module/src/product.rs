@@ -129,16 +129,25 @@ async fn update_organization_projection(
         }
     }
     let mut tx = state.pool.begin().await?;
+    sqlx::query(
+        "UPDATE dashboard_organization_nodes
+         SET active=false,projection_revision=$1,updated_at=now()
+         WHERE active=true",
+    )
+    .bind(input.organization_revision as i64)
+    .execute(&mut *tx)
+    .await?;
     for node in input.nodes {
         sqlx::query(
             "INSERT INTO dashboard_organization_nodes
-             (node_id,node_name,node_type_name,parent_node_id,node_path,projection_revision)
-             VALUES ($1,$2,$3,$4,$5,$6)
+             (node_id,node_name,node_type_name,parent_node_id,node_path,active,projection_revision)
+             VALUES ($1,$2,$3,$4,$5,true,$6)
              ON CONFLICT (node_id) DO UPDATE SET
                node_name=EXCLUDED.node_name,
                node_type_name=EXCLUDED.node_type_name,
                parent_node_id=EXCLUDED.parent_node_id,
                node_path=EXCLUDED.node_path,
+               active=true,
                projection_revision=EXCLUDED.projection_revision,
                updated_at=now()",
         )
@@ -683,7 +692,8 @@ async fn require_projected_nodes(
     ids: &[Uuid],
 ) -> Result<(), DashboardModuleError> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM dashboard_organization_nodes WHERE node_id=ANY($1)",
+        "SELECT COUNT(*) FROM dashboard_organization_nodes
+         WHERE node_id=ANY($1) AND active=true",
     )
     .bind(ids)
     .fetch_one(&mut **tx)

@@ -203,7 +203,7 @@ async fn update_security_state(
             "invalid security state".into(),
         ));
     }
-    sqlx::query(
+    let updated = sqlx::query(
         "INSERT INTO dashboard_security_state
          (singleton, installation_id, module_instance_id, authorization_revision,
           organization_revision, enabled, document_state)
@@ -215,7 +215,9 @@ async fn update_security_state(
            organization_revision=EXCLUDED.organization_revision,
            enabled=EXCLUDED.enabled,
            document_state=EXCLUDED.document_state,
-           updated_at=now()",
+           updated_at=now()
+         WHERE dashboard_security_state.authorization_revision <= EXCLUDED.authorization_revision
+           AND dashboard_security_state.organization_revision <= EXCLUDED.organization_revision",
     )
     .bind(input.installation_id)
     .bind(input.module_instance_id)
@@ -225,6 +227,11 @@ async fn update_security_state(
     .bind(input.document_state)
     .execute(&state.pool)
     .await?;
+    if updated.rows_affected() == 0 {
+        return Err(DashboardModuleError::Conflict(
+            "security state revision cannot move backwards".into(),
+        ));
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
