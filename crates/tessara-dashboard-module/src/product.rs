@@ -8,7 +8,7 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Row, Transaction};
@@ -621,13 +621,13 @@ pub(super) fn mutation_digest<T: Serialize>(
     Ok(format!("sha256:{:x}", digest.finalize()))
 }
 
-pub(super) async fn load_mutation_replay(
+pub(super) async fn load_mutation_replay<T: DeserializeOwned>(
     tx: &mut Transaction<'_, Postgres>,
     grant: &AuthorizationGrantV1,
     action: &str,
     idempotency_key: &str,
     payload_digest: &str,
-) -> Result<Option<DashboardIdResponseV1>, DashboardModuleError> {
+) -> Result<Option<T>, DashboardModuleError> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
         .bind(idempotency_key)
         .execute(&mut **tx)
@@ -660,13 +660,13 @@ pub(super) async fn load_mutation_replay(
         .map_err(|_| DashboardModuleError::Unavailable("stored mutation result is invalid".into()))
 }
 
-pub(super) async fn record_mutation_replay(
+pub(super) async fn record_mutation_replay<T: Serialize>(
     tx: &mut Transaction<'_, Postgres>,
     grant: &AuthorizationGrantV1,
     action: &str,
     idempotency_key: &str,
     payload_digest: &str,
-    result: &DashboardIdResponseV1,
+    result: &T,
 ) -> Result<(), DashboardModuleError> {
     sqlx::query(
         "INSERT INTO dashboard_mutation_replays

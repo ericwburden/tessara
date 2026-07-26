@@ -34,8 +34,8 @@ use uuid::Uuid;
 use crate::{
     DashboardModuleError, DashboardModuleState, MANAGE_CAPABILITY,
     product::{
-        DashboardIdResponseV1, DashboardSummaryV1, authorize, authorized_organizations,
-        get_dashboard_summary, load_mutation_replay, mutation_digest, record_mutation_replay,
+        DashboardSummaryV1, authorize, authorized_organizations, get_dashboard_summary,
+        load_mutation_replay, mutation_digest, record_mutation_replay,
     },
 };
 
@@ -95,10 +95,16 @@ pub struct DashboardCompositionResponseV1 {
     pub new_placement_ids: Vec<DashboardPlacementIdMappingV1>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DashboardPlacementIdMappingV1 {
     pub client_key: String,
     pub placement_id: Uuid,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct DashboardCompositionReplayV1 {
+    dashboard_id: Uuid,
+    new_placement_ids: Vec<DashboardPlacementIdMappingV1>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -507,7 +513,7 @@ async fn reconcile_composition(
         .collect::<BTreeMap<_, _>>();
 
     let mut tx = state.pool.begin().await?;
-    if load_mutation_replay(
+    if let Some(replay) = load_mutation_replay::<DashboardCompositionReplayV1>(
         &mut tx,
         &grant.payload,
         "dashboards.reconcile_composition",
@@ -515,8 +521,12 @@ async fn reconcile_composition(
         &payload_digest,
     )
     .await?
-    .is_some()
     {
+        if replay.dashboard_id != dashboard_id {
+            return Err(DashboardModuleError::Conflict(
+                "stored composition replay targets a different Dashboard".into(),
+            ));
+        }
         tx.commit().await?;
         return load_composition_response(
             &state,
@@ -524,7 +534,7 @@ async fn reconcile_composition(
             dashboard_id,
             &manage_scope,
             &dashboard_scope,
-            Vec::new(),
+            replay.new_placement_ids,
         )
         .await;
     }
@@ -598,7 +608,10 @@ async fn reconcile_composition(
         "dashboards.reconcile_composition",
         idempotency_key,
         &payload_digest,
-        &DashboardIdResponseV1 { id: dashboard_id },
+        &DashboardCompositionReplayV1 {
+            dashboard_id,
+            new_placement_ids: new_placement_ids.clone(),
+        },
     )
     .await?;
     tx.commit().await?;
