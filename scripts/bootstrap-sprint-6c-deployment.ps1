@@ -37,12 +37,22 @@ if ([int64]$existingRevision -gt 0) {
 }
 
 $desired = Get-Content -LiteralPath $fixturePath -Raw | ConvertFrom-Json
-$manifestBytes = [IO.File]::ReadAllBytes($dashboardManifestPath)
+$manifest = Get-Content -LiteralPath $dashboardManifestPath -Raw | ConvertFrom-Json
+$dashboardImageId = (& docker compose -f $composePath images -q dashboards).Trim()
+if ($LASTEXITCODE -ne 0 -or $dashboardImageId -notmatch "^sha256:[0-9a-f]{64}$") {
+    throw "The Sprint 6C Dashboard image is not available as an immutable image ID."
+}
+$runtimeDigest = $dashboardImageId
+$runtimeReference = "local/tessara-dashboards@$runtimeDigest"
+$manifest.deployment.declaration.runtime_image.digest = $runtimeDigest
+$manifest.deployment.declaration.runtime_image.image_reference = $runtimeReference
+$manifest.deployment.declaration.migration_image.digest = $runtimeDigest
+$manifest.deployment.declaration.migration_image.image_reference = $runtimeReference
+$materializedManifest = ($manifest | ConvertTo-Json -Depth 40 -Compress)
+$manifestBytes = [Text.Encoding]::UTF8.GetBytes($materializedManifest)
 $manifestHash = [Convert]::ToHexString(
     [Security.Cryptography.SHA256]::HashData($manifestBytes)
 ).ToLowerInvariant()
-$manifest = [Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
-$runtimeDigest = $manifest.deployment.declaration.runtime_image.digest
 
 $dashboardModule = [pscustomobject]@{
     definition_id = $manifest.definition_id
