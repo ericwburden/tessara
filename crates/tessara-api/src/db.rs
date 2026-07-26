@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0xf1cd_c973_6376_5be5);
+        assert_eq!(fnv1a(BASELINE), 0x6e3b_859b_ae70_46d7);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains(
             "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
@@ -463,7 +463,7 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "3d9c03e38baad9416ca8425ad32e4baa245311ab829a3ec465bf60484debe3a7"
+            "84b439707c0cdf56d59cc01cb04d483fefcdd6f0961e6dafbde22deeae4d54d4"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));

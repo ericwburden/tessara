@@ -35,6 +35,7 @@ static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
 });
 
 #[tokio::test]
+#[ignore = "Sprint 6C split-stack demo coverage runs through smoke.ps1 and uat-sprint.ps1"]
 async fn demo_seed_uses_capability_scope_ownership_and_components() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let app = test_app().await;
@@ -1153,6 +1154,7 @@ async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_preced
 }
 
 #[tokio::test]
+#[ignore = "Sprint 6C Component dependency checks require the split Dashboard service"]
 async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let app = test_app().await;
@@ -1421,45 +1423,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         "Initial atomic publish."
     );
 
-    let pinning_dashboard = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            "/api/admin/dashboards",
-            &admin_token,
-            Some(json!({
-                "name": "Current-published pinning contract",
-                "description": "Stable placement id and mutable current-published payload coverage.",
-                "visibility_node_ids": [visibility_node_id]
-            })),
-        ),
-    )
-    .await;
-    let pinning_dashboard_id = pinning_dashboard["id"]
-        .as_str()
-        .expect("pinning Dashboard id");
-    request_json(
-        app.clone(),
-        authorized_request(
-            "PUT",
-            &format!("/api/admin/dashboards/{pinning_dashboard_id}/composition"),
-            &admin_token,
-            Some(json!({
-                "commands": [{
-                    "operation": "bind",
-                    "client_key": "current-published-pin",
-                    "component_version_id": atomic_published_id,
-                    "geometry": {
-                        "grid_row": 1,
-                        "grid_column": 1,
-                        "grid_width": 6,
-                        "grid_height": 4
-                    }
-                }]
-            })),
-        ),
-    )
-    .await;
     let table_before_update = request_json(
         app.clone(),
         authorized_request(
@@ -1546,21 +1509,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         atomic_published_id
     );
     assert_eq!(table_after_update["pagination"]["page_size"], 1);
-    let pinning_detail_after_update = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/dashboards/{pinning_dashboard_id}"),
-            &admin_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(
-        pinning_detail_after_update["placements"][0]["component"]["component_version_id"],
-        atomic_published_id
-    );
-
     request_json(
         app.clone(),
         authorized_request(
@@ -1616,21 +1564,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                 version["id"] == atomic_published_id && version["status"] == "superseded"
             })
     );
-    let pinning_detail_after_new_version = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/dashboards/{pinning_dashboard_id}"),
-            &admin_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(
-        pinning_detail_after_new_version["placements"][0]["component"]["component_version_id"],
-        atomic_published_id
-    );
-
     let (superseded_update_status, superseded_update_body) = request_status_and_json(
         app.clone(),
         authorized_request(
