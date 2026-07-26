@@ -1,0 +1,8 @@
+name: tessara
+
+# Sprint 6C extends the Sprint 6B2 topology with the independently deployed
+# Dashboard Module Instance and its isolated database identities.
+include:
+  - path:
+      - ../sprint-6b2/compose.yaml
+      - ./compose.override.yaml

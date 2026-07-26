@@ -1,0 +1,39 @@
+services:
+  postgres:
+    environment:
+      TESSARA_DASHBOARD_OWNER_PASSWORD: ${TESSARA_DASHBOARD_OWNER_PASSWORD:-local-dashboard-owner}
+      TESSARA_DASHBOARD_MIGRATION_PASSWORD: ${TESSARA_DASHBOARD_MIGRATION_PASSWORD:-local-dashboard-migration}
+      TESSARA_DASHBOARD_RUNTIME_PASSWORD: ${TESSARA_DASHBOARD_RUNTIME_PASSWORD:-local-dashboard-runtime}
+    volumes:
+      - ../sprint-6c/postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
+
+  core:
+    environment:
+      TESSARA_DASHBOARD_MODULE_URL: http://dashboards:8091
+    depends_on:
+      dashboards: { condition: service_started }
+
+  dashboards-migrate:
+    image: tessara-dashboards
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://tessara_dashboard_migration:${TESSARA_DASHBOARD_MIGRATION_PASSWORD:-local-dashboard-migration}@postgres:5432/tessara_module_dashboards
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+
+  dashboards:
+    build: { context: ../.., dockerfile: Dockerfile.dashboard }
+    environment:
+      DATABASE_URL: postgres://tessara_dashboard_runtime:${TESSARA_DASHBOARD_RUNTIME_PASSWORD:-local-dashboard-runtime}@postgres:5432/tessara_module_dashboards
+      DASHBOARD_MODULE_BIND_ADDR: 0.0.0.0:8091
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_CORE_INTERNAL_URL: http://core:8080
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+    depends_on:
+      dashboards-migrate: { condition: service_completed_successfully }
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-data, tessara-services]
+    restart: unless-stopped
