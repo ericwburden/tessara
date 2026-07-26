@@ -38,6 +38,11 @@ pub(crate) fn route_is_allowed(active_route: &str, capabilities: &[String]) -> b
 
     capabilities.iter().any(|capability| {
         capability == "admin:all"
+            || (capability == "core:admin"
+                && matches!(
+                    active_route,
+                    "organization" | "administration" | "module_management"
+                ))
             || required_any_of
                 .iter()
                 .any(|required| capability == *required)
@@ -134,6 +139,17 @@ mod tests {
         assert!(!route_is_allowed("administration", &read));
         assert!(renders_authenticated_denial_in_place("module_management"));
         assert!(!renders_authenticated_denial_in_place("administration"));
+    }
+
+    #[test]
+    fn core_admin_opens_only_core_administration_routes() {
+        let core_admin = capabilities(&["core:admin"]);
+        for route in ["organization", "administration", "module_management"] {
+            assert!(route_is_allowed(route, &core_admin), "{route}");
+        }
+        for route in ["forms", "workflows", "responses", "datasets"] {
+            assert!(!route_is_allowed(route, &core_admin), "{route}");
+        }
     }
 
     #[test]

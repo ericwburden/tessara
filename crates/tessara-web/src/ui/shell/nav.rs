@@ -67,12 +67,44 @@ fn navigation_view(
             }
             .into_any()
         }
-        ShellNavigationLoadState::Loading => {
-            fallback_navigation(active_route, account, false).into_any()
-        }
+        ShellNavigationLoadState::Loading => navigation_loading_view().into_any(),
         ShellNavigationLoadState::Failed => {
             fallback_navigation(active_route, account, true).into_any()
         }
+    }
+}
+
+fn navigation_loading_view() -> impl IntoView {
+    view! {
+        <div
+            class="sidebar-navigation-projection sidebar-navigation-skeleton"
+            aria-label="Loading navigation"
+            aria-busy="true"
+        >
+            {navigation_loading_section("Main", 9)}
+            {navigation_loading_section("Admin", 4)}
+        </div>
+    }
+}
+
+fn navigation_loading_section(label: &'static str, item_count: usize) -> impl IntoView {
+    view! {
+        <p class="sidebar-section">{label}</p>
+        {(0..item_count)
+            .map(|index| {
+                let width_class = match index % 3 {
+                    0 => "skeleton--wide",
+                    1 => "skeleton--medium",
+                    _ => "skeleton--short",
+                };
+                view! {
+                    <div class="sidebar-link sidebar-navigation-skeleton__item" aria-hidden="true">
+                        <span class="skeleton sidebar-navigation-skeleton__icon"></span>
+                        <span class=format!("skeleton skeleton--text sidebar-navigation-skeleton__label {width_class}")></span>
+                    </div>
+                }
+            })
+            .collect_view()}
     }
 }
 
@@ -252,7 +284,7 @@ pub(crate) fn nav_section_for(
     if section == "Admin"
         && fallback_capabilities
             .iter()
-            .any(|capability| capability == "admin:all")
+            .any(|capability| matches!(capability.as_str(), "admin:all" | "core:admin"))
     {
         let insert_at = items
             .iter()
@@ -431,11 +463,51 @@ mod tests {
     }
 
     #[test]
+    fn failed_fallback_matches_the_core_administrator_floor() {
+        let html = Owner::new().with(|| {
+            fallback_navigation(
+                "module_management",
+                Some(account(&["core:admin"], &["core:admin"])),
+                true,
+            )
+            .to_html()
+        });
+
+        assert!(html.contains(">Organization<"));
+        assert!(html.contains("Module Management"));
+        assert!(html.contains("User Management"));
+        assert!(html.contains("Roles &amp; Access"));
+        assert!(html.contains("Node Types"));
+        assert!(!html.contains(">Forms<"));
+        assert!(!html.contains(">Workflows<"));
+    }
+
+    #[test]
     fn module_management_uses_the_canonical_blocks_icon() {
         let html = Owner::new().with(|| nav_icon_for("module_management").to_html());
 
         assert!(html.contains("M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"));
         assert!(html.contains("x=\"14\""));
         assert!(html.contains("y=\"2\""));
+    }
+
+    #[test]
+    fn independently_deployed_module_navigation_stays_inside_the_core_shell() {
+        let html = Owner::new().with(|| {
+            projected_nav_item_link(
+                ShellNavigationItemV1 {
+                    key: "scoped_records".into(),
+                    label: "Scoped Records".into(),
+                    href: "/reference/scoped-records".into(),
+                    owner: crate::state::shell_navigation::ShellNavigationItemOwnerV1::Contribution,
+                    contribution_id: Some("tessara.reference.scoped-records.directory".into()),
+                },
+                "home",
+            )
+            .to_html()
+        });
+
+        assert!(html.contains("href=\"/reference/scoped-records\""));
+        assert!(!html.contains("rel=\"external\""));
     }
 }

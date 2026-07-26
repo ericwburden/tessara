@@ -27,7 +27,7 @@ pub(crate) struct NavigationCatalogDestination {
     pub(crate) can_move_between_groups: bool,
 }
 
-pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 13] = [
+pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 14] = [
     NavigationCatalogDestination {
         id: "core.home",
         key: "home",
@@ -133,6 +133,19 @@ pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 13] = [
         definition_id: "tessara.dashboards",
         capabilities: &["dashboards:read"],
         default_order: 8,
+    }),
+    contribution(ContributionSpec {
+        id: "tessara.reference.scoped-records.navigation",
+        key: "scoped_records",
+        label: "Scoped Records",
+        route: "/reference/scoped-records",
+        semantic_destination: "tessara.reference.scoped-records.directory",
+        definition_id: "tessara.reference.scoped-records",
+        capabilities: &[
+            "tessara.reference.scoped-records:read",
+            "tessara.reference.scoped-records:manage",
+        ],
+        default_order: 9,
     }),
     core_admin(
         "core.admin.users",

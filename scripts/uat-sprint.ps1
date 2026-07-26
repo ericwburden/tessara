@@ -285,16 +285,25 @@ $moduleDestination = $modulePolicy.destinations | Where-Object {
     -and -not $_.can_hide `
     -and -not $_.can_move_between_groups
 } | Select-Object -First 1
+$scopedRecordsDestination = $modulePolicy.destinations | Where-Object {
+    $_.id -eq "tessara.reference.scoped-records.navigation" `
+    -and $_.definition_id -eq "tessara.reference.scoped-records" `
+    -and $_.semantic_destination -eq "tessara.reference.scoped-records.directory" `
+    -and $_.route -eq "/reference/scoped-records" `
+    -and $_.group_id -eq "core.main" `
+    -and $_.visible
+} | Select-Object -First 1
 if (
     $modulePolicy.schema_version -ne 2 `
     -or -not $modulePolicy.can_manage_navigation `
     -or @($modulePolicy.groups).Count -lt 2 `
     -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.main" }) `
     -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.admin" }) `
-    -or @($modulePolicy.destinations).Count -ne 13 `
-    -or -not $moduleDestination
+    -or @($modulePolicy.destinations).Count -ne 14 `
+    -or -not $moduleDestination `
+    -or -not $scopedRecordsDestination
 ) {
-    throw "Sprint UAT failure: schema-v2 navigation policy did not preserve required groups, exact membership, and protected Module Management."
+    throw "Sprint UAT failure: schema-v2 navigation policy did not preserve required groups, exact membership, protected Module Management, and Scoped Records."
 }
 
 $shellNavigation = Invoke-RestMethod -Uri "$BaseUrl/api/shell/navigation" -Headers $headers -TimeoutSec 30

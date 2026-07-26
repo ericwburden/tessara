@@ -11,6 +11,7 @@ use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     PageHeader,
 };
+use icons::{Plus, ShieldCheck};
 use leptos::prelude::*;
 
 #[component]
@@ -112,9 +113,26 @@ pub(super) fn AdministrationRolesSurface() -> impl IntoView {
 
                 <PageHeader title="Roles">
                     <button class="button" type="button" on:click=open_create_sheet>
+                        <Plus class="button__icon"/>
                         "New Role"
                     </button>
                 </PageHeader>
+
+                <section class="administration-floor-banner" aria-label="Core administration capability floor">
+                    <span class="administration-floor-banner__icon"><ShieldCheck/></span>
+                    <div class="administration-floor-banner__copy">
+                        <span>"Core Administration Capability Floor"</span>
+                        <h2>"Floor v1 is covered"</h2>
+                        <p>"The designated enrollment role remains installation-global and satisfies all current Core administration obligations."</p>
+                    </div>
+                    <div class="administration-floor-banner__meta">
+                        <span class="status-badge is-success">"Compliant"</span>
+                        <span>
+                            <small>"Designated role"</small>
+                            <strong>"Core Administrator"</strong>
+                        </span>
+                    </div>
+                </section>
 
                 {move || {
                     if is_loading.get() {

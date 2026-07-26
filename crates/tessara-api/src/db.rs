@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0xb2ee_c480_5e23_7198);
+        assert_eq!(fnv1a(BASELINE), 0xf1cd_c973_6376_5be5);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains(
             "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
@@ -463,7 +463,7 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "692f7bd17326b05cbba77983f575827d9f30e0d582b44ded57690655e4f2b843"
+            "3d9c03e38baad9416ca8425ad32e4baa245311ab829a3ec465bf60484debe3a7"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));
@@ -473,7 +473,20 @@ mod tests {
         assert!(baseline.contains("CREATE TABLE module_releases"));
         assert!(baseline.contains("CREATE TABLE module_instances"));
         assert!(baseline.contains("CREATE TABLE deployment_receipts"));
+        assert!(baseline.contains("CREATE TABLE core_administration_state"));
+        assert!(baseline.contains("CREATE TABLE core_security_revisions"));
+        assert!(baseline.contains("CREATE TABLE administrator_enrollment_handoffs"));
+        assert!(baseline.contains("CREATE TABLE core_module_action_declarations"));
         assert!(baseline.contains("manifest JSONB"));
+    }
+
+    #[test]
+    fn independent_module_capability_seed_is_manifest_driven_and_scope_aware() {
+        let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
+        assert!(baseline.contains("jsonb_array_elements"));
+        assert!(baseline.contains("manifest -> 'security_capabilities'"));
+        assert!(baseline.contains("'scope_aware'"));
+        assert!(baseline.contains("ON CONFLICT (key) DO UPDATE"));
     }
 
     fn sha256_hex(bytes: &[u8]) -> String {

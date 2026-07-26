@@ -423,7 +423,7 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert_eq!(reader_policy["groups"].as_array().map(Vec::len), Some(2));
     assert_eq!(
         reader_policy["destinations"].as_array().map(Vec::len),
-        Some(13)
+        Some(14)
     );
     assert!(
         reader_policy["groups"]

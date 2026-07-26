@@ -11,6 +11,7 @@ members = [
     "crates/tessara-db",
     "crates/tessara-forms",
     "crates/tessara-hierarchy",
+    "crates/tessara-installation-control",
     "crates/tessara-jobs",
     "crates/tessara-module-contract",
     "crates/tessara-reference-scoped-records",
@@ -43,8 +44,10 @@ anyhow = "1"
 argon2 = "0.5"
 arrow = "56"
 axum = "0.8"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 datafusion = "50"
+ed25519-dalek = "2"
 gloo-net = "0.6"
 gloo-timers = { version = "0.3", features = ["futures"] }
 icons = { version = "0.18.2", features = ["leptos"] }
@@ -54,6 +57,7 @@ leptos_meta = { version = "0.8.5", default-features = false }
 leptos_router = { version = "0.8.13", default-features = false }
 password-hash = { version = "0.5", features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

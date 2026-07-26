@@ -8,7 +8,10 @@
 
 mod dependency;
 mod deployment;
+mod enrollment;
 mod inventory;
+mod protocol;
+mod sdk;
 
 pub use dependency::{
     DependencyEvaluationFindingCode, DependencyEvaluationInput, DependencyRelationshipKind,
@@ -21,9 +24,30 @@ pub use deployment::{
     DeploymentPlanV1, DeploymentReceiptV1, DeploymentValidationError, DesiredModuleV1,
     IdentityChangeV1, ReleaseChangeV1, TessaraDeploymentV1, canonical_sha256,
 };
+pub use enrollment::{
+    AdministratorEligibilityDecisionV1, AdministratorEligibilityError,
+    AdministratorEnrollmentClaimKindV1, AdministratorEnrollmentClaimStateV1,
+    CORE_ELIGIBILITY_MAX_LIFETIME_SECONDS, EnrollmentRedemptionResultV1, EnrollmentReservationV1,
+    LocalOperatorAuthorizationV1, RECOVERY_OPERATOR_MAX_LIFETIME_SECONDS,
+};
 pub use inventory::{
     IndependentConfigurationV1, IndependentDefinitionV1, IndependentDiagnosticsV1,
     IndependentInstanceV1, IndependentReleaseV1,
+};
+pub use protocol::{
+    AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS, AUTHORIZATION_READ_MAX_LIFETIME_SECONDS,
+    AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
+    AuthorizationValidationError, CapabilityScopeBindingV1, DelegationBasisV1,
+    ExternalIdentityAssertionV1, NavigationProjectionV1, OriginalActorProjectionV1,
+    ProtocolEnvelopeError, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
+    PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV1,
+    SHELL_CONTEXT_MAX_LIFETIME_SECONDS, ShellContextV1, ShellContextValidationContextV1,
+    ShellContextValidationError, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
+    SignedWindowError, canonical_protocol_signing_bytes,
+};
+pub use sdk::{
+    ModuleShellError, SHELL_CONTENT_MEDIA_TYPE, ShellContentV1, render_native_module_document,
+    verify_shell_context,
 };
 
 use std::{collections::BTreeSet, fmt, str::FromStr};

@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use serde_json::Value;
 use tessara_module_contract::{DeploymentProfile, DeploymentReceiptV1};
 use uuid::Uuid;
 
@@ -31,7 +32,7 @@ use super::{
         UpdateNavigationPolicyRequestV2,
     },
     error::{ModuleHttpError, ModuleHttpResult},
-    reference,
+    reference, repository,
     service::{
         self, CatalogReadError, ModuleInventoryReadModel, NavigationDestinationUpdateV2,
         NavigationGroupUpdateV2, NavigationPolicyReadModelV2, NavigationPolicyUpdateError,
@@ -228,6 +229,14 @@ async fn import_deployment_receipt(
             .bind(module.definition_id.as_str()).bind(display_name).execute(&mut *tx).await?;
         sqlx::query("INSERT INTO module_releases (id, definition_id, version, manifest_digest, manifest, runtime_image_digest, publisher, trust_state, compatibility_state) VALUES ($1,$2,$3,$4,$5,$6,$7,'curated','compatible') ON CONFLICT (definition_id, manifest_digest) DO UPDATE SET version=EXCLUDED.version, manifest=EXCLUDED.manifest, runtime_image_digest=EXCLUDED.runtime_image_digest, publisher=EXCLUDED.publisher, trust_state='curated', compatibility_state='compatible'")
             .bind(module.release_id).bind(module.definition_id.as_str()).bind(module.version.to_string()).bind(module.manifest_digest.as_str()).bind(sqlx::types::Json(manifest)).bind(module.runtime_image.as_str()).bind(module.publisher.as_str()).execute(&mut *tx).await?;
+        for declaration in &manifest.security_capabilities {
+            repository::ensure_declared_module_capability(
+                &mut tx,
+                declaration.id.as_str(),
+                &declaration.description,
+            )
+            .await?;
+        }
         sqlx::query("INSERT INTO module_instances (id, installation_id, definition_id, release_id, identity_state, data_state, database_name, configuration, route_prefix, installed, deployed, configured, ready, enabled, healthy, last_observed_at) VALUES ($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,true,true,true,$8) ON CONFLICT (installation_id, definition_id) DO UPDATE SET release_id=EXCLUDED.release_id, identity_state='live', data_state='retained', database_name=EXCLUDED.database_name, configuration=EXCLUDED.configuration, route_prefix=EXCLUDED.route_prefix, installed=true, deployed=true, configured=true, ready=true, enabled=true, healthy=true, last_observed_at=EXCLUDED.last_observed_at")
             .bind(module.instance_id).bind(receipt.installation_id).bind(module.definition_id.as_str()).bind(module.release_id).bind(&module.database_name).bind(sqlx::types::Json(&module.configuration)).bind(&module.route_prefix).bind(applied_at).execute(&mut *tx).await?;
     }
@@ -642,12 +651,14 @@ pub(super) fn independent_entry_value(
             display_label: module
                 .configuration
                 .get("display_label")
-                .cloned()
+                .and_then(Value::as_str)
+                .map(str::to_owned)
                 .unwrap_or(module.display_name),
             retention_mode: module
                 .configuration
                 .get("retention_mode")
-                .cloned()
+                .and_then(Value::as_str)
+                .map(str::to_owned)
                 .unwrap_or_else(|| "Not reported".into()),
         },
         diagnostics: IndependentDiagnosticsV1 {

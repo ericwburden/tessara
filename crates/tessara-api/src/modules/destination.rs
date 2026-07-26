@@ -79,8 +79,12 @@ const COMPONENTS_READ: &[&str] = &["components:read", "components:manage"];
 const COMPONENTS_MANAGE: &[&str] = &["components:manage"];
 const DASHBOARDS_READ: &[&str] = &["dashboards:read"];
 const DASHBOARDS_MANAGE: &[&str] = &["dashboards:manage"];
+const SCOPED_RECORDS_READ: &[&str] = &[
+    "tessara.reference.scoped-records:read",
+    "tessara.reference.scoped-records:manage",
+];
 
-/// Resolves only names in the frozen Sprint 6A Core route registry.
+/// Resolves names in the Core-owned route registry.
 pub(crate) fn resolve(
     destination: &SemanticDestination,
     installation_id: Uuid,
@@ -229,6 +233,7 @@ fn route_spec(name: &str) -> Option<RouteSpec> {
             (DASHBOARD_ID_OR_NONE(name), DASHBOARDS_READ)
         }
         "dashboards.create" | "dashboards.edit" => (DASHBOARD_ID_OR_NONE(name), DASHBOARDS_MANAGE),
+        "tessara.reference.scoped-records.directory" => (NONE, SCOPED_RECORDS_READ),
         _ => return None,
     };
     Some(RouteSpec {
@@ -275,6 +280,9 @@ fn route_name(name: &str) -> &'static str {
         "dashboards.detail" => "dashboards.detail",
         "dashboards.edit" => "dashboards.edit",
         "dashboards.view" => "dashboards.view",
+        "tessara.reference.scoped-records.directory" => {
+            "tessara.reference.scoped-records.directory"
+        }
         _ => unreachable!("route_name is called only for registered routes"),
     }
 }
@@ -396,6 +404,7 @@ fn render_path(
         "dashboards.detail" => format!("/dashboards/{}", uuid("dashboard_id")?),
         "dashboards.edit" => format!("/dashboards/{}/edit", uuid("dashboard_id")?),
         "dashboards.view" => format!("/dashboards/{}/view", uuid("dashboard_id")?),
+        "tessara.reference.scoped-records.directory" => "/reference/scoped-records".to_string(),
         _ => return None,
     })
 }
@@ -592,6 +601,10 @@ mod tests {
             (
                 "dashboards.view",
                 "/dashboards/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/view",
+            ),
+            (
+                "tessara.reference.scoped-records.directory",
+                "/reference/scoped-records",
             ),
         ];
 

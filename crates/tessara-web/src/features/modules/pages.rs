@@ -1,6 +1,6 @@
 //! Native Module Management route pages.
 
-use icons::ExternalLink;
+use icons::{ExternalLink, HeartPulse, Pencil};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params;
 use leptos_router::params::{Params, ParamsError, ParamsMap};
@@ -513,6 +513,12 @@ fn independent_module_sections(
     let manifest_digest = release.manifest_digest.clone();
     let runtime_image = release.runtime_image.clone();
     let instance_id = instance.id.clone();
+    let configuration_action = format!("/api/modules/instances/{}/configuration/form", instance.id);
+    let configuration_editing = RwSignal::new(false);
+    let configured_label = configuration.display_label.clone();
+    let configured_label_for_edit = configured_label.clone();
+    let configured_label_for_cancel = configured_label.clone();
+    let configuration_draft = RwSignal::new(configured_label.clone());
     let serving_state = entry.serving_state();
     let manifest_sections = independent_manifest_sections(manifest.as_ref());
     view! {
@@ -562,7 +568,101 @@ fn independent_module_sections(
                     <aside class="module-detail-independent-stack"><section class="organization-detail-card module-detail-overview-card module-detail-artifact-verification"><h2>"Artifact provenance"</h2><dl class="module-detail-overview__summary-list"><div><dt>"Manifest"</dt><dd class="module-detail-overview__value-with-action"><code>{super::directory::compact_value(&manifest_digest)}</code><super::directory::CopyValue value=manifest_digest label="Copy manifest digest"/></dd></div><div><dt>"Runtime image"</dt><dd class="module-detail-overview__value-with-action"><code>{super::directory::compact_value(&runtime_image)}</code><super::directory::CopyValue value=runtime_image label="Copy runtime image digest"/></dd></div><div><dt>"Publisher"</dt><dd>{format!("{} · curated release", release.publisher)}</dd></div></dl></section></aside>
                 </div>
             </div>
-            <section data-module-section="configuration" class="organization-detail-card module-detail-overview-card"><h2>"Configuration"</h2><dl class="module-detail-overview__list"><div><dt>"Display label"</dt><dd>{configuration.display_label}</dd></div><div><dt>"Retention mode"</dt><dd>{configuration.retention_mode.replace('_', " ")}</dd></div><div><dt>"Validation"</dt><dd>{if configuration.valid { format!("Valid for release {} · No findings", release.version) } else { "A configuration finding was reported; review the Findings tab for its path and resolution.".into() }}</dd></div></dl></section>
+            <div data-module-section="configuration" class="module-configuration-grid">
+                <section class="organization-detail-card module-detail-overview-card module-configuration-card">
+                    <div class="module-detail__heading">
+                        <div>
+                            <h2>"Configuration"</h2>
+                            <p>"Validated by the module-owned configuration contract."</p>
+                        </div>
+                        <button
+                            class="button button--secondary"
+                            type="button"
+                            hidden=move || configuration_editing.get()
+                            on:click=move |_| {
+                                configuration_draft.set(configured_label_for_edit.clone());
+                                configuration_editing.set(true);
+                            }
+                        >
+                            <Pencil class="button__icon"/>
+                            "Edit configuration"
+                        </button>
+                    </div>
+                    <dl class="module-detail-overview__list" hidden=move || configuration_editing.get()>
+                        <div><dt>"Schema version"</dt><dd><code>"1"</code></dd></div>
+                        <div><dt>"Display label"</dt><dd>{configured_label}</dd></div>
+                        <div><dt>"Validation"</dt><dd><span class=if configuration.valid { "status-badge is-success" } else { "status-badge is-danger" }>{if configuration.valid { "Valid" } else { "Finding" }}</span>" " {format!("Release {} · {}", release.version, if configuration.valid { "no findings" } else { "review findings" })}</dd></div>
+                        <div><dt>"Authoritative validator"</dt><dd>"Scoped Records configuration contract"</dd></div>
+                    </dl>
+                    <form
+                        class="module-configuration-form"
+                        method="post"
+                        action=configuration_action
+                        hidden=move || !configuration_editing.get()
+                    >
+                        <input type="hidden" name="schema_version" value="1"/>
+                        <label class="field" for="module-display-label">
+                            <span>"Display label"</span>
+                            <input
+                                id="module-display-label"
+                                name="display_label"
+                                prop:value=move || configuration_draft.get()
+                                on:input=move |event| configuration_draft.set(event_target_value(&event))
+                                maxlength="80"
+                                required
+                            />
+                        </label>
+                        <div class="module-configuration-validation">
+                            <strong>"Configuration is valid"</strong>
+                            <span>{format!("Schema v1 · release {} · normalized by the module · no findings", release.version)}</span>
+                        </div>
+                        <div class="form-actions module-configuration-form__actions">
+                            <button
+                                class="button button--secondary"
+                                type="button"
+                                on:click=move |_| {
+                                    configuration_draft.set(configured_label_for_cancel.clone());
+                                    configuration_editing.set(false);
+                                }
+                            >
+                                "Cancel"
+                            </button>
+                            <button class="button" type="submit">"Save configuration"</button>
+                        </div>
+                    </form>
+                </section>
+                <aside class="organization-detail-card module-detail-overview-card module-application-state">
+                    <div class="module-detail__heading">
+                        <div>
+                            <h2>"Application state"</h2>
+                            <p>"Enablement remains separate from configuration and navigation."</p>
+                        </div>
+                    </div>
+                    <div class="module-application-state__line"><span>"Configured"</span><span class=if configuration.valid { "status-badge is-success" } else { "status-badge is-danger" }>{if configuration.valid { "Valid" } else { "Finding" }}</span></div>
+                    <div class="module-application-state__line"><span>"Module health"</span><span class=if instance.healthy { "status-badge is-success" } else { "status-badge is-danger" }>{if instance.healthy { "Healthy" } else { "Degraded" }}</span></div>
+                    <div class="module-application-state__line"><span>"Navigation"</span><span class="status-badge is-info">{if instance.enabled { "Visible" } else { "Hidden" }}</span></div>
+                    <div class="module-application-state__enablement">
+                        <div>
+                            <strong>"Product route enabled"</strong>
+                            <span>{if instance.enabled { "Authorized users can open the module." } else { "Configuration and diagnostics remain available." }}</span>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked=if instance.enabled { "true" } else { "false" }
+                            class=if instance.enabled { "module-application-state__switch is-on" } else { "module-application-state__switch" }
+                            disabled
+                            title="Enablement changes are applied through deployment."
+                        >
+                            <span></span>
+                        </button>
+                    </div>
+                    <a class="button button--secondary module-application-state__action" href="/reference/scoped-records/health">
+                        <HeartPulse class="button__icon"/>
+                        "Open health and diagnostics"
+                    </a>
+                </aside>
+            </div>
             {manifest_sections}
             <section data-module-section="findings" class="organization-detail-card module-detail-empty-section"><h2>"Findings"</h2><p>"No module findings were reported."</p></section>
         </div>

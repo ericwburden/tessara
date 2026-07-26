@@ -813,13 +813,14 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** using the curated 6B1 release fixture, an operator can validate and plan the exact deployment, apply it through Docker Compose, observe the Core, Traefik, PostgreSQL, and reference-module containers, reach the reference module through the single Tessara origin, stop it without breaking Core, inspect the contained fallback and diagnostics, restore it, apply a compatible upgrade, and roll back. The one PostgreSQL container contains separate Core, deployment-control, and Module Instance databases, and prohibited cross-database access fails.
 
-### Sprint 6B2: Secure Module Operation Slice (Next)
+### Sprint 6B2: Secure Module Operation Slice (Complete)
 
 **Outcome:** Tessara can securely enroll its first administrator and authorize scoped user activity across the independently deployed module boundary established in Sprint 6B1.
 
 **Build:**
 
 - add installation-bound, single-use administrator enrollment claims backed by the deployment-control database outside the Core backup boundary, including issued, reserved, consumed, expired, revoked, and replaced states
+- add guided local Supervisor commands for enrollment issue and recovery that acquire the required signed eligibility or operator authorization, issue or replace the claim, and open the enrollment page with non-secret claim metadata prefilled; keep the once-displayed secret write-only and out of URLs, browser history, logs, diagnostics, and later status output
 - define and enforce the versioned Core Administration Capability Floor and floor-compliant enrollment role for local Argon2id identity and signed fixture external-identity binding paths
 - define `ShellContextV1` and the module SDK conventions required for complete native SSR module documents that match the Core shell without sharing browser cookies or Core credentials
 - issue short-lived, audience/action/installation-bound Core authorization decisions or grants with original actor, presenting service, declared dependency/contract, descendant-aware scope, ownership/delegation assertions, authorization/organization revisions, expiry, and replay protection
@@ -829,11 +830,12 @@ This section records the completed foundation sequence that led to the current n
 
 **Application UI delivered this sprint:**
 
-- one-time administrator enrollment distinct from normal sign-in, with local and fixture-external identity paths and no secret redisplay
+- one-time administrator enrollment distinct from normal sign-in, with local and fixture-external identity paths, prefilled non-secret claim metadata, visible password requirements, no preselected existing email address, and no secret redisplay
+- designed in-page failure handling that preserves nondisclosure while offering actionable retry or claim-reissue guidance instead of exposing raw API responses
 - complete Scoped Records configuration, authorization, enablement, directory, detail, health, and diagnostics flows
 - clear scoped denial, stale authorization, disabled, degraded, and recovery states across Core and module-owned routes
 
-**User-testable exit condition:** an operator can issue a once-displayed enrollment claim, enroll a viable floor-compliant administrator, configure and enable Scoped Records, grant disjoint subtree access, and prove users receive only their authorized record/action combinations across the process boundary. Expired, revoked, replayed, cross-installation, wrong-audience, stale-revision, and pre-redemption-restore cases fail without leaking existence, while upgrade and rollback preserve Module Instance identity and isolated data.
+**User-testable exit condition:** an operator can run one guided local command to issue a once-displayed enrollment claim and open the prepared enrollment page, enroll a viable floor-compliant administrator, and use an equally guided reason-bearing recovery command when recovery is eligible. The operator can then configure and enable Scoped Records, grant disjoint subtree access, and prove users receive only their authorized record/action combinations across the process boundary. Expired, revoked, replayed, cross-installation, wrong-audience, stale-revision, and pre-redemption-restore cases fail without leaking existence and render useful in-page recovery guidance, while upgrade and rollback preserve Module Instance identity and isolated data.
 
 ### Future Platform Work: Verified Module Distribution And Lifecycle
 
@@ -848,7 +850,24 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** an operator can install an approved third-party module with one Tessara command and no separately managed verification utility; an unsigned, altered, unapproved, revoked, or incompatible release fails before container mutation, while a local-development module remains possible only under an explicit non-production policy.
 
-### Sprint 6C: Independently Deployed Dashboard Module Slice
+### Future Platform Work: Recovery And Secrets Management Interface
+
+**Outcome:** an operator can perform installation recovery, one-time claim presentation, and routine secret-reference lifecycle work through an ergonomic, heavily secured administrative interface without weakening the independent installation-control boundary or depending on a healthy Core session.
+
+- begin with a threat-modelled decision record comparing an SSH-accessible TUI, a restricted web UI behind a dedicated Traefik route, and a CLI-only baseline; evaluate remote attack surface, deployment and recovery dependencies, operator ergonomics, accessibility, automation, credential provisioning and rotation, auditing, and safe use during a Core outage before selecting the production interface
+- deliver the selected interface as privileged installation infrastructure rather than an ordinary product module; it has its own runtime identity, narrowly scoped persistence, signing keys, and immutable audit trail, and receives no direct Core or product-module database access
+- if the web option is selected, require a dedicated Traefik route and middleware chain with an explicit IP or network allowlist plus a unique deployment-assigned secret credential, separate step-up authentication, strict transport and browser security headers, request and session rate limits, CSRF protection, short idle and absolute session lifetimes, and a deployment option that leaves the route unpublished until explicitly enabled
+- if the TUI option is selected, expose no recovery HTTP route; require SSH transport with an explicit source allowlist, key-based host and operator authentication, a non-login or tightly restricted service account, command confinement to the recovery TUI, short-lived step-up authorization for sensitive actions, and independently retained audit records
+- use Tessara design tokens and interaction conventions for a web UI, or an equivalent Tessara terminal information hierarchy and terminology for a TUI, without embedding either interface in the normal Core `AppShell` or trusting an ordinary Core browser session; the recovery surface must remain usable when Core is unavailable, restored to stale state, or inaccessible because administrator credentials are lost
+- require separate step-up local-operator authorization, installation binding, and a recorded reason for sensitive actions; support stronger hardware-backed or multi-approver policies later without making two-person administration mandatory for single-operator installations
+- wrap claim issue, revoke, replace, status, reconciliation, and one-time presentation workflows; never imply that a lost claim secret can be retrieved, because the secret is displayed once and replacement is the only recovery path
+- manage versioned references to Compose secrets, Kubernetes Secrets, or later secret-provider adapters rather than copying plaintext into Core or module configuration; support rotation, revocation, dependency-impact preview, and read-back of identifiers and digests without general secret redisplay
+- prevent secret material from entering command arguments, shell history, terminal scrollback beyond an explicit one-time reveal, URLs, browser history, persistent browser storage, analytics, diagnostics, support bundles, logs, clipboard by default, or Core backups; encrypt any unavoidable interface-owned secret material at rest with separately managed keys and erase transient values promptly
+- require a security review, recovery drills, transport-specific hardening tests, redaction tests, and explicit break-glass audit verification before a production-ready designation
+
+**User-testable exit condition:** the accepted decision record demonstrates why the selected interface is more appropriate than the rejected alternatives for both single-operator and larger installations. With Core healthy, unavailable, and restored to a pre-recovery backup in separate exercises, an authorized operator can reach the selected restricted interface, complete independent transport authentication and step-up authorization, issue or replace a claim and view its secret exactly once, rotate a referenced deployment secret with an impact preview, and inspect immutable non-secret receipts. An ordinary Core administrator session, client outside the source allowlist, client lacking the deployment-assigned credential or authorized SSH key, replayed request, expired session, or later status lookup cannot reveal or reuse secret material.
+
+### Sprint 6C: Independently Deployed Dashboard Module Slice (Next)
 
 **Outcome:** Dashboards is the first existing Tessara feature area to operate as a separately deployed, full-stack module.
 

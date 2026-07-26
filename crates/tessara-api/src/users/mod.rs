@@ -160,6 +160,12 @@ pub async fn update_role(
     ensure_capability_ids_exist(&mut tx, &payload.capability_ids).await?;
     let proposed_scope_mode =
         capability_bundle_scope_mode(&mut tx, &payload.capability_ids).await?;
+    crate::core_security::ensure_designated_role_update_compliant(
+        &mut tx,
+        role_id,
+        &payload.capability_ids,
+    )
+    .await?;
 
     let role_currently_grants_admin = sqlx::query_scalar::<_, bool>(
         r#"

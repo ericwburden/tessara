@@ -37,6 +37,9 @@ pub const DASHBOARD_BOOTSTRAP_SCRIPT_ID: &str = "tessara-dashboard-bootstrap";
 /// DOM id for the request-scoped, actor-filtered shell navigation payload.
 pub const SHELL_NAVIGATION_BOOTSTRAP_SCRIPT_ID: &str = "tessara-shell-navigation-bootstrap";
 
+/// DOM id for module-provided content rendered inside the Core shell.
+pub const SCOPED_RECORDS_BOOTSTRAP_SCRIPT_ID: &str = "tessara-scoped-records-bootstrap";
+
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -101,6 +104,21 @@ pub fn application_html_with_module_management_and_shell_navigation_bootstrap(
     )
 }
 
+/// Renders Scoped Records content inside the Core-owned shell.
+pub fn application_html_with_scoped_records_bootstrap(
+    path: &str,
+    title: &str,
+    description: &str,
+    bootstrap: &tessara_module_contract::ShellContentV1,
+) -> String {
+    document::render_native_app_document_with_scoped_records_bootstrap(
+        title,
+        description,
+        path,
+        bootstrap,
+    )
+}
+
 pub fn css_path() -> String {
     pipeline::css_path()
 }
@@ -127,7 +145,9 @@ mod tests {
     use super::{
         Dashboard, DashboardPlacement, DashboardPlacementAvailability, DashboardRouteBootstrap,
         SessionAccount, application_html, application_html_with_dashboard_bootstrap,
+        application_html_with_scoped_records_bootstrap,
     };
+    use tessara_module_contract::ShellContentV1;
 
     fn initialize_test_executor() {
         let _ = any_spawner::Executor::init_futures_executor();
@@ -176,6 +196,29 @@ mod tests {
             );
             assert!(!html.contains("Native route placeholder"));
         }
+    }
+
+    #[test]
+    fn scoped_records_content_is_rendered_inside_the_core_shell() {
+        initialize_test_executor();
+        let html = application_html_with_scoped_records_bootstrap(
+            "/reference/scoped-records",
+            "Records Library · Tessara",
+            "Scoped Records.",
+            &ShellContentV1 {
+                schema_version: 1,
+                title: "Records Library".into(),
+                body_html: "<h1>Records Library</h1><p>Module-owned content.</p>".into(),
+            },
+        );
+
+        assert!(html.contains(r#"class="app-shell""#));
+        assert!(html.contains(r#"class="top-app-bar__title">Records Library"#));
+        assert!(html.contains(r#"class="sidebar-nav""#));
+        assert!(html.contains(r#"class="top-app-bar__actions""#));
+        assert!(html.contains(r#"class="route-panel scoped-records-page""#));
+        assert!(html.contains("<p>Module-owned content.</p>"));
+        assert!(!html.contains("data-shell-state="));
     }
 
     #[test]

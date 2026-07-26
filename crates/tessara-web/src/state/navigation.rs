@@ -599,6 +599,15 @@ fn core_item_is_visible(item: &NavItem, capabilities: &[String]) -> bool {
 fn actor_has_effective_capability(capabilities: &[String], required: &str) -> bool {
     capabilities.iter().any(|capability| {
         capability == "admin:all"
+            || (capability == "core:admin"
+                && matches!(
+                    required,
+                    "admin:all"
+                        | "hierarchy:read"
+                        | "hierarchy:manage"
+                        | "modules:read"
+                        | "modules:manage_navigation"
+                ))
             || capability == required
             || (required == "modules:read" && capability == "modules:manage_navigation")
     })
@@ -1141,6 +1150,19 @@ mod tests {
         assert!(resolved_keys(&no_access, NavigationSection::Admin).is_empty());
         assert_eq!(admin.unavailable, None);
         assert_eq!(no_access.unavailable, None);
+    }
+
+    #[test]
+    fn core_admin_navigation_matches_the_capability_floor() {
+        let navigation = resolve_navigation(&[], None, &["core:admin".to_string()]);
+        assert_eq!(
+            resolved_keys(&navigation, NavigationSection::Main),
+            ["home", "organization"]
+        );
+        assert_eq!(
+            resolved_keys(&navigation, NavigationSection::Admin),
+            ["administration", "module_management"]
+        );
     }
 
     #[test]

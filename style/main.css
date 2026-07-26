@@ -1956,6 +1956,21 @@ input {
   gap: 0.35rem;
 }
 
+.sidebar-navigation-skeleton__item {
+  pointer-events: none;
+}
+
+.sidebar-navigation-skeleton__icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.sidebar-navigation-skeleton__label {
+  max-width: 8.5rem;
+}
+
 .sidebar-navigation-status {
   margin: 0.75rem 0 0;
   padding: 0.65rem 0.75rem;
@@ -2359,6 +2374,498 @@ input {
   padding: 1.25rem;
 }
 
+.scoped-records-page {
+  gap: 1rem;
+}
+
+.scoped-records-module-content {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.scoped-records-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.scoped-records-breadcrumb a {
+  color: var(--semantic-link);
+}
+
+.scoped-records-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.scoped-records-heading > div:first-child {
+  min-width: 0;
+}
+
+.scoped-records-heading h1 {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  letter-spacing: -0.025em;
+}
+
+.scoped-records-heading h1::after {
+  display: block;
+  width: 3.2rem;
+  height: 2px;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--semantic-primary), var(--semantic-warning));
+  content: "";
+}
+
+.scoped-records-heading p,
+.scoped-records-card p {
+  margin: 0.4rem 0 0;
+  color: var(--color-muted);
+}
+
+.scoped-records-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.scoped-records-scope-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  border: 1px solid var(--semantic-primary-border);
+  border-radius: var(--radius);
+  background: var(--semantic-primary-soft);
+  padding: 0.8rem 1rem;
+}
+
+.scoped-records-scope-summary > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.scoped-records-scope-summary span {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.scoped-records-toolbar {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1fr) minmax(14rem, auto) auto;
+  gap: 0.65rem;
+}
+
+.scoped-records-toolbar input,
+.scoped-records-toolbar select,
+.scoped-records-form input,
+.scoped-records-form select {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  color: var(--color-text);
+  padding: 0 0.8rem;
+  font: inherit;
+}
+
+.scoped-records-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.scoped-records-table {
+  width: 100%;
+  min-width: 46rem;
+  border-collapse: collapse;
+}
+
+.scoped-records-table th,
+.scoped-records-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.8rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.scoped-records-table thead th {
+  color: var(--color-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scoped-records-table tbody tr:nth-child(odd) {
+  background: var(--color-table-row);
+}
+
+.scoped-records-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.scoped-records-table tbody th {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.scoped-records-table code {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.scoped-records-primary-link {
+  color: var(--semantic-link);
+  font-weight: 800;
+}
+
+.scoped-records-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.scoped-records-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.85fr);
+  gap: 1rem;
+}
+
+.scoped-records-card {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-panel) 84%, var(--color-control));
+  padding: 1rem;
+}
+
+.scoped-records-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.scoped-records-card h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.scoped-records-card dl {
+  display: grid;
+  margin: 0 -1rem -1rem;
+}
+
+.scoped-records-card dl > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.65fr) minmax(0, 1fr);
+  gap: 1rem;
+  border-top: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+}
+
+.scoped-records-card dt,
+.scoped-records-auth-context span {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.scoped-records-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.scoped-records-auth-context {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.scoped-records-auth-context > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.scoped-records-notice,
+.scoped-records-validation {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: var(--radius);
+  background: var(--semantic-info-soft);
+  padding: 0.8rem;
+}
+
+.scoped-records-validation {
+  border-color: var(--semantic-success-border);
+  background: var(--semantic-success-soft);
+}
+
+.scoped-records-notice span,
+.scoped-records-validation span,
+.scoped-records-empty span {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.scoped-records-form {
+  width: min(52rem, 100%);
+}
+
+.scoped-records-form-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.scoped-records-form-grid label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 800;
+}
+
+.scoped-records-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.scoped-records-tabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.scoped-records-tabs a {
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted);
+  padding: 0.6rem 0.35rem;
+  font-weight: 800;
+}
+
+.scoped-records-tabs a.is-active {
+  border-bottom-color: var(--semantic-primary);
+  color: var(--semantic-primary);
+}
+
+.scoped-records-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.scoped-records-diagnostic-grid article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.3rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 1rem;
+}
+
+.scoped-records-diagnostic-grid article > div {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.scoped-records-diagnostic-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1rem;
+  color: var(--semantic-primary);
+}
+
+.scoped-records-diagnostic-grid h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.scoped-records-diagnostic-grid article > strong,
+.scoped-records-diagnostic-grid article > div > strong,
+.scoped-records-diagnostic-grid small {
+  color: var(--color-muted);
+}
+
+.scoped-records-empty {
+  display: grid;
+  place-items: center;
+  gap: 0.35rem;
+  min-height: 8rem;
+  text-align: center;
+}
+
+.scoped-records-empty-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  color: var(--semantic-success);
+}
+
+.scoped-records-state-treatment {
+  display: grid;
+  justify-items: start;
+  gap: 0.8rem;
+  border: 1px solid var(--semantic-warning-border);
+  border-radius: var(--radius);
+  background: var(--semantic-warning-soft);
+  padding: 1.25rem;
+}
+
+.scoped-records-state-treatment__eyebrow {
+  color: var(--semantic-warning);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scoped-records-state-treatment h1,
+.scoped-records-state-treatment p,
+.scoped-records-state-context h2,
+.scoped-records-state-context dl {
+  margin: 0;
+}
+
+.scoped-records-state-treatment p {
+  max-width: 48rem;
+  color: var(--color-muted);
+}
+
+.scoped-records-state-context {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 1rem 1.25rem;
+}
+
+.scoped-records-state-context dl {
+  display: grid;
+}
+
+.scoped-records-state-context dl > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.5fr) minmax(0, 1fr);
+  gap: 1rem;
+  border-top: 1px solid var(--color-border);
+  padding: 0.7rem 0;
+}
+
+.scoped-records-state-context dt {
+  color: var(--color-muted);
+  font-weight: 800;
+}
+
+.scoped-records-state-context dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 56rem) {
+  .scoped-records-heading,
+  .scoped-records-pagination,
+  .scoped-records-card > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scoped-records-toolbar,
+  .scoped-records-detail-grid,
+  .scoped-records-diagnostic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scoped-records-actions,
+  .scoped-records-form-actions {
+    justify-content: stretch;
+  }
+
+  .scoped-records-actions .button,
+  .scoped-records-form-actions .button {
+    flex: 1;
+  }
+
+  .scoped-records-state-context dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}
+
+@media (max-width: 40rem) {
+  .scoped-records-table-wrap {
+    overflow: visible;
+    border: 0;
+  }
+
+  .scoped-records-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .scoped-records-table thead {
+    display: none;
+  }
+
+  .scoped-records-table tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .scoped-records-table tbody tr,
+  .scoped-records-table tbody tr:nth-child(odd) {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-panel) 84%, var(--color-control));
+  }
+
+  .scoped-records-table th,
+  .scoped-records-table td {
+    display: block;
+    border: 0;
+    padding: 0.18rem 0.85rem;
+  }
+
+  .scoped-records-table tbody th {
+    display: grid;
+    padding-top: 0.85rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .scoped-records-table tbody td:last-child {
+    padding-top: 0.45rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .scoped-records-table .status-badge {
+    width: fit-content;
+  }
+}
+
 .route-panel__section {
   display: grid;
   gap: 0.75rem;
@@ -2612,6 +3119,166 @@ input {
   margin: 0;
   min-width: 0;
   color: var(--color-muted);
+}
+
+.module-configuration-note {
+  margin: 0 1rem 0.65rem;
+  color: var(--color-muted);
+}
+
+.module-configuration-grid {
+  grid-template-columns: minmax(0, 1.55fr) minmax(19rem, 0.85fr);
+  gap: 1rem;
+}
+
+.module-configuration-card > .module-detail__heading,
+.module-application-state > .module-detail__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  padding: 1rem;
+}
+
+.module-configuration-card > .module-detail__heading h2,
+.module-application-state > .module-detail__heading h2 {
+  padding: 0;
+}
+
+.module-configuration-card > .module-detail__heading p,
+.module-application-state > .module-detail__heading p {
+  margin-top: 0.25rem;
+}
+
+.module-configuration-form {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.module-configuration-form .field {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 800;
+}
+
+.module-configuration-form input {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  color: var(--color-text);
+  padding: 0 0.8rem;
+  font: inherit;
+  font-weight: 400;
+}
+
+.module-configuration-form input:focus {
+  border-color: var(--semantic-primary);
+  outline: 2px solid var(--semantic-primary-border);
+  outline-offset: 1px;
+}
+
+.module-configuration-validation {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid var(--semantic-primary-border);
+  border-radius: var(--radius);
+  background: var(--semantic-primary-soft);
+  padding: 0.8rem 0.9rem;
+}
+
+.module-configuration-validation span,
+.module-application-state__enablement span {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.module-configuration-form__actions {
+  margin-bottom: 0;
+}
+
+.module-application-state__line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+}
+
+.module-application-state__enablement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+}
+
+.module-application-state__enablement > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.module-application-state__switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.85rem;
+  height: 1.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-control);
+  padding: 0.15rem;
+}
+
+.module-application-state__switch > span {
+  display: block;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: var(--color-muted);
+}
+
+.module-application-state__switch.is-on {
+  border-color: var(--semantic-primary-border);
+  background: var(--semantic-primary-soft);
+}
+
+.module-application-state__switch.is-on > span {
+  margin-left: auto;
+  background: var(--semantic-primary);
+}
+
+.module-application-state__action {
+  justify-content: center;
+  margin: 0 1rem 1rem;
+}
+
+.module-configuration-row {
+  padding-bottom: 1rem !important;
+}
+
+.module-configuration-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.module-configuration-field input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.module-configuration-field .button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 68rem) {
+  .module-configuration-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .module-detail-overview__value-with-action .module-directory__copy {
@@ -8373,6 +9040,14 @@ input {
 .administration-roles-list,
 .administration-role-detail-card {
   min-width: 0;
+  max-width: 100%;
+}
+
+.administration-roles-page,
+.administration-roles-stack {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .administration-roles-list {
@@ -8380,6 +9055,23 @@ input {
   border-radius: var(--radius);
   background: var(--color-panel-soft);
   padding: 1rem;
+}
+
+.administration-roles-list .searchable-data-table,
+.administration-roles-list .table-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.administration-roles-list .data-table,
+.administration-role-capability-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.administration-role-capability-table th,
+.administration-role-capability-table td {
+  overflow-wrap: anywhere;
 }
 
 .administration-role-detail-card {
@@ -8419,8 +9111,180 @@ input {
   gap: 0.55rem;
 }
 
+.administration-floor-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid var(--semantic-primary-border);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--semantic-primary-soft), var(--semantic-info-soft));
+  padding: 1rem;
+}
+
+.administration-floor-banner__icon {
+  display: grid;
+  place-items: center;
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: var(--radius);
+  background: var(--semantic-primary-soft);
+  color: var(--semantic-primary);
+}
+
+.administration-floor-banner__icon svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.administration-floor-banner__copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.administration-floor-banner__copy > span {
+  color: var(--semantic-primary);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.administration-floor-banner__copy h2,
+.administration-floor-banner__copy p {
+  margin: 0;
+}
+
+.administration-floor-banner__copy h2 {
+  font-size: 1.2rem;
+}
+
+.administration-floor-banner__copy p,
+.administration-floor-banner__meta small {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.administration-floor-banner__meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.administration-floor-banner__meta > span:last-child {
+  display: grid;
+  gap: 0.1rem;
+  border-left: 1px solid var(--color-border);
+  padding-left: 1rem;
+}
+
+.administration-floor-banner__meta strong {
+  white-space: nowrap;
+}
+
+@media (max-width: 56rem) {
+  .administration-floor-banner {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .administration-floor-banner__meta {
+    grid-column: 1 / -1;
+  }
+}
+
 .administration-role-capabilities {
   gap: 0.8rem;
+}
+
+.administration-role-enrollment-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.9rem;
+  margin: 0.9rem 1rem 0;
+  border: 1px solid rgb(20 184 166 / 28%);
+  border-radius: var(--radius);
+  background: rgb(20 184 166 / 10%);
+  padding: 0.8rem 0.9rem;
+}
+
+.administration-role-enrollment-note > strong {
+  width: 100%;
+}
+
+.administration-role-enrollment-note > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.administration-role-enrollment-note > span svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--semantic-success);
+}
+
+.administration-role-enrollment-note > p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.administration-role-floor-obligations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  padding: 0.9rem 1rem;
+}
+
+.administration-role-floor-obligations > strong {
+  width: 100%;
+}
+
+.administration-role-floor-obligations > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.administration-role-floor-obligations svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--semantic-success);
+}
+
+.administration-role-capability-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 0 1rem 1rem;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: var(--radius);
+  background: var(--semantic-info-soft);
+  padding: 0.8rem 0.9rem;
+}
+
+.administration-role-capability-notice > svg {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.05rem;
+  color: var(--semantic-info);
+}
+
+.administration-role-capability-notice > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.administration-role-capability-notice span {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .administration-role-assigned-users-sheet .sheet-panel__section {
@@ -12655,6 +13519,85 @@ input {
 
   .administration-roles-list {
     padding: 0.75rem;
+  }
+
+  .administration-roles-page > .page-header {
+    align-items: stretch;
+  }
+
+  .administration-roles-page > .page-header .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .administration-roles-list .searchable-data-table__toolbar {
+    order: 1;
+  }
+
+  .administration-roles-mobile-cards {
+    order: 2;
+  }
+
+  .administration-roles-list .directory-table-pagination {
+    order: 3;
+  }
+
+  .administration-roles-page,
+  .administration-roles-stack,
+  .administration-floor-banner,
+  .administration-role-detail-card,
+  .administration-role-capabilities {
+    min-width: 0;
+  }
+
+  .administration-role-capability-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .administration-role-capability-table thead {
+    display: none;
+  }
+
+  .administration-role-capability-table tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .administration-role-capability-table tbody tr {
+    display: grid;
+    gap: 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-table-row);
+    padding: 0.8rem;
+  }
+
+  .administration-role-capability-table tbody th,
+  .administration-role-capability-table tbody td {
+    display: block;
+    border: 0;
+    min-width: 0;
+    padding: 0;
+    text-align: left;
+  }
+
+  .administration-role-capability-table tbody td::before {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .administration-role-capability-table tbody td:nth-of-type(1)::before {
+    content: "Scope";
+  }
+
+  .administration-role-capability-table tbody td:nth-of-type(2)::before {
+    content: "Provenance";
   }
 
   .administration-role-detail-card__header {
