@@ -517,31 +517,6 @@ CREATE UNIQUE INDEX component_versions_one_draft_idx
 CREATE INDEX component_versions_dataset_major_idx
     ON component_versions (dataset_id, dataset_version_major);
 
-CREATE TABLE dashboards (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name text NOT NULL,
-    description text,
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE dashboard_scope_nodes (
-    dashboard_id uuid NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
-    node_id uuid NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (dashboard_id, node_id)
-);
-
-CREATE INDEX dashboard_scope_nodes_node_id_idx
-    ON dashboard_scope_nodes (node_id, dashboard_id);
-
-CREATE TABLE dashboard_components (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    dashboard_id uuid NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
-    component_version_id uuid NOT NULL REFERENCES component_versions(id) ON DELETE RESTRICT,
-    position integer NOT NULL DEFAULT 0,
-    config jsonb NOT NULL DEFAULT '{}'::jsonb
-);
-
 CREATE SCHEMA IF NOT EXISTS analytics;
 
 CREATE TABLE analytics.node_dim (
@@ -618,7 +593,12 @@ CREATE INDEX workflow_instances_status_idx
 CREATE INDEX workflow_step_instances_instance_status_idx
     ON workflow_step_instances (workflow_instance_id, status);
 
--- Sprint 5A establishes a hard per-dashboard placement capacity before the
+/*
+Historical Sprint 5A preflight retained as non-executable migration context.
+Dashboard storage and its active baseline now live exclusively in
+crates/tessara-dashboard-module/migrations/001_dashboard_module.sql.
+
+Sprint 5A establishes a hard per-dashboard placement capacity before the
 -- application begins relying on bounded grid fallback and viewer execution.
 
 -- Close the preflight-to-trigger race with old application writers. This lock
@@ -877,6 +857,7 @@ DROP TABLE dashboard_scope_nodes;
 DROP TABLE dashboard_components;
 DROP TABLE dashboards;
 DROP FUNCTION enforce_dashboard_component_capacity();
+*/
 
 -- Sprint 6A adds Core-owned discovery and policy state for the current
 -- in-process transition catalog. Module Release and Module Instance
