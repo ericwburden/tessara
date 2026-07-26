@@ -1,6 +1,12 @@
 # Sprint 6B2 Verification Evidence
 
-Status: implementation verification complete on 2026-07-25.
+Status: closeout verification complete on 2026-07-25.
+
+Closing implementation/evidence source commit:
+`c21398e2e026b06411292db34fb6ac0e1a871dde`.
+
+Running source-exact Core image:
+`sha256:f7aa6bf369f96d9fcc907c10899bee6f924974d30611aa6a3cbc7d3f17969476`.
 
 ## Implemented Boundaries
 
@@ -28,18 +34,19 @@ Status: implementation verification complete on 2026-07-25.
 
 ## Automated Evidence
 
-The following commands passed in the Sprint 6B2 worktree:
+The following commands passed in the Sprint 6B2 worktree. The final retained
+browser, UAT, and smoke cycle ran against the source-exact closing image and
+fresh database volumes:
 
-- `cargo check --workspace`
 - `cargo test -p tessara-module-contract`
   - 42 library tests, 8 dependency tests, 5 manifest fixture tests, and 2
     signed-protocol fixture tests.
-- `cargo test -p tessara-web --lib`
-  - 73 tests.
-- `cargo test -p tessara-api --lib` with disposable PostgreSQL databases
+- `cargo test -p tessara-web`
+  - 77 tests.
+- `cargo test -p tessara-api` with disposable PostgreSQL databases
   supplied through `TEST_DATABASE_URL` and `TEST_ENROLLMENT_DATABASE_URL`
-  - 135 tests, including atomic/idempotent local and signed
-    fixture-external enrollment.
+  - 144 library tests and all integration groups passed: 1, 14, 7, 1, 4, 3,
+    2, and 25 tests respectively, plus doc tests.
 - `cargo test -p tessara-installation-control` with
   `TEST_DEPLOYMENT_DATABASE_URL`
   - 4 state-machine tests and 1 PostgreSQL integration test proving concurrent
@@ -57,11 +64,58 @@ The following commands passed in the Sprint 6B2 worktree:
   - 60 Playwright tests passed with one worker and zero retries, including
     authenticated and JavaScript-disabled native shell coverage, permissions,
     module management, and responsive module-navigation behavior.
+- `.\scripts\validate-e2e.ps1 ...`
+  - The retained run passed all 60 tests with zero failures, skips, retries,
+    flakes, or filtered tests.
+- `.\scripts\uat-sprint.ps1 ...` and `.\scripts\smoke.ps1 ...`
+  - Both retained fresh-data acceptance runs passed.
 - `docker compose -f deploy/sprint-6b2/compose.yaml config --quiet`
 - All Core, installation-control, and Scoped Records SQL migrations applied
   successfully under their distinct migration roles to isolated PostgreSQL 17
   databases using single-transaction semantics.
 - `git diff --check`
+
+## Fresh Baseline And Provenance
+
+The closing stack was destroyed with
+`docker compose -f deploy\sprint-6b2\compose.yaml down -v --remove-orphans`,
+then rebuilt and launched from the closing source. The Core build received
+`TESSARA_SOURCE_COMMIT`, `TESSARA_SOURCE_TREE`, and
+`TESSARA_SOURCE_DIRTY=false`; captured deployment evidence confirms the exact
+commit and image above.
+
+The migration ledgers contain exactly one successful row each:
+
+- `tessara_core`: `1 | baseline | true`
+- `tessara_deployment`: `1 | enrollment claims | true`
+- `tessara_module_scoped_records`: `1 | scoped records | true`
+
+The final baseline SHA-256 digests are:
+
+- Core:
+  `3d9c03e38baad9416ca8425ad32e4baa245311ab829a3ec465bf60484debe3a7`
+- Installation control:
+  `e8e85037191a3e267a3c10f3baf8f2f34a3162b509377200fa1f07630f7b1d91`
+- Scoped Records:
+  `0b012fcf9e6e61301ef33d756e9342514654ffac0fc0e3fc6d62c349bbbd71c7`
+
+`.\scripts\bootstrap-sprint-6b2-deployment.ps1` applied deployment receipt
+revision 1 and then proved idempotency by returning a no-op on its second run.
+
+`scripts/local-launch.ps1 -FreshData` was not used because it targets the
+legacy root Compose topology. The Sprint-specific destructive reset,
+source-provenance build, `up -d`, and deployment bootstrap above are its exact
+6B2 closeout equivalent.
+
+## Retained Evidence
+
+- `artifacts/sprint-6b2-closeout/deployment-fresh.json`
+- `artifacts/sprint-6b2-closeout/smoke-fresh.json`
+- `artifacts/sprint-6b2-closeout/uat-fresh.json`
+- `artifacts/sprint-6b2-closeout/e2e-fresh.json`
+- `artifacts/sprint-6b2-closeout/e2e-fresh.summary.json`
+
+Each retained JSON artifact has its adjacent SHA-256 sidecar where supported.
 
 ## Live Slice Evidence
 
@@ -125,19 +179,6 @@ their real HTTP boundaries:
   the image used for migration and service startup contains the same schema
   state while avoiding duplicate Compose builds.
 
-## Legacy End-to-End Harness Note
-
-The 2026-07-25 post-build invocation of
-`npm --prefix end2end test -- --workers=1` reached 25 passing tests before the
-legacy harness attempted `docker compose exec postgres` against the stopped
-root `docker-compose.yml`. Sprint 6B2 intentionally runs from
-`deploy/sprint-6b2/compose.yaml` with separate database names and roles, so
-that cleanup/setup hook cannot target this stack as written and the remaining
-dependent tests were not a valid Sprint 6B2-stack gate. The earlier complete
-60-test result above remains the repository regression baseline; the new
-cross-process and UI behavior is covered by the targeted Rust tests and live
-Sprint 6B2 browser checks documented here.
-
 ## Development Trust
 
 The checked-in verification-key printer and Compose defaults are deterministic
@@ -149,8 +190,7 @@ responsibilities and must use Compose/Kubernetes Secrets.
 ## Acceptance Disposition
 
 The Sprint 6B2 plan's implementation and verification gates are satisfied.
-The repository-wide Playwright suite is a regression check against the
-long-running local stack; Sprint 6B2's new cross-process behavior is verified
-against the isolated slice through database-backed integration tests and live
-HTTP checks because that API-only acceptance build intentionally does not
-hydrate the ordinary Core sign-in shell.
+The complete repository Playwright suite, fresh UAT, fresh smoke, isolated
+database-backed integration suites, and source-exact deployment capture all
+passed against the final implementation. The Sprint 6B2 stack remains running
+at `http://localhost:8080` for user testing.

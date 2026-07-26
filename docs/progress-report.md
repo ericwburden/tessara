@@ -9,7 +9,9 @@ project direction.
 
 ## 2026-07-25 - Sprint 6B2 Closeout
 
-- Status: closeout candidate prepared; final source-exact validation is in progress.
+- Status: complete. Sprint 6B2 is closed against implementation/evidence commit
+  `c21398e2e026b06411292db34fb6ac0e1a871dde`; the subsequent closeout-only
+  commit records this handoff.
 - Completed:
   - Secure administrator enrollment and reason-bearing recovery across the
     independent installation-control boundary.
@@ -23,9 +25,174 @@ project direction.
   - Core and Scoped Records development migrations folded into their single
     fresh-install baselines; Installation Control already uses one baseline.
 - Validation:
-  - Final clean database, migration-ledger, build, Rust test, smoke, UAT, and
-    Playwright acceptance cycle pending against the committed closeout
-    candidate.
+  - A source-exact Sprint 6B2 image was built from the closing commit and
+    launched against empty Compose volumes. Core, installation control, and
+    Scoped Records each applied exactly migration `001`.
+  - Full API and web suites passed (144 API library tests plus all integration
+    groups; 77 web tests). Module-contract, installation-control, and Scoped
+    Records suites also passed.
+  - Direct Playwright and the retained evidence runner each passed all 60
+    tests with zero failures, skips, retries, or flakes. Fresh UAT and smoke
+    evidence also passed.
+  - Closeout evidence is retained under
+    `artifacts/sprint-6b2-closeout/`; detailed commands, hashes, and ledger
+    readback are in `docs/sprints/sprint-6b2-verification.md`.
+
+### Sprint Handoff / Demo Instructions
+
+#### 1. Guided administrator enrollment and recovery
+
+Role: local installation operator, followed by the new administrator.
+
+1. From the repository root, run
+   `.\scripts\tessara.ps1 enrollment issue -Open`.
+2. Copy the once-displayed claim secret into the prepared `/enrollment` page;
+   verify the installation, claim, generation, and kind are already populated.
+3. Enter a new email, display name, and password. Confirm the page states the
+   password requirements, completes with **Enrollment successful**, and
+   continues to `/login`.
+4. When recovery is eligible, run
+   `.\scripts\tessara.ps1 enrollment recover -Reason "Sprint 6B2 demo" -Operator "local-operator" -Open`
+   and repeat the browser flow.
+
+Expected result: the secret is shown only by the local command, never placed in
+the URL or redisplayed by status; a successful enrollment creates the viable
+Core Administrator, and recovery records its operator and reason.
+
+Acceptance check: replay, expired/revoked/replaced claims, invalid handoffs, and
+ineligible recovery all return the same non-disclosing designed failure path.
+Evidence: `artifacts/sprint-6b2-closeout/e2e-fresh.json` and the enrollment
+integration results in `docs/sprints/sprint-6b2-verification.md`.
+
+#### 2. Capability floor and role administration
+
+Role: Core Administrator. Path: `/administration/roles`.
+
+1. Verify the Capability Floor v1 summary is covered and the designated role
+   is **Core Administrator**.
+2. Open that role and verify the floor-obligations note and authoritative
+   `core:admin` capability.
+3. Create or edit a scoped role. Confirm enabled module capabilities are
+   assignable and that installation-global and Organization-scoped
+   capabilities cannot be mixed except by the supported administrator rule.
+
+Expected result: weakening the only viable designated enrollment role is
+blocked; module capabilities remain independently assignable.
+
+Acceptance check: role, capability, assignment, and designation changes advance
+authorization revision and invalidate stale grants. Evidence: API role,
+enrollment, and authorization integration groups plus the retained Playwright
+run.
+
+#### 3. Scoped Records configuration and application state
+
+Role: Core Administrator. Path:
+`/administration/modules/tessara.reference.scoped-records#configuration`.
+
+1. Edit the display label and save configuration.
+2. Confirm normalized validation remains valid and the navigation label
+   updates without a restart.
+3. Review the separate Application state panel, including configuration,
+   health, navigation visibility, product-route enablement, and the health and
+   diagnostics link.
+
+Expected result: one module-owned schema validates the UI and machine-client
+configuration; configuration does not silently change enablement.
+
+Acceptance check: invalid configuration returns stable findings, while a valid
+label persists and is projected into Core navigation. Evidence: API/web tests,
+UAT, and Playwright.
+
+#### 4. Scoped Records authorization and product workflow
+
+Roles: Core Administrator and a scoped read/manage test user. Paths:
+`/reference/scoped-records`, `/reference/scoped-records/records/new`, and a
+record detail/edit route.
+
+1. As the administrator, verify all seeded records are visible and create,
+   edit, search, and Organization filtering work.
+2. Assign disjoint read and manage roles to separate Organization subtrees.
+3. As a read-only user, verify only records in the authorized subtree appear
+   and create/edit controls and routes are unavailable.
+4. As a manager, create or update a record in the managed subtree. Repeat the
+   same idempotent request, then attempt to reuse its authorization for a
+   changed payload.
+
+Expected result: reads and mutations are constrained independently by current
+Organization scope; the exact retry returns the recorded result and changed
+replay fails.
+
+Acceptance check: A/X versus B/Y isolation, current ownership, wrong audience
+or action, stale revisions, and known-versus-random IDs fail closed. Evidence:
+Scoped Records integration tests, UAT, smoke, and Playwright.
+
+#### 5. Health and diagnostics
+
+Role: authorized module user. Paths: `/reference/scoped-records/health` and
+`/reference/scoped-records/diagnostics`.
+
+1. Verify readiness, liveness, configuration, and Core authorization panels.
+2. Refresh status, then inspect sanitized diagnostic context and download the
+   sanitized diagnostics result.
+
+Expected result: the module renders inside the Core-owned shell; diagnostics
+contain stable status and revision values but no claims, signing material, Core
+credentials, or browser cookies.
+
+Acceptance check: direct module access without a valid `ShellContextV1` fails
+closed, while the same-origin Core gateway succeeds. Evidence: module
+integration tests and Playwright.
+
+#### 6. Fresh Sprint 6B2 stack bootstrap
+
+Role: developer or installation operator.
+
+1. Run
+   `docker compose -f deploy\sprint-6b2\compose.yaml down -v --remove-orphans`.
+2. Build the stack with the source commit/tree provenance arguments documented
+   in `docs/sprints/sprint-6b2-verification.md`, then run
+   `docker compose -f deploy\sprint-6b2\compose.yaml up -d`.
+3. Run `.\scripts\bootstrap-sprint-6b2-deployment.ps1`; rerun it to verify the
+   existing receipt makes the second invocation a no-op.
+4. Open `http://localhost:8080`.
+
+Expected result: the public surface is Traefik/Core only; installation control
+and Scoped Records remain private services with isolated database identities.
+
+Acceptance check: all three migration ledgers contain only successful version
+`1`, the deployment receipt is revision `1`, and the source/image evidence
+matches the closing commit.
+
+### Acceptance Mapping
+
+- Installation-bound one-use claims and guided initial/recovery flows map to
+  handoff section 1; automated proof is in API enrollment integration,
+  installation-control state-machine/PostgreSQL tests, and retained
+  Playwright.
+- Capability Floor v1, viable designation, local identity, and signed fixture
+  identity map to sections 1 and 2; automated proof is in API capability-floor
+  and enrollment integration groups.
+- Native module documents and the Core-owned shell boundary map to section 5;
+  module integration and Playwright prove valid signed shell projection and
+  direct-request failure.
+- Short-lived installation/audience/action-bound grants, actor/service
+  identity, declared contracts, scope, revisions, and replay protection map to
+  section 4; module-contract, API authorization, and Scoped Records integration
+  tests exercise each rejection class.
+- Scoped Records configuration, enablement, directory, detail, create/edit,
+  health, and diagnostics map to sections 3–5; web/API tests, UAT, smoke, and
+  Playwright prove the application paths and designed states.
+- A/X versus B/Y isolation, ownership, stale revision, wrong audience/action,
+  and nondisclosure map to section 4; the database-backed Scoped Records
+  integration suite is the authoritative process-boundary proof.
+- Restore-safe enrollment state and stable module identity/database binding
+  through upgrade/rollback map to sections 1 and 6; installation-control and
+  Scoped Records PostgreSQL integration tests provide the automated proof.
+- The fresh-baseline and source-exact closeout condition maps to section 6;
+  deployment, smoke, UAT, and E2E evidence under
+  `artifacts/sprint-6b2-closeout/` is bound to commit
+  `c21398e2e026b06411292db34fb6ac0e1a871dde`.
+
 - Next Sprint: Sprint 6C - Independently Deployed Dashboard Module Slice.
 
 ## 2026-07-23 - Sprint 6B2 Implementation Started
