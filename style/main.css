@@ -3064,6 +3064,7 @@ input {
 
 #app-root[data-hydration="ready"] .module-detail-sections[data-active-section="overview"] [data-module-section="overview"],
 #app-root[data-hydration="ready"] .module-detail-sections[data-active-section="configuration"] [data-module-section="configuration"],
+#app-root[data-hydration="ready"] .module-detail-sections[data-active-section="diagnostics"] [data-module-section="diagnostics"],
 #app-root[data-hydration="ready"] .module-detail-sections[data-active-section="declarations"] [data-module-section="declarations"],
 #app-root[data-hydration="ready"] .module-detail-sections[data-active-section="contracts"] [data-module-section="contracts"],
 #app-root[data-hydration="ready"] .module-detail-sections[data-active-section="dependencies"] [data-module-section="dependencies"],

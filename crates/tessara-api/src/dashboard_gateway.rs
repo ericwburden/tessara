@@ -18,8 +18,8 @@ use serde_json::{Value, json};
 use sqlx::{PgPool, Row};
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ProtocolSignaturePurposeV1,
-    SignedEnvelopeV1,
+    CapabilityScopeBindingV1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
+    ProtocolSignaturePurposeV1, SecurityCapabilityId, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -317,8 +317,22 @@ async fn dashboard_authorization(
     .fetch_optional(pool)
     .await?
     .ok_or_else(restricted_authorization)?;
-    let bindings =
+    let mut bindings =
         capability_bindings(pool, request.account.account_id, &required_capability).await?;
+    if bindings.is_empty()
+        && has_global_capability(pool, request.account.account_id, &required_capability).await?
+    {
+        // A fresh installation may not have an Organization root yet. Preserve
+        // installation-global authority without manufacturing an Organization
+        // node; the sentinel scope can list an empty directory but cannot be
+        // selected for Dashboard visibility.
+        bindings.push(CapabilityScopeBindingV1 {
+            capability: SecurityCapabilityId::new(required_capability.clone())
+                .map_err(|error| ApiError::Internal(error.into()))?,
+            organization_root_id: installation_id,
+            authorized_organization_ids: Vec::new(),
+        });
+    }
     if bindings.is_empty() {
         return Err(restricted_authorization());
     }
@@ -388,6 +402,26 @@ async fn dashboard_authorization(
         })
         .map_err(|_| restricted_authorization())?;
     Ok(signed)
+}
+
+async fn has_global_capability(
+    pool: &PgPool,
+    account_id: Uuid,
+    capability: &str,
+) -> ApiResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM role_assignments ra
+           JOIN role_capabilities rc ON rc.role_id=ra.role_id
+           JOIN capabilities c ON c.id=rc.capability_id
+           WHERE ra.account_id=$1 AND ra.node_id IS NULL
+             AND (c.key=$2 OR c.key='admin:all')
+         )",
+    )
+    .bind(account_id)
+    .bind(capability)
+    .fetch_one(pool)
+    .await?)
 }
 
 async fn dashboard_instance(pool: &PgPool) -> ApiResult<sqlx::postgres::PgRow> {
