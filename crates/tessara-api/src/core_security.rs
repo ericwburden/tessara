@@ -818,7 +818,9 @@ fn require_installation_control(headers: &HeaderMap) -> ApiResult<()> {
     }
 }
 
-fn protocol_signer(purpose: ProtocolSignaturePurposeV1) -> ApiResult<PurposeBoundSigningKeyV1> {
+pub(crate) fn protocol_signer(
+    purpose: ProtocolSignaturePurposeV1,
+) -> ApiResult<PurposeBoundSigningKeyV1> {
     let secret = match std::env::var("TESSARA_CORE_PROTOCOL_SIGNING_KEY") {
         Ok(encoded) => {
             let decoded = URL_SAFE_NO_PAD

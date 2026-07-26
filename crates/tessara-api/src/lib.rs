@@ -11,6 +11,7 @@ mod auth;
 mod components;
 pub mod config;
 mod core_security;
+mod dashboard_components_adapter;
 mod dashboards;
 mod datasets;
 pub mod db;
@@ -500,6 +501,7 @@ fn api_routes() -> Router<AppState> {
         .merge(analytics::routes())
         .merge(datasets::routes())
         .merge(components::routes())
+        .merge(dashboard_components_adapter::routes())
         .merge(dashboards::routes())
         .merge(modules::routes())
         .merge(demo::routes())
