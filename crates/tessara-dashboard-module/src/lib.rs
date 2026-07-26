@@ -8,13 +8,18 @@ use axum::{
     Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode},
+    response::Html,
     routing::{get, post, put},
 };
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool, Row};
-use tessara_module_contract::PurposeBoundVerifyingKeyV1;
+use tessara_module_contract::{
+    ModuleDefinitionId, PurposeBoundVerifyingKeyV1, ShellContextV1,
+    ShellContextValidationContextV1, SignedEnvelopeV1, verify_shell_context,
+};
 use uuid::Uuid;
 
 mod composition;
@@ -121,6 +126,16 @@ struct SecurityState {
     updated_at: DateTime<Utc>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DashboardRenderRequestV1 {
+    schema_version: u16,
+    path: String,
+    title: String,
+    description: String,
+    bootstrap: tessara_web::DashboardRouteBootstrap,
+}
+
 pub fn router(state: DashboardModuleState) -> Router {
     Router::new()
         .route(
@@ -132,12 +147,68 @@ pub fn router(state: DashboardModuleState) -> Router {
             get(get_configuration).put(put_configuration),
         )
         .route("/api/private/security-state", put(update_security_state))
+        .route("/api/private/render", post(render_dashboard_document))
         .merge(product::routes())
         .merge(composition::routes())
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
         .route("/api/diagnostics", get(diagnostics))
         .with_state(state)
+}
+
+async fn render_dashboard_document(
+    State(state): State<DashboardModuleState>,
+    headers: HeaderMap,
+    Json(input): Json<DashboardRenderRequestV1>,
+) -> Result<Html<String>, DashboardModuleError> {
+    if input.schema_version != 1
+        || !input.path.starts_with("/dashboards")
+        || input.title.trim().is_empty()
+        || input.description.trim().is_empty()
+    {
+        return Err(DashboardModuleError::BadRequest(
+            "invalid Dashboard render request".into(),
+        ));
+    }
+    let encoded = headers
+        .get("x-tessara-shell-context")
+        .and_then(|value| value.to_str().ok())
+        .ok_or(DashboardModuleError::Forbidden)?;
+    let correlation_id = headers
+        .get("x-tessara-correlation-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(DashboardModuleError::Forbidden)?;
+    let envelope: SignedEnvelopeV1<ShellContextV1> = serde_json::from_slice(
+        &URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|_| DashboardModuleError::Forbidden)?,
+    )
+    .map_err(|_| DashboardModuleError::Forbidden)?;
+    let security = load_security_state(&state.pool)
+        .await?
+        .ok_or_else(|| DashboardModuleError::Unavailable("security state unavailable".into()))?;
+    verify_shell_context(
+        &envelope,
+        &state.core_shell_verifier,
+        &ShellContextValidationContextV1 {
+            installation_id: security.installation_id,
+            module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
+                .map_err(|_| DashboardModuleError::Forbidden)?,
+            module_instance_id: security.module_instance_id,
+            correlation_id,
+            now: Utc::now(),
+        },
+    )
+    .map_err(|_| DashboardModuleError::Forbidden)?;
+    Ok(Html(
+        tessara_web::application_html_with_dashboard_bootstrap(
+            &input.path,
+            &input.title,
+            &input.description,
+            &input.bootstrap,
+        ),
+    ))
 }
 
 async fn validate_configuration_api(

@@ -4666,6 +4666,7 @@ dependencies = [
  "sqlx",
  "tessara-dashboards",
  "tessara-module-contract",
+ "tessara-web",
  "thiserror 2.0.18",
  "tokio",
  "tower-http",

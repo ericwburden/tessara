@@ -19,7 +19,9 @@ use sqlx::{PgPool, Row};
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
     CapabilityScopeBindingV1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
-    ProtocolSignaturePurposeV1, SecurityCapabilityId, SignedEnvelopeV1,
+    NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1,
+    ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -519,12 +521,16 @@ async fn directory_page(State(state): State<AppState>, request: AuthenticatedReq
     )
     .await;
     match result {
-        Ok(dashboards) => dashboard_document(
+        Ok(dashboards) => render_dashboard_document(
+            &state,
+            &request,
             "/dashboards",
             "Tessara Dashboards",
             "Browse Tessara dashboards.",
             tessara_web::DashboardRouteBootstrap::directory(web_account(&request), dashboards),
-        ),
+        )
+        .await
+        .unwrap_or_else(|_| unavailable_document("/dashboards", &request)),
         Err(_) => unavailable_document("/dashboards", &request),
     }
 }
@@ -538,12 +544,16 @@ async fn create_page(State(state): State<AppState>, request: AuthenticatedReques
     )
     .await;
     match result {
-        Ok(nodes) => dashboard_document(
+        Ok(nodes) => render_dashboard_document(
+            &state,
+            &request,
             "/dashboards/new",
             "Create Dashboard",
             "Create a Tessara dashboard.",
             tessara_web::DashboardRouteBootstrap::create(web_account(&request), nodes),
-        ),
+        )
+        .await
+        .unwrap_or_else(|_| unavailable_document("/dashboards/new", &request)),
         Err(_) => unavailable_document("/dashboards/new", &request),
     }
 }
@@ -589,7 +599,9 @@ async fn dashboard_read_page(
             } else {
                 tessara_web::DashboardRouteBootstrap::detail(web_account(request), dashboard)
             };
-            dashboard_document(
+            render_dashboard_document(
+                state,
+                request,
                 &path,
                 if viewer {
                     "Dashboard Viewer"
@@ -599,6 +611,8 @@ async fn dashboard_read_page(
                 "Inspect a Tessara dashboard.",
                 bootstrap,
             )
+            .await
+            .unwrap_or_else(|_| unavailable_document(&path, request))
         }
         Err(_) => unavailable_document(&format!("/dashboards/{dashboard_id}"), request),
     }
@@ -624,12 +638,23 @@ async fn editor_page(
     )
     .await;
     match (composition, nodes) {
-        (Ok(composition), Ok(nodes)) => dashboard_document(
-            &format!("/dashboards/{dashboard_id}/edit"),
-            "Edit Dashboard",
-            "Edit a Tessara dashboard.",
-            tessara_web::DashboardRouteBootstrap::editor(web_account(&request), composition, nodes),
-        ),
+        (Ok(composition), Ok(nodes)) => {
+            let path = format!("/dashboards/{dashboard_id}/edit");
+            render_dashboard_document(
+                &state,
+                &request,
+                &path,
+                "Edit Dashboard",
+                "Edit a Tessara dashboard.",
+                tessara_web::DashboardRouteBootstrap::editor(
+                    web_account(&request),
+                    composition,
+                    nodes,
+                ),
+            )
+            .await
+            .unwrap_or_else(|_| unavailable_document(&path, &request))
+        }
         _ => unavailable_document(&format!("/dashboards/{dashboard_id}/edit"), &request),
     }
 }
@@ -668,19 +693,80 @@ fn web_account(request: &AuthenticatedRequest) -> tessara_web::SessionAccount {
     }
 }
 
-fn dashboard_document(
+async fn render_dashboard_document(
+    state: &AppState,
+    request: &AuthenticatedRequest,
     path: &str,
     title: &str,
     description: &str,
     bootstrap: tessara_web::DashboardRouteBootstrap,
-) -> Response {
-    let mut response = Html(tessara_web::application_html_with_dashboard_bootstrap(
-        path,
-        title,
-        description,
-        &bootstrap,
-    ))
-    .into_response();
+) -> ApiResult<Response> {
+    let instance = dashboard_instance(&state.pool).await?;
+    let module_instance_id: Uuid = instance.try_get("id")?;
+    let installation_id: Uuid = instance.try_get("installation_id")?;
+    let correlation_id = Uuid::new_v4();
+    let now = Utc::now();
+    let context = ShellContextV1 {
+        schema_version: 1,
+        installation_id,
+        module_definition_id: ModuleDefinitionId::new(DEFINITION_ID)
+            .map_err(|error| ApiError::Internal(error.into()))?,
+        module_instance_id,
+        original_actor: OriginalActorProjectionV1 {
+            actor_id: request.account.account_id,
+            display_name: request.account.display_name.clone(),
+            email: Some(request.account.email.clone()),
+        },
+        theme: ShellThemeV1::Dark,
+        navigation: vec![
+            NavigationProjectionV1 {
+                contribution_id: NavigationContributionId::new("tessara.core.home")
+                    .map_err(|error| ApiError::Internal(error.into()))?,
+                label: "Home".into(),
+                href: "/".into(),
+            },
+            NavigationProjectionV1 {
+                contribution_id: NavigationContributionId::new("tessara.dashboards.directory")
+                    .map_err(|error| ApiError::Internal(error.into()))?,
+                label: "Dashboards".into(),
+                href: "/dashboards".into(),
+            },
+        ],
+        return_destination: "/".into(),
+        locale: "en-US".into(),
+        time_zone: "UTC".into(),
+        correlation_id,
+        document_state: ShellDocumentStateV1::Active,
+        issued_at: now,
+        expires_at: now + Duration::seconds(60),
+    };
+    let envelope = protocol_signer(ProtocolSignaturePurposeV1::ShellContext)?
+        .sign(context)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let encoded = URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&envelope).map_err(|error| ApiError::Internal(error.into()))?);
+    let response = reqwest::Client::new()
+        .post(format!("{}/api/private/render", dashboard_url()))
+        .header("x-tessara-shell-context", encoded)
+        .header("x-tessara-correlation-id", correlation_id.to_string())
+        .json(&json!({
+            "schema_version": 1,
+            "path": path,
+            "title": title,
+            "description": description,
+            "bootstrap": bootstrap,
+        }))
+        .send()
+        .await
+        .map_err(|_| module_unavailable())?
+        .error_for_status()
+        .map_err(|_| module_unavailable())?;
+    let html = response.text().await.map_err(|_| module_unavailable())?;
+    Ok(dashboard_html_response(html))
+}
+
+fn dashboard_html_response(html: String) -> Response {
+    let mut response = Html(html).into_response();
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),
@@ -693,12 +779,13 @@ fn dashboard_document(
 }
 
 fn unavailable_document(route: &str, request: &AuthenticatedRequest) -> Response {
-    dashboard_document(
+    let html = tessara_web::application_html_with_dashboard_bootstrap(
         route,
         "Dashboard module unavailable",
         "The Dashboard Module Instance cannot currently be reached.",
-        tessara_web::DashboardRouteBootstrap::unavailable(web_account(request), route),
-    )
+        &tessara_web::DashboardRouteBootstrap::unavailable(web_account(request), route),
+    );
+    dashboard_html_response(html)
 }
 
 async fn module_response(response: reqwest::Response) -> ApiResult<Response> {
