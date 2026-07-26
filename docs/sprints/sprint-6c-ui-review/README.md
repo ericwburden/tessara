@@ -25,6 +25,11 @@ viewer screens also include a dashed **Prototype control** for switching the
 affected placement among the planned resolution states. Neither review control
 is proposed production UI.
 
+In the editor, a degraded placement is intentionally quiet: the saved panel is
+warning-tinted and its normal content icon is replaced by a warning icon.
+Selecting that icon opens a side sheet with the full diagnostic message and
+retry action.
+
 The review suite covers:
 
 1. Dashboard Module configuration and application state.

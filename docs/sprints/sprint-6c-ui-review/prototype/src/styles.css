@@ -160,8 +160,10 @@ code { font-family: "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhe
 .placement-card { grid-column: span 6; grid-row: span 4; min-width: 0; border: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 96%, transparent); }
 .placement-card:nth-child(3) { grid-column: span 5; }
 .placement-card.is-selected { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal); }
-.placement-card.is-danger { border-color: var(--danger); }
-.placement-card.is-warning { border-color: var(--orange); }
+.placement-card.is-danger { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--panel)); }
+.placement-card.is-warning { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 14%, var(--panel)); }
+.placement-card.is-info { border-color: #7e91ec; background: color-mix(in srgb, #7e91ec 14%, var(--panel)); }
+.placement-card.is-selected:is(.is-danger, .is-warning, .is-info) { box-shadow: 0 0 0 1px currentColor; }
 .placement-header, .viewer-card__header { min-height: 55px; display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-bottom: 1px solid var(--border); }
 .placement-header > div { display: grid; min-width: 0; gap: 2px; }
 .placement-header small { color: var(--muted); }
@@ -174,6 +176,28 @@ code { font-family: "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhe
 .placement-card.is-danger .placement-state > svg { color: var(--danger); }
 .placement-state h3 { margin: 2px 0 0; font-size: 18px; }
 .placement-state p, .placement-state small { margin: 0; color: var(--muted); line-height: 1.35; }
+.placement-state.is-condensed { place-items: center; }
+.placement-warning-trigger { width: 68px; height: 68px; display: inline-grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; background: color-mix(in srgb, currentColor 12%, var(--panel)); color: var(--orange); cursor: pointer; transition: transform .15s ease, background .15s ease; }
+.placement-card.is-danger .placement-warning-trigger { color: var(--danger); }
+.placement-card.is-info .placement-warning-trigger { color: #9aa8fa; }
+.placement-warning-trigger:hover { transform: scale(1.05); background: color-mix(in srgb, currentColor 20%, var(--panel)); }
+.placement-warning-trigger:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
+.placement-sheet-layer { position: fixed; inset: 0; z-index: 80; display: grid; justify-items: end; background: rgb(3 8 20 / 58%); backdrop-filter: blur(2px); }
+.placement-sheet { width: min(430px, calc(100vw - 24px)); height: 100%; display: grid; grid-template-rows: auto 1fr auto; border-left: 3px solid var(--orange); background: var(--panel); box-shadow: -18px 0 50px rgb(0 0 0 / 30%); }
+.placement-sheet.is-danger { border-color: var(--danger); }
+.placement-sheet.is-info { border-color: #7e91ec; }
+.placement-sheet__header { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 24px; border-bottom: 1px solid var(--border); }
+.placement-sheet__header h2 { margin: 5px 0 0; font-size: 22px; }
+.placement-sheet__body { align-content: start; display: grid; justify-items: start; gap: 14px; padding: 28px 24px; }
+.placement-sheet__body p { margin: 4px 0 0; font-size: 16px; line-height: 1.5; }
+.placement-sheet__body small { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.placement-sheet__icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--orange) 16%, var(--panel)); color: var(--orange); }
+.placement-sheet.is-danger .placement-sheet__icon { background: color-mix(in srgb, var(--danger) 16%, var(--panel)); color: var(--danger); }
+.placement-sheet.is-info .placement-sheet__icon { background: color-mix(in srgb, #7e91ec 16%, var(--panel)); color: #9aa8fa; }
+.placement-sheet__footer { display: flex; justify-content: flex-end; padding: 18px 24px; border-top: 1px solid var(--border); }
+.placement-sheet__footer .button { display: inline-flex; align-items: center; gap: 8px; }
+.is-spinning { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .viewer-workspace { padding: 20px; }
 .viewer-workspace .breadcrumb { margin-bottom: 22px; }
@@ -274,6 +298,7 @@ code { font-family: "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhe
   .dashboard-canvas { display: grid; grid-template-columns: 1fr; grid-auto-rows: auto; background-size: 100% 70px; }
   .placement-card, .placement-card:nth-child(3) { grid-column: auto; grid-row: auto; min-height: 300px; }
   .placement-state, .placement-placeholder { min-height: 245px; }
+  .placement-sheet { width: calc(100vw - 12px); }
   .viewer-workspace { padding: 14px; }
   .viewer-workspace > .state-picker { width: 100%; margin-left: 0; }
   .contained-note { align-items: flex-start; flex-wrap: wrap; }

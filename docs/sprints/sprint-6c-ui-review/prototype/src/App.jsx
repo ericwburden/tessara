@@ -420,20 +420,70 @@ function DashboardEditor({ state, setState, navigate }) {
 
 function PlacementCard({ index, title, state, selected = false }) {
   const current = state ? placementStates[state] : placementStates.healthy;
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  useEffect(() => {
+    setIsSheetOpen(false);
+    setIsRetrying(false);
+  }, [state]);
+
+  const retryResolution = () => {
+    setIsRetrying(true);
+    window.setTimeout(() => {
+      setIsRetrying(false);
+      setIsSheetOpen(false);
+    }, 900);
+  };
+
   return (
-    <article className={`placement-card ${selected ? "is-selected" : ""} ${state && state !== "healthy" ? `is-${current.tone}` : ""}`}>
-      <div className="placement-header"><span className="placement-index">{index}</span><div><strong>{title}</strong><small>Table · v1 · 1</small></div><span className="drag-handle">•••</span></div>
+    <>
+      <article className={`placement-card ${selected ? "is-selected" : ""} ${state && state !== "healthy" ? `is-${current.tone}` : ""}`}>
+        <div className="placement-header"><span className="placement-index">{index}</span><div><strong>{title}</strong><small>Table · v1 · 1</small></div><span className="drag-handle">•••</span></div>
       {state && state !== "healthy" ? (
-        <div className="placement-state">
-          {current.tone === "danger" ? <ShieldAlert size={25} /> : current.tone === "warning" ? <AlertTriangle size={25} /> : <Activity size={25} />}
-          <Badge tone={current.tone}>{current.short}</Badge>
-          <h3>{current.title}</h3><p>{current.description}</p><small>{current.detail}</small>
-          <button className="button secondary compact" type="button">{state === "notEvaluated" || state === "providerUnavailable" ? "Retry resolution" : "Open Placement details"}</button>
+        <div className="placement-state is-condensed">
+          <button
+            className="placement-warning-trigger"
+            type="button"
+            aria-label={`Open ${current.title} details`}
+            aria-haspopup="dialog"
+            onClick={() => setIsSheetOpen(true)}
+          >
+            {current.tone === "danger" ? <ShieldAlert size={42} /> : current.tone === "warning" ? <AlertTriangle size={42} /> : <Activity size={42} />}
+          </button>
         </div>
       ) : (
         <div className="placement-placeholder"><Grid2X2 size={34} /><span>6 × 4</span></div>
       )}
-    </article>
+      </article>
+      {isSheetOpen && (
+        <div className="placement-sheet-layer" role="presentation" onMouseDown={() => setIsSheetOpen(false)}>
+          <aside className={`placement-sheet is-${current.tone}`} role="dialog" aria-modal="true" aria-labelledby="placement-sheet-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="placement-sheet__header">
+              <div>
+                <p className="eyebrow">Placement issue</p>
+                <h2 id="placement-sheet-title">{current.title}</h2>
+              </div>
+              <button className="icon-button quiet" type="button" aria-label="Close placement issue" onClick={() => setIsSheetOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="placement-sheet__body">
+              <span className="placement-sheet__icon">
+                {current.tone === "danger" ? <ShieldAlert size={28} /> : current.tone === "warning" ? <AlertTriangle size={28} /> : <Activity size={28} />}
+              </span>
+              <Badge tone={current.tone}>{current.short}</Badge>
+              <p>{current.description}</p>
+              <small>{current.detail}</small>
+            </div>
+            <div className="placement-sheet__footer">
+              <button className="button" type="button" disabled={isRetrying} onClick={retryResolution}>
+                <RefreshCw size={16} className={isRetrying ? "is-spinning" : ""} />
+                {isRetrying ? "Retrying…" : "Retry resolution"}
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
 

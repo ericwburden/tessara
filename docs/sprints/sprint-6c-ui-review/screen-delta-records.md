@@ -81,8 +81,12 @@ Baseline preserved:
 
 Proposed additions and changes:
 
-- render the affected placement's current resolution status inside its existing
-  canvas footprint;
+- tint the affected placement's entire saved canvas footprint with its
+  resolution-state color;
+- replace the placement's normal content icon with a warning icon, keeping
+  diagnostic copy out of the editor canvas;
+- open a side sheet from the warning icon with the full authorized diagnostic
+  message and recovery action;
 - support authorized states for Components unavailable, inactive,
   superseded, provider-resource tombstoned, owner Module Instance
   tombstoned/data destroyed, missing, incompatible, and not evaluated;
@@ -97,7 +101,9 @@ Explicitly unchanged:
 
 - no automatic rebinding to a newer ComponentVersion;
 - no lifecycle semantics are invented by Dashboard;
-- no new editor mode, drawer, or separate repair wizard;
+- no new editor mode or separate repair wizard;
+- the side sheet is transient issue detail and does not change the saved layout
+  or create a second placement-management model;
 - the dashed placement-state selector in the prototype is review tooling only.
 
 ## Screen 4: Dashboard Viewer Placement Degradation

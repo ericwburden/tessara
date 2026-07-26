@@ -26,9 +26,11 @@ The mockups preserve the current Tessara shell, Dashboard surfaces, and Module M
 - `screenshots/05-module-unavailable-desktop.png`
 - `screenshots/06-viewer-provider-unavailable-mobile.png`
 - `screenshots/07-module-configuration-mobile.png`
+- `screenshots/08-editor-placement-side-sheet-desktop.png`
+- `screenshots/09-editor-placement-side-sheet-mobile.png`
 - `screenshots/design-qa-comparison.png`
 
-The full-view comparison is `screenshots/design-qa-comparison.png`. No separate focused crop was required: the original per-screen captures retain readable text and controls at their native dimensions.
+The full-view comparison is `screenshots/design-qa-comparison.png`. The revised editor card and its side sheet are captured separately at native resolution in screenshots 03, 08, and 09, so no additional focused crop was required.
 
 ## Capture conditions
 
@@ -44,9 +46,9 @@ The full-view comparison is `screenshots/design-qa-comparison.png`. No separate 
 
 ## Visual findings
 
-- **Typography:** Existing Tessara type scale, weights, labels, and code-style metadata are preserved. Degradation messages maintain the established hierarchy without competing with dashboard content.
-- **Spacing and layout:** Desktop shell proportions, content gutters, cards, editor rails, and viewer canvas remain aligned with the source captures. Mobile layouts collapse without horizontal overflow.
-- **Colors and tokens:** Existing dark surfaces, borders, status colors, focus treatment, and purple accent are reused. Prototype-only controls use a dashed purple boundary and an explicit label.
+- **Typography:** Existing Tessara type scale, weights, labels, and code-style metadata are preserved. Editor degradation copy now appears only in the side sheet, keeping the canvas hierarchy quiet.
+- **Spacing and layout:** Desktop shell proportions, content gutters, cards, editor rails, and viewer canvas remain aligned with the source captures. The side sheet overlays without changing the saved canvas geometry, and mobile layouts remain free of horizontal overflow.
+- **Colors and tokens:** Existing dark surfaces, borders, status colors, focus treatment, and purple accent are reused. The affected editor panel uses a restrained semantic warning tint across its full footprint. Prototype-only controls use a dashed purple boundary and an explicit label.
 - **Image quality and assets:** The exact Tessara icon and wordmark assets from the Sprint 6B2 prototype are reused. Lucide icons remain sharp at all checked sizes.
 - **Copy and content:** New copy is limited to transition-reference configuration, diagnostics, and placement degradation/recovery guidance. Healthy Dashboard labels and content remain unchanged.
 
@@ -70,6 +72,8 @@ The full-view comparison is `screenshots/design-qa-comparison.png`. No separate 
   - incompatible
   - not evaluated
 - Each state produces the intended title and recovery guidance.
+- The editor warning icon opens the issue side sheet.
+- The side-sheet close control, backdrop dismissal, and retry action work; retry returns to the editor canvas.
 - Browser console contains no errors or warnings.
 
 ## Responsive checks
@@ -81,7 +85,9 @@ All five routes were checked at 1280 × 720, 768 × 900, and 390 × 844. All 15 
 - Initial captures exposed persisted theme and placement state across hash navigation; the capture sequence was normalized with a reload and an explicit dark-theme/default-state reset.
 - The placement state selector could initially be mistaken for production UI. It was changed to a dashed purple review control labeled `Prototype control · placement state`.
 - Final desktop and mobile captures were regenerated after that correction and passed comparison.
+- Product-owner annotation found the original editor degradation card too verbose. The inline badge, title, explanation, and action were removed; the full panel now receives warning color, a single warning icon replaces normal content, and the icon opens a side sheet containing the message and retry action.
+- The first side-sheet capture exposed overlap from the prototype-only review navigator. The sheet layer was raised above review tooling, then desktop and mobile captures were regenerated and passed.
 
 ## Follow-up
 
-One P3 polish opportunity remains: the longest degradation explanations can feel dense in the editor at the shortest supported viewport height. This does not obscure actions or cause overflow and can be tightened during implementation if the production content requires it.
+No follow-up visual issues remain for the annotated editor interaction.

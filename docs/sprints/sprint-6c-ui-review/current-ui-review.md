@@ -63,7 +63,8 @@ introduced.
   or recovery action.
 - Use existing Tessara badges, bordered panels, compact inline notices, Module
   cards, and primary/secondary actions.
-- Keep placement degradation inside the affected placement footprint.
+- Keep the editor canvas treatment limited to the affected placement footprint;
+  reveal full diagnostic copy only on demand in a side sheet.
 - Use one clear status, one explanation, and at most one recovery action per
   placement state.
 - Treat the prototype screen/state switchers as review tooling only.
