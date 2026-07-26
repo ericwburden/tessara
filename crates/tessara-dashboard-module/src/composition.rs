@@ -420,22 +420,21 @@ async fn reconcile_composition(
                         "bind requires exactly one placement_id or client_key".into(),
                     ));
                 }
-                if let Some(placement_id) = placement_id {
-                    if !current.contains_key(&placement_id) || !seen.insert(placement_id) {
-                        return Err(DashboardModuleError::Conflict(
-                            "replacement placement is stale or repeated".into(),
-                        ));
-                    }
+                if let Some(placement_id) = placement_id
+                    && (!current.contains_key(&placement_id) || !seen.insert(placement_id))
+                {
+                    return Err(DashboardModuleError::Conflict(
+                        "replacement placement is stale or repeated".into(),
+                    ));
                 }
-                if let Some(client_key) = &client_key {
-                    if client_key.trim().is_empty()
+                if let Some(client_key) = &client_key
+                    && (client_key.trim().is_empty()
                         || client_key.chars().count() > 200
-                        || !client_keys.insert(client_key.clone())
-                    {
-                        return Err(DashboardModuleError::BadRequest(
-                            "client_key is invalid or repeated".into(),
-                        ));
-                    }
+                        || !client_keys.insert(client_key.clone()))
+                {
+                    return Err(DashboardModuleError::BadRequest(
+                        "client_key is invalid or repeated".into(),
+                    ));
                 }
                 let reference =
                     component_reference(grant.payload.installation_id, component_version_id)?;

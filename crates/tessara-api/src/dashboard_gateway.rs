@@ -270,6 +270,7 @@ async fn proxy(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn proxy_with_headers(
     State(state): State<AppState>,
     request: AuthenticatedRequest,

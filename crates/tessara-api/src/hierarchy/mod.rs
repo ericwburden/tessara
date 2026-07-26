@@ -923,7 +923,7 @@ pub async fn get_node(
                         related_component_versions.contains(&placement.component_version_id)
                     })
                     .count();
-                (component_count > 0).then(|| NodeDashboardLink {
+                (component_count > 0).then_some(NodeDashboardLink {
                     dashboard_id: dashboard.dashboard_id,
                     dashboard_name: dashboard.dashboard_name,
                     component_count: component_count as i64,
