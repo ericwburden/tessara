@@ -31,7 +31,11 @@ if ($components.Count -eq 0) {
 
 $dashboards = @(Invoke-RestMethod -Uri "$BaseUrl/api/dashboards" -Headers $headers)
 $dashboard = $dashboards |
-    Where-Object { $_.name -eq "Demo Operations Dashboard" } |
+    Where-Object {
+        $null -ne $_ -and
+        $null -ne $_.PSObject.Properties["name"] -and
+        $_.name -eq "Demo Operations Dashboard"
+    } |
     Select-Object -First 1
 if ($null -eq $dashboard) {
     $visibility = @(

@@ -322,6 +322,11 @@ async fn dashboard_authorization(
     .ok_or_else(restricted_authorization)?;
     let mut bindings =
         capability_bindings(pool, request.account.account_id, &required_capability).await?;
+    if required_capability == "dashboards:read" {
+        bindings.extend(
+            capability_bindings(pool, request.account.account_id, "dashboards:manage").await?,
+        );
+    }
     if bindings.is_empty()
         && has_global_capability(pool, request.account.account_id, &required_capability).await?
     {

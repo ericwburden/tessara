@@ -449,9 +449,14 @@ try {
     Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$login.token)
     $headers = @{ Authorization = "Bearer $($login.token)" }
     $moduleInventory = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/modules" -Headers $headers
+    $independentDashboard = $moduleInventory.entries | Where-Object {
+        $_.kind -eq "independently_deployed" -and
+        $_.definition.id -eq "tessara.dashboards"
+    } | Select-Object -First 1
     $transitionEntries = @($moduleInventory.entries | Where-Object { $_.kind -eq "transitional_in_process" })
-    if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne 7) {
-        throw "Smoke failure: Module inventory did not preserve the seven transition contributions alongside real modules"
+    $expectedTransitionCount = if ($independentDashboard) { 6 } else { 7 }
+    if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne $expectedTransitionCount) {
+        throw "Smoke failure: Module inventory did not expose the expected deduplicated transition contributions alongside real modules"
     }
     $migrationContribution = $moduleInventory.entries | Where-Object {
         $_.descriptor.reserved_definition_id -eq "tessara.migration"
@@ -552,7 +557,9 @@ try {
         $sessionTableComponent = $componentsForSeed | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
         $dashboardForSeed = $dashboardsForSeed | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
         $submissionForSeed = $submissionsForSeed | Where-Object { $_.form_name -eq "Demo Session Log" -and $_.status -eq "submitted" } | Select-Object -First 1
-        if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or -not $dashboardForSeed -or -not $submissionForSeed -or -not $nodesForSeed) {
+        if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or
+            (-not $independentDashboard -and -not $dashboardForSeed) -or
+            -not $submissionForSeed -or -not $nodesForSeed) {
             throw "Smoke failure: required existing Demo Session Log assets could not be found."
         }
         $seed = [pscustomobject]@{
@@ -562,14 +569,10 @@ try {
             submission_id         = $submissionForSeed.id
             dataset_id            = $sessionDataset.id
             component_version_id  = $sessionTableComponent.current_version_id
-            dashboard_id          = $dashboardForSeed.id
+            dashboard_id          = if ($dashboardForSeed) { $dashboardForSeed.id } else { $null }
             analytics_values      = 1
         }
     }
-    $independentDashboard = $moduleInventory.entries | Where-Object {
-        $_.kind -eq "independently_deployed" -and
-        $_.descriptor.reserved_definition_id -eq "tessara.dashboards"
-    } | Select-Object -First 1
     if ($independentDashboard) {
         $sprint6cSeedScript = Join-Path $PSScriptRoot "seed-sprint-6c-demo.ps1"
         $sprint6cSeed = (& $sprint6cSeedScript -BaseUrl $baseUrl | Out-String) | ConvertFrom-Json

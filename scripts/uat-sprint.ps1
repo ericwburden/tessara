@@ -224,7 +224,7 @@ $headers = @{ Authorization = "Bearer $adminToken" }
 $moduleInventory = Invoke-RestMethod -Uri "$BaseUrl/api/admin/modules" -Headers $headers -TimeoutSec 30
 $independentDashboard = $moduleInventory.entries | Where-Object {
     $_.kind -eq "independently_deployed" -and
-    $_.descriptor.reserved_definition_id -eq "tessara.dashboards"
+    $_.definition.id -eq "tessara.dashboards"
 } | Select-Object -First 1
 $seedSummary = $null
 if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {
@@ -245,7 +245,8 @@ if ($null -eq $seedSummary) {
     $sessionDataset = $datasets | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
     $sessionTableComponent = $components | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
     $sessionDashboard = $dashboards | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
-    if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or -not $sessionDashboard) {
+    if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or
+        (-not $independentDashboard -and -not $sessionDashboard)) {
         throw "Sprint UAT failure: required existing Demo Session Log assets could not be found."
     }
 
@@ -254,7 +255,7 @@ if ($null -eq $seedSummary) {
         form_id              = $sessionForm.id
         dataset_id           = $sessionDataset.id
         component_version_id = $sessionTableComponent.current_version_id
-        dashboard_id         = $sessionDashboard.id
+        dashboard_id         = if ($sessionDashboard) { $sessionDashboard.id } else { $null }
     }
 }
 if ($independentDashboard) {
