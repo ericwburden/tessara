@@ -30,7 +30,6 @@ enum ResourceKind {
     DatasetRevision,
     DatasetMajorLine,
     ComponentVersion,
-    Dashboard,
 }
 
 #[derive(Clone, Copy)]
@@ -48,9 +47,6 @@ const RESPONSES: &[&str] = &[
 ];
 const DATASETS: &[&str] = &["datasets:read", "datasets:manage"];
 const COMPONENTS: &[&str] = &["components:read", "components:manage"];
-// Dashboard management deliberately does not imply the reader directory, but
-// it remains valid authority for a typed Dashboard resource adapter.
-const DASHBOARDS: &[&str] = &["dashboards:read", "dashboards:manage"];
 
 pub(crate) fn construct(
     request: CreateResourceReferenceRequestV1,
@@ -289,7 +285,6 @@ fn resource_spec(resource_type: &str) -> Option<ResourceSpec> {
         "tessara.transition.dataset_revision" => (ResourceKind::DatasetRevision, DATASETS),
         "tessara.transition.dataset_major_line" => (ResourceKind::DatasetMajorLine, DATASETS),
         "tessara.transition.component_version" => (ResourceKind::ComponentVersion, COMPONENTS),
-        "tessara.transition.dashboard" => (ResourceKind::Dashboard, DASHBOARDS),
         _ => return None,
     };
     Some(ResourceSpec {
@@ -389,12 +384,6 @@ async fn load_lifecycle(
                 .fetch_optional(pool)
                 .await
         }
-        ResourceKind::Dashboard => {
-            sqlx::query_scalar("SELECT 'active'::text FROM dashboards WHERE id = $1")
-                .bind(uuid())
-                .fetch_optional(pool)
-                .await
-        }
     }
 }
 
@@ -423,7 +412,6 @@ mod tests {
             "tessara.transition.dataset_revision",
             "tessara.transition.dataset_major_line",
             "tessara.transition.component_version",
-            "tessara.transition.dashboard",
         ] {
             assert!(resource_spec(resource_type).is_some(), "{resource_type}");
         }

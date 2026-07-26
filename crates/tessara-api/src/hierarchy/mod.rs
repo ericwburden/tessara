@@ -4,7 +4,10 @@
 //! scoped node browse/detail projections used by forms, workflows, and access
 //! management.
 
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::{BTreeSet, HashMap},
+    str::FromStr,
+};
 
 use axum::{
     Json, Router,
@@ -887,60 +890,49 @@ pub async fn get_node(
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
-    let related_dashboards = sqlx::query(
+    let related_component_versions = sqlx::query_scalar::<_, Uuid>(
         r#"
-        SELECT
-            dashboards.id AS dashboard_id,
-            dashboards.name AS dashboard_name,
-            dashboards.description,
-            COUNT(placeable_component_versions.id) AS component_count
-        FROM dashboards
-        LEFT JOIN dashboard_components AS all_components
-            ON all_components.dashboard_id = dashboards.id
-        LEFT JOIN component_versions AS placeable_component_versions
-            ON placeable_component_versions.id = all_components.component_version_id
-           AND placeable_component_versions.status IN (
-               'published'::component_version_status,
-               'superseded'::component_version_status
-           )
-        WHERE EXISTS (
-            SELECT 1
-            FROM dashboard_components
-            JOIN component_versions
-                ON component_versions.id = dashboard_components.component_version_id
-               AND component_versions.status IN (
-                   'published'::component_version_status,
-                   'superseded'::component_version_status
-               )
-            JOIN dataset_sources
-                ON dataset_sources.dataset_id = component_versions.dataset_id
-            JOIN form_versions
-                ON form_versions.id = dataset_sources.form_version_id
-               AND form_versions.status = 'published'::form_version_status
-            JOIN workflow_steps
-                ON workflow_steps.form_version_id = form_versions.id
-            JOIN workflow_assignments
-                ON workflow_assignments.workflow_step_id = workflow_steps.id
-            WHERE dashboard_components.dashboard_id = dashboards.id
-              AND workflow_assignments.node_id = $1
-        )
-        GROUP BY dashboards.id, dashboards.name, dashboards.description
-        ORDER BY dashboards.name, dashboards.id
+        SELECT DISTINCT component_versions.id
+        FROM component_versions
+        JOIN dataset_sources ON dataset_sources.dataset_id=component_versions.dataset_id
+        JOIN form_versions ON form_versions.id=dataset_sources.form_version_id
+        JOIN workflow_steps ON workflow_steps.form_version_id=form_versions.id
+        JOIN workflow_assignments ON workflow_assignments.workflow_step_id=workflow_steps.id
+        WHERE component_versions.status IN (
+                'published'::component_version_status,
+                'superseded'::component_version_status
+              )
+          AND form_versions.status='published'::form_version_status
+          AND workflow_assignments.node_id=$1
         "#,
     )
     .bind(node_id)
     .fetch_all(&state.pool)
     .await?
     .into_iter()
-    .map(|row| {
-        Ok(NodeDashboardLink {
-            dashboard_id: row.try_get("dashboard_id")?,
-            dashboard_name: row.try_get("dashboard_name")?,
-            component_count: row.try_get("component_count")?,
-            description: row.try_get("description")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    .collect::<BTreeSet<_>>();
+    let related_dashboards = match crate::dashboard_dependencies::load().await {
+        Ok(projection) => projection
+            .dashboards
+            .into_iter()
+            .filter_map(|dashboard| {
+                let component_count = dashboard
+                    .placements
+                    .iter()
+                    .filter(|placement| {
+                        related_component_versions.contains(&placement.component_version_id)
+                    })
+                    .count();
+                (component_count > 0).then(|| NodeDashboardLink {
+                    dashboard_id: dashboard.dashboard_id,
+                    dashboard_name: dashboard.dashboard_name,
+                    component_count: component_count as i64,
+                    description: dashboard.description,
+                })
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
 
     Ok(Json(NodeDetail {
         id: node.try_get("id")?,

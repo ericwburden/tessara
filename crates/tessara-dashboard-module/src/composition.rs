@@ -147,6 +147,29 @@ pub struct DashboardVisibilityNodeOptionV1 {
     pub name: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct DashboardDependencyProjectionV1 {
+    pub schema_version: u16,
+    pub dashboards: Vec<DashboardDependencyV1>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DashboardDependencyV1 {
+    pub dashboard_id: Uuid,
+    pub dashboard_name: String,
+    pub description: Option<String>,
+    pub scope_node_ids: Vec<Uuid>,
+    pub placements: Vec<DashboardPlacementDependencyV1>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DashboardPlacementDependencyV1 {
+    pub placement_id: Uuid,
+    pub component_version_id: Uuid,
+    pub position: i32,
+    pub config: Value,
+}
+
 struct StoredPlacement {
     id: Uuid,
     position: i32,
@@ -165,6 +188,68 @@ pub(super) fn routes() -> Router<DashboardModuleState> {
             "/api/admin/dashboards/visibility-nodes",
             get(list_visibility_nodes),
         )
+        .route(
+            "/api/private/dependency-projection",
+            get(dependency_projection),
+        )
+}
+
+async fn dependency_projection(
+    State(state): State<DashboardModuleState>,
+    headers: HeaderMap,
+) -> Result<Json<DashboardDependencyProjectionV1>, DashboardModuleError> {
+    crate::require_private_key(&headers)?;
+    let rows = sqlx::query(
+        "SELECT dashboards.id,dashboards.name,dashboards.description,
+                COALESCE(array_agg(DISTINCT scope.node_id)
+                  FILTER (WHERE scope.node_id IS NOT NULL),'{}') AS scope_node_ids
+         FROM dashboards
+         LEFT JOIN dashboard_scope_nodes scope ON scope.dashboard_id=dashboards.id
+         GROUP BY dashboards.id,dashboards.name,dashboards.description
+         ORDER BY dashboards.name,dashboards.id",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let mut dashboards = Vec::with_capacity(rows.len());
+    for row in rows {
+        let dashboard_id: Uuid = row.try_get("id")?;
+        let placement_rows = sqlx::query(
+            "SELECT id,component_reference,position,config
+             FROM dashboard_placements
+             WHERE dashboard_id=$1
+             ORDER BY position,id",
+        )
+        .bind(dashboard_id)
+        .fetch_all(&state.pool)
+        .await?;
+        let placements = placement_rows
+            .into_iter()
+            .map(|placement| {
+                let reference: TypedResourceReference =
+                    serde_json::from_value(placement.try_get("component_reference")?)
+                        .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
+                let component_version_id = Uuid::parse_str(reference.resource_id())
+                    .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
+                Ok(DashboardPlacementDependencyV1 {
+                    placement_id: placement.try_get("id")?,
+                    component_version_id,
+                    position: placement.try_get("position")?,
+                    config: placement.try_get("config")?,
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()?;
+        dashboards.push(DashboardDependencyV1 {
+            dashboard_id,
+            dashboard_name: row.try_get("name")?,
+            description: row.try_get("description")?,
+            scope_node_ids: row.try_get("scope_node_ids")?,
+            placements,
+        });
+    }
+    Ok(Json(DashboardDependencyProjectionV1 {
+        schema_version: 1,
+        dashboards,
+    }))
 }
 
 async fn reconcile_composition(

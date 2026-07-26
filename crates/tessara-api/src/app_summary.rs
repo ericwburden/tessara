@@ -42,13 +42,17 @@ pub async fn get_summary(
                 (SELECT COUNT(*) FROM dataset_revisions) AS dataset_revisions,
                 (SELECT COUNT(*) FROM components) AS components,
                 (SELECT COUNT(*) FROM component_versions) AS component_versions,
-                (SELECT COUNT(*) FROM dashboards) AS dashboards
+                0::bigint AS dashboards
             "#,
         )
         .fetch_one(&state.pool)
         .await?;
 
-        return summary_from_row(row);
+        let mut summary = summary_from_row(row)?;
+        if let Ok(projection) = crate::dashboard_dependencies::load().await {
+            summary.0.dashboards = projection.dashboards.len() as i64;
+        }
+        return Ok(summary);
     }
 
     if let auth::CapabilityBoundary::Scoped(scope_ids) =

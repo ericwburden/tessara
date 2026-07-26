@@ -12,6 +12,7 @@ mod components;
 pub mod config;
 mod core_security;
 mod dashboard_components_adapter;
+mod dashboard_dependencies;
 mod dashboard_gateway;
 mod datasets;
 pub mod db;

@@ -814,53 +814,37 @@ pub(super) async fn load_dependency_impacts(
             });
         }
 
-        let dashboard_rows = match &scope.dashboards {
-            auth::CapabilityBoundary::Global => {
-                sqlx::query(
-                    r#"
-        SELECT DISTINCT dashboards.id, dashboards.name
-        FROM dashboard_components
-        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
-        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_id = $1
-          AND component_versions.dataset_version_major = $2
-          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
-        ORDER BY dashboards.name
-        "#,
-                )
-                .bind(source_dataset_id)
-                .bind(current_major)
-                .fetch_all(pool)
-                .await?
-            }
-            auth::CapabilityBoundary::Scoped(scope_ids) => {
-                sqlx::query(
-                    r#"
-        SELECT DISTINCT dashboards.id, dashboards.name
-        FROM dashboard_components
-        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
-        JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
-        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_id = $1
-          AND component_versions.dataset_version_major = $2
-          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
-          AND dashboard_scope_nodes.node_id = ANY($3)
-        ORDER BY dashboards.name
-        "#,
-                )
-                .bind(source_dataset_id)
-                .bind(current_major)
-                .bind(scope_ids)
-                .fetch_all(pool)
-                .await?
-            }
-            auth::CapabilityBoundary::None => Vec::new(),
-        };
-        for row in dashboard_rows {
+        let dashboard_component_ids = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM component_versions
+             WHERE dataset_id=$1
+               AND dataset_version_major=$2
+               AND status IN ('published'::component_version_status,'superseded'::component_version_status)",
+        )
+        .bind(source_dataset_id)
+        .bind(current_major)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+        let projection = crate::dashboard_dependencies::load().await?;
+        for dashboard in projection.dashboards.into_iter().filter(|dashboard| {
+            let visible = match &scope.dashboards {
+                auth::CapabilityBoundary::Global => true,
+                auth::CapabilityBoundary::Scoped(scope_ids) => dashboard
+                    .scope_node_ids
+                    .iter()
+                    .any(|node_id| scope_ids.contains(node_id)),
+                auth::CapabilityBoundary::None => false,
+            };
+            visible
+                && dashboard.placements.iter().any(|placement| {
+                    dashboard_component_ids.contains(&placement.component_version_id)
+                })
+        }) {
             impacts.push(DatasetDependencyImpact {
                 kind: DatasetDependencyKind::Dashboard,
-                id: row.try_get("id")?,
-                name: row.try_get("name")?,
+                id: dashboard.dashboard_id,
+                name: dashboard.dashboard_name,
                 pinned_revision_id: None,
                 pinned_version_major: Some(current_major),
                 binding_mode: DatasetDependencyBindingMode::MajorLine,

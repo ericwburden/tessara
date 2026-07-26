@@ -4,7 +4,6 @@ use axum::{Json, Router, extract::State, routing::post};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tessara_dashboards::GridRect;
 use uuid::Uuid;
 
 use crate::{
@@ -25,8 +24,7 @@ use accounts::{
     require_dev_admin_account,
 };
 use analytics::{
-    DashboardComponentPlacementSeed, DatasetFieldBinding, ensure_component,
-    ensure_component_with_config, ensure_dashboard, ensure_dataset, replace_dashboard_components,
+    DatasetFieldBinding, ensure_component, ensure_component_with_config, ensure_dataset,
 };
 use forms::{DemoFormSpec, FormFieldDef, ensure_demo_form, replace_form_scope_nodes};
 use hierarchy::{
@@ -1337,21 +1335,21 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     )
     .await?;
 
-    let (_partner_component_id, partner_component_version_id) = ensure_component(
+    let (_partner_component_id, _partner_component_version_id) = ensure_component(
         pool,
         "Demo Partner Profile Table",
         "demo-partner-profile-table",
         partner_dataset_revision_id,
     )
     .await?;
-    let (_program_component_id, program_component_version_id) = ensure_component(
+    let (_program_component_id, _program_component_version_id) = ensure_component(
         pool,
         "Demo Program Snapshot Table",
         "demo-program-snapshot-table",
         program_dataset_revision_id,
     )
     .await?;
-    let (_activity_component_id, activity_component_version_id) = ensure_component(
+    let (_activity_component_id, _activity_component_version_id) = ensure_component(
         pool,
         "Demo Activity Plan Table",
         "demo-activity-plan-table",
@@ -1365,7 +1363,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         session_dataset_revision_id,
     )
     .await?;
-    let (_session_bar_component_id, session_bar_component_version_id) =
+    let (_session_bar_component_id, _session_bar_component_version_id) =
         ensure_component_with_config(
             pool,
             "Demo Session Participants Bar",
@@ -1398,7 +1396,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             }),
         )
         .await?;
-    let (_session_line_component_id, session_line_component_version_id) =
+    let (_session_line_component_id, _session_line_component_version_id) =
         ensure_component_with_config(
             pool,
             "Demo Session Participants Line",
@@ -1416,7 +1414,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             }),
         )
         .await?;
-    let (_session_pie_component_id, session_pie_component_version_id) =
+    let (_session_pie_component_id, _session_pie_component_version_id) =
         ensure_component_with_config(
             pool,
             "Demo Session Completion Pie",
@@ -1443,7 +1441,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             }),
         )
         .await?;
-    let (_session_donut_component_id, session_donut_component_version_id) =
+    let (_session_donut_component_id, _session_donut_component_version_id) =
         ensure_component_with_config(
             pool,
             "Demo Session Completion Donut",
@@ -1470,7 +1468,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             }),
         )
         .await?;
-    let (_session_stat_component_id, session_stat_component_version_id) =
+    let (_session_stat_component_id, _session_stat_component_version_id) =
         ensure_component_with_config(
             pool,
             "Demo Session Total Participants StatCard",
@@ -1488,69 +1486,9 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         )
         .await?;
 
-    let dashboard_id = ensure_dashboard(
-        pool,
-        "Demo Operations Dashboard",
-        Some("Operational view of partner, program, activity, and session data."),
-        &[
-            partner_a, partner_b, program_a, program_b, program_c, program_d, activity_a,
-            activity_b, activity_c, activity_d, activity_e, activity_f, session_a, session_b,
-            session_c, session_d, session_e, session_f, session_g, session_h,
-        ],
-    )
-    .await?;
-    replace_dashboard_components(
-        pool,
-        dashboard_id,
-        &[
-            DashboardComponentPlacementSeed::new(
-                partner_component_version_id,
-                Some("Partner Profile"),
-                GridRect::new(1, 1, 6, 4),
-            ),
-            DashboardComponentPlacementSeed::new(
-                program_component_version_id,
-                Some("Program Snapshot"),
-                GridRect::new(1, 7, 6, 4),
-            ),
-            DashboardComponentPlacementSeed::new(
-                activity_component_version_id,
-                Some("Activity Plan"),
-                GridRect::new(5, 1, 6, 4),
-            ),
-            DashboardComponentPlacementSeed::new(
-                session_component_version_id,
-                Some("Session Log Table"),
-                GridRect::new(9, 1, 12, 6),
-            ),
-            DashboardComponentPlacementSeed::new(
-                session_bar_component_version_id,
-                Some("Participants by Completion"),
-                GridRect::new(15, 1, 6, 3),
-            ),
-            DashboardComponentPlacementSeed::new(
-                session_line_component_version_id,
-                Some("Participants Over Time"),
-                GridRect::new(15, 7, 6, 2),
-            ),
-            DashboardComponentPlacementSeed::new(
-                session_pie_component_version_id,
-                Some("Completion Share"),
-                GridRect::new(18, 1, 3, 3),
-            ),
-            DashboardComponentPlacementSeed::new(
-                session_donut_component_version_id,
-                Some("Completion Donut"),
-                GridRect::new(18, 4, 3, 3),
-            ),
-            DashboardComponentPlacementSeed::new(
-                session_stat_component_version_id,
-                Some("Total Participants"),
-                GridRect::new(18, 7, 3, 2),
-            ),
-        ],
-    )
-    .await?;
+    // Dashboard demo composition is seeded through the independently deployed
+    // Dashboard Module after Core has committed its ComponentVersion IDs.
+    let dashboard_id = Uuid::nil();
 
     Ok(DemoSeedSummary {
         seed_version: DEMO_SEED_VERSION,
@@ -1566,7 +1504,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         dataset_count: 4,
         dataset_revision_count: 4,
         component_count: 9,
-        dashboard_count: 1,
+        dashboard_count: 0,
         organization_node_id: session_a,
         form_id: session_form.form_id,
         form_version_id: session_form.form_version_id,
@@ -1618,7 +1556,6 @@ async fn require_demo_seed_target_empty(
           + (SELECT COUNT(*) FROM dataset_revisions)
           + (SELECT COUNT(*) FROM components)
           + (SELECT COUNT(*) FROM component_versions)
-          + (SELECT COUNT(*) FROM dashboards)
         "#,
     )
     .bind(dev_admin_account_id)

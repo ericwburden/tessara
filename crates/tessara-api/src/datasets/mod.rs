@@ -1902,51 +1902,58 @@ async fn load_dashboard_dependency_counts(
     if version_majors.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let rows = match boundary {
-        auth::CapabilityBoundary::Global => {
-            sqlx::query(
-                r#"
-        SELECT component_versions.dataset_version_major AS dependency_key,
-               COUNT(DISTINCT dashboards.id)::bigint AS dependency_count
-        FROM dashboard_components
-        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
-        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_id = $1
-          AND component_versions.dataset_version_major = ANY($2)
-          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
-        GROUP BY component_versions.dataset_version_major
-        "#,
-            )
-            .bind(source_dataset_id)
-            .bind(version_majors)
-            .fetch_all(pool)
-            .await?
+    if matches!(boundary, auth::CapabilityBoundary::None) {
+        return Ok(BTreeMap::new());
+    }
+    let component_rows = sqlx::query(
+        "SELECT id,dataset_version_major
+         FROM component_versions
+         WHERE dataset_id=$1
+           AND dataset_version_major=ANY($2)
+           AND status IN ('published'::component_version_status,'superseded'::component_version_status)",
+    )
+    .bind(source_dataset_id)
+    .bind(version_majors)
+    .fetch_all(pool)
+    .await?;
+    let component_majors = component_rows
+        .into_iter()
+        .map(|row| {
+            Ok((
+                row.try_get::<Uuid, _>("id")?,
+                row.try_get::<i32, _>("dataset_version_major")?,
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, sqlx::Error>>()?;
+    let projection = crate::dashboard_dependencies::load().await?;
+    let mut dashboards_by_major = BTreeMap::<i32, BTreeSet<Uuid>>::new();
+    for dashboard in projection.dashboards {
+        let visible = match boundary {
+            auth::CapabilityBoundary::Global => true,
+            auth::CapabilityBoundary::Scoped(scope_ids) => dashboard
+                .scope_node_ids
+                .iter()
+                .any(|node_id| scope_ids.contains(node_id)),
+            auth::CapabilityBoundary::None => false,
+        };
+        if !visible {
+            continue;
         }
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            sqlx::query(
-                r#"
-        SELECT component_versions.dataset_version_major AS dependency_key,
-               COUNT(DISTINCT dashboards.id)::bigint AS dependency_count
-        FROM dashboard_components
-        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
-        JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
-        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_id = $1
-          AND component_versions.dataset_version_major = ANY($2)
-          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
-          AND dashboard_scope_nodes.node_id = ANY($3)
-        GROUP BY component_versions.dataset_version_major
-        "#,
-            )
-            .bind(source_dataset_id)
-            .bind(version_majors)
-            .bind(scope_ids)
-            .fetch_all(pool)
-            .await?
+        for major in dashboard
+            .placements
+            .iter()
+            .filter_map(|placement| component_majors.get(&placement.component_version_id))
+        {
+            dashboards_by_major
+                .entry(*major)
+                .or_default()
+                .insert(dashboard.dashboard_id);
         }
-        auth::CapabilityBoundary::None => Vec::new(),
-    };
-    count_map_from_i32_rows(rows)
+    }
+    Ok(dashboards_by_major
+        .into_iter()
+        .map(|(major, dashboards)| (major, dashboards.len()))
+        .collect())
 }
 
 fn count_map_from_uuid_rows(rows: Vec<PgRow>) -> ApiResult<BTreeMap<Uuid, usize>> {

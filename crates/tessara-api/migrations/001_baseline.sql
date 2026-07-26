@@ -869,6 +869,15 @@ BEFORE INSERT OR UPDATE OF dashboard_id ON dashboard_components
 FOR EACH ROW
 EXECUTE FUNCTION enforce_dashboard_component_capacity();
 
+-- Sprint 6C moves Dashboard storage into the Dashboard Module Instance
+-- database. The earlier baseline declarations remain above solely so the
+-- historical preflight is source-auditable; a fresh Core schema retains none
+-- of the Dashboard tables, triggers, functions, indexes, or foreign keys.
+DROP TABLE dashboard_scope_nodes;
+DROP TABLE dashboard_components;
+DROP TABLE dashboards;
+DROP FUNCTION enforce_dashboard_component_capacity();
+
 -- Sprint 6A adds Core-owned discovery and policy state for the current
 -- in-process transition catalog. Module Release and Module Instance
 -- persistence deliberately begins in Sprint 6B, so neither table appears in

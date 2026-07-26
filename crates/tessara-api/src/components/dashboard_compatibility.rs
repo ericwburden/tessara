@@ -1,11 +1,9 @@
 //! Guards mutable published Component payloads against invalidating pinned
 //! Dashboard layouts.
 //!
-//! Dashboard reconciliation locks Dashboard rows before ComponentVersion rows.
-//! This rare update-in-place path follows the same order for already-affected
-//! Dashboards. A transaction advisory lock serializes kind-changing updates so
-//! two different versions pinned by one Dashboard cannot write-skew past the
-//! complete-layout validation.
+//! Dashboard rows live in a separate database. Core therefore consumes the
+//! module's bounded dependency projection and never joins Dashboard storage.
+//! A Core advisory lock serializes concurrent published Component updates.
 
 use std::collections::BTreeMap;
 
@@ -16,7 +14,10 @@ use tessara_dashboards::{
 };
 use uuid::Uuid;
 
-use crate::error::{ApiError, ApiResult};
+use crate::{
+    dashboard_dependencies,
+    error::{ApiError, ApiResult},
+};
 
 const PUBLISHED_UPDATE_ADVISORY_LOCK: i64 = 0x5445_5353_4152_4135;
 const DASHBOARD_COMPATIBILITY_ERROR: &str =
@@ -31,8 +32,7 @@ struct StoredDashboardPlacement {
     component_type: String,
 }
 
-/// Serializes update-in-place compatibility checks and locks the currently
-/// affected Dashboards in stable ID order before the caller locks the
+/// Serializes update-in-place compatibility checks before the caller locks the
 /// Component/ComponentVersion rows.
 pub(super) async fn prepare_published_update(
     tx: &mut Transaction<'_, Postgres>,
@@ -42,22 +42,7 @@ pub(super) async fn prepare_published_update(
         .bind(PUBLISHED_UPDATE_ADVISORY_LOCK)
         .execute(&mut **tx)
         .await?;
-    sqlx::query(
-        r#"
-        SELECT dashboards.id
-        FROM dashboards
-        JOIN (
-            SELECT DISTINCT dashboard_id
-            FROM dashboard_components
-            WHERE component_version_id = $1
-        ) AS affected ON affected.dashboard_id = dashboards.id
-        ORDER BY dashboards.id
-        FOR UPDATE OF dashboards
-        "#,
-    )
-    .bind(component_version_id)
-    .fetch_all(&mut **tx)
-    .await?;
+    let _ = component_version_id;
     Ok(())
 }
 
@@ -69,43 +54,55 @@ pub(super) async fn validate_published_update(
     tx: &mut Transaction<'_, Postgres>,
     component_version_id: Uuid,
 ) -> ApiResult<()> {
-    let rows = sqlx::query(
-        r#"
-        WITH affected_dashboards AS (
-            SELECT DISTINCT dashboard_id
-            FROM dashboard_components
-            WHERE component_version_id = $1
-        )
-        SELECT dashboard_components.dashboard_id,
-               dashboard_components.id AS placement_id,
-               dashboard_components.position,
-               dashboard_components.config,
-               component_versions.component_type::text AS component_type
-        FROM dashboard_components
-        JOIN component_versions
-          ON component_versions.id = dashboard_components.component_version_id
-        WHERE dashboard_components.dashboard_id IN (
-            SELECT dashboard_id FROM affected_dashboards
-        )
-        ORDER BY dashboard_components.dashboard_id,
-                 dashboard_components.position,
-                 dashboard_components.id
-        "#,
+    let projection = dashboard_dependencies::load().await?;
+    let affected = projection
+        .dashboards
+        .into_iter()
+        .filter(|dashboard| {
+            dashboard
+                .placements
+                .iter()
+                .any(|placement| placement.component_version_id == component_version_id)
+        })
+        .collect::<Vec<_>>();
+    let component_ids = affected
+        .iter()
+        .flat_map(|dashboard| {
+            dashboard
+                .placements
+                .iter()
+                .map(|placement| placement.component_version_id)
+        })
+        .collect::<Vec<_>>();
+    let component_types = sqlx::query(
+        "SELECT id,component_type::text AS component_type
+         FROM component_versions WHERE id=ANY($1)",
     )
-    .bind(component_version_id)
+    .bind(&component_ids)
     .fetch_all(&mut **tx)
     .await?
     .into_iter()
     .map(|row| {
-        Ok(StoredDashboardPlacement {
-            dashboard_id: row.try_get("dashboard_id")?,
-            placement_id: row.try_get("placement_id")?,
-            position: row.try_get("position")?,
-            config: row.try_get("config")?,
-            component_type: row.try_get("component_type")?,
-        })
+        Ok((
+            row.try_get::<Uuid, _>("id")?,
+            row.try_get::<String, _>("component_type")?,
+        ))
     })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    .collect::<Result<BTreeMap<_, _>, sqlx::Error>>()?;
+    let mut rows = Vec::new();
+    for dashboard in affected {
+        for placement in dashboard.placements {
+            if let Some(component_type) = component_types.get(&placement.component_version_id) {
+                rows.push(StoredDashboardPlacement {
+                    dashboard_id: dashboard.dashboard_id,
+                    placement_id: placement.placement_id,
+                    position: placement.position,
+                    config: placement.config,
+                    component_type: component_type.clone(),
+                });
+            }
+        }
+    }
 
     validate_candidate_layouts(&rows)
 }
