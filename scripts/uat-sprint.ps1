@@ -221,6 +221,11 @@ function New-BrowserSession {
 try {
 $adminToken = Get-ApiToken -Email "admin@tessara.local" -Password "tessara-dev-admin"
 $headers = @{ Authorization = "Bearer $adminToken" }
+$moduleInventory = Invoke-RestMethod -Uri "$BaseUrl/api/admin/modules" -Headers $headers -TimeoutSec 30
+$independentDashboard = $moduleInventory.entries | Where-Object {
+    $_.kind -eq "independently_deployed" -and
+    $_.descriptor.reserved_definition_id -eq "tessara.dashboards"
+} | Select-Object -First 1
 $seedSummary = $null
 if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {
     try {
@@ -252,15 +257,26 @@ if ($null -eq $seedSummary) {
         dashboard_id         = $sessionDashboard.id
     }
 }
+if ($independentDashboard) {
+    $sprint6cSeedScript = Join-Path $PSScriptRoot "seed-sprint-6c-demo.ps1"
+    $sprint6cSeed = (& $sprint6cSeedScript -BaseUrl $BaseUrl | Out-String) | ConvertFrom-Json
+    if (
+        $sprint6cSeed.seed_version -ne "sprint-6c-demo-v1" -or
+        [int]$sprint6cSeed.dashboard_placements -ne 9
+    ) {
+        throw "Sprint UAT failure: Sprint 6C Dashboard seed did not produce nine placements."
+    }
+    $seedSummary.dashboard_id = $sprint6cSeed.dashboard_id
+}
 if ($seedSummary.seed_version -ne "uat-demo-v2") {
     throw "Sprint UAT failure: demo seed did not confirm expected uat-demo-v2."
 }
 $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
-$moduleInventory = Invoke-RestMethod -Uri "$BaseUrl/api/admin/modules" -Headers $headers -TimeoutSec 30
 $transitionEntries = @($moduleInventory.entries | Where-Object { $_.kind -eq "transitional_in_process" })
-if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne 7) {
-    throw "Sprint UAT failure: Module inventory did not preserve the seven transition contributions alongside real modules."
+$expectedTransitionCount = if ($independentDashboard) { 6 } else { 7 }
+if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne $expectedTransitionCount) {
+    throw "Sprint UAT failure: Module inventory did not expose the expected deduplicated transition contributions alongside real modules."
 }
 $migrationContribution = $moduleInventory.entries | Where-Object {
     $_.descriptor.reserved_definition_id -eq "tessara.migration"

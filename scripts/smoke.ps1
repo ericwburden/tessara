@@ -566,6 +566,21 @@ try {
             analytics_values      = 1
         }
     }
+    $independentDashboard = $moduleInventory.entries | Where-Object {
+        $_.kind -eq "independently_deployed" -and
+        $_.descriptor.reserved_definition_id -eq "tessara.dashboards"
+    } | Select-Object -First 1
+    if ($independentDashboard) {
+        $sprint6cSeedScript = Join-Path $PSScriptRoot "seed-sprint-6c-demo.ps1"
+        $sprint6cSeed = (& $sprint6cSeedScript -BaseUrl $baseUrl | Out-String) | ConvertFrom-Json
+        if (
+            $sprint6cSeed.seed_version -ne "sprint-6c-demo-v1" -or
+            [int]$sprint6cSeed.dashboard_placements -ne 9
+        ) {
+            throw "Smoke failure: Sprint 6C Dashboard seed did not produce nine placements."
+        }
+        $seed.dashboard_id = $sprint6cSeed.dashboard_id
+    }
     $summary = Invoke-Json -Method "Get" -Uri "$baseUrl/api/summary" -Headers $headers
     $operatorLogin = Invoke-Json `
         -Method "Post" `
@@ -585,8 +600,8 @@ try {
         -Body @{ email = "delegator@tessara.local"; password = "tessara-dev-delegator" }
     Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$delegatorLogin.token)
     $delegatorHeaders = @{ Authorization = "Bearer $($delegatorLogin.token)" }
-    if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.datasets -lt 1 -or $summary.components -lt 1 -or $summary.dashboards -lt 1) {
-        throw "Expected application summary to include seeded published forms, submissions, datasets, components, and dashboards"
+    if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.datasets -lt 1 -or $summary.components -lt 1) {
+        throw "Expected Core application summary to include seeded published forms, submissions, datasets, and components"
     }
     $nodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
     $dashboard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards/$($seed.dashboard_id)" -Headers $headers
