@@ -41,6 +41,9 @@ pub enum ApiError {
     /// A requested entity could not be found.
     #[error("not found: {0}")]
     NotFound(String),
+    /// An independently deployed dependency is temporarily unavailable.
+    #[error("service unavailable: {0}")]
+    ServiceUnavailable(String),
     /// A database operation failed.
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
@@ -98,6 +101,11 @@ impl IntoResponse for ApiError {
                 format!("The current account is missing required capability '{capability}'."),
             ),
             ApiError::NotFound(message) => (StatusCode::NOT_FOUND, "not_found", message.clone()),
+            ApiError::ServiceUnavailable(message) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                message.clone(),
+            ),
             ApiError::Database(error) => {
                 error!(error = ?error, "database request failed");
                 (

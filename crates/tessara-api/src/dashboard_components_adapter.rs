@@ -11,8 +11,10 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
 use sqlx::Row;
 use tessara_dashboards::{
-    DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID, DashboardComponentMetadataV1,
+    DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
+    DashboardComponentCatalogResponseV1, DashboardComponentMetadataV1,
     DashboardComponentResolutionRequestV1, DashboardComponentResolutionResponseV1,
+    DashboardComponentTransitionAction,
 };
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
@@ -35,10 +37,15 @@ const DASHBOARD_CONTRACT: &str = "tessara.dashboards.dashboard";
 const COMPONENT_READ_CAPABILITY: &str = "components:read";
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new().route(
-        "/api/private/dashboard-components/resolve",
-        post(resolve_component),
-    )
+    Router::new()
+        .route(
+            "/api/private/dashboard-components/resolve",
+            post(resolve_component),
+        )
+        .route(
+            "/api/private/dashboard-components/catalog",
+            post(component_catalog),
+        )
 }
 
 async fn resolve_component(
@@ -68,8 +75,9 @@ async fn resolve_component(
     let globally_authorized =
         has_global_component_authority(&state, inbound.payload.original_actor_id).await?;
 
-    let downstream = issue_downstream_grant(&state, &inbound, &request, component_bindings).await?;
-    validate_downstream_grant(&state, &downstream, &request, &inbound).await?;
+    let downstream =
+        issue_downstream_grant(&state, &inbound, request.action, component_bindings).await?;
+    validate_downstream_grant(&state, &downstream, request.action, &inbound).await?;
 
     let provider_state =
         std::env::var("TESSARA_COMPONENTS_PROVIDER_STATE").unwrap_or_else(|_| "available".into());
@@ -159,6 +167,7 @@ async fn resolve_component(
         version_number: row.try_get("version_number")?,
         version_label: row.try_get("version_label")?,
         version_status: version_status.clone(),
+        scope_node_ids: dataset_scope,
     };
     let resolution = tessara_module_contract::ResourceResolutionV1::authorized(
         ResourceOwnerState::CoreInstallation {
@@ -176,6 +185,85 @@ async fn resolve_component(
         DashboardComponentResolutionResponseV1::new(resolution, Some(metadata))
             .map_err(|error| ApiError::Internal(error.into()))?,
     ))
+}
+
+async fn component_catalog(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<DashboardComponentCatalogResponseV1>> {
+    let inbound = validate_inbound_dashboard_grant(&state, &headers).await?;
+    let bindings = component_capability_bindings(&state, inbound.payload.original_actor_id).await?;
+    if bindings.is_empty() {
+        return Ok(Json(DashboardComponentCatalogResponseV1 {
+            schema_version: 1,
+            components: Vec::new(),
+        }));
+    }
+    let downstream = issue_downstream_grant(
+        &state,
+        &inbound,
+        DashboardComponentTransitionAction::ResolveMetadata,
+        bindings,
+    )
+    .await?;
+    validate_downstream_grant(
+        &state,
+        &downstream,
+        DashboardComponentTransitionAction::ResolveMetadata,
+        &inbound,
+    )
+    .await?;
+    if std::env::var("TESSARA_COMPONENTS_PROVIDER_STATE").is_ok_and(|state| state != "available") {
+        return Ok(Json(DashboardComponentCatalogResponseV1 {
+            schema_version: 1,
+            components: Vec::new(),
+        }));
+    }
+    let rows = sqlx::query(
+        "SELECT cv.id,cv.component_id,c.name AS component_name,c.slug AS component_slug,
+                cv.component_type::text AS component_type,cv.version_number,
+                cv.version_label,cv.status::text AS version_status,cv.dataset_id
+         FROM component_versions cv
+         JOIN components c ON c.id=cv.component_id
+         WHERE cv.status IN ('published','superseded')
+         ORDER BY c.name,cv.version_number,cv.id",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let capability = SecurityCapabilityId::new(COMPONENT_READ_CAPABILITY)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let mut components = Vec::new();
+    for row in rows {
+        let dataset_id: Uuid = row.try_get("dataset_id")?;
+        let nodes: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT node_id FROM dataset_scope_nodes WHERE dataset_id=$1 ORDER BY node_id",
+        )
+        .bind(dataset_id)
+        .fetch_all(&state.pool)
+        .await?;
+        if nodes.is_empty()
+            || !nodes
+                .iter()
+                .any(|node_id| downstream.payload.authorizes(&capability, *node_id))
+        {
+            continue;
+        }
+        components.push(DashboardComponentMetadataV1 {
+            component_version_id: row.try_get("id")?,
+            component_id: row.try_get("component_id")?,
+            component_name: row.try_get("component_name")?,
+            component_slug: row.try_get("component_slug")?,
+            component_type: row.try_get("component_type")?,
+            version_number: row.try_get("version_number")?,
+            version_label: row.try_get("version_label")?,
+            version_status: row.try_get("version_status")?,
+            scope_node_ids: nodes,
+        });
+    }
+    Ok(Json(DashboardComponentCatalogResponseV1 {
+        schema_version: 1,
+        components,
+    }))
 }
 
 async fn validate_inbound_dashboard_grant(
@@ -248,7 +336,7 @@ async fn validate_inbound_dashboard_grant(
 async fn issue_downstream_grant(
     state: &AppState,
     inbound: &SignedEnvelopeV1<AuthorizationGrantV1>,
-    request: &DashboardComponentResolutionRequestV1,
+    action: DashboardComponentTransitionAction,
     capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
 ) -> ApiResult<SignedEnvelopeV1<AuthorizationGrantV1>> {
     let revisions = sqlx::query(
@@ -270,7 +358,7 @@ async fn issue_downstream_grant(
                 .map_err(|error| ApiError::Internal(error.into()))?,
             functional_contract: FunctionalContractId::new(DASHBOARD_COMPONENT_CONTRACT_ID)
                 .map_err(|error| ApiError::Internal(error.into()))?,
-            action: request.action.as_str().into(),
+            action: action.as_str().into(),
             operation: AuthorizationGrantOperationV1::Read,
             capability_scope_bindings,
             resource_assertion: None,
@@ -287,7 +375,7 @@ async fn issue_downstream_grant(
 async fn validate_downstream_grant(
     state: &AppState,
     grant: &SignedEnvelopeV1<AuthorizationGrantV1>,
-    request: &DashboardComponentResolutionRequestV1,
+    action: DashboardComponentTransitionAction,
     inbound: &SignedEnvelopeV1<AuthorizationGrantV1>,
 ) -> ApiResult<()> {
     protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
@@ -311,7 +399,7 @@ async fn validate_downstream_grant(
                 .map_err(|error| ApiError::Internal(error.into()))?,
             functional_contract: FunctionalContractId::new(DASHBOARD_COMPONENT_CONTRACT_ID)
                 .map_err(|error| ApiError::Internal(error.into()))?,
-            action: request.action.as_str().into(),
+            action: action.as_str().into(),
             operation: AuthorizationGrantOperationV1::Read,
             authorization_revision: revisions.try_get::<i64, _>("authorization_revision")? as u64,
             organization_revision: revisions.try_get::<i64, _>("organization_revision")? as u64,

@@ -94,7 +94,6 @@ pub(super) fn routes() -> Router<DashboardModuleState> {
             put(update_dashboard).delete(delete_dashboard),
         )
         .route("/api/dashboards", get(list_dashboards))
-        .route("/api/dashboards/{dashboard_id}", get(get_dashboard))
 }
 
 async fn update_organization_projection(
@@ -191,7 +190,7 @@ async fn list_manageable_dashboards(
     ))
 }
 
-async fn get_dashboard(
+pub(super) async fn get_dashboard_summary(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
@@ -374,7 +373,7 @@ async fn delete_dashboard(
     Ok(Json(result))
 }
 
-async fn authorize(
+pub(super) async fn authorize(
     state: &DashboardModuleState,
     headers: &HeaderMap,
     action: &str,
@@ -419,7 +418,10 @@ async fn authorize(
     Ok(envelope)
 }
 
-fn authorized_organizations(grant: &AuthorizationGrantV1, capability: &str) -> BTreeSet<Uuid> {
+pub(super) fn authorized_organizations(
+    grant: &AuthorizationGrantV1,
+    capability: &str,
+) -> BTreeSet<Uuid> {
     grant
         .capability_scope_bindings
         .iter()

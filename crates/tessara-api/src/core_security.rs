@@ -660,7 +660,7 @@ async fn exchange_authorization(
     Ok(Json(signed))
 }
 
-async fn capability_bindings(
+pub(crate) async fn capability_bindings(
     pool: &PgPool,
     account_id: Uuid,
     capability: &str,

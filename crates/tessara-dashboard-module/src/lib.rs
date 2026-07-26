@@ -17,6 +17,7 @@ use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::PurposeBoundVerifyingKeyV1;
 use uuid::Uuid;
 
+mod composition;
 mod product;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.dashboards";
@@ -132,6 +133,7 @@ pub fn router(state: DashboardModuleState) -> Router {
         )
         .route("/api/private/security-state", put(update_security_state))
         .merge(product::routes())
+        .merge(composition::routes())
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
         .route("/api/diagnostics", get(diagnostics))

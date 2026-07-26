@@ -22,10 +22,11 @@ pub use placement_config::{
 };
 pub use transition_component::{
     DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
-    DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentMetadataV1,
-    DashboardComponentResolutionRequestV1, DashboardComponentResolutionResponseV1,
-    DashboardComponentResolutionValidationError, DashboardComponentTransitionAction,
-    DashboardComponentVersionReferenceV1, DashboardComponentVersionReferenceValidationError,
+    DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentCatalogResponseV1,
+    DashboardComponentMetadataV1, DashboardComponentResolutionRequestV1,
+    DashboardComponentResolutionResponseV1, DashboardComponentResolutionValidationError,
+    DashboardComponentTransitionAction, DashboardComponentVersionReferenceV1,
+    DashboardComponentVersionReferenceValidationError,
 };
 
 pub use tessara_core::grid_layout::{GridPlacement, GridRect, GridSize};

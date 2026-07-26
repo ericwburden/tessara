@@ -65,6 +65,19 @@ pub struct DashboardComponentMetadataV1 {
     pub version_number: i32,
     pub version_label: String,
     pub version_status: String,
+    /// Provider-authoritative Organization scope used by Dashboard to prevent
+    /// a placement from broadening visibility beyond its Component data.
+    pub scope_node_ids: Vec<Uuid>,
+}
+
+/// Authorized placeable ComponentVersion metadata returned to the Dashboard
+/// editor. The adapter filters this collection before any item reaches the
+/// Dashboard process.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DashboardComponentCatalogResponseV1 {
+    pub schema_version: u16,
+    pub components: Vec<DashboardComponentMetadataV1>,
 }
 
 /// Version-one action-bound resolution returned to Dashboard.
@@ -424,6 +437,7 @@ mod tests {
             version_number: 1,
             version_label: "v1".into(),
             version_status: "published".into(),
+            scope_node_ids: vec![Uuid::from_u128(3)],
         }
     }
 }

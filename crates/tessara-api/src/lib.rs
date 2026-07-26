@@ -12,7 +12,7 @@ mod components;
 pub mod config;
 mod core_security;
 mod dashboard_components_adapter;
-mod dashboards;
+mod dashboard_gateway;
 mod datasets;
 pub mod db;
 pub mod demo;
@@ -320,17 +320,6 @@ pub fn router(state: AppState) -> Router {
                 )
             }),
         )
-        .route("/dashboards", get(dashboards::native_directory))
-        .route("/dashboards/new", get(dashboards::native_create))
-        .route(
-            "/dashboards/{dashboard_id}/edit",
-            get(dashboards::native_editor),
-        )
-        .route(
-            "/dashboards/{dashboard_id}/view",
-            get(dashboards::native_viewer),
-        )
-        .route("/dashboards/{dashboard_id}", get(dashboards::native_detail))
         .route(
             "/datasets",
             get(|| async {
@@ -502,7 +491,7 @@ fn api_routes() -> Router<AppState> {
         .merge(datasets::routes())
         .merge(components::routes())
         .merge(dashboard_components_adapter::routes())
-        .merge(dashboards::routes())
+        .merge(dashboard_gateway::routes())
         .merge(modules::routes())
         .merge(demo::routes())
 }
