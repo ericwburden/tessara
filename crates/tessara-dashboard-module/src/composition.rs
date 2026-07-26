@@ -695,10 +695,11 @@ async fn load_placements_with_authorization(
                 DashboardModuleError::Unavailable("Component resolution missing".into())
             })?;
             let metadata = resolution.metadata().cloned();
-            let available = metadata.is_some();
             let parsed = parsed.get(&placement.id).ok_or_else(|| {
                 DashboardModuleError::Conflict("placement configuration missing".into())
             })?;
+            let state = resolution_state(resolution.resolution());
+            let available = parsed.is_executable() && matches!(state, "available" | "superseded");
             let allowed_operations = editor.then(|| match parsed.config_state {
                 DashboardPlacementConfigState::FutureSchema => vec![
                     DashboardPlacementOperation::Retain,
@@ -741,7 +742,7 @@ async fn load_placements_with_authorization(
                 } else {
                     DashboardPlacementAvailabilityV1::Unavailable
                 },
-                resolution_state: resolution_state(resolution.resolution()),
+                resolution_state: state,
                 resolution: resolution.resolution().clone(),
                 config_state: editor.then_some(parsed.config_state),
                 title: available.then(|| parsed.title.clone()).flatten(),

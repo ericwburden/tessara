@@ -27,8 +27,8 @@ pub use state::shell_navigation::{
 pub use tessara_web_dashboards::{
     Dashboard, DashboardComponentVersion, DashboardComponentVersionOption, DashboardComposition,
     DashboardPlacement, DashboardPlacementAvailability, DashboardPlacementIdMapping,
-    DashboardRouteBootstrap, DashboardSummary, DashboardVisibilityNode, SessionAccount,
-    VisibilityNodeOption, dashboard_route_bootstrap,
+    DashboardPlacementResolutionState, DashboardRouteBootstrap, DashboardSummary,
+    DashboardVisibilityNode, SessionAccount, VisibilityNodeOption, dashboard_route_bootstrap,
 };
 
 /// DOM id for the request-scoped Dashboard hydration payload.
@@ -243,6 +243,9 @@ mod tests {
                     grid_width: 6,
                     grid_height: 2,
                     availability: DashboardPlacementAvailability::Unavailable,
+                    resolution_state: Some(
+                        tessara_web_dashboards::DashboardPlacementResolutionState::Restricted,
+                    ),
                     config_state: None,
                     title: None,
                     component: None,

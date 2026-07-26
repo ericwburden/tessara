@@ -655,16 +655,22 @@
 .dashboard-viewer-placement.is-unavailable,
 .dashboard-composition-tile.is-unavailable {
   border-color: var(--semantic-warning-border);
-  border-style: dashed;
-  background:
-    repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 0.55rem,
-      color-mix(in srgb, var(--semantic-warning-soft) 54%, transparent) 0.55rem,
-      color-mix(in srgb, var(--semantic-warning-soft) 54%, transparent) 1.1rem
-    ),
-    var(--color-panel);
+  background: color-mix(in srgb, var(--semantic-warning-soft) 68%, var(--color-panel));
+}
+
+.dashboard-viewer-placement.is-degraded {
+  border-color: var(--semantic-warning-border);
+  background: color-mix(in srgb, var(--semantic-warning-soft) 34%, var(--color-panel));
+}
+
+.dashboard-composition-tile:is(
+    .placement-state--tombstoned,
+    .placement-state--owner-tombstoned,
+    .placement-state--owner-data-destroyed,
+    .placement-state--missing
+  ) {
+  border-color: var(--semantic-danger-border);
+  background: color-mix(in srgb, var(--semantic-danger-soft) 64%, var(--color-panel));
 }
 
 .route-panel.dashboard-editor {
@@ -845,6 +851,70 @@
 
 .sheet-panel.dashboard-placement-sheet {
   width: min(30rem, 100vw);
+}
+
+.sheet-panel.dashboard-placement-issue-sheet {
+  width: min(30rem, 100vw);
+}
+
+.dashboard-placement-issue-sheet__body {
+  display: grid;
+  justify-items: start;
+  gap: 1rem;
+  min-height: 100%;
+}
+
+.dashboard-placement-issue-sheet__icon {
+  display: grid;
+  width: 6rem;
+  height: 6rem;
+  place-items: center;
+  justify-self: center;
+  border: 1px solid var(--semantic-warning-border);
+  border-radius: 999px;
+  background: var(--semantic-warning-soft);
+  color: var(--semantic-warning);
+}
+
+.dashboard-placement-issue-sheet__icon svg {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.dashboard-placement-issue-sheet__body > p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.dashboard-placement-issue-sheet__containment {
+  color: var(--color-muted);
+  font-size: 0.86rem;
+}
+
+.dashboard-placement-issue-sheet__retry {
+  width: 100%;
+  margin-top: auto;
+}
+
+.module-transition-binding-note {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--semantic-warning-border);
+  border-radius: var(--radius);
+  background: var(--semantic-warning-soft);
+  padding: 0.75rem;
+}
+
+.module-transition-binding-note p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.module-dashboard-diagnostics {
+  display: grid;
+  gap: 1rem;
 }
 
 .dashboard-components-sheet .dashboard-component-list {
@@ -1086,6 +1156,16 @@
 .dashboard-composition-tile__symbol svg {
   width: clamp(1.65rem, 3vw, 3.2rem);
   height: clamp(1.65rem, 3vw, 3.2rem);
+}
+
+.dashboard-composition-tile.is-unavailable .dashboard-composition-tile__symbol {
+  color: var(--semantic-warning);
+  opacity: 1;
+}
+
+.dashboard-composition-tile.is-unavailable .dashboard-composition-tile__symbol svg {
+  width: clamp(2.5rem, 5vw, 4.75rem);
+  height: clamp(2.5rem, 5vw, 4.75rem);
 }
 
 .dashboard-composition-tile > footer {
@@ -1536,6 +1616,46 @@
   text-align: center;
 }
 
+.dashboard-viewer__containment-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--semantic-warning-border);
+  border-radius: var(--radius);
+  background: var(--semantic-warning-soft);
+  padding: 0.8rem 1rem;
+}
+
+.dashboard-viewer__containment-note div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.dashboard-viewer__containment-note p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.dashboard-placement-state-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-bottom: 1px solid var(--semantic-warning-border);
+  background: var(--semantic-warning-soft);
+  padding: 0.45rem 0.65rem;
+  font-size: 0.76rem;
+}
+
+.dashboard-redacted-placeholder small {
+  color: var(--color-muted);
+}
+
+.dashboard-redacted-placeholder .button {
+  margin-top: 0.45rem;
+}
+
 .dashboard-lazy-placeholder {
   border-color: var(--semantic-primary-border);
   background: var(--semantic-primary-soft);
@@ -1578,6 +1698,15 @@
 }
 
 @media (max-width: 780px) {
+  .dashboard-viewer__containment-note {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-viewer__containment-note a,
+  .dashboard-placement-issue-sheet__retry {
+    width: 100%;
+  }
   .dashboards-page:not(.dashboard-editor) {
     overflow: hidden;
     padding: 0.9rem;

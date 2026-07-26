@@ -71,6 +71,94 @@ pub enum DashboardPlacementAvailability {
     Unavailable,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DashboardPlacementResolutionState {
+    Available,
+    Restricted,
+    ProviderUnavailable,
+    Inactive,
+    Superseded,
+    Tombstoned,
+    OwnerTombstoned,
+    OwnerDataDestroyed,
+    Missing,
+    Incompatible,
+    NotEvaluated,
+}
+
+impl DashboardPlacementResolutionState {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Available => "Available",
+            Self::Restricted => "Placement unavailable",
+            Self::ProviderUnavailable => "Provider unavailable",
+            Self::Inactive => "Component inactive",
+            Self::Superseded => "Component superseded",
+            Self::Tombstoned => "Component removed",
+            Self::OwnerTombstoned => "Owner Module Instance removed",
+            Self::OwnerDataDestroyed => "Owner data destroyed",
+            Self::Missing => "Component missing",
+            Self::Incompatible => "Component incompatible",
+            Self::NotEvaluated => "Not evaluated",
+        }
+    }
+
+    pub const fn message(self) -> &'static str {
+        match self {
+            Self::Available => "This placement is available.",
+            Self::Restricted => {
+                "This placement cannot be displayed. No Component identity or lifecycle detail is available."
+            }
+            Self::ProviderUnavailable => {
+                "This placement cannot be rendered right now. The Dashboard remains available while the Components provider recovers."
+            }
+            Self::Inactive => {
+                "This exact ComponentVersion is inactive. Retain it or explicitly replace it in Placement details."
+            }
+            Self::Superseded => {
+                "This exact ComponentVersion has been superseded. Tessara will not automatically rebind the placement."
+            }
+            Self::Tombstoned => {
+                "The provider reports that this ComponentVersion was removed. Replace or remove the saved reference."
+            }
+            Self::OwnerTombstoned => {
+                "The Module Instance that owned this resource has been removed."
+            }
+            Self::OwnerDataDestroyed => {
+                "The owning Module Instance reports that its retained resource data was destroyed."
+            }
+            Self::Missing => {
+                "The authorized Components provider returned no matching ComponentVersion."
+            }
+            Self::Incompatible => {
+                "The Components provider is reachable, but it does not support the required Dashboard compatibility contract."
+            }
+            Self::NotEvaluated => "No current resolution decision is available for this placement.",
+        }
+    }
+
+    pub const fn retryable(self) -> bool {
+        matches!(self, Self::ProviderUnavailable | Self::NotEvaluated)
+    }
+
+    pub const fn css_class(self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::Restricted => "restricted",
+            Self::ProviderUnavailable => "provider-unavailable",
+            Self::Inactive => "inactive",
+            Self::Superseded => "superseded",
+            Self::Tombstoned => "tombstoned",
+            Self::OwnerTombstoned => "owner-tombstoned",
+            Self::OwnerDataDestroyed => "owner-data-destroyed",
+            Self::Missing => "missing",
+            Self::Incompatible => "incompatible",
+            Self::NotEvaluated => "not-evaluated",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DashboardPlacement {
     pub placement_id: String,
@@ -80,6 +168,8 @@ pub struct DashboardPlacement {
     pub grid_width: i32,
     pub grid_height: i32,
     pub availability: DashboardPlacementAvailability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_state: Option<DashboardPlacementResolutionState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_state: Option<DashboardPlacementConfigState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -91,6 +181,16 @@ pub struct DashboardPlacement {
 }
 
 impl DashboardPlacement {
+    pub fn effective_resolution_state(&self) -> DashboardPlacementResolutionState {
+        self.resolution_state.unwrap_or_else(|| {
+            if self.availability == DashboardPlacementAvailability::Available {
+                DashboardPlacementResolutionState::Available
+            } else {
+                DashboardPlacementResolutionState::Restricted
+            }
+        })
+    }
+
     pub fn display_title(&self) -> String {
         self.title
             .clone()

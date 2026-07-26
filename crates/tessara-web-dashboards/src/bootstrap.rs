@@ -139,6 +139,7 @@ mod tests {
                 grid_width: 6,
                 grid_height: 3,
                 availability: crate::types::DashboardPlacementAvailability::Unavailable,
+                resolution_state: Some(crate::types::DashboardPlacementResolutionState::Restricted),
                 config_state: None,
                 title: None,
                 component: None,

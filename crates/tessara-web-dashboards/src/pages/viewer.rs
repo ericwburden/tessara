@@ -19,7 +19,10 @@ use tessara_web_ui::{
     EmptyState, PageHeader,
 };
 
-use crate::types::{Dashboard, DashboardPlacement, DashboardPlacementAvailability};
+use crate::types::{
+    Dashboard, DashboardPlacement, DashboardPlacementAvailability,
+    DashboardPlacementResolutionState,
+};
 use crate::{DashboardRouteBootstrap, dashboard_route_bootstrap};
 
 use super::detail::placement_style;
@@ -468,7 +471,26 @@ pub fn DashboardViewerContent(dashboard_id: String) -> impl IntoView {
                     {if loaded.placements.is_empty() {
                         view! { <EmptyState title="Empty Dashboard" message="This Dashboard has no saved placements."/> }.into_any()
                     } else {
+                        let degraded_count = loaded.placements.iter().filter(|placement| {
+                            placement.effective_resolution_state()
+                                != DashboardPlacementResolutionState::Available
+                        }).count();
                         view! {
+                            {if degraded_count > 0 {
+                                view! {
+                                    <aside class="dashboard-viewer__containment-note" role="status">
+                                        <div>
+                                            <strong>{format!("{degraded_count} placement issue{}", if degraded_count == 1 { "" } else { "s" })}</strong>
+                                            <p>"Healthy placements remain available. Saved references and layout are unchanged."</p>
+                                        </div>
+                                        <a href="/administration/modules/tessara.dashboards#diagnostics">
+                                            "Open Dashboard diagnostics"
+                                        </a>
+                                    </aside>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
                             <div
                                 class="dashboard-saved-grid dashboard-viewer__grid"
                                 style="--dashboard-track-size: clamp(48px, 5.8vw, 80px)"
@@ -496,6 +518,8 @@ fn DashboardViewerPlacement(placement: DashboardPlacement) -> impl IntoView {
         placement.grid_height,
     );
     let available = placement.availability == DashboardPlacementAvailability::Available;
+    let resolution_state = placement.effective_resolution_state();
+    let has_issue = resolution_state != DashboardPlacementResolutionState::Available;
     let order = placement.position + 1;
     let title = if available {
         placement.display_title()
@@ -616,6 +640,7 @@ fn DashboardViewerPlacement(placement: DashboardPlacement) -> impl IntoView {
             class:dashboard-viewer-placement--chart=is_chart
             class:dashboard-viewer-placement--stat-card=is_stat_card
             class:is-unavailable=move || !available
+            class:is-degraded=has_issue
             style=style
             data-placement-id=placement_id
             data-placement-presentation=presentation
@@ -641,6 +666,18 @@ fn DashboardViewerPlacement(placement: DashboardPlacement) -> impl IntoView {
                 data-execution-active=move || active_for_data.get().to_string()
                 data-execution-busy=move || busy_for_data.get().to_string()
             >
+                {if has_issue && available {
+                    view! {
+                        <div class="dashboard-placement-state-banner" role="status">
+                            <span class="status-badge status-badge--warning">
+                                {resolution_state.label()}
+                            </span>
+                            <span>{resolution_state.message()}</span>
+                        </div>
+                    }.into_any()
+                } else {
+                    ().into_any()
+                }}
                 {if is_chart {
                     view! {
                         <h2 id=chart_title_id class="dashboard-viewer-placement__chart-title">
@@ -655,9 +692,16 @@ fn DashboardViewerPlacement(placement: DashboardPlacement) -> impl IntoView {
                     if !available {
                         view! {
                             <div class="dashboard-redacted-placeholder" role="status">
-                                <span aria-hidden="true">"◫"</span>
-                                <strong>"Unavailable placement"</strong>
-                                <p>"This Component is hidden or cannot execute. Its saved footprint is preserved."</p>
+                                <span aria-hidden="true">"⚠"</span>
+                                <span class="status-badge status-badge--warning">
+                                    {resolution_state.label()}
+                                </span>
+                                <strong>{resolution_state.label()}</strong>
+                                <p>{resolution_state.message()}</p>
+                                <small>"The saved footprint and exact reference are preserved."</small>
+                                {resolution_state.retryable().then(|| view! {
+                                    <a class="button button--secondary" href="">"Retry resolution"</a>
+                                })}
                             </div>
                         }.into_any()
                     } else if let Some(target) = target {
@@ -892,7 +936,7 @@ mod tests {
     #[cfg(feature = "ssr")]
     use crate::types::{
         Dashboard, DashboardComponentVersion, DashboardPlacement, DashboardPlacementAvailability,
-        SessionAccount,
+        DashboardPlacementResolutionState, SessionAccount,
     };
     #[cfg(feature = "ssr")]
     use leptos::prelude::*;
@@ -925,6 +969,7 @@ mod tests {
             grid_width: 6,
             grid_height: 4,
             availability: DashboardPlacementAvailability::Available,
+            resolution_state: Some(DashboardPlacementResolutionState::Available),
             config_state: None,
             title: Some(title.into()),
             component: Some(DashboardComponentVersion {
@@ -1053,6 +1098,7 @@ mod tests {
         let _ = any_spawner::Executor::init_futures_executor();
         let mut placement = component_placement("bar", "Confidential performance chart");
         placement.availability = DashboardPlacementAvailability::Unavailable;
+        placement.resolution_state = Some(DashboardPlacementResolutionState::Restricted);
         placement
             .component
             .as_mut()
@@ -1068,6 +1114,21 @@ mod tests {
         assert!(!html.contains("dashboard-viewer-placement__chart-title"));
         assert!(!html.contains("Confidential performance chart"));
         assert!(!html.contains("confidential-performance-chart"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn provider_outage_is_contained_with_authorized_copy_and_retry() {
+        let _ = any_spawner::Executor::init_futures_executor();
+        let mut placement = component_placement("table", "Program table");
+        placement.availability = DashboardPlacementAvailability::Unavailable;
+        placement.resolution_state = Some(DashboardPlacementResolutionState::ProviderUnavailable);
+        let html = Owner::new().with(|| view! { <DashboardViewerPlacement placement/> }.to_html());
+
+        assert!(html.contains("Provider unavailable"));
+        assert!(html.contains("Dashboard remains available"));
+        assert!(html.contains("Retry resolution"));
+        assert!(html.contains("exact reference are preserved"));
     }
 
     #[test]

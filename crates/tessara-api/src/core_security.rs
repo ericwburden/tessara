@@ -10,6 +10,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use tessara_module_contract::{
     AdministratorEligibilityDecisionV1, AdministratorEnrollmentClaimKindV1,
@@ -1502,8 +1503,8 @@ async fn update_module_configuration(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
     Path(instance_id): Path<Uuid>,
-    Json(input): Json<tessara_reference_scoped_records::ScopedRecordsConfigurationV1>,
-) -> ApiResult<Json<tessara_reference_scoped_records::ConfigurationValidationV1>> {
+    Json(input): Json<serde_json::Value>,
+) -> ApiResult<Json<serde_json::Value>> {
     request.require_capability("admin:all")?;
     let validation = persist_module_configuration(&state.pool, instance_id, input).await?;
     Ok(Json(validation))
@@ -1513,6 +1514,7 @@ async fn update_module_configuration(
 struct ModuleConfigurationForm {
     schema_version: u16,
     display_label: String,
+    default_page_size: Option<u16>,
 }
 
 async fn update_module_configuration_form(
@@ -1522,50 +1524,97 @@ async fn update_module_configuration_form(
     Form(input): Form<ModuleConfigurationForm>,
 ) -> ApiResult<Redirect> {
     request.require_capability("admin:all")?;
-    let validation = persist_module_configuration(
-        &state.pool,
-        instance_id,
-        tessara_reference_scoped_records::ScopedRecordsConfigurationV1 {
-            schema_version: input.schema_version,
-            display_label: input.display_label,
-        },
-    )
-    .await?;
-    if !validation.valid {
+    let definition: String =
+        sqlx::query_scalar("SELECT definition_id FROM module_instances WHERE id=$1")
+            .bind(instance_id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
+    let payload = if definition == "tessara.dashboards" {
+        json!({
+            "schema_version": input.schema_version,
+            "display_label": input.display_label,
+            "default_page_size": input.default_page_size.unwrap_or(25)
+        })
+    } else {
+        json!({
+            "schema_version": input.schema_version,
+            "display_label": input.display_label
+        })
+    };
+    let validation = persist_module_configuration(&state.pool, instance_id, payload).await?;
+    if validation.get("valid").and_then(Value::as_bool) != Some(true) {
         return Err(ApiError::BadRequest(
             validation
-                .findings
-                .first()
-                .map(|finding| finding.message)
+                .get("findings")
+                .and_then(Value::as_array)
+                .and_then(|findings| findings.first())
+                .and_then(|finding| finding.get("message"))
+                .and_then(Value::as_str)
                 .unwrap_or("Module configuration is invalid.")
                 .into(),
         ));
     }
-    Ok(Redirect::to(
-        "/administration/modules/tessara.reference.scoped-records#configuration",
-    ))
+    Ok(Redirect::to(&format!(
+        "/administration/modules/{definition}#configuration"
+    )))
 }
 
 async fn persist_module_configuration(
     pool: &PgPool,
     instance_id: Uuid,
-    input: tessara_reference_scoped_records::ScopedRecordsConfigurationV1,
-) -> ApiResult<tessara_reference_scoped_records::ConfigurationValidationV1> {
+    input: serde_json::Value,
+) -> ApiResult<serde_json::Value> {
     let definition: String =
         sqlx::query_scalar("SELECT definition_id FROM module_instances WHERE id=$1")
             .bind(instance_id)
             .fetch_optional(pool)
             .await?
             .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
-    if definition != tessara_reference_scoped_records::MODULE_DEFINITION_ID {
+    let (base_url, validation) = if definition
+        == tessara_reference_scoped_records::MODULE_DEFINITION_ID
+    {
+        let typed: tessara_reference_scoped_records::ScopedRecordsConfigurationV1 =
+            serde_json::from_value(input)
+                .map_err(|_| ApiError::BadRequest("invalid module configuration".into()))?;
+        (
+            scoped_records_url(),
+            serde_json::to_value(tessara_reference_scoped_records::validate_configuration(
+                &typed,
+            ))
+            .map_err(|error| ApiError::Internal(error.into()))?,
+        )
+    } else if definition == "tessara.dashboards" {
+        let validation = reqwest::Client::new()
+            .post(format!(
+                "{}/api/configuration/validate",
+                dashboard_module_url()
+            ))
+            .json(&input)
+            .send()
+            .await
+            .map_err(|_| {
+                ApiError::ServiceUnavailable("Dashboard configuration validator unavailable".into())
+            })?
+            .error_for_status()
+            .map_err(|_| {
+                ApiError::ServiceUnavailable("Dashboard configuration validator unavailable".into())
+            })?
+            .json()
+            .await
+            .map_err(|error| ApiError::Internal(error.into()))?;
+        (dashboard_module_url(), validation)
+    } else {
         return Err(ApiError::BadRequest(
-            "the module does not expose the Scoped Records configuration contract".into(),
+            "the module does not expose a supported configuration contract".into(),
         ));
-    }
-    let validation = tessara_reference_scoped_records::validate_configuration(&input);
-    if let Some(normalized) = &validation.normalized {
+    };
+    if let Some(normalized) = validation
+        .get("normalized")
+        .filter(|_| validation.get("valid").and_then(Value::as_bool) == Some(true))
+    {
         let applied = reqwest::Client::new()
-            .put(format!("{}/api/configuration", scoped_records_url()))
+            .put(format!("{base_url}/api/configuration"))
             .header(
                 "x-tessara-module-control-key",
                 std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
@@ -1574,16 +1623,18 @@ async fn persist_module_configuration(
             .json(normalized)
             .send()
             .await
-            .map_err(|_| ApiError::NotFound("module configuration route unavailable".into()))?
+            .map_err(|_| {
+                ApiError::ServiceUnavailable("module configuration route unavailable".into())
+            })?
             .error_for_status()
-            .map_err(|_| ApiError::NotFound("module configuration route unavailable".into()))?
+            .map_err(|_| {
+                ApiError::ServiceUnavailable("module configuration route unavailable".into())
+            })?
             .json::<serde_json::Value>()
             .await
             .map_err(|error| ApiError::Internal(error.into()))?;
-        let expected_normalized =
-            serde_json::to_value(normalized).map_err(|error| ApiError::Internal(error.into()))?;
         if applied.get("valid").and_then(serde_json::Value::as_bool) != Some(true)
-            || applied.get("normalized") != Some(&expected_normalized)
+            || applied.get("normalized") != Some(normalized)
         {
             return Err(ApiError::BadRequest(
                 "the module rejected its normalized configuration".into(),
@@ -1594,11 +1645,18 @@ async fn persist_module_configuration(
              WHERE id=$1",
         )
         .bind(instance_id)
-        .bind(serde_json::to_value(normalized).map_err(|error| ApiError::Internal(error.into()))?)
+        .bind(normalized)
         .execute(pool)
         .await?;
     }
     Ok(validation)
+}
+
+fn dashboard_module_url() -> String {
+    std::env::var("TESSARA_DASHBOARD_MODULE_URL")
+        .unwrap_or_else(|_| "http://dashboards:8091".into())
+        .trim_end_matches('/')
+        .to_string()
 }
 
 #[derive(Clone, Deserialize)]

@@ -21,6 +21,6 @@ pub use pages::{
 pub use types::{
     Dashboard, DashboardComponentVersion, DashboardComponentVersionOption, DashboardComposition,
     DashboardPlacement, DashboardPlacementAvailability, DashboardPlacementConfigState,
-    DashboardPlacementIdMapping, DashboardPlacementOperation, DashboardSummary,
-    DashboardVisibilityNode, SessionAccount, VisibilityNodeOption,
+    DashboardPlacementIdMapping, DashboardPlacementOperation, DashboardPlacementResolutionState,
+    DashboardSummary, DashboardVisibilityNode, SessionAccount, VisibilityNodeOption,
 };

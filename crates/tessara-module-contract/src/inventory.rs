@@ -4,7 +4,10 @@
 //! the versioned HTTP object is declared once here so they cannot silently
 //! diverge.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -49,6 +52,8 @@ pub struct IndependentConfigurationV1 {
     pub valid: bool,
     pub display_label: String,
     pub retention_mode: String,
+    #[serde(default)]
+    pub details: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -57,4 +62,6 @@ pub struct IndependentDiagnosticsV1 {
     pub readiness_path: String,
     pub liveness_path: String,
     pub public_route: String,
+    #[serde(default)]
+    pub details: BTreeMap<String, Value>,
 }

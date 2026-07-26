@@ -617,7 +617,7 @@ pub(super) fn independent_entry_value(
         .unwrap_or_else(|| ("Not reported".into(), "Not reported".into()));
     serde_json::to_value(IndependentModuleEntryV1::IndependentlyDeployed {
         definition: IndependentDefinitionV1 {
-            id: module.definition_id,
+            id: module.definition_id.clone(),
             display_name: module.display_name.clone(),
             description:
                 "Independently deployed module observed from the current deployment receipt."
@@ -660,11 +660,60 @@ pub(super) fn independent_entry_value(
                 .and_then(Value::as_str)
                 .map(str::to_owned)
                 .unwrap_or_else(|| "Not reported".into()),
+            details: module
+                .configuration
+                .as_object()
+                .map(|details| {
+                    details
+                        .iter()
+                        .filter(|(key, _)| {
+                            !matches!(key.as_str(), "display_label" | "retention_mode")
+                        })
+                        .map(|(key, value)| (key.clone(), value.clone()))
+                        .collect()
+                })
+                .unwrap_or_default(),
         },
         diagnostics: IndependentDiagnosticsV1 {
             readiness_path,
             liveness_path,
             public_route: module.route_prefix.unwrap_or_else(|| "Not reported".into()),
+            details: if module.definition_id == "tessara.dashboards" {
+                [
+                    (
+                        "database".into(),
+                        Value::String("dashboard_module_instance".into()),
+                    ),
+                    (
+                        "authorization_exchange".into(),
+                        Value::String("core_signed_action_grants".into()),
+                    ),
+                    (
+                        "components_binding".into(),
+                        Value::String("tessara.dashboards.component-version".into()),
+                    ),
+                    (
+                        "components_contract".into(),
+                        Value::String("tessara.components.component-version".into()),
+                    ),
+                    (
+                        "components_actions".into(),
+                        serde_json::json!(["resolve_metadata", "render"]),
+                    ),
+                    (
+                        "components_provider".into(),
+                        Value::String("core_installation".into()),
+                    ),
+                    (
+                        "migration_target".into(),
+                        Value::String("Sprint 8A".into()),
+                    ),
+                ]
+                .into_iter()
+                .collect()
+            } else {
+                Default::default()
+            },
         },
         manifest,
         findings: Vec::new(),

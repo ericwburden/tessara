@@ -7,7 +7,7 @@ use std::{
 
 use icons::{
     ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChartBar, ChartLine, ChartPie, Donut, GripVertical,
-    SquareActivity, Table2,
+    SquareActivity, Table2, TriangleAlert,
 };
 use leptos::{ev, prelude::*};
 use tessara_core::{resolve_move_request, resolve_resize_request};
@@ -39,8 +39,8 @@ use crate::types::{
     DashboardComponentVersion, DashboardComponentVersionOption, DashboardComposition,
     DashboardCompositionCommand, DashboardMetadataRequest, DashboardPlacement,
     DashboardPlacementAvailability, DashboardPlacementConfigState, DashboardPlacementGeometry,
-    DashboardPlacementOperation, EditorPlacement, ReconcileDashboardCompositionRequest,
-    SessionAccount, VisibilityNodeOption,
+    DashboardPlacementOperation, DashboardPlacementResolutionState, EditorPlacement,
+    ReconcileDashboardCompositionRequest, SessionAccount, VisibilityNodeOption,
 };
 use crate::{DashboardRouteBootstrap, dashboard_route_bootstrap};
 
@@ -104,6 +104,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
     let preview_open = RwSignal::new(false);
     let components_open = RwSignal::new(false);
     let inspector_open = RwSignal::new(false);
+    let issue_placement = RwSignal::new(None::<DashboardPlacement>);
     let confirmed_navigation = RwSignal::new(false);
     let next_client_key = RwSignal::new(1_u64);
     let save_dashboard_id = StoredValue::new(dashboard_id.clone());
@@ -147,6 +148,8 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                 let detail_href = format!("/dashboards/{}", loaded.dashboard.id);
                 let viewer_href = format!("/dashboards/{}/view", loaded.dashboard.id);
                 let metadata_dashboard_id = loaded.dashboard.id.clone();
+                let issue_retry_href =
+                    StoredValue::new(format!("/dashboards/{}/edit", loaded.dashboard.id));
                 let current_account = account.get();
                 let can_read_dashboard = editor_reader_actions_visible(current_account.as_ref());
                 view! {
@@ -156,6 +159,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                 preview_open.get()
                                     || components_open.get()
                                     || inspector_open.get()
+                                    || issue_placement.get().is_some()
                                     || operation.get().is_busy()
                             }
                             aria-busy=move || operation.get().is_busy().to_string()
@@ -302,7 +306,14 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                             inert=move || operation.get().is_busy()
                             aria-busy=move || operation.get().is_busy().to_string()
                         >
-                            <CompositionCanvas placements selected dirty save_error announcement/>
+                            <CompositionCanvas
+                                placements
+                                selected
+                                issue_placement
+                                dirty
+                                save_error
+                                announcement
+                            />
                         </div>
 
                         <SideSheet
@@ -325,6 +336,40 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                 announcement
                                 next_client_key
                             />
+                        </SideSheet>
+
+                        <SideSheet
+                            id="dashboard-placement-issue"
+                            title="Placement issue"
+                            description="Authorized diagnostic detail for the selected placement."
+                            eyebrow="Placement issue"
+                            side=SideSheetSide::End
+                            open=Signal::derive(move || issue_placement.get().is_some())
+                            on_close=Callback::new(move |_| issue_placement.set(None))
+                            close_label="Close placement issue"
+                            class="dashboard-placement-issue-sheet"
+                        >
+                            {move || issue_placement.get().map(|placement| {
+                                let state = placement.effective_resolution_state();
+                                let retry_href = issue_retry_href.get_value();
+                                view! {
+                                    <div class="dashboard-placement-issue-sheet__body">
+                                        <div class="dashboard-placement-issue-sheet__icon" aria-hidden="true">
+                                            <TriangleAlert/>
+                                        </div>
+                                        <span class="status-badge status-badge--warning">{state.label()}</span>
+                                        <p>{state.message()}</p>
+                                        <p class="dashboard-placement-issue-sheet__containment">
+                                            "The saved footprint and exact ComponentVersion reference are unchanged."
+                                        </p>
+                                        {state.retryable().then(|| view! {
+                                            <a class="button dashboard-placement-issue-sheet__retry" href=retry_href>
+                                                "Retry resolution"
+                                            </a>
+                                        })}
+                                    </div>
+                                }
+                            })}
                         </SideSheet>
 
                         <SideSheet
@@ -466,6 +511,7 @@ fn ComponentPalette(
 fn CompositionCanvas(
     placements: RwSignal<Vec<EditorPlacement>>,
     selected: RwSignal<Option<String>>,
+    issue_placement: RwSignal<Option<DashboardPlacement>>,
     dirty: RwSignal<bool>,
     save_error: RwSignal<Option<String>>,
     announcement: RwSignal<String>,
@@ -604,11 +650,13 @@ fn CompositionCanvas(
                         let may_move = editor_can_move(&editor);
                         let may_resize = editor_can_resize(&editor);
                         let placement = editor.placement;
+                        let issue_target = placement.clone();
                         let title = placement.display_title();
                         let subtitle = placement.component.as_ref().map(|component| {
                             format!("{} · {}", kind_label(&component.component_type), version_label(component.version_number, &component.version_label))
                         }).unwrap_or_else(|| "Redacted placement".into());
-                        let unavailable = placement.availability == DashboardPlacementAvailability::Unavailable;
+                        let resolution_state = placement.effective_resolution_state();
+                        let has_issue = resolution_state != DashboardPlacementResolutionState::Available;
                         let rect = GridRect::new(
                             placement.grid_row,
                             placement.grid_column,
@@ -617,8 +665,11 @@ fn CompositionCanvas(
                         );
                         let tile_rect = Signal::derive(move || Some(rect));
                         let tile_class = Signal::derive(move || {
-                            if unavailable {
-                                "dashboard-composition-tile is-unavailable".to_string()
+                            if has_issue {
+                                format!(
+                                    "dashboard-composition-tile is-unavailable placement-state--{}",
+                                    resolution_state.css_class()
+                                )
                             } else {
                                 "dashboard-composition-tile".to_string()
                             }
@@ -670,11 +721,25 @@ fn CompositionCanvas(
                                     id=select_dom_id
                                     class="dashboard-composition-tile__select"
                                     type="button"
-                                    aria-label=format!("Select placement {}", placement.position + 1)
+                                    aria-label=if has_issue {
+                                        format!("Open issue details for placement {}", placement.position + 1)
+                                    } else {
+                                        format!("Select placement {}", placement.position + 1)
+                                    }
                                     on:focus=move |_| selected.set(Some(focus_key.clone()))
+                                    on:click=move |_| {
+                                        selected.set(Some(key.clone()));
+                                        if has_issue {
+                                            issue_placement.set(Some(issue_target.clone()));
+                                        }
+                                    }
                                 >
                                 <span class="dashboard-composition-tile__symbol" aria-hidden="true">
-                                    {kind_icon(placement.kind_label())}
+                                    {if has_issue {
+                                        view! { <TriangleAlert/> }.into_any()
+                                    } else {
+                                        kind_icon(placement.kind_label()).into_any()
+                                    }}
                                 </span>
                                 </button>
                                 <footer>{format!("{} × {}", placement.grid_width, placement.grid_height)}</footer>
@@ -1113,6 +1178,7 @@ fn add_component(
         grid_width: rect.width,
         grid_height: rect.height,
         availability: DashboardPlacementAvailability::Available,
+        resolution_state: Some(DashboardPlacementResolutionState::Available),
         config_state: Some(DashboardPlacementConfigState::Valid),
         title: None,
         component: Some(option_to_component(&option)),
@@ -1897,15 +1963,17 @@ fn kind_icon(kind: &str) -> AnyView {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_reconcile_request, component_version_href, dashboard_placement_height_limit,
-        editor_can_resize, editor_reader_actions_visible, first_available_rect,
-        placement_select_dom_id, selection_after_removal,
+        CompositionCanvas, build_reconcile_request, component_version_href,
+        dashboard_placement_height_limit, editor_can_resize, editor_reader_actions_visible,
+        first_available_rect, placement_select_dom_id, selection_after_removal,
     };
     use crate::types::{
         DashboardComponentVersion, DashboardPlacement, DashboardPlacementAvailability,
-        DashboardPlacementConfigState, DashboardPlacementOperation, EditorPlacement,
-        SessionAccount,
+        DashboardPlacementConfigState, DashboardPlacementOperation,
+        DashboardPlacementResolutionState, EditorPlacement, SessionAccount,
     };
+    #[cfg(feature = "ssr")]
+    use leptos::prelude::*;
     use tessara_dashboards::GridSize;
 
     fn placement(id: &str, row: i32, column: i32, width: i32, height: i32) -> EditorPlacement {
@@ -1917,6 +1985,7 @@ mod tests {
             grid_width: width,
             grid_height: height,
             availability: DashboardPlacementAvailability::Available,
+            resolution_state: Some(DashboardPlacementResolutionState::Available),
             config_state: Some(DashboardPlacementConfigState::Valid),
             title: None,
             component: Some(DashboardComponentVersion {
@@ -2019,5 +2088,33 @@ mod tests {
             placement_select_dom_id("placement:42"),
             "dashboard-placement-select-placement-42"
         );
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn degraded_editor_tile_uses_warning_icon_without_inline_diagnostic_copy() {
+        let _ = any_spawner::Executor::init_futures_executor();
+        let mut degraded = placement("one", 1, 1, 6, 4);
+        degraded.placement.availability = DashboardPlacementAvailability::Unavailable;
+        degraded.placement.resolution_state =
+            Some(DashboardPlacementResolutionState::ProviderUnavailable);
+        let html = Owner::new().with(|| {
+            view! {
+                <CompositionCanvas
+                    placements=RwSignal::new(vec![degraded])
+                    selected=RwSignal::new(None)
+                    issue_placement=RwSignal::new(None)
+                    dirty=RwSignal::new(false)
+                    save_error=RwSignal::new(None)
+                    announcement=RwSignal::new(String::new())
+                />
+            }
+            .to_html()
+        });
+
+        assert!(html.contains("placement-state--provider-unavailable"));
+        assert!(html.contains("Open issue details for placement 1"));
+        assert!(!html.contains("This placement cannot be rendered right now"));
+        assert!(!html.contains("Retry resolution"));
     }
 }
