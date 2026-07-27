@@ -29,12 +29,17 @@ project direction.
   Dashboard, deployment-control, and Scoped Records images carry matching
   clean source labels; Dashboard database credentials fail against every
   non-Dashboard database.
-- Validation completed: workspace formatting/clippy and Rust suites,
-  fresh smoke and UAT, all 60 canonical Playwright tests, desktop/mobile
+- Validation completed: workspace formatting/clippy and Rust suites, the full
+  PowerShell 7 validation wrapper (including release nondisclosure timing),
+  fresh smoke and UAT, all 61 canonical Playwright tests with one worker and
+  zero retries/skips/failures, desktop/mobile
   degraded-state browser review, retry, Dashboard-process outage containment,
   and post-restart data preservation. Durable proof is retained under
   `artifacts/sprint-6c-closeout/`; command-level details are in
   `docs/sprints/sprint-6c-verification.md`.
+- The final source-exact deployment and retained machine evidence are bound to
+  implementation commit `d56bc817332ce5fb8f75592bb8fa739fb303b215`
+  and source tree `e7d590567b699fd276c703cea0c1be26b7e93b50`.
 - Next Sprint: Sprint 6D - Application Blueprint And Composition Automation
   Slice.
 
@@ -45,9 +50,9 @@ project direction.
 - Role: `admin`
 - Paths:
   - `http://localhost:8080/dashboards`
-  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205`
-  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205/edit`
-  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205/view`
+  - `http://localhost:8080/dashboards/26e397d0-e869-48cf-87a4-57816b167978`
+  - `http://localhost:8080/dashboards/26e397d0-e869-48cf-87a4-57816b167978/edit`
+  - `http://localhost:8080/dashboards/26e397d0-e869-48cf-87a4-57816b167978/view`
 - Steps:
   1. Sign in as `admin@tessara.local`.
   2. Open **Dashboards**, then open **Demo Operations Dashboard**.
@@ -122,7 +127,7 @@ project direction.
 
 - Role: `admin`
 - Paths:
-  - `http://localhost:8080/dashboards/7e0de7b5-ce1c-4338-9d5b-66a27ba14205/edit`
+  - `http://localhost:8080/dashboards/26e397d0-e869-48cf-87a4-57816b167978/edit`
 - Steps:
   1. Recreate Core with
      `TESSARA_COMPONENTS_PROVIDER_STATE=unavailable`.
@@ -213,8 +218,8 @@ project direction.
    distinguishes every required state:
    - Manual: **Scoped Access And Nondisclosure** and **Components Provider
      Degradation**.
-   - Automated: permissions Playwright cases plus the nine-state matrix in
-     `browser-outage-responsive-fresh.json`.
+   - Automated: permissions Playwright cases plus the ten-state matrix in
+     `artifacts/sprint-6c-closeout/degraded-states-fresh.json`.
 7. Sprint 5A directory/create/detail/editor/viewer behavior is preserved:
    - Manual: **Independent Dashboard Authoring And Viewing**.
    - Automated: smoke, UAT, and all Dashboard Playwright cases.
@@ -237,7 +242,7 @@ project direction.
       walkthrough.
     - Automated: `docs/sprints/sprint-6c-verification.md` and every artifact
       under `artifacts/sprint-6c-closeout/`, all bound to implementation and
-      evidence commit `cc7e44fbcead3016b7556eab6e7d9370e11a7999`.
+      evidence commit `d56bc817332ce5fb8f75592bb8fa739fb303b215`.
 
 ## 2026-07-25 - Sprint 6C Kickoff
 

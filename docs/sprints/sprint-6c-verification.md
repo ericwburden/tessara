@@ -11,6 +11,9 @@ retained under `artifacts/sprint-6c-closeout/`.
 - Deployment profile: `deploy/sprint-6c/compose.yaml`.
 - The retained stack uses one clean commit/tree identity across Core,
   Dashboard, installation control, and Scoped Records release images.
+- Exact deployed implementation/evidence commit:
+  `d56bc817332ce5fb8f75592bb8fa739fb303b215`; source tree:
+  `e7d590567b699fd276c703cea0c1be26b7e93b50`.
 - `scripts/bootstrap-sprint-6c-deployment.ps1` produced deployment receipt
   revision 1. Two subsequent invocations returned the existing revision
   without mutation.
@@ -27,7 +30,12 @@ copied into this document so the retained machine record remains authoritative.
 
 - `cargo fmt --all -- --check`: passed.
 - `cargo clippy --workspace --all-targets --all-features`: passed with only
-  existing advisory warnings.
+  two existing advisory `too_many_arguments` warnings in installation control
+  and the Scoped Records integration fixture.
+- `scripts/validate.ps1`: passed in full under PowerShell 7, including native,
+  SSR/hydrate, contract, API, web, database, fresh-baseline, workflow, and
+  release nondisclosure timing gates. Windows PowerShell 5.1 is not a supported
+  runner for this script because it lacks `[IO.Path]::GetRelativePath`.
 - `cargo test --workspace --no-fail-fast`: passed against disposable Core,
   enrollment, deployment-control, Scoped Records, and fresh Sprint 6C
   databases. Two obsolete Core-owned Dashboard demo fixtures remain explicitly
@@ -49,9 +57,14 @@ copied into this document so the retained machine record remains authoritative.
   fail closed.
 - Fresh smoke: passed and retained as `smoke-fresh.json`.
 - Fresh UAT: passed and retained as `uat-fresh.json`.
-- Canonical Playwright acceptance: all 60 tests passed with one worker, zero
+- Canonical Playwright acceptance: all 61 tests passed with one worker, zero
   retries, zero skips, and zero failures; proof is retained as
   `playwright-acceptance-fresh.json`.
+- The closeout rerun corrected the fresh seed script's single-item JSON-array
+  normalization and bound the previously implemented independent-module
+  control scenario into the tracked acceptance manifest. The outage guard now
+  bounds distinct console/response identities while tolerating the browser's
+  characterized duplicate hydration request.
 
 ## Browser And Outage Verification
 
