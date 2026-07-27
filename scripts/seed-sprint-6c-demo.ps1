@@ -1,8 +1,39 @@
 [CmdletBinding()]
-param([string]$BaseUrl = "http://127.0.0.1:8080")
+param(
+    [string]$BaseUrl = "http://127.0.0.1:8080",
+    [switch]$SelfTest
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function ConvertTo-Sprint6CArray {
+    param([AllowNull()][object]$Value)
+
+    $items = @()
+    foreach ($item in $Value) {
+        $items += $item
+    }
+    return $items
+}
+
+if ($SelfTest) {
+    if (@(ConvertTo-Sprint6CArray -Value @()).Count -ne 0) {
+        throw "Empty JSON arrays must remain empty."
+    }
+    $fixture = [object[]]@(
+        [pscustomobject]@{ id = "first" },
+        [pscustomobject]@{ id = "second" }
+    )
+    $normalized = @(ConvertTo-Sprint6CArray -Value $fixture)
+    if ($normalized.Count -ne 2 -or
+        $normalized[0].id -cne "first" -or
+        $normalized[1].id -cne "second") {
+        throw "Non-empty JSON arrays must retain their item boundaries."
+    }
+    Write-Host "Sprint 6C seed JSON-array normalization self-test passed."
+    exit 0
+}
 
 $login = $null
 for ($attempt = 1; $attempt -le 30 -and $null -eq $login; $attempt++) {
@@ -24,12 +55,14 @@ $headers = @{
     Authorization = "Bearer $($login.token)"
 }
 
-$components = @(Invoke-RestMethod -Uri "$BaseUrl/api/components" -Headers $headers)
+$componentResponse = Invoke-RestMethod -Uri "$BaseUrl/api/components" -Headers $headers
+$components = @(ConvertTo-Sprint6CArray -Value $componentResponse)
 if ($components.Count -eq 0) {
     Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/demo/seed" -Headers $headers | Out-Null
 }
 
-$dashboards = @(Invoke-RestMethod -Uri "$BaseUrl/api/dashboards" -Headers $headers)
+$dashboardResponse = Invoke-RestMethod -Uri "$BaseUrl/api/dashboards" -Headers $headers
+$dashboards = @(ConvertTo-Sprint6CArray -Value $dashboardResponse)
 $dashboard = $dashboards |
     Where-Object {
         $null -ne $_ -and
@@ -38,9 +71,9 @@ $dashboard = $dashboards |
     } |
     Select-Object -First 1
 if ($null -eq $dashboard) {
-    $visibility = @(
-        Invoke-RestMethod -Uri "$BaseUrl/api/admin/dashboards/visibility-nodes" -Headers $headers
-    )
+    $visibilityResponse = Invoke-RestMethod `
+        -Uri "$BaseUrl/api/admin/dashboards/visibility-nodes" -Headers $headers
+    $visibility = @(ConvertTo-Sprint6CArray -Value $visibilityResponse)
     if ($visibility.Count -eq 0) {
         throw "Sprint 6C demo seed requires projected Organization nodes."
     }
