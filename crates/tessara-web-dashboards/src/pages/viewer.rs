@@ -1118,17 +1118,34 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     #[test]
-    fn provider_outage_is_contained_with_authorized_copy_and_retry() {
+    fn every_authorized_degraded_state_has_distinct_contained_copy() {
         let _ = any_spawner::Executor::init_futures_executor();
-        let mut placement = component_placement("table", "Program table");
-        placement.availability = DashboardPlacementAvailability::Unavailable;
-        placement.resolution_state = Some(DashboardPlacementResolutionState::ProviderUnavailable);
-        let html = Owner::new().with(|| view! { <DashboardViewerPlacement placement/> }.to_html());
+        for state in [
+            DashboardPlacementResolutionState::ProviderUnavailable,
+            DashboardPlacementResolutionState::Inactive,
+            DashboardPlacementResolutionState::Superseded,
+            DashboardPlacementResolutionState::Tombstoned,
+            DashboardPlacementResolutionState::OwnerTombstoned,
+            DashboardPlacementResolutionState::OwnerDataDestroyed,
+            DashboardPlacementResolutionState::Missing,
+            DashboardPlacementResolutionState::Incompatible,
+            DashboardPlacementResolutionState::NotEvaluated,
+        ] {
+            let mut placement = component_placement("table", "Program table");
+            placement.availability = DashboardPlacementAvailability::Unavailable;
+            placement.resolution_state = Some(state);
+            let html =
+                Owner::new().with(|| view! { <DashboardViewerPlacement placement/> }.to_html());
 
-        assert!(html.contains("Provider unavailable"));
-        assert!(html.contains("Dashboard remains available"));
-        assert!(html.contains("Retry resolution"));
-        assert!(html.contains("exact reference are preserved"));
+            assert!(html.contains(state.label()), "{state:?}: {html}");
+            assert!(html.contains(state.message()), "{state:?}: {html}");
+            assert_eq!(
+                html.contains("Retry resolution"),
+                state.retryable(),
+                "{state:?}: {html}"
+            );
+            assert!(html.contains("exact reference are preserved"));
+        }
     }
 
     #[test]

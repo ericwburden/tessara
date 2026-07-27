@@ -2109,33 +2109,48 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     #[test]
-    fn degraded_editor_tile_uses_warning_icon_without_inline_diagnostic_copy() {
+    fn every_degraded_editor_tile_uses_warning_icon_without_inline_diagnostic_copy() {
         let _ = any_spawner::Executor::init_futures_executor();
-        let mut degraded = placement("one", 1, 1, 6, 4);
-        degraded.placement.availability = DashboardPlacementAvailability::Unavailable;
-        degraded.placement.resolution_state =
-            Some(DashboardPlacementResolutionState::ProviderUnavailable);
-        degraded.placement.title = Some("Partner Profile".into());
-        degraded.placement.component = None;
-        let html = Owner::new().with(|| {
-            view! {
-                <CompositionCanvas
-                    placements=RwSignal::new(vec![degraded])
-                    selected=RwSignal::new(None)
-                    issue_placement=RwSignal::new(None)
-                    dirty=RwSignal::new(false)
-                    save_error=RwSignal::new(None)
-                    announcement=RwSignal::new(String::new())
-                />
-            }
-            .to_html()
-        });
+        for state in [
+            DashboardPlacementResolutionState::Restricted,
+            DashboardPlacementResolutionState::ProviderUnavailable,
+            DashboardPlacementResolutionState::Inactive,
+            DashboardPlacementResolutionState::Superseded,
+            DashboardPlacementResolutionState::Tombstoned,
+            DashboardPlacementResolutionState::OwnerTombstoned,
+            DashboardPlacementResolutionState::OwnerDataDestroyed,
+            DashboardPlacementResolutionState::Missing,
+            DashboardPlacementResolutionState::Incompatible,
+            DashboardPlacementResolutionState::NotEvaluated,
+        ] {
+            let mut degraded = placement("one", 1, 1, 6, 4);
+            degraded.placement.availability = DashboardPlacementAvailability::Unavailable;
+            degraded.placement.resolution_state = Some(state);
+            degraded.placement.title = Some("Partner Profile".into());
+            degraded.placement.component = None;
+            let html = Owner::new().with(|| {
+                view! {
+                    <CompositionCanvas
+                        placements=RwSignal::new(vec![degraded])
+                        selected=RwSignal::new(None)
+                        issue_placement=RwSignal::new(None)
+                        dirty=RwSignal::new(false)
+                        save_error=RwSignal::new(None)
+                        announcement=RwSignal::new(String::new())
+                    />
+                }
+                .to_html()
+            });
 
-        assert!(html.contains("placement-state--provider-unavailable"));
-        assert!(html.contains("Open issue details for placement 1"));
-        assert!(html.contains("Partner Profile"));
-        assert!(!html.contains("Redacted placement"));
-        assert!(!html.contains("This placement cannot be rendered right now"));
-        assert!(!html.contains("Retry resolution"));
+            assert!(
+                html.contains(&format!("placement-state--{}", state.css_class())),
+                "{state:?}: {html}"
+            );
+            assert!(html.contains("Open issue details for placement 1"));
+            assert!(html.contains("Partner Profile"));
+            assert!(!html.contains("Redacted placement"));
+            assert!(!html.contains(state.message()));
+            assert!(!html.contains("Retry resolution"));
+        }
     }
 }

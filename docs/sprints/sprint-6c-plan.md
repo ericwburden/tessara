@@ -199,6 +199,9 @@ Components contribution as a Module Instance.
   revision invalidation, nondisclosure, and all detailed resolution states.
 - Database-isolation tests using Dashboard runtime credentials against every
   non-Dashboard database.
+- `.\scripts\test-sprint-6c-degraded-states.ps1` to exercise the complete
+  Components provider resolution matrix while proving all nine saved
+  placement titles survive and restoring the original provider/module state.
 - `docker compose -f deploy\sprint-6c\compose.yaml config --quiet`
 - `.\scripts\bootstrap-sprint-6c-deployment.ps1` twice.
 - `.\scripts\local-launch.ps1` remains in the checklist but is expected to be

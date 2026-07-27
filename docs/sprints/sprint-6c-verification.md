@@ -35,7 +35,14 @@ copied into this document so the retained machine record remains authoritative.
   them.
 - Dashboard module/web focused tests cover idempotent composition replay,
   signed shell rendering, resolution vocabulary, title nondisclosure, and the
-  approved warning-icon-only editor tile.
+  approved warning-icon-only editor tile across every degraded resolution
+  state.
+- `scripts/test-sprint-6c-degraded-states.ps1`: passed the complete
+  `available`, provider-unavailable, incompatible, inactive, superseded,
+  resource-tombstoned, owner-tombstoned, owner-data-destroyed, missing, and
+  not-evaluated matrix. Every state returned nine consistently classified
+  placements with all saved titles retained, and cleanup restored the original
+  provider and Module Instance enablement states.
 - `scripts/verify-sprint-6c-isolation.ps1`: passed. The Dashboard runtime role
   can read its own database and cannot connect to Core, deployment-control,
   Scoped Records, or another module database; the inverse runtime checks also
