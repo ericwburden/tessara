@@ -1109,7 +1109,7 @@ mod tests {
             "definition": {"id":"tessara.reference.scoped-records","display_name":"Scoped Records","description":"Reference module"},
             "release": {"id":"00000000-0000-0000-0000-000000000002","version":"1.0.0","manifest_digest":format!("sha256:{}", "c".repeat(64)),"runtime_image":format!("sha256:{}", "d".repeat(64)),"publisher":"tessara.first_party","trust":"trusted","compatibility":"compatible"},
             "instance": {"id":"00000000-0000-0000-0000-000000000003","identity":"live","data":"retained","database_name":"tessara_module_scoped_records","installed":true,"deployed":true,"configured":true,"ready":true,"enabled":true,"healthy":true,"observed_at":"2026-07-22T18:30:00Z"},
-            "configuration": {"declared":true,"valid":true,"display_label":"Scoped Records","retention_mode":"retain_on_undeploy"},
+            "configuration": {"declared":true,"valid":true,"values":{"schema_version":1,"display_label":"Scoped Records","retention_mode":"retain_on_undeploy"}},
             "diagnostics": {"readiness_path":"/health/ready","liveness_path":"/health/live","public_route":"/reference/scoped-records"},
             "findings": []
         })).expect("independent projection parses");

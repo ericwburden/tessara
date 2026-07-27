@@ -19,7 +19,7 @@ use super::detail::ModuleDetailPeerSections;
 use super::directory::ModuleInventoryDirectory;
 use super::models::{
     ModuleDetailPresentationV1, ModuleDetailResponseV1, ModuleDetailViewModelV1,
-    ModuleInventoryEntryV1, ModuleInventoryResponseV1, ModuleManagementAccessV1,
+    ModuleInventoryEntryV1, ModuleInventoryResponseV1, ModuleManagementAccessV1, ModuleManifestV1,
     NavigationPolicyResponseV2,
 };
 use super::policy::ModuleNavigationPolicyView;
@@ -550,10 +550,163 @@ fn select_module_detail_section(
     }
 }
 
+#[derive(Clone)]
+struct ConfigurationField {
+    name: String,
+    label: String,
+    value: Value,
+    kind: String,
+    minimum: Option<String>,
+    maximum: Option<String>,
+    choices: Vec<String>,
+    required: bool,
+}
+
+fn configuration_fields(
+    manifest: Option<&ModuleManifestV1>,
+    values: &std::collections::BTreeMap<String, Value>,
+) -> Vec<ConfigurationField> {
+    let Some(properties) = manifest
+        .and_then(|manifest| manifest.configuration_schema.get("properties"))
+        .and_then(Value::as_object)
+    else {
+        return Vec::new();
+    };
+    let required = manifest
+        .and_then(|manifest| manifest.configuration_schema.get("required"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    properties
+        .iter()
+        .map(|(name, schema)| ConfigurationField {
+            name: name.clone(),
+            label: schema
+                .get("title")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    name.split('_')
+                        .enumerate()
+                        .map(|(index, word)| {
+                            if index == 0 {
+                                let mut chars = word.chars();
+                                chars
+                                    .next()
+                                    .map(|first| {
+                                        first.to_uppercase().collect::<String>() + chars.as_str()
+                                    })
+                                    .unwrap_or_default()
+                            } else {
+                                word.to_string()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                }),
+            value: values.get(name).cloned().unwrap_or(Value::Null),
+            kind: schema
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or("string")
+                .to_string(),
+            minimum: schema.get("minimum").map(value_text),
+            maximum: schema.get("maximum").map(value_text),
+            choices: schema
+                .get("enum")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(value_text)
+                .collect(),
+            required: required.contains(&name.as_str()),
+        })
+        .collect()
+}
+
+fn value_text(value: &Value) -> String {
+    match value {
+        Value::Null => "Not configured".into(),
+        Value::String(value) => value.clone(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        value => value.to_string(),
+    }
+}
+
+fn configuration_value_row(field: ConfigurationField) -> AnyView {
+    view! {
+        <div>
+            <dt>{field.label}</dt>
+            <dd>{value_text(&field.value)}</dd>
+        </div>
+    }
+    .into_any()
+}
+
+fn configuration_form_field(field: ConfigurationField) -> AnyView {
+    let id = format!("module-configuration-{}", field.name);
+    let value = value_text(&field.value);
+    let label = field.label;
+    let name = field.name;
+    if !field.choices.is_empty() {
+        let options = field
+            .choices
+            .into_iter()
+            .map(|choice| {
+                let selected = choice == value;
+                view! { <option value=choice.clone() selected=selected>{choice.clone()}</option> }
+            })
+            .collect::<Vec<_>>();
+        return view! {
+            <label class="field" for=id.clone()>
+                <span>{label}</span>
+                <select id=id.clone() name=name required=field.required>{options}</select>
+            </label>
+        }
+        .into_any();
+    }
+    if field.kind == "boolean" {
+        return view! {
+            <label class="field" for=id.clone()>
+                <span>{label}</span>
+                <select id=id.clone() name=name required=field.required>
+                    <option value="true" selected=value == "true">"Enabled"</option>
+                    <option value="false" selected=value != "true">"Disabled"</option>
+                </select>
+            </label>
+        }
+        .into_any();
+    }
+    let input_type = if matches!(field.kind.as_str(), "integer" | "number") {
+        "number"
+    } else {
+        "text"
+    };
+    view! {
+        <label class="field" for=id.clone()>
+            <span>{label}</span>
+            <input
+                id=id.clone()
+                name=name
+                type=input_type
+                value=value
+                min=field.minimum
+                max=field.maximum
+                required=field.required
+            />
+        </label>
+    }
+    .into_any()
+}
+
 fn independent_module_sections(
     entry: ModuleInventoryEntryV1,
     active_section: RwSignal<&'static str>,
 ) -> AnyView {
+    let findings = entry.findings().to_vec();
     let (definition, release, instance, configuration, diagnostics) =
         entry.independent().expect("independent module projection");
     let manifest = entry.manifest().cloned();
@@ -568,22 +721,41 @@ fn independent_module_sections(
     let configuration_action = format!("/api/modules/instances/{}/configuration/form", instance.id);
     let enablement_action = format!("/api/modules/instances/{}/enablement/form", instance.id);
     let configuration_editing = RwSignal::new(false);
-    let configured_label = configuration.display_label.clone();
-    let configured_label_for_edit = configured_label.clone();
-    let configured_label_for_cancel = configured_label.clone();
-    let configuration_draft = RwSignal::new(configured_label.clone());
-    let is_dashboard = definition.id == "tessara.dashboards";
-    let configured_page_size = configuration
-        .details
-        .get("default_page_size")
-        .and_then(Value::as_u64)
-        .unwrap_or(25) as u16;
-    let page_size_draft = RwSignal::new(configured_page_size);
-    let health_href = if is_dashboard {
-        "/administration/modules/tessara.dashboards#diagnostics"
-    } else {
-        "/reference/scoped-records/health"
-    };
+    let fields = configuration_fields(manifest.as_ref(), &configuration.values);
+    let configuration_rows = fields
+        .clone()
+        .into_iter()
+        .map(configuration_value_row)
+        .collect::<Vec<_>>();
+    let configuration_form_fields = fields
+        .into_iter()
+        .map(configuration_form_field)
+        .collect::<Vec<_>>();
+    let health_href = format!("/administration/modules/{}#diagnostics", definition.id);
+    let diagnostics_download_href = format!("/api/admin/modules/{}", definition.id);
+    let diagnostics_download_name = format!("{}-diagnostics.json", definition.id.replace('.', "-"));
+    let dependency_rows = manifest
+        .as_ref()
+        .map(|manifest| {
+            manifest
+                .dependencies
+                .iter()
+                .map(|dependency| {
+                    let contract = dependency.contract_id.to_string();
+                    let binding = dependency.binding_key.to_string();
+                    let requirement = dependency.version_requirement.to_string();
+                    view! {
+                        <div>
+                            <dt>{contract}</dt>
+                            <dd>{format!("Binding {binding} · {requirement}")}</dd>
+                        </div>
+                    }
+                    .into_any()
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let has_dependencies = !dependency_rows.is_empty();
     let serving_state = entry.serving_state();
     let manifest_sections = independent_manifest_sections(manifest.as_ref());
     view! {
@@ -627,9 +799,7 @@ fn independent_module_sections(
                                 <div><dt>"Liveness"</dt><dd class="module-detail-status-value"><span class=if instance.healthy { "status-badge is-success" } else { "status-badge is-danger" } title="Result of the module liveness probe.">{if instance.healthy { "Passing" } else { "Failing" }}</span><code>{diagnostics.liveness_path.clone()}</code></dd></div>
                                 <div><dt>"Last observation"</dt><dd><time datetime=instance.observed_at.clone()>{instance.observed_at.clone()}</time></dd></div>
                                 <div><dt>"Public route"</dt><dd><code>{diagnostics.public_route}</code></dd></div>
-                                {is_dashboard.then(|| view! {
-                                    <div><dt>"Database"</dt><dd><code>"dashboard_module_instance"</code></dd></div>
-                                })}
+                                <div><dt>"Database"</dt><dd><code>{instance.database_name.clone()}</code></dd></div>
                             </dl>
                         </section>
                     </div>
@@ -648,7 +818,6 @@ fn independent_module_sections(
                             type="button"
                             hidden=move || configuration_editing.get()
                             on:click=move |_| {
-                                configuration_draft.set(configured_label_for_edit.clone());
                                 configuration_editing.set(true);
                             }
                         >
@@ -658,12 +827,9 @@ fn independent_module_sections(
                     </div>
                     <dl class="module-detail-overview__list" hidden=move || configuration_editing.get()>
                         <div><dt>"Schema version"</dt><dd><code>"1"</code></dd></div>
-                        <div><dt>"Display label"</dt><dd>{configured_label}</dd></div>
-                        {is_dashboard.then(|| view! {
-                            <div><dt>"Default page size"</dt><dd>{configured_page_size}</dd></div>
-                        })}
+                        {configuration_rows}
                         <div><dt>"Validation"</dt><dd><span class=if configuration.valid { "status-badge is-success" } else { "status-badge is-danger" }>{if configuration.valid { "Valid" } else { "Finding" }}</span>" " {format!("Release {} · {}", release.version, if configuration.valid { "no findings" } else { "review findings" })}</dd></div>
-                        <div><dt>"Authoritative validator"</dt><dd>{if is_dashboard { "Dashboard module configuration contract" } else { "Scoped Records configuration contract" }}</dd></div>
+                        <div><dt>"Authoritative validator"</dt><dd>"Module-owned configuration contract"</dd></div>
                     </dl>
                     <form
                         class="module-configuration-form"
@@ -672,36 +838,7 @@ fn independent_module_sections(
                         hidden=move || !configuration_editing.get()
                     >
                         <input type="hidden" name="schema_version" value="1"/>
-                        <label class="field" for="module-display-label">
-                            <span>"Display label"</span>
-                            <input
-                                id="module-display-label"
-                                name="display_label"
-                                prop:value=move || configuration_draft.get()
-                                on:input=move |event| configuration_draft.set(event_target_value(&event))
-                                maxlength="80"
-                                required
-                            />
-                        </label>
-                        {is_dashboard.then(|| view! {
-                            <label class="field" for="module-default-page-size">
-                                <span>"Default page size"</span>
-                                <input
-                                    id="module-default-page-size"
-                                    name="default_page_size"
-                                    type="number"
-                                    min="10"
-                                    max="100"
-                                    prop:value=move || page_size_draft.get()
-                                    on:input=move |event| {
-                                        if let Ok(value) = event_target_value(&event).parse::<u16>() {
-                                            page_size_draft.set(value);
-                                        }
-                                    }
-                                    required
-                                />
-                            </label>
-                        })}
+                        {configuration_form_fields}
                         <div class="module-configuration-validation">
                             <strong>"Configuration is valid"</strong>
                             <span>{format!("Schema v1 · release {} · normalized by the module · no findings", release.version)}</span>
@@ -711,8 +848,6 @@ fn independent_module_sections(
                                 class="button button--secondary"
                                 type="button"
                                 on:click=move |_| {
-                                    configuration_draft.set(configured_label_for_cancel.clone());
-                                    page_size_draft.set(configured_page_size);
                                     configuration_editing.set(false);
                                 }
                             >
@@ -721,12 +856,6 @@ fn independent_module_sections(
                             <button class="button" type="submit">"Save configuration"</button>
                         </div>
                     </form>
-                    {is_dashboard.then(|| view! {
-                        <aside class="module-transition-binding-note">
-                            <strong>"First-party transition binding"</strong>
-                            <p><code>"tessara.dashboards.component-version"</code>" uses Core's installation-owned Components adapter. External Blueprints cannot select it; explicit migration is required in Sprint 8A."</p>
-                        </aside>
-                    })}
                 </section>
                 <aside class="organization-detail-card module-detail-overview-card module-application-state">
                     <div class="module-detail__heading">
@@ -738,9 +867,6 @@ fn independent_module_sections(
                     <div class="module-application-state__line"><span>"Configured"</span><span class=if configuration.valid { "status-badge is-success" } else { "status-badge is-danger" }>{if configuration.valid { "Valid" } else { "Finding" }}</span></div>
                     <div class="module-application-state__line"><span>"Module health"</span><span class=if instance.healthy { "status-badge is-success" } else { "status-badge is-danger" }>{if instance.healthy { "Healthy" } else { "Degraded" }}</span></div>
                     <div class="module-application-state__line"><span>"Navigation"</span><span class="status-badge is-info">{if instance.enabled { "Visible" } else { "Hidden" }}</span></div>
-                    {is_dashboard.then(|| view! {
-                        <div class="module-application-state__line"><span>"Components adapter"</span><span class="status-badge is-info">"Compatible"</span></div>
-                    })}
                     <div class="module-application-state__enablement">
                         <div>
                             <strong>{if instance.enabled { "Product route enabled" } else { "Product route disabled" }}</strong>
@@ -762,11 +888,9 @@ fn independent_module_sections(
                     </div>
                     <a
                         class="button button--secondary module-application-state__action"
-                        href=health_href
+                        href=health_href.clone()
                         on:click=move |_| {
-                            if is_dashboard {
-                                select_module_detail_section(active_section, "findings", "diagnostics");
-                            }
+                            select_module_detail_section(active_section, "findings", "diagnostics");
                         }
                     >
                         <HeartPulse class="button__icon"/>
@@ -774,91 +898,102 @@ fn independent_module_sections(
                     </a>
                 </aside>
             </div>
-            {if is_dashboard {
-                view! {
-                    <section data-module-section="findings" class="module-dashboard-diagnostics">
-                        <div class="module-dashboard-diagnostics__heading">
-                            <div>
-                                <p class="module-dashboard-diagnostics__eyebrow">"Dashboard module"</p>
-                                <h2>"Health and diagnostics"</h2>
-                                <p>"Sanitized operational context for the independently deployed Dashboard service."</p>
-                            </div>
-                            <div class="module-dashboard-diagnostics__actions">
-                                <a class="button button--secondary" href=health_href>
-                                    <RefreshCw class="button__icon"/>
-                                    "Refresh status"
-                                </a>
-                                <a
-                                    class="button button--secondary"
-                                    href="/api/admin/modules/tessara.dashboards"
-                                    download="tessara-dashboards-diagnostics.json"
-                                >
-                                    <Download class="button__icon"/>
-                                    "Download diagnostics"
-                                </a>
-                            </div>
+            <section data-module-section="findings" class="module-dashboard-diagnostics">
+                <div class="module-dashboard-diagnostics__heading">
+                    <div>
+                        <p class="module-dashboard-diagnostics__eyebrow">{definition.display_name.clone()}</p>
+                        <h2>"Health and diagnostics"</h2>
+                        <p>"Sanitized operational context from the shared independent-module contract."</p>
+                    </div>
+                    <div class="module-dashboard-diagnostics__actions">
+                        <a class="button button--secondary" href=health_href>
+                            <RefreshCw class="button__icon"/>
+                            "Refresh status"
+                        </a>
+                        <a
+                            class="button button--secondary"
+                            href=diagnostics_download_href
+                            download=diagnostics_download_name
+                        >
+                            <Download class="button__icon"/>
+                            "Download diagnostics"
+                        </a>
+                    </div>
+                </div>
+                <div class="module-dashboard-diagnostics__metrics">
+                    <article class="module-dashboard-diagnostic-metric">
+                        <HeartPulse/>
+                        <div>
+                            <span>"Readiness"</span>
+                            <strong>{if instance.ready { "Ready" } else { "Not ready" }}</strong>
+                            <small>{if instance.ready { "Configuration, data, and Core authorization exchange are available." } else { "The module readiness probe is not passing." }}</small>
                         </div>
-                        <div class="module-dashboard-diagnostics__metrics">
-                            <article class="module-dashboard-diagnostic-metric">
-                                <HeartPulse/>
-                                <div>
-                                    <span>"Readiness"</span>
-                                    <strong>{if instance.ready { "Ready" } else { "Not ready" }}</strong>
-                                    <small>{if instance.ready { "Configuration, database, and Core authorization exchange are available." } else { "The Dashboard readiness probe is not passing." }}</small>
-                                </div>
-                            </article>
-                            <article class="module-dashboard-diagnostic-metric">
-                                <Activity/>
-                                <div>
-                                    <span>"Liveness"</span>
-                                    <strong>{if instance.healthy { "Healthy" } else { "Unhealthy" }}</strong>
-                                    <small>"Dashboard service responded during the "<time datetime=instance.observed_at.clone()>"latest health check"</time>"."</small>
-                                </div>
-                            </article>
-                            <article class="module-dashboard-diagnostic-metric">
-                                <Database/>
-                                <div>
-                                    <span>"Dashboard database"</span>
-                                    <strong>{if instance.deployed { "Connected" } else { "Unavailable" }}</strong>
-                                    <small>"Instance-scoped runtime identity · baseline 1 applied."</small>
-                                </div>
-                            </article>
-                            <article class="module-dashboard-diagnostic-metric">
-                                <ShieldCheck/>
-                                <div>
-                                    <span>"Core authorization"</span>
-                                    <strong>{if instance.enabled { "Current" } else { "Disabled" }}</strong>
-                                    <small>"Core-signed action grants · no reusable credential exposed."</small>
-                                </div>
-                            </article>
+                    </article>
+                    <article class="module-dashboard-diagnostic-metric">
+                        <Activity/>
+                        <div>
+                            <span>"Liveness"</span>
+                            <strong>{if instance.healthy { "Healthy" } else { "Unhealthy" }}</strong>
+                            <small>"The module responded during the "<time datetime=instance.observed_at.clone()>"latest health check"</time>"."</small>
                         </div>
-                        <section class="organization-detail-card module-dashboard-dependency-card">
-                            <div class="module-detail__heading">
-                                <div>
-                                    <h2>"Components compatibility dependency"</h2>
-                                    <p>"Transition-only first-party Core Release binding."</p>
-                                </div>
-                                <span class="status-badge is-success">"Compatible"</span>
-                            </div>
+                    </article>
+                    <article class="module-dashboard-diagnostic-metric">
+                        <Database/>
+                        <div>
+                            <span>"Module database"</span>
+                            <strong>{if instance.deployed { "Connected" } else { "Unavailable" }}</strong>
+                            <small><code>{instance.database_name}</code>" · instance-scoped runtime identity."</small>
+                        </div>
+                    </article>
+                    <article class="module-dashboard-diagnostic-metric">
+                        <ShieldCheck/>
+                        <div>
+                            <span>"Core authorization"</span>
+                            <strong>{if instance.enabled { "Current" } else { "Disabled" }}</strong>
+                            <small>"Core-signed action grants · no reusable credential exposed."</small>
+                        </div>
+                    </article>
+                </div>
+                <section class="organization-detail-card module-dashboard-dependency-card">
+                    <div class="module-detail__heading">
+                        <div>
+                            <h2>"Dependency assessment"</h2>
+                            <p>"Contract requirements declared by the module manifest."</p>
+                        </div>
+                        <span class="status-badge is-success">"Satisfied"</span>
+                    </div>
+                    {if has_dependencies {
+                        view! { <dl class="module-detail-overview__list">{dependency_rows}</dl> }.into_any()
+                    } else {
+                        view! { <p>"No external functional dependencies were declared."</p> }.into_any()
+                    }}
+                </section>
+                <section class="organization-detail-card module-dashboard-dependency-card">
+                    <div class="module-detail__heading">
+                        <div>
+                            <h2>"Findings"</h2>
+                            <p>"Actionable observations from the shared independent-module projection."</p>
+                        </div>
+                        <span class=if findings.is_empty() { "status-badge is-success" } else { "status-badge is-danger" }>
+                            {if findings.is_empty() { "None" } else { "Review" }}
+                        </span>
+                    </div>
+                    {if findings.is_empty() {
+                        view! { <p>"No module findings were reported."</p> }.into_any()
+                    } else {
+                        view! {
                             <dl class="module-detail-overview__list">
-                                <div><dt>"Binding"</dt><dd><code>"tessara.dashboards.component-version"</code></dd></div>
-                                <div><dt>"Contract"</dt><dd><code>"tessara.components.component-version"</code></dd></div>
-                                <div><dt>"Provider"</dt><dd>"Core installation · in-process transition contribution"</dd></div>
-                                <div><dt>"Declared actions"</dt><dd>"Resolve metadata · Render"</dd></div>
-                                <div><dt>"Last successful check"</dt><dd><time datetime=instance.observed_at.clone()>"Latest health check"</time></dd></div>
-                                <div><dt>"Migration target"</dt><dd>"Sprint 8A"</dd></div>
+                                {findings.into_iter().map(|finding| view! {
+                                    <div data-finding-code=finding.code.clone()>
+                                        <dt><code>{finding.code.clone()}</code></dt>
+                                        <dd>{finding.message}" · "<code>{finding.path}</code></dd>
+                                    </div>
+                                }).collect_view()}
                             </dl>
-                        </section>
-                    </section>
-                }.into_any()
-            } else {
-                view! {
-                    <section data-module-section="findings" class="organization-detail-card module-detail-empty-section">
-                        <h2>"Findings"</h2>
-                        <p>"No module findings were reported."</p>
-                    </section>
-                }.into_any()
-            }}
+                        }.into_any()
+                    }}
+                </section>
+            </section>
             {manifest_sections}
         </div>
     }.into_any()
@@ -885,20 +1020,65 @@ fn independent_manifest_sections(
         .collect();
     };
 
+    let mut declaration_rows = manifest
+        .features
+        .iter()
+        .map(|item| {
+            (
+                item.name.clone(),
+                format!("Feature {} · {}", item.id, item.description),
+            )
+        })
+        .collect::<Vec<_>>();
+    declaration_rows.extend(manifest.routes.iter().map(|route| {
+        (
+            format!("Route · {}", route.name),
+            format!("{:?} · {} parameter(s)", route.kind, route.parameters.len()),
+        )
+    }));
+    declaration_rows.extend(manifest.typed_reference_schemas.iter().map(|reference| {
+        (
+            format!("Typed reference · {}", reference.resource_type),
+            format!("{:?}", reference.resource_id),
+        )
+    }));
+    declaration_rows.extend([
+        (
+            "Configuration validation".into(),
+            manifest
+                .operational_routes
+                .configuration_validation
+                .to_string(),
+        ),
+        (
+            "Compatibility".into(),
+            manifest.operational_routes.compatibility.to_string(),
+        ),
+        (
+            "Status".into(),
+            manifest.operational_routes.status.to_string(),
+        ),
+        (
+            "Diagnostics".into(),
+            manifest.operational_routes.diagnostics.to_string(),
+        ),
+    ]);
+    if let Some(shell) = &manifest.shell_contribution_contracts {
+        for (surface, contract) in [
+            ("Home contribution", shell.home.as_ref()),
+            ("Work discovery contribution", shell.work_discovery.as_ref()),
+            ("Search contribution", shell.search.as_ref()),
+        ] {
+            if let Some(contract) = contract {
+                declaration_rows.push((surface.into(), contract.to_string()));
+            }
+        }
+    }
     let sections = vec![
         (
             "declarations",
             "Declarations",
-            manifest
-                .features
-                .iter()
-                .map(|item| {
-                    (
-                        item.name.clone(),
-                        format!("{} · {}", item.id, item.description),
-                    )
-                })
-                .collect::<Vec<_>>(),
+            declaration_rows,
             "No feature declarations were reported.",
         ),
         (

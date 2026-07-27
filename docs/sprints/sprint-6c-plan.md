@@ -1,7 +1,7 @@
 # Sprint 6C Plan: Independently Deployed Dashboard Module Slice
 
-Status: implementation complete and closeout-ready on 2026-07-26. The sprint
-started from clean `main` commit
+Status: implementation reopened on 2026-07-27 to turn the two independent
+modules into a reusable migration pathway. The sprint started from clean `main` commit
 `c4e291c32645af65773726ab6a93449f4bef2c4a`.
 
 - Branch: `codex/sprint-6c`
@@ -10,6 +10,7 @@ started from clean `main` commit
   `Sprint 6C: Independently Deployed Dashboard Module Slice (Next)`
 - Predecessor: `Sprint 6B2: Secure Module Operation Slice (Complete)`
 - Verification record: `docs/sprints/sprint-6c-verification.md`
+- Reusable pathway: `docs/architecture/independent-module-pathway.md`
 
 ## Sprint Summary
 
@@ -152,6 +153,10 @@ Components contribution as a Module Instance.
 11. Contract, permission, outage, database-isolation, API, SSR, responsive,
     smoke, UAT, and Playwright coverage pass against the exact clean source
     commit used to build the retained stack.
+12. Dashboard and Scoped Records conform to one schema-driven Module
+    Management and control-plane template. A third module can adopt the same
+    configuration, enablement, diagnostics, and inventory path by registering
+    deployment metadata, without adding a definition-specific branch to Core.
 
 ## Manual Test Plan
 

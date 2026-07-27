@@ -2003,6 +2003,46 @@ fn validate_manifest_metadata(manifest: &ModuleManifestV1, findings: &mut Vec<Va
             path: "configuration_schema".into(),
             message: "configuration schema must be a JSON object".into(),
         });
+    } else {
+        validate_managed_configuration_schema(&manifest.configuration_schema, findings);
+    }
+}
+
+fn validate_managed_configuration_schema(schema: &Value, findings: &mut Vec<ValidationFinding>) {
+    if schema.get("type").and_then(Value::as_str) != Some("object") {
+        findings.push(ValidationFinding {
+            code: "invalid_configuration_schema".into(),
+            path: "configuration_schema.type".into(),
+            message: "managed module configuration must use an object schema".into(),
+        });
+    }
+    let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
+        findings.push(ValidationFinding {
+            code: "invalid_configuration_schema".into(),
+            path: "configuration_schema.properties".into(),
+            message: "managed module configuration must declare object properties".into(),
+        });
+        return;
+    };
+    for (name, property) in properties {
+        let kind = property.get("type").and_then(Value::as_str);
+        if !matches!(kind, Some("string" | "integer" | "number" | "boolean")) {
+            findings.push(ValidationFinding {
+                code: "unsupported_configuration_field_type".into(),
+                path: format!("configuration_schema.properties.{name}.type"),
+                message: "managed configuration fields must be string, integer, number, or boolean"
+                    .into(),
+            });
+        }
+        if let Some(choices) = property.get("enum")
+            && !choices.is_array()
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_configuration_field_enum".into(),
+                path: format!("configuration_schema.properties.{name}.enum"),
+                message: "configuration field enum must be an array".into(),
+            });
+        }
     }
 }
 
@@ -3667,5 +3707,25 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn manifest_validation_rejects_configuration_fields_the_shared_ui_cannot_manage() {
+        let mut manifest = forms_manifest();
+        manifest.configuration_schema = json!({
+            "type": "object",
+            "properties": {
+                "supported": {"type": "boolean"},
+                "unsupported": {"type": "array"}
+            }
+        });
+
+        let error = manifest
+            .validate(&forms_authority())
+            .expect_err("unsupported managed configuration is invalid");
+        assert!(error.findings.iter().any(|finding| {
+            finding.code == "unsupported_configuration_field_type"
+                && finding.path == "configuration_schema.properties.unsupported.type"
+        }));
     }
 }

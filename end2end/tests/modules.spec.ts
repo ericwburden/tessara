@@ -972,13 +972,10 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
     const independentEntries = inventory.entries.filter(
       (entry): entry is IndependentModuleInventoryEntry =>
-        entry.kind === "independently_deployed" &&
-        [DASHBOARDS_DEFINITION, SCOPED_RECORDS_DEFINITION].includes(
-          entry.definition.id,
-        ),
+        entry.kind === "independently_deployed",
     );
-    expect(independentEntries.map((entry) => entry.definition.id).sort()).toEqual(
-      [DASHBOARDS_DEFINITION, SCOPED_RECORDS_DEFINITION].sort(),
+    expect(independentEntries.map((entry) => entry.definition.id)).toEqual(
+      expect.arrayContaining([DASHBOARDS_DEFINITION, SCOPED_RECORDS_DEFINITION]),
     );
 
     for (const entry of independentEntries) {
@@ -1005,45 +1002,71 @@ test.describe.serial("Sprint 6A Module Management", () => {
         await expect(routeSwitch).toBeVisible();
         await expect(routeSwitch).toHaveAttribute("aria-checked", "true");
 
-        if (entry.definition.id === DASHBOARDS_DEFINITION) {
-          await expect(page.getByRole("tab", { name: "Diagnostics" })).toHaveCount(0);
-          const configurationCard = page.locator(".module-configuration-card");
+        const configurationProperties = (
+          (
+            entry.manifest?.configuration_schema as
+              | { properties?: Record<string, unknown> }
+              | undefined
+          )?.properties ?? {}
+        );
+        const configurationCard = page.locator(".module-configuration-card");
+        await page.getByRole("button", { name: "Edit configuration" }).click();
+        await expect(
+          configurationCard.locator(".module-configuration-form"),
+        ).toBeVisible();
+        for (const property of Object.keys(configurationProperties)) {
           await expect(
-            configurationCard.locator(".module-transition-binding-note"),
+            configurationCard.locator(`[name="${property}"]`),
           ).toBeVisible();
-          await expect(
-            page.locator(
-              ".module-application-state > .module-transition-binding-note",
-            ),
-          ).toHaveCount(0);
-
-          await page
-            .getByRole("link", { name: "Open health and diagnostics" })
-            .click();
-          await expect(page).toHaveURL(
-            new RegExp(
-              `/administration/modules/${DASHBOARDS_DEFINITION}#diagnostics$`,
-            ),
-          );
-          await expect(
-            page.getByRole("tab", { name: "Findings" }),
-          ).toHaveAttribute("aria-selected", "true");
-          await expect(
-            page.getByRole("heading", {
-              name: "Health and diagnostics",
-            }),
-          ).toBeVisible();
-          await expect(
-            page.getByRole("link", { name: "Download diagnostics" }),
-          ).toHaveAttribute("download", "tessara-dashboards-diagnostics.json");
-          await expect(page.locator(".module-dashboard-diagnostic-metric")).toHaveCount(
-            4,
-          );
-          await expect(
-            page.getByText("No module findings were reported.", { exact: true }),
-          ).toHaveCount(0);
-          await page.getByRole("tab", { name: "Configuration" }).click();
         }
+        const [configurationResponse] = await Promise.all([
+          page.waitForResponse((response) =>
+            response.url().endsWith(
+              `/api/modules/instances/${entry.instance.id}/configuration/form`,
+            ),
+          ),
+          page.getByRole("button", { name: "Save configuration" }).click(),
+        ]);
+        const configurationAccepted = configurationResponse.status() < 400;
+        const configurationFailure = configurationAccepted
+          ? ""
+          : await configurationResponse.text();
+        expect(configurationAccepted, configurationFailure).toBeTruthy();
+        await expect(page).toHaveURL(
+          new RegExp(
+            `/administration/modules/${entry.definition.id}#configuration$`,
+          ),
+        );
+        await expect(
+          page.getByRole("button", { name: "Edit configuration" }),
+        ).toBeVisible();
+
+        await page
+          .getByRole("link", { name: "Open health and diagnostics" })
+          .click();
+        await expect(page).toHaveURL(
+          new RegExp(
+            `/administration/modules/${entry.definition.id}#diagnostics$`,
+          ),
+        );
+        await expect(
+          page.getByRole("tab", { name: "Findings" }),
+        ).toHaveAttribute("aria-selected", "true");
+        await expect(
+          page.getByRole("heading", {
+            name: "Health and diagnostics",
+          }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("link", { name: "Download diagnostics" }),
+        ).toHaveAttribute(
+          "download",
+          `${entry.definition.id.replaceAll(".", "-")}-diagnostics.json`,
+        );
+        await expect(page.locator(".module-dashboard-diagnostic-metric")).toHaveCount(
+          4,
+        );
+        await page.getByRole("tab", { name: "Configuration" }).click();
 
         await page.getByRole("switch", { name: "Disable product route" }).click();
         currentlyEnabled = false;
@@ -1064,16 +1087,16 @@ test.describe.serial("Sprint 6A Module Management", () => {
           expect(disabledEntry.instance.enabled).toBe(false);
         }
 
+        await expect(
+          page.getByText("Product route disabled", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByText(
+            "The product route and navigation are disabled. Configuration and diagnostics remain available.",
+            { exact: true },
+          ),
+        ).toBeVisible();
         if (entry.definition.id === DASHBOARDS_DEFINITION) {
-          await expect(
-            page.getByText("Product route disabled", { exact: true }),
-          ).toBeVisible();
-          await expect(
-            page.getByText(
-              "The product route and navigation are disabled. Configuration and diagnostics remain available.",
-              { exact: true },
-            ),
-          ).toBeVisible();
           await expect(
             page.locator('.sidebar a[href="/dashboards"]'),
           ).toHaveCount(0);

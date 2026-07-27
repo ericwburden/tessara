@@ -50,10 +50,8 @@ pub struct IndependentInstanceV1 {
 pub struct IndependentConfigurationV1 {
     pub declared: bool,
     pub valid: bool,
-    pub display_label: String,
-    pub retention_mode: String,
     #[serde(default)]
-    pub details: BTreeMap<String, Value>,
+    pub values: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

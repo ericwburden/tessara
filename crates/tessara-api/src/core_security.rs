@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use axum::{
     Json, Router,
     body::{Body, Bytes},
@@ -1449,34 +1451,20 @@ async fn sync_scoped_records_security_state(
     enabled: bool,
     document_state: &str,
 ) -> ApiResult<()> {
-    reqwest::Client::new()
-        .put(format!(
-            "{}/api/private/security-state",
-            scoped_records_url()
-        ))
-        .header(
-            "x-tessara-module-control-key",
-            std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
-                .unwrap_or_else(|_| "development-module-control-only".into()),
-        )
-        .json(&serde_json::json!({
-            "schema_version": 1,
-            "installation_id": installation_id,
-            "module_instance_id": instance_id,
-            "authorization_revision": authorization_revision,
-            "organization_revision": organization_revision,
-            "enabled": enabled,
-            "document_state": document_state
-        }))
-        .send()
-        .await
-        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?
-        .error_for_status()
-        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?;
-    Ok(())
+    sync_module_security_state(
+        tessara_reference_scoped_records::MODULE_DEFINITION_ID,
+        installation_id,
+        instance_id,
+        authorization_revision,
+        organization_revision,
+        enabled,
+        document_state,
+    )
+    .await
 }
 
-async fn sync_dashboard_security_state(
+async fn sync_module_security_state(
+    definition: &str,
     installation_id: Uuid,
     instance_id: Uuid,
     authorization_revision: i64,
@@ -1484,11 +1472,9 @@ async fn sync_dashboard_security_state(
     enabled: bool,
     document_state: &str,
 ) -> ApiResult<()> {
+    let base_url = module_control_url(definition)?;
     reqwest::Client::new()
-        .put(format!(
-            "{}/api/private/security-state",
-            dashboard_module_url()
-        ))
+        .put(format!("{base_url}/api/private/security-state"))
         .header(
             "x-tessara-module-control-key",
             std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
@@ -1538,6 +1524,36 @@ fn scoped_records_url() -> String {
         .to_string()
 }
 
+fn module_control_url(definition: &str) -> ApiResult<String> {
+    let configured = std::env::var("TESSARA_MODULE_CONTROL_ENDPOINTS")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| parse_module_control_endpoints(&value))
+        .transpose()?
+        .and_then(|endpoints| endpoints.get(definition).cloned());
+    let endpoint = configured.or_else(|| match definition {
+        tessara_reference_scoped_records::MODULE_DEFINITION_ID => Some(scoped_records_url()),
+        "tessara.dashboards" => Some(dashboard_module_url()),
+        _ => None,
+    });
+    endpoint
+        .filter(|endpoint| !endpoint.trim().is_empty())
+        .map(|endpoint| endpoint.trim_end_matches('/').to_string())
+        .ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "module {definition} does not have a configured control endpoint"
+            ))
+        })
+}
+
+fn parse_module_control_endpoints(value: &str) -> ApiResult<BTreeMap<String, String>> {
+    serde_json::from_str(value).map_err(|_| {
+        ApiError::Internal(anyhow::anyhow!(
+            "TESSARA_MODULE_CONTROL_ENDPOINTS must be a JSON object"
+        ))
+    })
+}
+
 async fn update_module_configuration(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -1549,38 +1565,29 @@ async fn update_module_configuration(
     Ok(Json(validation))
 }
 
-#[derive(Deserialize)]
-struct ModuleConfigurationForm {
-    schema_version: u16,
-    display_label: String,
-    default_page_size: Option<u16>,
-}
-
 async fn update_module_configuration_form(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
     Path(instance_id): Path<Uuid>,
-    Form(input): Form<ModuleConfigurationForm>,
+    Form(input): Form<BTreeMap<String, String>>,
 ) -> ApiResult<Redirect> {
     request.require_capability("admin:all")?;
-    let definition: String =
-        sqlx::query_scalar("SELECT definition_id FROM module_instances WHERE id=$1")
-            .bind(instance_id)
-            .fetch_optional(&state.pool)
-            .await?
-            .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
-    let payload = if definition == "tessara.dashboards" {
-        json!({
-            "schema_version": input.schema_version,
-            "display_label": input.display_label,
-            "default_page_size": input.default_page_size.unwrap_or(25)
-        })
-    } else {
-        json!({
-            "schema_version": input.schema_version,
-            "display_label": input.display_label
-        })
-    };
+    let module = sqlx::query(
+        "SELECT instances.definition_id,releases.manifest
+         FROM module_instances instances
+         JOIN module_releases releases ON releases.id=instances.release_id
+         WHERE instances.id=$1",
+    )
+    .bind(instance_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
+    let definition: String = module.try_get("definition_id")?;
+    let manifest: Value = module.try_get("manifest")?;
+    let schema = manifest
+        .get("configuration_schema")
+        .ok_or_else(|| ApiError::BadRequest("module configuration schema is unavailable".into()))?;
+    let payload = configuration_form_payload(schema, input)?;
     let validation = persist_module_configuration(&state.pool, instance_id, payload).await?;
     if validation.get("valid").and_then(Value::as_bool) != Some(true) {
         return Err(ApiError::BadRequest(
@@ -1670,31 +1677,16 @@ async fn sync_module_enablement(
     enabled: bool,
 ) -> ApiResult<()> {
     let document_state = module_document_state(enabled);
-    if definition == tessara_reference_scoped_records::MODULE_DEFINITION_ID {
-        return sync_scoped_records_security_state(
-            installation_id,
-            instance_id,
-            authorization_revision,
-            organization_revision,
-            enabled,
-            document_state,
-        )
-        .await;
-    }
-    if definition == "tessara.dashboards" {
-        return sync_dashboard_security_state(
-            installation_id,
-            instance_id,
-            authorization_revision,
-            organization_revision,
-            enabled,
-            document_state,
-        )
-        .await;
-    }
-    Err(ApiError::BadRequest(
-        "the module does not expose a supported enablement contract".into(),
-    ))
+    sync_module_security_state(
+        definition,
+        installation_id,
+        instance_id,
+        authorization_revision,
+        organization_revision,
+        enabled,
+        document_state,
+    )
+    .await
 }
 
 fn module_document_state(enabled: bool) -> &'static str {
@@ -1712,44 +1704,22 @@ async fn persist_module_configuration(
             .fetch_optional(pool)
             .await?
             .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
-    let (base_url, validation) = if definition
-        == tessara_reference_scoped_records::MODULE_DEFINITION_ID
-    {
-        let typed: tessara_reference_scoped_records::ScopedRecordsConfigurationV1 =
-            serde_json::from_value(input)
-                .map_err(|_| ApiError::BadRequest("invalid module configuration".into()))?;
-        (
-            scoped_records_url(),
-            serde_json::to_value(tessara_reference_scoped_records::validate_configuration(
-                &typed,
-            ))
-            .map_err(|error| ApiError::Internal(error.into()))?,
-        )
-    } else if definition == "tessara.dashboards" {
-        let validation = reqwest::Client::new()
-            .post(format!(
-                "{}/api/configuration/validate",
-                dashboard_module_url()
-            ))
-            .json(&input)
-            .send()
-            .await
-            .map_err(|_| {
-                ApiError::ServiceUnavailable("Dashboard configuration validator unavailable".into())
-            })?
-            .error_for_status()
-            .map_err(|_| {
-                ApiError::ServiceUnavailable("Dashboard configuration validator unavailable".into())
-            })?
-            .json()
-            .await
-            .map_err(|error| ApiError::Internal(error.into()))?;
-        (dashboard_module_url(), validation)
-    } else {
-        return Err(ApiError::BadRequest(
-            "the module does not expose a supported configuration contract".into(),
-        ));
-    };
+    let base_url = module_control_url(&definition)?;
+    let validation: Value = reqwest::Client::new()
+        .post(format!("{base_url}/api/configuration/validate"))
+        .json(&input)
+        .send()
+        .await
+        .map_err(|_| {
+            ApiError::ServiceUnavailable("module configuration validator unavailable".into())
+        })?
+        .error_for_status()
+        .map_err(|_| {
+            ApiError::ServiceUnavailable("module configuration validator unavailable".into())
+        })?
+        .json()
+        .await
+        .map_err(|error| ApiError::Internal(error.into()))?;
     if let Some(normalized) = validation
         .get("normalized")
         .filter(|_| validation.get("valid").and_then(Value::as_bool) == Some(true))
@@ -1791,6 +1761,75 @@ async fn persist_module_configuration(
         .await?;
     }
     Ok(validation)
+}
+
+fn configuration_form_payload(
+    schema: &Value,
+    mut fields: BTreeMap<String, String>,
+) -> ApiResult<Value> {
+    let properties = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .ok_or_else(|| ApiError::BadRequest("module configuration schema is invalid".into()))?;
+    let required = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    let schema_version = fields
+        .remove("schema_version")
+        .unwrap_or_else(|| "1".into())
+        .parse::<u16>()
+        .map_err(|_| ApiError::BadRequest("schema_version must be an integer".into()))?;
+    let mut configuration =
+        serde_json::Map::from_iter([("schema_version".into(), json!(schema_version))]);
+    for (name, property) in properties {
+        let Some(raw) = fields.remove(name) else {
+            if required.contains(&name.as_str()) {
+                return Err(ApiError::BadRequest(format!(
+                    "configuration field {name} is required"
+                )));
+            }
+            continue;
+        };
+        let value = match property.get("type").and_then(Value::as_str) {
+            Some("string") | None => Value::String(raw),
+            Some("integer") => Value::Number(
+                raw.parse::<i64>()
+                    .map_err(|_| {
+                        ApiError::BadRequest(format!(
+                            "configuration field {name} must be an integer"
+                        ))
+                    })?
+                    .into(),
+            ),
+            Some("number") => serde_json::Number::from_f64(raw.parse::<f64>().map_err(|_| {
+                ApiError::BadRequest(format!("configuration field {name} must be a number"))
+            })?)
+            .map(Value::Number)
+            .ok_or_else(|| {
+                ApiError::BadRequest(format!("configuration field {name} must be finite"))
+            })?,
+            Some("boolean") => Value::Bool(raw.parse::<bool>().map_err(|_| {
+                ApiError::BadRequest(format!("configuration field {name} must be a boolean"))
+            })?),
+            Some(kind) => {
+                return Err(ApiError::BadRequest(format!(
+                    "configuration field {name} uses unsupported type {kind}"
+                )));
+            }
+        };
+        configuration.insert(name.clone(), value);
+    }
+    if !fields.is_empty() {
+        return Err(ApiError::BadRequest(format!(
+            "unknown module configuration fields: {}",
+            fields.keys().cloned().collect::<Vec<_>>().join(", ")
+        )));
+    }
+    Ok(Value::Object(configuration))
 }
 
 fn dashboard_module_url() -> String {
@@ -2293,6 +2332,97 @@ mod tests {
     fn module_enablement_maps_to_explicit_document_states() {
         assert_eq!(module_document_state(true), "enabled");
         assert_eq!(module_document_state(false), "disabled");
+    }
+
+    #[test]
+    fn module_control_registry_is_definition_driven() {
+        let endpoints = parse_module_control_endpoints(
+            r#"{
+                "tessara.reference.scoped-records": "http://scoped-records:8090",
+                "tessara.dashboards": "http://dashboards:8091",
+                "example.third-module": "http://third-module:8092"
+            }"#,
+        )
+        .expect("control endpoint registry is valid");
+        assert_eq!(
+            endpoints.get("example.third-module").map(String::as_str),
+            Some("http://third-module:8092")
+        );
+    }
+
+    #[test]
+    fn configuration_forms_are_coerced_from_manifest_schema() {
+        let dashboard = configuration_form_payload(
+            &json!({
+                "type": "object",
+                "properties": {
+                    "display_label": {"type": "string"},
+                    "default_page_size": {"type": "integer"}
+                },
+                "required": ["display_label", "default_page_size"]
+            }),
+            BTreeMap::from([
+                ("schema_version".into(), "1".into()),
+                ("display_label".into(), "Dashboards".into()),
+                ("default_page_size".into(), "25".into()),
+            ]),
+        )
+        .expect("Dashboard schema is supported");
+        assert_eq!(
+            dashboard,
+            json!({
+                "schema_version": 1,
+                "display_label": "Dashboards",
+                "default_page_size": 25
+            })
+        );
+
+        let scoped_records = configuration_form_payload(
+            &json!({
+                "type": "object",
+                "properties": {
+                    "display_label": {"type": "string"},
+                    "retention_mode": {
+                        "type": "string",
+                        "enum": ["retain_on_undeploy"]
+                    }
+                }
+            }),
+            BTreeMap::from([
+                ("schema_version".into(), "1".into()),
+                ("display_label".into(), "Scoped Records".into()),
+                ("retention_mode".into(), "retain_on_undeploy".into()),
+            ]),
+        )
+        .expect("Scoped Records schema is supported");
+        assert_eq!(
+            scoped_records,
+            json!({
+                "schema_version": 1,
+                "display_label": "Scoped Records",
+                "retention_mode": "retain_on_undeploy"
+            })
+        );
+    }
+
+    #[test]
+    fn configuration_forms_reject_fields_outside_the_manifest_schema() {
+        let error = configuration_form_payload(
+            &json!({
+                "type": "object",
+                "properties": {"display_label": {"type": "string"}}
+            }),
+            BTreeMap::from([
+                ("display_label".into(), "Example".into()),
+                ("core_only_override".into(), "not allowed".into()),
+            ]),
+        )
+        .expect_err("Core-only fields must not bypass the module manifest");
+        assert!(
+            error
+                .to_string()
+                .contains("unknown module configuration fields")
+        );
     }
 
     #[test]

@@ -9,7 +9,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use serde_json::Value;
 use tessara_module_contract::{DeploymentProfile, DeploymentReceiptV1};
 use uuid::Uuid;
 
@@ -619,6 +618,34 @@ pub(super) fn independent_entry_value(
     module: super::service::IndependentModuleReadModel,
 ) -> serde_json::Value {
     let manifest = module.manifest.map(|manifest| manifest.0);
+    let configured_display_name = module
+        .configuration
+        .get("display_label")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| module.display_name.clone());
+    let mut findings = Vec::new();
+    if !module.configured {
+        findings.push(serde_json::json!({
+            "code": "module_configuration_invalid",
+            "path": "instance.configured",
+            "message": "The module configuration is not valid."
+        }));
+    }
+    if !module.ready {
+        findings.push(serde_json::json!({
+            "code": "module_readiness_failed",
+            "path": "instance.ready",
+            "message": "The module readiness probe is not passing."
+        }));
+    }
+    if !module.healthy {
+        findings.push(serde_json::json!({
+            "code": "module_health_check_failed",
+            "path": "instance.healthy",
+            "message": "The module liveness observation is unhealthy."
+        }));
+    }
     let (readiness_path, liveness_path) = manifest
         .as_ref()
         .map(|manifest| match &manifest.deployment {
@@ -631,7 +658,7 @@ pub(super) fn independent_entry_value(
     serde_json::to_value(IndependentModuleEntryV1::IndependentlyDeployed {
         definition: IndependentDefinitionV1 {
             id: module.definition_id.clone(),
-            display_name: module.display_name.clone(),
+            display_name: configured_display_name,
             description:
                 "Independently deployed module observed from the current deployment receipt."
                     .into(),
@@ -661,27 +688,12 @@ pub(super) fn independent_entry_value(
         configuration: IndependentConfigurationV1 {
             declared: manifest.is_some(),
             valid: module.configured,
-            display_label: module
-                .configuration
-                .get("display_label")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .unwrap_or(module.display_name),
-            retention_mode: module
-                .configuration
-                .get("retention_mode")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .unwrap_or_else(|| "Not reported".into()),
-            details: module
+            values: module
                 .configuration
                 .as_object()
                 .map(|details| {
                     details
                         .iter()
-                        .filter(|(key, _)| {
-                            !matches!(key.as_str(), "display_label" | "retention_mode")
-                        })
                         .map(|(key, value)| (key.clone(), value.clone()))
                         .collect()
                 })
@@ -691,45 +703,10 @@ pub(super) fn independent_entry_value(
             readiness_path,
             liveness_path,
             public_route: module.route_prefix.unwrap_or_else(|| "Not reported".into()),
-            details: if module.definition_id == "tessara.dashboards" {
-                [
-                    (
-                        "database".into(),
-                        Value::String("dashboard_module_instance".into()),
-                    ),
-                    (
-                        "authorization_exchange".into(),
-                        Value::String("core_signed_action_grants".into()),
-                    ),
-                    (
-                        "components_binding".into(),
-                        Value::String("tessara.dashboards.component-version".into()),
-                    ),
-                    (
-                        "components_contract".into(),
-                        Value::String("tessara.components.component-version".into()),
-                    ),
-                    (
-                        "components_actions".into(),
-                        serde_json::json!(["resolve_metadata", "render"]),
-                    ),
-                    (
-                        "components_provider".into(),
-                        Value::String("core_installation".into()),
-                    ),
-                    (
-                        "migration_target".into(),
-                        Value::String("Sprint 8A".into()),
-                    ),
-                ]
-                .into_iter()
-                .collect()
-            } else {
-                Default::default()
-            },
+            details: Default::default(),
         },
         manifest,
-        findings: Vec::new(),
+        findings,
     })
     .expect("typed independent module projection must serialize")
 }

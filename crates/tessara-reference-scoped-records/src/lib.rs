@@ -39,6 +39,7 @@ pub struct ModuleState {
 pub struct ScopedRecordsConfigurationV1 {
     pub schema_version: u16,
     pub display_label: String,
+    pub retention_mode: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -79,12 +80,20 @@ pub fn validate_configuration(input: &ScopedRecordsConfigurationV1) -> Configura
             message: "Display label must contain at most 80 characters.",
         });
     }
+    if input.retention_mode != "retain_on_undeploy" {
+        findings.push(ConfigurationFindingV1 {
+            code: "configuration.retention_mode.unsupported",
+            field: "retention_mode",
+            message: "Scoped Records v1 retains data when the module is undeployed.",
+        });
+    }
     ConfigurationValidationV1 {
         schema_version: 1,
         valid: findings.is_empty(),
         normalized: findings.is_empty().then(|| ScopedRecordsConfigurationV1 {
             schema_version: 1,
             display_label: label.to_string(),
+            retention_mode: "retain_on_undeploy".into(),
         }),
         findings,
     }
@@ -188,6 +197,7 @@ async fn get_configuration(State(state): State<ModuleState>) -> Result<Json<Valu
     Ok(Json(json!({
         "schema_version": row.try_get::<i32,_>("schema_version")?,
         "display_label": row.try_get::<String,_>("display_label")?,
+        "retention_mode": "retain_on_undeploy",
         "updated_at": row.try_get::<DateTime<Utc>,_>("updated_at")?,
     })))
 }
@@ -1313,11 +1323,13 @@ mod tests {
         let valid = validate_configuration(&ScopedRecordsConfigurationV1 {
             schema_version: 1,
             display_label: "  Regional Records  ".into(),
+            retention_mode: "retain_on_undeploy".into(),
         });
         assert_eq!(valid.normalized.unwrap().display_label, "Regional Records");
         let invalid = validate_configuration(&ScopedRecordsConfigurationV1 {
             schema_version: 1,
             display_label: " ".into(),
+            retention_mode: "retain_on_undeploy".into(),
         });
         assert_eq!(
             invalid.findings[0].code,

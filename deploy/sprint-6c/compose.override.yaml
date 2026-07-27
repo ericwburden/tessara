@@ -17,6 +17,7 @@ services:
         TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
     environment:
       TESSARA_DASHBOARD_MODULE_URL: http://dashboards:8091
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.dashboards":"http://dashboards:8091"}'
       TESSARA_COMPONENTS_PROVIDER_STATE: ${TESSARA_COMPONENTS_PROVIDER_STATE:-available}
     depends_on:
       dashboards: { condition: service_started }

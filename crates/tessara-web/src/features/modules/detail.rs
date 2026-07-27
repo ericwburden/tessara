@@ -390,10 +390,10 @@ pub fn ModuleDetailPeerSections(
             <section
                 class="organization-detail-card"
                 data-module-section="findings"
-                aria-labelledby="module-configuration-heading"
+                aria-labelledby="module-finding-configuration-heading"
                 data-module-dimension="configuration"
             >
-                <h2 id="module-configuration-heading">"Configuration"</h2>
+                <h2 id="module-finding-configuration-heading">"Configuration"</h2>
                 {dimension_state(dimensions.configuration)}
             </section>
 
