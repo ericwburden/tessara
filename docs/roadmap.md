@@ -879,6 +879,9 @@ This section records the completed foundation sequence that led to the current n
 - expose required Component metadata and rendering/execution behavior through that typed adapter, mark the binding transition-only and unavailable to new external Blueprints, and require Sprint 8A to migrate data/references explicitly before retiring it
 - obtain Core-issued, downstream-audience scope-bound grants or decisions bound to original actor, Dashboard service identity, the resolved Components dependency/contract/action, and installation rather than forwarding Dashboard authority
 - advertise Dashboard routes, navigation, functional contracts, resources, configuration, diagnostics, and security capabilities through its manifest
+- provide one definition-independent Core control-endpoint registry and shared configuration/diagnostics adapter for independently deployed modules; adding the next module must be deployment/manifest registration rather than a new module-ID branch
+- render supported module configuration fields from the manifest schema, reject unsupported schema shapes before enrollment, and keep enablement, navigation, lifecycle, findings, dependencies, and diagnostics in shared Module Management code
+- prove the pathway against both Dashboard and Scoped Records with inventory-driven conformance tests, and publish the migration recipe and ownership checklist for the next feature extraction
 - preserve the Sprint 5A authoring and viewing experience through same-origin routing
 - show a non-disclosing forbidden placement for unauthorized resolution; after authorization, distinguish unavailable, inactive, superseded, provider-resource tombstoned, owner-module-instance tombstoned/data-destroyed, missing, and not-evaluated outcomes without redefining Component lifecycle semantics
 - restructure seed and local data directly for the new database layout because no production compatibility obligation exists
@@ -890,7 +893,7 @@ This section records the completed foundation sequence that led to the current n
 - Dashboard configuration and diagnostics reached from Core module administration
 - clear placement degradation when the Components provider is unavailable or changes lifecycle state
 
-**User-testable exit condition:** a tester can compose and view a Dashboard through the normal shell while Dashboard runs in a separate process and database, and can observe contained behavior when Dashboard or Components is unavailable.
+**User-testable exit condition:** a tester can compose and view a Dashboard through the normal shell while Dashboard runs in a separate process and database, and can observe contained behavior when Dashboard or Components is unavailable. In Module Management, Dashboard and Scoped Records use the same configuration, diagnostics, lifecycle, enablement, navigation, findings, and route-state interactions; their visible differences come only from declared module metadata and configuration. The documented pathway and inventory-driven conformance test identify the bounded manifest, control-endpoint, deployment, bootstrap, product, and database work needed for the next migration without adding a module-specific Core management path.
 
 ### Sprint 6D: Application Blueprint And Composition Automation Slice (Next)
 

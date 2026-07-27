@@ -7,6 +7,83 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-27 - Sprint 6C Reusable Module Pathway Complete
+
+- Status: closeout-ready. Sprint 6C now leaves a reusable migration pathway,
+  not only two separately implemented modules.
+- Core uses a definition-independent control-endpoint registry, schema-driven
+  configuration rendering, generic configuration apply/read-back and security
+  synchronization, and shared lifecycle/findings/diagnostics behavior.
+  Dashboard and Scoped Records have no module-ID-specific Module Management
+  path.
+- The migration recipe is in
+  `docs/architecture/independent-module-pathway.md`; the common/custom
+  inventory is in
+  `docs/audits/module-management-consistency-2026-07-27/README.md`.
+- Implementation commit `b1b497689cec0fc0220b6ba26b53deed000a2978`
+  established the pathway. Commit
+  `f59468fc627d62fd2f8e5d629ba6b7714cc1bd4c` fixed hash synchronization
+  for the shared module-detail tabs and is the exact deployed source; tree
+  `963315ddc752f63cdf81be9d7f295be95e9b4cd1`.
+- Final verification passed: full `scripts/validate.ps1`, final UAT and smoke,
+  direct 61/61 Playwright, retained manifest-bound 61/61 Playwright,
+  database isolation, and all ten degraded provider states. Durable proof is
+  under `artifacts/sprint-6c-pathway-closeout/`.
+- Next Sprint: Sprint 6D - Application Blueprint And Composition Automation
+  Slice.
+
+### Sprint Handoff / Demo Instructions
+
+#### Shared Independent-Module Configuration
+
+- Role: `admin`
+- Paths:
+  - `http://localhost:8080/administration/modules/tessara.dashboards#configuration`
+  - `http://localhost:8080/administration/modules/tessara.reference.scoped-records#configuration`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open each path and compare Configuration, Application state, diagnostics,
+     findings, dependencies, navigation, and Overview lifecycle interactions.
+  3. Edit and save each module's declared configuration without changing its
+     value.
+  4. Disable and re-enable the product route; confirm the product navigation
+     item follows enablement while Module Management remains available.
+- Expected:
+  - Panel structure, control behavior, statuses, error handling, and tab/hash
+    navigation are identical.
+  - Only manifest-owned labels, fields, values, dependencies, resources, and
+    diagnostics differ.
+- Acceptance check:
+  - Pass when both modules complete the same workflow and no module-specific
+    Core administration behavior is visible.
+- Evidence location:
+  - `artifacts/sprint-6c-pathway-closeout/playwright-final-fresh.summary.json`
+  - `artifacts/sprint-6c-pathway-closeout/uat-final-fresh.json`
+  - `docs/audits/module-management-consistency-2026-07-27/README.md`
+
+#### Reusable Migration Path Review
+
+- Role: implementer/reviewer; no application role is required.
+- Paths:
+  - `docs/architecture/independent-module-pathway.md`
+  - `docs/audits/module-management-consistency-2026-07-27/README.md`
+- Steps:
+  1. Follow the ownership, manifest, configuration, endpoint, deployment,
+     bootstrap, and test checklist.
+  2. Compare each step with Dashboard and Scoped Records.
+  3. Confirm the next module can register through
+     `TESSARA_MODULE_CONTROL_ENDPOINTS` without a module-ID branch in Core.
+- Expected:
+  - The bounded shared work and the intentionally module-owned product work are
+    explicit.
+- Acceptance check:
+  - Pass when a migration plan can be produced from the guide and requires no
+    new Core Module Management screen or per-module control adapter.
+- Evidence location:
+  - `docs/architecture/independent-module-pathway.md`
+  - `end2end/tests/modules.spec.ts`
+  - `artifacts/sprint-6c-pathway-closeout/deployment-handoff-fresh.json`
+
 ## 2026-07-26 - Sprint 6C Implementation Complete
 
 - Status: implementation and closeout-readiness verification are complete.
