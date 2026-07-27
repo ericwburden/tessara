@@ -470,10 +470,10 @@ fn module_detail_page(
         <div class="module-section-switcher" aria-label="Module detail section">
             <div class="module-section-tabs--detail tabs-list" role="tablist" aria-label="Module detail sections">
                 {MODULE_DETAIL_SECTIONS.into_iter().map(|(value,label)| view! {
-                    <button class="tabs-trigger" type="button" role="tab"
+                    <a class="tabs-trigger" href=format!("#{value}") role="tab"
                         aria-selected=move || (active_section.get() == value).to_string()
                         class:is-active=move || active_section.get()==value
-                        on:click=move |_| select_module_detail_section(active_section, value, value)>{label}</button>
+                        on:click=move |_| active_section.set(value)>{label}</a>
                 }).collect_view()}
             </div>
             <select class="module-section-select module-section-select--detail form-control"
