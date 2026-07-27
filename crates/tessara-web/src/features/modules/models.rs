@@ -114,6 +114,7 @@ pub enum ModuleInventoryEntryV1 {
 pub enum ModuleServingStateV1 {
     CoreManaged,
     Ready,
+    Disabled,
     Blocked,
 }
 
@@ -122,6 +123,7 @@ impl ModuleServingStateV1 {
         match self {
             Self::CoreManaged => "Core-managed",
             Self::Ready => "Ready",
+            Self::Disabled => "Disabled",
             Self::Blocked => "Blocked",
         }
     }
@@ -130,6 +132,7 @@ impl ModuleServingStateV1 {
         match self {
             Self::CoreManaged => "status-badge is-info",
             Self::Ready => "status-badge is-success",
+            Self::Disabled => "status-badge is-info",
             Self::Blocked => "status-badge is-danger",
         }
     }
@@ -140,9 +143,20 @@ impl ModuleServingStateV1 {
                 "This contribution is served by the Core process and has no independent runtime."
             }
             Self::Ready => "The module is healthy, ready, enabled, and serving its product route.",
-            Self::Blocked => {
-                "At least one health, readiness, or enablement condition prevents the module from serving."
+            Self::Disabled => {
+                "The module is intentionally disabled, so its product route is not serving."
             }
+            Self::Blocked => {
+                "At least one health or readiness condition prevents the enabled module from serving."
+            }
+        }
+    }
+
+    pub const fn detail_label(self) -> &'static str {
+        match self {
+            Self::Ready => "Healthy and enabled",
+            Self::Blocked => "Attention required",
+            Self::CoreManaged | Self::Disabled => self.label(),
         }
     }
 
@@ -269,9 +283,10 @@ impl ModuleInventoryEntryV1 {
     pub fn serving_state(&self) -> ModuleServingStateV1 {
         match self {
             Self::TransitionalInProcess { .. } => ModuleServingStateV1::CoreManaged,
-            Self::IndependentlyDeployed { instance, .. }
-                if instance.ready && instance.enabled && instance.healthy =>
-            {
+            Self::IndependentlyDeployed { instance, .. } if !instance.enabled => {
+                ModuleServingStateV1::Disabled
+            }
+            Self::IndependentlyDeployed { instance, .. } if instance.ready && instance.healthy => {
                 ModuleServingStateV1::Ready
             }
             Self::IndependentlyDeployed { .. } => ModuleServingStateV1::Blocked,
@@ -1106,6 +1121,14 @@ mod tests {
         assert_eq!(entry.serving_state(), super::ModuleServingStateV1::Ready);
 
         if let super::ModuleInventoryEntryV1::IndependentlyDeployed { instance, .. } = &mut entry {
+            instance.enabled = false;
+        }
+        assert_eq!(entry.serving_state(), super::ModuleServingStateV1::Disabled);
+        assert_eq!(entry.serving_state().label(), "Disabled");
+        assert_eq!(entry.serving_state().detail_label(), "Disabled");
+
+        if let super::ModuleInventoryEntryV1::IndependentlyDeployed { instance, .. } = &mut entry {
+            instance.enabled = true;
             instance.healthy = false;
         }
         assert_eq!(entry.serving_state(), super::ModuleServingStateV1::Blocked);

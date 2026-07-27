@@ -982,8 +982,19 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
 
     for (const entry of independentEntries) {
-      let disabled = false;
+      const initiallyEnabled = entry.instance.enabled;
+      let currentlyEnabled = initiallyEnabled;
       try {
+        if (!initiallyEnabled) {
+          const response = await fixtures.admin.post(
+            `/api/modules/instances/${entry.instance.id}/enablement/form`,
+            {
+              form: { enabled: "true" },
+            },
+          );
+          expect(response.ok()).toBeTruthy();
+          currentlyEnabled = true;
+        }
         await gotoHydrated(
           page,
           `/administration/modules/${entry.definition.id}#configuration`,
@@ -1035,7 +1046,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
         }
 
         await page.getByRole("switch", { name: "Disable product route" }).click();
-        disabled = true;
+        currentlyEnabled = false;
         await expect(
           page.getByRole("switch", { name: "Enable product route" }),
         ).toHaveAttribute("aria-checked", "false");
@@ -1053,17 +1064,57 @@ test.describe.serial("Sprint 6A Module Management", () => {
           expect(disabledEntry.instance.enabled).toBe(false);
         }
 
+        if (entry.definition.id === DASHBOARDS_DEFINITION) {
+          await expect(
+            page.getByText("Product route disabled", { exact: true }),
+          ).toBeVisible();
+          await expect(
+            page.getByText(
+              "The product route and navigation are disabled. Configuration and diagnostics remain available.",
+              { exact: true },
+            ),
+          ).toBeVisible();
+          await expect(
+            page.locator('.sidebar a[href="/dashboards"]'),
+          ).toHaveCount(0);
+
+          await page.getByRole("tab", { name: "Overview" }).click();
+          const lifecycle = page.locator(
+            ".module-detail-independent-stack .module-detail-overview-card",
+            { has: page.getByRole("heading", { name: "Lifecycle assessment" }) },
+          );
+          await expect(lifecycle.getByText("Disabled", { exact: true })).toBeVisible();
+          await expect(
+            lifecycle.locator("dl > div").filter({ hasText: "Deployment" }),
+          ).toContainText("Installed · Deployed · Container healthy");
+          await expect(
+            lifecycle.locator("dl > div").filter({ hasText: "Application" }),
+          ).toContainText("Disabled · Route unavailable");
+
+          await gotoHydrated(page, "/administration/modules");
+          const dashboardRow = page.locator(
+            `.module-directory__table [data-module-definition="${DASHBOARDS_DEFINITION}"]`,
+          );
+          await expect(
+            dashboardRow.getByText("Disabled", { exact: true }),
+          ).toBeVisible();
+          await gotoHydrated(
+            page,
+            `/administration/modules/${entry.definition.id}#configuration`,
+          );
+        }
+
         await page.getByRole("switch", { name: "Enable product route" }).click();
-        disabled = false;
+        currentlyEnabled = true;
         await expect(
           page.getByRole("switch", { name: "Disable product route" }),
         ).toHaveAttribute("aria-checked", "true");
       } finally {
-        if (disabled) {
+        if (currentlyEnabled !== initiallyEnabled) {
           const response = await fixtures.admin.post(
             `/api/modules/instances/${entry.instance.id}/enablement/form`,
             {
-              form: { enabled: "true" },
+              form: { enabled: String(initiallyEnabled) },
             },
           );
           expect(response.ok()).toBeTruthy();

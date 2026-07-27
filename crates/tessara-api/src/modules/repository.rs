@@ -452,17 +452,15 @@ pub(crate) async fn load_catalog_projections(
     Ok(projections)
 }
 
-pub(crate) async fn load_available_independent_module_definition_ids(
+pub(crate) async fn load_independent_module_navigation_availability(
     tx: &mut Transaction<'_, Postgres>,
-) -> Result<Vec<String>, sqlx::Error> {
-    sqlx::query_scalar(
+) -> Result<Vec<(String, bool)>, sqlx::Error> {
+    sqlx::query_as(
         r#"
-        SELECT definition_id
+        SELECT
+            definition_id,
+            installed AND deployed AND configured AND enabled AS available
         FROM module_instances
-        WHERE installed
-          AND deployed
-          AND configured
-          AND enabled
         ORDER BY definition_id
         "#,
     )

@@ -746,8 +746,10 @@ async fn apply_navigation_availability(
                 .map(|label| (definition_id, label))
         })
         .collect::<BTreeMap<_, _>>();
-    for definition_id in repository::load_available_independent_module_definition_ids(tx).await? {
-        availability.insert(definition_id, true);
+    for (definition_id, available) in
+        repository::load_independent_module_navigation_availability(tx).await?
+    {
+        availability.insert(definition_id, available);
     }
     for destination in &mut policy.destinations {
         destination.available = destination

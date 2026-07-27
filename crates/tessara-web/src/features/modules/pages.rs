@@ -23,6 +23,8 @@ use super::models::{
     NavigationPolicyResponseV2,
 };
 use super::policy::ModuleNavigationPolicyView;
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+use crate::state::session::{refresh_shell_navigation, shell_navigation_state};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     DropdownMenu, PageHeader,
@@ -70,6 +72,12 @@ pub fn ModuleManagementDirectoryPage() -> impl IntoView {
     );
     let route_state = RwSignal::new(initial);
     let active_section = RwSignal::new("modules");
+
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    {
+        let shell_navigation = shell_navigation_state();
+        Effect::new(move |_| refresh_shell_navigation(shell_navigation));
+    }
 
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     Effect::new(move |_| {
@@ -264,6 +272,12 @@ pub fn ModuleManagementDetailPage() -> impl IntoView {
 
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     {
+        let shell_navigation = shell_navigation_state();
+        Effect::new(move |_| refresh_shell_navigation(shell_navigation));
+    }
+
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    {
         let location = leptos_router::hooks::use_location();
         Effect::new(move |_| {
             let hash = location.hash.get();
@@ -405,7 +419,7 @@ fn module_detail_page(
         ModuleDetailPresentationV1::IndependentlyDeployed => view! {
             <span class="status-badge is-info" title="This module runs as an independently deployed service.">"Independently deployed"</span>
             <span class=detail.serving_state.badge_class() title=detail.serving_state.explanation()>
-                {if detail.serving_state.is_ready() { "Healthy and enabled" } else { "Attention required" }}
+                {detail.serving_state.detail_label()}
             </span>
         }
         .into_any(),
@@ -593,16 +607,16 @@ fn independent_module_sections(
                             </dl>
                         </section>
                         <section class="organization-detail-card module-detail-overview-card">
-                            <header class="module-detail__heading"><div><h2>"Lifecycle assessment"</h2><p>"Independent dimensions explain why the route is available."</p></div><span class=serving_state.badge_class() title=serving_state.explanation()>{if serving_state.is_ready() { "Ready" } else { "Attention required" }}</span></header>
+                            <header class="module-detail__heading"><div><h2>"Lifecycle assessment"</h2><p>"Independent dimensions explain why the route is available."</p></div><span class=serving_state.badge_class() title=serving_state.explanation()>{serving_state.label()}</span></header>
                             <dl class="module-detail-overview__assessment-list">
                                 <div><dt>"Dependencies"</dt><dd>"All required contracts satisfied"</dd></div>
                                 <div><dt>"Compatibility"</dt><dd>{format!("Release {} is {} with this installation", release.version, release.compatibility)}</dd></div>
                                 <div><dt>"Instance continuity"</dt><dd>{format!("{} · Durable instance retained", instance.identity)}</dd></div>
-                                <div><dt>"Deployment"</dt><dd>{format!("{} · {} · Container {}", state(instance.installed), state(instance.deployed), if instance.healthy { "healthy" } else { "unhealthy" })}</dd></div>
+                                <div><dt>"Deployment"</dt><dd>{format!("{} · {} · Container {}", if instance.installed { "Installed" } else { "Not installed" }, if instance.deployed { "Deployed" } else { "Not deployed" }, if instance.healthy { "healthy" } else { "unhealthy" })}</dd></div>
                                 <div><dt>"Configuration"</dt><dd>{if configuration.valid { "Valid" } else { "Finding reported" }}</dd></div>
                                 <div><dt>"Readiness"</dt><dd>{if instance.ready { "Passing" } else { "Failing" }}</dd></div>
                                 <div><dt>"Health"</dt><dd>{if instance.healthy { "Healthy" } else { "Unhealthy" }}</dd></div>
-                                <div><dt>"Application"</dt><dd>{format!("{} · Route {}", state(instance.enabled), if instance.ready { "available" } else { "unavailable" })}</dd></div>
+                                <div><dt>"Application"</dt><dd>{format!("{} · Route {}", state(instance.enabled), if instance.enabled && instance.ready && instance.healthy { "available" } else { "unavailable" })}</dd></div>
                                 <div><dt>"Data"</dt><dd>{format!("{} in {}", instance.data, instance.database_name)}</dd></div>
                             </dl>
                         </section>
@@ -729,8 +743,8 @@ fn independent_module_sections(
                     })}
                     <div class="module-application-state__enablement">
                         <div>
-                            <strong>"Product route enabled"</strong>
-                            <span>{if instance.enabled { "Authorized users can open the module." } else { "Configuration and diagnostics remain available." }}</span>
+                            <strong>{if instance.enabled { "Product route enabled" } else { "Product route disabled" }}</strong>
+                            <span>{if instance.enabled { "Authorized users can open the module." } else { "The product route and navigation are disabled. Configuration and diagnostics remain available." }}</span>
                         </div>
                         <form class="module-application-state__enablement-form" method="post" action=enablement_action>
                             <input type="hidden" name="enabled" value=if instance.enabled { "false" } else { "true" }/>

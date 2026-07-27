@@ -6,7 +6,16 @@
 
 use std::collections::BTreeMap;
 
-use axum::{Json, Router, extract::State, routing::get};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::{
+        HeaderValue,
+        header::{CACHE_CONTROL, VARY},
+    },
+    response::{IntoResponse, Response},
+    routing::get,
+};
 use serde::Serialize;
 use tessara_module_contract::{ResourceOwner, SemanticDestination, SemanticRouteName};
 
@@ -77,8 +86,15 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn get_shell_navigation(
     State(state): State<AppState>,
     auth: AuthenticatedRequest,
-) -> Json<ShellNavigationResponseV1> {
-    Json(load_response(&state, &auth.account).await)
+) -> Response {
+    let mut response = Json(load_response(&state, &auth.account).await).into_response();
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response
+        .headers_mut()
+        .insert(VARY, HeaderValue::from_static("Cookie, Authorization"));
+    response
 }
 
 pub(super) async fn load_response(
