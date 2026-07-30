@@ -9,6 +9,8 @@ This document maps the
 to required manual and automated proof. It is governed by the
 [Sprint 6D plan](./sprint-6d-plan.md) and
 [Module SDK Implementation Contract](../architecture/module-sdk-implementation-contract.md).
+The tester-ready manual scenarios are indexed in
+[Sprint 6D UAT Scripts](./sprint-6d-uat/README.md).
 
 The user approved this consolidated test-change packet before test
 implementation. Any later change that weakens, deletes, skips, retries, or
