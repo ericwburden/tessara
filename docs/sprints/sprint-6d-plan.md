@@ -12,6 +12,8 @@ Status: kicked off on 2026-07-30 from clean `main` commit
 - Accepted architecture decision:
   `docs/architecture/module-sdk-source-ownership.md`
 - Planned verification record: `docs/sprints/sprint-6d-verification.md`
+- Ownership inventory:
+  `docs/architecture/module-sdk-ownership-inventory.md`
 
 ## Sprint Summary
 
