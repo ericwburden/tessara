@@ -8,6 +8,21 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-07-30 - Sprint 6D Canonical Module SDK And Runtime Kickoff
+
+- Status: kicked off from clean `main` commit
+  `89f133f683c1fb1c549b85f57a08098077ac3fba`.
+- Branch: `codex/sprint-6d`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6d`.
+- Plan: `docs/sprints/sprint-6d-plan.md`.
+- Planned verification: `cargo fmt --all`, contract/runtime/UI/testkit and
+  reference-module targeted suites, native/WASM package-boundary audits,
+  `cargo test -p tessara-api`, `cargo test -p tessara-web`, Sprint 6D Compose
+  validation and idempotent bootstrap, smoke, UAT, and retained Playwright.
+- Immediate focus: inventory current canonical/shared behavior and dependency
+  edges, then establish the package/source boundary audits before extracting
+  runtime and UI implementations.
+
 ## 2026-07-30 - Post-Sprint 6C Module SDK And Extraction Decision
 
 ### Decision
