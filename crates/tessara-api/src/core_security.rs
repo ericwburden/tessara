@@ -997,7 +997,7 @@ async fn proxy_manifest_module_document(
     .await?;
     let authorization_revision = revisions.try_get::<i64, _>("authorization_revision")?;
     let organization_revision = revisions.try_get::<i64, _>("organization_revision")?;
-    sync_module_security_state(
+    if sync_module_security_state(
         manifest.definition_id.as_str(),
         installation_id,
         instance_id,
@@ -1006,7 +1006,11 @@ async fn proxy_manifest_module_document(
         enabled,
         if healthy { "enabled" } else { "degraded" },
     )
-    .await?;
+    .await
+    .is_err()
+    {
+        return Ok(crate::module_unavailable_fallback_response());
+    }
     let correlation_id = Uuid::new_v4();
     let now = Utc::now();
     let navigation = manifest
