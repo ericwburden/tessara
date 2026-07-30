@@ -52,6 +52,12 @@ pub struct ShellNavigationItemV1 {
     pub contribution_id: Option<String>,
 }
 
+impl ShellNavigationItemV1 {
+    pub(crate) fn requires_document_navigation(&self) -> bool {
+        self.owner == ShellNavigationItemOwnerV1::Contribution && item_spec(&self.key).is_none()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShellNavigationUnavailableV1 {

@@ -132,6 +132,7 @@ fn projected_nav_item_link(
         "sidebar-link"
     };
     let icon = nav_icon_for(&item.key);
+    let rel = item.requires_document_navigation().then_some("external");
     let label = item.label;
     let title = label.clone();
     let aria_label = label.clone();
@@ -139,6 +140,7 @@ fn projected_nav_item_link(
         <a
             class=class
             href=item.href
+            rel=rel
             title=title
             aria-label=aria_label
         >
@@ -509,5 +511,25 @@ mod tests {
 
         assert!(html.contains("href=\"/reference/scoped-records\""));
         assert!(!html.contains("rel=\"external\""));
+    }
+
+    #[test]
+    fn manifest_module_navigation_requests_a_same_origin_document() {
+        let html = Owner::new().with(|| {
+            projected_nav_item_link(
+                ShellNavigationItemV1 {
+                    key: "example.module.navigation".into(),
+                    label: "Example Module".into(),
+                    href: "/reference/example".into(),
+                    owner: crate::state::shell_navigation::ShellNavigationItemOwnerV1::Contribution,
+                    contribution_id: Some("example.module.navigation".into()),
+                },
+                "home",
+            )
+            .to_html()
+        });
+
+        assert!(html.contains("href=\"/reference/example\""));
+        assert!(html.contains("rel=\"external\""));
     }
 }
