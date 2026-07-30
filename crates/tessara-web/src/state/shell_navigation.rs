@@ -115,18 +115,22 @@ impl ShellNavigationResponseV1 {
             }
 
             for item in &group.items {
-                let Some(spec) = item_spec(&item.key) else {
-                    return false;
-                };
                 if !seen_keys.insert(item.key.as_str())
-                    || spec.locked_group.is_some_and(|id| id != group.id)
-                    || !item_label_is_supported(&item.key, spec.label, &item.label)
-                    || spec.href != item.href
-                    || spec.owner != item.owner
-                    || spec.contribution_id != item.contribution_id.as_deref()
                     || (self.state == ShellNavigationStateV1::Unavailable
                         && item.owner == ShellNavigationItemOwnerV1::Contribution)
                 {
+                    return false;
+                }
+                if let Some(spec) = item_spec(&item.key) {
+                    if spec.locked_group.is_some_and(|id| id != group.id)
+                        || !item_label_is_supported(&item.key, spec.label, &item.label)
+                        || spec.href != item.href
+                        || spec.owner != item.owner
+                        || spec.contribution_id != item.contribution_id.as_deref()
+                    {
+                        return false;
+                    }
+                } else if !manifest_contribution_is_supported(item) {
                     return false;
                 }
             }
@@ -134,6 +138,24 @@ impl ShellNavigationResponseV1 {
 
         seen_keys.contains("home")
     }
+}
+
+fn manifest_contribution_is_supported(item: &ShellNavigationItemV1) -> bool {
+    item.owner == ShellNavigationItemOwnerV1::Contribution
+        && item.contribution_id.as_deref() == Some(item.key.as_str())
+        && item.key.contains('.')
+        && item.key == item.key.trim()
+        && item.key.chars().all(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || ".:_-".contains(character)
+        })
+        && item.label == item.label.trim()
+        && (1..=80).contains(&item.label.chars().count())
+        && !item.label.chars().any(char::is_control)
+        && item.href.starts_with('/')
+        && !item.href.starts_with("//")
+        && !item.href.contains(['\r', '\n'])
 }
 
 fn item_label_is_supported(key: &str, static_label: &str, actual_label: &str) -> bool {
@@ -381,6 +403,26 @@ mod tests {
             .find(|item| item.key == "scoped_records")
             .expect("scoped records item")
             .label = " ".into();
+        assert!(!response.is_supported());
+    }
+
+    #[test]
+    fn manifest_contributions_are_bounded_without_a_product_specific_key() {
+        let mut response = available();
+        response.groups[0].items.push(ShellNavigationItemV1 {
+            key: "example.module.navigation".into(),
+            label: "Example Module".into(),
+            href: "/reference/example".into(),
+            owner: ShellNavigationItemOwnerV1::Contribution,
+            contribution_id: Some("example.module.navigation".into()),
+        });
+        assert!(response.is_supported());
+
+        response.groups[0]
+            .items
+            .last_mut()
+            .expect("manifest contribution")
+            .href = "https://example.invalid".into();
         assert!(!response.is_supported());
     }
 
