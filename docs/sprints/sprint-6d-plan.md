@@ -1,337 +1,317 @@
 # Sprint 6D Plan: Canonical Module SDK And Runtime Extraction
 
-Status: kicked off on 2026-07-30 from clean `main` commit
-`89f133f683c1fb1c549b85f57a08098077ac3fba`.
+Status: specification-hardened for implementation.
 
 - Branch: `codex/sprint-6d`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6d`
-- Roadmap source:
+- Base decision commit:
+  `89f133f647c87e5dfa72891d23a06a012cbd0b05`
+- Kickoff commit:
+  `d55b56b4dddbf6c80eb6fca3e046726ce274dbba`
+- Initial inventory commit:
+  `1b86fa658115547f9f762bae9d1814318cd94f16`
+- Roadmap authority:
   `Sprint 6D: Canonical Module SDK And Runtime Extraction Slice (Next)`
-- Predecessor:
-  `Sprint 6C: Independently Deployed Dashboard Module Slice (Complete)`
-- Accepted architecture decision:
-  `docs/architecture/module-sdk-source-ownership.md`
-- Planned verification record: `docs/sprints/sprint-6d-verification.md`
+- Implementation contract:
+  [Module SDK Implementation Contract](../architecture/module-sdk-implementation-contract.md)
 - Ownership inventory:
-  `docs/architecture/module-sdk-ownership-inventory.md`
+  [Module SDK Canonical Ownership Inventory](../architecture/module-sdk-ownership-inventory.md)
+- Planned verification:
+  [Sprint 6D Verification](./sprint-6d-verification.md)
 
-## Sprint Summary
+## Outcome And Scope
 
-Sprint 6D extracts the policy-neutral platform code required by every
-independently deployed Tessara module into canonical, independently versioned
-contract, runtime, UI, asset, and conformance boundaries. The same canonical
-source may be statically linked or otherwise compiled into Core and multiple
-module images. Shared source is not copied, and a module does not link the Core
-application, root route tree, Core API state, Core-private DTOs, or another
-module's product implementation.
+Sprint 6D establishes one current, independently versioned source for shared
+module contracts, runtime integration, complete-document shell/UI rendering,
+frontend assets, and conformance support. The source may be compiled into many
+images, but modules do not link Core, root web, Core-private state/DTOs, or
+another module implementation.
 
-The sprint proves the boundary with a minimal reference module that renders a
-complete same-origin SSR document from authenticated `ShellContextV1`, serves
-its own frontend assets, exposes the shared configuration and operational
-contracts, degrades coherently, and passes a reusable conformance testkit
-without depending on `tessara-web` or `tessara-api`. Existing Core, Dashboard,
-and Scoped Records product behavior remains unchanged. Dashboard product
-adoption and removal of its root-web dependency belongs to Sprint 6E.
+Tessara is pre-production and advances functionality by pure fast-forward
+changes. The sprint updates manifests, packages, consumers, fixtures,
+deployment baselines, and tests together. It does not retain obsolete
+manifest readers, version windows, crate facades, renderer bridges, or test
+expectations for backwards compatibility.
 
-## Sprint Specifications
+The sprint proves the boundary with:
 
-### Canonical Ownership Inventory
+- the four canonical packages;
+- one generic manifest-driven document/asset route seam;
+- a minimal non-product reference module;
+- Scoped Records adoption of runtime/UI;
+- exact native/WASM package and source audits;
+- executable deployment and closeout evidence from the first implementation
+  slice.
 
-- Inventory shared and duplicated behavior across Core, Dashboard, Scoped
-  Records, `tessara-module-contract`, `tessara-web`, `tessara-web-ui`,
-  `tessara-web-http`, Dockerfiles, Compose profiles, bootstrap scripts, and
-  conformance/acceptance harnesses.
-- Record one canonical owner, consumers, current forbidden dependencies,
-  target package, wire/runtime status, and Sprint 6D disposition for every
-  retained behavior.
-- Distinguish platform contracts, module runtime, shared UI/design-system,
-  testkit, Core-owned policy, and module-owned product behavior. Do not use a
-  broad shared crate as a holding area for business logic.
+Dashboard adoption, its root-web removal, Dashboard-owned frontend assets, and
+Dashboard-only upgrade/rollback proof remain Sprint 6E.
 
-### Platform Contract Boundary
+## Required Implementation
 
-- Retain `tessara-module-contract` as the policy-neutral public contract owner
-  or split it only where dependency or target constraints require a narrower
-  package.
-- Canonically own manifests, Shell Context, scope-bound grants/decisions,
-  semantic destinations, typed resource references, stable error envelopes,
-  configuration/control protocol wire types, and generated-schema/client
-  conventions.
-- Keep verification separate from Core authorization decisions: SDK code may
-  validate signed context, audience, installation, action, freshness, and
-  integrity, but Core remains the decision owner.
-- Define package and wire semantic-versioning rules, manifest declarations,
-  compatibility ranges, the supported-version window, deprecation, and
-  vulnerable/unsupported release reporting.
+### Package and source ownership
 
-### Module Runtime Boundary
+- Implement the exact contract/runtime/UI/testkit graph in the implementation
+  contract.
+- Keep pure signed-envelope and Shell Context validation in contract; move
+  header extraction, environment/verifier construction, tracing, startup, and
+  shutdown to runtime.
+- Move complete-document rendering, pure shell presentation, policy-neutral
+  primitives, tokens, shared CSS, accessibility behavior, and asset
+  conventions to module UI.
+- Move the Dashboard placement editor to its Dashboard product/web owner,
+  update consumers directly, and delete `tessara-web-ui`.
+- Retain `tessara-web-http` as an independent browser-transport leaf.
+- Delete `ShellContentV1`, its media type, Core bridge, hydration bootstrap,
+  renderer branches, and tests.
+- Adopt runtime/UI in Scoped Records without moving its product rules,
+  persistence, migrations, product routes, or product diagnostic facts.
+- Leave Dashboard's root-web/runtime transition visible and nonconforming for
+  Sprint 6E.
 
-- Establish a canonical policy-neutral module runtime package for server
-  startup, configuration validation/apply plumbing, private security-state
-  application, health, readiness, sanitized diagnostics, correlation/tracing,
-  graceful shutdown, and standard operational errors.
-- Extract reusable implementations from Dashboard, Scoped Records, Core, and
-  scripts instead of copying their source. Module-specific configuration
-  schemas, product routes, repositories, and diagnostics facts remain with the
-  owning module.
-- Expose narrow construction/configuration interfaces so a module supplies its
-  identity, manifest, routes, configuration validator, and diagnostics
-  provider without the runtime recognizing a module definition ID.
-- Keep the package graph free of `tessara-api`, root `tessara-web`, Core
-  application state, product modules, SQLx, or Axum dependencies unless a
-  responsibility explicitly requires them; record and test every permitted
-  infrastructure dependency.
+### Current public contracts
 
-### Module UI And Asset Boundary
+- Replace `ModuleManifestV1` with the sole current exact-version manifest and
+  update every repository consumer and production manifest atomically.
+- Add standard configuration validation, projected security state,
+  health/readiness, sanitized diagnostics, and runtime error envelopes.
+- Implement generic providers for definition/manifest/routes/assets,
+  configuration, security state, readiness, and diagnostics.
+- Define a normalized presentation model derived only from verified Shell
+  Context plus route metadata.
+- Keep module configuration semantics and storage with the module; keep
+  authorization and navigation policy with Core.
+- Support contract on native/WASM, runtime on native, UI through explicit
+  `ssr`/`hydrate` features, and target-gated reference builds.
 
-- Establish a canonical SSR-compatible module UI package that owns
-  complete-document shell rendering from normalized Shell Context, shared UI
-  primitives, design tokens, theme behavior, accessibility behavior, standard
-  unavailable/restricted states, and module asset conventions.
-- Separate shell rendering inputs from Core session and application state. The
-  package consumes authenticated wire/context projections and does not make
-  authorization decisions.
-- Define module-owned CSS, JavaScript/WASM, icon, content-hash, cache-header,
-  and hydration conventions. Repeated compiled assets in release images are
-  valid when generated from the canonical source.
-- Preserve the current Core shell while introducing the shared source seam.
-  No Core, Dashboard, or Scoped Records product-flow redesign is in scope.
+### Generic module documents and assets
 
-### Package And Source Enforcement
+- Extend the current manifest with validated GET/HEAD browser path templates,
+  required capability, authorization action/contract, and optional
+  Organization-scope parameter.
+- Add one generic Core document proxy driven by accepted manifests and the
+  module endpoint registry.
+- Authenticate and authorize in Core, sign short-lived Shell Context and grant
+  envelopes, remove browser credentials, and forward only safe metadata.
+- Generate contributed navigation from the accepted current manifest instead
+  of adding reference-specific Core branches.
+- Serve module-owned immutable assets through definition/release/content-hash
+  paths without browser credentials.
+- Render the Core-owned authenticated fallback on timeout, connection failure,
+  or module 5xx; pass through normalized module 4xx responses.
+- Do not add generic product API or mutation proxying.
 
-- Extend or add automated Cargo metadata graph checks for both native and
-  `wasm32-unknown-unknown` targets where applicable.
-- Reject paths from canonical SDK/runtime/testkit packages to `tessara-api`,
-  root `tessara-web`, root route/state modules, Dashboard or Scoped Records
-  product code, and any other feature implementation.
-- Add source assertions for Core-private state/DTO imports, module definition
-  branching, copied shell/runtime implementations, and product-specific
-  terminology in policy-neutral packages.
-- Record allowlists narrowly and require a reviewed architecture change to
-  broaden them.
+### Reference module
 
-### Reference Module And Testkit
+- Add definition `tessara.reference.module-sdk`, release `1.0.0`, and
+  capability `tessara.reference.module-sdk:read`.
+- Serve `/reference/module-sdk` and the authorized scope probe
+  `/reference/module-sdk/scopes/{organization_id}`.
+- Require at least one authorized capability binding for the root and exact
+  Organization scope for the probe.
+- Return identical `403 module action unavailable` envelopes for known and
+  random unauthorized Organization IDs.
+- Declare one non-product conformance feature/behavior contract, no product
+  resources, no product records, and no cross-module dependency.
+- Normalize only a `display_label` configuration.
+- Persist configuration and projected security state atomically in one exact
+  current JSON schema on a module-owned volume; persist no signed/user/secret
+  material.
+- Supply liveness, readiness, sanitized diagnostics, complete SSR, canonical
+  CSS, minimal hydration, immutable assets, standard states, outage behavior,
+  and bounded graceful shutdown.
 
-- Add a minimal first-party reference/fixture module with its own manifest,
-  route contribution, configuration schema, security capability, health,
-  readiness, diagnostics, complete-document SSR route, and module-owned
-  versioned assets.
-- The reference module must build and test without `tessara-web` or
-  `tessara-api`. It must not become a product module or add domain scope beyond
-  proving the roadmap contract.
-- Add a reusable testkit for manifest and compatibility validation,
-  authenticated/tampered/wrong-audience context, configuration normalization,
-  health/readiness, sanitized diagnostics, SSR shell, asset headers,
-  unavailable state, graceful shutdown, and package independence.
-- Route the fixture through the same-origin gateway in the Sprint 6D
-  deployment profile and preserve the Core-owned fallback when it is stopped.
+### Version and security policy
 
-### Module Authoring And Upgrade Guidance
+- Use exact current package/protocol versions; the support window has width
+  one.
+- Update repository consumers atomically for every breaking pre-production
+  change.
+- Record deprecation in architecture/release history, but retain no obsolete
+  API solely for compatibility.
+- Reject older or newer tuples at manifest import, bootstrap, enablement, and
+  upgrade.
+- Inventory the exact linked SDK versions for every Module Release.
+- Block unsupported or critical/high-vulnerable versions without a
+  grandfathered lifecycle exception; report moderate/low advisories.
+- Require a rebuilt immutable module image to deliver any SDK/security fix.
 
-- Document how a module declares, consumes, tests, builds, and upgrades
-  canonical contract/runtime/UI/testkit packages.
-- Document that shared-source changes affect a deployed module only after that
-  module publishes and deploys a new immutable release image.
-- Document compatibility-window, deprecation, security advisory, and affected
-  Module Release inventory expectations.
-- Update the independent-module pathway with the canonical package graph and
-  reference-module conformance commands, without pre-implementing Dashboard
-  adoption from Sprint 6E.
+## Dependency And Source Rules
+
+Allowed Tessara workspace edges are exactly:
+
+| Source | Allowed Tessara dependencies |
+| --- | --- |
+| `tessara-module-contract` | none |
+| `tessara-module-runtime` | contract |
+| `tessara-module-ui` | contract |
+| `tessara-module-testkit` | contract, runtime, UI |
+| `tessara-reference-module-sdk` `ssr` graph | contract, runtime, UI |
+| `tessara-reference-module-sdk` `hydrate` graph | contract and UI; runtime and native persistence are forbidden |
+| `tessara-reference-module-sdk` dev graph | applicable production graph plus testkit |
+| Scoped Records | contract, runtime, UI, and its module-owned infrastructure |
+| root `tessara-web` | contract, UI, Core/product web dependencies; it is not an SDK package |
+| `tessara-web-http` | no Tessara dependency unless contract wire types are required; browser transport only |
+| `tessara-web-ui` | deleted; no dependency or facade remains |
+
+Every other direct or transitive edge from a canonical package is forbidden.
+Native and WASM audits also reject:
+
+- Core/root/product package imports;
+- Core-private DTO or application-state symbols;
+- product Module Definition IDs or product DTO terminology in canonical
+  production source;
+- definition-ID branches in runtime/UI/testkit;
+- copied shell, verifier-construction, control-route, tracing, startup, or
+  shutdown implementations.
+
+Dashboard's Sprint 6E debt is an expected failing transition finding, not a
+canonical allowlist entry.
 
 ## Acceptance Criteria
 
-1. Every retained shared platform behavior in scope has one documented
-   canonical source owner and no unexplained copied implementation.
-2. Canonical contract, runtime, UI/design-system, asset, and testkit
-   responsibilities are explicit, independently testable, and free of module
-   product semantics.
-3. Package/source audits reject paths from the canonical SDK/runtime/testkit
-   to Core application code, root `tessara-web`, Core-private DTO/state, or
-   module implementations on every relevant target.
-4. The reference module builds and runs without `tessara-web` or
-   `tessara-api`.
-5. An authenticated user can load the reference module's complete same-origin
-   SSR document with coherent shell, navigation, theme, and standard states;
-   the module serves its own versioned frontend assets.
+1. Every shared behavior in Sprint 6D has one documented canonical owner and
+   source; no obsolete facade or bridge remains.
+2. The four canonical packages have the exact allowed graph on every relevant
+   target and contain no Core or product semantics.
+3. One current manifest and exact platform tuple replace the development v1
+   shape everywhere in the repository.
+4. The reference module builds native and WASM without root web, Core API,
+   Core application state, SQLx, or a product implementation.
+5. An authenticated actor can load the reference complete document through
+   its normal same-origin navigation with coherent shell, theme, accessibility,
+   standard states, and module-owned assets.
 6. Invalid, tampered, expired, wrong-installation, wrong-audience, and
-   unauthorized context fails closed without exposing reusable credentials or
-   protected destination existence.
-7. Configuration, security-state application, health, readiness, sanitized
-   diagnostics, correlation, and graceful shutdown pass through the canonical
-   runtime and reusable conformance testkit.
-8. Stopping the reference module produces the Core-owned fallback while Core,
-   Dashboard, Scoped Records, and unrelated routes remain available.
-9. SDK/runtime versions, manifest compatibility, support window, deprecation,
-   and unsupported/vulnerable release handling are documented and covered by
-   compatibility tests.
-10. Existing Core, Dashboard, and Scoped Records product, authorization,
-    module-management, SSR, API, smoke, UAT, and Playwright behavior remains
-    green; Dashboard retains its intentional root-web transition for Sprint
-    6E.
-11. The Sprint 6D deployment is reproducible from an exact clean source commit,
-    records commit/tree/dirty/image provenance, and its bootstrap is
-    idempotent.
-12. The module-authoring workflow lets a future module adopt the canonical
-    packages without copying source or adding definition-specific Core
-    Module Management logic.
+   unauthorized projections fail closed without credential, policy, or
+   protected-destination disclosure.
+7. Configuration, projected security state, readiness, liveness, diagnostics,
+   correlation, and shutdown flow through canonical runtime providers.
+8. Stopping the reference module produces the Core fallback while Core,
+   Dashboard, Scoped Records, Module Management, and unrelated routes remain
+   available.
+9. Scoped Records uses canonical runtime/UI while preserving product and
+   authorization behavior.
+10. Dashboard retains its Sprint 6C product behavior and remains an explicit
+    Sprint 6E source/runtime transition finding.
+11. Exact-version and security inventory reject unsupported or blocked
+    releases without compatibility fallback.
+12. The Sprint 6D deployment and evidence bind clean committed source to
+    immutable images and repeat bootstrap as a verified no-op.
+13. A future module can adopt the current packages and generic document route
+    without adding definition-specific Core UI, routing, or control logic.
 
-## Manual Test Plan
+## Manual Verification
 
-1. Launch the source-exact Sprint 6D stack and bootstrap it twice. Confirm the
-   second materialization is a no-op and the reference Module Instance,
-   configuration, routes, and receipt remain stable.
-2. Sign in as an administrator and open the reference route through the
-   same-origin gateway. Verify complete SSR shell chrome, navigation, theme,
-   route content, versioned module assets, configuration, health, and
-   diagnostics.
-3. Disable and re-enable the reference module through shared Module
-   Management. Confirm product navigation and route state change without a
-   definition-specific Core screen.
-4. Stop the reference module. Confirm its route receives the Core-owned
-   fallback, Module Management remains usable, and Core, Dashboard, and Scoped
-   Records routes continue to work. Restart it and confirm identity and
-   configuration are retained.
-5. Use a constrained non-admin actor with the reference capability in one
-   authorized scope and without it in another. Confirm the allowed route works
-   and known/random unauthorized destinations receive the same non-disclosing
-   outcome.
-6. Exercise tampered, expired, wrong-installation, and wrong-audience Shell
-   Context fixtures through the conformance harness and confirm fail-closed
-   results without credential or policy leakage.
-7. Inspect response headers and image contents to confirm the reference module
-   serves its own content-hashed/cache-controlled assets compiled from the
-   canonical UI source.
-8. Review `cargo metadata` evidence for native and WASM targets and confirm the
-   reference module and canonical packages have no path to forbidden Core/root
-   or module implementation packages.
-9. Exercise keyboard, no-JavaScript, light/dark theme, 1280 px, 768 px, and
-   390 px presentation for the reference document and fallback state.
+1. Review the ownership and package-boundary outputs and confirm the Dashboard
+   finding is visible rather than accepted as conforming.
+2. Build the reference native and hydrate targets directly and inspect their
+   dependency graphs.
+3. Launch a source-exact fresh Sprint 6D deployment and run bootstrap twice;
+   compare identity, configuration, route, manifest, and receipt state.
+4. Sign in as an administrator and navigate to the reference route through
+   normal navigation. Inspect complete HTML, shell, theme, assets,
+   configuration, health, and diagnostics.
+5. Exercise light, dark, and system theme; keyboard operation; no JavaScript;
+   and 1280 px, 768 px, and 390 px layouts.
+6. Use one constrained actor with the reference capability in one Organization
+   scope. Confirm the root and authorized probe work, while known and random
+   unauthorized scopes return indistinguishable results.
+7. Disable/re-enable the reference module through generic Module Management.
+8. Stop/restart the reference process. Confirm the Core fallback, unrelated
+   routes, retained configuration/security state, and recovery.
+9. Inspect the reference image and responses for exact SDK versions,
+   provenance, content hashes, cache headers, and module-owned assets.
+10. Run the shared conformance command and inspect every retained evidence
+    record before closeout.
 
-## Automated Test Plan
+## Automated Verification
 
-- `cargo fmt --all`
-- `cargo test -p tessara-module-contract`
-- targeted tests for each new module runtime, UI, and testkit package
-- reference-module native build/test without root application features
-- reference-module `wasm32-unknown-unknown` check when hydration is included
-- native and WASM package/source boundary audit commands
-- context verification tests for valid, tampered, expired, wrong-installation,
-  wrong-audience, unauthorized, and nondisclosing known/random cases
-- runtime conformance tests for configuration, security state, health,
-  readiness, diagnostics redaction, tracing/correlation, and graceful shutdown
-- SSR and asset tests for complete-document shell content, accessibility
-  landmarks, content hashes, cache headers, no-JavaScript usefulness, and
-  standard fallback states
-- `cargo test -p tessara-api`
-- `cargo test -p tessara-web`
-- existing Dashboard and Scoped Records targeted suites
-- `docker compose -f deploy\sprint-6d\compose.yaml config --quiet`
-- `.\scripts\bootstrap-sprint-6d-deployment.ps1` twice
-- `.\scripts\local-launch.ps1` remains a required compatibility check; the
-  Sprint 6D Compose profile is authoritative for retained reference-module
-  evidence
-- `.\scripts\smoke.ps1`
-- `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
-- `npm --prefix .\end2end test`
-- retained Playwright validation through `.\scripts\validate-e2e.ps1` against
-  the source-exact Sprint 6D deployment evidence
+Automated changes require explicit user approval before their files are
+edited. The planned coverage is:
 
-## Closeout-Readiness Plan
+- current-manifest validation and exact-version mismatch rejection;
+- targeted contract/runtime/UI/testkit/reference/Scoped Records suites;
+- native and WASM package/source boundary audits;
+- valid, tampered, expired, wrong-installation, wrong-audience, unauthorized,
+  and nondisclosing known/random context/grant cases;
+- configuration persistence and read-back;
+- liveness/readiness and sanitized diagnostics;
+- complete-document SSR, landmarks, no-JavaScript usefulness, hydration
+  stability, asset hashes, and cache headers;
+- graceful shutdown and outage/Core-fallback containment;
+- existing Core, web, Dashboard, Scoped Records, smoke, UAT, and Playwright
+  regression coverage;
+- responsive, theme, keyboard, authorization, and unavailable-state
+  Playwright coverage;
+- Compose validation, fresh baseline, source/image provenance, bootstrap
+  first-apply, and bootstrap second-run no-op evidence.
 
-- Deployment profile: `deploy/sprint-6d/compose.yaml`, extending the retained
-  Sprint 6C topology with only the minimal reference-module and generic route
-  registration needed for this sprint.
-- Idempotent materialization:
-  `.\scripts\bootstrap-sprint-6d-deployment.ps1`; run it twice and retain the
-  first apply plus second no-op evidence.
-- Source provenance: every rebuilt release image records exact
-  `TESSARA_SOURCE_COMMIT`, `TESSARA_SOURCE_TREE`,
-  `TESSARA_SOURCE_DIRTY`, release profile, and immutable image digest. Retained
-  evidence must bind the running images to one committed clean source.
-- Migration checkpoint: no product schema is planned. If any Core or fixture
-  schema changes become necessary, squash the development migration before
-  closeout and apply every affected baseline to disposable empty databases.
-  Otherwise record a deliberate no-schema-change checkpoint and rerun the
-  existing Core, Dashboard, Scoped Records, deployment-control, and fixture
-  fresh-baseline proofs.
-- Final evidence directory: `artifacts/sprint-6d-closeout/`, containing at
-  least `deployment-fresh.json`, `bootstrap-first.json`,
-  `bootstrap-second-noop.json`, `sdk-ownership.json`,
-  `package-boundaries.json`, `reference-conformance.json`,
-  `smoke-fresh.json`, `uat-fresh.json`, `e2e-fresh.json`,
-  `e2e-fresh.summary.json`, and required hash/provenance sidecars.
-- Harness reconciliation: update smoke, UAT, Playwright, navigation/module
-  inventory, capability, manifest, Compose, bootstrap, and evidence assertions
-  in the same change that adds the reference module. Prefer semantic
-  assertions; keep any contractually exact inventory in one shared fixture.
-- Non-admin proof: use one constrained actor whose reference capability is
-  authorized only at one declared scope. Prove allowed access plus identical
-  restricted results for known and random unauthorized destinations and
-  wrong-audience context.
-- Exit-condition mapping:
-  - build/run without root dependencies: manual tests 2 and 8; reference build
-    and native/WASM package audits;
-  - same-origin coherent shell: manual tests 2, 7, and 9; SSR, asset, smoke,
-    UAT, and Playwright assertions;
-  - authenticated and unavailable states: manual tests 3–6; context,
-    nondisclosure, outage, and fallback automation;
-  - shared conformance suite: manual test 6; runtime/UI/testkit conformance
-    outputs;
-  - one canonical implementation: manual test 8; ownership inventory, source
-    duplicate scan, and package/source boundary evidence;
-  - repeated code/assets in the module image: manual test 7; image inspection,
-    asset hashes, provenance, and module-only build evidence.
-- Before implementation-complete status, run a closeout-readiness audit for
-  acceptance mapping, Compose validity, provenance inputs, bootstrap
-  idempotency, migration status, current harness inventory, and clean targeted
-  suites. Commit all implementation and harness corrections before the one
-  retained source-exact cycle.
+The approved commands and file-level test changes are recorded in the
+[Sprint 6D Verification](./sprint-6d-verification.md) document before test
+implementation.
 
-## Ordered Implementation Plan
+## Deployment And Closeout
 
-1. Produce the canonical ownership and dependency inventory, including current
-   Dashboard/Scoped Records/root-web coupling and exact target package
-   boundaries.
-2. Strengthen the platform contract boundary and compatibility/versioning
-   policy without importing runtime or UI dependencies.
-3. Extract the policy-neutral module runtime and move reusable operational
-   implementations behind narrow construction/provider interfaces.
-4. Extract complete-document shell/UI primitives and module-owned asset
-   conventions while keeping Core rendering behavior stable.
-5. Implement native/WASM package-graph and source audits before broad adoption
-   can introduce accidental dependencies.
-6. Add the minimal reference module and reusable testkit, then prove direct
-   build, context verification, runtime operations, SSR shell, asset, outage,
-   and graceful-shutdown behavior.
-7. Add Sprint 6D Compose, bootstrap, provenance, constrained-actor, smoke,
-   UAT, and Playwright coverage in the same slices that alter deployment and
-   route inventories.
-8. Document module authoring, package upgrades, compatibility support, and
-   unsupported/vulnerable release handling; update the reusable independent
-   module pathway.
-9. Run the closeout-readiness audit, record the migration checkpoint, commit
-   clean implementation source, and execute one retained source-exact
-   closeout cycle.
+- `deploy/sprint-6d/compose.yaml` extends Sprint 6C with the reference state
+  initializer/runtime, named state volume, endpoint registration, and
+  provenance-labelled image.
+- The reference state initializer creates or validates the exact current JSON
+  schema. Incompatible pre-production fixture state is recreated, not
+  migrated.
+- Any affected development database baseline is advanced/squashed directly
+  and proven against disposable empty databases. No upgrade migration is kept
+  for obsolete pre-Sprint-6D development state.
+- `scripts/bootstrap-sprint-6d-deployment.ps1` materializes the current
+  reference release/instance/configuration/capability/routes, emits first-apply
+  evidence, and proves the second run is an exact no-op.
+- Every rebuilt image records source commit, tree, dirty state, release
+  profile, exact SDK versions, and immutable digest.
+- Closeout evidence lives under `artifacts/sprint-6d-closeout/` with the exact
+  names in the verification document and SHA-256 sidecars.
+- One retained source-exact closeout cycle begins only from a clean committed
+  tree after implementation, harness, and readiness corrections are committed.
 
-## Dependencies And Blockers
+## Ordered Implementation
 
-- Sprint 6C's independent Dashboard/Scoped Records processes, database
-  isolation, Module Management, Shell Context, authorization exchange,
-  gateway, Compose, bootstrap, and conformance evidence are required and
-  complete.
-- Existing `tessara-module-contract`, `tessara-web-ui`, `tessara-web-http`,
-  root shell components, module control endpoints, manifests, and boundary
-  audit scripts are the extraction inputs, not automatically the final
-  package design.
-- `tessara-web-ui` currently depends on `tessara-core`; shell components and
-  root application state remain coupled inside `tessara-web`.
-  `tessara-dashboard-module` still depends on root `tessara-web`. These are
-  known transition edges, not kickoff blockers.
-- Sprint 6D must not remove the Dashboard root-web edge, migrate Dashboard
-  product code/assets, or prove Dashboard-only rollout; those belong to Sprint
-  6E.
-- Blueprint automation, physical Components extraction, third-party catalog
-  verification, and unrelated product behavior are later roadmap scope.
-- No blocking conflict is known at kickoff. Any required expansion into Core
-  policy or module product semantics must stop for an explicit roadmap or
-  architecture decision.
+1. Commit this specification hardening without production or test changes.
+2. Present the complete test-change approval packet and receive explicit user
+   approval before editing any test or verification-harness file.
+3. Replace the manifest and establish the four package shells plus native/WASM
+   boundary gates.
+4. Characterize current rendering, then extract runtime/UI, delete
+   `ShellContentV1`, move the placement editor, and delete `tessara-web-ui`.
+5. Implement the generic document/asset route and reference module.
+6. Adopt runtime/UI in Scoped Records and preserve its product behavior.
+7. Add Sprint 6D deployment/bootstrap/provenance and only the approved test
+   changes.
+8. Run the closeout-readiness audit and retained source-exact cycle.
+
+## Non-Goals And 6E Handoff
+
+Sprint 6D does not migrate Dashboard to canonical runtime/UI, remove its
+root-web dependency, move its route tree/assets, or prove Dashboard-only
+upgrade/rollback. It also excludes generic module product API proxying,
+product-flow redesign, shared database adapters, Blueprint automation,
+Components extraction, and remote microfrontends.
+
+Sprint 6E receives the current canonical packages, manifest, route/asset
+conventions, testkit, and explicit Dashboard findings. It removes the
+Dashboard source/runtime debt and proves independent Dashboard release,
+upgrade, and rollback.
+
+## Readiness And Blockers
+
+Product decisions are closed. The implementation contract is decision
+complete.
+
+The main delivery risk is breadth: the generic read-only document seam,
+immediate shared-UI source move, reference module, and Scoped Records adoption
+all land in one sprint. The scope controls above are mandatory; implementation
+must not absorb Dashboard adoption, generic product APIs, or compatibility
+work to compensate.
+
+Production extraction is blocked until:
+
+- this specification change is committed;
+- the test-change approval packet is explicitly approved;
+- current-rendering characterization and boundary gates are ready to land
+  together with their approved tests.

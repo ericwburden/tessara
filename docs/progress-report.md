@@ -8,6 +8,34 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-07-30 - Sprint 6D Specification Hardening
+
+- Reconciled Sprint 6D with Tessara's pre-production pure fast-forward
+  direction: the implementation will support one current manifest and one
+  exact Core/protocol/SDK tuple rather than retain development compatibility
+  readers, facades, bridges, or previous-minor windows.
+- Fixed the canonical crate graph and public provider responsibilities for
+  `tessara-module-contract`, `tessara-module-runtime`,
+  `tessara-module-ui`, and `tessara-module-testkit`.
+- Decided that Sprint 6D moves policy-neutral primitives to module UI, moves
+  placement editing to Dashboard product ownership, deletes
+  `tessara-web-ui`, retains `tessara-web-http` as an independent leaf, and
+  deletes `ShellContentV1`.
+- Specified one manifest-driven Core GET/HEAD document and immutable-asset
+  proxy, the non-product `tessara.reference.module-sdk` fixture, exact
+  authorization/outage/state behavior, and Scoped Records runtime/UI
+  adoption.
+- Kept Dashboard runtime/UI adoption and root-web removal entirely in Sprint
+  6E; the Sprint 6D boundary report must show that debt as nonconforming rather
+  than allowlist it.
+- Added a clause-by-clause verification/evidence contract. No test, fixture,
+  assertion, smoke/UAT/conformance script, Playwright file, or verification
+  harness may change until the user approves the consolidated test-change
+  packet.
+- Production extraction remains blocked until this specification change is
+  committed, the test-change packet is approved, and boundary/current-render
+  gates are ready to land with their approved tests.
+
 ## 2026-07-30 - Sprint 6D Canonical Module SDK And Runtime Kickoff
 
 - Status: kicked off from clean `main` commit

@@ -11,6 +11,7 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 | [modular-application-platform.md](./modular-application-platform.md) | Canonical product contract for Core, modules, composition, ownership, and application releases |
 | [architecture.md](./architecture.md) | Target architecture, transition model, and technical design direction |
 | [architecture/module-sdk-source-ownership.md](./architecture/module-sdk-source-ownership.md) | Accepted decision for canonical shared SDK/runtime source, repeated release artifacts, and independent module builds |
+| [architecture/module-sdk-implementation-contract.md](./architecture/module-sdk-implementation-contract.md) | Sprint 6D package graph, public providers, current manifest, generic document/asset seam, reference fixture, version policy, and Sprint 6E handoff |
 | [api-wire-types.md](./api-wire-types.md) | Direction for module-owned public contracts, wire types, and generated clients |
 | [development-workflow.md](./development-workflow.md) | Local development loops for fast host-run iteration, API-only refresh, and full-stack relaunch |
 | [ui-guidance.md](./ui-guidance.md) | Canonical UI guidance for naming, brand expression, shell behavior, rendering, layout, components, states, shared primitive contracts, and transitional UI rules |

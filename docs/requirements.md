@@ -94,16 +94,20 @@ Before Core exists, the Supervisor must create and persist the stable Applicatio
 
 Every normal Tessara module must be a separately deployable full-stack application. Each exact Module Release must provide:
 
-- a versioned, verifiable manifest
+- the sole current, verifiable manifest
 - module identity, version, runtime/optional-migration image digests, and Core Release compatibility
 - the v1 `tessara-oci-v1` Deployment Profile: digest-pinned runtime image and optional migration image, supported platform/architecture, runtime and migration commands, listen protocol/port and service-registration name, configuration/secret injection points, runtime versus migration identities, readiness/liveness probes, graceful shutdown, and resource requests/limits
-- supported Shell Context, UI SDK, and design-system contract versions
+- exact current Shell Context, control protocol, contract, runtime, UI SDK,
+  design-system/asset ABI, and conformance versions plus the exact shared
+  packages linked into the image
 - required and optional functional dependencies
 - versioned machine-readable Feature Declarations with stable namespaced identifiers, descriptions, use cases, inputs, outcomes, constraints, and links to realizing contracts, resources, routes, configuration, and security capabilities
 - required and provided contract versions
 - namespaced security capabilities
 - owned resource types and typed-reference schemas
-- product routes when the capability has end-user workflows
+- product routes when the capability has end-user workflows, including
+  validated GET/HEAD browser path templates with declared capability/action
+  authorization and optional Organization-scope parameters
 - at least an administration, configuration, or diagnostics screen
 - machine-readable configuration schema and module-owned validation API
 - same-origin route integration through semantic destinations
@@ -119,6 +123,13 @@ Core-private DTOs, or another module's domain/persistence implementation.
 Shared platform packages must remain policy-neutral; functional behavior must
 have exactly one authoritative Core or module owner and be consumed across
 boundaries through a versioned contract.
+
+Before production stability, the platform supports exactly the current
+manifest and Core/protocol/SDK tuple. A breaking platform change updates all
+repository consumers, manifests, deployment baselines, and tests in the same
+functionality change. Tessara must not retain dual manifest readers, crate
+facades, deprecated APIs, or wire adapters solely for development backwards
+compatibility.
 
 A module may have no primary end-user route. It must still be operable and configurable without direct database edits. Tessara must not require a separate headless-module class.
 
@@ -240,10 +251,13 @@ The same versioned Composition Engine and operations must be available to Core U
 - The Installation Supervisor/bootstrap CLI must run outside Core, support first installation through the shared Composition Engine or a detached signature over a resolved lockfile/plan digest, and own Core Release component and Module Release migration sequencing, health-gated traffic switching, rollback, and recovery. Its own signed upgrade must run through a separate bootstrap launcher with ledger backup/schema compatibility, health verification, and rollback rather than through an application apply.
 - After first Core health, the Supervisor CLI must support initial and recovery Administrator Enrollment Claim issuance under their distinct eligibility rules, non-secret lifecycle/reservation status inspection, revocation/replacement, and reconciliation without exposing a claim secret after initial display.
 - A module instance must serve exactly one application installation unless a later architecture explicitly adds multi-tenancy.
-- A same-origin gateway must route browser UI and API traffic without exposing deployment topology in saved links.
+- A same-origin gateway must route browser UI and API traffic without exposing deployment topology in saved links. Current module manifests drive a generic Core GET/HEAD document and immutable-asset proxy; Core authenticates/authorizes the browser, sends short-lived signed projections without browser credentials, and owns the unavailable fallback.
 - Every supported application release must record the exact Core Release version and component-image digests including the gateway, exact Module Release versions/image digests, selected Deployment Profile versions, and compatibility status.
 - Installations must remain operable without a mandatory central Tessara SaaS control plane.
 - Core Release component (including gateway) and Module Release upgrades must validate compatibility before migrations or traffic switching.
+- Before production, compatibility means exact equality with the current
+  declared platform tuple. Non-current releases must be rebuilt rather than
+  normalized or grandfathered through lifecycle changes.
 - Failed migrations, unavailable dependencies, rollback, and recovery must have explicit operational behavior.
 - Diagnostic bundles must redact secrets while preserving versions, health, dependency findings, and correlation data needed for support.
 
@@ -302,6 +316,11 @@ The first-party reference application consists of Forms, Workflows, Responses, D
 ## Compatibility And Change Observation
 
 Module owners define compatibility and versioning rules for their resources. For the current reference analytics application:
+
+- platform SDK/protocol compatibility is distinct from module-owned resource
+  compatibility: the pre-production platform supports one exact current tuple,
+  while module owners may define longer-lived compatibility rules for their
+  product resources;
 
 - Dataset revision and major-line compatibility must remain visible to consumers.
 - Component and Dashboard consumers must receive declared state and compatibility outcomes from their providers.

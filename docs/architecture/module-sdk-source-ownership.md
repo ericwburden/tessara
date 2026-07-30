@@ -1,6 +1,7 @@
 # Module SDK Source Ownership And Deployment
 
-Status: Accepted 2026-07-30, after Sprint 6C closeout.
+Status: Accepted 2026-07-30, with Sprint 6D fast-forward implementation
+contract.
 
 ## Context
 
@@ -64,21 +65,28 @@ allowed when each artifact is produced from the canonical package source.
    decisions, Organization scope, shell policy, navigation composition, and
    installation/module lifecycle. SDK code may verify or render those
    decisions; it does not recreate them.
-7. Shared-package adoption is release-local. Updating an SDK does not by itself
-   require every deployed module to move. Core and the gateway support a
-   declared compatibility window, and manifests advertise the exact contract
-   and SDK compatibility of each Module Release.
+7. Shared-package adoption is release-local. Updating canonical source changes
+   deployed behavior only after a consuming module publishes and deploys a new
+   image. Before production, Core supports one exact current platform tuple;
+   repository consumers advance together and manifests advertise the exact
+   contract and SDK versions linked into each Module Release.
 8. Unsupported or vulnerable SDK versions are handled through catalog and
    compatibility policy that identifies affected Module Releases. They are not
    silently replaced inside running module images.
-9. A change confined to a module implementation or its compatible SDK adoption
+9. A change confined to a module implementation or its current SDK adoption
    produces only a new release of that module. The installation lockfile and
    receipt record the new module digest, while Core and unrelated module image
    digests remain unchanged.
+10. Before production stability, repository functionality advances
+    fast-forward. A new manifest, wire shape, package boundary, or shared
+    source replaces the obsolete development shape across all repository
+    consumers in the same change. Tessara does not retain dual readers,
+    facades, deprecated APIs, or migration paths solely for development
+    backwards compatibility.
 
-## Initial Package Direction
+## Required Package Direction
 
-The extraction should establish canonical responsibilities equivalent to:
+The extraction establishes these exact package names and responsibilities:
 
 - `tessara-module-contract`: manifests, Shell Context, grants/decisions,
   semantic destinations, typed resource references, stable errors, and public
@@ -91,10 +99,15 @@ The extraction should establish canonical responsibilities equivalent to:
 - `tessara-module-testkit`: manifest, contract, route, authorization, outage,
   asset, and deployment-independence conformance fixtures.
 
-The final crate names may be refined during extraction, but these ownership
-boundaries are required. Existing `tessara-web-ui`, `tessara-web-http`, and
-other reusable code should move or narrow into those packages instead of being
-copied.
+The complete allowed graph, provider interfaces, current manifest, generic
+document route, reference module, target behavior, and version policy are
+defined in the
+[Module SDK Implementation Contract](./module-sdk-implementation-contract.md).
+
+Policy-neutral `tessara-web-ui` source moves directly to
+`tessara-module-ui`; its Dashboard placement editor moves to the Dashboard
+product/web owner, and the old crate is deleted. `tessara-web-http` remains an
+independent leaf.
 
 ## Dashboard Reference Completion
 
@@ -127,3 +140,9 @@ Components, Datasets, Responses, Workflows, and Forms.
 - Core and module source graphs become smaller and more auditable: shared
   platform behavior is reusable, while business behavior remains owned once
   behind a functional contract.
+- During pre-production the supported-version window has width one: the exact
+  tuple declared by the current Core Release. Breaking changes update all
+  repository consumers and baselines atomically; older or newer tuples are
+  rejected rather than normalized.
+- `ShellContentV1` and `tessara-web-ui` are removed in Sprint 6D instead of
+  becoming transitional compatibility contracts.

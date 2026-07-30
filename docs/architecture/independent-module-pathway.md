@@ -1,18 +1,18 @@
 # Independent Module Pathway
 
-Status: Sprint 6C runtime/data reference contract. The canonical shared-source
-and independent-build template completes in Sprints 6D and 6E.
+Status: Sprint 6D current module-authoring contract. Dashboard completes its
+adoption in Sprint 6E.
 
 Dashboard and Scoped Records are the two conformance fixtures for this
 pathway. A third module must be able to reach the same degree of modularity
 without adding a definition-ID branch to Core or Module Management.
 
 Sprint 6C proved the independent process, database, control, product, and
-operational boundary. Dashboard still links root `tessara-web`, so later
-feature extractions must not copy that transitional source/build edge. They
-must follow the accepted
-[Module SDK Source Ownership And Deployment](./module-sdk-source-ownership.md)
-decision and the completed Sprint 6E Dashboard structure.
+operational boundary. Sprint 6D makes the canonical source/build contract
+concrete in the
+[Module SDK Implementation Contract](./module-sdk-implementation-contract.md).
+Dashboard still links root `tessara-web`; that explicit nonconforming finding
+is removed in Sprint 6E and must not be copied by later modules.
 
 ## Shared Boundary
 
@@ -30,6 +30,10 @@ An independently deployed module owns:
 - applying normalized configuration and Core-projected enablement/security
   state.
 
+Every new module uses the sole current manifest and exact current
+contract/runtime/UI tuple. Pre-production authoring does not target an older
+manifest or SDK window.
+
 Core owns:
 
 - installation, actor, authorization, release and instance inventory, desired
@@ -42,7 +46,13 @@ Core owns:
 Core does not own module product tables, module configuration types, or
 definition-specific Module Management components.
 
-## Required Module Control Contract
+## Required Module Runtime And Control Contract
+
+Every independently deployed module implements the canonical runtime provider
+interfaces for definition/routes/assets, configuration, projected security
+state, readiness, and sanitized diagnostics. The shared runtime owns request
+authentication, protocol validation, control/probe routes, tracing, standard
+errors, startup, and shutdown; module providers own semantics and persistence.
 
 Every module registered in `TESSARA_MODULE_CONTROL_ENDPOINTS` exposes the same
 private service protocol:
@@ -114,27 +124,34 @@ flow or markup is a conformance failure.
 
 1. Create a module crate/service with its own database baseline and distinct
    owner, migration, and runtime identities.
-2. Publish a valid `ModuleManifestV1`, including the configuration schema,
-   operational routes, capabilities, navigation, and deployment probes.
-3. Implement the shared configuration and security-state endpoints.
+2. Publish the sole current manifest, including exact platform/SDK versions,
+   browser routes, configuration schema, operational routes, capabilities,
+   navigation, assets, and deployment probes.
+3. Implement module-owned providers behind `tessara-module-runtime`; do not
+   copy the shared configuration, security-state, probe, tracing, startup, or
+   shutdown implementation.
 4. Register the service endpoint in `TESSARA_MODULE_CONTROL_ENDPOINTS`.
 5. Materialize the Module Release and Module Instance through the deployment
    receipt/bootstrap path.
-6. Route only approved same-origin product/API paths through the gateway.
+6. Route approved GET/HEAD documents and immutable assets through the generic
+   manifest-driven Core seam. Product APIs remain explicitly owned/routed by
+   the module until a later generic API contract exists.
 7. Add the module to the parameterized independent-module acceptance fixture;
    do not add a module-specific Module Management test branch.
 8. Pass manifest, configuration, enablement, navigation, diagnostics,
    no-JavaScript, outage-containment, and database-isolation gates.
-9. Pass source/package-graph checks proving the module does not depend on the
+9. Pass native/WASM source/package-graph checks proving the module does not depend on the
    Core application binary, root `tessara-web`, Core-private DTOs, or another
    module implementation; repeated compiled SDK/runtime code and assets are
    allowed.
 10. Prove an image-only module upgrade and rollback while Core, gateway, and
    unrelated module image digests remain unchanged.
 11. Search Core and the web shell for the new definition ID. Matches in
-   fixtures, seed, routing registration, or explicit compatibility adapters
-   must be explainable; Module Management and control-plane branches are not
-   allowed.
+    fixtures, seed, or routing registration must be explainable; Module
+    Management and control-plane branches are not allowed.
+12. When the current manifest or SDK tuple advances before production, update
+    and rebuild the module. Do not add an old-manifest reader, compatibility
+    facade, or deprecated API to avoid that update.
 
 ## Conformance Rule
 
@@ -145,3 +162,6 @@ The pathway is reusable only while this check remains true:
 > definition-specific changes to Core's configuration, enablement,
 > diagnostics, Module Management rendering, or root web application and no
 > dependency from the module back to those Core implementations.
+
+The Sprint 6D reference module is the conformance fixture for this statement.
+Dashboard remains an expected failing transition until Sprint 6E.

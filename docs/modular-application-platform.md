@@ -80,19 +80,21 @@ Functional behavior has exactly one authoritative Core or module owner and is
 reused across deployment boundaries through versioned APIs, events, exports,
 or typed resource contracts.
 
-Each Module Release pins or declares compatible shared-package and wire
-contract versions and includes the compiled code and assets it needs. A module
-can adopt a compatible SDK change and publish a new release without rebuilding
-or redeploying Core or unrelated modules. An already deployed image is never
-silently modified when canonical shared source changes. Core maintains an
-explicit compatibility window, while catalog and support policy identify
-Module Releases that use unsupported or vulnerable SDK versions.
+Each Module Release declares the exact shared-package and wire-contract
+versions it uses and includes the compiled code and assets it needs. Before
+production stability, the supported window is the one exact tuple declared by
+the current Core Release. A shared change updates repository consumers
+fast-forward; an already deployed image is never silently modified. Catalog
+and support policy identify every non-current, unsupported, or vulnerable
+Module Release.
 
 A separately deployable module must not depend on the Core application binary,
 root web application, Core-private DTOs, or another module's domain or
-persistence implementation. The accepted technical decision and Dashboard
-reference completion rules are recorded in
-[architecture/module-sdk-source-ownership.md](./architecture/module-sdk-source-ownership.md).
+persistence implementation. The accepted technical decision, package graph,
+interfaces, and Dashboard handoff are recorded in
+[architecture/module-sdk-source-ownership.md](./architecture/module-sdk-source-ownership.md)
+and the
+[Module SDK Implementation Contract](./architecture/module-sdk-implementation-contract.md).
 
 ## Core Responsibilities
 
@@ -119,18 +121,24 @@ Core owns desired-state authoring, validation, and administrative orchestration,
 
 ## Module Manifest And Contract
 
-Every Module Release publishes a signed or otherwise verifiable manifest containing at least:
+Every Module Release publishes a signed or otherwise verifiable current
+manifest containing at least:
 
 - stable module identity, publisher, semantic version, and runtime/optional-migration image digests
 - `tessara-oci-v1` runtime image and optional migration-image digests plus commands, supported platform/architecture, listen/service registration, configuration/secret injection, health/probe, graceful-shutdown, and resource declarations
-- supported Core Release versions and manifest schema version
-- supported Shell Context, UI SDK, and design-system contract versions
+- exact current Core Release and manifest schema version
+- exact Shell Context, control protocol, contract, runtime, UI SDK,
+  design-system/asset ABI, and conformance versions
+- exact shared packages actually linked into the release image
 - required and optional functional dependencies plus any explicit provider-binding constraints
 - machine-readable Feature Declarations with stable namespaced identifiers, descriptions, use cases, inputs, outcomes, constraints, and links to their realizing contracts and contributions
 - required and provided functional contract names and versions
 - owned resource types and their reference schemas
 - namespaced security capabilities and human-readable descriptions
-- product, administration, configuration, and diagnostics destinations
+- product, administration, configuration, and diagnostics destinations,
+  including validated same-origin GET/HEAD path templates, required
+  capability/action contract, and optional Organization-scope parameter for
+  browser documents
 - navigation contributions, labels, grouping hints, and required security capabilities
 - optional versioned shell-contribution contracts such as Home/work-discovery panels and global search providers, including scope-bound Authorization Grant requirements, latency/failure behavior, and semantic result destinations
 - typed configuration schema, secret-reference fields, and validation endpoint
@@ -139,7 +147,15 @@ Every Module Release publishes a signed or otherwise verifiable manifest contain
 - optional module-owned bootstrap schema, validation/apply/read-back endpoints, and receipt contract
 - conformance suite version and support metadata
 
-Core validates trust, Core Release compatibility, dependency closure, contract bindings, route uniqueness, security-capability namespaces, configuration, and Deployment Profile compatibility before a module can become ready or enabled. The Supervisor conformance suite verifies that declared runtime/migration commands, probes, identity separation, shutdown, and resource behavior match `tessara-oci-v1`; an artifact digest alone is never treated as an executable deployment contract.
+Core validates trust, exact Core/platform tuple, dependency closure, contract
+bindings, path-template uniqueness, security-capability namespaces,
+configuration, and Deployment Profile compatibility before a module can
+become ready or enabled. Before production, obsolete manifest shapes are
+replaced across the repository rather than retained through dual readers. The
+Supervisor conformance suite verifies that declared runtime/migration
+commands, probes, identity separation, shutdown, and resource behavior match
+`tessara-oci-v1`; an artifact digest alone is never treated as an executable
+deployment contract.
 
 Feature Declarations, functional contracts, and security capabilities are separate namespaces. A Feature Declaration helps a human or LLM select a module; it is not an integration contract and does not promise that two similarly described modules are interchangeable. A module can require a functional contract without inheriting security authority from its provider, and possessing a security capability does not prove that a required provider is installed or healthy.
 
@@ -288,7 +304,15 @@ LLMs use Feature Declarations plus the same versioned catalog, schema, plan, app
 
 ## Deployment And Support Model
 
-An installation uses a same-origin gateway so the browser experiences one application even though Core and modules are separate processes. Modules may be released and supported independently, while an Application Release records the exact supported combination deployed for one application.
+An installation uses a same-origin gateway so the browser experiences one
+application even though Core and modules are separate processes. Accepted
+module manifests drive one generic Core document proxy: Core authenticates and
+authorizes the browser, signs short-lived Shell Context and grant projections,
+strips browser credentials, and proxies complete module documents and
+credential-free immutable assets. Core renders the fallback when an upstream
+document is unavailable. Modules may be released independently, while an
+Application Release records the exact supported combination deployed for one
+application.
 
 The platform must support:
 

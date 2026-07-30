@@ -939,10 +939,10 @@ application.
   Records, `tessara-module-contract`, `tessara-web`, `tessara-web-ui`,
   `tessara-web-http`, container builds, and conformance scripts; assign one
   canonical source owner to every retained behavior
-- establish policy-neutral package boundaries equivalent to a platform
-  contract package, module runtime, module UI SDK/design system, and module
-  testkit; final crate names may differ, but their responsibilities and
-  dependency directions must remain explicit
+- establish the policy-neutral `tessara-module-contract`,
+  `tessara-module-runtime`, `tessara-module-ui`, and
+  `tessara-module-testkit` boundaries with explicit responsibilities and
+  dependency directions
 - extract Shell Context and authorization-grant/decision verification,
   semantic destinations, typed resource references, stable errors, module
   configuration/control protocol support, health/readiness, diagnostics,
@@ -952,9 +952,14 @@ application.
   primitives, design tokens, accessibility behavior, asset naming/caching, and
   hydration conventions so a module can build and serve its own frontend
   assets
-- define semantic versioning, manifest declarations, compatibility ranges, a
-  supported-version window, deprecation policy, and release inventory for
-  shared SDK/runtime versions
+- replace the development manifest shape and shared UI/fragment bridges
+  fast-forward across repository consumers; define semantic versioning, exact
+  manifest declarations, a pre-production supported-version window of one
+  current Core/protocol/SDK tuple, deprecation/removal policy, and release
+  inventory for shared SDK/runtime versions
+- add one manifest-driven Core GET/HEAD document and immutable-asset proxy so
+  a conforming module receives short-lived signed projections without browser
+  credentials and Core owns the authenticated unavailable fallback
 - add package-graph and source audits proving the SDK/runtime cannot reach the
   Core application binary, root route tree, Core API state, Core-private DTOs,
   Dashboard/Scoped Records product code, or any other module implementation
@@ -964,9 +969,9 @@ application.
 - document the module-authoring and SDK upgrade workflow, including the rule
   that a canonical shared-source update changes deployed behavior only when a
   consuming module publishes and deploys a new release
-- preserve existing Core, Dashboard, and Scoped Records behavior while the
-  canonical packages are established; module product migration belongs to the
-  adopting module sprint
+- preserve existing Core, Dashboard, and Scoped Records product behavior while
+  Scoped Records adopts the canonical runtime/UI and Dashboard product/runtime
+  adoption remains Sprint 6E
 
 **Application UI delivered this sprint:**
 
@@ -1009,9 +1014,9 @@ released, upgraded, and rolled back without root Core/web application code.
 - preserve Sprint 6C Dashboard data, migrations, runtime identities,
   configuration, diagnostics, enablement, degraded placement states,
   nondisclosure, and transition-only Components compatibility contract
-- ensure Dashboard changes to internal UI, API, domain, or compatible SDK
-  adoption require only a new Dashboard Module Release; contract changes
-  retain ordinary compatibility validation
+- ensure Dashboard changes to internal UI, API, domain, or current SDK
+  adoption require only a new Dashboard Module Release; functional contract
+  changes retain their declared module-owned validation
 - add build provenance and lockfile/receipt proof that a Dashboard-only
   upgrade and rollback change the Dashboard image digest while Core, gateway,
   Scoped Records, and other module image digests remain unchanged

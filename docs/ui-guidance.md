@@ -332,6 +332,13 @@ Application composition UI MUST keep desired Blueprint state, deterministic lock
 
 When a module cannot serve a destination, preserve the shared shell and show an explicit state with the module name, current condition, impact, safe retry or diagnostic action, and a route back to Core. Do not collapse provider unavailability into a generic empty state or permission denial.
 
+Separately deployed module documents MUST enter through the current
+manifest-driven same-origin route. Core authenticates and authorizes the
+browser, supplies short-lived signed Shell Context/grant projections without
+forwarding browser credentials, and owns the unavailable fallback. The module
+renders the complete document from canonical module UI source; Core does not
+wrap a remote body fragment.
+
 ### Shell model
 
 Tessara MUST use a responsive two-region default shell with an optional right contextual panel.
@@ -547,7 +554,7 @@ When tabular interaction is required, prefer an accessible data-grid pattern ove
 - Keep the shared shell light. Navigation, titles, breadcrumbs, and core layout should load immediately without depending on heavy lazy chunks.
 - Separately deployed modules MUST use the versioned Shell Context and shared UI SDK to server-render complete same-origin HTML documents for their routes, including coherent shell chrome. Core owns the policy/context contract, not every rendering process, and does not wrap a remote HTML fragment.
 - The shared UI SDK, design tokens, accessibility behavior, and shell components MUST have one canonical source implementation. Modules MAY compile and serve repeated SDK code and assets from their own release images; they MUST NOT maintain copied implementations or link the root Core web application.
-- A compatible UI SDK adoption MUST be releasable for one module without rebuilding or redeploying Core or unrelated modules. Module manifests and support policy declare the compatible SDK/design-system versions.
+- A current UI SDK adoption MUST be releasable for one module without rebuilding or redeploying Core or unrelated modules. Before production, manifests declare the exact current UI/design-system tuple; obsolete SDK versions are rebuilt rather than supported through a compatibility facade.
 - When a module cannot render, the gateway MUST serve a Core-owned fallback document that preserves shell/navigation context and identifies the unavailable, disabled, unconfigured, or incompatible destination.
 - Module route transitions MUST preserve installation, actor, scope-bound authorization, theme, navigation, and return-destination context without exposing reusable credentials; downstream module calls require Core exchange for the new audience.
 - Treat browser hydration errors as release-blocking defects.
@@ -1590,24 +1597,36 @@ When in doubt, favor:
 
 These appendices describe the shared primitive contracts for the reset application. They do not override the design rules above. When a primitive contract conflicts with the main body of this document, the main body wins.
 
-### Current primitive layer
+### Current and Sprint 6D primitive layer
 
-The current transition implementation has a shared native UI primitive layer in root `tessara-web` plus the policy-neutral `tessara-web-ui` support crate used by extracted feature areas. This describes current code, not permanent root ownership for separately deployed modules.
+The pre-Sprint-6D transition implementation has a shared native UI primitive
+layer in root `tessara-web` plus `tessara-web-ui`. Sprint 6D fast-forwards that
+source ownership:
 
+- `crates/tessara-module-ui/src`
+  - Canonical Leptos SSR/hydration shell presentation, tokens, shared
+    accessibility behavior, standard states, and policy-neutral primitives.
 - `crates/tessara-web/src/ui`
-  - Leptos-native SSR components for app shell, navigation, root page framing, status badges, filters, timestamps, and root-owned route support.
-- `crates/tessara-web-ui/src`
-  - Policy-neutral shared primitives consumed by extracted feature crates, including breadcrumbs, buttons, comboboxes, data tables, dropdowns, empty states, info lists, page headers, search/filter helpers, tabs, timestamps, pagination, segmented toggles, and draggable panel lists.
+  - Core authentication, session, route-policy, and presentation adapters that
+    supply normalized input to module UI.
+- Dashboard product/web owner
+  - Placement editor and grid behavior moved out of the shared primitive
+    layer.
 
 Rules:
 
 - New route UI MUST use native Leptos components and `view!` markup.
-- During the transition, shared primitives SHOULD be extended in `crates/tessara-web-ui` when they are policy-neutral and useful across feature crates. Current root-only shell or route-policy UI belongs under `crates/tessara-web/src/ui`.
+- Shared policy-neutral primitives MUST be added to `tessara-module-ui`.
+  Dashboard placement behavior belongs to Dashboard. Core-only authentication,
+  session, and route-policy adapters remain under root web.
 - The target module SDK/design system MUST make the same tokens, primitives, shell-integration metadata, accessibility behavior, semantic destinations, feedback states, and compatibility guarantees available to separately released module applications without importing Core product policy.
-- Module UI releases MUST declare and test their supported design-system and shell-contract versions.
+- Module UI releases MUST declare and test their exact current design-system,
+  Shell Context, and UI package versions.
 - Application chrome and route icons SHOULD use Rust/UI native Leptos icon components where an appropriate icon exists.
 - Tessara brand marks, favicons, and exploratory icon mockups MAY use custom SVG assets.
-- HTML-string helpers, compatibility shells, and broad legacy UI files are not part of the primitive layer.
+- HTML-string helpers, compatibility shells, `ShellContentV1`, and broad
+  legacy UI files are not part of the primitive layer. `tessara-web-ui` is
+  deleted rather than retained as a facade.
 
 ### App shell
 
