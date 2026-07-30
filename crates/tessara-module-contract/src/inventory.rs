@@ -35,7 +35,7 @@ pub struct IndependentInstanceV1 {
     pub id: String,
     pub identity: String,
     pub data: String,
-    pub database_name: String,
+    pub database_name: Option<String>,
     pub installed: bool,
     pub deployed: bool,
     pub configured: bool,

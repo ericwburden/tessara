@@ -118,7 +118,7 @@ Dashboard-only upgrade/rollback proof remain Sprint 6E.
 - Normalize only a `display_label` configuration.
 - Persist configuration and projected security state atomically in one exact
   current JSON schema on a module-owned volume; persist no signed/user/secret
-  material.
+  material and claim no PostgreSQL database binding.
 - Supply liveness, readiness, sanitized diagnostics, complete SSR, canonical
   CSS, minimal hydration, immutable assets, standard states, outage behavior,
   and bounded graceful shutdown.

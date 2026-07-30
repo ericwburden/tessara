@@ -291,7 +291,7 @@ mod tests {
                 runtime_image: digest('d'),
                 publisher: tessara_module_contract::PublisherId::new("tessara.first_party")
                     .unwrap(),
-                database_name: "tessara_module_scoped_records".into(),
+                database_name: Some("tessara_module_scoped_records".into()),
                 route_prefix: "/reference/scoped-records".into(),
                 configuration: BTreeMap::new(),
             }],

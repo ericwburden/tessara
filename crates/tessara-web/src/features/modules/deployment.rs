@@ -84,7 +84,10 @@ pub(super) fn DeploymentLedger(
                             let definition = change.definition_id.to_string();
                             let release = release_change_label(&change.release);
                             let (instance_state, instance) = identity_change_label(&change.instance);
-                            let (database_state, database) = identity_change_label(&change.database);
+                            let (database_state, database) = change.database.as_ref().map_or_else(
+                                || ("Not used", "Module-owned state".into()),
+                                identity_change_label,
+                            );
                             view! {
                             <dl class="module-detail-overview__list module-deployment-change">
                                 <div><dt>{module_display_name(&definition)}</dt><dd>{format!("Release {release}")}</dd></div>

@@ -76,7 +76,7 @@ pub(crate) struct IndependentModuleReadModel {
     pub(crate) instance_id: Uuid,
     pub(crate) identity: String,
     pub(crate) data: String,
-    pub(crate) database_name: String,
+    pub(crate) database_name: Option<String>,
     pub(crate) configuration: sqlx::types::Json<Value>,
     pub(crate) route_prefix: Option<String>,
     pub(crate) installed: bool,

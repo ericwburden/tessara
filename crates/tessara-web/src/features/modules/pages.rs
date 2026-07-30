@@ -813,7 +813,10 @@ fn independent_module_sections(
                                 <div><dt>"Readiness"</dt><dd>{if instance.ready { "Passing" } else { "Failing" }}</dd></div>
                                 <div><dt>"Health"</dt><dd>{if instance.healthy { "Healthy" } else { "Unhealthy" }}</dd></div>
                                 <div><dt>"Application"</dt><dd>{format!("{} · Route {}", state(instance.enabled), if instance.enabled && instance.ready && instance.healthy { "available" } else { "unavailable" })}</dd></div>
-                                <div><dt>"Data"</dt><dd>{format!("{} in {}", instance.data, instance.database_name)}</dd></div>
+                                <div><dt>"Data"</dt><dd>{instance.database_name.as_ref().map_or_else(
+                                    || format!("{} in module-owned state", instance.data),
+                                    |database_name| format!("{} in {database_name}", instance.data),
+                                )}</dd></div>
                             </dl>
                         </section>
                         <section class="organization-detail-card module-detail-overview-card">
@@ -823,7 +826,7 @@ fn independent_module_sections(
                                 <div><dt>"Liveness"</dt><dd class="module-detail-status-value"><span class=if instance.healthy { "status-badge is-success" } else { "status-badge is-danger" } title="Result of the module liveness probe.">{if instance.healthy { "Passing" } else { "Failing" }}</span><code>{diagnostics.liveness_path.clone()}</code></dd></div>
                                 <div><dt>"Last observation"</dt><dd><time datetime=instance.observed_at.clone()>{instance.observed_at.clone()}</time></dd></div>
                                 <div><dt>"Public route"</dt><dd><code>{diagnostics.public_route}</code></dd></div>
-                                <div><dt>"Database"</dt><dd><code>{instance.database_name.clone()}</code></dd></div>
+                                <div><dt>"Database"</dt><dd><code>{instance.database_name.clone().unwrap_or_else(|| "Not used".into())}</code></dd></div>
                             </dl>
                         </section>
                     </div>
@@ -967,9 +970,13 @@ fn independent_module_sections(
                     <article class="module-dashboard-diagnostic-metric">
                         <Database/>
                         <div>
-                            <span>"Module database"</span>
-                            <strong>{if instance.ready { "Connected" } else { "Unavailable" }}</strong>
-                            <small><code>{instance.database_name}</code>" · instance-scoped runtime identity."</small>
+                            <span>{if instance.database_name.is_some() { "Module database" } else { "Persistence" }}</span>
+                            <strong>{if instance.database_name.is_some() {
+                                if instance.ready { "Connected" } else { "Unavailable" }
+                            } else {
+                                "Module-owned"
+                            }}</strong>
+                            <small><code>{instance.database_name.unwrap_or_else(|| "module-owned state".into())}</code>" · instance-scoped runtime identity."</small>
                         </div>
                     </article>
                     <article class="module-dashboard-diagnostic-metric">

@@ -36,7 +36,7 @@ pub struct DesiredModuleV1 {
     pub manifest_digest: ArtifactDigest,
     pub runtime_image: ArtifactDigest,
     pub publisher: PublisherId,
-    pub database_name: String,
+    pub database_name: Option<String>,
     pub route_prefix: String,
     #[serde(default)]
     pub configuration: BTreeMap<String, String>,
@@ -75,7 +75,7 @@ pub enum DeploymentActionV1 {
         definition_id: ModuleDefinitionId,
         version: Version,
         runtime_image: ArtifactDigest,
-        database_name: String,
+        database_name: Option<String>,
     },
 }
 
@@ -112,7 +112,7 @@ pub struct AppliedModuleV1 {
     pub release_id: Uuid,
     pub instance_id: Uuid,
     pub version: Version,
-    pub database_name: String,
+    pub database_name: Option<String>,
     #[serde(default)]
     pub route_prefix: Option<String>,
     #[serde(default)]
@@ -154,7 +154,7 @@ pub struct AppliedModuleChangeV1 {
     pub definition_id: ModuleDefinitionId,
     pub release: ReleaseChangeV1,
     pub instance: IdentityChangeV1,
-    pub database: IdentityChangeV1,
+    pub database: Option<IdentityChangeV1>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -208,7 +208,7 @@ impl DeploymentReceiptV1 {
                     previous_module.map(|previous| previous.instance_id.to_string()),
                     module.instance_id.to_string(),
                 );
-                let database = classify_identity(
+                let database = classify_optional_identity(
                     previous_module.map(|previous| previous.database_name.clone()),
                     module.database_name.clone(),
                 );
@@ -230,6 +230,13 @@ fn classify_identity(previous: Option<String>, current: String) -> IdentityChang
         Some(previous) if previous == current => IdentityChangeV1::Preserved { value: current },
         Some(from) => IdentityChangeV1::Replaced { from, to: current },
     }
+}
+
+fn classify_optional_identity(
+    previous: Option<Option<String>>,
+    current: Option<String>,
+) -> Option<IdentityChangeV1> {
+    current.map(|current| classify_identity(previous.flatten(), current))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -330,18 +337,20 @@ impl TessaraDeploymentV1 {
                     "module definition may appear only once",
                 ));
             }
-            if !valid_database_name(&module.database_name) {
-                findings.push(error(
-                    "deployment_database_name_invalid",
-                    format!("{base}/database_name"),
-                    "database_name must be a lower-case PostgreSQL identifier",
-                ));
-            } else if !databases.insert(module.database_name.as_str()) {
-                findings.push(error(
-                    "deployment_database_duplicate",
-                    format!("{base}/database_name"),
-                    "each module must own a distinct database",
-                ));
+            if let Some(database_name) = module.database_name.as_deref() {
+                if !valid_database_name(database_name) {
+                    findings.push(error(
+                        "deployment_database_name_invalid",
+                        format!("{base}/database_name"),
+                        "database_name must be a lower-case PostgreSQL identifier when declared",
+                    ));
+                } else if !databases.insert(database_name) {
+                    findings.push(error(
+                        "deployment_database_duplicate",
+                        format!("{base}/database_name"),
+                        "each database-owning module must own a distinct database",
+                    ));
+                }
             }
             if !valid_route_prefix(&module.route_prefix) {
                 findings.push(error(
@@ -482,7 +491,7 @@ mod tests {
                     }
                 },
                 publisher: PublisherId::new("tessara.first_party").unwrap(),
-                database_name: "tessara_module_scoped_records".into(),
+                database_name: Some("tessara_module_scoped_records".into()),
                 route_prefix: "/reference/scoped-records".into(),
                 configuration: BTreeMap::new(),
             }],
@@ -497,6 +506,24 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.digest(), second.digest());
         assert_eq!(first.deployment_digest, canonical_sha256(&desired).unwrap());
+    }
+
+    #[test]
+    fn module_owned_state_does_not_require_a_database_claim() {
+        let mut desired = deployment();
+        desired.modules[0].database_name = None;
+        let plan = desired.plan().expect("database-less module plans");
+        assert!(matches!(
+            &plan.actions[3],
+            DeploymentActionV1::InstallModule {
+                database_name: None,
+                ..
+            }
+        ));
+
+        let mut applied = receipt(1, Uuid::from_u128(20), "unused");
+        applied.modules[0].database_name = None;
+        assert_eq!(applied.classify_change(None).modules[0].database, None);
     }
 
     #[test]
@@ -546,7 +573,7 @@ mod tests {
                 release_id: Uuid::from_u128(10),
                 instance_id,
                 version: Version::new(1, 0, 0),
-                database_name: database_name.into(),
+                database_name: Some(database_name.into()),
                 route_prefix: None,
                 configuration: BTreeMap::new(),
             }],
@@ -564,7 +591,7 @@ mod tests {
         ));
         assert!(matches!(
             preserved_change.modules[0].database,
-            IdentityChangeV1::Preserved { .. }
+            Some(IdentityChangeV1::Preserved { .. })
         ));
 
         let replaced = receipt(2, Uuid::from_u128(21), "tessara_module_rebound");
@@ -575,7 +602,7 @@ mod tests {
         ));
         assert!(matches!(
             replaced_change.modules[0].database,
-            IdentityChangeV1::Replaced { .. }
+            Some(IdentityChangeV1::Replaced { .. })
         ));
     }
 }

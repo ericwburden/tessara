@@ -273,6 +273,10 @@ The minimal fixture is:
 
 It declares one non-product conformance feature/behavior contract, no product
 resource types, no product records, and no cross-module dependency.
+Its exact JSON state is module-owned persistence, so deployment and inventory
+record no PostgreSQL database binding. Database identity is optional in the
+current deployment contract and is declared only when a module actually owns
+a database.
 
 The root document requires at least one authorized capability binding. The
 scoped probe verifies the requested Organization against the signed grant.

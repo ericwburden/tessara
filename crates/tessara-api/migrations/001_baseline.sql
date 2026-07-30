@@ -1296,7 +1296,7 @@ CREATE TABLE module_instances (
     release_id UUID NOT NULL REFERENCES module_releases(id) ON DELETE RESTRICT,
     identity_state TEXT NOT NULL CHECK (identity_state IN ('live', 'tombstoned')),
     data_state TEXT NOT NULL CHECK (data_state IN ('retained', 'destroyed')),
-    database_name TEXT NOT NULL,
+    database_name TEXT,
     configuration JSONB NOT NULL DEFAULT '{}'::JSONB,
     route_prefix TEXT,
     installed BOOLEAN NOT NULL,
