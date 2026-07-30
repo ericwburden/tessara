@@ -913,6 +913,103 @@
   line-height: 1.5;
 }
 
+.dashboard-module-unavailable {
+  min-height: calc(100vh - 8rem);
+}
+
+.dashboard-module-unavailable__state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(15.5rem, 0.45fr);
+  align-items: start;
+  gap: 1.25rem;
+  border: 1px solid var(--semantic-warning-border);
+  border-radius: var(--radius);
+  background: var(--semantic-warning-soft);
+  padding: 2rem 1.35rem;
+}
+
+.dashboard-module-unavailable__icon {
+  display: grid;
+  width: 3.65rem;
+  height: 3.65rem;
+  place-items: center;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--semantic-warning) 14%, transparent);
+  color: var(--semantic-warning);
+}
+
+.dashboard-module-unavailable__icon svg {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.dashboard-module-unavailable__content h1 {
+  margin: 0.3rem 0 0.6rem;
+}
+
+.dashboard-module-unavailable__content > p:not(.eyebrow) {
+  color: var(--color-muted);
+  line-height: 1.55;
+}
+
+.dashboard-module-unavailable__protections {
+  display: grid;
+  gap: 0.55rem;
+  margin: 1.2rem 0;
+}
+
+.dashboard-module-unavailable__protections span {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--color-muted);
+}
+
+.dashboard-module-unavailable__protections svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  color: var(--semantic-success);
+}
+
+.dashboard-module-unavailable__summary {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  padding: 1rem;
+}
+
+.dashboard-module-unavailable__summary span {
+  margin-top: 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 65.625rem) {
+  .dashboard-module-unavailable__state {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 47.5rem) {
+  .dashboard-module-unavailable {
+    min-height: 0;
+  }
+
+  .dashboard-module-unavailable__state {
+    padding: 1.25rem 1rem;
+  }
+
+  .dashboard-module-unavailable__content .button-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .module-dashboard-diagnostics {
   display: grid;
   gap: 1rem;

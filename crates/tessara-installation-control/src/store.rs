@@ -121,13 +121,15 @@ impl InstallationControlStore {
         .await?;
         append_event(
             &mut transaction,
-            installation_id,
-            claim_id,
-            generation as u32,
-            "issued",
-            now,
-            None,
-            json!({"claim_kind": kind_text(kind), "eligibility_nonce": eligibility.payload.nonce}),
+            EnrollmentEvent {
+                installation_id,
+                claim_id,
+                generation: generation as u32,
+                event_kind: "issued",
+                occurred_at: now,
+                reservation_id: None,
+                evidence: json!({"claim_kind": kind_text(kind), "eligibility_nonce": eligibility.payload.nonce}),
+            },
         )
         .await?;
         transaction.commit().await?;
@@ -209,13 +211,15 @@ impl InstallationControlStore {
         persist_claim(&mut transaction, &claim).await?;
         append_event(
             &mut transaction,
-            installation_id,
-            claim_id,
-            generation,
-            "reserved",
-            now,
-            Some(reservation_id),
-            json!({}),
+            EnrollmentEvent {
+                installation_id,
+                claim_id,
+                generation,
+                event_kind: "reserved",
+                occurred_at: now,
+                reservation_id: Some(reservation_id),
+                evidence: json!({}),
+            },
         )
         .await?;
         transaction.commit().await?;
@@ -268,13 +272,15 @@ impl InstallationControlStore {
         persist_claim(&mut transaction, &claim).await?;
         append_event(
             &mut transaction,
-            result.installation_id,
-            result.claim_id,
-            result.generation,
-            "consumed",
-            result.completed_at,
-            Some(result.reservation_id),
-            json!({"account_id": result.account_id, "role_id": result.role_id}),
+            EnrollmentEvent {
+                installation_id: result.installation_id,
+                claim_id: result.claim_id,
+                generation: result.generation,
+                event_kind: "consumed",
+                occurred_at: result.completed_at,
+                reservation_id: Some(result.reservation_id),
+                evidence: json!({"account_id": result.account_id, "role_id": result.role_id}),
+            },
         )
         .await?;
         transaction.commit().await?;
@@ -324,13 +330,15 @@ impl InstallationControlStore {
         let status = claim.status().clone();
         append_event(
             &mut transaction,
-            installation_id,
-            status.claim_id,
-            status.generation,
-            if replace { "replaced" } else { "revoked" },
-            now,
-            status.reservation_id,
-            json!({}),
+            EnrollmentEvent {
+                installation_id,
+                claim_id: status.claim_id,
+                generation: status.generation,
+                event_kind: if replace { "replaced" } else { "revoked" },
+                occurred_at: now,
+                reservation_id: status.reservation_id,
+                evidence: json!({}),
+            },
         )
         .await?;
         transaction.commit().await?;
@@ -375,28 +383,34 @@ async fn expire_active(
     for row in rows {
         append_event(
             transaction,
-            installation_id,
-            row.try_get("claim_id")?,
-            row.try_get::<i32, _>("generation")? as u32,
-            "expired",
-            now,
-            row.try_get("reservation_id")?,
-            json!({}),
+            EnrollmentEvent {
+                installation_id,
+                claim_id: row.try_get("claim_id")?,
+                generation: row.try_get::<i32, _>("generation")? as u32,
+                event_kind: "expired",
+                occurred_at: now,
+                reservation_id: row.try_get("reservation_id")?,
+                evidence: json!({}),
+            },
         )
         .await?;
     }
     Ok(())
 }
 
-async fn append_event(
-    transaction: &mut Transaction<'_, Postgres>,
+struct EnrollmentEvent {
     installation_id: Uuid,
     claim_id: Uuid,
     generation: u32,
-    event_kind: &str,
+    event_kind: &'static str,
     occurred_at: DateTime<Utc>,
     reservation_id: Option<Uuid>,
     evidence: Value,
+}
+
+async fn append_event(
+    transaction: &mut Transaction<'_, Postgres>,
+    event: EnrollmentEvent,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO administrator_enrollment_events
@@ -405,13 +419,13 @@ async fn append_event(
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
     )
     .bind(Uuid::new_v4())
-    .bind(installation_id)
-    .bind(claim_id)
-    .bind(generation as i32)
-    .bind(event_kind)
-    .bind(occurred_at)
-    .bind(reservation_id)
-    .bind(evidence)
+    .bind(event.installation_id)
+    .bind(event.claim_id)
+    .bind(event.generation as i32)
+    .bind(event.event_kind)
+    .bind(event.occurred_at)
+    .bind(event.reservation_id)
+    .bind(event.evidence)
     .execute(&mut **transaction)
     .await?;
     Ok(())

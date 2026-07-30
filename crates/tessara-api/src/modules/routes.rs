@@ -1,6 +1,9 @@
 //! Axum routes for Sprint 6A Core module discovery and platform adapters.
 
-use std::collections::BTreeSet;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use axum::{
     Json, Router,
@@ -9,6 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use chrono::Utc;
 use tessara_module_contract::{DeploymentProfile, DeploymentReceiptV1};
 use uuid::Uuid;
 
@@ -250,9 +254,10 @@ async fn list_modules(
     auth: AuthenticatedRequest,
 ) -> ModuleHttpResult<Json<ModuleInventoryResponseV1>> {
     require_global_read(&auth)?;
-    let inventory = service::load_module_inventory(&state.pool)
+    let mut inventory = service::load_module_inventory(&state.pool)
         .await
         .map_err(map_catalog_error)?;
+    refresh_module_observations(&mut inventory).await;
     Ok(Json(inventory_response(inventory)))
 }
 
@@ -264,9 +269,10 @@ async fn get_module(
     // Authorization deliberately precedes lookup so unknown identities do not
     // create an unauthenticated or scoped-only definition oracle.
     require_global_read(&auth)?;
-    let inventory = service::load_module_inventory(&state.pool)
+    let mut inventory = service::load_module_inventory(&state.pool)
         .await
         .map_err(map_catalog_error)?;
+    refresh_module_observations(&mut inventory).await;
     let installation_id = inventory.installation_id;
     let entry = inventory
         .modules
@@ -291,6 +297,71 @@ async fn get_module(
         installation_id,
         entry,
     }))
+}
+
+pub(super) async fn refresh_module_observations(inventory: &mut ModuleInventoryReadModel) {
+    let Some(endpoints) = configured_module_control_endpoints() else {
+        return;
+    };
+    let Ok(client) = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_millis(750))
+        .build()
+    else {
+        return;
+    };
+
+    for module in &mut inventory.modules {
+        let Some(endpoint) = endpoints.get(&module.definition_id) else {
+            continue;
+        };
+        let Some(manifest) = module.manifest.as_ref() else {
+            continue;
+        };
+        let (readiness_path, liveness_path) = match &manifest.deployment {
+            DeploymentProfile::TessaraOciV1(deployment) => (
+                deployment.readiness_path.as_str(),
+                deployment.liveness_path.as_str(),
+            ),
+        };
+        let base_url = endpoint.trim_end_matches('/');
+        let readiness_url = format!("{base_url}{readiness_path}");
+        let liveness_url = format!("{base_url}{liveness_path}");
+        let (ready, healthy) = tokio::join!(
+            module_probe_passes(&client, &readiness_url),
+            module_probe_passes(&client, &liveness_url),
+        );
+        let state_changed = module.ready != ready || module.healthy != healthy;
+        module.ready = ready;
+        module.healthy = healthy;
+        if state_changed {
+            module.observed_at = Utc::now();
+        }
+    }
+}
+
+async fn module_probe_passes(client: &reqwest::Client, url: &str) -> bool {
+    client
+        .get(url)
+        .send()
+        .await
+        .is_ok_and(|response| response.status().is_success())
+}
+
+fn configured_module_control_endpoints() -> Option<BTreeMap<String, String>> {
+    let value = std::env::var("TESSARA_MODULE_CONTROL_ENDPOINTS").ok()?;
+    parse_module_control_endpoints(&value)
+}
+
+fn parse_module_control_endpoints(value: &str) -> Option<BTreeMap<String, String>> {
+    let endpoints: BTreeMap<String, String> = serde_json::from_str(value).ok()?;
+    endpoints
+        .iter()
+        .all(|(definition, endpoint)| {
+            !definition.trim().is_empty()
+                && (endpoint.starts_with("http://") || endpoint.starts_with("https://"))
+        })
+        .then_some(endpoints)
 }
 
 async fn get_descriptor(
@@ -864,7 +935,7 @@ mod tests {
 
     use super::{
         band_anchors, if_none_match_matches, immutable_core_items, map_policy_error,
-        navigation_policy_response,
+        navigation_policy_response, parse_module_control_endpoints,
     };
     use crate::auth::{AccountContext, AuthenticatedRequest, CapabilityScope, SessionContext};
     use crate::modules::{
@@ -894,6 +965,25 @@ mod tests {
             &digest.parse().expect("syntactically representable header"),
             digest
         ));
+    }
+
+    #[test]
+    fn live_observation_registry_is_definition_driven_and_rejects_non_http_endpoints() {
+        let endpoints = parse_module_control_endpoints(
+            r#"{
+                "tessara.dashboards": "http://dashboards:8091",
+                "example.future-module": "https://future-module.internal"
+            }"#,
+        )
+        .expect("valid endpoint registry");
+        assert_eq!(
+            endpoints.get("example.future-module").map(String::as_str),
+            Some("https://future-module.internal")
+        );
+        assert!(
+            parse_module_control_endpoints(r#"{"example.future-module":"file:///etc/tessara"}"#)
+                .is_none()
+        );
     }
 
     #[test]

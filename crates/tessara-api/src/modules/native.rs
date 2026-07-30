@@ -127,7 +127,10 @@ async fn directory_bootstrap(
     account: &AccountContext,
 ) -> tessara_web::ModuleManagementRouteBootstrapV1 {
     let inventory = match service::load_module_inventory(&state.pool).await {
-        Ok(inventory) => inventory_response(inventory),
+        Ok(mut inventory) => {
+            super::routes::refresh_module_observations(&mut inventory).await;
+            inventory_response(inventory)
+        }
         Err(error) => {
             return unavailable_bootstrap(tessara_web::ModuleManagementSurfaceV1::Directory, error);
         }
@@ -155,12 +158,13 @@ async fn detail_bootstrap(
     account: &AccountContext,
     definition_id: &str,
 ) -> tessara_web::ModuleManagementRouteBootstrapV1 {
-    let inventory = match service::load_module_inventory(&state.pool).await {
+    let mut inventory = match service::load_module_inventory(&state.pool).await {
         Ok(inventory) => inventory,
         Err(error) => {
             return unavailable_bootstrap(tessara_web::ModuleManagementSurfaceV1::Detail, error);
         }
     };
+    super::routes::refresh_module_observations(&mut inventory).await;
     let installation_id = inventory.installation_id;
     let Some(entry) = inventory
         .modules

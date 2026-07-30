@@ -214,10 +214,15 @@ mod tests {
         );
 
         assert!(html.contains(r#"class="app-shell""#));
-        assert!(html.contains("Dashboards are temporarily unavailable"));
+        assert!(html.contains("Dashboard module unavailable"));
+        assert!(html.contains("Dashboards cannot be reached right now"));
         assert!(html.contains("Try Dashboards again"));
         assert!(html.contains("Open Module diagnostics"));
-        assert!(html.contains("Dashboard data remains in its isolated Module Instance database"));
+        assert!(
+            html.contains("Your Dashboard data remains in the Dashboard Module Instance database")
+        );
+        assert!(html.contains("No Dashboard request was sent to another provider"));
+        assert!(html.contains("Existing Dashboard references and configuration are preserved"));
     }
 
     #[test]

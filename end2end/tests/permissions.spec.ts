@@ -465,6 +465,7 @@ async function setupFixtures(): Promise<FixtureState> {
   const admin = await newContext();
   await signIn(admin, "admin@tessara.local", "tessara-dev-admin");
   await ensureDemoSeed(admin);
+  await cleanupPlaywrightDashboards(admin);
 
   const [
     noAccessRole,
@@ -850,6 +851,19 @@ WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
   runPlaywrightSql(sql);
 }
 
+async function cleanupPlaywrightDashboards(admin: APIRequestContext) {
+  const dashboards = await getJson<DashboardSummary[]>(admin, "/api/dashboards");
+  for (const dashboard of dashboards.filter((candidate) =>
+    candidate.name.startsWith(PLAYWRIGHT_ENTITY_PREFIX),
+  )) {
+    const response = await admin.delete(`/api/admin/dashboards/${dashboard.id}`);
+    expect(
+      response.ok(),
+      `Dashboard cleanup for ${dashboard.id} returned ${response.status()}`,
+    ).toBeTruthy();
+  }
+}
+
 test.describe.serial("capability + scope + ownership permissions", () => {
   test.beforeAll(async () => {
     cleanupPlaywrightEntities();
@@ -858,6 +872,9 @@ test.describe.serial("capability + scope + ownership permissions", () => {
 
   test.afterAll(async () => {
     try {
+      if (fixtures) {
+        await cleanupPlaywrightDashboards(fixtures.admin);
+      }
       cleanupPlaywrightEntities();
     } finally {
       await Promise.all(contexts.map((context) => context.dispose()));

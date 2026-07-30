@@ -30,7 +30,7 @@ pub fn SideSheet(
     /// Stable DOM identifier used to associate the dialog and its title.
     #[prop(into)]
     id: String,
-    #[prop(into)] title: String,
+    #[prop(into)] title: Signal<String>,
     open: Signal<bool>,
     on_close: Callback<()>,
     children: ChildrenFn,
@@ -51,7 +51,7 @@ pub fn SideSheet(
         <Portal>
             <SideSheetSurface
                 id=id.clone()
-                title=title.clone()
+                title
                 open
                 on_close
                 description=description.clone()
@@ -70,7 +70,7 @@ pub fn SideSheet(
 #[component]
 fn SideSheetSurface(
     id: String,
-    title: String,
+    title: Signal<String>,
     open: Signal<bool>,
     on_close: Callback<()>,
     children: ChildrenFn,
@@ -151,7 +151,7 @@ fn SideSheetSurface(
                     </div>
                     <header class="sheet-panel__header">
                         {eyebrow.clone().map(|eyebrow| view! { <p>{eyebrow}</p> })}
-                        <h2 id=title_id.clone()>{title.clone()}</h2>
+                        <h2 id=title_id.clone()>{move || title.get()}</h2>
                         {description.clone().map(|description| {
                             view! { <p id=description_id_for_content.clone()>{description}</p> }
                         })}
@@ -172,7 +172,7 @@ mod tests {
             view! {
                 <SideSheetSurface
                     id="placement-details".to_string()
-                    title="Placement details".to_string()
+                    title=Signal::derive(|| "Placement details".to_string())
                     description=Some("Change the selected placement.".to_string())
                     eyebrow=Some("Dashboard editor".to_string())
                     open=Signal::derive(|| true)
@@ -204,7 +204,7 @@ mod tests {
             view! {
                 <SideSheetSurface
                     id="components".to_string()
-                    title="Components".to_string()
+                    title=Signal::derive(|| "Components".to_string())
                     open=Signal::derive(|| false)
                     on_close=Callback::new(|_| {})
                     description=None

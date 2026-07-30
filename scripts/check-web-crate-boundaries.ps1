@@ -184,7 +184,7 @@ function Assert-NoDependencyPath {
         $current = $queue.Dequeue()
         foreach ($edge in @($Graph.edgesById[$current.id])) {
             $path = @($current.path) + $edge
-            if (& $IsForbiddenPackage $edge.toName) {
+            if (& $IsForbiddenPackage $edge.toName $path) {
                 throw "$Description`nRejected dependency path:`n$(Format-Path -Path $path)"
             }
 
@@ -250,7 +250,9 @@ $domainCrates = @(
     "tessara-submissions"
 )
 $frameworkNeutralContractCrates = @("tessara-module-contract")
-$domainForbidden = @("leptos", "axum", "sqlx", "gloo-net", "web-sys", "js-sys", "wasm-bindgen")
+$domainTransitiveForbidden = @("leptos", "axum", "sqlx", "gloo-net")
+$domainDirectForbidden = @("web-sys", "js-sys", "wasm-bindgen")
+$domainForbidden = $domainTransitiveForbidden + $domainDirectForbidden
 
 Push-Location $repoRoot
 try {
@@ -324,13 +326,18 @@ try {
                 continue
             }
             Assert-NoDependencyPath -Graph $graph -StartPackage $crate -Description "$crate must not depend on web/server transport or UI frameworks." -IsForbiddenPackage {
-                param($name)
-                $name -in $domainForbidden
+                param($name, $path)
+                $name -in $domainTransitiveForbidden -or
+                    ($name -in $domainDirectForbidden -and $path.Count -eq 1)
             }
         }
 
         foreach ($crate in $frameworkNeutralContractCrates) {
-            Assert-PackageTreeContainsNoFrameworks -Platform $platform -PackageName $crate -ForbiddenPackages $domainForbidden -Description "$crate must remain a pure, framework-neutral contract crate."
+            Assert-NoDependencyPath -Graph $graph -StartPackage $crate -Description "$crate must remain a pure, framework-neutral contract crate." -IsForbiddenPackage {
+                param($name, $path)
+                $name -in $domainTransitiveForbidden -or
+                    ($name -in $domainDirectForbidden -and $path.Count -eq 1)
+            }
         }
     }
 

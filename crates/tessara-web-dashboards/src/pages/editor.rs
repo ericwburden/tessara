@@ -150,6 +150,12 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                 let metadata_dashboard_id = loaded.dashboard.id.clone();
                 let issue_retry_href =
                     StoredValue::new(format!("/dashboards/{}/edit", loaded.dashboard.id));
+                let issue_title = Signal::derive(move || {
+                    issue_placement
+                        .get()
+                        .map(|placement| placement.effective_resolution_state().title().to_string())
+                        .unwrap_or_else(|| "Placement issue".to_string())
+                });
                 let current_account = account.get();
                 let can_read_dashboard = editor_reader_actions_visible(current_account.as_ref());
                 view! {
@@ -340,7 +346,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
 
                         <SideSheet
                             id="dashboard-placement-issue"
-                            title="Placement issue"
+                            title=issue_title
                             description="Authorized diagnostic detail for the selected placement."
                             eyebrow="Placement issue"
                             side=SideSheetSide::End
@@ -1979,17 +1985,19 @@ fn kind_icon(kind: &str) -> AnyView {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(feature = "ssr", not(feature = "hydrate")))]
+    use super::CompositionCanvas;
     use super::{
-        CompositionCanvas, build_reconcile_request, component_version_href,
-        dashboard_placement_height_limit, editor_can_resize, editor_reader_actions_visible,
-        first_available_rect, placement_select_dom_id, selection_after_removal,
+        build_reconcile_request, component_version_href, dashboard_placement_height_limit,
+        editor_can_resize, editor_reader_actions_visible, first_available_rect,
+        placement_select_dom_id, selection_after_removal,
     };
     use crate::types::{
         DashboardComponentVersion, DashboardPlacement, DashboardPlacementAvailability,
         DashboardPlacementConfigState, DashboardPlacementOperation,
         DashboardPlacementResolutionState, EditorPlacement, SessionAccount,
     };
-    #[cfg(feature = "ssr")]
+    #[cfg(all(feature = "ssr", not(feature = "hydrate")))]
     use leptos::prelude::*;
     use tessara_dashboards::GridSize;
 
@@ -2107,7 +2115,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(all(feature = "ssr", not(feature = "hydrate")))]
     #[test]
     fn every_degraded_editor_tile_uses_warning_icon_without_inline_diagnostic_copy() {
         let _ = any_spawner::Executor::init_futures_executor();

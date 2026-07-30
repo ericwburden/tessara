@@ -6,7 +6,10 @@ export default defineConfig({
   testDir: "./tests",
   fullyParallel: false,
   forbidOnly: acceptance,
-  workers: acceptance ? 1 : undefined,
+  // The repository suite mutates installation-wide module enablement and
+  // shared demo fixtures. Keep the documented direct runner state-safe too;
+  // focused diagnostic runs can still override this explicitly on the CLI.
+  workers: 1,
   retries: 0,
   reporter: acceptance
     ? [["list"], ["json"], ["junit", { includeProjectInTestName: true }]]

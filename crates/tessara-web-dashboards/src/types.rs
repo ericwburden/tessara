@@ -88,6 +88,22 @@ pub enum DashboardPlacementResolutionState {
 }
 
 impl DashboardPlacementResolutionState {
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::Available => "Placement available",
+            Self::Restricted => "Placement unavailable",
+            Self::ProviderUnavailable => "Component provider unavailable",
+            Self::Inactive => "ComponentVersion is inactive",
+            Self::Superseded => "ComponentVersion is superseded",
+            Self::Tombstoned => "ComponentVersion was removed",
+            Self::OwnerTombstoned => "Owner Module Instance was removed",
+            Self::OwnerDataDestroyed => "Owner data was destroyed",
+            Self::Missing => "ComponentVersion is missing",
+            Self::Incompatible => "Component provider is incompatible",
+            Self::NotEvaluated => "Placement was not evaluated",
+        }
+    }
+
     pub const fn label(self) -> &'static str {
         match self {
             Self::Available => "Available",

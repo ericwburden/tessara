@@ -756,6 +756,30 @@ fn independent_module_sections(
         })
         .unwrap_or_default();
     let has_dependencies = !dependency_rows.is_empty();
+    let transition_binding_notes = manifest
+        .as_ref()
+        .map(|manifest| {
+            manifest
+                .dependencies
+                .iter()
+                .filter(|dependency| {
+                    dependency.contract_id.as_str() == "tessara.components.component-version"
+                })
+                .map(|dependency| {
+                    let binding = dependency.binding_key.to_string();
+                    view! {
+                        <aside class="module-transition-binding-note">
+                            <strong>"First-party transition binding"</strong>
+                            <p>
+                                <code>{binding}</code>
+                                " uses Core's installation-owned Components adapter. External Blueprints cannot select it; explicit migration is required in Sprint 8A."
+                            </p>
+                        </aside>
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let serving_state = entry.serving_state();
     let manifest_sections = independent_manifest_sections(manifest.as_ref());
     view! {
@@ -831,6 +855,9 @@ fn independent_module_sections(
                         <div><dt>"Validation"</dt><dd><span class=if configuration.valid { "status-badge is-success" } else { "status-badge is-danger" }>{if configuration.valid { "Valid" } else { "Finding" }}</span>" " {format!("Release {} · {}", release.version, if configuration.valid { "no findings" } else { "review findings" })}</dd></div>
                         <div><dt>"Authoritative validator"</dt><dd>"Module-owned configuration contract"</dd></div>
                     </dl>
+                    <div hidden=move || configuration_editing.get()>
+                        {transition_binding_notes}
+                    </div>
                     <form
                         class="module-configuration-form"
                         method="post"
@@ -941,7 +968,7 @@ fn independent_module_sections(
                         <Database/>
                         <div>
                             <span>"Module database"</span>
-                            <strong>{if instance.deployed { "Connected" } else { "Unavailable" }}</strong>
+                            <strong>{if instance.ready { "Connected" } else { "Unavailable" }}</strong>
                             <small><code>{instance.database_name}</code>" · instance-scoped runtime identity."</small>
                         </div>
                     </article>

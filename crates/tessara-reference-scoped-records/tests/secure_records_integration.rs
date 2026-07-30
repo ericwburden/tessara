@@ -63,6 +63,11 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
         core_shell_verifier: shell_signer.verifier(),
     });
     let actor_id = Uuid::new_v4();
+    let grant_context = GrantContext {
+        installation_id,
+        module_instance_id,
+        actor_id,
+    };
     let correlation_id = Uuid::new_v4();
     let now = Utc::now();
     let shell = shell_signer
@@ -98,9 +103,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     let shell_owner = Uuid::new_v4();
     let shell_grant = signed_grant(
         &signer,
-        installation_id,
-        module_instance_id,
-        actor_id,
+        &grant_context,
         Uuid::new_v4(),
         "records.list",
         AuthorizationGrantOperationV1::Read,
@@ -149,7 +152,11 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
         StatusCode::NOT_FOUND,
         "direct module access must not disclose whether a product route exists"
     );
-    let configuration_body = json!({"schema_version": 1, "display_label": "  Regional Records  "});
+    let configuration_body = json!({
+        "schema_version": 1,
+        "display_label": "  Regional Records  ",
+        "retention_mode": "retain_on_undeploy"
+    });
     let public_configuration = app
         .clone()
         .oneshot(
@@ -192,9 +199,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     let jti = Uuid::new_v4();
     let create_grant = signed_grant(
         &signer,
-        installation_id,
-        module_instance_id,
-        actor_id,
+        &grant_context,
         jti,
         "records.create",
         AuthorizationGrantOperationV1::Mutation,
@@ -256,9 +261,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     .unwrap();
     let read_grant = signed_grant(
         &signer,
-        installation_id,
-        module_instance_id,
-        actor_id,
+        &grant_context,
         Uuid::new_v4(),
         "records.list",
         AuthorizationGrantOperationV1::Read,
@@ -286,11 +289,15 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     );
 }
 
-fn signed_grant(
-    signer: &PurposeBoundSigningKeyV1,
+struct GrantContext {
     installation_id: Uuid,
     module_instance_id: Uuid,
     actor_id: Uuid,
+}
+
+fn signed_grant(
+    signer: &PurposeBoundSigningKeyV1,
+    context: &GrantContext,
     jti: Uuid,
     action: &str,
     operation: AuthorizationGrantOperationV1,
@@ -301,10 +308,10 @@ fn signed_grant(
     let envelope = signer
         .sign(AuthorizationGrantV1 {
             schema_version: 1,
-            installation_id,
-            original_actor_id: actor_id,
+            installation_id: context.installation_id,
+            original_actor_id: context.actor_id,
             presenting_service: ModuleDefinitionId::new("tessara.core").unwrap(),
-            audience_module_instance_id: module_instance_id,
+            audience_module_instance_id: context.module_instance_id,
             dependency_binding: DependencyBindingKey::new("tessara.core.scoped-records").unwrap(),
             functional_contract: FunctionalContractId::new(
                 "tessara.reference.scoped-records.record",

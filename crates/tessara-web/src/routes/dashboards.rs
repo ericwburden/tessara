@@ -3,6 +3,7 @@
 //! Keep URL nesting, route parameters, shell/session policy, and route-to-content
 //! wiring here; Dashboard UI behavior belongs in `tessara-web-dashboards`.
 
+use icons::{Check, RefreshCw, Unplug};
 use leptos::prelude::*;
 use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
@@ -100,16 +101,36 @@ fn dashboard_route_content(content: impl IntoView) -> AnyView {
     match dashboard_route_bootstrap() {
         Some(DashboardRouteBootstrap::Unavailable { retry_href, .. }) => view! {
             <section class="route-panel dashboards-page dashboard-module-unavailable">
-                <p class="eyebrow">"Dashboard module"</p>
-                <h1>"Dashboards are temporarily unavailable"</h1>
-                <p>
-                    "The Dashboard Module Instance cannot currently be reached. Dashboard data remains in its isolated Module Instance database; Core credentials, browser cookies, configuration, and saved Component references have not been forwarded or replaced."
-                </p>
-                <div class="button-row">
-                    <a class="button" href=retry_href>"Try Dashboards again"</a>
-                    <a class="button button--secondary" href="/administration/modules/tessara.dashboards#diagnostics">
-                        "Open Module diagnostics"
-                    </a>
+                <div class="dashboard-module-unavailable__state">
+                    <div class="dashboard-module-unavailable__icon" aria-hidden="true">
+                        <Unplug/>
+                    </div>
+                    <div class="dashboard-module-unavailable__content">
+                        <p class="eyebrow">"Dashboard module unavailable"</p>
+                        <h1>"Dashboards cannot be reached right now"</h1>
+                        <p>
+                            "Core and the rest of Tessara are still available. Your Dashboard data remains in the Dashboard Module Instance database."
+                        </p>
+                        <div class="dashboard-module-unavailable__protections">
+                            <span><Check/>"No Dashboard request was sent to another provider."</span>
+                            <span><Check/>"Core credentials and browser cookies were not forwarded."</span>
+                            <span><Check/>"Existing Dashboard references and configuration are preserved."</span>
+                        </div>
+                        <div class="button-row">
+                            <a class="button" href=retry_href><RefreshCw class="button__icon"/>"Try Dashboards again"</a>
+                            <a class="button button--secondary" href="/administration/modules/tessara.dashboards#diagnostics">
+                                "Open Module diagnostics"
+                            </a>
+                        </div>
+                    </div>
+                    <aside class="dashboard-module-unavailable__summary">
+                        <span>"Last known state"</span>
+                        <strong>"Unavailable now"</strong>
+                        <span>"Module Definition"</span>
+                        <code>"tessara.dashboards"</code>
+                        <span>"Route"</span>
+                        <code>"/dashboards"</code>
+                    </aside>
                 </div>
             </section>
         }

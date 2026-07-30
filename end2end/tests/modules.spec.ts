@@ -1010,6 +1010,21 @@ test.describe.serial("Sprint 6A Module Management", () => {
           )?.properties ?? {}
         );
         const configurationCard = page.locator(".module-configuration-card");
+        if (entry.definition.id === DASHBOARDS_DEFINITION) {
+          const transitionNote = configurationCard.locator(
+            ".module-transition-binding-note",
+          );
+          await expect(transitionNote).toContainText(
+            "First-party transition binding",
+          );
+          await expect(transitionNote).toContainText(
+            "tessara.dashboards.component-version",
+          );
+        } else {
+          await expect(
+            configurationCard.locator(".module-transition-binding-note"),
+          ).toHaveCount(0);
+        }
         await page.getByRole("button", { name: "Edit configuration" }).click();
         await expect(
           configurationCard.locator(".module-configuration-form"),
