@@ -273,6 +273,9 @@ if ($SelfTest) {
                 descriptor = [pscustomobject]@{ reserved_definition_id = $_.definition_id }
                 source_digest = $_.source_digest
             }
+        }) + @([pscustomobject]@{
+            kind = "independently_deployed"
+            definition = [pscustomobject]@{ id = "tessara.reference.scoped-records" }
         })
     }
     [void](Assert-Sprint6ACatalog `
