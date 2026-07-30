@@ -546,6 +546,8 @@ When tabular interaction is required, prefer an accessible data-grid pattern ove
 - Prefer native links and forms where they preserve workflow clarity. Client-side enhancement should improve the experience, not become the only way the page works.
 - Keep the shared shell light. Navigation, titles, breadcrumbs, and core layout should load immediately without depending on heavy lazy chunks.
 - Separately deployed modules MUST use the versioned Shell Context and shared UI SDK to server-render complete same-origin HTML documents for their routes, including coherent shell chrome. Core owns the policy/context contract, not every rendering process, and does not wrap a remote HTML fragment.
+- The shared UI SDK, design tokens, accessibility behavior, and shell components MUST have one canonical source implementation. Modules MAY compile and serve repeated SDK code and assets from their own release images; they MUST NOT maintain copied implementations or link the root Core web application.
+- A compatible UI SDK adoption MUST be releasable for one module without rebuilding or redeploying Core or unrelated modules. Module manifests and support policy declare the compatible SDK/design-system versions.
 - When a module cannot render, the gateway MUST serve a Core-owned fallback document that preserves shell/navigation context and identifies the unavailable, disabled, unconfigured, or incompatible destination.
 - Module route transitions MUST preserve installation, actor, scope-bound authorization, theme, navigation, and return-destination context without exposing reusable credentials; downstream module calls require Core exchange for the new audience.
 - Treat browser hydration errors as release-blocking defects.

@@ -61,6 +61,39 @@ A module may have no end-user navigation contribution, but it is not modeled as 
 
 Modules are interchangeable in the compositional sense: an application can omit capabilities it does not need and add narrowly scoped modules for capabilities it lacks. The platform does not promise that independently authored providers with superficially similar functions are drop-in replacements or share data semantics.
 
+## Canonical Shared Source And Release Artifacts
+
+Tessara distinguishes canonical source ownership from deployment ownership.
+Shared platform code may be compiled into Core and many module images, and
+those images may contain repeated binary code, container layers, CSS,
+JavaScript, or WASM. Every shared behavior nevertheless has one canonical
+source owner. Modules must consume versioned platform contract, module runtime,
+UI SDK/design-system, and conformance packages rather than copy their source.
+
+Canonical shared packages own policy-neutral integration behavior such as
+Shell Context and grant verification, semantic destinations, typed resource
+references, configuration/control protocol support, stable errors, health and
+diagnostics, SSR shell primitives, design tokens, accessibility behavior,
+asset conventions, generated clients, and conformance fixtures. They do not
+own a functional module's product rules, persistence, routes, or private DTOs.
+Functional behavior has exactly one authoritative Core or module owner and is
+reused across deployment boundaries through versioned APIs, events, exports,
+or typed resource contracts.
+
+Each Module Release pins or declares compatible shared-package and wire
+contract versions and includes the compiled code and assets it needs. A module
+can adopt a compatible SDK change and publish a new release without rebuilding
+or redeploying Core or unrelated modules. An already deployed image is never
+silently modified when canonical shared source changes. Core maintains an
+explicit compatibility window, while catalog and support policy identify
+Module Releases that use unsupported or vulnerable SDK versions.
+
+A separately deployable module must not depend on the Core application binary,
+root web application, Core-private DTOs, or another module's domain or
+persistence implementation. The accepted technical decision and Dashboard
+reference completion rules are recorded in
+[architecture/module-sdk-source-ownership.md](./architecture/module-sdk-source-ownership.md).
+
 ## Core Responsibilities
 
 Core is authoritative for:
@@ -279,7 +312,19 @@ Forms/Workflows -> Responses -> Datasets -> Components -> Dashboards
 
 That diagram describes product capability and data flow, not deployment topology. Forms, Workflows, Responses, Datasets, Components, and Dashboards become separate full-stack modules. Organization, users, sessions, RBAC, the shell, and the module control plane remain in Core.
 
-The current Rust crates, single Axum service, shared database, and root-owned feature routes are a transition baseline. Existing feature-crate boundaries are useful extraction seams, but compile-time separation is not the target. During Sprint 6A, current areas may publish explicitly non-installable `transitional_in_process` contribution descriptors for discovery, contracts, security capabilities, and navigation. A descriptor may reserve a future Module Definition identity, but it creates neither a Module Release nor a Module Instance, does not satisfy `tessara-oci-v1`, and cannot be materialized by the Supervisor.
+The original Rust crates, single Axum service, shared database, and root-owned
+feature routes remain the transition baseline for areas not yet extracted.
+Sprint 6C moved Dashboard runtime and data into a real Module Release/Instance,
+but Dashboard remains in a source/build transition until it adopts the
+canonical module SDK/runtime and no longer links the root web application or
+Core-private bootstrap types. Existing feature-crate boundaries are useful
+extraction seams, but compile-time separation inside Core is not the target.
+During Sprint 6A, current areas could publish explicitly non-installable
+`transitional_in_process` contribution descriptors for discovery, contracts,
+security capabilities, and navigation. A descriptor may reserve a future
+Module Definition identity, but it creates neither a Module Release nor a
+Module Instance, does not satisfy `tessara-oci-v1`, and cannot be materialized
+by the Supervisor.
 
 When a first extracted module temporarily consumes an in-process provider, the current Core Release may expose a narrowly versioned, first-party Core Release compatibility contract. That binding is trusted as a Core Release contract, not as a module provider, and is prohibited in new external application Blueprints. Typed references to its records use `core_installation` ownership and a transition-specific resource type; they never pretend the descriptor owns a Module Instance.
 

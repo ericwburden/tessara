@@ -71,10 +71,14 @@ The codebase already includes a substantial vertical foundation:
 - Sprint 4A Dataset Catalog and Thin Table Components: searchable Dataset tags, Dataset provenance lineage, one thin Table Component over Dataset major-line outputs with last-mile projection/filter defaults, edit-screen component versioning/publishing, and shared interactive table rendering for Dataset previews and Component viewers
 - Sprint 5A Dashboard Composition: native directory/detail/editor/viewer flows over stable `ComponentVersion` identities, revisioned placement composition, bounded execution, and scoped redaction
 - Sprint 6A Module Contract and Core Control Plane: one stable Application Installation and Core runtime observation; exact Manifest, Feature Declaration, contract, semantic-destination, typed-reference, and real Release/Instance public types; seven versioned transition descriptors with six active in-process contributions and retired Migration; Core-owned module inventory/provenance APIs and native Module Management UI; and revisioned band-restricted navigation policy, without Release/Instance persistence, installation, execution, or mutation
+- Sprint 6A-UI through 6B2: configuration-driven navigation and reusable Module Management; persisted Module Releases/Instances; same-origin gateway and installation-control services; per-module databases and identities; secure Shell Context, authorization, configuration, health, diagnostics, enablement, enrollment, upgrade, and rollback foundations; and independently deployed Scoped Records
+- Sprint 6C Dashboard runtime/data extraction: Dashboard service, database, identities, migrations, manifest, operations, APIs, SSR pages, same-origin routes, transition-only Components contract, and definition-independent Module Management controls, with root web source/build decoupling deliberately remaining for the post-closeout SDK adoption pass
 
-### Closed Sprint 6A UI baseline (input to Sprint 6A-UI)
+### Historical closed Sprint 6A UI baseline
 
-Until Sprint 6A-UI lands, the application shell exposes these meaningful user-testable surfaces. The Sprint 6A-UI block below explicitly supersedes the fixed group, anchor, band, and Administration-landing details while preserving unrelated route behavior:
+This records the user-testable baseline that Sprint 6A-UI subsequently
+superseded. Its fixed group, anchor, band, and Administration-landing details
+are historical; unrelated route behavior remains useful transition context:
 
 - role-aware login and shared home entry
 - product-area navigation for Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, and Administration; Migration is retained only as retired historical/support inventory
@@ -87,26 +91,44 @@ Until Sprint 6A-UI lands, the application shell exposes these meaningful user-te
 
 ### Current implementation gaps
 
-The contract and control-plane foundation is complete, but Tessara does not yet materialize or operate a real Module Release or Module Instance. Sprint 6A-UI first replaces Sprint 6A's rigid navigation-band policy with configuration-driven groups and harmonizes the related administration UI without changing that platform boundary. Sprint 6B then must:
+The contract, control-plane, container runtime, secure module-operation, and
+first feature process/database boundaries are complete through Sprint 6C.
+Dashboard now runs as a real Module Release/Instance with its own service,
+database, runtime identities, migrations, manifest, operations, APIs, SSR
+pages, and same-origin routes. The reusable Module Management pathway is
+definition-independent.
 
-- persist and mutate real Module Releases and Instances without treating Sprint 6A transition descriptors as deployable providers
-- introduce a Supervisor-rooted `tessara-oci-v1` runtime, same-origin gateway, verifiable installation context, health/readiness observation, and controlled lifecycle operations
-- add scope-bound grants or exact Core authorization decisions with downstream audience, freshness, replay, and revocation proof
-- establish one database per module instance in the installation's PostgreSQL cluster, with dedicated credentials and no cross-module database access
-- install the Sprint 6B reference module as the first independently deployed full-stack process and database
-- define deterministic Application Blueprint, lockfile, validate, plan/diff, apply, and read-back operations for human and LLM composition
-- prove scoped authorization, lifecycle observation, unavailable-state behavior, and diagnostics across actual module boundaries
-- move remaining non-Core feature areas into independently deployed and supported modules before broad pilot hardening
+The next gap is source/build independence. Dashboard still links root
+`tessara-web`, and Core still constructs Dashboard-specific web bootstrap
+types. Tessara must now:
+
+- extract canonical, independently versioned platform contract, module
+  runtime, UI SDK/design-system, asset, and conformance source packages
+- allow repeated compiled code and assets in module images while prohibiting
+  copied shared source and shared module business implementations
+- finish Dashboard route, SSR/hydration, bootstrap, and asset ownership without
+  dependencies on the Core application binary, root web application, or
+  Core-private DTOs
+- prove Dashboard-only build, deployment, upgrade, and rollback while Core and
+  unrelated module image digests remain unchanged
+- define deterministic Application Blueprint, lockfile, validate, plan/diff,
+  apply, and read-back operations for human and LLM composition
+- prove scoped authorization, lifecycle observation, unavailable-state
+  behavior, and diagnostics across actual module boundaries
+- apply the completed SDK/runtime and module extraction pass to the remaining
+  non-Core feature areas before broad pilot hardening
 
 ### Frontend transition baseline
 
-The completed web refactoring pass remains useful because it created explicit feature seams without changing route behavior. Those crates are now transitional aids toward full-stack module ownership rather than the final architecture.
+The completed web refactoring pass remains useful because it created explicit feature seams without changing route behavior. Sprint 6C then established the first real feature process/database boundary. The remaining root-linked crates are transitional inputs to the canonical module SDK/runtime and full source/build separation rather than the final architecture.
 
-- Keep current root route adapters, shell, auth/session policy, hydration entrypoint, CSS, and assets stable until the same-origin gateway and module SDK can replace those responsibilities deliberately.
+- Keep current root route adapters, shell, auth/session policy, hydration entrypoint, CSS, and assets stable for unextracted routes while the canonical module SDK/runtime replaces those responsibilities deliberately for route-owning modules.
 - Avoid new dependencies from feature crates into root application policy or sibling feature internals.
 - Treat each non-Core feature area as a candidate module boundary owning UI, API, persistence, configuration, diagnostics, and contracts together.
 - Promote stable wire schemas into module-owned contract crates or generated clients; do not use shared DTO code as a shortcut to shared domain ownership.
-- Build the shared design-system and module SDK around SSR-compatible shell integration, authenticated context, semantic navigation, typed references, stable errors, health, and conformance testing.
+- Extract the shared design-system, module runtime, and SDK around SSR-compatible shell integration, authenticated context, semantic navigation, typed references, stable errors, health, asset ownership, and conformance testing.
+- Permit canonical SDK/runtime source to be compiled into multiple module images; do not copy its source or require a shared runtime deployment merely to avoid repeated artifact bytes.
+- Require an extracted module to build without the Core application binary, root `tessara-web`, Core API state, Core-private DTOs, or another module's implementation crates.
 - Use full-page same-origin module routes as the default. Runtime-loaded remote UI code, iframes, and browser-side microfrontend composition are not required.
 - Continue measuring release artifacts and route behavior, but evaluate extraction based on the complete module boundary rather than frontend compile time alone.
 
@@ -871,6 +893,14 @@ This section records the completed foundation sequence that led to the current n
 
 **Outcome:** Dashboards is the first existing Tessara feature area to operate as a separately deployed, full-stack module.
 
+**Post-closeout boundary note:** Sprint 6C completed the independent process,
+database, runtime identity, manifest, operations, API, SSR response, and
+same-origin route boundary. Its accepted implementation still compiles root
+`tessara-web` into the Dashboard service and uses Core-owned
+Dashboard-specific bootstrap adapters. Sprints 6D and 6E extract the canonical
+shared SDK/runtime and finish the Dashboard source/build boundary without
+reopening Sprint 6C or changing its retained evidence.
+
 **Build:**
 
 - move Dashboard UI, API, persistence, migrations, configuration, and health/readiness into the Dashboard module
@@ -895,7 +925,120 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can compose and view a Dashboard through the normal shell while Dashboard runs in a separate process and database, and can observe contained behavior when Dashboard or Components is unavailable. In Module Management, Dashboard and Scoped Records use the same configuration, diagnostics, lifecycle, enablement, navigation, findings, and route-state interactions; their visible differences come only from declared module metadata and configuration. The documented pathway and inventory-driven conformance test identify the bounded manifest, control-endpoint, deployment, bootstrap, product, and database work needed for the next migration without adding a module-specific Core management path.
 
-### Sprint 6D: Application Blueprint And Composition Automation Slice (Next)
+### Sprint 6D: Canonical Module SDK And Runtime Extraction Slice (Next)
+
+**Outcome:** Tessara has one canonical, independently versioned source for
+shared module contracts, runtime integration, complete-document shell/UI
+rendering, frontend assets, and conformance support; that source can be
+compiled into many release images without linking modules to the Core
+application.
+
+**Build:**
+
+- inventory shared and duplicated behavior across Core, Dashboard, Scoped
+  Records, `tessara-module-contract`, `tessara-web`, `tessara-web-ui`,
+  `tessara-web-http`, container builds, and conformance scripts; assign one
+  canonical source owner to every retained behavior
+- establish policy-neutral package boundaries equivalent to a platform
+  contract package, module runtime, module UI SDK/design system, and module
+  testkit; final crate names may differ, but their responsibilities and
+  dependency directions must remain explicit
+- extract Shell Context and authorization-grant/decision verification,
+  semantic destinations, typed resource references, stable errors, module
+  configuration/control protocol support, health/readiness, diagnostics,
+  tracing, shutdown, and generated-client/schema conventions without moving
+  Core policy or module product semantics into the SDK
+- extract SSR-compatible complete-document shell components, shared UI
+  primitives, design tokens, accessibility behavior, asset naming/caching, and
+  hydration conventions so a module can build and serve its own frontend
+  assets
+- define semantic versioning, manifest declarations, compatibility ranges, a
+  supported-version window, deprecation policy, and release inventory for
+  shared SDK/runtime versions
+- add package-graph and source audits proving the SDK/runtime cannot reach the
+  Core application binary, root route tree, Core API state, Core-private DTOs,
+  Dashboard/Scoped Records product code, or any other module implementation
+- add a minimal reference/fixture module and reusable testkit proving manifest,
+  context, configuration, health, diagnostics, SSR shell, asset, outage, and
+  graceful-shutdown conformance without a root `tessara-web` dependency
+- document the module-authoring and SDK upgrade workflow, including the rule
+  that a canonical shared-source update changes deployed behavior only when a
+  consuming module publishes and deploys a new release
+- preserve existing Core, Dashboard, and Scoped Records behavior while the
+  canonical packages are established; module product migration belongs to the
+  adopting module sprint
+
+**Application UI delivered this sprint:**
+
+- no intentional product-flow redesign
+- a reference module document rendered from the canonical Shell Context/UI SDK
+  with the same shell, navigation, theme, accessibility, and standard
+  unavailable-state behavior as Core
+
+**User-testable exit condition:** a tester can build and run the reference
+module without linking root `tessara-web` or `tessara-api`, navigate to its
+same-origin SSR route in the normal Tessara shell, verify authenticated and
+unavailable states, and run the shared conformance suite. Package/source audits
+show one canonical implementation for each extracted platform behavior, while
+the module image contains its own compiled runtime/UI code and assets.
+
+### Sprint 6E: Dashboard SDK Adoption And Source Independence Slice
+
+**Outcome:** Dashboards completes the first full extraction pass: its already
+independent Sprint 6C process and database also become independently built,
+released, upgraded, and rolled back without root Core/web application code.
+
+**Build:**
+
+- make Dashboard adopt the canonical contract, runtime, UI SDK/design-system,
+  asset, and testkit packages established in Sprint 6D
+- remove the `tessara-dashboard-module -> tessara-web` dependency and every
+  path from the Dashboard release graph to the Core application binary, root
+  route tree, Core API state, and Core-private DTO/bootstrap types
+- move Dashboard route-tree, complete-document SSR, hydration entrypoint,
+  route bootstrap mapping, CSS, JavaScript/WASM, icons, and other frontend
+  assets into the Dashboard release
+- remove Dashboard product routes and web feature code from the Core
+  application build; replace Dashboard-specific Core gateway/bootstrap logic
+  with generic manifest/service-registration routing and versioned Shell
+  Context/platform contracts
+- keep Core authoritative for session authentication, authorization and
+  Organization decisions, navigation composition, semantic destinations,
+  module lifecycle, and fallback documents without making Core the Dashboard
+  page renderer
+- preserve Sprint 6C Dashboard data, migrations, runtime identities,
+  configuration, diagnostics, enablement, degraded placement states,
+  nondisclosure, and transition-only Components compatibility contract
+- ensure Dashboard changes to internal UI, API, domain, or compatible SDK
+  adoption require only a new Dashboard Module Release; contract changes
+  retain ordinary compatibility validation
+- add build provenance and lockfile/receipt proof that a Dashboard-only
+  upgrade and rollback change the Dashboard image digest while Core, gateway,
+  Scoped Records, and other module image digests remain unchanged
+- extend source/package audits and browser, no-JavaScript, hydration, outage,
+  authorization, asset-cache, health-gated switch, and rollback coverage for
+  the completed boundary
+- update the independent-module pathway so this completed Dashboard structure,
+  not the Sprint 6C root-linked transition, is the template for later feature
+  extractions
+
+**Application UI delivered this sprint:**
+
+- unchanged Dashboard directory, detail, editor, viewer, configuration, and
+  diagnostics experiences rendered and hydrated entirely by the Dashboard
+  release through the canonical shared SDK
+- unchanged coherent shell and Core-owned fallback behavior during Dashboard
+  upgrade, outage, and rollback
+
+**User-testable exit condition:** from one installed composition, a tester can
+deploy a Dashboard-only UI/behavior release, observe the change through normal
+same-origin routes, and roll it back without rebuilding or restarting Core,
+the gateway, Scoped Records, or any unrelated module. Cargo/source audits show
+no Dashboard release dependency on root `tessara-web`, `tessara-api`, or
+another module implementation, and installation receipts prove only the
+Dashboard release digest changed.
+
+### Sprint 6F: Application Blueprint And Composition Automation Slice
 
 **Outcome:** a Tessara application is a declarative, validated, reproducible composition suitable for human and LLM-driven construction.
 
@@ -970,7 +1113,25 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 8: Current Feature Module Separation
 
-Every sprint in this phase must leave the extracted feature as a separately deployed full-stack module with its own administration/configuration surface, manifest, Feature Declarations, security capabilities, database, migrations, health/readiness, same-origin routes, and conformance coverage. Cross-module relationships use APIs, events, exports, and typed references only. Each extraction must inventory Core-owned transition references, migrate data into the new Module Instance, publish a complete old-to-new mapping, invoke versioned consumer-owned rebinding, emit completeness receipts, preserve explicit migrated/retired resolution for old references, and remove the read-only Core compatibility adapter only after all consumers are verified. Each extraction reruns the Phase 7 scope, lifecycle, outage, and compatibility proofs against the newly physical boundary.
+Every sprint in this phase applies the completed Sprint 6D/6E extraction pass.
+It must leave the feature as a separately built and deployed full-stack module
+using the canonical contract/runtime/UI/testkit packages, with no dependency on
+the Core application binary, root web application, Core-private DTOs, or
+another module implementation. Each module owns its administration/configuration
+surface, manifest, Feature Declarations, security capabilities, database,
+migrations, health/readiness, complete-document same-origin routes, frontend
+assets, and conformance coverage. Repeated compiled SDK/runtime code and assets
+are allowed; copied shared source is not.
+
+Cross-module relationships use APIs, events, exports, and typed references
+only. Each extraction must inventory Core-owned transition references, migrate
+data into the new Module Instance, publish a complete old-to-new mapping,
+invoke versioned consumer-owned rebinding, emit completeness receipts,
+preserve explicit migrated/retired resolution for old references, and remove
+the read-only Core compatibility adapter only after all consumers are
+verified. Each extraction reruns the Phase 7 scope, lifecycle, outage,
+compatibility, source-ownership, package-graph, independent-image-upgrade, and
+rollback proofs against the newly physical boundary.
 
 ### Sprint 8A: Component Module Separation Slice
 

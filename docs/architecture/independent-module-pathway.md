@@ -1,10 +1,18 @@
 # Independent Module Pathway
 
-Status: Sprint 6C reference contract.
+Status: Sprint 6C runtime/data reference contract. The canonical shared-source
+and independent-build template completes in Sprints 6D and 6E.
 
 Dashboard and Scoped Records are the two conformance fixtures for this
 pathway. A third module must be able to reach the same degree of modularity
 without adding a definition-ID branch to Core or Module Management.
+
+Sprint 6C proved the independent process, database, control, product, and
+operational boundary. Dashboard still links root `tessara-web`, so later
+feature extractions must not copy that transitional source/build edge. They
+must follow the accepted
+[Module SDK Source Ownership And Deployment](./module-sdk-source-ownership.md)
+decision and the completed Sprint 6E Dashboard structure.
 
 ## Shared Boundary
 
@@ -12,6 +20,9 @@ An independently deployed module owns:
 
 - its product API, native SSR product pages, data, migration, runtime, and
   database identities;
+- its route tree, hydration/SSR entrypoints, and versioned frontend assets,
+  built from canonical module runtime/UI SDK source without linking the Core
+  application or root web application;
 - its manifest, configuration schema, configuration validator, readiness,
   liveness, status, and diagnostics;
 - its product capabilities, routes, navigation, resources, contracts, and
@@ -114,7 +125,13 @@ flow or markup is a conformance failure.
    do not add a module-specific Module Management test branch.
 8. Pass manifest, configuration, enablement, navigation, diagnostics,
    no-JavaScript, outage-containment, and database-isolation gates.
-9. Search Core and the web shell for the new definition ID. Matches in
+9. Pass source/package-graph checks proving the module does not depend on the
+   Core application binary, root `tessara-web`, Core-private DTOs, or another
+   module implementation; repeated compiled SDK/runtime code and assets are
+   allowed.
+10. Prove an image-only module upgrade and rollback while Core, gateway, and
+   unrelated module image digests remain unchanged.
+11. Search Core and the web shell for the new definition ID. Matches in
    fixtures, seed, routing registration, or explicit compatibility adapters
    must be explainable; Module Management and control-plane branches are not
    allowed.
@@ -124,6 +141,7 @@ flow or markup is a conformance failure.
 The pathway is reusable only while this check remains true:
 
 > Adding a conforming third module requires deployment registration and
-> module-owned implementation, but no definition-specific changes to Core's
-> configuration, enablement, diagnostics, or Module Management rendering.
-
+> module-owned implementation built on the canonical SDK/runtime, but no
+> definition-specific changes to Core's configuration, enablement,
+> diagnostics, Module Management rendering, or root web application and no
+> dependency from the module back to those Core implementations.

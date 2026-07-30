@@ -32,11 +32,19 @@ The normal deployment unit is a full-stack module with its own product or admini
 
 The current codebase is a useful transition baseline:
 
-- one Axum application serves APIs and Leptos SSR UI
-- `tessara-web` owns the shell, route adapters, authentication policy, document integration, hydration entrypoint, CSS, and public assets
-- focused `tessara-web-*` and domain crates separate several feature areas at compile time
-- product data currently shares one PostgreSQL database
-- current feature routes and DTOs are largely registered at the root application
+- Core and the Sprint 6C Dashboard and Scoped Records modules run as separate
+  processes with separate databases, while the remaining feature areas still
+  run through the Core Axum/Leptos application and Core database
+- `tessara-web` still owns the root shell, route adapters, authentication
+  policy, document integration, hydration entrypoint, CSS, and public assets;
+  Dashboard currently reuses that root crate from its independent process
+- focused `tessara-web-*` and domain crates separate several feature areas at
+  compile time
+- most remaining feature routes and DTOs are still registered at the root
+  application
+- Dashboard has a real Module Release/Instance and process/data boundary, but
+  its source/build boundary is incomplete until the canonical module SDK and
+  runtime replace its root `tessara-web` and Core-private bootstrap coupling
 
 These are descriptions of current implementation, not target deployment constraints. Feature crates are extraction seams. They should first acquire explicit manifests and contracts, then move behind module-owned APIs and routes, and finally into independent processes and databases.
 
@@ -388,7 +396,35 @@ The shared design system and module SDK must let independently deployed modules 
 - health, readiness, diagnostics, and conformance-test support
 - contract schema generation and typed clients
 
-The current `cargo-leptos` pipeline, `tessara-web`, `tessara-web-ui`, `tessara-web-http`, and feature crates remain the implementation baseline until the module runtime exists. New code should avoid deepening root dependencies that would make a feature harder to extract.
+Shared platform behavior follows the accepted
+[Module SDK Source Ownership And Deployment](./architecture/module-sdk-source-ownership.md)
+decision: code may be compiled into many independently deployed images, but
+each behavior has one canonical source owner. Canonical platform-contract,
+module-runtime, UI SDK/design-system, and testkit packages are independently
+versioned and policy-neutral. Business rules remain in exactly one owning Core
+area or functional module and cross a process boundary only through a
+versioned contract.
+
+Repeated compiled Rust code, container layers, CSS, JavaScript, and WASM are
+permitted. Copied source implementations are not. A module pins compatible SDK
+and contract versions and serves its own complete-document SSR and frontend
+assets. An SDK update reaches a running module through a new release of that
+module; it does not implicitly replace code inside deployed images or require
+Core and unrelated modules to be redeployed.
+
+Sprint 6C established the Dashboard process and database boundary, but its
+release remains a source/build transition while `tessara-dashboard-module`
+links root `tessara-web` and Core constructs Dashboard-specific web bootstrap
+types. The next transition extracts the canonical SDK/runtime from the current
+`cargo-leptos`, `tessara-web`, `tessara-web-ui`, `tessara-web-http`, module
+contract, and conformance code. Dashboards then adopts that boundary and
+removes its root application dependencies before the same pass is applied to
+the remaining feature modules.
+
+The SDK/runtime dependency graph must not lead from a module to the Core
+application binary, root route tree, Core API state, Core-private DTOs, or
+another module's product implementation. Automated source and package-graph
+audits enforce that rule.
 
 ## Operational Requirements
 
@@ -410,11 +446,13 @@ The installation must remain locally operable without a mandatory central Tessar
 
 1. Represent current in-process feature areas through explicitly non-installable `transitional_in_process` contribution descriptors and Core module inventory; do not call them Module Releases or Module Instances.
 2. Introduce semantic destinations, namespaced capability contributions, typed references, and explicit module state.
-3. Add the out-of-process Installation Supervisor/bootstrap CLI, same-origin gateway, authenticated module context, per-module database provisioning, SDK, and conformance suite.
-4. Extract one existing full-stack feature, beginning with Dashboards, behind real module boundaries.
-5. Add deterministic Blueprint, lockfile, plan, apply, and read-back tooling.
-6. Prove cross-module scope and resource lifecycle behavior.
-7. Extract Components, Datasets, Responses, Workflows, and Forms into module-owned processes and databases.
-8. Harden migration, upgrades, backup/restore, diagnostics, and multiple independently supported application compositions.
+3. Add the out-of-process Installation Supervisor/bootstrap CLI, same-origin gateway, authenticated module context, per-module database provisioning, and conformance foundation.
+4. Establish the Dashboard process/database boundary as the first existing full-stack feature extraction.
+5. Extract the canonical module contract, runtime, UI SDK/design system, asset, and testkit source boundaries without module-specific product behavior.
+6. Finish Dashboard source/build independence by adopting those packages, owning its routes/assets, and removing root Core/web application dependencies.
+7. Add deterministic Blueprint, lockfile, plan, apply, and read-back tooling.
+8. Prove cross-module scope and resource lifecycle behavior.
+9. Apply the proven SDK/runtime and full-stack extraction pass to Components, Datasets, Responses, Workflows, and Forms.
+10. Harden migration, upgrades, backup/restore, diagnostics, and multiple independently supported application compositions.
 
 This sequence deliberately establishes the platform contract before many applications depend on the current shared structure.

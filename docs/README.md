@@ -10,6 +10,7 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 | [requirements.md](./requirements.md) | Product and system requirements |
 | [modular-application-platform.md](./modular-application-platform.md) | Canonical product contract for Core, modules, composition, ownership, and application releases |
 | [architecture.md](./architecture.md) | Target architecture, transition model, and technical design direction |
+| [architecture/module-sdk-source-ownership.md](./architecture/module-sdk-source-ownership.md) | Accepted decision for canonical shared SDK/runtime source, repeated release artifacts, and independent module builds |
 | [api-wire-types.md](./api-wire-types.md) | Direction for module-owned public contracts, wire types, and generated clients |
 | [development-workflow.md](./development-workflow.md) | Local development loops for fast host-run iteration, API-only refresh, and full-stack relaunch |
 | [ui-guidance.md](./ui-guidance.md) | Canonical UI guidance for naming, brand expression, shell behavior, rendering, layout, components, states, shared primitive contracts, and transitional UI rules |
@@ -34,6 +35,7 @@ The active direction for Tessara is:
 - make every retained non-Core feature area a separately deployed full-stack module with its own configuration or administration UI and database; retire transitional features that do not remain supported
 - require one PostgreSQL cluster per v1 installation, with one Core database and one database per module instance and no cross-module database access
 - integrate modules through manifests, Feature Declarations, versioned functional contracts, namespaced security capabilities, semantic destinations, APIs/events, and durable typed resource references
+- maintain one canonical source for shared platform/runtime/UI behavior while allowing that code and its assets to be compiled into multiple independently deployed images
 - keep mutation, versioning, publication, lifecycle, audit, and historical-review decisions inside the owning module
 - compose independently supported applications from declarative Blueprints and exact lockfiles through deterministic validate, plan/diff, apply, and read-back operations
 - execute locked Core Release components (including the gateway) and Module Release changes through an installation-local Supervisor outside Core so upgrades and rollback do not depend on a process replacing itself

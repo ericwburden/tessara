@@ -27,6 +27,8 @@ Human administrators, deployment automation, and LLM clients must be able to dis
 - Cross-module navigation must use named semantic destinations and typed parameters rather than stored deployment URLs.
 - Disabled, unavailable, unconfigured, unauthorized, incompatible, and unknown destinations must have distinct user-facing outcomes after authorization; an unauthorized direct request must not reveal whether the destination is known.
 - Product and administrative module surfaces must use the shared design-system and accessibility contract.
+- Shared shell, design-system, module-runtime, and integration behavior must have one canonical source implementation even when its compiled code and assets are repeated in multiple Core or module release images.
+- A compatible shared-SDK change must be adoptable through an individual Module Release without requiring Core or unrelated modules to be rebuilt or redeployed.
 
 ## Core Requirements
 
@@ -110,6 +112,13 @@ Every normal Tessara module must be a separately deployable full-stack applicati
 - module-owned persistence, migrations, retention, and recovery behavior
 - platform conformance tests
 - an optional module-owned, versioned, typed, idempotent bootstrap/apply/read-back contract when catalogs or initial product records are part of reproducible application construction
+
+A module may compile canonical platform SDK/runtime source into its own image,
+but it must not depend on the Core application binary, root web application,
+Core-private DTOs, or another module's domain/persistence implementation.
+Shared platform packages must remain policy-neutral; functional behavior must
+have exactly one authoritative Core or module owner and be consumed across
+boundaries through a versioned contract.
 
 A module may have no primary end-user route. It must still be operable and configurable without direct database edits. Tessara must not require a separate headless-module class.
 

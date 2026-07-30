@@ -5,7 +5,41 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
-“Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
+“Next Sprint” labels inside dated entries are historical snapshots and may be
+superseded. Use the current sequencing in `docs/roadmap.md`.
+
+## 2026-07-30 - Post-Sprint 6C Module SDK And Extraction Decision
+
+### Decision
+
+- Accept repeated compiled code, container layers, CSS, JavaScript, and WASM
+  across Core and module images when every shared behavior has one canonical
+  source owner.
+- Extract independently versioned, policy-neutral platform contract, module
+  runtime, UI SDK/design-system, asset, and conformance packages before
+  applying the next feature-module extraction.
+- Keep functional behavior owned by exactly one Core area or module and reuse
+  it through versioned contracts rather than shared implementation,
+  persistence access, or copied source.
+- Treat Sprint 6C as the completed Dashboard process/database boundary while
+  acknowledging its remaining source/build transition: the Dashboard module
+  still links root `tessara-web`, and Core still constructs
+  Dashboard-specific web bootstrap types.
+
+### Roadmap Change
+
+- Sprint 6D is now **Canonical Module SDK And Runtime Extraction**.
+- Sprint 6E completes Dashboard SDK adoption, route/asset ownership, and
+  source/build independence.
+- The former Sprint 6D Blueprint and composition work moves intact to Sprint
+  6F.
+- Components, Datasets, Responses, Workflows, and Forms must use the completed
+  Sprint 6D/6E extraction pass, including source-ownership and
+  independent-image upgrade/rollback proof.
+
+This sequencing supersedes “Next Sprint” statements in the dated Sprint 6C
+closeout entries below without changing their retained implementation or
+validation evidence.
 
 ## 2026-07-29 - Sprint 6C Final Corrective Closeout
 

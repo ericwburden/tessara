@@ -8,21 +8,22 @@ Out-of-roadmap sprint proposals and migration plans may also live here when they
 
 ## Current Roadmap Position
 
-**Sprint 6A: Module Contract And Core Control Plane** completed on 2026-07-15.
-The post-closeout sequencing decision inserts **Sprint 6A-UI: Navigation
-Composition And Module Management Harmonization** as the next sprint without
-reopening or modifying closed Sprint 6A commits or retained evidence. Sprint
-6A-UI kicked off on 2026-07-15 from clean post-closeout `main`. It now replaces
-Sprint 6A's band policy with configured ordered groups, removes the redundant
-`/administration` landing route, directly exposes Core Admin destinations, and
-retains targeted Module Management UI correction. Product workflows and Sprint
-6B runtime scope remain unchanged.
+Sprint 6C closed on 2026-07-29 with Dashboard operating in an independent
+process and database. The accepted post-closeout sequencing decision treats
+that as the runtime/data boundary and completes source/build independence in
+two steps:
 
-**Sprint 6B: Module Runtime And Installation Infrastructure** follows Sprint
-6A-UI with its real Module Release/Instance persistence, materialization, and
-runtime scope unchanged.
+1. **Sprint 6D: Canonical Module SDK And Runtime Extraction** is next.
+2. **Sprint 6E: Dashboard SDK Adoption And Source Independence** follows.
+3. **Sprint 6F: Application Blueprint And Composition Automation** retains the
+   former Sprint 6D Blueprint scope.
 
-## Active Sprint 6A-UI Artifacts
+Later module extractions apply the completed Sprint 6D/6E pattern. See the
+[roadmap](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-next)
+and the accepted
+[module SDK source-ownership decision](../architecture/module-sdk-source-ownership.md).
+
+## Completed Sprint 6A-UI Artifacts
 
 - [Sprint 6A-UI Navigation Composition And Module Management Harmonization Plan](./sprint-6a-ui-plan.md)
 - [Sprint 6A-UI Navigation And Module Management Baseline](./sprint-6a-ui-baseline-inventory.md)

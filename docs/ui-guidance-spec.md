@@ -695,5 +695,8 @@ open question "What global number-formatting pattern should apply beyond tabular
 -- Decision: Core owns shell policy, Shell Context, navigation policy and semantic destination resolution.
 -- Each separately deployed full-stack module uses the shared UI SDK and authenticated Shell Context
 -- to server-render the complete coherent document for its own product and administration routes.
+-- Shared UI/runtime behavior has one canonical source implementation even when its compiled code
+-- and assets are repeated in many module images. A module must not link the root Core web
+-- application, and compatible SDK adoption is releasable without redeploying unrelated images.
 -- The gateway supplies a Core-owned fallback document when the route owner cannot render.
 ```
