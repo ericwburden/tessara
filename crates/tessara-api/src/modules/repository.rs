@@ -843,12 +843,15 @@ pub(crate) async fn replace_navigation_composition(
     for placement in placements {
         sqlx::query(
             r#"
-            UPDATE navigation_destination_placements
-            SET group_id = $3,
-                visible = $4,
-                display_order = $5,
+            INSERT INTO navigation_destination_placements (
+                installation_id, destination_id, group_id, visible, display_order
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (installation_id, destination_id) DO UPDATE SET
+                group_id = EXCLUDED.group_id,
+                visible = EXCLUDED.visible,
+                display_order = EXCLUDED.display_order,
                 updated_at = now()
-            WHERE installation_id = $1 AND destination_id = $2
             "#,
         )
         .bind(installation_id)
@@ -859,6 +862,22 @@ pub(crate) async fn replace_navigation_composition(
         .execute(&mut **tx)
         .await?;
     }
+
+    let retained_destination_ids = placements
+        .iter()
+        .map(|placement| placement.destination_id.as_str())
+        .collect::<Vec<_>>();
+    sqlx::query(
+        r#"
+        DELETE FROM navigation_destination_placements
+        WHERE installation_id = $1
+          AND NOT (destination_id = ANY($2))
+        "#,
+    )
+    .bind(installation_id)
+    .bind(&retained_destination_ids)
+    .execute(&mut **tx)
+    .await?;
 
     let retained_group_ids = groups
         .iter()

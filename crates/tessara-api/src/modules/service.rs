@@ -14,10 +14,12 @@ use super::{
         ensure_compatible_source_change, frozen_definition_ids, frozen_source_input,
         prepare_catalog, prepare_source, source_digest,
     },
-    navigation_catalog::{self, DESTINATIONS, NavigationCatalogOwner},
+    navigation_catalog::{self, NavigationCatalogOwner, ResolvedNavigationDestination},
     repository::{self, NavigationGroupRow, NavigationPlacementRow, NavigationRecord},
 };
 
+#[cfg(test)]
+use super::navigation_catalog::DESTINATIONS;
 #[cfg(test)]
 use super::repository::NavigationPolicyEntryRow;
 
@@ -178,6 +180,81 @@ pub(crate) struct NavigationPolicyReadModelV2 {
     pub(crate) revision: i64,
     pub(crate) groups: Vec<NavigationGroupV2>,
     pub(crate) destinations: Vec<NavigationDestinationV2>,
+}
+
+async fn load_navigation_catalog(
+    tx: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+) -> Result<Vec<ResolvedNavigationDestination>, sqlx::Error> {
+    let manifests = sqlx::query_scalar::<_, sqlx::types::Json<ModuleManifest>>(
+        r#"
+        SELECT releases.manifest
+        FROM module_instances AS instances
+        JOIN module_releases AS releases ON releases.id = instances.release_id
+        WHERE instances.installation_id = $1
+          AND instances.identity_state = 'live'
+          AND instances.installed
+          AND instances.deployed
+          AND releases.manifest IS NOT NULL
+        ORDER BY instances.definition_id
+        "#,
+    )
+    .bind(installation_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let manifests = manifests
+        .into_iter()
+        .map(|manifest| manifest.0)
+        .collect::<Vec<_>>();
+    Ok(resolve_navigation_catalog(&manifests))
+}
+
+fn resolve_navigation_catalog(manifests: &[ModuleManifest]) -> Vec<ResolvedNavigationDestination> {
+    let mut catalog = navigation_catalog::resolved_destinations();
+    let mut known_ids = catalog
+        .iter()
+        .map(|destination| destination.id.clone())
+        .collect::<BTreeSet<_>>();
+    for manifest in manifests {
+        for contribution in &manifest.navigation {
+            // The frozen transition catalog continues to own an existing ID
+            // until that product is explicitly adopted through a later sprint.
+            if known_ids.contains(contribution.id.as_str()) {
+                continue;
+            }
+            let Some(route) = manifest.browser_routes.iter().find(|route| {
+                route.destination == contribution.destination && !route.path_template.contains('{')
+            }) else {
+                continue;
+            };
+            let default_group_id = match contribution.group.as_str() {
+                "Main" => "core.main",
+                "Admin" => "core.admin",
+                _ => continue,
+            };
+            known_ids.insert(contribution.id.to_string());
+            catalog.push(ResolvedNavigationDestination {
+                id: contribution.id.to_string(),
+                key: contribution.id.to_string(),
+                label: contribution.label.clone(),
+                route: route.path_template.clone(),
+                semantic_destination: Some(contribution.destination.to_string()),
+                definition_id: Some(manifest.definition_id.to_string()),
+                owner: NavigationCatalogOwner::Contribution,
+                required_capabilities_any_of: contribution
+                    .required_capabilities_any_of
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+                default_group_id: default_group_id.to_string(),
+                default_order: contribution.order_hint,
+                can_hide: true,
+                can_move_between_groups: true,
+            });
+        }
+    }
+    catalog
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -459,10 +536,17 @@ pub(crate) async fn load_navigation_policy_v2(
     let revision = repository::load_navigation_policy_revision(&mut tx, installation_id).await?;
     let groups = repository::load_navigation_groups(&mut tx, installation_id).await?;
     let placements = repository::load_navigation_placements(&mut tx, installation_id).await?;
-    let mut policy = navigation_policy_v2_model(installation_id, revision, groups, placements)
-        .map_err(|()| CatalogReadError::Integrity {
-            code: "navigation_policy_integrity_mismatch",
-        })?;
+    let catalog = load_navigation_catalog(&mut tx, installation_id).await?;
+    let mut policy = navigation_policy_v2_model_with_catalog(
+        installation_id,
+        revision,
+        groups,
+        placements,
+        &catalog,
+    )
+    .map_err(|()| CatalogReadError::Integrity {
+        code: "navigation_policy_integrity_mismatch",
+    })?;
     apply_navigation_availability(&mut policy, &mut tx).await?;
     tx.commit().await?;
     Ok(policy)
@@ -515,11 +599,13 @@ async fn update_navigation_policy_v2_transaction(
     let mut tx = pool.begin().await?;
     let installation_id = repository::installation_id(&mut tx).await?;
     let current_revision = repository::lock_navigation_policy(&mut tx, installation_id).await?;
-    let mut current = navigation_policy_v2_model(
+    let catalog = load_navigation_catalog(&mut tx, installation_id).await?;
+    let mut current = navigation_policy_v2_model_with_catalog(
         installation_id,
         current_revision,
         repository::load_navigation_groups(&mut tx, installation_id).await?,
         repository::load_navigation_placements(&mut tx, installation_id).await?,
+        &catalog,
     )
     .map_err(|()| NavigationPolicyUpdateError::Integrity)?;
     apply_navigation_availability(&mut current, &mut tx).await?;
@@ -572,11 +658,12 @@ async fn update_navigation_policy_v2_transaction(
         current_revision,
     )
     .await?;
-    let mut updated = navigation_policy_v2_model(
+    let mut updated = navigation_policy_v2_model_with_catalog(
         installation_id,
         next_revision,
         repository::load_navigation_groups(&mut tx, installation_id).await?,
         repository::load_navigation_placements(&mut tx, installation_id).await?,
+        &catalog,
     )
     .map_err(|()| NavigationPolicyUpdateError::Integrity)?;
     apply_navigation_availability(&mut updated, &mut tx).await?;
@@ -610,13 +697,30 @@ async fn update_navigation_policy_v2_transaction(
     Ok(updated)
 }
 
+#[cfg(test)]
 fn navigation_policy_v2_model(
     installation_id: Uuid,
     revision: i64,
     groups: Vec<NavigationGroupRow>,
     placements: Vec<NavigationPlacementRow>,
 ) -> Result<NavigationPolicyReadModelV2, ()> {
-    if revision < 0 || groups.len() < 2 || placements.len() != DESTINATIONS.len() {
+    navigation_policy_v2_model_with_catalog(
+        installation_id,
+        revision,
+        groups,
+        placements,
+        &navigation_catalog::resolved_destinations(),
+    )
+}
+
+fn navigation_policy_v2_model_with_catalog(
+    installation_id: Uuid,
+    revision: i64,
+    groups: Vec<NavigationGroupRow>,
+    placements: Vec<NavigationPlacementRow>,
+    catalog: &[ResolvedNavigationDestination],
+) -> Result<NavigationPolicyReadModelV2, ()> {
+    if revision < 0 || groups.len() < 2 || placements.len() != catalog.len() {
         return Err(());
     }
     let mut seen_group_ids = BTreeSet::new();
@@ -657,7 +761,10 @@ fn navigation_policy_v2_model(
     let mut orders_by_group = BTreeMap::<String, Vec<i32>>::new();
     let mut projected_destinations = Vec::with_capacity(placements.len());
     for placement in placements {
-        let catalog = navigation_catalog::destination(&placement.destination_id).ok_or(())?;
+        let catalog = catalog
+            .iter()
+            .find(|destination| destination.id == placement.destination_id)
+            .ok_or(())?;
         if !seen_destinations.insert(placement.destination_id.clone())
             || !seen_group_ids.contains(&placement.group_id)
             || placement.display_order < 0
@@ -672,17 +779,13 @@ fn navigation_policy_v2_model(
             .push(placement.display_order);
         projected_destinations.push(NavigationDestinationV2 {
             id: placement.destination_id,
-            key: catalog.key.to_string(),
-            label: catalog.label.to_string(),
-            route: catalog.route.to_string(),
-            semantic_destination: catalog.semantic_destination.map(str::to_string),
-            definition_id: catalog.definition_id.map(str::to_string),
+            key: catalog.key.clone(),
+            label: catalog.label.clone(),
+            route: catalog.route.clone(),
+            semantic_destination: catalog.semantic_destination.clone(),
+            definition_id: catalog.definition_id.clone(),
             owner: catalog.owner,
-            required_capabilities_any_of: catalog
-                .required_capabilities_any_of
-                .iter()
-                .map(|value| (*value).to_string())
-                .collect(),
+            required_capabilities_any_of: catalog.required_capabilities_any_of.clone(),
             group_id: placement.group_id,
             visible: placement.visible,
             order: placement.display_order,
@@ -691,9 +794,9 @@ fn navigation_policy_v2_model(
             can_move_between_groups: catalog.can_move_between_groups,
         });
     }
-    if DESTINATIONS
+    if catalog
         .iter()
-        .any(|catalog| !seen_destinations.contains(catalog.id))
+        .any(|catalog| !seen_destinations.contains(&catalog.id))
         || orders_by_group
             .values_mut()
             .any(|orders| !dense_orders(orders))
@@ -837,14 +940,17 @@ fn validate_navigation_policy_v2_request(
         }
     }
 
-    if destinations.len() != DESTINATIONS.len() {
+    if destinations.len() != current.destinations.len() {
         return Err(NavigationPolicyUpdateError::InvalidDestinationCollection);
     }
     let mut seen_destinations = BTreeSet::new();
     let mut orders_by_group = BTreeMap::<String, Vec<i32>>::new();
     let mut placement_rows = Vec::with_capacity(destinations.len());
     for destination in destinations {
-        let catalog = navigation_catalog::destination(&destination.id)
+        let catalog = current
+            .destinations
+            .iter()
+            .find(|current| current.id == destination.id)
             .ok_or(NavigationPolicyUpdateError::InvalidDestinationCollection)?;
         if !seen_destinations.insert(destination.id.clone())
             || !seen_ids.contains(&destination.group_id)
@@ -853,8 +959,7 @@ fn validate_navigation_policy_v2_request(
             return Err(NavigationPolicyUpdateError::InvalidDestinationCollection);
         }
         if (!catalog.can_hide && !destination.visible)
-            || (!catalog.can_move_between_groups
-                && destination.group_id != catalog.default_group_id)
+            || (!catalog.can_move_between_groups && destination.group_id != catalog.group_id)
         {
             return Err(NavigationPolicyUpdateError::ProtectedDestination {
                 destination_id: destination.id,
@@ -871,9 +976,10 @@ fn validate_navigation_policy_v2_request(
             display_order: destination.order,
         });
     }
-    if DESTINATIONS
+    if current
+        .destinations
         .iter()
-        .any(|catalog| !seen_destinations.contains(catalog.id))
+        .any(|catalog| !seen_destinations.contains(&catalog.id))
         || orders_by_group
             .values_mut()
             .any(|orders| !dense_orders(orders))
@@ -905,11 +1011,12 @@ fn valid_custom_group_id(id: &str) -> bool {
         .is_ok_and(|parsed| parsed.get_version_num() == 4 && parsed.to_string() == uuid)
 }
 
-async fn ensure_navigation_composition_v2(
+pub(crate) async fn ensure_navigation_composition_v2(
     tx: &mut Transaction<'_, Postgres>,
     installation_id: Uuid,
     correlation_id: Uuid,
 ) -> Result<(), CatalogSyncError> {
+    let catalog = load_navigation_catalog(tx, installation_id).await?;
     let groups = repository::load_navigation_groups(tx, installation_id).await?;
     let placements = repository::load_navigation_placements(tx, installation_id).await?;
     if groups.is_empty() && placements.is_empty() {
@@ -927,15 +1034,7 @@ async fn ensure_navigation_composition_v2(
                 owner: "core".into(),
             },
         ];
-        let default_placements = DESTINATIONS
-            .iter()
-            .map(|destination| NavigationPlacementRow {
-                destination_id: destination.id.to_string(),
-                group_id: destination.default_group_id.to_string(),
-                visible: true,
-                display_order: destination.default_order,
-            })
-            .collect::<Vec<_>>();
+        let default_placements = default_navigation_placements(&catalog);
         repository::seed_navigation_composition(
             tx,
             installation_id,
@@ -960,41 +1059,78 @@ async fn ensure_navigation_composition_v2(
     } else {
         let group_ids = groups
             .iter()
-            .map(|group| group.group_id.as_str())
+            .map(|group| group.group_id.clone())
             .collect::<BTreeSet<_>>();
-        let placed_ids = placements
+        let catalog_ids = catalog
             .iter()
-            .map(|placement| placement.destination_id.as_str())
+            .map(|destination| destination.id.clone())
             .collect::<BTreeSet<_>>();
+        let removed = placements
+            .iter()
+            .filter(|placement| !catalog_ids.contains(&placement.destination_id))
+            .map(|placement| placement.destination_id.clone())
+            .collect::<Vec<_>>();
+        let mut reconciled = placements
+            .iter()
+            .filter(|placement| catalog_ids.contains(&placement.destination_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        reconciled.sort_by(|left, right| {
+            left.group_id
+                .cmp(&right.group_id)
+                .then_with(|| left.display_order.cmp(&right.display_order))
+                .then_with(|| left.destination_id.cmp(&right.destination_id))
+        });
         let mut next_order_by_group = BTreeMap::<String, i32>::new();
-        for placement in &placements {
-            let next_order = placement.display_order + 1;
-            next_order_by_group
+        for placement in &mut reconciled {
+            let order = next_order_by_group
                 .entry(placement.group_id.clone())
-                .and_modify(|current| *current = (*current).max(next_order))
-                .or_insert(next_order);
+                .or_insert(0);
+            placement.display_order = *order;
+            *order += 1;
         }
-        let mut additions = Vec::new();
-        for destination in DESTINATIONS
+        let placed_ids = reconciled
             .iter()
-            .filter(|destination| !placed_ids.contains(destination.id))
-        {
-            if !group_ids.contains(destination.default_group_id) {
+            .map(|placement| placement.destination_id.clone())
+            .collect::<BTreeSet<_>>();
+        let mut additions = Vec::new();
+        let mut missing = catalog
+            .iter()
+            .filter(|destination| !placed_ids.contains(&destination.id))
+            .collect::<Vec<_>>();
+        missing.sort_by(|left, right| {
+            left.default_group_id
+                .cmp(&right.default_group_id)
+                .then_with(|| left.default_order.cmp(&right.default_order))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        for destination in missing {
+            if !group_ids.contains(&destination.default_group_id) {
                 return Err(CatalogSyncError::StoredNavigationCompositionMismatch);
             }
             let order = next_order_by_group
-                .entry(destination.default_group_id.to_string())
+                .entry(destination.default_group_id.clone())
                 .or_insert(0);
             additions.push(NavigationPlacementRow {
-                destination_id: destination.id.to_string(),
-                group_id: destination.default_group_id.to_string(),
+                destination_id: destination.id.clone(),
+                group_id: destination.default_group_id.clone(),
                 visible: true,
                 display_order: *order,
             });
             *order += 1;
         }
-        if !additions.is_empty() {
-            repository::seed_navigation_composition(tx, installation_id, &[], &additions).await?;
+        let order_changed = reconciled.iter().any(|next| {
+            placements
+                .iter()
+                .find(|current| current.destination_id == next.destination_id)
+                .is_some_and(|current| {
+                    current.group_id != next.group_id || current.display_order != next.display_order
+                })
+        });
+        if !additions.is_empty() || !removed.is_empty() || order_changed {
+            reconciled.extend(additions.iter().cloned());
+            repository::replace_navigation_composition(tx, installation_id, &groups, &reconciled)
+                .await?;
             let previous_revision =
                 repository::load_navigation_policy_revision(tx, installation_id).await?;
             let revision = repository::increment_navigation_policy_revision(
@@ -1016,20 +1152,51 @@ async fn ensure_navigation_composition_v2(
                         .iter()
                         .map(|placement| placement.destination_id.as_str())
                         .collect::<Vec<_>>(),
+                    "destinations_removed": removed,
                 }),
             )
             .await?;
         }
     }
 
-    navigation_policy_v2_model(
+    navigation_policy_v2_model_with_catalog(
         installation_id,
         repository::load_navigation_policy_revision(tx, installation_id).await?,
         repository::load_navigation_groups(tx, installation_id).await?,
         repository::load_navigation_placements(tx, installation_id).await?,
+        &catalog,
     )
     .map_err(|()| CatalogSyncError::StoredNavigationCompositionMismatch)?;
     Ok(())
+}
+
+fn default_navigation_placements(
+    catalog: &[ResolvedNavigationDestination],
+) -> Vec<NavigationPlacementRow> {
+    let mut destinations = catalog.iter().collect::<Vec<_>>();
+    destinations.sort_by(|left, right| {
+        left.default_group_id
+            .cmp(&right.default_group_id)
+            .then_with(|| left.default_order.cmp(&right.default_order))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let mut next_order_by_group = BTreeMap::<String, i32>::new();
+    destinations
+        .into_iter()
+        .map(|destination| {
+            let order = next_order_by_group
+                .entry(destination.default_group_id.clone())
+                .or_insert(0);
+            let placement = NavigationPlacementRow {
+                destination_id: destination.id.clone(),
+                group_id: destination.default_group_id.clone(),
+                visible: true,
+                display_order: *order,
+            };
+            *order += 1;
+            placement
+        })
+        .collect()
 }
 
 pub(crate) async fn record_navigation_policy_authorization_denial(
@@ -1928,7 +2095,7 @@ mod tests {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "84b439707c0cdf56d59cc01cb04d483fefcdd6f0961e6dafbde22deeae4d54d4"
+            "c7793c1fa4529d29edebd1805eab9269abb2e3f0a610bf2e0371f0c1a8d0c209"
         );
     }
 
@@ -1939,6 +2106,49 @@ mod tests {
         assert!(!valid_navigation_label(" Scoped Records"));
         assert!(!valid_navigation_label("Scoped Records\n"));
         assert!(!valid_navigation_label(&"x".repeat(81)));
+    }
+
+    #[test]
+    fn independent_manifest_navigation_extends_the_transition_catalog_generically() {
+        let manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-reference-module-sdk/manifest.json"
+        ))
+        .expect("reference manifest fixture is valid JSON");
+        let catalog = resolve_navigation_catalog(&[manifest]);
+        let reference = catalog
+            .iter()
+            .find(|destination| destination.id == "tessara.reference.module-sdk.navigation")
+            .expect("manifest navigation is projected");
+        assert_eq!(reference.route, "/reference/module-sdk");
+        assert_eq!(reference.default_group_id, "core.main");
+        assert_eq!(
+            reference.required_capabilities_any_of,
+            ["tessara.reference.module-sdk:read"]
+        );
+
+        let groups = vec![
+            NavigationGroupRow {
+                group_id: "core.main".to_string(),
+                label: "Main".to_string(),
+                display_order: 0,
+                owner: "core".to_string(),
+            },
+            NavigationGroupRow {
+                group_id: "core.admin".to_string(),
+                label: "Admin".to_string(),
+                display_order: 1,
+                owner: "core".to_string(),
+            },
+        ];
+        let policy = navigation_policy_v2_model_with_catalog(
+            Uuid::nil(),
+            1,
+            groups,
+            default_navigation_placements(&catalog),
+            &catalog,
+        )
+        .expect("manifest and transition destinations form one dense policy");
+        assert_eq!(policy.destinations.len(), 15);
     }
 
     #[test]

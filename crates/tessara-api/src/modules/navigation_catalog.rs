@@ -27,6 +27,49 @@ pub(crate) struct NavigationCatalogDestination {
     pub(crate) can_move_between_groups: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ResolvedNavigationDestination {
+    pub(crate) id: String,
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) route: String,
+    pub(crate) semantic_destination: Option<String>,
+    pub(crate) definition_id: Option<String>,
+    pub(crate) owner: NavigationCatalogOwner,
+    pub(crate) required_capabilities_any_of: Vec<String>,
+    pub(crate) default_group_id: String,
+    pub(crate) default_order: i32,
+    pub(crate) can_hide: bool,
+    pub(crate) can_move_between_groups: bool,
+}
+
+impl From<NavigationCatalogDestination> for ResolvedNavigationDestination {
+    fn from(value: NavigationCatalogDestination) -> Self {
+        Self {
+            id: value.id.to_string(),
+            key: value.key.to_string(),
+            label: value.label.to_string(),
+            route: value.route.to_string(),
+            semantic_destination: value.semantic_destination.map(str::to_string),
+            definition_id: value.definition_id.map(str::to_string),
+            owner: value.owner,
+            required_capabilities_any_of: value
+                .required_capabilities_any_of
+                .iter()
+                .map(|capability| (*capability).to_string())
+                .collect(),
+            default_group_id: value.default_group_id.to_string(),
+            default_order: value.default_order,
+            can_hide: value.can_hide,
+            can_move_between_groups: value.can_move_between_groups,
+        }
+    }
+}
+
+pub(crate) fn resolved_destinations() -> Vec<ResolvedNavigationDestination> {
+    DESTINATIONS.iter().copied().map(Into::into).collect()
+}
+
 pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 14] = [
     NavigationCatalogDestination {
         id: "core.home",
@@ -233,8 +276,4 @@ const fn core_admin(
         can_hide: false,
         can_move_between_groups: false,
     }
-}
-
-pub(crate) fn destination(id: &str) -> Option<NavigationCatalogDestination> {
-    DESTINATIONS.iter().copied().find(|item| item.id == id)
 }

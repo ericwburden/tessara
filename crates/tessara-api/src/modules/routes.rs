@@ -245,6 +245,12 @@ async fn import_deployment_receipt(
         sqlx::query("INSERT INTO module_instances (id, installation_id, definition_id, release_id, identity_state, data_state, database_name, configuration, route_prefix, installed, deployed, configured, ready, enabled, healthy, last_observed_at) VALUES ($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,true,true,true,$8) ON CONFLICT (installation_id, definition_id) DO UPDATE SET release_id=EXCLUDED.release_id, identity_state='live', data_state='retained', database_name=EXCLUDED.database_name, configuration=EXCLUDED.configuration, route_prefix=EXCLUDED.route_prefix, installed=true, deployed=true, configured=true, ready=true, enabled=true, healthy=true, last_observed_at=EXCLUDED.last_observed_at")
             .bind(module.instance_id).bind(receipt.installation_id).bind(module.definition_id.as_str()).bind(module.release_id).bind(&module.database_name).bind(sqlx::types::Json(&module.configuration)).bind(&module.route_prefix).bind(applied_at).execute(&mut *tx).await?;
     }
+    service::ensure_navigation_composition_v2(&mut tx, receipt.installation_id, Uuid::new_v4())
+        .await
+        .map_err(|error| match error {
+            service::CatalogSyncError::Database(error) => ModuleHttpError::Database(error),
+            other => ModuleHttpError::Integrity(other.stable_code()),
+        })?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
