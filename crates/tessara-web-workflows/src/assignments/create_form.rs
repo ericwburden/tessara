@@ -6,7 +6,7 @@ use super::types::{
 use super::{WorkflowAssignmentAssigneePicker, WorkflowAssignmentCandidatePairPicker};
 use leptos::prelude::*;
 use std::collections::HashSet;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 use super::mutations::{SubmitWorkflowAssignmentBulkInput, submit_workflow_assignment_bulk};
 

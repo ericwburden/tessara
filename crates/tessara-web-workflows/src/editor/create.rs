@@ -5,7 +5,7 @@ use crate::types::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::types::{WorkflowFormSummary, WorkflowStepDraft, WorkflowSummary};
 use leptos::prelude::*;
 use std::collections::HashSet;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
 

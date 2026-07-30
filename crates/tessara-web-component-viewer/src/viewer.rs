@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 
 use icons::{ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Fullscreen, ListFilter, RotateCcw};
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     EmptyState, FullscreenDialog, TableColumnOption, TableColumnSelector, TablePaginationBar,
     TablePopoverController, TableSearch,
 };

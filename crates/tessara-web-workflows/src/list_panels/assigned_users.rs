@@ -3,7 +3,7 @@
 use crate::shared::{FormAttachmentLink, WorkflowAssignedUsersSheetData, user_count_label};
 use icons::{ExternalLink, PanelRight};
 use leptos::prelude::*;
-use tessara_web_ui::{SideSheet, TableSearch, empty_view};
+use tessara_module_ui::{SideSheet, TableSearch, empty_view};
 
 const ASSIGNED_USERS_SHEET_ID: &str = "workflow-assigned-users-sheet";
 

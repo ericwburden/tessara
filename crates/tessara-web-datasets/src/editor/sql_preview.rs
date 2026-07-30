@@ -5,7 +5,7 @@ use super::super::types::*;
 use icons::ChevronsUpDown;
 use leptos::prelude::*;
 use std::collections::BTreeSet;
-use tessara_web_ui::EmptyState;
+use tessara_module_ui::EmptyState;
 
 #[allow(clippy::too_many_arguments)]
 #[component]

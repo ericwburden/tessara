@@ -5,7 +5,7 @@ use super::super::types::DatasetSummary;
 use crate::{pagination::pagination_page_start, text::sentence_label};
 use icons::Search;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, TablePaginationFooter};
+use tessara_module_ui::{DataTable, TablePaginationFooter};
 
 #[component]
 pub(crate) fn DatasetDirectoryTable(

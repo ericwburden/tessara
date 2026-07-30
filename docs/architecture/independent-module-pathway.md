@@ -3,9 +3,12 @@
 Status: Sprint 6D current module-authoring contract. Dashboard completes its
 adoption in Sprint 6E.
 
-Dashboard and Scoped Records are the two conformance fixtures for this
-pathway. A third module must be able to reach the same degree of modularity
-without adding a definition-ID branch to Core or Module Management.
+The non-product `tessara.reference.module-sdk` release is the canonical
+source/build conformance fixture. Scoped Records proves adoption while
+retaining real product persistence. Dashboard proves the independent
+process/database boundary but remains explicitly nonconforming at the
+source/runtime edge until Sprint 6E. A later module must use the same generic
+path without adding a definition-ID branch to Core or Module Management.
 
 Sprint 6C proved the independent process, database, control, product, and
 operational boundary. Sprint 6D makes the canonical source/build contract

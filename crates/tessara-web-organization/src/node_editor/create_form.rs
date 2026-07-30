@@ -3,7 +3,7 @@
 use crate::types::{NodeMetadataFieldSummary, NodeTypeCatalogEntry, OrganizationNode};
 use leptos::prelude::*;
 use std::collections::HashMap;
-use tessara_web_ui::Button;
+use tessara_module_ui::Button;
 
 use super::{
     OrganizationNodeMetadataSection, SubmitCreateNodeInput, available_node_types_for_parent,

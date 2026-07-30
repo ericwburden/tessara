@@ -5,7 +5,7 @@ use crate::metadata::metadata_label;
 use crate::status::status_badge_class;
 use crate::types::SubmissionDetail;
 use leptos::prelude::*;
-use tessara_web_ui::{InfoListTable, Timestamp, empty_view};
+use tessara_module_ui::{InfoListTable, Timestamp, empty_view};
 
 #[component]
 pub(crate) fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {

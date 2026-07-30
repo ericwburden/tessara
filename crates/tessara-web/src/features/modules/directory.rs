@@ -2,7 +2,7 @@
 
 use icons::{BoxIcon, ChevronRight, Clock, Copy, Info, List, Search, Tag, TriangleAlert};
 use leptos::prelude::*;
-use tessara_web_ui::{SideSheet, SideSheetSide};
+use tessara_module_ui::{SideSheet, SideSheetSide};
 
 use super::models::{ModuleInventoryEntryV1, ModuleInventoryResponseV1, TransitionAvailabilityV1};
 use crate::ui::{DataTable, TablePaginationFooter};

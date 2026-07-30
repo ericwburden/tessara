@@ -10,11 +10,11 @@ hydrate = [
     "dep:gloo-timers",
     "leptos/hydrate",
     "tessara-web-http/hydrate",
-    "tessara-web-ui/hydrate",
+    "tessara-module-ui/hydrate",
 ]
 ssr = [
     "leptos/ssr",
-    "tessara-web-ui/ssr",
+    "tessara-module-ui/ssr",
 ]
 
 [dependencies]
@@ -24,4 +24,4 @@ leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
-tessara-web-ui = { path = "../tessara-web-ui", default-features = false }
+tessara-module-ui = { path = "../tessara-module-ui", default-features = false }

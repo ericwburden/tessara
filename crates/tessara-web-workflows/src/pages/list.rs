@@ -14,7 +14,7 @@ use crate::{
     workflow_version_label,
 };
 use leptos::prelude::*;
-use tessara_web_ui::{Button, PageHeader};
+use tessara_module_ui::{Button, PageHeader};
 
 #[component]
 pub fn WorkflowsIndexContent() -> impl IntoView {

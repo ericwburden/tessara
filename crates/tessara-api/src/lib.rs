@@ -515,10 +515,19 @@ async fn require_authenticated_ui_route(
     }
 }
 
-async fn module_unavailable_fallback() -> Html<&'static str> {
-    Html(
+async fn module_unavailable_fallback() -> Response {
+    module_unavailable_fallback_response()
+}
+
+pub(crate) fn module_unavailable_fallback_response() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        [(axum::http::header::CACHE_CONTROL, "no-store")],
+        Html(
         r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Module unavailable · Tessara</title><link rel="stylesheet" href="/pkg/tessara-web.css"></head><body class="tessara-app"><main class="login-shell"><section class="login-panel blurred-surface" aria-labelledby="module-unavailable-title"><a class="login-brand" href="/" aria-label="Tessara home"><img src="/assets/tessara-icon-256.svg" alt=""><span>Tessara</span></a><div class="login-panel__header"><h1 id="module-unavailable-title">Module temporarily unavailable</h1><p>The requested module is not ready. Tessara Core and its administration surfaces remain available.</p></div><a class="button" href="/administration/modules">Open Module Management</a></section></main></body></html>"#,
+        ),
     )
+        .into_response()
 }
 
 fn is_protected_ui_request(request: &Request) -> bool {

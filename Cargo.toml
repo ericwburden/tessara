@@ -15,6 +15,10 @@ members = [
     "crates/tessara-installation-control",
     "crates/tessara-jobs",
     "crates/tessara-module-contract",
+    "crates/tessara-module-runtime",
+    "crates/tessara-module-testkit",
+    "crates/tessara-module-ui",
+    "crates/tessara-reference-module-sdk",
     "crates/tessara-reference-scoped-records",
     "crates/tessara-submissions",
     "crates/tessara-web",
@@ -28,7 +32,6 @@ members = [
     "crates/tessara-web-organization",
     "crates/tessara-web-responses",
     "crates/tessara-web-workflows",
-    "crates/tessara-web-ui",
 ]
 resolver = "3"
 
@@ -42,6 +45,7 @@ version = "0.1.0"
 
 [workspace.dependencies]
 anyhow = "1"
+async-trait = "0.1"
 argon2 = "0.5"
 arrow = "56"
 axum = "0.8"

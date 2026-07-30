@@ -1,7 +1,7 @@
 //! Route-free visual execution and shared stat/chart presentation.
 
 use leptos::prelude::*;
-use tessara_web_ui::{EmptyState, Skeleton};
+use tessara_module_ui::{EmptyState, Skeleton};
 
 #[cfg(feature = "hydrate")]
 use crate::api;

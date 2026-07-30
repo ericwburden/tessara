@@ -6,7 +6,7 @@ use icons::{
 };
 use leptos::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
-use tessara_web_ui::{
+use tessara_module_ui::{
     Combobox, ComboboxOption, DataTable, DraggablePanelList, DraggablePanelListAnchor,
     DraggablePanelListDraggable, DraggablePanelListDropZone, DraggablePanelListItem,
     DraggablePanelListMove, SegmentedToggle, SegmentedToggleOption, empty_view,

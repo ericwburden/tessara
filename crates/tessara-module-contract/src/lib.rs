@@ -9,9 +9,9 @@
 mod dependency;
 mod deployment;
 mod enrollment;
+pub mod grid_layout;
 mod inventory;
 mod protocol;
-mod sdk;
 
 pub use dependency::{
     DependencyEvaluationFindingCode, DependencyEvaluationInput, DependencyRelationshipKind,
@@ -30,6 +30,11 @@ pub use enrollment::{
     CORE_ELIGIBILITY_MAX_LIFETIME_SECONDS, EnrollmentRedemptionResultV1, EnrollmentReservationV1,
     LocalOperatorAuthorizationV1, RECOVERY_OPERATOR_MAX_LIFETIME_SECONDS,
 };
+pub use grid_layout::{
+    GridConstraints, GridLayoutError, GridMoveDirection, GridMoveRequest, GridPlacement, GridRect,
+    GridResizeAxis, GridResizeRequest, GridResizeStep, GridSize, derive_row_major_positions,
+    reflow_movement, resolve_move_request, resolve_resize_request, sort_row_major, validate_resize,
+};
 pub use inventory::{
     IndependentConfigurationV1, IndependentDefinitionV1, IndependentDiagnosticsV1,
     IndependentInstanceV1, IndependentReleaseV1,
@@ -45,10 +50,6 @@ pub use protocol::{
     ShellContextValidationError, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
     SignedWindowError, canonical_protocol_signing_bytes,
 };
-pub use sdk::{
-    ModuleShellError, SHELL_CONTENT_MEDIA_TYPE, ShellContentV1, render_native_module_document,
-    verify_shell_context,
-};
 
 use std::{collections::BTreeSet, fmt, str::FromStr};
 
@@ -59,6 +60,15 @@ use uuid::Uuid;
 
 /// The first supported module manifest and transition descriptor schema.
 pub const CONTRACT_SCHEMA_VERSION_V1: u16 = 1;
+pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 2;
+pub const CURRENT_CORE_RELEASE: &str = "0.1.0";
+pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "1.0.0";
+pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.0.0";
+pub const CURRENT_MODULE_CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.1.0";
+pub const CURRENT_MODULE_UI_VERSION: &str = "0.1.0";
+pub const CURRENT_DESIGN_SYSTEM_ASSET_ABI: &str = "1.0.0";
+pub const CURRENT_CONFORMANCE_SUITE_VERSION: &str = "1.0.0";
 
 fn deserialize_schema_version_v1<'de, D>(deserializer: D) -> Result<u16, D::Error>
 where
@@ -68,6 +78,19 @@ where
     if schema_version != CONTRACT_SCHEMA_VERSION_V1 {
         return Err(de::Error::custom(format!(
             "schema version {schema_version} is unsupported; expected {CONTRACT_SCHEMA_VERSION_V1}"
+        )));
+    }
+    Ok(schema_version)
+}
+
+fn deserialize_manifest_schema_version<'de, D>(deserializer: D) -> Result<u16, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let schema_version = u16::deserialize(deserializer)?;
+    if schema_version != MODULE_MANIFEST_SCHEMA_VERSION {
+        return Err(de::Error::custom(format!(
+            "module manifest schema version {schema_version} is unsupported; expected {MODULE_MANIFEST_SCHEMA_VERSION}"
         )));
     }
     Ok(schema_version)
@@ -333,7 +356,7 @@ pub struct ModuleDefinition {
 }
 
 /// Definition lifecycle is intentionally independent from release/instance state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModuleDefinitionState {
     /// Definition is known to Core.
@@ -1350,21 +1373,69 @@ fn namespace_matches(identifier: &str, prefix: &str) -> bool {
             .is_some_and(|remainder| remainder.starts_with(['.', ':']))
 }
 
-/// Complete real-module manifest contract. Sprint 6B supplies its first instance.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModulePlatformVersions {
+    pub core_release: Version,
+    pub shell_context_schema: Version,
+    pub module_control_protocol: Version,
+    pub module_contract: Version,
+    pub module_runtime: Version,
+    pub module_ui: Version,
+    pub design_system_asset_abi: Version,
+    pub conformance_suite: Version,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LinkedModulePackages {
+    pub module_contract: Version,
+    pub module_runtime: Option<Version>,
+    pub module_ui: Option<Version>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum BrowserDocumentMethod {
+    Get,
+    Head,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserRouteDeclaration {
+    pub destination: SemanticRouteName,
+    pub path_template: String,
+    pub methods: Vec<BrowserDocumentMethod>,
+    pub required_capability: SecurityCapabilityId,
+    pub authorization_action: String,
+    pub functional_contract: FunctionalContractId,
+    pub organization_scope_parameter: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleAssetDeclaration {
+    /// Module-local absolute path used by Core when proxying the asset.
+    pub path: String,
+    /// Content digest included in the public same-origin URL.
+    pub digest: ArtifactDigest,
+    /// Exact response media type.
+    pub content_type: String,
+}
+
+/// Sole current real-module manifest contract.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ModuleManifestV1 {
-    #[serde(deserialize_with = "deserialize_schema_version_v1")]
+pub struct ModuleManifest {
+    #[serde(deserialize_with = "deserialize_manifest_schema_version")]
     pub schema_version: u16,
     pub definition_id: ModuleDefinitionId,
     pub release_version: Version,
     pub publisher: PublisherId,
     pub support: ModuleSupportDeclaration,
-    pub conformance_suite_version: Version,
-    pub core_release_compatibility: VersionReq,
-    pub shell_context_compatibility: VersionReq,
-    pub ui_sdk_compatibility: VersionReq,
-    pub design_system_compatibility: VersionReq,
+    pub platform_versions: ModulePlatformVersions,
+    pub linked_packages: LinkedModulePackages,
     pub deployment: DeploymentProfile,
     #[serde(default)]
     pub features: Vec<FeatureDeclaration>,
@@ -1379,6 +1450,10 @@ pub struct ModuleManifestV1 {
     #[serde(default)]
     pub routes: Vec<RouteDeclaration>,
     #[serde(default)]
+    pub browser_routes: Vec<BrowserRouteDeclaration>,
+    #[serde(default)]
+    pub assets: Vec<ModuleAssetDeclaration>,
+    #[serde(default)]
     pub navigation: Vec<NavigationContribution>,
     #[serde(default)]
     pub security_capabilities: Vec<SecurityCapabilityDeclaration>,
@@ -1387,16 +1462,17 @@ pub struct ModuleManifestV1 {
     pub shell_contribution_contracts: Option<ShellContributionContracts>,
 }
 
-impl ModuleManifestV1 {
+impl ModuleManifest {
     /// Performs deterministic cross-reference and declaration validation.
     pub fn validate(
         &self,
         authority: &ManifestNamespaceAuthority,
     ) -> Result<(), ContractValidationError> {
         let mut findings = Vec::new();
-        validate_schema_version(self.schema_version, &mut findings);
+        validate_manifest_schema_version(self.schema_version, &mut findings);
         validate_manifest_authority(self, authority, &mut findings);
         validate_manifest_metadata(self, &mut findings);
+        validate_platform_versions(self, &mut findings);
         validate_declaration_graph(
             DeclarationGraph {
                 features: &self.features,
@@ -1410,12 +1486,52 @@ impl ModuleManifestV1 {
             &mut findings,
         );
         validate_manifest_links(self, &mut findings);
+        validate_module_assets(&self.assets, &mut findings);
         match &self.deployment {
             DeploymentProfile::TessaraOciV1(deployment) => {
                 validate_deployment(deployment, &mut findings);
             }
         }
         finish_validation(findings)
+    }
+}
+
+fn validate_module_assets(
+    assets: &[ModuleAssetDeclaration],
+    findings: &mut Vec<ValidationFinding>,
+) {
+    let mut paths = BTreeSet::new();
+    let mut digests = BTreeSet::new();
+    for (index, asset) in assets.iter().enumerate() {
+        if !asset.path.starts_with('/')
+            || asset.path.contains("..")
+            || asset.path.contains(['?', '#'])
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_module_asset_path".into(),
+                path: format!("assets[{index}].path"),
+                message: "asset path must be an absolute, query-free module-local path".into(),
+            });
+        }
+        if !paths.insert(asset.path.as_str()) {
+            findings.push(ValidationFinding {
+                code: "duplicate_module_asset_path".into(),
+                path: format!("assets[{index}].path"),
+                message: "asset paths must be unique".into(),
+            });
+        }
+        if !digests.insert(asset.digest.as_str()) {
+            findings.push(ValidationFinding {
+                code: "duplicate_module_asset_digest".into(),
+                path: format!("assets[{index}].digest"),
+                message: "asset digests must be unique within a release".into(),
+            });
+        }
+        require_text(
+            &format!("assets[{index}].content_type"),
+            &asset.content_type,
+            findings,
+        );
     }
 }
 
@@ -1662,6 +1778,98 @@ fn validate_schema_version(schema_version: u16, findings: &mut Vec<ValidationFin
     }
 }
 
+fn validate_manifest_schema_version(schema_version: u16, findings: &mut Vec<ValidationFinding>) {
+    if schema_version != MODULE_MANIFEST_SCHEMA_VERSION {
+        findings.push(ValidationFinding {
+            code: "unsupported_manifest_schema_version".into(),
+            path: "schema_version".into(),
+            message: format!(
+                "expected module manifest schema version {MODULE_MANIFEST_SCHEMA_VERSION}, received {schema_version}"
+            ),
+        });
+    }
+}
+
+fn validate_platform_versions(manifest: &ModuleManifest, findings: &mut Vec<ValidationFinding>) {
+    for (path, actual, expected) in [
+        (
+            "platform_versions.core_release",
+            &manifest.platform_versions.core_release,
+            CURRENT_CORE_RELEASE,
+        ),
+        (
+            "platform_versions.shell_context_schema",
+            &manifest.platform_versions.shell_context_schema,
+            CURRENT_SHELL_CONTEXT_SCHEMA,
+        ),
+        (
+            "platform_versions.module_control_protocol",
+            &manifest.platform_versions.module_control_protocol,
+            CURRENT_MODULE_CONTROL_PROTOCOL,
+        ),
+        (
+            "platform_versions.module_contract",
+            &manifest.platform_versions.module_contract,
+            CURRENT_MODULE_CONTRACT_VERSION,
+        ),
+        (
+            "platform_versions.module_runtime",
+            &manifest.platform_versions.module_runtime,
+            CURRENT_MODULE_RUNTIME_VERSION,
+        ),
+        (
+            "platform_versions.module_ui",
+            &manifest.platform_versions.module_ui,
+            CURRENT_MODULE_UI_VERSION,
+        ),
+        (
+            "platform_versions.design_system_asset_abi",
+            &manifest.platform_versions.design_system_asset_abi,
+            CURRENT_DESIGN_SYSTEM_ASSET_ABI,
+        ),
+        (
+            "platform_versions.conformance_suite",
+            &manifest.platform_versions.conformance_suite,
+            CURRENT_CONFORMANCE_SUITE_VERSION,
+        ),
+    ] {
+        let expected = Version::parse(expected).expect("current platform version constant");
+        if *actual != expected {
+            findings.push(ValidationFinding {
+                code: "unsupported_platform_version".into(),
+                path: path.into(),
+                message: format!("expected exact version {expected}, received {actual}"),
+            });
+        }
+    }
+    for (path, linked, declared) in [
+        (
+            "linked_packages.module_contract",
+            Some(&manifest.linked_packages.module_contract),
+            &manifest.platform_versions.module_contract,
+        ),
+        (
+            "linked_packages.module_runtime",
+            manifest.linked_packages.module_runtime.as_ref(),
+            &manifest.platform_versions.module_runtime,
+        ),
+        (
+            "linked_packages.module_ui",
+            manifest.linked_packages.module_ui.as_ref(),
+            &manifest.platform_versions.module_ui,
+        ),
+    ] {
+        if linked.is_some_and(|linked| linked != declared) {
+            findings.push(ValidationFinding {
+                code: "linked_package_version_mismatch".into(),
+                path: path.into(),
+                message: "linked package version must equal the declared current platform version"
+                    .into(),
+            });
+        }
+    }
+}
+
 struct DeclarationGraph<'a> {
     features: &'a [FeatureDeclaration],
     contracts: &'a [FunctionalContractDeclaration],
@@ -1885,7 +2093,7 @@ fn validate_declaration_graph(graph: DeclarationGraph<'_>, findings: &mut Vec<Va
 }
 
 fn validate_manifest_authority(
-    manifest: &ModuleManifestV1,
+    manifest: &ModuleManifest,
     authority: &ManifestNamespaceAuthority,
     findings: &mut Vec<ValidationFinding>,
 ) {
@@ -1985,7 +2193,7 @@ fn validate_identifier_authority(
     }
 }
 
-fn validate_manifest_metadata(manifest: &ModuleManifestV1, findings: &mut Vec<ValidationFinding>) {
+fn validate_manifest_metadata(manifest: &ModuleManifest, findings: &mut Vec<ValidationFinding>) {
     require_text(
         "support.support_tier",
         &manifest.support.support_tier,
@@ -2046,7 +2254,7 @@ fn validate_managed_configuration_schema(schema: &Value, findings: &mut Vec<Vali
     }
 }
 
-fn validate_manifest_links(manifest: &ModuleManifestV1, findings: &mut Vec<ValidationFinding>) {
+fn validate_manifest_links(manifest: &ModuleManifest, findings: &mut Vec<ValidationFinding>) {
     let resource_ids = manifest
         .resource_types
         .iter()
@@ -2103,6 +2311,93 @@ fn validate_manifest_links(manifest: &ModuleManifestV1, findings: &mut Vec<Valid
         .iter()
         .map(|route| (route.name.as_str(), route.kind))
         .collect::<std::collections::BTreeMap<_, _>>();
+    let capability_ids = manifest
+        .security_capabilities
+        .iter()
+        .map(|capability| capability.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let contract_ids = manifest
+        .provided_contracts
+        .iter()
+        .map(|contract| contract.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut browser_paths: Vec<&str> = Vec::new();
+    for (index, browser_route) in manifest.browser_routes.iter().enumerate() {
+        let base = format!("browser_routes[{index}]");
+        if !route_kinds.contains_key(browser_route.destination.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_browser_destination".into(),
+                path: format!("{base}.destination"),
+                message: "browser destination must name a declared semantic route".into(),
+            });
+        }
+        if !browser_route.path_template.starts_with('/')
+            || browser_route.path_template.contains("..")
+            || browser_route.path_template.starts_with("/api/")
+            || browser_route.path_template.starts_with("/administration/")
+            || browser_route.path_template.starts_with("/_tessara/")
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_browser_path_template".into(),
+                path: format!("{base}.path_template"),
+                message:
+                    "browser path must be absolute, traversal-free, and outside reserved Core paths"
+                        .into(),
+            });
+        }
+        if let Some(previous_index) = browser_paths.iter().position(|previous| {
+            browser_path_templates_overlap(previous, &browser_route.path_template)
+        }) {
+            findings.push(ValidationFinding {
+                code: "ambiguous_browser_path_template".into(),
+                path: format!("{base}.path_template"),
+                message: format!(
+                    "browser path overlaps browser_routes[{previous_index}].path_template"
+                ),
+            });
+        }
+        browser_paths.push(browser_route.path_template.as_str());
+        let method_count = browser_route.methods.iter().collect::<BTreeSet<_>>().len();
+        if browser_route.methods.is_empty() || method_count != browser_route.methods.len() {
+            findings.push(ValidationFinding {
+                code: "invalid_browser_methods".into(),
+                path: format!("{base}.methods"),
+                message: "browser document routes require unique GET/HEAD methods".into(),
+            });
+        }
+        if !capability_ids.contains(browser_route.required_capability.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_browser_capability".into(),
+                path: format!("{base}.required_capability"),
+                message: "browser route capability must be declared by the manifest".into(),
+            });
+        }
+        if !contract_ids.contains(browser_route.functional_contract.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_browser_contract".into(),
+                path: format!("{base}.functional_contract"),
+                message: "browser route functional contract must be provided by the manifest"
+                    .into(),
+            });
+        }
+        require_text(
+            &format!("{base}.authorization_action"),
+            &browser_route.authorization_action,
+            findings,
+        );
+        if let Some(scope_parameter) = &browser_route.organization_scope_parameter
+            && !browser_route
+                .path_template
+                .split('/')
+                .any(|segment| segment == format!("{{{scope_parameter}}}"))
+        {
+            findings.push(ValidationFinding {
+                code: "unresolved_browser_scope_parameter".into(),
+                path: format!("{base}.organization_scope_parameter"),
+                message: "scope parameter must name a path-template parameter".into(),
+            });
+        }
+    }
     for (path, route_name, expected_kind) in [
         (
             "operational_routes.configuration_validation",
@@ -2142,11 +2437,6 @@ fn validate_manifest_links(manifest: &ModuleManifestV1, findings: &mut Vec<Valid
         }
     }
 
-    let contract_ids = manifest
-        .provided_contracts
-        .iter()
-        .map(|contract| contract.id.as_str())
-        .collect::<BTreeSet<_>>();
     if let Some(contributions) = manifest.shell_contribution_contracts.as_ref() {
         for (path, contract) in [
             ("shell_contribution_contracts.home", &contributions.home),
@@ -2167,6 +2457,17 @@ fn validate_manifest_links(manifest: &ModuleManifestV1, findings: &mut Vec<Valid
             }
         }
     }
+}
+
+fn browser_path_templates_overlap(left: &str, right: &str) -> bool {
+    let left = left.trim_matches('/').split('/').collect::<Vec<_>>();
+    let right = right.trim_matches('/').split('/').collect::<Vec<_>>();
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            *left == right
+                || (left.starts_with('{') && left.ends_with('}'))
+                || (right.starts_with('{') && right.ends_with('}'))
+        })
 }
 
 fn validate_feature_configuration_links(
@@ -2533,7 +2834,7 @@ mod tests {
         .expect("valid manifest authority")
     }
 
-    fn forms_manifest() -> ModuleManifestV1 {
+    fn forms_manifest() -> ModuleManifest {
         let mut transition = forms_transition();
         let form_version_type: ResourceTypeId = id("tessara.forms.form-version");
         transition.features[0].resource_types = vec![form_version_type.clone()];
@@ -2565,8 +2866,8 @@ mod tests {
             },
         ]);
 
-        ModuleManifestV1 {
-            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+        ModuleManifest {
+            schema_version: MODULE_MANIFEST_SCHEMA_VERSION,
             definition_id: transition.reserved_definition_id,
             release_version: Version::new(1, 0, 0),
             publisher: id("tessara.first_party"),
@@ -2575,11 +2876,21 @@ mod tests {
                 contact: "support@tessara.example".into(),
                 documentation: "https://docs.tessara.example/modules/forms".into(),
             },
-            conformance_suite_version: Version::new(1, 0, 0),
-            core_release_compatibility: VersionReq::parse("^0.1").unwrap(),
-            shell_context_compatibility: VersionReq::parse("^1").unwrap(),
-            ui_sdk_compatibility: VersionReq::parse("^1").unwrap(),
-            design_system_compatibility: VersionReq::parse("^1").unwrap(),
+            platform_versions: ModulePlatformVersions {
+                core_release: Version::new(0, 1, 0),
+                shell_context_schema: Version::new(1, 0, 0),
+                module_control_protocol: Version::new(1, 0, 0),
+                module_contract: Version::new(0, 1, 0),
+                module_runtime: Version::new(0, 1, 0),
+                module_ui: Version::new(0, 1, 0),
+                design_system_asset_abi: Version::new(1, 0, 0),
+                conformance_suite: Version::new(1, 0, 0),
+            },
+            linked_packages: LinkedModulePackages {
+                module_contract: Version::new(0, 1, 0),
+                module_runtime: Some(Version::new(0, 1, 0)),
+                module_ui: Some(Version::new(0, 1, 0)),
+            },
             deployment: DeploymentProfile::TessaraOciV1(TessaraOciV1 {
                 runtime_image: OciImageDeclaration {
                     image_reference: format!(
@@ -2632,6 +2943,8 @@ mod tests {
                 },
             }],
             routes: transition.routes,
+            browser_routes: Vec::new(),
+            assets: Vec::new(),
             navigation: transition.navigation,
             security_capabilities: transition.security_capabilities,
             configuration_schema: json!({
@@ -2789,8 +3102,51 @@ mod tests {
 
         let json = serde_json::to_value(&manifest).expect("serialize manifest");
         assert_eq!(json["deployment"]["profile"], "tessara-oci-v1");
-        let decoded: ModuleManifestV1 = serde_json::from_value(json).expect("deserialize manifest");
+        let decoded: ModuleManifest = serde_json::from_value(json).expect("deserialize manifest");
         assert_eq!(decoded, manifest);
+    }
+
+    #[test]
+    fn manifest_support_window_is_the_exact_current_tuple() {
+        let mut manifest = forms_manifest();
+        manifest.platform_versions.module_runtime = Version::new(0, 0, 9);
+        let error = manifest
+            .validate(&forms_authority())
+            .expect_err("obsolete runtime version must fail");
+        assert!(error.findings.iter().any(|finding| {
+            finding.code == "unsupported_platform_version"
+                && finding.path == "platform_versions.module_runtime"
+        }));
+
+        let mut linked = forms_manifest();
+        linked.linked_packages.module_ui = Some(Version::new(0, 0, 9));
+        let error = linked
+            .validate(&forms_authority())
+            .expect_err("linked package inventory must be truthful");
+        assert!(error.findings.iter().any(|finding| {
+            finding.code == "linked_package_version_mismatch"
+                && finding.path == "linked_packages.module_ui"
+        }));
+    }
+
+    #[test]
+    fn browser_path_templates_reject_parameterized_ambiguity() {
+        assert!(browser_path_templates_overlap(
+            "/reference/example/{organization_id}",
+            "/reference/example/current",
+        ));
+        assert!(browser_path_templates_overlap(
+            "/reference/example/{left}",
+            "/reference/example/{right}",
+        ));
+        assert!(!browser_path_templates_overlap(
+            "/reference/example",
+            "/reference/example/{organization_id}",
+        ));
+        assert!(!browser_path_templates_overlap(
+            "/reference/example/{organization_id}",
+            "/reference/other/{organization_id}",
+        ));
     }
 
     #[test]
@@ -3596,11 +3952,11 @@ mod tests {
         let manifest = forms_manifest();
         let mut json = serde_json::to_value(manifest).expect("serialize manifest");
         json["deployment"]["profile"] = json!("tessara-oci-v2");
-        assert!(serde_json::from_value::<ModuleManifestV1>(json).is_err());
+        assert!(serde_json::from_value::<ModuleManifest>(json).is_err());
 
         let mut json = serde_json::to_value(forms_manifest()).expect("serialize manifest");
         json["deployment"]["declaration"]["listen"]["host"] = json!("attacker.example");
-        assert!(serde_json::from_value::<ModuleManifestV1>(json).is_err());
+        assert!(serde_json::from_value::<ModuleManifest>(json).is_err());
     }
 
     #[test]

@@ -4,7 +4,7 @@ use crate::display::response_value_label;
 use crate::metadata::metadata_label;
 use crate::types::SubmissionValueDetail;
 use leptos::prelude::*;
-use tessara_web_ui::DataTable;
+use tessara_module_ui::DataTable;
 
 #[component]
 pub(crate) fn ResponseValuesTable(values: Vec<SubmissionValueDetail>) -> impl IntoView {

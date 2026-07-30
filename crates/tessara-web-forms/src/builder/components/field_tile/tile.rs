@@ -9,7 +9,7 @@ use crate::builder::{
     form_builder_field_type_icon, schedule_form_builder_drag_preview,
 };
 use tessara_core::GridRect;
-use tessara_web_ui::placement_editor::{PlacementTileShell, placement_grid_cell_id};
+use tessara_module_ui::placement_editor::{PlacementTileShell, placement_grid_cell_id};
 
 #[component]
 pub(crate) fn FormBuilderGridTile(
@@ -108,7 +108,7 @@ pub(crate) fn FormBuilderGridTile(
             let Some(field) = field.get_untracked() else {
                 return;
             };
-            let cell = tessara_web_ui::placement_editor::PlacementGridCell {
+            let cell = tessara_module_ui::placement_editor::PlacementGridCell {
                 row: field.grid_row.max(1),
                 column: field.grid_column.max(1),
             };

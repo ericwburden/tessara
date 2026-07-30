@@ -4,7 +4,7 @@ use crate::FormNodeTypeOption;
 use crate::status_badge_class;
 use crate::support::text::sentence_label;
 use leptos::prelude::*;
-use tessara_web_ui::{InfoListTable, InfoRow};
+use tessara_module_ui::{InfoListTable, InfoRow};
 
 #[component]
 /// Renders the shared form identity and scope editor fields.

@@ -1,7 +1,8 @@
 # Sprint 6D Verification
 
-Status: executable verification contract; no Sprint 6D implementation evidence
-has been captured.
+Status: test-change packet approved by the user on 2026-07-30; pre-commit
+implementation verification passed, but retained source-exact closeout
+evidence has not yet been captured.
 
 This document maps the
 [Sprint 6D roadmap](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-next)
@@ -9,10 +10,38 @@ to required manual and automated proof. It is governed by the
 [Sprint 6D plan](./sprint-6d-plan.md) and
 [Module SDK Implementation Contract](../architecture/module-sdk-implementation-contract.md).
 
-No test, fixture, assertion, smoke/UAT/conformance script, Playwright file, or
-verification harness may be changed until the user approves the consolidated
-Sprint 6D test-change packet. Any implementation-driven departure from that
-approved packet requires renewed approval.
+The user approved this consolidated test-change packet before test
+implementation. Any later change that weakens, deletes, skips, retries, or
+materially replaces an existing product expectation requires renewed
+approval.
+
+## Approved Test-Change Packet
+
+The approval covers equal-or-stronger additions and fast-forward fixture
+updates in these exact areas:
+
+- contract/runtime/UI/testkit/reference and Scoped Records unit/integration
+  tests under their owning crates;
+- current manifest/deployment fixtures and digests under
+  `crates/tessara-module-contract/tests/fixtures/`,
+  `crates/tessara-dashboard-module/`, and
+  `deploy/sprint-6b1/fixtures/`;
+- package/source graph and exact-version inventory checks in
+  `scripts/verify-module-sdk-boundaries.ps1`,
+  `scripts/verify-module-sdk-compatibility.ps1`, and `scripts/validate.ps1`;
+- Sprint 6D Compose/bootstrap/provenance/evidence harnesses under
+  `deploy/sprint-6d/` and `scripts/bootstrap-sprint-6d-deployment.ps1`;
+- additive Sprint 6D assertions in retained smoke, UAT, and Playwright
+  harnesses when exercised against the reference module;
+- Markdown link/evidence validators needed to enforce this document.
+
+The approved purpose is to prove exact-version rejection, native/WASM
+independence, signed-context/grant failure modes, configuration persistence,
+probes/diagnostics, complete SSR/no-JavaScript/hydration behavior, immutable
+assets, authorization nondisclosure, outage containment, graceful shutdown,
+source/image provenance, and bootstrap idempotence. Existing Dashboard,
+Scoped Records, Core, responsive, theme, keyboard, authorization, smoke, UAT,
+and Playwright expectations may not be loosened.
 
 ## Closeout Preconditions
 
@@ -104,8 +133,7 @@ packet must cover:
 - retained Playwright through the repository validation wrapper;
 - evidence-schema, digest, provenance, and cross-file consistency checks.
 
-This list does not authorize edits. The approval packet must name each changed
-test/harness path and its intended assertions before implementation begins.
+These commands and paths are authorized by the approved packet above.
 
 ## Evidence Inventory
 

@@ -10,7 +10,7 @@ use crate::{
 };
 use icons::{PanelRight, X};
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, DropdownMenu, Timestamp};
+use tessara_module_ui::{DataTable, DropdownMenu, Timestamp};
 
 #[component]
 pub(crate) fn WorkflowDetailAssignmentsTable(

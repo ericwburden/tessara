@@ -2,22 +2,22 @@ use semver::Version;
 use sha2::{Digest, Sha256};
 use tessara_module_contract::{
     ArtifactDigest, DeploymentProfile, FunctionalContractKind, InventoryEntry,
-    ManifestNamespaceAuthority, ModuleDefinitionId, ModuleInstance, ModuleManifestV1,
+    ManifestNamespaceAuthority, ModuleDefinitionId, ModuleInstance, ModuleManifest,
     OciImageDeclaration, PublisherId, ResourceResolutionV1, RouteKind, RouteParameterType,
     SemanticDestination, TransitionAvailability, TransitionalContributionDescriptorV1,
     ValidationFinding,
 };
 
-const VALID_MANIFEST: &str = include_str!("fixtures/valid-manifest-v1.json");
-const VALID_MANIFEST_DIGEST_SIDECAR: &str = include_str!("fixtures/valid-manifest-v1.json.sha256");
+const VALID_MANIFEST: &str = include_str!("fixtures/valid-manifest.json");
+const VALID_MANIFEST_DIGEST_SIDECAR: &str = include_str!("fixtures/valid-manifest.json.sha256");
 const VALID_MANIFEST_SHA256: &str =
-    "sha256:ea026d25380c8f7590f2e6dedb03c75372c3cd55984cfd7befc3696d0da32d09";
+    "sha256:ae989fe7c4b01cbabb09fda22b264d2cc16a88d816c592704ee96deea1654529";
 const INVALID_MANIFEST_PROFILE: &str =
-    include_str!("fixtures/invalid-manifest-unsupported-profile-v1.json");
+    include_str!("fixtures/invalid-manifest-unsupported-profile.json");
 const INVALID_TRANSITION_DEPLOYMENT: &str =
     include_str!("fixtures/invalid-transition-deployment-v1.json");
 const INVALID_MANIFEST_SCHEMA: &str =
-    include_str!("fixtures/invalid-manifest-unsupported-schema-v1.json");
+    include_str!("fixtures/invalid-manifest-unsupported-schema.json");
 const INVALID_TRANSITION_SCHEMA: &str =
     include_str!("fixtures/invalid-transition-unsupported-schema-v1.json");
 const INVALID_ARTIFACT_DIGEST: &str =
@@ -1071,11 +1071,11 @@ fn canonical_valid_manifest_fixture_round_trips_and_validates() {
         VALID_MANIFEST_DIGEST_SIDECAR,
         VALID_MANIFEST_SHA256,
     );
-    let manifest: ModuleManifestV1 = serde_json::from_slice(VALID_MANIFEST.as_bytes()).unwrap();
+    let manifest: ModuleManifest = serde_json::from_slice(VALID_MANIFEST.as_bytes()).unwrap();
     manifest.validate(&forms_authority()).unwrap();
 
     let encoded = serde_json::to_string(&manifest).unwrap();
-    let decoded: ModuleManifestV1 = serde_json::from_str(&encoded).unwrap();
+    let decoded: ModuleManifest = serde_json::from_str(&encoded).unwrap();
     assert_eq!(decoded, manifest);
 }
 
@@ -1146,7 +1146,7 @@ fn migration_is_the_only_retired_empty_transition_source() {
 
 #[test]
 fn invalid_fixtures_have_specific_wire_rejections() {
-    let manifest_error = serde_json::from_str::<ModuleManifestV1>(INVALID_MANIFEST_PROFILE)
+    let manifest_error = serde_json::from_str::<ModuleManifest>(INVALID_MANIFEST_PROFILE)
         .expect_err("unsupported deployment profile must fail at the wire boundary");
     assert_eq!(manifest_error.classify(), serde_json::error::Category::Data);
     assert!(manifest_error.to_string().contains("tessara-oci-v2"));
@@ -1165,7 +1165,7 @@ fn invalid_fixtures_have_specific_wire_rejections() {
             .contains("unknown field `deployment`")
     );
 
-    let manifest_schema_error = serde_json::from_str::<ModuleManifestV1>(INVALID_MANIFEST_SCHEMA)
+    let manifest_schema_error = serde_json::from_str::<ModuleManifest>(INVALID_MANIFEST_SCHEMA)
         .expect_err("unsupported Manifest schema must fail during deserialization");
     assert_eq!(
         manifest_schema_error.classify(),
@@ -1174,7 +1174,7 @@ fn invalid_fixtures_have_specific_wire_rejections() {
     assert!(
         manifest_schema_error
             .to_string()
-            .contains("schema version 2 is unsupported; expected 1")
+            .contains("module manifest schema version 1 is unsupported; expected 2")
     );
 
     let transition_schema_error =
@@ -1227,7 +1227,7 @@ fn invalid_fixtures_have_specific_wire_rejections() {
 
 #[test]
 fn invalid_oci_image_reference_fixture_has_one_exact_validation_finding() {
-    let mut manifest: ModuleManifestV1 = serde_json::from_str(VALID_MANIFEST).unwrap();
+    let mut manifest: ModuleManifest = serde_json::from_str(VALID_MANIFEST).unwrap();
     let invalid_image: OciImageDeclaration =
         serde_json::from_str(INVALID_OCI_IMAGE_REFERENCE).unwrap();
     let DeploymentProfile::TessaraOciV1(deployment) = &mut manifest.deployment;

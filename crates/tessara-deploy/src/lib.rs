@@ -251,7 +251,7 @@ mod tests {
     use semver::Version;
     use std::collections::BTreeMap;
     use tessara_module_contract::{
-        ArtifactDigest, DeploymentProfile, DesiredModuleV1, ModuleManifestV1,
+        ArtifactDigest, DeploymentProfile, DesiredModuleV1, ModuleManifest,
     };
 
     fn digest(c: char) -> ArtifactDigest {
@@ -263,8 +263,8 @@ mod tests {
         } else {
             digest('e')
         };
-        let mut manifest: ModuleManifestV1 = serde_json::from_str(include_str!(
-            "../../tessara-module-contract/tests/fixtures/valid-manifest-v1.json"
+        let mut manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../tessara-module-contract/tests/fixtures/valid-manifest.json"
         ))
         .unwrap();
         manifest.release_version = version.clone();

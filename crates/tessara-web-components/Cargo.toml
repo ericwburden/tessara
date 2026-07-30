@@ -25,5 +25,5 @@ serde_json = { workspace = true }
 tessara-web-component-viewer = { path = "../tessara-web-component-viewer", default-features = false }
 tessara-web-data-ops = { path = "../tessara-web-data-ops" }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
-tessara-web-ui = { path = "../tessara-web-ui" }
+tessara-module-ui = { path = "../tessara-module-ui", features = ["components"] }
 web-sys = { workspace = true }

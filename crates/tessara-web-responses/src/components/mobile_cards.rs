@@ -8,7 +8,7 @@ use crate::pagination::pagination_page_start;
 use crate::status::status_badge_class;
 use crate::types::SubmissionSummary;
 use leptos::prelude::*;
-use tessara_web_ui::{Timestamp, empty_view};
+use tessara_module_ui::{Timestamp, empty_view};
 
 #[component]
 pub(crate) fn ResponseMobileCards(

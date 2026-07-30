@@ -6,7 +6,6 @@
 use leptos::context::Provider;
 use leptos::prelude::*;
 use leptos_router::location::RequestUrl;
-use tessara_module_contract::ShellContentV1;
 use tessara_web_dashboards::DashboardRouteBootstrap;
 
 use crate::{
@@ -20,15 +19,7 @@ use crate::{
 };
 
 pub(crate) fn render_native_app_document(title: &str, description: &str, path: &str) -> String {
-    render_native_app_document_with_optional_bootstraps(
-        title,
-        description,
-        path,
-        None,
-        None,
-        None,
-        None,
-    )
+    render_native_app_document_with_optional_bootstraps(title, description, path, None, None, None)
 }
 
 pub(crate) fn render_native_app_document_with_dashboard_bootstrap(
@@ -42,7 +33,6 @@ pub(crate) fn render_native_app_document_with_dashboard_bootstrap(
         description,
         path,
         Some(bootstrap),
-        None,
         None,
         None,
     )
@@ -61,7 +51,6 @@ pub(crate) fn render_native_app_document_with_module_management_bootstrap(
         None,
         Some(bootstrap),
         None,
-        None,
     )
 }
 
@@ -79,24 +68,6 @@ pub(crate) fn render_native_app_document_with_module_management_and_shell_naviga
         None,
         Some(bootstrap),
         Some(shell_navigation),
-        None,
-    )
-}
-
-pub(crate) fn render_native_app_document_with_scoped_records_bootstrap(
-    title: &str,
-    description: &str,
-    path: &str,
-    bootstrap: &ShellContentV1,
-) -> String {
-    render_native_app_document_with_optional_bootstraps(
-        title,
-        description,
-        path,
-        None,
-        None,
-        None,
-        Some(bootstrap),
     )
 }
 
@@ -107,7 +78,6 @@ fn render_native_app_document_with_optional_bootstraps(
     dashboard_bootstrap: Option<&DashboardRouteBootstrap>,
     module_management_bootstrap: Option<&ModuleManagementRouteBootstrapV1>,
     shell_navigation_bootstrap: Option<&ShellNavigationResponseV1>,
-    scoped_records_bootstrap: Option<&ShellContentV1>,
 ) -> String {
     // Workspace-wide `--all-features` builds intentionally unify `ssr` and
     // `hydrate`. Browser-only components can therefore construct Effects while
@@ -119,53 +89,40 @@ fn render_native_app_document_with_optional_bootstraps(
     let shell_bootstrap = dashboard_bootstrap.cloned();
     let module_shell_bootstrap = module_management_bootstrap.cloned();
     let navigation_shell_bootstrap = shell_navigation_bootstrap.cloned();
-    let scoped_shell_bootstrap = scoped_records_bootstrap.cloned();
     let shell_path = path.to_string();
-    let shell = Owner::new().with(move || {
-        if let Some(scoped_records) = scoped_shell_bootstrap {
-            return view! {
-                <Provider value=RequestUrl::new(&shell_path)>
-                    <Provider value=scoped_records>
-                        <app::App initial_shell_navigation=navigation_shell_bootstrap/>
-                    </Provider>
-                </Provider>
-            }
-            .to_html();
-        }
-        match (shell_bootstrap, module_shell_bootstrap) {
-            (Some(dashboard), Some(module_management)) => view! {
-                <Provider value=RequestUrl::new(&shell_path)>
-                    <Provider value=dashboard>
-                        <Provider value=module_management>
-                            <app::App initial_shell_navigation=navigation_shell_bootstrap/>
-                        </Provider>
-                    </Provider>
-                </Provider>
-            }
-            .to_html(),
-            (Some(dashboard), None) => view! {
-                <Provider value=RequestUrl::new(&shell_path)>
-                    <Provider value=dashboard>
-                        <app::App initial_shell_navigation=navigation_shell_bootstrap/>
-                    </Provider>
-                </Provider>
-            }
-            .to_html(),
-            (None, Some(module_management)) => view! {
-                <Provider value=RequestUrl::new(&shell_path)>
+    let shell = Owner::new().with(move || match (shell_bootstrap, module_shell_bootstrap) {
+        (Some(dashboard), Some(module_management)) => view! {
+            <Provider value=RequestUrl::new(&shell_path)>
+                <Provider value=dashboard>
                     <Provider value=module_management>
                         <app::App initial_shell_navigation=navigation_shell_bootstrap/>
                     </Provider>
                 </Provider>
-            }
-            .to_html(),
-            (None, None) => view! {
-                <Provider value=RequestUrl::new(&shell_path)>
+            </Provider>
+        }
+        .to_html(),
+        (Some(dashboard), None) => view! {
+            <Provider value=RequestUrl::new(&shell_path)>
+                <Provider value=dashboard>
                     <app::App initial_shell_navigation=navigation_shell_bootstrap/>
                 </Provider>
-            }
-            .to_html(),
+            </Provider>
         }
+        .to_html(),
+        (None, Some(module_management)) => view! {
+            <Provider value=RequestUrl::new(&shell_path)>
+                <Provider value=module_management>
+                    <app::App initial_shell_navigation=navigation_shell_bootstrap/>
+                </Provider>
+            </Provider>
+        }
+        .to_html(),
+        (None, None) => view! {
+            <Provider value=RequestUrl::new(&shell_path)>
+                <app::App initial_shell_navigation=navigation_shell_bootstrap/>
+            </Provider>
+        }
+        .to_html(),
     });
     let brand = crate::document::document_head_tags(title, description);
     let theme_bootstrap = crate::document::bootstrap_script();
@@ -190,13 +147,6 @@ fn render_native_app_document_with_optional_bootstraps(
             crate::SHELL_NAVIGATION_BOOTSTRAP_SCRIPT_ID
         ));
     }
-    if let Some(bootstrap) = scoped_records_bootstrap {
-        let json = escaped_scoped_records_bootstrap_json(bootstrap);
-        route_bootstrap.push_str(&format!(
-            "    <script id=\"{}\" type=\"application/json\">{json}</script>\n",
-            crate::SCOPED_RECORDS_BOOTSTRAP_SCRIPT_ID
-        ));
-    }
     let hydration = pipeline::hydration_module_tag();
 
     format!(
@@ -219,16 +169,6 @@ fn render_native_app_document_with_optional_bootstraps(
 </html>",
         app_root_id = pipeline::APP_ROOT_ID,
     )
-}
-
-fn escaped_scoped_records_bootstrap_json(bootstrap: &ShellContentV1) -> String {
-    serde_json::to_string(bootstrap)
-        .expect("Scoped Records bootstrap should serialize")
-        .replace('&', "\\u0026")
-        .replace('<', "\\u003c")
-        .replace('>', "\\u003e")
-        .replace('\u{2028}', "\\u2028")
-        .replace('\u{2029}', "\\u2029")
 }
 
 fn escaped_shell_navigation_bootstrap_json(bootstrap: &ShellNavigationResponseV1) -> String {

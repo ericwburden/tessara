@@ -16,7 +16,7 @@ mod status_badge;
 pub(crate) use dropdown::DropdownMenu;
 pub(crate) use shell::AppShell;
 pub(crate) use status_badge::*;
-pub(crate) use tessara_web_ui::{
+pub(crate) use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
     EmptyState, InfoListTable, PageHeader, TableFilterHeader, TablePaginationFooter, Timestamp,
 };

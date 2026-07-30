@@ -17,13 +17,16 @@ use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, PurposeBoundVerifyingKeyV1,
-    SHELL_CONTENT_MEDIA_TYPE, SecurityCapabilityId, ShellContentV1, ShellContextV1,
-    ShellContextValidationContextV1, SignedEnvelopeV1, render_native_module_document,
-    verify_shell_context,
+    SecurityCapabilityId, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
 };
+use tessara_module_runtime::{
+    decode_signed_envelope_header, request_correlation_id, verify_shell_context,
+};
+use tessara_module_ui::{ShellPresentation, render_module_document};
 use uuid::Uuid;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.reference.scoped-records";
+pub const MODULE_SHELL_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.0/sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d/module-shell.css";
 pub const READ_CAPABILITY: &str = "tessara.reference.scoped-records:read";
 pub const MANAGE_CAPABILITY: &str = "tessara.reference.scoped-records:manage";
 
@@ -178,6 +181,7 @@ pub fn router(state: ModuleState) -> Router {
         .route("/health/ready", get(ready))
         .route("/health", get(health_page))
         .route("/diagnostics", get(diagnostics_page))
+        .route(MODULE_SHELL_CSS_PATH, get(module_shell_stylesheet))
         .with_state(state)
 }
 
@@ -1078,21 +1082,11 @@ async fn shell_page(
     heading: &str,
     body: &str,
 ) -> Result<Response, ApiError> {
-    let encoded = headers
-        .get("x-tessara-shell-context")
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(ApiError::shell_unavailable)?;
-    let correlation_id = headers
-        .get("x-tessara-correlation-id")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .ok_or_else(ApiError::shell_unavailable)?;
-    let envelope: SignedEnvelopeV1<ShellContextV1> = serde_json::from_slice(
-        &URL_SAFE_NO_PAD
-            .decode(encoded)
-            .map_err(|_| ApiError::shell_unavailable())?,
-    )
-    .map_err(|_| ApiError::shell_unavailable())?;
+    let correlation_id =
+        request_correlation_id(headers).map_err(|_| ApiError::shell_unavailable())?;
+    let envelope: SignedEnvelopeV1<ShellContextV1> =
+        decode_signed_envelope_header(headers, "x-tessara-shell-context")
+            .map_err(|_| ApiError::shell_unavailable())?;
     let security = load_security_state(&state.pool).await?;
     verify_shell_context(
         &envelope,
@@ -1107,30 +1101,29 @@ async fn shell_page(
         },
     )
     .map_err(|_| ApiError::shell_unavailable())?;
-    let content = body.to_string();
-    let shell_content = ShellContentV1 {
-        schema_version: 1,
-        title: heading.to_string(),
-        body_html: content,
-    };
-    let requests_shell_content = headers
-        .get(header::ACCEPT)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| {
-            value
-                .split(',')
-                .any(|media_type| media_type.trim() == SHELL_CONTENT_MEDIA_TYPE)
-        });
-    if requests_shell_content {
-        Ok(Json(shell_content).into_response())
-    } else {
-        Ok(Html(render_native_module_document(
-            &envelope.payload,
-            "Scoped Records",
-            &shell_content.body_html,
-        ))
-        .into_response())
-    }
+    let presentation = ShellPresentation::from_verified_context(
+        &envelope.payload,
+        headers
+            .get("x-tessara-original-path")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("/reference/scoped-records"),
+        heading,
+    );
+    Ok(Html(render_module_document(
+        &presentation,
+        MODULE_SHELL_CSS_PATH,
+        None,
+        body,
+    ))
+    .into_response())
+}
+
+async fn module_shell_stylesheet() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        tessara_module_ui::MODULE_SHELL_CSS,
+    )
+        .into_response()
 }
 
 fn escape(value: &str) -> String {

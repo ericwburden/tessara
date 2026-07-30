@@ -437,6 +437,14 @@ try {
     }
     $dashboardsShell = Invoke-Html -Uri "$baseUrl/dashboards" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell"
+    $sdkReferenceShell = Invoke-Html -Uri "$baseUrl/reference/module-sdk" -CookieJarPath $adminBrowserSession
+    if (
+        $sdkReferenceShell -notlike "*Module SDK Reference*" `
+        -or $sdkReferenceShell -notmatch 'data-shell-state="active"' `
+        -or $sdkReferenceShell -notmatch '/_tessara/modules/tessara\.reference\.module-sdk/1\.0\.0/sha256:[0-9a-f]{64}/module-shell\.(css|js)'
+    ) {
+        throw "Smoke failure: canonical SDK reference did not return its complete signed document and content-addressed assets"
+    }
     $datasetsShell = Invoke-Html -Uri "$baseUrl/datasets" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $datasetsShell -Needles @("Datasets") -Context "datasets shell"
     $datasetNewShell = Invoke-Html -Uri "$baseUrl/datasets/new" -CookieJarPath $adminBrowserSession
@@ -489,15 +497,24 @@ try {
         -and $_.group_id -eq "core.main" `
         -and $_.visible
     } | Select-Object -First 1
+    $sdkReferenceDestination = $modulePolicy.destinations | Where-Object {
+        $_.id -eq "tessara.reference.module-sdk.navigation" `
+        -and $_.definition_id -eq "tessara.reference.module-sdk" `
+        -and $_.semantic_destination -eq "tessara.reference.module-sdk.root" `
+        -and $_.route -eq "/reference/module-sdk" `
+        -and $_.group_id -eq "core.main" `
+        -and $_.visible
+    } | Select-Object -First 1
     if (
         $modulePolicy.schema_version -ne 2 `
         -or -not $modulePolicy.can_manage_navigation `
         -or @($modulePolicy.groups).Count -lt 2 `
         -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.main" }) `
         -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.admin" }) `
-        -or @($modulePolicy.destinations).Count -ne 14 `
+        -or @($modulePolicy.destinations).Count -ne 15 `
         -or -not $moduleDestination `
-        -or -not $scopedRecordsDestination
+        -or -not $scopedRecordsDestination `
+        -or -not $sdkReferenceDestination
     ) {
         throw "Smoke failure: schema-v2 navigation policy did not preserve required groups, exact membership, protected Module Management, and Scoped Records"
     }

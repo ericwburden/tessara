@@ -6,7 +6,7 @@ use crate::workflow_assignee_label;
 use icons::Search;
 use leptos::prelude::*;
 use std::collections::HashSet;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 #[component]
 pub(crate) fn WorkflowAssignmentAssigneePicker(

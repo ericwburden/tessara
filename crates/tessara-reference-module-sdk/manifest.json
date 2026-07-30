@@ -1,0 +1,194 @@
+{
+  "schema_version": 2,
+  "definition_id": "tessara.reference.module-sdk",
+  "release_version": "1.0.0",
+  "publisher": "tessara.first_party",
+  "support": {
+    "support_tier": "first_party",
+    "contact": "support@tessara.example",
+    "documentation": "https://docs.tessara.example/modules/reference-module-sdk"
+  },
+  "platform_versions": {
+    "core_release": "0.1.0",
+    "shell_context_schema": "1.0.0",
+    "module_control_protocol": "1.0.0",
+    "module_contract": "0.1.0",
+    "module_runtime": "0.1.0",
+    "module_ui": "0.1.0",
+    "design_system_asset_abi": "1.0.0",
+    "conformance_suite": "1.0.0"
+  },
+  "linked_packages": {
+    "module_contract": "0.1.0",
+    "module_runtime": "0.1.0",
+    "module_ui": "0.1.0"
+  },
+  "deployment": {
+    "profile": "tessara-oci-v1",
+    "declaration": {
+      "runtime_image": {
+        "image_reference": "registry.example/tessara/reference-module-sdk@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": ["/app/tessara-reference-module-sdk"]
+      },
+      "migration_image": null,
+      "listen": {
+        "protocol": "http",
+        "port": 8091,
+        "registration_name": "reference-module-sdk"
+      },
+      "configuration_keys": ["TESSARA_REFERENCE_STATE_PATH"],
+      "secret_keys": ["TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY"],
+      "runtime_identity": "reference-module-sdk-runtime",
+      "migration_identity": "reference-module-sdk-state",
+      "readiness_path": "/health/ready",
+      "liveness_path": "/health/live",
+      "graceful_shutdown_seconds": 30,
+      "resources": {
+        "cpu_request_millis": 50,
+        "cpu_limit_millis": 100,
+        "memory_request_mebibytes": 32,
+        "memory_limit_mebibytes": 64
+      }
+    }
+  },
+  "features": [
+    {
+      "id": "tessara.reference.module-sdk.conformance",
+      "name": "Module SDK conformance",
+      "description": "Proves the non-product independent module pathway.",
+      "use_cases": ["Verify the canonical module SDK"],
+      "inputs": ["Signed shell and authorization projections"],
+      "outcomes": ["Conformance evidence"],
+      "constraints": ["No product resource or product persistence"],
+      "contracts": ["tessara.reference.module-sdk.conformance"],
+      "resource_types": [],
+      "destinations": ["tessara.reference.module-sdk.root", "tessara.reference.module-sdk.scope"],
+      "capabilities": ["tessara.reference.module-sdk:read"],
+      "configuration_pointers": ["/properties/display_label"]
+    }
+  ],
+  "provided_contracts": [
+    {
+      "id": "tessara.reference.module-sdk.conformance",
+      "version": "1.0.0",
+      "kind": "behavior",
+      "description": "Read-only SDK conformance behavior."
+    }
+  ],
+  "dependencies": [],
+  "resource_types": [],
+  "typed_reference_schemas": [],
+  "routes": [
+    {
+      "name": "tessara.reference.module-sdk.root",
+      "kind": "product",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.module-sdk.scope",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "organization_id",
+          "value_type": "uuid",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "tessara.reference.module-sdk.configuration.validate",
+      "kind": "configuration",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.module-sdk.compatibility",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.module-sdk.status",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.module-sdk.diagnostics",
+      "kind": "diagnostics",
+      "parameters": []
+    }
+  ],
+  "browser_routes": [
+    {
+      "destination": "tessara.reference.module-sdk.root",
+      "path_template": "/reference/module-sdk",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "tessara.reference.module-sdk:read",
+      "authorization_action": "reference.module-sdk.read",
+      "functional_contract": "tessara.reference.module-sdk.conformance",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "tessara.reference.module-sdk.scope",
+      "path_template": "/reference/module-sdk/scopes/{organization_id}",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "tessara.reference.module-sdk:read",
+      "authorization_action": "reference.module-sdk.scope.read",
+      "functional_contract": "tessara.reference.module-sdk.conformance",
+      "organization_scope_parameter": "organization_id"
+    },
+    {
+      "destination": "tessara.reference.module-sdk.diagnostics",
+      "path_template": "/reference/module-sdk/diagnostics",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "tessara.reference.module-sdk:read",
+      "authorization_action": "reference.module-sdk.diagnostics.read",
+      "functional_contract": "tessara.reference.module-sdk.conformance",
+      "organization_scope_parameter": null
+    }
+  ],
+  "assets": [
+    {
+      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d/module-shell.css",
+      "digest": "sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js",
+      "digest": "sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff",
+      "content_type": "text/javascript; charset=utf-8"
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.reference.module-sdk.navigation",
+      "destination": "tessara.reference.module-sdk.root",
+      "label": "Module SDK Reference",
+      "group": "Main",
+      "order_hint": 90,
+      "required_capabilities_any_of": ["tessara.reference.module-sdk:read"]
+    }
+  ],
+  "security_capabilities": [
+    {
+      "id": "tessara.reference.module-sdk:read",
+      "description": "Inspect Module SDK conformance behavior."
+    }
+  ],
+  "configuration_schema": {
+    "type": "object",
+    "properties": {
+      "display_label": {
+        "type": "string"
+      }
+    }
+  },
+  "operational_routes": {
+    "configuration_validation": "tessara.reference.module-sdk.configuration.validate",
+    "compatibility": "tessara.reference.module-sdk.compatibility",
+    "status": "tessara.reference.module-sdk.status",
+    "diagnostics": "tessara.reference.module-sdk.diagnostics"
+  },
+  "shell_contribution_contracts": null
+}

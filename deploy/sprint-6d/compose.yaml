@@ -1,0 +1,8 @@
+name: tessara
+
+# Sprint 6D extends the Sprint 6C topology with the non-product canonical SDK
+# reference module and its module-owned durable JSON state.
+include:
+  - path:
+      - ../sprint-6c/compose.yaml
+      - ./compose.override.yaml

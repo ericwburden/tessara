@@ -7,7 +7,7 @@ use crate::{
     form_field_count_label, form_status_label, form_version_label,
 };
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     InfoListTable, Tabs, TabsContent, TabsList, TabsTrigger, Timestamp, empty_view,
 };
 

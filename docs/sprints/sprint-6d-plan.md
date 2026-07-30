@@ -1,6 +1,6 @@
 # Sprint 6D Plan: Canonical Module SDK And Runtime Extraction
 
-Status: specification-hardened for implementation.
+Status: implementation complete; retained closeout evidence pending.
 
 - Branch: `codex/sprint-6d`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6d`
@@ -58,8 +58,11 @@ Dashboard-only upgrade/rollback proof remain Sprint 6E.
 - Move complete-document rendering, pure shell presentation, policy-neutral
   primitives, tokens, shared CSS, accessibility behavior, and asset
   conventions to module UI.
-- Move the Dashboard placement editor to its Dashboard product/web owner,
-  update consumers directly, and delete `tessara-web-ui`.
+- Move policy-neutral grid geometry from the historically named
+  `tessara-core` crate to `tessara-module-contract`, move shared placement DOM
+  mechanics to `tessara-module-ui`, keep Dashboard and Forms policy adapters
+  with their respective product owners, update consumers directly, and delete
+  `tessara-web-ui`.
 - Retain `tessara-web-http` as an independent browser-transport leaf.
 - Delete `ShellContentV1`, its media type, Core bridge, hydration bootstrap,
   renderer branches, and tests.
@@ -300,8 +303,11 @@ upgrade, and rollback.
 
 ## Readiness And Blockers
 
-Product decisions are closed. The implementation contract is decision
-complete.
+Product decisions are closed. Implementation confirmed that the placement
+editor is consumed by both Dashboard and Forms. The approved ownership rule is
+therefore applied at the actual seam: generic serializable geometry belongs to
+contract, generic DOM mechanics belong to module UI, and product sizing,
+validation, and workflow policy remain in each product adapter.
 
 The main delivery risk is breadth: the generic read-only document seam,
 immediate shared-UI source move, reference module, and Scoped Records adoption
@@ -309,9 +315,7 @@ all land in one sprint. The scope controls above are mandatory; implementation
 must not absorb Dashboard adoption, generic product APIs, or compatibility
 work to compensate.
 
-Production extraction is blocked until:
-
-- this specification change is committed;
-- the test-change approval packet is explicitly approved;
-- current-rendering characterization and boundary gates are ready to land
-  together with their approved tests.
+The specification commit and test-change approval preconditions are complete.
+No product-decision blocker remains. Closeout remains blocked on the retained
+source-exact deployment, bootstrap, smoke, UAT, Playwright, outage, and manual
+evidence cycle after implementation is committed.

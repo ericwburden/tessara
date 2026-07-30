@@ -5,7 +5,7 @@ use crate::builder::{FormBuilderEditorState, new_form_builder_editor_state};
 use crate::options_loader::load_form_edit_options;
 use crate::{FormDefinition, FormEditForm, FormSummary, RenderedForm};
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
     empty_view,
 };

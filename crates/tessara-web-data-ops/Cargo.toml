@@ -16,4 +16,4 @@ ssr = [
 [dependencies]
 icons = { workspace = true }
 leptos = { workspace = true }
-tessara-web-ui = { path = "../tessara-web-ui" }
+tessara-module-ui = { path = "../tessara-module-ui", features = ["components"] }

@@ -7,7 +7,7 @@ use crate::status::status_badge_class;
 use crate::types::{RenderedForm, SubmissionDetail};
 use leptos::prelude::*;
 use std::collections::HashMap;
-use tessara_web_ui::{InfoListTable, empty_view};
+use tessara_module_ui::{InfoListTable, empty_view};
 
 #[component]
 pub(crate) fn ResponseEditForm(

@@ -7,7 +7,7 @@ use crate::types::{NodeTypeCatalogEntry, OrganizationNodeDetail, OrganizationTre
 use icons::{ChevronDown, ChevronRight, PanelRight, Pencil, Plus};
 use leptos::prelude::*;
 use std::collections::HashSet;
-use tessara_web_ui::DropdownMenu;
+use tessara_module_ui::DropdownMenu;
 
 #[derive(Clone)]
 pub(crate) struct OrganizationTreeViewContext {

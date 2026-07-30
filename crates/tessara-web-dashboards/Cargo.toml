@@ -10,12 +10,12 @@ hydrate = [
     "leptos/hydrate",
     "tessara-web-component-viewer/hydrate",
     "tessara-web-http/hydrate",
-    "tessara-web-ui/hydrate",
+    "tessara-module-ui/hydrate",
 ]
 ssr = [
     "leptos/ssr",
     "tessara-web-component-viewer/ssr",
-    "tessara-web-ui/ssr",
+    "tessara-module-ui/ssr",
 ]
 
 [dependencies]
@@ -29,7 +29,7 @@ tessara-core = { path = "../tessara-core" }
 tessara-dashboards = { path = "../tessara-dashboards" }
 tessara-web-component-viewer = { path = "../tessara-web-component-viewer", default-features = false }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
-tessara-web-ui = { path = "../tessara-web-ui", default-features = false }
+tessara-module-ui = { path = "../tessara-module-ui", default-features = false }
 wasm-bindgen = { workspace = true }
 web-sys = { workspace = true, features = [
     "DomRect",

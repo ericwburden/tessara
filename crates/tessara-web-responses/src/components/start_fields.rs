@@ -4,7 +4,7 @@ use crate::text::nonempty_text;
 use crate::types::AssignmentResponseStartOption;
 use crate::workflow_revision_label_from_option;
 use leptos::prelude::*;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 #[component]
 pub(crate) fn ResponseAssignmentStartFields(

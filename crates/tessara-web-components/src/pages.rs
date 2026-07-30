@@ -16,13 +16,13 @@ use icons::{ChevronDown, CircleHelp, History, ListFilter, PanelRight, Pencil, Se
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
 use leptos::wasm_bindgen::{JsCast, closure::Closure};
+use tessara_module_ui::{
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
+    EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter,
+};
 use tessara_web_data_ops::{
     DataOpsFiltersEditor, DataOpsProjectionEditor, DatasetFieldDraft as DataOpsDatasetFieldDraft,
     DatasetRowFilterDraft as DataOpsRowFilterDraft,
-};
-use tessara_web_ui::{
-    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
-    EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter,
 };
 
 #[cfg(feature = "hydrate")]

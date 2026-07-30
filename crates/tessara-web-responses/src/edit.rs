@@ -6,7 +6,7 @@ use super::components::ResponseEditForm;
 use super::loaders::load_submission_edit_context;
 use crate::types::{RenderedForm, SubmissionDetail};
 use std::collections::HashMap;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
 

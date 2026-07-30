@@ -13,7 +13,7 @@ use crate::builder::{
     clear_form_builder_drag_intent, commit_form_builder_drag_preview,
     schedule_form_builder_drag_preview, set_form_builder_drag_preview,
 };
-use tessara_web_ui::placement_editor::{
+use tessara_module_ui::placement_editor::{
     PlacementGridCanvas, PlacementGridCell, PlacementGridTarget,
 };
 

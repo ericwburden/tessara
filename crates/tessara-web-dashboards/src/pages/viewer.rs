@@ -9,14 +9,14 @@ use std::{
 
 use leptos::html;
 use leptos::prelude::*;
+use tessara_module_ui::{
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
+    EmptyState, PageHeader,
+};
 use tessara_web_component_viewer::{
     ComponentRequestActivity, ComponentRequestActivityCallback, ComponentTablePresentation,
     ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
     ComponentViewerMode,
-};
-use tessara_web_ui::{
-    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
-    EmptyState, PageHeader,
 };
 
 use crate::types::{

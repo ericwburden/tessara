@@ -1,0 +1,35 @@
+services:
+  core:
+    environment:
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.dashboards":"http://dashboards:8091","tessara.reference.module-sdk":"http://reference-module-sdk:8091"}'
+    depends_on:
+      reference-module-sdk: { condition: service_healthy }
+
+  reference-module-sdk:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.reference-module-sdk
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    environment:
+      TESSARA_REFERENCE_BIND_ADDR: 0.0.0.0:8091
+      TESSARA_REFERENCE_STATE_PATH: /var/lib/tessara-reference/state.json
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8091/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-services]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    volumes:
+      - reference-module-state:/var/lib/tessara-reference
+
+volumes:
+  reference-module-state:

@@ -1,0 +1,26 @@
+FROM rust:1.94-bookworm AS builder
+WORKDIR /app
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release -p tessara-reference-module-sdk --features ssr \
+    && cp /app/target/release/tessara-reference-module-sdk /tmp/reference-module-sdk
+
+FROM debian:trixie-slim
+ARG TESSARA_SOURCE_COMMIT=unknown
+ARG TESSARA_SOURCE_TREE=unknown
+ARG TESSARA_SOURCE_DIRTY=unknown
+
+LABEL org.opencontainers.image.revision="$TESSARA_SOURCE_COMMIT" \
+      com.tessara.source-tree="$TESSARA_SOURCE_TREE" \
+      com.tessara.source-dirty="$TESSARA_SOURCE_DIRTY" \
+      com.tessara.build-profile="release" \
+      com.tessara.module-contract-version="0.1.0" \
+      com.tessara.module-runtime-version="0.1.0" \
+      com.tessara.module-ui-version="0.1.0"
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /tmp/reference-module-sdk /usr/local/bin/reference-module-sdk
+EXPOSE 8091
+ENTRYPOINT ["reference-module-sdk"]

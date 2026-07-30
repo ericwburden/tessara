@@ -12,7 +12,7 @@ use crate::text::sentence_label;
 use icons::{ChevronDown, ChevronRight, Database, FileText, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, EmptyState,
     InteractiveDataTable, InteractiveTableColumn, InteractiveTableRow, PageHeader,
 };
@@ -317,7 +317,7 @@ pub(crate) fn DatasetPreviewTable(
             InteractiveTableColumn::new(
                 field.key.clone(),
                 field.label.clone(),
-                tessara_web_ui::InteractiveTableDataType::from_field_type(&field.field_type),
+                tessara_module_ui::InteractiveTableDataType::from_field_type(&field.field_type),
             )
         })
         .collect::<Vec<_>>();

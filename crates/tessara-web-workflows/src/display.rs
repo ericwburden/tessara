@@ -8,7 +8,7 @@ use crate::types::{
 };
 use icons::FileText;
 use leptos::prelude::*;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 pub(crate) fn workflow_revision_label_from_raw(label: &str) -> String {
     let trimmed = label.trim();

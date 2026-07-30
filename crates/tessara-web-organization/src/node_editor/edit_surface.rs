@@ -1,7 +1,7 @@
 //! Organization node edit route surface.
 
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, EmptyState,
     PageHeader,
 };

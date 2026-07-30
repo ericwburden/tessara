@@ -6,7 +6,7 @@ use crate::support::pagination::pagination_page_start;
 use crate::support::text::{sentence_label, text_matches};
 use crate::{FormWorkflowSourceMarker, form_workflow_revision_label_from_option};
 use leptos::prelude::*;
-use tessara_web_ui::{SearchableDataTable, TablePaginationFooter};
+use tessara_module_ui::{SearchableDataTable, TablePaginationFooter};
 
 #[component]
 pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> impl IntoView {

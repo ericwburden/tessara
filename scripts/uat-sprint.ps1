@@ -310,15 +310,24 @@ $scopedRecordsDestination = $modulePolicy.destinations | Where-Object {
     -and $_.group_id -eq "core.main" `
     -and $_.visible
 } | Select-Object -First 1
+$sdkReferenceDestination = $modulePolicy.destinations | Where-Object {
+    $_.id -eq "tessara.reference.module-sdk.navigation" `
+    -and $_.definition_id -eq "tessara.reference.module-sdk" `
+    -and $_.semantic_destination -eq "tessara.reference.module-sdk.root" `
+    -and $_.route -eq "/reference/module-sdk" `
+    -and $_.group_id -eq "core.main" `
+    -and $_.visible
+} | Select-Object -First 1
 if (
     $modulePolicy.schema_version -ne 2 `
     -or -not $modulePolicy.can_manage_navigation `
     -or @($modulePolicy.groups).Count -lt 2 `
     -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.main" }) `
     -or -not ($modulePolicy.groups | Where-Object { $_.id -eq "core.admin" }) `
-    -or @($modulePolicy.destinations).Count -ne 14 `
+    -or @($modulePolicy.destinations).Count -ne 15 `
     -or -not $moduleDestination `
-    -or -not $scopedRecordsDestination
+    -or -not $scopedRecordsDestination `
+    -or -not $sdkReferenceDestination
 ) {
     throw "Sprint UAT failure: schema-v2 navigation policy did not preserve required groups, exact membership, protected Module Management, and Scoped Records."
 }
@@ -550,6 +559,13 @@ foreach ($placement in $dashboardApi.placements) {
 
 $dashboardsList = Invoke-Html -Uri "$BaseUrl/dashboards" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $dashboardsList -Needles @("Dashboards") -Context "dashboard directory"
+
+$sdkReference = Invoke-Html -Uri "$BaseUrl/reference/module-sdk" -CookieJarPath $adminBrowserSession
+Assert-Contains -Content $sdkReference -Needles @(
+    "Module SDK Reference",
+    "data-shell-state=`"active`"",
+    "/_tessara/modules/tessara.reference.module-sdk/1.0.0/"
+) -Context "canonical SDK reference"
 
 $dashboardCreate = Invoke-Html -Uri "$BaseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $dashboardCreate -Needles @("Create Dashboard") -Context "dashboard create"

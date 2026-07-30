@@ -23,6 +23,7 @@ const RESPONSES_DEFINITION = "tessara.responses";
 const MIGRATION_DEFINITION = "tessara.migration";
 const DASHBOARDS_DEFINITION = "tessara.dashboards";
 const SCOPED_RECORDS_DEFINITION = "tessara.reference.scoped-records";
+const SDK_REFERENCE_DEFINITION = "tessara.reference.module-sdk";
 const UNKNOWN_DEFINITION = "tessara.unknown-definition";
 const BENIGN_NAVIGATION_ABORT =
   "WebAssembly compilation aborted: Network error: Response body loading was aborted";
@@ -975,7 +976,11 @@ test.describe.serial("Sprint 6A Module Management", () => {
         entry.kind === "independently_deployed",
     );
     expect(independentEntries.map((entry) => entry.definition.id)).toEqual(
-      expect.arrayContaining([DASHBOARDS_DEFINITION, SCOPED_RECORDS_DEFINITION]),
+      expect.arrayContaining([
+        DASHBOARDS_DEFINITION,
+        SCOPED_RECORDS_DEFINITION,
+        SDK_REFERENCE_DEFINITION,
+      ]),
     );
 
     for (const entry of independentEntries) {
@@ -1913,7 +1918,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
           ).toBeVisible();
           await expect(
             routeContent.locator("tr[data-module-definition]"),
-          ).toHaveCount(8);
+          ).toHaveCount(9);
           await expect(
             routeContent.getByText("Read-only", { exact: true }),
           ).toBeVisible();
@@ -1962,6 +1967,85 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await assertNativeRouteGuard();
     } finally {
       await context.close();
+    }
+  });
+
+  test("canonical SDK reference owns complete SSR hydration and immutable assets", async ({
+    browser,
+    page,
+  }) => {
+    await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+    const response = await page.goto("/reference/module-sdk");
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: "Module SDK Reference",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydrated",
+      "true",
+    );
+    const stylesheet = await page.locator('link[rel="stylesheet"]').getAttribute("href");
+    const hydration = await page.locator('script[type="module"]').getAttribute("src");
+    expect(stylesheet).toMatch(
+      /^\/_tessara\/modules\/tessara\.reference\.module-sdk\/1\.0\.0\/sha256:[0-9a-f]{64}\/module-shell\.css$/,
+    );
+    expect(hydration).toMatch(
+      /^\/_tessara\/modules\/tessara\.reference\.module-sdk\/1\.0\.0\/sha256:[0-9a-f]{64}\/module-shell\.js$/,
+    );
+    for (const path of [stylesheet!, hydration!]) {
+      const asset = await page.request.get(path);
+      expect(asset.status()).toBe(200);
+      expect(asset.headers()["cache-control"]).toBe(
+        "public, max-age=31536000, immutable",
+      );
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+
+    const noJavaScript = await browser.newContext({
+      baseURL: BASE_URL,
+      javaScriptEnabled: false,
+      viewport: { width: 768, height: 900 },
+    });
+    try {
+      const login = await noJavaScript.request.post("/api/auth/login", {
+        data: { email: "admin@tessara.local", password: "tessara-dev-admin" },
+      });
+      const body = await expectJson<{ token: string }>(login);
+      await noJavaScript.addCookies([{
+        name: "tessara_session",
+        value: body.token,
+        url: BASE_URL,
+        httpOnly: true,
+        sameSite: "Lax",
+      }]);
+      const noJavaScriptPage = await noJavaScript.newPage();
+      const noJavaScriptResponse = await noJavaScriptPage.goto(
+        "/reference/module-sdk",
+      );
+      expect(noJavaScriptResponse?.status()).toBe(200);
+      await expect(
+        noJavaScriptPage.getByRole("heading", {
+          level: 1,
+          name: "Module SDK Reference",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(noJavaScriptPage.locator("#module-content")).not.toHaveAttribute(
+        "data-hydrated",
+        "true",
+      );
+    } finally {
+      await noJavaScript.close();
     }
   });
 });

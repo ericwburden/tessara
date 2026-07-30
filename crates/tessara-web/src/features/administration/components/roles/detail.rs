@@ -5,7 +5,7 @@ use crate::features::administration::models::{
 };
 use icons::{Check, CircleHelp, Pencil};
 use leptos::prelude::*;
-use tessara_web_ui::{SideSheet, SideSheetSide};
+use tessara_module_ui::{SideSheet, SideSheetSide};
 
 use super::super::capability_metadata::AdminCapabilityProvenance;
 use crate::features::administration::display::admin_capability_scope_label;

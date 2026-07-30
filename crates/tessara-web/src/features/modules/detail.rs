@@ -2,7 +2,7 @@
 
 use icons::{ChevronRight, CircleAlert, CircleCheck, Eye, Info, Settings};
 use leptos::prelude::*;
-use tessara_web_ui::ModalDialog;
+use tessara_module_ui::ModalDialog;
 
 use super::directory::{
     CopyValue, NO_MODULE_INSTANCE_LABEL, NO_MODULE_RELEASE_LABEL, compact_value,

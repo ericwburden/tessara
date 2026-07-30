@@ -1,6 +1,6 @@
 use icons::{Eye, Pencil};
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, EmptyState, PageHeader, TablePaginationFooter, TableSearch};
+use tessara_module_ui::{DataTable, EmptyState, PageHeader, TablePaginationFooter, TableSearch};
 
 use crate::types::{DashboardSummary, SessionAccount};
 use crate::{DashboardRouteBootstrap, dashboard_route_bootstrap};

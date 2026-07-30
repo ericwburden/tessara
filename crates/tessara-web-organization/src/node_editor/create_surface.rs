@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 use std::collections::HashMap;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
     PageHeader,
 };

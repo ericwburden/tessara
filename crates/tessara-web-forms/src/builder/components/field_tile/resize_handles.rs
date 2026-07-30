@@ -2,7 +2,7 @@
 
 use crate::builder::{FormBuilderFieldDraft, start_form_builder_field_resize};
 use leptos::prelude::*;
-use tessara_web_ui::placement_editor::{PlacementResizeHandles, PlacementResizeStart};
+use tessara_module_ui::placement_editor::{PlacementResizeHandles, PlacementResizeStart};
 
 #[component]
 pub(super) fn FormBuilderFieldResizeHandles(

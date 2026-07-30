@@ -19,11 +19,10 @@ use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, CapabilityScopeBindingV1,
     DependencyBindingKey, EnrollmentRedemptionResultV1, EnrollmentReservationV1,
     ExternalIdentityAssertionV1, FunctionalContractId, LocalOperatorAuthorizationV1,
-    ModuleDefinitionId, NavigationContributionId, NavigationProjectionV1,
+    ModuleDefinitionId, ModuleManifest, NavigationContributionId, NavigationProjectionV1,
     OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
-    PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV1, SHELL_CONTENT_MEDIA_TYPE,
-    SecurityCapabilityId, ShellContentV1, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
-    SignedEnvelopeV1,
+    PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV1, SecurityCapabilityId,
+    ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -105,18 +104,18 @@ pub(crate) fn routes() -> Router<AppState> {
             "/reference/scoped-records/records/{record_id}",
             get(proxy_scoped_record_page).post(update_scoped_record_form),
         )
-        .route(
-            "/api/reference/scoped-records/content",
-            get(proxy_scoped_records_content_root),
-        )
-        .route(
-            "/api/reference/scoped-records/content/{*module_path}",
-            get(proxy_scoped_records_content_page),
-        )
         .route("/reference/scoped-records", get(proxy_scoped_records_root))
         .route(
             "/reference/scoped-records/{*module_path}",
             get(proxy_scoped_records_page),
+        )
+        .route(
+            "/reference/{*module_path}",
+            get(proxy_manifest_module_document),
+        )
+        .route(
+            "/_tessara/modules/{definition}/{release}/{digest}/{*asset_path}",
+            get(proxy_manifest_module_asset),
         )
 }
 
@@ -898,31 +897,6 @@ async fn proxy_scoped_record_page(
     scoped_records_document(&state.pool, &request, &module_path, None).await
 }
 
-async fn proxy_scoped_records_content_root(
-    State(state): State<AppState>,
-    request: AuthenticatedRequest,
-    Query(query): Query<ScopedRecordsDirectoryQuery>,
-) -> ApiResult<Json<ShellContentV1>> {
-    require_module_page_access(&request)?;
-    Ok(Json(
-        proxy_module_content(&state.pool, &request, "", Some(&query)).await?,
-    ))
-}
-
-async fn proxy_scoped_records_content_page(
-    State(state): State<AppState>,
-    request: AuthenticatedRequest,
-    Path(module_path): Path<String>,
-) -> ApiResult<Json<ShellContentV1>> {
-    require_module_page_access(&request)?;
-    if module_path.starts_with("api/") || module_path.contains("..") {
-        return Err(ApiError::NotFound("module route".into()));
-    }
-    Ok(Json(
-        proxy_module_content(&state.pool, &request, &module_path, None).await?,
-    ))
-}
-
 fn require_module_page_access(request: &AuthenticatedRequest) -> ApiResult<()> {
     if request
         .account
@@ -932,6 +906,276 @@ fn require_module_page_access(request: &AuthenticatedRequest) -> ApiResult<()> {
     } else {
         request.require_capability("admin:all").map(|_| ())
     }
+}
+
+async fn proxy_manifest_module_document(
+    State(state): State<AppState>,
+    request: AuthenticatedRequest,
+    Path(module_path): Path<String>,
+) -> ApiResult<Response> {
+    let requested_path = format!("/reference/{module_path}");
+    let rows = sqlx::query(
+        "SELECT instances.id,instances.installation_id,instances.enabled,instances.healthy,
+                releases.manifest
+         FROM module_instances instances
+         JOIN module_releases releases ON releases.id=instances.release_id
+         WHERE instances.identity_state='live' AND instances.installed=true
+           AND instances.deployed=true AND instances.configured=true AND instances.ready=true
+         ORDER BY instances.definition_id,instances.id",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let mut matched = None;
+    for row in rows {
+        let instance_id: Uuid = row.try_get("id")?;
+        let installation_id: Uuid = row.try_get("installation_id")?;
+        let enabled: bool = row.try_get("enabled")?;
+        let healthy: bool = row.try_get("healthy")?;
+        let manifest: ModuleManifest = serde_json::from_value(row.try_get("manifest")?)
+            .map_err(|error| ApiError::Internal(error.into()))?;
+        for route in &manifest.browser_routes {
+            if let Some(parameters) = match_browser_path(&route.path_template, &requested_path) {
+                if matched.is_some() {
+                    return Err(ApiError::ServiceUnavailable(
+                        "module route registration is ambiguous".into(),
+                    ));
+                }
+                matched = Some((
+                    instance_id,
+                    installation_id,
+                    enabled,
+                    healthy,
+                    manifest.clone(),
+                    route.clone(),
+                    parameters,
+                ));
+            }
+        }
+    }
+    let Some((instance_id, installation_id, enabled, healthy, manifest, route, parameters)) =
+        matched
+    else {
+        return Err(ApiError::NotFound("module route".into()));
+    };
+    if !request
+        .account
+        .has_capability(route.required_capability.as_str())
+    {
+        return Err(restricted_authorization());
+    }
+    let bindings = capability_bindings(
+        &state.pool,
+        request.account.account_id,
+        route.required_capability.as_str(),
+    )
+    .await?;
+    if bindings.is_empty() {
+        return Err(restricted_authorization());
+    }
+    if let Some(scope_parameter) = &route.organization_scope_parameter {
+        let organization_id = parameters
+            .get(scope_parameter)
+            .and_then(|value| Uuid::parse_str(value).ok())
+            .ok_or_else(restricted_authorization)?;
+        if !bindings.iter().any(|binding| {
+            binding.organization_root_id == organization_id
+                || binding
+                    .authorized_organization_ids
+                    .contains(&organization_id)
+        }) {
+            return Err(restricted_authorization());
+        }
+    }
+    if !enabled {
+        return Ok(crate::module_unavailable_fallback_response());
+    }
+    let revisions = sqlx::query(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    let authorization_revision = revisions.try_get::<i64, _>("authorization_revision")?;
+    let organization_revision = revisions.try_get::<i64, _>("organization_revision")?;
+    sync_module_security_state(
+        manifest.definition_id.as_str(),
+        installation_id,
+        instance_id,
+        authorization_revision,
+        organization_revision,
+        enabled,
+        if healthy { "enabled" } else { "degraded" },
+    )
+    .await?;
+    let correlation_id = Uuid::new_v4();
+    let now = Utc::now();
+    let navigation = manifest
+        .navigation
+        .iter()
+        .filter(|item| {
+            item.required_capabilities_any_of
+                .iter()
+                .any(|capability| request.account.has_capability(capability.as_str()))
+        })
+        .filter_map(|item| {
+            let route = manifest.browser_routes.iter().find(|route| {
+                route.destination == item.destination && !route.path_template.contains('{')
+            })?;
+            Some(NavigationProjectionV1 {
+                contribution_id: item.id.clone(),
+                label: item.label.clone(),
+                href: route.path_template.clone(),
+            })
+        })
+        .collect();
+    let shell = protocol_signer(ProtocolSignaturePurposeV1::ShellContext)?
+        .sign(ShellContextV1 {
+            schema_version: 1,
+            installation_id,
+            module_definition_id: manifest.definition_id.clone(),
+            module_instance_id: instance_id,
+            original_actor: OriginalActorProjectionV1 {
+                actor_id: request.account.account_id,
+                display_name: request.account.display_name.clone(),
+                email: Some(request.account.email.clone()),
+            },
+            theme: ShellThemeV1::Dark,
+            navigation,
+            return_destination: "/".into(),
+            locale: "en-US".into(),
+            time_zone: "UTC".into(),
+            correlation_id,
+            document_state: if healthy {
+                ShellDocumentStateV1::Active
+            } else {
+                ShellDocumentStateV1::Degraded
+            },
+            issued_at: now,
+            expires_at: now + Duration::seconds(60),
+        })
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let grant = protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
+        .sign(AuthorizationGrantV1 {
+            schema_version: 1,
+            installation_id,
+            original_actor_id: request.account.account_id,
+            presenting_service: ModuleDefinitionId::new("tessara.core")
+                .map_err(|error| ApiError::Internal(error.into()))?,
+            audience_module_instance_id: instance_id,
+            dependency_binding: DependencyBindingKey::new("tessara.core.module-document")
+                .map_err(|error| ApiError::Internal(error.into()))?,
+            functional_contract: route.functional_contract,
+            action: route.authorization_action,
+            operation: AuthorizationGrantOperationV1::Read,
+            capability_scope_bindings: bindings,
+            resource_assertion: None,
+            delegation_basis: Vec::new(),
+            authorization_revision: authorization_revision as u64,
+            organization_revision: organization_revision as u64,
+            jti: Uuid::new_v4(),
+            issued_at: now,
+            expires_at: now + Duration::seconds(60),
+        })
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let endpoint = match module_control_url(manifest.definition_id.as_str()) {
+        Ok(endpoint) => endpoint,
+        Err(_) => return Ok(crate::module_unavailable_fallback_response()),
+    };
+    let response = match reqwest::Client::new()
+        .get(format!("{endpoint}{requested_path}"))
+        .header(
+            "x-tessara-shell-context",
+            URL_SAFE_NO_PAD.encode(
+                serde_json::to_vec(&shell).map_err(|error| ApiError::Internal(error.into()))?,
+            ),
+        )
+        .header(
+            "x-tessara-authorization",
+            URL_SAFE_NO_PAD.encode(
+                serde_json::to_vec(&grant).map_err(|error| ApiError::Internal(error.into()))?,
+            ),
+        )
+        .header("x-tessara-correlation-id", correlation_id.to_string())
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(_) => return Ok(crate::module_unavailable_fallback_response()),
+    };
+    if response.status().is_server_error() {
+        return Ok(crate::module_unavailable_fallback_response());
+    }
+    module_response(response, Some("no-store")).await
+}
+
+async fn proxy_manifest_module_asset(
+    State(state): State<AppState>,
+    Path((definition, release, digest, asset_path)): Path<(String, String, String, String)>,
+) -> ApiResult<Response> {
+    let row = sqlx::query(
+        "SELECT releases.manifest
+         FROM module_instances instances
+         JOIN module_releases releases ON releases.id=instances.release_id
+         WHERE instances.identity_state='live' AND instances.installed=true
+           AND instances.deployed=true AND instances.definition_id=$1
+           AND releases.version=$2
+         ORDER BY instances.id
+         LIMIT 1",
+    )
+    .bind(&definition)
+    .bind(&release)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("module asset".into()))?;
+    let manifest: ModuleManifest = serde_json::from_value(row.try_get("manifest")?)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let requested_path = format!("/_tessara/modules/{definition}/{release}/{digest}/{asset_path}");
+    let asset = manifest
+        .assets
+        .iter()
+        .find(|asset| asset.path == requested_path && asset.digest.as_str() == digest)
+        .ok_or_else(|| ApiError::NotFound("module asset".into()))?;
+    let endpoint = module_control_url(&definition)?;
+    let response = reqwest::Client::new()
+        .get(format!("{endpoint}{}", asset.path))
+        .send()
+        .await
+        .map_err(|_| ApiError::ServiceUnavailable("module asset unavailable".into()))?;
+    let response = module_response(response, Some("public, max-age=31536000, immutable")).await?;
+    if response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        != Some(asset.content_type.as_str())
+    {
+        return Err(ApiError::ServiceUnavailable(
+            "module asset content type mismatch".into(),
+        ));
+    }
+    Ok(response)
+}
+
+fn match_browser_path(template: &str, requested: &str) -> Option<BTreeMap<String, String>> {
+    let template_segments = template.trim_matches('/').split('/').collect::<Vec<_>>();
+    let requested_segments = requested.trim_matches('/').split('/').collect::<Vec<_>>();
+    if template_segments.len() != requested_segments.len() {
+        return None;
+    }
+    let mut parameters = BTreeMap::new();
+    for (template, requested) in template_segments.into_iter().zip(requested_segments) {
+        if let Some(name) = template
+            .strip_prefix('{')
+            .and_then(|value| value.strip_suffix('}'))
+        {
+            if name.is_empty() || requested.is_empty() {
+                return None;
+            }
+            parameters.insert(name.to_string(), requested.to_string());
+        } else if template != requested {
+            return None;
+        }
+    }
+    Some(parameters)
 }
 
 async fn proxy_record_list(
@@ -1002,32 +1246,12 @@ async fn proxy_record_update(
     .await
 }
 
-#[cfg(not(feature = "ssr"))]
 async fn proxy_module_get(
     pool: &PgPool,
     request: &AuthenticatedRequest,
     path: &str,
-) -> ApiResult<Response> {
-    let (shell_context, correlation_id) = scoped_records_shell_context(pool, request).await?;
-    let encoded = URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(&shell_context).map_err(|error| ApiError::Internal(error.into()))?,
-    );
-    let response = reqwest::Client::new()
-        .get(format!("{}/{}", scoped_records_url(), path))
-        .header("x-tessara-shell-context", encoded)
-        .header("x-tessara-correlation-id", correlation_id.to_string())
-        .send()
-        .await
-        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?;
-    module_response(response).await
-}
-
-async fn proxy_module_content(
-    pool: &PgPool,
-    request: &AuthenticatedRequest,
-    path: &str,
     query: Option<&ScopedRecordsDirectoryQuery>,
-) -> ApiResult<ShellContentV1> {
+) -> ApiResult<Response> {
     let (shell_context, correlation_id) = scoped_records_shell_context(pool, request).await?;
     let encoded = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&shell_context).map_err(|error| ApiError::Internal(error.into()))?,
@@ -1037,7 +1261,17 @@ async fn proxy_module_content(
         .get(format!("{}/{}", scoped_records_url(), path))
         .header("x-tessara-shell-context", encoded)
         .header("x-tessara-correlation-id", correlation_id.to_string())
-        .header(reqwest::header::ACCEPT, SHELL_CONTENT_MEDIA_TYPE)
+        .header(
+            "x-tessara-original-path",
+            format!(
+                "/reference/scoped-records{}",
+                if path.is_empty() {
+                    String::new()
+                } else {
+                    format!("/{path}")
+                }
+            ),
+        )
         .header(
             "x-tessara-organization-access",
             URL_SAFE_NO_PAD.encode(
@@ -1071,15 +1305,11 @@ async fn proxy_module_content(
             ),
         );
     }
-    outbound
+    let response = outbound
         .send()
         .await
-        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?
-        .error_for_status()
-        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?
-        .json::<ShellContentV1>()
-        .await
-        .map_err(|error| ApiError::Internal(error.into()))
+        .map_err(|_| ApiError::NotFound("module route unavailable".into()))?;
+    module_response(response, Some("no-store")).await
 }
 
 #[derive(Deserialize)]
@@ -1154,32 +1384,7 @@ async fn scoped_records_document(
     path: &str,
     query: Option<&ScopedRecordsDirectoryQuery>,
 ) -> ApiResult<Response> {
-    let content = proxy_module_content(pool, request, path, query).await?;
-    #[cfg(feature = "ssr")]
-    {
-        let title = format!("{} · Tessara", content.title);
-        Ok(
-            Html(tessara_web::application_html_with_scoped_records_bootstrap(
-                &format!(
-                    "/reference/scoped-records{}",
-                    if path.is_empty() {
-                        String::new()
-                    } else {
-                        format!("/{path}")
-                    }
-                ),
-                &title,
-                "Scoped Records module content rendered inside the Tessara Core shell.",
-                &content,
-            ))
-            .into_response(),
-        )
-    }
-    #[cfg(not(feature = "ssr"))]
-    {
-        let _ = content;
-        proxy_module_get(pool, request, path).await
-    }
+    proxy_module_get(pool, request, path, query).await
 }
 
 async fn scoped_records_organization_access(
@@ -1350,7 +1555,7 @@ async fn proxy_authorized_module_request(
         .send()
         .await
         .map_err(|_| ApiError::NotFound("module route unavailable".into()))?;
-    module_response(response).await
+    module_response(response, None).await
 }
 
 async fn scoped_records_authorization(
@@ -1497,7 +1702,10 @@ async fn sync_module_security_state(
     Ok(())
 }
 
-async fn module_response(response: reqwest::Response) -> ApiResult<Response> {
+async fn module_response(
+    response: reqwest::Response,
+    cache_control: Option<&'static str>,
+) -> ApiResult<Response> {
     let status = StatusCode::from_u16(response.status().as_u16())
         .map_err(|error| ApiError::Internal(error.into()))?;
     let content_type = response
@@ -1510,9 +1718,13 @@ async fn module_response(response: reqwest::Response) -> ApiResult<Response> {
         .bytes()
         .await
         .map_err(|error| ApiError::Internal(error.into()))?;
-    Response::builder()
+    let mut builder = Response::builder()
         .status(status)
-        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CONTENT_TYPE, content_type);
+    if let Some(cache_control) = cache_control {
+        builder = builder.header(header::CACHE_CONTROL, cache_control);
+    }
+    builder
         .body(Body::from(bytes))
         .map_err(|error| ApiError::Internal(error.into()))
 }
@@ -1707,6 +1919,11 @@ async fn persist_module_configuration(
     let base_url = module_control_url(&definition)?;
     let validation: Value = reqwest::Client::new()
         .post(format!("{base_url}/api/configuration/validate"))
+        .header(
+            "x-tessara-module-control-key",
+            std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
+                .unwrap_or_else(|_| "development-module-control-only".into()),
+        )
         .json(&input)
         .send()
         .await
@@ -2348,6 +2565,26 @@ mod tests {
             endpoints.get("example.third-module").map(String::as_str),
             Some("http://third-module:8092")
         );
+    }
+
+    #[test]
+    fn browser_path_matching_is_generic_and_segment_bounded() {
+        assert_eq!(
+            match_browser_path(
+                "/reference/module-sdk/scopes/{organization_id}",
+                "/reference/module-sdk/scopes/00000000-0000-0000-0000-000000000007"
+            )
+            .and_then(|parameters| parameters.get("organization_id").cloned()),
+            Some("00000000-0000-0000-0000-000000000007".into())
+        );
+        assert!(
+            match_browser_path(
+                "/reference/module-sdk/scopes/{organization_id}",
+                "/reference/module-sdk/scopes/one/extra"
+            )
+            .is_none()
+        );
+        assert!(match_browser_path("/reference/module-sdk", "/reference/scoped-records").is_none());
     }
 
     #[test]

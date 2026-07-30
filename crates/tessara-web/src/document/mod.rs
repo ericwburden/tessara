@@ -13,6 +13,5 @@ pub(crate) use html::{
     render_native_app_document, render_native_app_document_with_dashboard_bootstrap,
     render_native_app_document_with_module_management_and_shell_navigation_bootstrap,
     render_native_app_document_with_module_management_bootstrap,
-    render_native_app_document_with_scoped_records_bootstrap,
 };
 pub(crate) use theme_bootstrap::{bootstrap_script, stylesheet_links};

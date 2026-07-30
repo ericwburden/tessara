@@ -4,7 +4,7 @@ use super::super::types::NodeDashboardLink;
 use crate::pagination::pagination_page_start;
 use crate::text::{nonempty_text, text_matches};
 use leptos::prelude::*;
-use tessara_web_ui::{SearchableDataTable, TablePaginationFooter};
+use tessara_module_ui::{SearchableDataTable, TablePaginationFooter};
 
 #[component]
 #[allow(unused_variables)]

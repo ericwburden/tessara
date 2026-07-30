@@ -8,7 +8,7 @@ use crate::{
 };
 use icons::{PanelRight, X};
 use leptos::prelude::*;
-use tessara_web_ui::{DropdownMenu, Timestamp};
+use tessara_module_ui::{DropdownMenu, Timestamp};
 
 use super::mutations::toggle_workflow_assignment;
 

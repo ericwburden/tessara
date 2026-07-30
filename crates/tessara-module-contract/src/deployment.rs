@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     ArtifactDigest, DeploymentProfile, ManifestNamespaceAuthority, ModuleDefinitionId,
-    ModuleManifestV1, PublisherId,
+    ModuleManifest, PublisherId,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ pub struct TessaraDeploymentV1 {
 pub struct DesiredModuleV1 {
     pub definition_id: ModuleDefinitionId,
     pub version: Version,
-    pub manifest: ModuleManifestV1,
+    pub manifest: ModuleManifest,
     pub manifest_digest: ArtifactDigest,
     pub runtime_image: ArtifactDigest,
     pub publisher: PublisherId,
@@ -105,7 +105,7 @@ pub struct AppliedComponentV1 {
 pub struct AppliedModuleV1 {
     pub definition_id: ModuleDefinitionId,
     #[serde(default)]
-    pub manifest: Option<ModuleManifestV1>,
+    pub manifest: Option<ModuleManifest>,
     pub manifest_digest: ArtifactDigest,
     pub runtime_image: ArtifactDigest,
     pub publisher: PublisherId,
@@ -460,8 +460,8 @@ mod tests {
     }
 
     fn deployment() -> TessaraDeploymentV1 {
-        let manifest: ModuleManifestV1 =
-            serde_json::from_str(include_str!("../tests/fixtures/valid-manifest-v1.json")).unwrap();
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../tests/fixtures/valid-manifest.json")).unwrap();
         TessaraDeploymentV1 {
             api_version: "tessara.io/deployment/v1".into(),
             installation_id: Uuid::nil(),

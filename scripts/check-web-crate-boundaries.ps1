@@ -264,37 +264,37 @@ try {
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-datasets" -Description "tessara-web-datasets must not depend on root/API/sibling web feature crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-datasets", "tessara-web-data-ops", "tessara-web-http", "tessara-web-ui"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-datasets", "tessara-web-data-ops", "tessara-web-http", "tessara-module-ui"))
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-forms" -Description "tessara-web-forms must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-forms", "tessara-web-http", "tessara-web-ui"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-forms", "tessara-web-http", "tessara-module-ui"))
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-workflows" -Description "tessara-web-workflows must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-workflows", "tessara-web-http", "tessara-web-ui"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-workflows", "tessara-web-http", "tessara-module-ui"))
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-responses" -Description "tessara-web-responses must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-responses", "tessara-web-http", "tessara-web-ui"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-responses", "tessara-web-http", "tessara-module-ui"))
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-organization" -Description "tessara-web-organization must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-organization", "tessara-web-http", "tessara-web-ui"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-organization", "tessara-web-http", "tessara-module-ui"))
         }
 
-        Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-ui" -Description "tessara-web-ui must not depend on root/API/web feature crates." -IsForbiddenPackage {
+        Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-module-ui" -Description "tessara-module-ui must not depend on root/API/web feature crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api") -or
-                ($name -like "tessara-web-*" -and $name -ne "tessara-web-ui")
+                ($name -like "tessara-web-*" -and $name -ne "tessara-module-ui")
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-http" -Description "tessara-web-http must remain policy-neutral and independent of root/API/web feature crates." -IsForbiddenPackage {
@@ -306,19 +306,19 @@ try {
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-dashboards" -Description "tessara-web-dashboards must not depend on root/API/router/meta, Components/data-ops, or unapproved sibling web crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta", "tessara-web-components", "tessara-web-data-ops") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-dashboards", "tessara-web-http", "tessara-web-ui", "tessara-web-component-viewer"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-dashboards", "tessara-web-http", "tessara-module-ui", "tessara-web-component-viewer"))
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-component-viewer" -Description "tessara-web-component-viewer must remain a route-free presentation leaf with no root/API/feature dependencies." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-component-viewer", "tessara-web-http", "tessara-web-ui"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-component-viewer", "tessara-web-http", "tessara-module-ui"))
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-components" -Description "tessara-web-components may use data-ops, shared UI, and the viewer leaf, but not root/API/Dashboard or other feature crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "tessara-web-dashboards") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-components", "tessara-web-data-ops", "tessara-web-http", "tessara-web-ui", "tessara-web-component-viewer"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-components", "tessara-web-data-ops", "tessara-web-http", "tessara-module-ui", "tessara-web-component-viewer"))
         }
 
         foreach ($crate in $domainCrates) {
@@ -349,7 +349,7 @@ try {
     Assert-SourceDoesNotMatch -Path "crates\tessara-web-dashboards\src" -Pattern "AppShell|ShellSessionBootstrap|ApplicationBootstrap|ApplicationRenderContext|crate::(app|document|features|routes|state|ui)|types::route_params|require_route_params|leptos_router|leptos_meta|tessara_api|tessara_web_components|tessara_web_data_ops|features::(components|data_ops)|use_(location|navigate|params|query|resolved_path)" -Description "tessara-web-dashboards must not import root route/shell/state, router/meta, API, Components, or data-ops authoring concepts."
     Assert-SourceDoesNotMatch -Path "crates\tessara-web-component-viewer\src" -Pattern "AppShell|ShellSessionBootstrap|ApplicationBootstrap|ApplicationRenderContext|DashboardPlacement|DashboardRoute|crate::(app|document|features|routes|state|ui|editor|versions|publishing)|types::route_params|require_route_params|use_(location|navigate|params|query|resolved_path)|redirect_to_login|set_href|leptos_router|leptos_meta|tessara_api|tessara_dashboards|tessara_web_components|tessara_web_dashboards|tessara_web_data_ops|features::(dashboards|components|data_ops)" -Description "tessara-web-component-viewer must not import route/shell/login, Dashboard, Components authoring/version-management, or data-ops authoring concepts."
 
-    Write-ReviewAidMatches -Path "crates\tessara-web-ui\src" -Pattern "datasets|forms|workflows|responses|organization|administration|AppShell|ShellSession|require_authenticated_route" -Description "Review-aid matches in tessara-web-ui source:"
+    Write-ReviewAidMatches -Path "crates\tessara-module-ui\src" -Pattern "datasets|forms|workflows|responses|organization|administration|AppShell|ShellSession|require_authenticated_route" -Description "Review-aid matches in tessara-module-ui source:"
 
     Write-Host "Web crate boundary checks passed." -ForegroundColor Green
     # `rg` uses exit code 1 for an expected no-match result. Do not leak that

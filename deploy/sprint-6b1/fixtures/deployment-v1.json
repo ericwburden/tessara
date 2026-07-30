@@ -12,7 +12,7 @@
       "definition_id": "tessara.reference.scoped-records",
       "version": "1.0.0",
       "manifest": {
-        "schema_version": 1,
+        "schema_version": 2,
         "definition_id": "tessara.reference.scoped-records",
         "release_version": "1.0.0",
         "publisher": "tessara.first_party",
@@ -21,11 +21,6 @@
           "contact": "support@tessara.example",
           "documentation": "https://docs.tessara.example/modules/scoped-records"
         },
-        "conformance_suite_version": "1.0.0",
-        "core_release_compatibility": "^0.1",
-        "shell_context_compatibility": "^1",
-        "ui_sdk_compatibility": "^1",
-        "design_system_compatibility": "^1",
         "deployment": {
           "profile": "tessara-oci-v1",
           "declaration": {
@@ -34,7 +29,10 @@
               "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
               "platform": "linux",
               "architecture": "amd64",
-              "command": ["/app/scoped-records", "serve"]
+              "command": [
+                "/app/scoped-records",
+                "serve"
+              ]
             },
             "migration_image": null,
             "listen": {
@@ -42,8 +40,13 @@
               "port": 8080,
               "registration_name": "scoped-records"
             },
-            "configuration_keys": ["DISPLAY_LABEL", "RETENTION_MODE"],
-            "secret_keys": ["DATABASE_URL"],
+            "configuration_keys": [
+              "DISPLAY_LABEL",
+              "RETENTION_MODE"
+            ],
+            "secret_keys": [
+              "DATABASE_URL"
+            ],
             "runtime_identity": "scoped-records-runtime",
             "migration_identity": "scoped-records-migration",
             "readiness_path": "/health/ready",
@@ -57,66 +60,128 @@
             }
           }
         },
-        "features": [{
-          "id": "tessara.reference.scoped-records.directory",
-          "name": "Scoped record directory",
-          "description": "Demonstrates independently deployed scoped record behavior.",
-          "use_cases": ["Inspect scoped records"],
-          "inputs": ["Scope"],
-          "outcomes": ["Scoped record list"],
-          "constraints": ["Reference use only"],
-          "contracts": ["tessara.reference.scoped-records.record"],
-          "resource_types": ["tessara.reference.scoped-records.record"],
-          "destinations": ["tessara.reference.scoped-records.directory"],
-          "capabilities": ["tessara.reference.scoped-records:read"],
-          "configuration_pointers": ["/properties/display_label", "/properties/retention_mode"]
-        }],
-        "provided_contracts": [{
-          "id": "tessara.reference.scoped-records.record",
-          "version": "1.0.0",
-          "kind": "resource",
-          "description": "Resolve a reference scoped record."
-        }],
-        "dependencies": [],
-        "resource_types": [{
-          "id": "tessara.reference.scoped-records.record",
-          "description": "A scoped record owned by the reference module."
-        }],
-        "typed_reference_schemas": [{
-          "resource_type": "tessara.reference.scoped-records.record",
-          "resource_id": {
-            "format": "opaque_string",
-            "min_length": 1,
-            "max_length": 256
+        "features": [
+          {
+            "id": "tessara.reference.scoped-records.directory",
+            "name": "Scoped record directory",
+            "description": "Demonstrates independently deployed scoped record behavior.",
+            "use_cases": [
+              "Inspect scoped records"
+            ],
+            "inputs": [
+              "Scope"
+            ],
+            "outcomes": [
+              "Scoped record list"
+            ],
+            "constraints": [
+              "Reference use only"
+            ],
+            "contracts": [
+              "tessara.reference.scoped-records.record"
+            ],
+            "resource_types": [
+              "tessara.reference.scoped-records.record"
+            ],
+            "destinations": [
+              "tessara.reference.scoped-records.directory"
+            ],
+            "capabilities": [
+              "tessara.reference.scoped-records:read"
+            ],
+            "configuration_pointers": [
+              "/properties/display_label",
+              "/properties/retention_mode"
+            ]
           }
-        }],
-        "routes": [
-          {"name": "tessara.reference.scoped-records.directory", "kind": "product", "parameters": []},
-          {"name": "tessara.reference.scoped-records.configuration.validate", "kind": "configuration", "parameters": []},
-          {"name": "tessara.reference.scoped-records.compatibility", "kind": "diagnostics", "parameters": []},
-          {"name": "tessara.reference.scoped-records.status", "kind": "diagnostics", "parameters": []},
-          {"name": "tessara.reference.scoped-records.diagnostics", "kind": "diagnostics", "parameters": []}
         ],
-        "navigation": [{
-          "id": "tessara.reference.scoped-records.navigation",
-          "destination": "tessara.reference.scoped-records.directory",
-          "label": "Scoped Records",
-          "group": "Main",
-          "order_hint": 30,
-          "required_capabilities_any_of": [
-            "tessara.reference.scoped-records:read",
-            "tessara.reference.scoped-records:manage"
-          ]
-        }],
+        "provided_contracts": [
+          {
+            "id": "tessara.reference.scoped-records.record",
+            "version": "1.0.0",
+            "kind": "resource",
+            "description": "Resolve a reference scoped record."
+          }
+        ],
+        "dependencies": [],
+        "resource_types": [
+          {
+            "id": "tessara.reference.scoped-records.record",
+            "description": "A scoped record owned by the reference module."
+          }
+        ],
+        "typed_reference_schemas": [
+          {
+            "resource_type": "tessara.reference.scoped-records.record",
+            "resource_id": {
+              "format": "opaque_string",
+              "min_length": 1,
+              "max_length": 256
+            }
+          }
+        ],
+        "routes": [
+          {
+            "name": "tessara.reference.scoped-records.directory",
+            "kind": "product",
+            "parameters": []
+          },
+          {
+            "name": "tessara.reference.scoped-records.configuration.validate",
+            "kind": "configuration",
+            "parameters": []
+          },
+          {
+            "name": "tessara.reference.scoped-records.compatibility",
+            "kind": "diagnostics",
+            "parameters": []
+          },
+          {
+            "name": "tessara.reference.scoped-records.status",
+            "kind": "diagnostics",
+            "parameters": []
+          },
+          {
+            "name": "tessara.reference.scoped-records.diagnostics",
+            "kind": "diagnostics",
+            "parameters": []
+          }
+        ],
+        "navigation": [
+          {
+            "id": "tessara.reference.scoped-records.navigation",
+            "destination": "tessara.reference.scoped-records.directory",
+            "label": "Scoped Records",
+            "group": "Main",
+            "order_hint": 30,
+            "required_capabilities_any_of": [
+              "tessara.reference.scoped-records:read",
+              "tessara.reference.scoped-records:manage"
+            ]
+          }
+        ],
         "security_capabilities": [
-          {"id": "tessara.reference.scoped-records:read", "description": "Inspect scoped records."},
-          {"id": "tessara.reference.scoped-records:manage", "description": "Manage scoped records."}
+          {
+            "id": "tessara.reference.scoped-records:read",
+            "description": "Inspect scoped records."
+          },
+          {
+            "id": "tessara.reference.scoped-records:manage",
+            "description": "Manage scoped records."
+          }
         ],
         "configuration_schema": {
           "type": "object",
           "properties": {
-            "display_label": {"type": "string"},
-            "retention_mode": {"type": "string", "enum": ["retain_on_undeploy"]}
+            "display_label": {
+              "type": "string"
+            },
+            "retention_mode": {
+              "type": "string",
+              "enum": [
+                "retain_on_undeploy"
+              ]
+            }
           }
         },
         "operational_routes": {
@@ -125,7 +190,43 @@
           "status": "tessara.reference.scoped-records.status",
           "diagnostics": "tessara.reference.scoped-records.diagnostics"
         },
-        "shell_contribution_contracts": null
+        "shell_contribution_contracts": null,
+        "platform_versions": {
+          "core_release": "0.1.0",
+          "shell_context_schema": "1.0.0",
+          "module_control_protocol": "1.0.0",
+          "module_contract": "0.1.0",
+          "module_runtime": "0.1.0",
+          "module_ui": "0.1.0",
+          "design_system_asset_abi": "1.0.0",
+          "conformance_suite": "1.0.0"
+        },
+        "linked_packages": {
+          "module_contract": "0.1.0",
+          "module_runtime": "0.1.0",
+          "module_ui": "0.1.0"
+        },
+        "browser_routes": [
+          {
+            "destination": "tessara.reference.scoped-records.directory",
+            "path_template": "/reference/scoped-records",
+            "methods": [
+              "GET",
+              "HEAD"
+            ],
+            "required_capability": "tessara.reference.scoped-records:read",
+            "authorization_action": "tessara.reference.scoped-records.directory.read",
+            "functional_contract": "tessara.reference.scoped-records.record",
+            "organization_scope_parameter": null
+          }
+        ],
+        "assets": [
+          {
+            "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.0/sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d/module-shell.css",
+            "digest": "sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d",
+            "content_type": "text/css; charset=utf-8"
+          }
+        ]
       },
       "manifest_digest": "sha256:7a4514b6e5a00b93a517fd09f9e2662526b53c3d4cf363b115034ef096f59175",
       "runtime_image": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",

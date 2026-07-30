@@ -42,7 +42,7 @@ These seven documents—and only these seven—are the persistence synchronizati
 | Dashboards | [`transition-dashboards-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-dashboards-v1.json) | `sha256:c82ecc7c3d121d1e1498c130133e487c8a68899b9255951e97955ce0de76bbe5` |
 | Migration | [`transition-migration-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-migration-v1.json) | `sha256:de48eeb3edb4a432e5060b817ef50c34c5316879b44aef0ad3d6877c5895b42e` |
 
-The valid v1 Module Manifest is a conformance fixture, not a transition synchronization input. Its independently executable exact-byte pin is `sha256:ea026d25380c8f7590f2e6dedb03c75372c3cd55984cfd7befc3696d0da32d09` for [`valid-manifest-v1.json`](../../crates/tessara-module-contract/tests/fixtures/valid-manifest-v1.json), with the same strict one-line LF sidecar rule. The contract test rejects BOM, CR, NUL, invalid UTF-8, missing or repeated terminal LF, sidecar drift, and source-byte drift for that Manifest and every transition fixture.
+The current Module Manifest is a conformance fixture, not a transition synchronization input. Sprint 6D fast-forwarded the former v1 fixture to [`valid-manifest.json`](../../crates/tessara-module-contract/tests/fixtures/valid-manifest.json) and its adjacent exact-digest sidecar. The contract test rejects BOM, CR, NUL, invalid UTF-8, missing or repeated terminal LF, sidecar drift, and source-byte drift for that Manifest and every transition fixture.
 
 ## Default Shell Contract
 

@@ -12,7 +12,7 @@ use std::{cell::Cell, cell::RefCell, rc::Rc};
 #[cfg(feature = "hydrate")]
 use tessara_core::{GridRect, GridSize, resolve_resize_request};
 #[cfg(feature = "hydrate")]
-use tessara_web_ui::placement_editor::{
+use tessara_module_ui::placement_editor::{
     PlacementResizeSession, placement_grid_metrics_from_element, placement_tile_style,
 };
 #[cfg(feature = "hydrate")]

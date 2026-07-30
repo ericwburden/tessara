@@ -3,7 +3,7 @@
 use crate::FormsAttachedNodesSheetData;
 use icons::ExternalLink;
 use leptos::prelude::*;
-use tessara_web_ui::{SideSheet, TableSearch, empty_view};
+use tessara_module_ui::{SideSheet, TableSearch, empty_view};
 
 use super::ATTACHED_NODES_SHEET_ID;
 

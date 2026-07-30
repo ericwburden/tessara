@@ -10,7 +10,7 @@ use crate::{
 use icons::X;
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use tessara_web_ui::Timestamp;
+use tessara_module_ui::Timestamp;
 
 #[component]
 pub(crate) fn WorkflowAssignmentDetailSheet(

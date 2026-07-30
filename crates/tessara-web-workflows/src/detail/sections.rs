@@ -4,7 +4,7 @@ use crate::assignments::WorkflowAssignmentSummary;
 use crate::types::{WorkflowStepSummary, WorkflowVersionSummary};
 use crate::{WorkflowDetailAssignmentsTable, WorkflowStepsTable, WorkflowVersionsTable};
 use leptos::prelude::*;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 #[component]
 pub(super) fn WorkflowStepsSection(

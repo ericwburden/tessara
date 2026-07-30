@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $composePath = Join-Path $repoRoot $ComposeFile
 $fixturePath = Join-Path $repoRoot "deploy/sprint-6b1/fixtures/deployment-v1.json"
-$dashboardManifestPath = Join-Path $repoRoot "crates/tessara-dashboard-module/manifest-v1.json"
+$dashboardManifestPath = Join-Path $repoRoot "crates/tessara-dashboard-module/manifest.json"
 $workingDirectory = Join-Path $repoRoot "target/sprint-6c-bootstrap"
 [IO.Directory]::CreateDirectory($workingDirectory) | Out-Null
 

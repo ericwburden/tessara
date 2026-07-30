@@ -19,7 +19,7 @@ use super::detail::ModuleDetailPeerSections;
 use super::directory::ModuleInventoryDirectory;
 use super::models::{
     ModuleDetailPresentationV1, ModuleDetailResponseV1, ModuleDetailViewModelV1,
-    ModuleInventoryEntryV1, ModuleInventoryResponseV1, ModuleManagementAccessV1, ModuleManifestV1,
+    ModuleInventoryEntryV1, ModuleInventoryResponseV1, ModuleManagementAccessV1, ModuleManifest,
     NavigationPolicyResponseV2,
 };
 use super::policy::ModuleNavigationPolicyView;
@@ -563,7 +563,7 @@ struct ConfigurationField {
 }
 
 fn configuration_fields(
-    manifest: Option<&ModuleManifestV1>,
+    manifest: Option<&ModuleManifest>,
     values: &std::collections::BTreeMap<String, Value>,
 ) -> Vec<ConfigurationField> {
     let Some(properties) = manifest
@@ -1026,9 +1026,7 @@ fn independent_module_sections(
     }.into_any()
 }
 
-fn independent_manifest_sections(
-    manifest: Option<&super::models::ModuleManifestV1>,
-) -> Vec<AnyView> {
+fn independent_manifest_sections(manifest: Option<&super::models::ModuleManifest>) -> Vec<AnyView> {
     let Some(manifest) = manifest else {
         return [
             ("declarations", "Declarations", "No persisted module manifest is available."),

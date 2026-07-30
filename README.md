@@ -53,26 +53,39 @@ tessara-web-forms
 tessara-web-http
 tessara-web-organization
 tessara-web-responses
-tessara-web-ui
+tessara-module-contract
+tessara-module-runtime
+tessara-module-ui
+tessara-module-testkit
+tessara-reference-module-sdk
 tessara-web-workflows
 ```
 
-The workspace has these crates scaffolded now. The current implementation keeps
-the vertical slice logic in one runnable service while the module runtime is
-built. These crate boundaries are useful extraction seams, not the target
-deployment topology.
+The workspace includes canonical module contract, native runtime, UI, and
+testkit packages plus a separately runnable non-product reference module.
+Feature crates remain extraction seams until their roadmap sprint moves each
+product into its independently releasable module.
 
 Domain rules should move into their owning Core or full-stack module boundary as
 contracts stabilize. Current extracted examples:
 
-- `tessara-core`: shared field type parsing and JSON value validation
+- `tessara-core`: legacy-named application helpers that are being reduced as
+  genuinely policy-neutral contracts move to canonical packages
 - `tessara-module-contract`: framework-neutral versioned Manifest, transition,
-  semantic-destination, typed-reference, and resolution wire contracts
+  semantic-destination, typed-reference, resolution, protocol, and generic
+  grid-geometry contracts
+- `tessara-module-runtime`: native verifier, provider, probe, startup, tracing,
+  and shutdown integration
+- `tessara-module-ui`: normalized complete-document shell presentation,
+  shared primitives, placement DOM mechanics, CSS, and asset source
+- `tessara-module-testkit`: shared signing and conformance fixtures
+- `tessara-reference-module-sdk`: non-product native/WASM conformance module
 - `tessara-dashboards`: dashboard composition rules
 - `tessara-forms`: form version lifecycle and section/field compatibility rules
 - `tessara-submissions`: draft/edit/submit workflow rules and required value checks
-- `tessara-web-*`: feature-owned native Leptos route/UI seams plus shared HTTP
-  and UI primitives; these remain one deployed web application in Sprint 6A
+- `tessara-web-*`: feature-owned native Leptos route/UI seams plus the retained
+  policy-neutral browser HTTP leaf; most remain one deployed web application
+  until their extraction sprint
 
 The current crate name `tessara-core` predates architectural **Core** and is not
 its boundary definition. During module extraction, field/value semantics must

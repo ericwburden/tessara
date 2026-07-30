@@ -8,6 +8,40 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-07-30 - Sprint 6D Implementation
+
+- User approved the complete Sprint 6D test/harness change packet and
+  implementation proceeded without compatibility facades or old-manifest
+  readers.
+- Added the canonical contract/runtime/UI/testkit packages and the independent
+  non-product reference module with native SSR, WASM hydration, exact manifest
+  declarations, JSON configuration/security persistence, probes, sanitized
+  diagnostics, immutable assets, and graceful shutdown.
+- Deleted `ShellContentV1`, the root Scoped Records fragment bridge, and
+  `tessara-web-ui`; moved generic grid geometry to module contract and shared
+  primitives/placement mechanics to module UI while retaining product policy
+  in Dashboard and Forms.
+- Added exact current manifest/platform/package tuples, validated browser
+  routes and content-addressed assets, generic Core document/asset routing,
+  credential stripping, signed projections, no-store documents, immutable
+  assets, and the Core-owned unavailable fallback.
+- Scoped Records now consumes canonical runtime verification/startup and
+  module UI complete-document rendering. Dashboard behavior remains unchanged
+  and its root-web edge remains the explicit Sprint 6E finding.
+- Added Sprint 6D Compose/bootstrap scaffolding plus native/WASM source graph
+  and exact compatibility-inventory gates.
+- Pre-commit validation passed: workspace all-target checking; formatting and
+  diff whitespace; 62 contract unit tests plus contract fixture/protocol
+  suites; runtime, testkit, 28 module-UI, and four reference-module tests;
+  contract/UI/reference WASM checks; the two database-backed Scoped Records
+  integration tests against disposable clean databases; the generic Core
+  route matcher; native/WASM source boundaries; exact compatibility
+  inventory; Markdown links; Compose configuration; all PowerShell parsers;
+  and Playwright discovery of exactly 62 tests in seven files.
+- Retained source-exact deployment, smoke, UAT, complete Playwright execution,
+  outage/recovery, graceful-shutdown, and manual closeout evidence remains to
+  be captured from committed source.
+
 ## 2026-07-30 - Sprint 6D Specification Hardening
 
 - Reconciled Sprint 6D with Tessara's pre-production pure fast-forward
@@ -17,10 +51,12 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
 - Fixed the canonical crate graph and public provider responsibilities for
   `tessara-module-contract`, `tessara-module-runtime`,
   `tessara-module-ui`, and `tessara-module-testkit`.
-- Decided that Sprint 6D moves policy-neutral primitives to module UI, moves
-  placement editing to Dashboard product ownership, deletes
-  `tessara-web-ui`, retains `tessara-web-http` as an independent leaf, and
-  deletes `ShellContentV1`.
+- Decided that Sprint 6D moves policy-neutral primitives to module UI,
+  deletes `tessara-web-ui`, retains `tessara-web-http` as an independent leaf,
+  and deletes `ShellContentV1`. Implementation inventory subsequently refined
+  placement ownership: generic geometry is contract-owned, shared DOM
+  mechanics are module-UI-owned, and Dashboard/Form policy remains
+  product-owned.
 - Specified one manifest-driven Core GET/HEAD document and immutable-asset
   proxy, the non-product `tessara.reference.module-sdk` fixture, exact
   authorization/outage/state behavior, and Scoped Records runtime/UI

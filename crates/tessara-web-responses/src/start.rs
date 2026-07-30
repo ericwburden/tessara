@@ -8,7 +8,7 @@ use super::loaders::load_response_start_options;
 use crate::types::AssignmentResponseStartOptions;
 #[cfg(feature = "hydrate")]
 use crate::url::current_search_param;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
 

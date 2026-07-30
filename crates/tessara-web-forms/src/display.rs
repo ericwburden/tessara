@@ -6,7 +6,7 @@ use crate::support::text::{nonempty_text, sentence_label};
 use crate::types::{FormAttachmentLink, FormDefinition, FormVersionSummary, RenderedField};
 use icons::FileText;
 use leptos::prelude::*;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 pub(crate) fn status_badge_class(status: &str) -> &'static str {
     match status {

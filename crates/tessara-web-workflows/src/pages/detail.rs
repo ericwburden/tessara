@@ -6,7 +6,7 @@ use crate::WorkflowDetailBody;
 use crate::loaders::load_workflow_detail;
 use crate::types::WorkflowDefinition;
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, EmptyState,
     PageHeader, empty_view,
 };

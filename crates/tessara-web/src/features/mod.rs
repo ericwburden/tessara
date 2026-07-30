@@ -8,5 +8,4 @@ pub mod home;
 pub mod login;
 pub mod modules;
 pub mod operations;
-pub mod scoped_records;
 pub mod shared;

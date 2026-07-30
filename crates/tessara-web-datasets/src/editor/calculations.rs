@@ -6,7 +6,7 @@ use crate::types::{
 };
 use icons::{ChevronsUpDown, Diamond, DiamondPlus, Pencil, Trash2, WandSparkles};
 use leptos::prelude::*;
-use tessara_web_ui::{Combobox, ComboboxOption};
+use tessara_module_ui::{Combobox, ComboboxOption};
 
 #[component]
 pub(crate) fn DatasetCalculationsEditor(

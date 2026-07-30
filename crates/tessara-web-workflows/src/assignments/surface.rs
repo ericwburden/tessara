@@ -5,7 +5,7 @@ use super::{
     assignee_filter_options, filtered_assignments,
 };
 use leptos::prelude::*;
-use tessara_web_ui::PageHeader;
+use tessara_module_ui::PageHeader;
 
 #[component]
 pub(crate) fn WorkflowAssignmentsSurface(state: WorkflowAssignmentsPageState) -> impl IntoView {

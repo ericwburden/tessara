@@ -4,7 +4,7 @@ use crate::metadata::metadata_label;
 use crate::text::nonempty_text;
 use crate::types::SubmissionAuditEventSummary;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, Timestamp};
+use tessara_module_ui::{DataTable, Timestamp};
 
 /// Renders response audit events.
 #[component]

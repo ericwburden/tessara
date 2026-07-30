@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
-use tessara_module_contract::{DeploymentReceiptV1, ModuleManifestV1};
+use tessara_module_contract::{DeploymentReceiptV1, ModuleManifest};
 use uuid::Uuid;
 
 use super::{
@@ -68,7 +68,7 @@ pub(crate) struct IndependentModuleReadModel {
     pub(crate) release_id: Uuid,
     pub(crate) version: String,
     pub(crate) manifest_digest: String,
-    pub(crate) manifest: Option<sqlx::types::Json<ModuleManifestV1>>,
+    pub(crate) manifest: Option<sqlx::types::Json<ModuleManifest>>,
     pub(crate) runtime_image: String,
     pub(crate) publisher: String,
     pub(crate) trust: String,
@@ -369,7 +369,7 @@ pub(crate) async fn load_descriptor_document(
     pool: &PgPool,
     definition_id: &str,
 ) -> Result<Option<DescriptorDocumentReadModel>, CatalogReadError> {
-    let release = sqlx::query_as::<_, (String, sqlx::types::Json<ModuleManifestV1>)>(
+    let release = sqlx::query_as::<_, (String, sqlx::types::Json<ModuleManifest>)>(
         "SELECT releases.manifest_digest, releases.manifest
          FROM module_instances instances
          JOIN module_releases releases ON releases.id = instances.release_id

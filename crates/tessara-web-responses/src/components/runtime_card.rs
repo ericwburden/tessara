@@ -4,7 +4,7 @@ use crate::metadata::metadata_label;
 use crate::text::nonempty_text;
 use crate::types::SubmissionRuntimeDetail;
 use leptos::prelude::*;
-use tessara_web_ui::InfoListTable;
+use tessara_module_ui::InfoListTable;
 
 /// Renders workflow runtime progress for a response.
 #[component]

@@ -16,7 +16,7 @@ use crate::types::{
 use icons::{ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Plus, Trash2};
 use leptos::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
-use tessara_web_ui::{
+use tessara_module_ui::{
     DraggablePanelList, DraggablePanelListAnchor, DraggablePanelListDraggable,
     DraggablePanelListDropZone, DraggablePanelListItem, DraggablePanelListMove, SegmentedToggle,
     SegmentedToggleOption, Skeleton, empty_view,

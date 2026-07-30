@@ -8,7 +8,7 @@ use crate::features::administration::models::{
 };
 use icons::{Copy, Eye};
 use leptos::prelude::*;
-use tessara_web_ui::ModalDialog;
+use tessara_module_ui::ModalDialog;
 
 #[component]
 pub(crate) fn AdminCapabilityMetadata(

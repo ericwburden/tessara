@@ -4648,6 +4648,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "tessara-module-contract",
  "thiserror 2.0.18",
 ]
 
@@ -4775,6 +4776,78 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessara-module-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tessara-module-contract",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "tessara-module-testkit"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "tessara-module-contract",
+ "tessara-module-runtime",
+ "tessara-module-ui",
+ "uuid",
+]
+
+[[package]]
+name = "tessara-module-ui"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "sha2",
+ "tessara-module-contract",
+ "thiserror 2.0.18",
+ "uuid",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-reference-module-sdk"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tessara-module-contract",
+ "tessara-module-runtime",
+ "tessara-module-testkit",
+ "tessara-module-ui",
+ "tokio",
+ "tower",
+ "uuid",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "tessara-reference-scoped-records"
 version = "0.1.0"
 dependencies = [
@@ -4788,12 +4861,12 @@ dependencies = [
  "sha2",
  "sqlx",
  "tessara-module-contract",
+ "tessara-module-runtime",
+ "tessara-module-ui",
  "thiserror 2.0.18",
  "tokio",
  "tower",
- "tower-http",
  "tracing",
- "tracing-subscriber",
  "uuid",
 ]
 
@@ -4816,6 +4889,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tessara-module-contract",
+ "tessara-module-ui",
  "tessara-web-components",
  "tessara-web-dashboards",
  "tessara-web-datasets",
@@ -4823,7 +4897,6 @@ dependencies = [
  "tessara-web-http",
  "tessara-web-organization",
  "tessara-web-responses",
- "tessara-web-ui",
  "tessara-web-workflows",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -4839,8 +4912,8 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-module-ui",
  "tessara-web-http",
- "tessara-web-ui",
 ]
 
 [[package]]
@@ -4852,10 +4925,10 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-module-ui",
  "tessara-web-component-viewer",
  "tessara-web-data-ops",
  "tessara-web-http",
- "tessara-web-ui",
  "web-sys",
 ]
 
@@ -4872,9 +4945,9 @@ dependencies = [
  "serde_json",
  "tessara-core",
  "tessara-dashboards",
+ "tessara-module-ui",
  "tessara-web-component-viewer",
  "tessara-web-http",
- "tessara-web-ui",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -4885,7 +4958,7 @@ version = "0.1.0"
 dependencies = [
  "icons",
  "leptos",
- "tessara-web-ui",
+ "tessara-module-ui",
 ]
 
 [[package]]
@@ -4898,9 +4971,9 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-module-ui",
  "tessara-web-data-ops",
  "tessara-web-http",
- "tessara-web-ui",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -4916,8 +4989,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tessara-core",
+ "tessara-module-ui",
  "tessara-web-http",
- "tessara-web-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4942,8 +5015,8 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-module-ui",
  "tessara-web-http",
- "tessara-web-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4959,22 +5032,10 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-module-ui",
  "tessara-web-http",
- "tessara-web-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "tessara-web-ui"
-version = "0.1.0"
-dependencies = [
- "icons",
- "js-sys",
- "leptos",
- "tessara-core",
- "wasm-bindgen",
  "web-sys",
 ]
 
@@ -4988,8 +5049,8 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-module-ui",
  "tessara-web-http",
- "tessara-web-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

@@ -15,11 +15,7 @@ use tessara_dashboards::{
     DASHBOARD_GRID_CONSTRAINTS, DashboardPlacementSizePolicy, GridPlacement, GridRect, GridSize,
     reflow_dashboard_movement, validate_dashboard_layout, validate_dashboard_resize,
 };
-use tessara_web_component_viewer::{
-    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
-    ComponentViewerMode,
-};
-use tessara_web_ui::placement_editor::{
+use tessara_module_ui::placement_editor::{
     GridMoveDirection, GridMoveRequest, GridResizeRequest, PlacementDragPreview,
     PlacementGridCanvas, PlacementGridCell, PlacementGridGuides, PlacementGridTarget,
     PlacementResizeHandles, PlacementResizeStart, PlacementTileShell, clear_placement_drag_intent,
@@ -28,10 +24,14 @@ use tessara_web_ui::placement_editor::{
     schedule_placement_drag_preview, set_placement_drag_preview,
 };
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-use tessara_web_ui::placement_editor::{
+use tessara_module_ui::placement_editor::{
     PlacementResizeSession, placement_grid_metrics_from_element, placement_tile_style,
 };
-use tessara_web_ui::{EmptyState, ModalDialog, SideSheet, SideSheetSide, TableSearch};
+use tessara_module_ui::{EmptyState, ModalDialog, SideSheet, SideSheetSide, TableSearch};
+use tessara_web_component_viewer::{
+    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
+    ComponentViewerMode,
+};
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use wasm_bindgen::{JsCast, closure::Closure};
 

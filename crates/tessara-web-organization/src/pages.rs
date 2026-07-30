@@ -11,7 +11,7 @@ use super::tree::{
 use super::types::{NodeTypeCatalogEntry, OrganizationNodeDetail, OrganizationTreeNode};
 use leptos::prelude::*;
 use std::collections::HashSet;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
     EmptyState, PageHeader,
 };

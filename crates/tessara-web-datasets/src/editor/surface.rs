@@ -7,7 +7,7 @@ use super::{
     DatasetVisibilityEditor, install_dataset_editor_loaders, submit_dataset_editor,
 };
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
 

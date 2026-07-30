@@ -4,7 +4,7 @@
 use crate::api;
 use icons::{Plus, X};
 use leptos::prelude::*;
-use tessara_web_ui::{Combobox, ComboboxOption};
+use tessara_module_ui::{Combobox, ComboboxOption};
 
 #[component]
 pub(crate) fn DatasetIdentitySection(

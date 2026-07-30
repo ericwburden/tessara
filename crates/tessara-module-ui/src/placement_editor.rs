@@ -1,7 +1,7 @@
 //! Reusable, domain-neutral placement-editor interactions.
 //!
 //! This module owns Leptos/DOM mechanics only. Bounds, collision, reflow, and
-//! final resize validation remain in `tessara-core::grid_layout`.
+//! final resize validation live in this package's framework-free grid module.
 
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
@@ -15,8 +15,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
 #[cfg(test)]
-use tessara_core::{GridConstraints, resolve_move_request, resolve_resize_request};
-pub use tessara_core::{
+use tessara_module_contract::grid_layout::{
+    GridConstraints, resolve_move_request, resolve_resize_request,
+};
+pub use tessara_module_contract::grid_layout::{
     GridMoveDirection, GridMoveRequest, GridRect, GridResizeAxis, GridResizeRequest,
     GridResizeStep, GridSize,
 };

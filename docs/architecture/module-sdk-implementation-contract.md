@@ -43,10 +43,14 @@ and product infrastructure. `tessara-web-http` remains a separate
 policy-neutral browser transport leaf and is not absorbed or re-exported by
 module UI.
 
-All policy-neutral primitives move directly to `tessara-module-ui`. The
-Dashboard placement editor moves to its Dashboard product/web owner because
-its grid behavior is product code. `tessara-web-ui` is then deleted rather
-than retained as a compatibility facade.
+All policy-neutral primitives move directly to `tessara-module-ui`.
+Implementation inventory showed that placement editing is shared by Dashboard
+and Forms rather than being a Dashboard-only product component. Its
+framework-neutral grid geometry therefore moves to
+`tessara-module-contract`, its DOM/pointer/keyboard mechanics move to module
+UI, and Dashboard/Form sizing and workflow rules remain in their product
+adapters. `tessara-web-ui` is deleted rather than retained as a compatibility
+facade.
 
 ## Source Disposition
 
@@ -71,12 +75,14 @@ than retained as a compatibility facade.
 - `ShellContentV1`, its media type, its Core fragment bridge, its hydration
   bootstrap, and all associated rendering branches are deleted. There is no
   dual fragment/complete-document path.
-- Root `AppShell` remains only as the Core adapter that enforces authentication
-  and supplies normalized presentation. The pure frame, sidebar, mobile
-  navigation, top bar, theme behavior, normalized navigation presentation,
-  and shared accessibility behavior move to module UI.
-- Product route resolution, session loading, Core navigation policy, and
-  Core-only account actions remain in root web adapters.
+- Root `AppShell`, its router-bound sidebar/mobile/top-bar composition, product
+  route resolution, session loading, Core navigation policy, and Core-only
+  account actions remain in root web. They are one Core application component,
+  not an SDK facade.
+- Module UI owns the independent complete-document frame rendered only from
+  normalized verified presentation. It shares policy-neutral primitives,
+  tokens, theme semantics, landmarks, and accessibility rules with root
+  consumers without importing the root shell implementation.
 - Token, reset, shell, primitive, and state CSS move from the monolithic Core
   stylesheet into canonical module UI sources. Product CSS remains with its
   product owner.
@@ -249,10 +255,11 @@ release, and content digest. Asset requests carry no browser credentials.
 Complete HTML uses `Cache-Control: no-store`; content-hashed assets use
 immutable caching.
 
-An upstream connection failure, timeout, or 5xx produces the Core-owned
-authenticated unavailable document with retained shell/navigation and a
-Module Management action. Normalized module 4xx responses pass through. Sprint
-6D does not introduce generic product API or mutation proxying.
+An upstream connection failure, timeout, or 5xx produces a Core-owned,
+authenticated, branded `503` document with Tessara Home and Module Management
+recovery actions. It does not render module content or claim that the module
+is healthy. Normalized module 4xx responses pass through. Sprint 6D does not
+introduce generic product API or mutation proxying.
 
 ## Reference Module Contract
 
@@ -287,9 +294,13 @@ process health. Diagnostics are sanitized. Shutdown stops accepting work,
 finishes/abandons bounded in-flight work, flushes committed state, and exits
 within the declared Compose grace period.
 
-The reference image contains its own canonical CSS, minimal hydration entry,
-WASM/JavaScript, icons, and content hashes. It builds and tests without root
-web, Core API/application state, SQLx, or any product implementation.
+The reference image contains its own content-addressed canonical CSS and
+minimal JavaScript hydration enhancer. The same crate's target-gated
+`hydrate` feature compiles its WASM entry independently; that artifact is a
+consumer build option rather than a prerequisite for useful HTML or the
+minimal image enhancer. Both native `ssr` and WASM `hydrate` graphs build
+without root web, Core API/application state, SQLx, or any product
+implementation.
 
 ## Fast-Forward Version And Security Policy
 

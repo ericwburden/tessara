@@ -6,7 +6,7 @@ use icons::{
     Lock, PanelRight, Pencil, Plus, Trash2,
 };
 use leptos::prelude::*;
-use tessara_web_ui::ModalDialog;
+use tessara_module_ui::ModalDialog;
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::{JsCast, closure::Closure};
 

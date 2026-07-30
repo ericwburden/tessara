@@ -23,6 +23,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-web-data-ops = { path = "../tessara-web-data-ops" }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
-tessara-web-ui = { path = "../tessara-web-ui" }
+tessara-module-ui = { path = "../tessara-module-ui", features = ["components"] }
 wasm-bindgen = { workspace = true }
 web-sys = { workspace = true }

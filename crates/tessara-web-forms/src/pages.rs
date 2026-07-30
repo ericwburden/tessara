@@ -8,7 +8,7 @@ use crate::{
     form_node_filter_options, form_status_label, form_version_label,
 };
 use leptos::prelude::*;
-use tessara_web_ui::{Button, PageHeader};
+use tessara_module_ui::{Button, PageHeader};
 
 use super::list::FormsList;
 

@@ -3,7 +3,7 @@
 use crate::text::nonempty_text;
 use crate::types::WorkflowStepSummary;
 use leptos::prelude::*;
-use tessara_web_ui::DataTable;
+use tessara_module_ui::DataTable;
 
 #[component]
 pub(crate) fn WorkflowStepsTable(steps: Vec<WorkflowStepSummary>) -> impl IntoView {

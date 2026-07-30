@@ -5,7 +5,7 @@
 use super::components::ResponseDetailContent as ResponseDetailBody;
 use super::loaders::load_submission_detail;
 use crate::types::SubmissionDetail;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
 

@@ -3,7 +3,7 @@
 use crate::{FormAttachmentLink, FormsAttachedNodesSheetData, node_count_label};
 use icons::PanelRight;
 use leptos::prelude::*;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 use super::ATTACHED_NODES_SHEET_ID;
 

@@ -4,7 +4,7 @@ use crate::status_badge_class;
 use crate::support::text::{nonempty_text, sentence_label};
 use crate::types::FormVersionSummary;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, Timestamp, empty_view};
+use tessara_module_ui::{DataTable, Timestamp, empty_view};
 
 use super::display::form_version_desc_sort_key;
 use super::versions::form_version_sort_label;

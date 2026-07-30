@@ -109,6 +109,26 @@ try {
         cargo check -p tessara-module-contract --locked
     }
 
+    Invoke-CheckedStep -Label "Canonical module SDK boundary audit" -Command {
+        & .\scripts\verify-module-sdk-boundaries.ps1
+        if ($LASTEXITCODE -ne 0) { throw "module SDK boundary audit failed with exit code $LASTEXITCODE" }
+    }
+
+    Invoke-CheckedStep -Label "Canonical module SDK compatibility inventory" -Command {
+        & .\scripts\verify-module-sdk-compatibility.ps1
+        if ($LASTEXITCODE -ne 0) { throw "module SDK compatibility inventory failed with exit code $LASTEXITCODE" }
+    }
+
+    Invoke-CheckedStep -Label "Markdown local links" -Command {
+        & .\scripts\verify-markdown-links.ps1
+        if ($LASTEXITCODE -ne 0) { throw "Markdown link validation failed with exit code $LASTEXITCODE" }
+    }
+
+    Invoke-CheckedStep -Label "Canonical module SDK native checks" -Command {
+        cargo check -p tessara-module-runtime -p tessara-module-ui -p tessara-module-testkit --locked
+        cargo check -p tessara-reference-module-sdk --features ssr --locked
+    }
+
     Invoke-CheckedStep -Label "API check" -Command {
         cargo check -p tessara-api --locked
     }
@@ -134,6 +154,24 @@ try {
     # Contract tests are database-independent and belong in both validation modes.
     Invoke-CheckedStep -Label "Module contract tests" -Command {
         cargo test -p tessara-module-contract --locked
+    }
+
+    Invoke-CheckedStep -Label "Canonical module SDK tests" -Command {
+        cargo test -p tessara-module-runtime -p tessara-module-ui -p tessara-module-testkit --locked
+        cargo test -p tessara-reference-module-sdk --features ssr --locked
+        if ($Fast) {
+            cargo test -p tessara-reference-scoped-records --lib --locked
+        } else {
+            cargo test -p tessara-reference-scoped-records --locked
+        }
+    }
+
+    if (-not $Fast) {
+        Invoke-CheckedStep -Label "Canonical module SDK WASM checks" -Command {
+            cargo check -p tessara-module-contract --target wasm32-unknown-unknown --locked
+            cargo check -p tessara-module-ui --no-default-features --features hydrate --target wasm32-unknown-unknown --locked
+            cargo check -p tessara-reference-module-sdk --no-default-features --features hydrate --target wasm32-unknown-unknown --locked
+        }
     }
 
     Invoke-CheckedStep -Label "Web tests" -Command {

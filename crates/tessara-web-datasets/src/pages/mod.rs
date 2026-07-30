@@ -5,7 +5,7 @@
 use leptos::prelude::*;
 
 use crate::text::text_matches;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
     EmptyState, PageHeader,
 };

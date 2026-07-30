@@ -9,7 +9,7 @@ use crate::types::{
 use crate::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashSet;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
 

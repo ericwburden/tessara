@@ -105,8 +105,10 @@ defined in the
 [Module SDK Implementation Contract](./module-sdk-implementation-contract.md).
 
 Policy-neutral `tessara-web-ui` source moves directly to
-`tessara-module-ui`; its Dashboard placement editor moves to the Dashboard
-product/web owner, and the old crate is deleted. `tessara-web-http` remains an
+`tessara-module-ui`. Shared placement DOM mechanics move with it,
+framework-neutral grid geometry moves from the historical `tessara-core`
+crate to `tessara-module-contract`, and Dashboard/Form policy adapters remain
+product-owned. The old UI crate is deleted. `tessara-web-http` remains an
 independent leaf.
 
 ## Dashboard Reference Completion
@@ -133,8 +135,10 @@ Components, Datasets, Responses, Workflows, and Forms.
 - Module images may contain repeated compiled runtime/UI code and assets.
 - A shared SDK fix reaches a deployed module only through a new release of that
   module, preserving independent rollout and rollback.
-- Major platform-contract changes require an explicit compatibility migration
-  rather than an implicit whole-application rebuild.
+- Before production, major platform-contract changes replace the obsolete
+  repository shape atomically and require fresh development baselines rather
+  than compatibility code. A multi-version migration policy is a future
+  production-readiness decision.
 - Canonical packages require ownership, semantic versioning, compatibility
   tests, support windows, and release inventory.
 - Core and module source graphs become smaller and more auditable: shared

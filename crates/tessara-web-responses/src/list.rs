@@ -9,7 +9,7 @@ use crate::filtering::unique_filter_options;
 use crate::text::text_matches;
 use crate::types::SubmissionSummary;
 use leptos::prelude::*;
-use tessara_web_ui::PageHeader;
+use tessara_module_ui::PageHeader;
 
 #[allow(non_snake_case)]
 pub fn ResponsesIndexContent() -> impl IntoView {

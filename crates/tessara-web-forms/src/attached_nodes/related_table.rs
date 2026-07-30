@@ -4,7 +4,7 @@ use crate::FormAttachmentLink;
 use crate::support::pagination::pagination_page_start;
 use crate::support::text::text_matches;
 use leptos::prelude::*;
-use tessara_web_ui::{SearchableDataTable, TablePaginationFooter};
+use tessara_module_ui::{SearchableDataTable, TablePaginationFooter};
 
 #[component]
 pub(crate) fn FormAttachedNodesRelatedTable(nodes: Vec<FormAttachmentLink>) -> impl IntoView {

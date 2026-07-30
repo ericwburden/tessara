@@ -2,7 +2,7 @@
 
 use crate::shared::status_badge_class;
 use leptos::prelude::*;
-use tessara_web_ui::{InfoListTable, Timestamp};
+use tessara_module_ui::{InfoListTable, Timestamp};
 
 #[component]
 pub(super) fn WorkflowDetailsCard(

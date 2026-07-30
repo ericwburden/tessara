@@ -5,7 +5,7 @@
 use crate::loaders::load_form_detail;
 use crate::{FormDefinition, FormDetailBody, RenderedForm};
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, EmptyState,
     PageHeader, empty_view,
 };

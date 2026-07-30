@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "definition_id": "tessara.forms",
   "release_version": "1.0.0",
   "publisher": "tessara.first_party",
@@ -8,11 +8,6 @@
     "contact": "support@tessara.example",
     "documentation": "https://docs.tessara.example/modules/forms"
   },
-  "conformance_suite_version": "1.0.0",
-  "core_release_compatibility": "^0.1",
-  "shell_context_compatibility": "^1",
-  "ui_sdk_compatibility": "^1",
-  "design_system_compatibility": "^1",
   "deployment": {
     "profile": "tessara-oci-v1",
     "declaration": {
@@ -21,22 +16,32 @@
         "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "platform": "linux",
         "architecture": "amd64",
-        "command": ["/app/forms", "serve"]
+        "command": [
+          "/app/forms",
+          "serve"
+        ]
       },
       "migration_image": {
         "image_reference": "registry.example/tessara/forms-migrations@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "platform": "linux",
         "architecture": "amd64",
-        "command": ["/app/forms", "migrate"]
+        "command": [
+          "/app/forms",
+          "migrate"
+        ]
       },
       "listen": {
         "protocol": "http",
         "port": 8080,
         "registration_name": "forms"
       },
-      "configuration_keys": ["DEFAULT_LOCALE"],
-      "secret_keys": ["DATABASE_URL"],
+      "configuration_keys": [
+        "DEFAULT_LOCALE"
+      ],
+      "secret_keys": [
+        "DATABASE_URL"
+      ],
       "runtime_identity": "forms-runtime",
       "migration_identity": "forms-migration",
       "readiness_path": "/health/ready",
@@ -55,15 +60,34 @@
       "id": "tessara.forms.authoring",
       "name": "Form authoring",
       "description": "Author and publish forms.",
-      "use_cases": ["Build a data collection instrument"],
-      "inputs": ["Field definitions"],
-      "outcomes": ["Published FormVersion"],
-      "constraints": ["Publication policy remains Forms-owned"],
-      "contracts": ["tessara.forms.form-version"],
-      "resource_types": ["tessara.forms.form-version"],
-      "destinations": ["forms.directory"],
-      "capabilities": ["forms:read", "forms:manage"],
-      "configuration_pointers": ["/properties/default_locale"]
+      "use_cases": [
+        "Build a data collection instrument"
+      ],
+      "inputs": [
+        "Field definitions"
+      ],
+      "outcomes": [
+        "Published FormVersion"
+      ],
+      "constraints": [
+        "Publication policy remains Forms-owned"
+      ],
+      "contracts": [
+        "tessara.forms.form-version"
+      ],
+      "resource_types": [
+        "tessara.forms.form-version"
+      ],
+      "destinations": [
+        "forms.directory"
+      ],
+      "capabilities": [
+        "forms:read",
+        "forms:manage"
+      ],
+      "configuration_pointers": [
+        "/properties/default_locale"
+      ]
     }
   ],
   "provided_contracts": [
@@ -125,7 +149,10 @@
       "label": "Forms",
       "group": "Main",
       "order_hint": 20,
-      "required_capabilities_any_of": ["forms:read", "forms:manage"]
+      "required_capabilities_any_of": [
+        "forms:read",
+        "forms:manage"
+      ]
     }
   ],
   "security_capabilities": [
@@ -141,7 +168,9 @@
   "configuration_schema": {
     "type": "object",
     "properties": {
-      "default_locale": {"type": "string"}
+      "default_locale": {
+        "type": "string"
+      }
     }
   },
   "operational_routes": {
@@ -150,5 +179,34 @@
     "status": "forms.status",
     "diagnostics": "forms.diagnostics"
   },
-  "shell_contribution_contracts": null
+  "shell_contribution_contracts": null,
+  "platform_versions": {
+    "core_release": "0.1.0",
+    "shell_context_schema": "1.0.0",
+    "module_control_protocol": "1.0.0",
+    "module_contract": "0.1.0",
+    "module_runtime": "0.1.0",
+    "module_ui": "0.1.0",
+    "design_system_asset_abi": "1.0.0",
+    "conformance_suite": "1.0.0"
+  },
+  "linked_packages": {
+    "module_contract": "0.1.0",
+    "module_runtime": "0.1.0",
+    "module_ui": "0.1.0"
+  },
+  "browser_routes": [
+    {
+      "destination": "forms.directory",
+      "path_template": "/forms",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "forms:read",
+      "authorization_action": "forms.directory.read",
+      "functional_contract": "tessara.forms.form-version",
+      "organization_scope_parameter": null
+    }
+  ]
 }

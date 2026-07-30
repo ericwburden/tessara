@@ -4,7 +4,7 @@
 //! contexts. Keep this crate small: add types here only when multiple contexts
 //! need the same semantic contract.
 
-pub mod grid_layout;
+pub use tessara_module_contract::grid_layout;
 
 pub use grid_layout::{
     GridConstraints, GridLayoutError, GridMoveDirection, GridMoveRequest, GridPlacement, GridRect,

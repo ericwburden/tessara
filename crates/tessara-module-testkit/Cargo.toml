@@ -1,0 +1,15 @@
+[package]
+name = "tessara-module-testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tessara-module-contract = { path = "../tessara-module-contract" }
+tessara-module-runtime = { path = "../tessara-module-runtime" }
+tessara-module-ui = { path = "../tessara-module-ui", features = ["ssr"] }
+uuid = { workspace = true }

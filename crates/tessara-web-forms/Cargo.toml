@@ -9,11 +9,11 @@ default = []
 hydrate = [
     "leptos/hydrate",
     "tessara-web-http/hydrate",
-    "tessara-web-ui/hydrate",
+    "tessara-module-ui/hydrate",
 ]
 ssr = [
     "leptos/ssr",
-    "tessara-web-ui/ssr",
+    "tessara-module-ui/ssr",
 ]
 
 [dependencies]
@@ -25,7 +25,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-core = { path = "../tessara-core" }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
-tessara-web-ui = { path = "../tessara-web-ui", default-features = false }
+tessara-module-ui = { path = "../tessara-module-ui", default-features = false }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 web-sys = { workspace = true }

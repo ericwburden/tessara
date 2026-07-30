@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use tessara_web_ui::{SideSheet, SideSheetSide, TableSearch};
+use tessara_module_ui::{SideSheet, SideSheetSide, TableSearch};
 
 use crate::types::DashboardVisibilityNode;
 

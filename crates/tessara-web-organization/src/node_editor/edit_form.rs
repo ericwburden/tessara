@@ -5,7 +5,7 @@ use crate::types::{
 };
 use leptos::prelude::*;
 use std::collections::HashMap;
-use tessara_web_ui::Button;
+use tessara_module_ui::Button;
 
 use super::{
     OrganizationNodeMetadataSection, SubmitUpdateNodeInput, parent_node_options_for_edit,

@@ -29,7 +29,7 @@ pub(crate) use sizing::{
     max_form_builder_new_field_width_at, valid_form_builder_layout_values,
 };
 pub(crate) use state::{FormBuilderEditorState, new_form_builder_editor_state};
-pub(crate) use tessara_web_ui::placement_editor::{
+pub(crate) use tessara_module_ui::placement_editor::{
     clear_placement_drag_intent as clear_form_builder_drag_intent,
     schedule_placement_drag_preview as schedule_form_builder_drag_preview,
     set_placement_drag_preview as set_form_builder_drag_preview,

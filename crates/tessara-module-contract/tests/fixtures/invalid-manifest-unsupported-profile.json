@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "definition_id": "tessara.forms",
   "release_version": "1.0.0",
   "publisher": "tessara.first_party",
@@ -8,11 +8,6 @@
     "contact": "support@tessara.example",
     "documentation": "https://docs.tessara.example/modules/forms"
   },
-  "conformance_suite_version": "1.0.0",
-  "core_release_compatibility": "^0.1",
-  "shell_context_compatibility": "^1",
-  "ui_sdk_compatibility": "^1",
-  "design_system_compatibility": "^1",
   "deployment": {
     "profile": "tessara-oci-v2",
     "declaration": {}
@@ -25,12 +20,30 @@
   "routes": [],
   "navigation": [],
   "security_capabilities": [],
-  "configuration_schema": {"type": "object"},
+  "configuration_schema": {
+    "type": "object"
+  },
   "operational_routes": {
     "configuration_validation": "forms.configuration.validate",
     "compatibility": "forms.compatibility",
     "status": "forms.status",
     "diagnostics": "forms.diagnostics"
   },
-  "shell_contribution_contracts": null
+  "shell_contribution_contracts": null,
+  "platform_versions": {
+    "core_release": "0.1.0",
+    "shell_context_schema": "1.0.0",
+    "module_control_protocol": "1.0.0",
+    "module_contract": "0.1.0",
+    "module_runtime": "0.1.0",
+    "module_ui": "0.1.0",
+    "design_system_asset_abi": "1.0.0",
+    "conformance_suite": "1.0.0"
+  },
+  "linked_packages": {
+    "module_contract": "0.1.0",
+    "module_runtime": "0.1.0",
+    "module_ui": "0.1.0"
+  },
+  "browser_routes": []
 }

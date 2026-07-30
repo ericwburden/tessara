@@ -6,7 +6,7 @@ use crate::types::WorkflowVersionSummary;
 use crate::workflow_revision_label_from_option;
 use icons::Pencil;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, Timestamp};
+use tessara_module_ui::{DataTable, Timestamp};
 
 #[component]
 pub(crate) fn WorkflowVersionsTable(

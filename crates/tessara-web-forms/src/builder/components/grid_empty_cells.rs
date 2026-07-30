@@ -1,7 +1,7 @@
 //! Form adapter for the shared placement guide layer.
 
 use leptos::prelude::*;
-use tessara_web_ui::placement_editor::{PlacementGridCell, PlacementGridGuides};
+use tessara_module_ui::placement_editor::{PlacementGridCell, PlacementGridGuides};
 
 #[component]
 pub(crate) fn FormBuilderGridEmptyCells(

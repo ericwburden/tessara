@@ -10,7 +10,7 @@ use crate::builder::{
     form_builder_section_layout, max_form_builder_field_height, max_form_builder_field_width,
 };
 use icons::Trash2;
-use tessara_web_ui::{SideSheet, empty_view};
+use tessara_module_ui::{SideSheet, empty_view};
 
 #[component]
 pub(crate) fn FieldConfigSheet(

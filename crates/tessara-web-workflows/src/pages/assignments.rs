@@ -7,7 +7,7 @@ use crate::assignments::{
     install_workflow_assignments_page_effects,
 };
 use leptos::prelude::*;
-use tessara_web_ui::{
+use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
 };
 

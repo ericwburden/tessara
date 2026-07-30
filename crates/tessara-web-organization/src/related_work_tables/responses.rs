@@ -6,7 +6,7 @@ use crate::pagination::pagination_page_start;
 use crate::text::{sentence_label, text_matches};
 use icons::Search;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, TablePaginationFooter, Timestamp};
+use tessara_module_ui::{DataTable, TablePaginationFooter, Timestamp};
 
 #[component]
 pub(crate) fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {

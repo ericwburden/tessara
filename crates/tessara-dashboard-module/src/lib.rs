@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
     ModuleDefinitionId, PurposeBoundVerifyingKeyV1, ShellContextV1,
-    ShellContextValidationContextV1, SignedEnvelopeV1, verify_shell_context,
+    ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -188,19 +188,21 @@ async fn render_dashboard_document(
     let security = load_security_state(&state.pool)
         .await?
         .ok_or_else(|| DashboardModuleError::Unavailable("security state unavailable".into()))?;
-    verify_shell_context(
-        &envelope,
-        &state.core_shell_verifier,
-        &ShellContextValidationContextV1 {
+    state
+        .core_shell_verifier
+        .verify(&envelope)
+        .map_err(|_| DashboardModuleError::Forbidden)?;
+    envelope
+        .payload
+        .validate_for(&ShellContextValidationContextV1 {
             installation_id: security.installation_id,
             module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
                 .map_err(|_| DashboardModuleError::Forbidden)?,
             module_instance_id: security.module_instance_id,
             correlation_id,
             now: Utc::now(),
-        },
-    )
-    .map_err(|_| DashboardModuleError::Forbidden)?;
+        })
+        .map_err(|_| DashboardModuleError::Forbidden)?;
     Ok(Html(
         tessara_web::application_html_with_dashboard_bootstrap(
             &input.path,
@@ -427,7 +429,7 @@ impl axum::response::IntoResponse for DashboardModuleError {
 #[cfg(test)]
 mod tests {
     use sha2::{Digest, Sha256};
-    use tessara_module_contract::ModuleManifestV1;
+    use tessara_module_contract::ModuleManifest;
 
     use super::{DashboardConfigurationV1, validate_configuration};
 
@@ -455,8 +457,8 @@ mod tests {
 
     #[test]
     fn authoritative_manifest_declares_the_independent_dashboard_boundary() {
-        let manifest: ModuleManifestV1 =
-            serde_json::from_str(include_str!("../manifest-v1.json")).expect("valid manifest");
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../manifest.json")).expect("valid manifest");
         assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
         let tessara_module_contract::DeploymentProfile::TessaraOciV1(deployment) =
             &manifest.deployment;

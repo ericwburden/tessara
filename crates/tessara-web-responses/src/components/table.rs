@@ -11,7 +11,7 @@ use crate::status::status_badge_class;
 use crate::types::SubmissionSummary;
 use icons::{PanelRight, Pencil};
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, DropdownMenu, TableFilterHeader, Timestamp, empty_view};
+use tessara_module_ui::{DataTable, DropdownMenu, TableFilterHeader, Timestamp, empty_view};
 
 #[component]
 pub(crate) fn ResponseDesktopTable(

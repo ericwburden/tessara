@@ -3,7 +3,7 @@
 use super::super::super::types::{DatasetFieldDefinition, DatasetSourceDefinition};
 use crate::text::sentence_label;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, EmptyState};
+use tessara_module_ui::{DataTable, EmptyState};
 
 #[component]
 pub(super) fn DatasetSourcesTable(sources: Vec<DatasetSourceDefinition>) -> impl IntoView {

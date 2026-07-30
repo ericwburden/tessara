@@ -5,7 +5,7 @@ use crate::builder::{
     form_builder_occupancy_map, form_builder_section_fields, max_form_builder_new_field_width_at,
 };
 use leptos::prelude::*;
-use tessara_web_ui::placement_editor::placement_grid_cell_from_click_event;
+use tessara_module_ui::placement_editor::placement_grid_cell_from_click_event;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn add_form_builder_field_from_grid_click(

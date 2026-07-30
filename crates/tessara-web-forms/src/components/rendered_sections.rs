@@ -2,7 +2,7 @@
 
 use crate::{RenderedForm, rendered_field_layout_label, rendered_field_type_label};
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, empty_view};
+use tessara_module_ui::{DataTable, empty_view};
 
 #[component]
 pub(crate) fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {

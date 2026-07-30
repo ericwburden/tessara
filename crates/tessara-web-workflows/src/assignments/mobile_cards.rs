@@ -8,7 +8,7 @@ use crate::{
     workflow_assignment_status_label,
 };
 use leptos::prelude::*;
-use tessara_web_ui::Timestamp;
+use tessara_module_ui::Timestamp;
 
 use super::mutations::toggle_workflow_assignment;
 

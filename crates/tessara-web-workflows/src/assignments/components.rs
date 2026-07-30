@@ -7,7 +7,7 @@ use crate::assignments::{
 use crate::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, TableFilterHeader, TablePaginationFooter};
+use tessara_module_ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 
 #[component]
 pub(crate) fn WorkflowAssignmentsList(

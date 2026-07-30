@@ -7,7 +7,7 @@ use super::related_work_tables::{
 };
 use crate::types::OrganizationNodeDetail;
 use leptos::prelude::*;
-use tessara_web_ui::{Tabs, TabsContent, TabsList, TabsTrigger};
+use tessara_module_ui::{Tabs, TabsContent, TabsList, TabsTrigger};
 
 #[component]
 pub(crate) fn RelatedWorkSummary(

@@ -8,8 +8,8 @@ use crate::builder::components::{FieldConfigSheet, FormBuilderSection};
 use crate::builder::install_form_builder_resize_cleanup;
 use crate::builder::state::{FormBuilderEditorState, add_form_builder_section_to_editor};
 use icons::Plus;
-use tessara_web_ui::placement_editor::install_placement_drag_cleanup;
-use tessara_web_ui::{Tabs, TabsList};
+use tessara_module_ui::placement_editor::install_placement_drag_cleanup;
+use tessara_module_ui::{Tabs, TabsList};
 
 #[component]
 pub(crate) fn FormBuilderCanvas(state: FormBuilderEditorState) -> impl IntoView {

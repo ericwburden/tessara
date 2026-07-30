@@ -9,7 +9,7 @@ use crate::{FormsAttachedNodesSheetData, status_badge_class};
 use crate::{form_attached_nodes, form_field_count_label, form_status_label};
 use icons::Search;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, TableFilterHeader, TablePaginationFooter};
+use tessara_module_ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 
 #[component]
 pub(crate) fn FormsList(

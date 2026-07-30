@@ -8,7 +8,7 @@ use crate::types::OrganizationNodeDetail;
 use icons::{ExternalLink, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use tessara_web_ui::empty_view;
+use tessara_module_ui::empty_view;
 
 #[component]
 pub(crate) fn OrganizationDetailSheet(

@@ -15,8 +15,6 @@ use crate::routes;
 use crate::state::session::provide_shell_session;
 use crate::state::shell_navigation::ShellNavigationResponseV1;
 #[cfg(any(feature = "hydrate", test))]
-use tessara_module_contract::ShellContentV1;
-#[cfg(any(feature = "hydrate", test))]
 use tessara_web_dashboards::DashboardRouteBootstrap;
 
 #[cfg(feature = "hydrate")]
@@ -50,24 +48,7 @@ pub fn hydrate_app(root_id: &str) {
         .and_then(|script| script.text_content())
         .and_then(|json| parse_shell_navigation_bootstrap_json(&json))
         .filter(ShellNavigationResponseV1::is_supported);
-    let scoped_records_bootstrap = document
-        .get_element_by_id(crate::SCOPED_RECORDS_BOOTSTRAP_SCRIPT_ID)
-        .and_then(|script| script.text_content())
-        .and_then(|json| parse_scoped_records_bootstrap_json(&json));
     let has_shell_navigation_bootstrap = shell_navigation_bootstrap.is_some();
-
-    if let Some(scoped_records) = scoped_records_bootstrap {
-        let handle = hydrate_from(root, move || {
-            view! {
-                <Provider value=scoped_records>
-                    <App initial_shell_navigation=shell_navigation_bootstrap/>
-                </Provider>
-            }
-        });
-        schedule_hydration_ready(false, false, has_shell_navigation_bootstrap);
-        handle.forget();
-        return;
-    }
 
     match (dashboard_bootstrap, module_management_bootstrap) {
         (Some(dashboard), Some(module_management)) => {
@@ -221,11 +202,6 @@ fn parse_shell_navigation_bootstrap_json(json: &str) -> Option<ShellNavigationRe
     serde_json::from_str(json).ok()
 }
 
-#[cfg(any(feature = "hydrate", test))]
-fn parse_scoped_records_bootstrap_json(json: &str) -> Option<ShellContentV1> {
-    serde_json::from_str(json).ok()
-}
-
 #[component]
 pub fn App(initial_shell_navigation: Option<ShellNavigationResponseV1>) -> impl IntoView {
     let _ = provide_shell_session(initial_shell_navigation);
@@ -249,12 +225,11 @@ mod tests {
             ShellNavigationResponseV1, ShellNavigationStateV1,
         },
     };
-    use tessara_module_contract::ShellContentV1;
     use tessara_web_dashboards::{DashboardRouteBootstrap, DashboardSummary, SessionAccount};
 
     use super::{
         parse_dashboard_bootstrap_json, parse_module_bootstrap_json,
-        parse_scoped_records_bootstrap_json, parse_shell_navigation_bootstrap_json,
+        parse_shell_navigation_bootstrap_json,
     };
 
     #[test]
@@ -309,18 +284,5 @@ mod tests {
         );
         assert_eq!(parse_module_bootstrap_json("{"), None);
         assert_eq!(parse_shell_navigation_bootstrap_json("{"), None);
-
-        let scoped_records = ShellContentV1 {
-            schema_version: 1,
-            title: "Scoped Records".into(),
-            body_html: "<p>Module content</p>".into(),
-        };
-        let scoped_json =
-            serde_json::to_string(&scoped_records).expect("serialize Scoped Records bootstrap");
-        assert_eq!(
-            parse_scoped_records_bootstrap_json(&scoped_json),
-            Some(scoped_records)
-        );
-        assert_eq!(parse_scoped_records_bootstrap_json("{"), None);
     }
 }

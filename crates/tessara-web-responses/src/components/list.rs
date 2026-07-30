@@ -2,7 +2,7 @@
 
 use super::{ResponseDesktopTable, ResponseMobileCards};
 use crate::types::SubmissionSummary;
-use tessara_web_ui::TablePaginationFooter;
+use tessara_module_ui::TablePaginationFooter;
 
 use icons::Search;
 use leptos::prelude::*;

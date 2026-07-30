@@ -3,7 +3,7 @@
 use crate::shared::{FormAttachmentLink, WorkflowAvailableNodesSheetData, node_count_label};
 use icons::{ExternalLink, PanelRight};
 use leptos::prelude::*;
-use tessara_web_ui::{SideSheet, TableSearch, empty_view};
+use tessara_module_ui::{SideSheet, TableSearch, empty_view};
 
 const AVAILABLE_NODES_SHEET_ID: &str = "workflow-available-nodes-sheet";
 
