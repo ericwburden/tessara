@@ -70,6 +70,10 @@ pub(crate) fn resolved_destinations() -> Vec<ResolvedNavigationDestination> {
     DESTINATIONS.iter().copied().map(Into::into).collect()
 }
 
+pub(crate) fn is_frozen_destination(id: &str) -> bool {
+    DESTINATIONS.iter().any(|destination| destination.id == id)
+}
+
 pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 14] = [
     NavigationCatalogDestination {
         id: "core.home",

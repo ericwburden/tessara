@@ -152,7 +152,9 @@ fn compose_groups(
                 continue;
             }
 
-            let href = if let Some(route) = &destination.semantic_destination {
+            let href = if navigation_catalog::is_frozen_destination(&destination.id)
+                && let Some(route) = &destination.semantic_destination
+            {
                 let semantic_destination = SemanticDestination {
                     owner: ResourceOwner::CoreInstallation {
                         installation_id: policy.installation_id,
@@ -251,7 +253,7 @@ fn is_same_origin_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_same_origin_path;
+    use super::{is_same_origin_path, navigation_catalog};
 
     #[test]
     fn shell_paths_remain_same_origin() {
@@ -259,5 +261,15 @@ mod tests {
         assert!(!is_same_origin_path("https://example.invalid"));
         assert!(!is_same_origin_path("//example.invalid"));
         assert!(!is_same_origin_path("/safe\nset-cookie: unsafe"));
+    }
+
+    #[test]
+    fn only_frozen_destinations_require_the_transition_route_resolver() {
+        assert!(navigation_catalog::is_frozen_destination(
+            "tessara.dashboards.navigation"
+        ));
+        assert!(!navigation_catalog::is_frozen_destination(
+            "tessara.reference.module-sdk.navigation"
+        ));
     }
 }
