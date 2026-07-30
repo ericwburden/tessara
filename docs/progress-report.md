@@ -7,6 +7,135 @@ project direction.
 
 “Next Sprint” labels inside dated entries are historical snapshots and may be superseded. Sprint 6A-UI is closed under the approved fresh-sprint lifecycle (one squashed baseline migration and a freshly seeded database). Sprint 6B follows with its runtime scope unchanged.
 
+## 2026-07-29 - Sprint 6C Final Corrective Closeout
+
+### Completed
+
+- Sprint 6C is complete. Dashboard is independently deployed with its own
+  service, database, identities, migration, manifest, configuration,
+  diagnostics, APIs, SSR UI, and same-origin product routes.
+- Module Management now applies one reusable, schema-driven control pathway to
+  Dashboard and Scoped Records. Common configuration, enablement, navigation,
+  diagnostics, findings, lifecycle, and route-state behavior has no
+  definition-specific Core branch.
+- Corrective UAT aligned disabled-state labels and lifecycle assessment,
+  removed disabled product navigation, made enablement actionable, repaired
+  diagnostics navigation and findings presentation, and retained
+  module-specific notes in the final Configuration row.
+- Degraded Dashboard placements use the approved warning-tinted tile with one
+  icon; the full message, large centered icon, and retry action live in the
+  side sheet.
+- Final implementation source is commit
+  `a5d694f7ef7c68e52a9ac93135846d29d5a061d7`, tree
+  `fc5494044be6c8dffa6c38381b5610f49f6619c4`.
+
+### Validation
+
+- Exact-source deployment, bootstrap idempotency, fresh-data evidence, smoke,
+  UAT, 61/61 direct Playwright, and 61/61 retained Playwright passed.
+- API and web Rust suites, formatting, database isolation, and all ten
+  degraded provider states passed. Each degraded state retained all nine
+  placements and titles, and the normal enabled/available state was restored.
+- Final evidence is
+  `artifacts/sprint-6c-final-closeout-2026-07-29-r2/`; command details and all
+  twelve acceptance mappings are in
+  `docs/sprints/sprint-6c-verification.md`.
+- `docs/roadmap.md` was reviewed: Sprint 6C is already marked **Complete** and
+  Sprint 6D is already marked **Next**, so no roadmap mutation was required.
+
+### Next Sprint
+
+Sprint 6D - Application Blueprint And Composition Automation Slice.
+
+### Sprint Handoff / Demo Instructions
+
+#### Shared Module Management Template
+
+- Role: administrator (`admin@tessara.local`).
+- Paths:
+  - `http://localhost:8080/administration/modules`
+  - `http://localhost:8080/administration/modules/tessara.dashboards#configuration`
+  - `http://localhost:8080/administration/modules/tessara.reference.scoped-records#configuration`
+- Steps:
+  1. Compare both module Configuration, Overview, Diagnostics, Findings,
+     Dependencies, Navigation, and application-state panels.
+  2. Edit and save each schema-owned configuration without changing its value.
+  3. Disable and re-enable each product route.
+- Expected: common structure, controls, status semantics, errors, and
+  navigation are identical; only declared metadata, fields, dependencies,
+  resources, diagnostics, and product behavior differ. Disabled modules say
+  **Disabled**, are not treated as errors, and disappear from product
+  navigation while remaining manageable.
+- Acceptance check: pass when both modules complete the same administrative
+  workflow without a per-module Core screen or adapter.
+- Evidence:
+  `artifacts/sprint-6c-final-closeout-2026-07-29-r2/playwright-retained-fresh.summary.json`
+  and `docs/audits/module-management-consistency-2026-07-27/README.md`.
+
+#### Independent Dashboard Product Flow
+
+- Role: administrator.
+- Paths:
+  - `http://localhost:8080/dashboards`
+  - `http://localhost:8080/dashboards/41933f5c-f02b-47c6-b44f-6edffa32c283`
+  - append `/edit` or `/view` for authoring and presentation.
+- Steps:
+  1. Open the directory and the retained Demo Operations Dashboard.
+  2. Review detail, editor, and viewer; select, move, resize, save, and refresh
+     a placement without changing its reference.
+  3. Confirm nine placements remain and the same Dashboard identity survives.
+- Expected: every page remains in the normal Tessara shell at the established
+  same-origin URL and preserves Sprint 5A behavior.
+- Acceptance check: pass when directory/detail/editor/viewer work after
+  refresh and saved composition is stable.
+- Evidence:
+  `artifacts/sprint-6c-final-closeout-2026-07-29-r2/smoke-fresh.json`,
+  `uat-fresh.json`, and `playwright-retained-fresh.json`.
+
+#### Enablement, Outage, And Degraded Placement States
+
+- Role: administrator; use the scripted matrix for state mutation.
+- Paths:
+  - Dashboard Configuration in Module Management.
+  - Retained Dashboard `/edit` and `/view` paths above.
+- Steps:
+  1. Disable Dashboard and confirm its navigation item disappears while
+     Module Management reports a healthy **Disabled** application state.
+  2. Re-enable it and run
+     `scripts/test-sprint-6c-degraded-states.ps1`.
+  3. In the editor, open a warning tile's icon, inspect the centered side-sheet
+     icon and full diagnostic, then use **Retry resolution**.
+  4. Confirm the script restores the available provider and enabled module.
+- Expected: Dashboard or Components failures remain contained, unrelated Core
+  routes work, saved titles remain, and no product-data loss occurs.
+- Acceptance check: pass when all ten resolution states are distinct, all nine
+  placements survive, and the final normal state is restored.
+- Evidence:
+  `artifacts/sprint-6c-final-closeout-2026-07-29-r2/degraded-states-fresh.json`
+  and `deployment-handoff-fresh.json`.
+
+#### Constrained Actor And Reusable Migration Review
+
+- Role: the ephemeral constrained actor from the permissions fixture for the
+  access proof; implementer/reviewer for the pathway review.
+- Paths:
+  - Dashboard API/viewer routes exercised by `end2end/tests/permissions.spec.ts`.
+  - `docs/architecture/independent-module-pathway.md`.
+- Steps:
+  1. Compare known and random ComponentVersion references outside the actor's
+     Component scope while Dashboard scope remains authorized.
+  2. Confirm both results are nondisclosing and hidden Components never run.
+  3. Follow the ownership, manifest, configuration endpoint, deployment,
+     bootstrap, and conformance checklist for a hypothetical third module.
+- Expected: authorization does not widen across module boundaries, and a third
+  migration registers through `TESSARA_MODULE_CONTROL_ENDPOINTS` without new
+  module-ID logic in Core.
+- Acceptance check: pass when the constrained actor sees only allowed data and
+  the migration plan needs no new shared Module Management implementation.
+- Evidence:
+  `artifacts/sprint-6c-final-closeout-2026-07-29-r2/playwright-retained-fresh.json`
+  and `docs/architecture/independent-module-pathway.md`.
+
 ## 2026-07-27 - Sprint 6C Reusable Module Pathway Complete
 
 - Status: closeout-ready. Sprint 6C now leaves a reusable migration pathway,

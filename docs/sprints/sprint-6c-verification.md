@@ -1,116 +1,149 @@
 # Sprint 6C Verification
 
-Status: closeout-ready.
+Status: complete. Final corrective closeout completed on 2026-07-29.
 
-This record extends the original Dashboard extraction closeout with the
-reusable, definition-independent module pathway requested before Sprint 6C
-handoff. The original evidence under `artifacts/sprint-6c-closeout/` remains
-historical. Authoritative pathway evidence is retained under
-`artifacts/sprint-6c-pathway-closeout/`.
+This record supersedes the earlier Sprint 6C closeout summaries for final
+handoff. Historical evidence remains under `artifacts/sprint-6c-closeout/` and
+`artifacts/sprint-6c-pathway-closeout/`. The authoritative final evidence is
+under `artifacts/sprint-6c-final-closeout-2026-07-29-r2/`.
 
 ## Source And Deployment
 
-- Reusable-path implementation commit:
-  `b1b497689cec0fc0220b6ba26b53deed000a2978`.
-- Closeout-discovered module-tab navigation fix and exact deployed commit:
-  `f59468fc627d62fd2f8e5d629ba6b7714cc1bd4c`; source tree:
-  `963315ddc752f63cdf81be9d7f295be95e9b4cd1`.
-- Deployment profile: `deploy/sprint-6c/compose.yaml`.
-- Core, Dashboard, Scoped Records, and installation-control release images
-  carry the same clean commit/tree labels.
-- A destructive fresh-data cycle rebuilt every release image, applied one
-  baseline per database, bootstrapped revision 1, and proved a second
-  bootstrap invocation was a no-op.
-- `deployment-final-fresh.json` is the deployment used for UAT, smoke, and
-  Playwright acceptance. After degraded-state testing intentionally recreated
-  Core, `deployment-handoff-fresh.json` captured the restored, normal-provider,
-  exact-source stack left running for review.
+- Final implementation commit:
+  `a5d694f7ef7c68e52a9ac93135846d29d5a061d7`; source tree:
+  `fc5494044be6c8dffa6c38381b5610f49f6619c4`.
+- The application, UAT corrections, reusable module pathway, walkthrough, and
+  test inventory were committed in `84f0d83a8294685d85120fe943d7ab846495c74b`.
+- The final commit corrects explicit PostgreSQL binding validation in the
+  retained Playwright harness. Because acceptance evidence is source-bound,
+  every release image was rebuilt and all deployment, UAT, smoke, browser, and
+  degraded-state evidence was recaptured after that commit.
+- Deployment profile: `deploy/sprint-6c/compose.yaml` plus
+  `deploy/sprint-6c/compose.override.yaml`, project `tessara`.
+- Core, Dashboard, Scoped Records, and installation-control images carry the
+  same clean commit/tree labels. `deployment-fresh.json` proves the exact
+  source and database-derived `fresh` state.
+- Bootstrap found the existing revision-1 deployment receipt and made no
+  change, proving the repeat invocation is idempotent.
+- The degraded-state matrix intentionally recreated Core. The restored
+  available-provider stack was recaptured as
+  `deployment-handoff-fresh.json` and left running for review.
 
-The retained machine records, rather than this document, are authoritative for
-container IDs, image IDs, installation identity, timestamps, database
-snapshots, and digests.
+Authoritative digests:
+
+- Deployment:
+  `4b7b305a9d8a3eae40fb0aa9cf972ffae756cf56bde5705957e9d56929e538e7`.
+- Restored handoff deployment:
+  `47569c2344e4aa95078c72e9c5061fc33aaabc5b8090ef0913c12a56d225dd64`.
+- UAT:
+  `2bc71a9100b25097ea79f9001fc744ff0ad288824ef42acf5be3b7fdcb08651d`.
+- Smoke:
+  `406a9c3e4029970e221084e4880638ab07838a8e55804c7e7ff1672367a62b21`.
+- Retained Playwright JSON:
+  `c81b4048feacda6f69fbd09221f2822fe820a8ea553b35f84d9b6af45b45bdf6`.
+- Degraded states:
+  `927f700b2ec1fbe9bc763788b57725336605e94ba6756ade2bd7062cdd2f936a`.
 
 ## Reusable Module Pathway
 
 - Core discovers independently deployed configuration-control endpoints from
-  the `TESSARA_MODULE_CONTROL_ENDPOINTS` registry. Adding a module does not
-  require a new module-ID branch in Core routing, validation, configuration
-  application, security synchronization, findings, or diagnostics.
-- The shared configuration form renders supported string, enum, integer,
-  number, and boolean fields from each manifest's configuration schema.
-  Unsupported schemas fail closed during manifest validation.
+  `TESSARA_MODULE_CONTROL_ENDPOINTS`. Adding a module requires no module-ID
+  branch in Core routing, validation, configuration application, security
+  synchronization, findings, or diagnostics.
+- The shared configuration form renders supported schema fields and rejects
+  unsupported schemas during manifest validation.
 - Shared Module Management owns configuration, diagnostics, findings,
   dependencies, lifecycle, enablement, navigation, and route-state behavior.
-  Module-specific content is limited to declared metadata, configuration
-  schema/values, dependencies, resources, and diagnostics returned by the
-  module contract.
-- Dashboard and Scoped Records both use this path. Browser conformance iterates
-  every independently deployed inventory entry instead of naming one reference
-  implementation.
-- The migration recipe, ownership boundary, required manifest declarations,
-  control endpoint contract, deployment wiring, and conformance checklist are
-  documented in `docs/architecture/independent-module-pathway.md`.
-- The consistency inventory and custom-function review are retained in
+  Module-specific differences are declared metadata, schema/values,
+  dependencies, resources, diagnostics, and product behavior.
+- Dashboard and Scoped Records both use the pathway. Common browser
+  conformance iterates independently deployed inventory entries.
+- The migration recipe is
+  `docs/architecture/independent-module-pathway.md`; the consistency and
+  custom-function inventory is
   `docs/audits/module-management-consistency-2026-07-27/README.md`.
 
 ## Automated Verification
 
-- `scripts/validate.ps1`: passed in full on pristine disposable Core,
-  enrollment, fresh-baseline, and populated-upgrade databases. This included
-  evidence self-tests, formatting, native/SSR/hydrate checks, 43 module
-  contract tests, 79 web tests, all API feature and integration suites, and
-  the release nondisclosure timing proof.
-- The first full validation attempt correctly rejected reused one-time
-  enrollment state in the disposable test database. After recreating only the
-  four named test databases, the complete matrix passed without skips.
-- `npm --prefix .\end2end test`: passed all 61 tests in the required
-  state-safe one-worker acceptance mode.
+- `cargo fmt --all -- --check`: passed.
+- `cargo test -p tessara-api --locked`: passed all unit, integration, native
+  route, module, permission, fresh-baseline, and workflow suites using three
+  isolated disposable databases. Two demo tests are deliberately delegated to
+  the split-stack smoke/UAT coverage; no test failed.
+- `cargo test -p tessara-web --locked`: passed 79/79.
+- The previously completed full `scripts/validate.ps1` and Clippy verification
+  remain applicable: the only later source change is the TypeScript
+  acceptance binding fix described above.
+- `npm --prefix .\end2end test`: passed 61/61 against the exact deployed
+  source.
 - `scripts/validate-e2e.ps1`: passed the manifest-bound 61-test inventory with
   one worker, zero retries, skips, filtered tests, flaky results, or failures.
-  The retained JSON report digest is
-  `27fd7d9b83cd94732f9f11c6b9bb72179ce874cd1fe42dfae5934cd7df5dd616`.
-- `scripts/uat-sprint.ps1`: passed and retained as
-  `uat-final-fresh.json` (SHA-256
-  `d38874aa06010263af45b54ac52a53a1cf5a7ff14bed4b298f82411669a04814`).
-- `scripts/smoke.ps1`: passed and retained as
-  `smoke-final-fresh.json` (SHA-256
-  `cc3b34eded9784cb9a4f4eea2ea81135be32c67bd53dd47e5b2b8d31e23b4368`).
-- `scripts/verify-sprint-6c-isolation.ps1`: passed. Dashboard and Scoped
-  Records runtime identities can reach only their owned databases, while
-  inverse Core/module access fails closed.
-- `scripts/test-sprint-6c-degraded-states.ps1`: passed `available`,
-  provider-unavailable, incompatible, inactive, superseded,
-  resource-tombstoned, owner-tombstoned, owner-data-destroyed, missing, and
-  not-evaluated states. Every state returned nine placements with saved titles
-  retained. Proof is `degraded-states-final.json` (SHA-256
-  `dc8be774b8540106a7c6254dae3af8b4e9090593eb83fa8cd7469ae69694870f`).
+- `scripts/uat-sprint.ps1`: passed the module, organization, forms, datasets,
+  components, dashboards, and seed flows.
+- `scripts/smoke.ps1`: passed against the retained fresh deployment and
+  preserved Dashboard `41933f5c-f02b-47c6-b44f-6edffa32c283`.
+- `scripts/verify-sprint-6c-isolation.ps1`: passed negative cross-database
+  credential checks.
+- `scripts/test-sprint-6c-degraded-states.ps1`: passed available,
+  provider-unavailable, incompatible, inactive, superseded, tombstoned,
+  owner-tombstoned, owner-data-destroyed, missing, and not-evaluated states.
+  All ten states retained nine placements and saved titles, and the original
+  enabled/available state was restored.
+- Visual UAT inspection covered Module Management parity, configuration and
+  findings layout, enablement semantics, product-navigation removal while
+  disabled, Dashboard outage containment, editor warning treatment, the
+  centered side-sheet icon, responsive states, and normal restored operation.
+  The walkthrough is `docs/sprints/sprint-6c-uat-walkthrough.md`.
 
-## Closeout Discovery
+## Closeout Discoveries
 
-The first direct four-worker browser run exposed expected cross-file
-interference because Module Management intentionally disabled Dashboards while
-the Dashboard suite was using it. The canonical acceptance mode already
-serializes installation-wide state.
+The first final evidence capture used the generic deployment helper without
+overriding its historical `api` service name. Sprint 6C names that service
+`core`; rerunning with the exact Core, gateway, and PostgreSQL container IDs
+passed. No application or evidence contract changed.
 
-The serialized rerun then found a real shared UI defect: selecting Overview
-from a `#configuration` URL changed the active tab only briefly, allowing the
-old hash to restore Configuration. Module detail tabs now use real hash
-destinations while preserving their ARIA tab semantics. The focused
-independent-module control scenario and both complete 61-test runs passed after
-the repair.
+The first retained acceptance attempt exposed a real harness defect:
+explicit database binding validation referenced derived variables before
+initialization. The fix validates the configured database and user values
+before deriving the command. A focused reproduction passed, the fix was
+committed, the stack was rebuilt from that exact commit, and the complete
+source-exact acceptance cycle was repeated successfully.
+
+The first unconfigured API test invocation passed 151 tests and correctly
+refused to skip two required database integration tests. The final invocation
+supplied isolated, token-bounded disposable databases plus the explicit
+destructive-test acknowledgement; the complete API suite passed. The named
+test container and its data were removed afterward without touching the
+Sprint stack.
 
 ## Acceptance Mapping
 
-1. A future migration has one documented path for ownership, manifest,
-   control endpoint, deployment, bootstrap, and conformance work.
-2. Dashboard and Scoped Records expose the same shared configuration,
-   diagnostics, lifecycle, enablement, navigation, findings, and route-state
-   behavior.
-3. Their differences are declarative metadata/configuration and
-   module-owned product behavior, not Core module-ID conditionals.
-4. Configuration schema support and unsupported-schema rejection are enforced
-   by contract tests.
-5. Common UI behavior is exercised by iterating the independent-module
-   inventory.
-6. Exact-source UAT, smoke, browser, database-isolation, degraded-state, and
-   full repository gates are retained and green.
+1. Separate Dashboard service/database/manifest/configuration/health/API/SSR:
+   Compose and deployment evidence, UAT, smoke, API/web tests, and Module
+   Management walkthrough passed.
+2. Runtime database isolation: `verify-sprint-6c-isolation.ps1` passed all
+   negative cross-database checks.
+3. Typed ComponentVersion references without Core relational dependency:
+   module contract, Dashboard repository, baseline, and API tests passed.
+4. Versioned transition-only adapter and Sprint 8A migration marker: contract
+   tests, manifest inspection, and Module Management configuration note passed.
+5. Downstream grant binding: module contract and Core adapter actor,
+   installation, audience, action, scope, revision, expiry, and replay tests
+   passed.
+6. Nondisclosure and complete resolution states: permissions tests and the
+   ten-state degraded matrix passed.
+7. Sprint 5A product continuity: Dashboard directory, create, detail, editor,
+   viewer, SSR, responsive, and canonical Playwright coverage passed.
+8. Core-owned Module Management without product-data access: shared
+   configuration/diagnostics UAT and isolation tests passed.
+9. Contained Dashboard/Components outages: visual outage inspection,
+   degraded matrix, retry behavior, and unrelated-route checks passed.
+10. Deterministic fresh bootstrap/baselines: database-derived fresh evidence,
+    baseline tests, revision-1 receipt, and repeat bootstrap no-op passed.
+11. Exact-clean-source verification: commit/tree-labelled deployment, UAT,
+    smoke, 61/61 direct and retained Playwright, Rust suites, isolation, and
+    degraded-state evidence passed.
+12. Reusable Module Management template: Dashboard and Scoped Records use one
+    schema-driven control path, shared conformance tests pass, and the
+    registration-based third-module recipe contains no definition-specific
+    Core branch.

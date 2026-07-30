@@ -1,7 +1,8 @@
 # Sprint 6C Plan: Independently Deployed Dashboard Module Slice
 
-Status: implementation reopened on 2026-07-27 to turn the two independent
-modules into a reusable migration pathway. The sprint started from clean `main` commit
+Status: complete on 2026-07-29. The reopened implementation produced a
+reusable migration pathway, completed corrective UAT, and passed the final
+source-exact closeout cycle. The sprint started from clean `main` commit
 `c4e291c32645af65773726ab6a93449f4bef2c4a`.
 
 - Branch: `codex/sprint-6c`
