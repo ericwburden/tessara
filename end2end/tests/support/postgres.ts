@@ -17,8 +17,8 @@ export function runPlaywrightSql(sql: string) {
     }
     if (
       !/^[0-9a-f]{64}$/.test(configuredContainer) ||
-      !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(database) ||
-      !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(user)
+      !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(configuredDatabase) ||
+      !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(configuredUser)
     ) {
       throw new Error("Playwright acceptance PostgreSQL binding is malformed.");
     }
