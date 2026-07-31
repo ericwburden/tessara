@@ -402,16 +402,29 @@ pub(super) async fn authorize(
     let encoded = headers
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
-        .ok_or(DashboardModuleError::Forbidden)?;
-    let bytes = URL_SAFE_NO_PAD
-        .decode(encoded)
-        .map_err(|_| DashboardModuleError::Forbidden)?;
+        .ok_or_else(|| {
+            tracing::warn!(
+                action,
+                "Dashboard authorization header is missing or invalid"
+            );
+            DashboardModuleError::Forbidden
+        })?;
+    let bytes = URL_SAFE_NO_PAD.decode(encoded).map_err(|error| {
+        tracing::warn!(%error, action, "Dashboard authorization envelope is not base64url");
+        DashboardModuleError::Forbidden
+    })?;
     let envelope: SignedEnvelopeV1<AuthorizationGrantV1> =
-        serde_json::from_slice(&bytes).map_err(|_| DashboardModuleError::Forbidden)?;
+        serde_json::from_slice(&bytes).map_err(|error| {
+            tracing::warn!(%error, action, "Dashboard authorization envelope is invalid");
+            DashboardModuleError::Forbidden
+        })?;
     state
         .core_authorization_verifier
         .verify(&envelope)
-        .map_err(|_| DashboardModuleError::Forbidden)?;
+        .map_err(|error| {
+            tracing::warn!(%error, action, "Dashboard authorization signature is invalid");
+            DashboardModuleError::Forbidden
+        })?;
     let security = load_security_state(&state.pool)
         .await?
         .ok_or_else(|| DashboardModuleError::Unavailable("security state unavailable".into()))?;

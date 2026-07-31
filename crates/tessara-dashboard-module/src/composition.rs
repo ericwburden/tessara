@@ -293,6 +293,15 @@ async fn reconcile_composition(
             .iter()
             .all(|node_id| manage_scope.contains(node_id))
     {
+        tracing::warn!(
+            dashboard_scope_count = dashboard_scope.len(),
+            manage_scope_count = manage_scope.len(),
+            missing_scope_count = dashboard_scope
+                .iter()
+                .filter(|node_id| !manage_scope.contains(node_id))
+                .count(),
+            "Dashboard composition scope is not manageable"
+        );
         return Err(DashboardModuleError::Forbidden);
     }
     let authorization = authorization_header(&headers)?;
