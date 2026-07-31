@@ -16,3 +16,22 @@ docker compose -f deploy/sprint-6d/compose.yaml up --build -d
 ```
 
 The second bootstrap must report an exact no-op.
+
+For the retained closeout run, publish the canonical evidence in this order:
+
+```powershell
+.\scripts\verify-module-sdk-boundaries.ps1 `
+  -NativeEvidencePath artifacts/sprint-6d-closeout/package-boundaries-native.json `
+  -WasmEvidencePath artifacts/sprint-6d-closeout/package-boundaries-wasm.json
+.\scripts\verify-module-sdk-compatibility.ps1 `
+  -EvidencePath artifacts/sprint-6d-closeout/compatibility-inventory.json
+.\scripts\run-module-sdk-conformance.ps1 `
+  -EvidencePath artifacts/sprint-6d-closeout/reference-conformance.json
+.\scripts\capture-sprint-6d-closeout-evidence.ps1 -Mode Static
+.\scripts\capture-sprint-6d-closeout-evidence.ps1 -Mode RuntimeResilience
+```
+
+After smoke, UAT, Playwright, the Scoped Records regression capture, and the
+manual matrix are complete, run `capture-sprint-6d-closeout-evidence.ps1
+-Mode Digests`. It rejects an incomplete 18-file closeout inventory and writes
+the required SHA-256 sidecars.

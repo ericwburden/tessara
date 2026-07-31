@@ -165,6 +165,20 @@ Retained files live under `artifacts/sprint-6d-closeout/`:
 Each retained JSON/Markdown file has a sibling `.sha256` containing the
 lower-case SHA-256 digest followed by one newline.
 
+The canonical publishers are:
+
+- package boundary, compatibility, and conformance scripts named in the
+  approved test-change packet;
+- `capture-sprint-6d-closeout-evidence.ps1 -Mode Static` for source/image,
+  migration, and ownership proof;
+- `capture-sprint-6d-closeout-evidence.ps1 -Mode RuntimeResilience` for one
+  graceful stop, Core fallback/containment, restart, and state-retention
+  chronology;
+- `capture-sprint-6d-closeout-evidence.ps1 -Mode
+  ScopedRecordsRegression` after smoke, UAT, and Playwright are retained;
+- `capture-sprint-6d-closeout-evidence.ps1 -Mode Digests` as the final
+  complete-inventory and sidecar gate.
+
 ## Migration Checkpoint
 
 Sprint 6D uses fast-forward development baselines:
