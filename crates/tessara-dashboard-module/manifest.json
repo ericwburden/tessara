@@ -373,7 +373,7 @@
   "assets": [
     {
       "path": "/dashboard.css",
-      "digest": "sha256:a88186f05236add56720b1580c3e8ba872eb3ea35f9dbf37b64fb4e38ffc817d",
+      "digest": "sha256:252c2f8357e49ef744e56316d08ebf67b6e44547ac8536fdf3e666c095ba1b73",
       "content_type": "text/css; charset=utf-8"
     },
     {

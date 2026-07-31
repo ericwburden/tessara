@@ -517,6 +517,33 @@ mod tests {
                 .iter()
                 .any(|capability| capability.id.as_str() == "dashboards:read")
         );
+
+        for (path, expected_digest) in [
+            ("/dashboard.css", tessara_dashboard_ui::DASHBOARD_CSS_SHA256),
+            (
+                "/dashboard-lifecycle.css",
+                tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS_SHA256,
+            ),
+            ("/dashboard.js", tessara_dashboard_ui::DASHBOARD_JS_SHA256),
+            (
+                "/dashboard-bindings.js",
+                tessara_dashboard_ui::DASHBOARD_BINDINGS_JS_SHA256,
+            ),
+            (
+                "/dashboard.wasm",
+                tessara_dashboard_ui::DASHBOARD_WASM_SHA256,
+            ),
+        ] {
+            let declared = manifest
+                .assets
+                .iter()
+                .find(|asset| asset.path == path)
+                .unwrap_or_else(|| panic!("manifest should declare {path}"));
+            assert_eq!(
+                declared.digest.to_string(),
+                format!("sha256:{expected_digest}")
+            );
+        }
     }
 
     #[test]
