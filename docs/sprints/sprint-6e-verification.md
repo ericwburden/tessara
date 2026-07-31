@@ -1,9 +1,11 @@
 # Sprint 6E Verification Contract
 
-Status: UAT fixes are implemented and the administrator product flow plus
-candidate and maintained-baseline rollback flows pass. Final acceptance remains
-blocked on scoped-manager/nondisclosure fixtures, the explicit presentation
-sweep, provider degradation, and a new source-exact retained chronology.
+Status: Module Browser Lifecycle v1 and Dashboard adoption pass focused manual
+UAT on candidate `2.0.2`, including history, dirty-state negotiation, repeat
+mount/unmount, failure containment, and complete-document recovery. Final Sprint
+acceptance remains blocked on scoped-manager/nondisclosure fixtures, the
+explicit JavaScript-disabled/presentation sweep, provider degradation, and a
+new source-exact retained chronology.
 
 This document is the retained acceptance map for Dashboard SDK adoption and
 source independence. Final run outputs belong under
