@@ -26,6 +26,14 @@ use crate::{
 
 const CORE_DASHBOARD_BINDING: &str = "tessara.core.dashboards";
 const DASHBOARD_CONTRACT: &str = "tessara.dashboards.dashboard";
+const COMPOSITION_CONTRACT: &str = "tessara.dashboards.composition";
+
+fn contract_for_action(action: &str) -> &'static str {
+    match action {
+        "dashboards.load_composition" | "dashboards.reconcile_composition" => COMPOSITION_CONTRACT,
+        _ => DASHBOARD_CONTRACT,
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -419,7 +427,8 @@ pub(super) async fn authorize(
             presenting_service: ModuleDefinitionId::new("tessara.core").expect("Core id"),
             audience_module_instance_id: security.module_instance_id,
             dependency_binding: DependencyBindingKey::new(CORE_DASHBOARD_BINDING).expect("binding"),
-            functional_contract: FunctionalContractId::new(DASHBOARD_CONTRACT).expect("contract"),
+            functional_contract: FunctionalContractId::new(contract_for_action(action))
+                .expect("contract"),
             action: action.into(),
             operation,
             authorization_revision: security.authorization_revision as u64,
@@ -781,7 +790,10 @@ async fn load_scope_ids_pool(
 
 #[cfg(test)]
 mod tests {
-    use super::{DashboardInputV1, normalized_scope, validate_dashboard_input};
+    use super::{
+        COMPOSITION_CONTRACT, DASHBOARD_CONTRACT, DashboardInputV1, contract_for_action,
+        normalized_scope, validate_dashboard_input,
+    };
     use uuid::Uuid;
 
     #[test]
@@ -800,5 +812,19 @@ mod tests {
             })
             .is_ok()
         );
+    }
+
+    #[test]
+    fn authorization_contract_matches_the_manifest_action_family() {
+        assert_eq!(
+            contract_for_action("dashboards.load_composition"),
+            COMPOSITION_CONTRACT
+        );
+        assert_eq!(
+            contract_for_action("dashboards.reconcile_composition"),
+            COMPOSITION_CONTRACT
+        );
+        assert_eq!(contract_for_action("dashboards.list"), DASHBOARD_CONTRACT);
+        assert_eq!(contract_for_action("dashboards.update"), DASHBOARD_CONTRACT);
     }
 }

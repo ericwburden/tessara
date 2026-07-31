@@ -29,4 +29,17 @@ if ($LASTEXITCODE -ne 1) {
     throw "Root Dashboard UI ownership audit failed to execute."
 }
 
+$composeOverride = Get-Content -LiteralPath `
+    (Join-Path $repoRoot "deploy/sprint-6e/compose.override.yaml") -Raw
+if ($composeOverride -notmatch "traefik\.http\.routers\.tessara-core\.entrypoints:\s*web") {
+    throw "Sprint 6E must isolate the public Core router to the web entrypoint."
+}
+foreach ($slot in @("baseline", "candidate")) {
+    $route = Get-Content -LiteralPath `
+        (Join-Path $repoRoot "deploy/sprint-6e/dashboard-route.$slot.yaml") -Raw
+    if ($route -notmatch "entryPoints:\s*\[module\]") {
+        throw "Sprint 6E Dashboard slot '$slot' is not isolated to the module entrypoint."
+    }
+}
+
 Write-Host "Sprint 6E Dashboard source and package boundaries passed."

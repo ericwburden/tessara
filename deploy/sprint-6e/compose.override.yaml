@@ -19,6 +19,11 @@ services:
       TESSARA_DASHBOARD_MODULE_URL: ""
       TESSARA_MODULE_SERVICE_ENDPOINTS: '{"dashboards":"http://gateway:8081","scoped-records":"http://scoped-records:8090","module-sdk":"http://reference-module-sdk:8091"}'
       TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.reference.module-sdk":"http://reference-module-sdk:8091"}'
+    labels:
+      # The inherited PathPrefix(`/`) router must remain public-only. Without
+      # this constraint it also competes on the private module entrypoint and
+      # can send Core's signed module request back to Core's login boundary.
+      traefik.http.routers.tessara-core.entrypoints: web
 
   dashboards:
     image: ${TESSARA_DASHBOARD_BASELINE_IMAGE:-tessara-dashboards:2.0.0}
