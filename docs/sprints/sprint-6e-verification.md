@@ -1,9 +1,10 @@
 # Sprint 6E Verification Contract
 
 Status: UAT fixes are implemented and the administrator product flow plus
-live baseline-candidate-baseline cycle pass. Final acceptance remains blocked
-on scoped-manager/nondisclosure fixtures, the explicit presentation sweep,
-provider degradation, and a new source-exact retained chronology.
+candidate product flow pass. Final acceptance remains blocked because the
+restored immutable `2.0.0` baseline editor returns `403`, and on scoped-manager/
+nondisclosure fixtures, the explicit presentation sweep, provider degradation,
+and a new source-exact retained chronology.
 
 This document is the retained acceptance map for Dashboard SDK adoption and
 source independence. Final run outputs belong under
