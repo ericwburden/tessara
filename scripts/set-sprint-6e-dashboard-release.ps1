@@ -70,15 +70,14 @@ $desired = Get-Content -LiteralPath `
 $desired.installation_id = $latestReceipt.installation_id
 $desired.revision = [int64]$latestReceipt.revision + 1
 $desired.modules = @($latestReceipt.modules | ForEach-Object {
-    if ($_.definition_id -ne "tessara.dashboards") {
-        return $_
-    }
+    $isDashboard = $_.definition_id -eq "tessara.dashboards"
+    $selectedManifest = if ($isDashboard) { $manifest } else { $_.manifest }
     [pscustomobject]@{
         definition_id = $_.definition_id
-        version = $expectedVersion
-        manifest = $manifest
-        manifest_digest = Get-ManifestDigest $manifest
-        runtime_image = $imageId
+        version = if ($isDashboard) { $expectedVersion } else { $_.version }
+        manifest = $selectedManifest
+        manifest_digest = if ($isDashboard) { Get-ManifestDigest $manifest } else { $_.manifest_digest }
+        runtime_image = if ($isDashboard) { $imageId } else { $_.runtime_image }
         publisher = $_.publisher
         database_name = $_.database_name
         route_prefix = $_.route_prefix
