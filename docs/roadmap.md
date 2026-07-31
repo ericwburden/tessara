@@ -925,7 +925,7 @@ reopening Sprint 6C or changing its retained evidence.
 
 **User-testable exit condition:** a tester can compose and view a Dashboard through the normal shell while Dashboard runs in a separate process and database, and can observe contained behavior when Dashboard or Components is unavailable. In Module Management, Dashboard and Scoped Records use the same configuration, diagnostics, lifecycle, enablement, navigation, findings, and route-state interactions; their visible differences come only from declared module metadata and configuration. The documented pathway and inventory-driven conformance test identify the bounded manifest, control-endpoint, deployment, bootstrap, product, and database work needed for the next migration without adding a module-specific Core management path.
 
-### Sprint 6D: Canonical Module SDK And Runtime Extraction Slice (Next)
+### Sprint 6D: Canonical Module SDK And Runtime Extraction Slice (Complete)
 
 **Outcome:** Tessara has one canonical, independently versioned source for
 shared module contracts, runtime integration, complete-document shell/UI
@@ -987,7 +987,7 @@ unavailable states, and run the shared conformance suite. Package/source audits
 show one canonical implementation for each extracted platform behavior, while
 the module image contains its own compiled runtime/UI code and assets.
 
-### Sprint 6E: Dashboard SDK Adoption And Source Independence Slice
+### Sprint 6E: Dashboard SDK Adoption And Source Independence Slice (Next)
 
 **Outcome:** Dashboards completes the first full extraction pass: its already
 independent Sprint 6C process and database also become independently built,

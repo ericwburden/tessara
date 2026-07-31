@@ -3,7 +3,7 @@
 Status: accepted Sprint 6D implementation contract.
 
 This document makes the
-[Sprint 6D roadmap outcome](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-next)
+[Sprint 6D roadmap outcome](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-complete)
 concrete. It refines the source-ownership decision in
 [Module SDK Source Ownership And Deployment](./module-sdk-source-ownership.md)
 without expanding Sprint 6D into Dashboard adoption.

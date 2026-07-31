@@ -13,13 +13,13 @@ process and database. The accepted post-closeout sequencing decision treats
 that as the runtime/data boundary and completes source/build independence in
 two steps:
 
-1. **Sprint 6D: Canonical Module SDK And Runtime Extraction** is next.
-2. **Sprint 6E: Dashboard SDK Adoption And Source Independence** follows.
+1. **Sprint 6D: Canonical Module SDK And Runtime Extraction** is complete.
+2. **Sprint 6E: Dashboard SDK Adoption And Source Independence** is next.
 3. **Sprint 6F: Application Blueprint And Composition Automation** retains the
    former Sprint 6D Blueprint scope.
 
 Later module extractions apply the completed Sprint 6D/6E pattern. See the
-[roadmap](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-next)
+[roadmap](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-complete)
 and the accepted
 [module SDK source-ownership decision](../architecture/module-sdk-source-ownership.md).
 

@@ -1,11 +1,11 @@
 # Sprint 6D Verification
 
-Status: test-change packet approved by the user on 2026-07-30; pre-commit
-implementation verification passed, but retained source-exact closeout
-evidence has not yet been captured.
+Status: complete. The user-approved test-change packet, implementation
+verification, source-exact deployment, retained acceptance runs, manual UAT,
+and digest-bound closeout evidence all passed on 2026-07-31.
 
 This document maps the
-[Sprint 6D roadmap](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-next)
+[Sprint 6D roadmap](../roadmap.md#sprint-6d-canonical-module-sdk-and-runtime-extraction-slice-complete)
 to required manual and automated proof. It is governed by the
 [Sprint 6D plan](./sprint-6d-plan.md) and
 [Module SDK Implementation Contract](../architecture/module-sdk-implementation-contract.md).
@@ -48,7 +48,9 @@ and Playwright expectations may not be loosened.
 ## Closeout Preconditions
 
 - HEAD is a committed clean `codex/sprint-6d` source tree.
-- `docs/roadmap.md` still marks Sprint 6D as the sole `(Next)` sprint.
+- Before closeout mutation, `docs/roadmap.md` marked Sprint 6D as the sole
+  `(Next)` sprint; closeout marks Sprint 6D `(Complete)` and Sprint 6E as the
+  sole `(Next)` sprint.
 - Every production manifest uses the sole current schema and exact supported
   platform tuple.
 - No unresolved decision blocker remains in the Sprint plan or implementation
@@ -196,9 +198,64 @@ The checkpoint must explicitly say which database baselines changed. If none
 changed, it records deliberate no-database-schema-change proof plus every
 fresh-baseline command still rerun.
 
+## Closeout Execution
+
+The final retained deployment was built from clean implementation commit
+`e313e1a9f7c412c8d4651af8d19e6178c446a696`, tree
+`84544593ce21d4bf9405bbbfe45f5d1f275eeb66`. All five Tessara release images
+carry that commit, tree, clean-source, and release-profile provenance. The
+later closeout commit changes documentation only; it does not invalidate the
+source binding.
+
+The first candidate closeout cycle was intentionally discarded after the
+graceful-shutdown check exposed missing Unix SIGTERM handling in
+`tessara-module-runtime`. Commit `e313e1a9` added the canonical termination
+path without changing test expectations. The stack, data volumes, bootstrap,
+and all retained acceptance evidence were then rebuilt or rerun from that
+corrected commit.
+
+Final results:
+
+- fresh Compose build and deployment passed with all expected services
+  running and PostgreSQL plus the reference module healthy;
+- first bootstrap applied the desired revision and the second bootstrap was
+  an exact no-op;
+- all four database migration ledgers matched their current baseline
+  checksums; the Core baseline was the sole Sprint 6D database baseline
+  changed, while Dashboard, deployment-control, and Scoped Records baselines
+  were reapplied unchanged to the fresh cluster; reference state used current
+  JSON schema version 1;
+- native and WASM package/source audits passed with zero canonical forbidden
+  findings; the known Dashboard-to-root-`tessara-web` edge remains visible,
+  unallowlisted, unchanged, and assigned to Sprint 6E;
+- exact SDK compatibility inventory and the six-check shared reference
+  conformance suite passed;
+- the source-exact smoke and Sprint UAT suites passed;
+- SIGTERM produced exit code 0 in 0.436 seconds, below the 30-second bound,
+  with identical reference-state digests before and after restart;
+- during the reference outage, the authenticated route returned the
+  Core-owned 503 fallback while Core health and Dashboard remained 200, and
+  the restarted reference route returned 200;
+- `cargo test -p tessara-api --locked` passed 156 unit tests and every active
+  integration suite; its two documented Sprint 6C demo checks remained
+  intentionally ignored;
+- `cargo test -p tessara-web --locked` passed 80 tests;
+- the canonical `scripts/validate.ps1` run passed from a full `cargo clean`
+  against four freshly provisioned role-specific databases, including the
+  release resource-reference timing proof;
+- direct Playwright passed 62/62, and the retained source-bound wrapper passed
+  62/62 with zero skips, unexpected results, flakes, filters, or retries;
+- the database-backed Scoped Records regression passed six unit checks and
+  its secure-records integration check;
+- the 20-row manual matrix passed, all 18 required artifacts were present,
+  and the digest publisher verified every sibling SHA-256 sidecar.
+
+The complete retained set is in `artifacts/sprint-6d-closeout/`. The running
+stack remains available at `http://127.0.0.1:8080` for handoff.
+
 ## Closeout Decision
 
-Sprint 6D may move from implementation-complete to closeout only when:
+Sprint 6D is closed because:
 
 - every roadmap and exit-condition row has both proofs;
 - every automated change matches the user-approved test packet or a later
@@ -209,3 +266,6 @@ Sprint 6D may move from implementation-complete to closeout only when:
 - all retained evidence is source-exact, internally consistent, and
   digest-bound;
 - the repository is clean at the evidenced commit.
+
+No blocker remains for Sprint 6D. Sprint 6E owns Dashboard adoption of the
+canonical SDK packages and removal of the recorded Dashboard-to-root-web edge.

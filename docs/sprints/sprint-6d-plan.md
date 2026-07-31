@@ -1,6 +1,6 @@
 # Sprint 6D Plan: Canonical Module SDK And Runtime Extraction
 
-Status: implementation complete; retained closeout evidence pending.
+Status: complete; source-exact closeout evidence passed and is digest-bound.
 
 - Branch: `codex/sprint-6d`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6d`
@@ -11,7 +11,7 @@ Status: implementation complete; retained closeout evidence pending.
 - Initial inventory commit:
   `1b86fa658115547f9f762bae9d1814318cd94f16`
 - Roadmap authority:
-  `Sprint 6D: Canonical Module SDK And Runtime Extraction Slice (Next)`
+  `Sprint 6D: Canonical Module SDK And Runtime Extraction Slice (Complete)`
 - Implementation contract:
   [Module SDK Implementation Contract](../architecture/module-sdk-implementation-contract.md)
 - Ownership inventory:
@@ -315,7 +315,8 @@ all land in one sprint. The scope controls above are mandatory; implementation
 must not absorb Dashboard adoption, generic product APIs, or compatibility
 work to compensate.
 
-The specification commit and test-change approval preconditions are complete.
-No product-decision blocker remains. Closeout remains blocked on the retained
-source-exact deployment, bootstrap, smoke, UAT, Playwright, outage, and manual
-evidence cycle after implementation is committed.
+The specification, test-change approval, implementation, and closeout
+preconditions are complete. No product-decision or delivery blocker remains.
+The retained source-exact deployment, bootstrap, smoke, UAT, Playwright,
+outage, shutdown, regression, and manual evidence cycle passed against
+implementation commit `e313e1a9f7c412c8d4651af8d19e6178c446a696`.

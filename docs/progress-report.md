@@ -8,6 +8,139 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-07-31 - Sprint 6D Source-Exact Closeout
+
+### Completed
+
+- Sprint 6D is complete. Canonical `tessara-module-contract`,
+  `tessara-module-runtime`, `tessara-module-ui`, and
+  `tessara-module-testkit` packages now own the policy-neutral module
+  contract, startup/verification/operations, complete-document UI/assets, and
+  reusable conformance behavior.
+- The non-product `tessara.reference.module-sdk` release proves independent
+  native SSR, WASM hydration, configuration/security persistence, probes,
+  diagnostics, immutable assets, authorization nondisclosure, outage
+  containment, and shutdown without linking root `tessara-web` or
+  `tessara-api`.
+- Scoped Records consumes the canonical runtime and UI while retaining its
+  product and authorization semantics. Dashboard behavior remains unchanged;
+  its intentional root-`tessara-web` source edge is recorded, not allowlisted,
+  and handed to Sprint 6E.
+- The final source-exact implementation is commit
+  `e313e1a9f7c412c8d4651af8d19e6178c446a696`, tree
+  `84544593ce21d4bf9405bbbfe45f5d1f275eeb66`.
+- The first candidate evidence cycle found that container SIGTERM did not
+  reach the canonical shutdown future. The candidate evidence was discarded,
+  Unix SIGTERM handling was added in the implementation commit above, and the
+  stack and complete evidence set were recreated. No test expectation changed
+  during the correction.
+- All 18 required retained artifacts and their SHA-256 sidecars are under
+  `artifacts/sprint-6d-closeout/`.
+
+### Validation
+
+- A destructive fresh reset, release-image build, four database migrators,
+  first bootstrap, and exact second-bootstrap no-op passed. All five Tessara
+  images are labeled with the closing implementation commit/tree and clean
+  release provenance.
+- Native/WASM boundaries, source ownership, exact compatibility inventory,
+  and shared reference conformance passed. Canonical packages have zero
+  forbidden product/Core dependencies or terminology findings.
+- Smoke and Sprint UAT passed. Graceful SIGTERM exited 0 in 0.436 seconds with
+  unchanged state; the outage check retained Core health and Dashboard at 200,
+  served the Core-owned reference fallback at 503, and restored the reference
+  route to 200.
+- `cargo test -p tessara-api --locked` passed 156 unit tests and every active
+  database integration suite; `cargo test -p tessara-web --locked` passed 80
+  tests.
+- `scripts/validate.ps1` passed from a full `cargo clean` against four fresh,
+  role-specific test databases, including the release timing proof.
+- Direct Playwright and the source-bound retained wrapper each passed 62/62.
+  There were zero skipped, unexpected, flaky, filtered, or retried retained
+  tests. Existing Core, Organization, Forms, Workflows, Responses, Datasets,
+  Components, Dashboard, Module Management, responsive, keyboard, theme,
+  authorization, SSR, no-JavaScript, and hydration expectations remained
+  intact.
+- The database-backed Scoped Records regression passed six unit checks and
+  its secure integration check. The 20-point manual UAT matrix passed and the
+  final evidence digest gate verified all 18 artifacts.
+
+### Next Sprint
+
+Sprint 6E - Dashboard SDK Adoption And Source Independence. It must adopt the
+Sprint 6D canonical packages, remove the recorded
+`tessara-dashboard-module -> tessara-web` edge, and prove Dashboard-only
+release/upgrade/rollback behavior without reopening Sprint 6D product scope.
+
+### Sprint Handoff / Demo Instructions
+
+The source-exact Sprint 6D stack remains running at
+`http://127.0.0.1:8080`.
+
+#### Canonical Reference Experience
+
+- Role: enrolled administrator.
+- Path: normal Tessara navigation to the reference module route.
+- Steps: sign in, open the reference destination, refresh it directly, inspect
+  the complete server-rendered document, exercise keyboard focus, switch
+  light/dark/system themes, and inspect it at 1280 px, 768 px, and 390 px.
+- Expected: the module owns the complete SSR/hydration document and
+  content-hashed assets while presenting the same shell, navigation, tokens,
+  accessibility, and responsive behavior as Core.
+- Acceptance: PASS.
+- Evidence: `manual-uat.md`, `reference-conformance.json`,
+  `e2e-fresh.json`, and `e2e-fresh.summary.json`.
+
+#### Configuration, Authorization, And Operations
+
+- Roles: administrator and constrained actor.
+- Paths: reference product route, module configuration, readiness/liveness,
+  and sanitized diagnostics.
+- Steps: submit invalid and normalized valid configuration, read persisted
+  state, compare authorized and unauthorized Organization probes, disable and
+  re-enable the module, and inspect operational state.
+- Expected: stable validation findings, persisted normalized configuration,
+  capability/scope enforcement, indistinguishable known/random unauthorized
+  results, separate lifecycle probes, and no secret-bearing diagnostics.
+- Acceptance: PASS.
+- Evidence: `manual-uat.md`, `reference-conformance.json`,
+  `uat-fresh.json`, and `compatibility-inventory.json`.
+
+#### Outage, Recovery, And Retained Products
+
+- Role: operator, then enrolled administrator.
+- Paths: reference route, `/health`, Dashboard, Scoped Records, and existing
+  Core product routes.
+- Steps: stop the reference service with SIGTERM, visit its same-origin route,
+  confirm unrelated routes, restart it, and repeat the retained product flows.
+- Expected: bounded exit with retained state, Core-owned 503 reference
+  fallback, uninterrupted Core/Dashboard behavior, healthy recovery, and no
+  existing-screen regression.
+- Acceptance: PASS.
+- Evidence: `shutdown.json`, `outage-recovery.json`,
+  `scoped-records-regression.json`, `smoke-fresh.json`, `uat-fresh.json`, and
+  `e2e-fresh.json`.
+
+### Acceptance Mapping
+
+| Roadmap or exit clause | Manual proof | Automated proof | Result |
+| --- | --- | --- | --- |
+| Assign one owner to shared and duplicated behavior | Review ownership rows and the visible Sprint 6E Dashboard finding | Ownership and duplicate-source scan | PASS |
+| Establish contract/runtime/UI/testkit boundaries | Inspect manifests, package sources, and native graph | Exact native allowed/forbidden-edge audit | PASS |
+| Extract verification, destinations, references, errors, control, probes, diagnostics, tracing, and shutdown without product policy | Exercise reference control/operations and inspect sanitized output | Contract/runtime/testkit/reference suites and source scan | PASS |
+| Extract complete-document shell, primitives, tokens, accessibility, assets, and hydration | SSR/no-JavaScript, keyboard, themes, and three-width walkthrough | Native/WASM builds, conformance, and 62-test Playwright suite | PASS |
+| Define exact current compatibility and release inventory | Review supported tuple and obsolete rejection | Compatibility inventory gate | PASS |
+| Prevent canonical packages reaching Core/root/product implementations | Review native and WASM graph paths | Transitive graph and forbidden-symbol audits | PASS |
+| Deliver the non-product reference module and shared testkit | Navigate fixture and inspect conformance output | Six-check shared conformance suite | PASS |
+| Document authoring and fast-forward SDK upgrade workflow | Follow the clean-checkout authoring checklist | Markdown links and conformance entrypoint checks | PASS |
+| Preserve Core, Dashboard, and Scoped Records; defer Dashboard adoption | Exercise retained product routes and compare existing UI | Rust, smoke, UAT, direct and retained Playwright regressions | PASS |
+| Build/run reference without root `tessara-web` or `tessara-api` | Inspect package/image ownership and run reference image | Native/WASM dependency and source audits | PASS |
+| Navigate a coherent same-origin complete SSR route | Normal navigation, direct refresh, raw document/assets review | Smoke, UAT, conformance, and Playwright SSR/asset checks | PASS |
+| Verify authenticated and unavailable states | Allowed/constrained actors plus disable, stop, and restart walkthrough | Authorization/nondisclosure and outage/recovery checks | PASS |
+| Run the shared conformance suite | Inspect all six reported checks | Shared conformance command | PASS |
+| Show one canonical implementation per extracted behavior | Review ownership output and explain the Dashboard handoff | Duplicate-source and forbidden-symbol scans | PASS |
+| Show module-owned compiled runtime/UI/assets in the image | Inspect image provenance, asset URLs, and cache headers | Image labels/digests and asset assertions | PASS |
+
 ## 2026-07-30 - Sprint 6D Implementation
 
 - User approved the complete Sprint 6D test/harness change packet and
