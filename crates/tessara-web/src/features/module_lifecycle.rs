@@ -1,6 +1,11 @@
 //! Framework-neutral browser lifecycle host for independently deployed modules.
 
 use leptos::prelude::*;
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
 
 use crate::ui::AppShell;
 
@@ -26,18 +31,28 @@ enum HostState {
 pub fn ModuleLifecyclePage() -> impl IntoView {
     let state = RwSignal::new(HostState::Loading);
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-    let activation_revision = RwSignal::new(0_u64);
+    let activation_revision = Arc::new(AtomicU64::new(0));
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    let page_active = Arc::new(AtomicBool::new(true));
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     {
         let location = leptos_router::hooks::use_location();
+        let activation_revision = Arc::clone(&activation_revision);
+        let page_active = Arc::clone(&page_active);
+        let cleanup_page_active = Arc::clone(&page_active);
         Effect::new(move |_| {
             let path = location.pathname.get();
-            activation_revision.update(|revision| *revision = revision.wrapping_add(1));
-            let requested_revision = activation_revision.get_untracked();
+            let requested_revision = activation_revision
+                .fetch_add(1, Ordering::Relaxed)
+                .wrapping_add(1);
             state.set(HostState::Loading);
+            let activation_revision = Arc::clone(&activation_revision);
+            let page_active = Arc::clone(&page_active);
             leptos::task::spawn_local(async move {
                 let result = browser::activate(&path).await;
-                if activation_revision.get_untracked() != requested_revision {
+                if !page_active.load(Ordering::Relaxed)
+                    || activation_revision.load(Ordering::Relaxed) != requested_revision
+                {
                     return;
                 }
                 match result {
@@ -46,6 +61,7 @@ pub fn ModuleLifecyclePage() -> impl IntoView {
                 }
             });
         });
+        on_cleanup(move || cleanup_page_active.store(false, Ordering::Relaxed));
     }
 
     view! {
