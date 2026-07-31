@@ -12,10 +12,9 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
 
 - Sprint: `Sprint 6E: Dashboard SDK Adoption And Source Independence Slice`,
   selected from the sole roadmap heading marked `(Next)`.
-- Status: planning worktree prepared from clean post-Sprint-6D `main` commit
-  `3f2acf6a7151fa59983bd2fab42123db65b804aa`; implementation is explicitly
-  blocked until the sprint plan and its four source/release decisions are
-  approved.
+- Status: plan approved after review; implementation began from clean
+  post-Sprint-6D `main` commit
+  `3f2acf6a7151fa59983bd2fab42123db65b804aa`.
 - Branch: `codex/sprint-6e`.
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6e`.
 - Plan: `docs/sprints/sprint-6e-plan.md`.
@@ -24,9 +23,10 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
   API/web regressions; Sprint 6E Compose and idempotent bootstrap;
   Dashboard-only upgrade/rollback evidence; smoke; UAT; direct and retained
   Playwright.
-- Immediate focus: review and solidify Dashboard UI ownership, the Components
-  provider seam, release observation, and health-gated rollback. No product
-  functionality or test/harness implementation is authorized yet.
+- Approved decisions: Dashboard-owned `tessara-dashboard-ui`; permanent
+  provider-owned `tessara-components-contract`; retained route-free Component
+  viewer; manifest-driven generic routing; private-gateway blue/green release
+  switch; clean `2.0.0` baseline and Dashboard-only `2.0.1` candidate commits.
 
 ## 2026-07-31 - Sprint 6D Source-Exact Closeout
 

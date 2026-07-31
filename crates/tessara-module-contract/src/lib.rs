@@ -60,15 +60,15 @@ use uuid::Uuid;
 
 /// The first supported module manifest and transition descriptor schema.
 pub const CONTRACT_SCHEMA_VERSION_V1: u16 = 1;
-pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 2;
+pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 3;
 pub const CURRENT_CORE_RELEASE: &str = "0.1.0";
 pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "1.0.0";
-pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.0.0";
+pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.1.0";
 pub const CURRENT_MODULE_CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.1.0";
-pub const CURRENT_MODULE_UI_VERSION: &str = "0.1.0";
+pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.2.0";
+pub const CURRENT_MODULE_UI_VERSION: &str = "0.2.0";
 pub const CURRENT_DESIGN_SYSTEM_ASSET_ABI: &str = "1.0.0";
-pub const CURRENT_CONFORMANCE_SUITE_VERSION: &str = "1.0.0";
+pub const CURRENT_CONFORMANCE_SUITE_VERSION: &str = "1.1.0";
 
 fn deserialize_schema_version_v1<'de, D>(deserializer: D) -> Result<u16, D::Error>
 where
@@ -382,7 +382,7 @@ pub struct ModuleRelease {
 }
 
 /// Trust is not implied by compatibility.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReleaseTrustState {
     Unknown,
@@ -1409,8 +1409,55 @@ pub struct BrowserRouteDeclaration {
     pub methods: Vec<BrowserDocumentMethod>,
     pub required_capability: SecurityCapabilityId,
     pub authorization_action: String,
+    pub dependency_binding: DependencyBindingKey,
     pub functional_contract: FunctionalContractId,
     pub organization_scope_parameter: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum PublicApiMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicApiRouteDeclaration {
+    pub path_template: String,
+    pub method: PublicApiMethod,
+    pub required_capability: SecurityCapabilityId,
+    pub authorization_action: String,
+    pub dependency_binding: DependencyBindingKey,
+    pub operation: AuthorizationGrantOperationV1,
+    pub functional_contract: FunctionalContractId,
+    #[serde(default)]
+    pub idempotency: PublicApiIdempotency,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublicApiIdempotency {
+    #[default]
+    None,
+    ForwardOrGenerateHeader,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ControlProjectionKind {
+    SecurityState,
+    Organization,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ControlProjectionDeclaration {
+    pub kind: ControlProjectionKind,
+    pub path: String,
+    pub revision_field: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1451,6 +1498,10 @@ pub struct ModuleManifest {
     pub routes: Vec<RouteDeclaration>,
     #[serde(default)]
     pub browser_routes: Vec<BrowserRouteDeclaration>,
+    #[serde(default)]
+    pub public_api_routes: Vec<PublicApiRouteDeclaration>,
+    #[serde(default)]
+    pub control_projections: Vec<ControlProjectionDeclaration>,
     #[serde(default)]
     pub assets: Vec<ModuleAssetDeclaration>,
     #[serde(default)]
@@ -2398,6 +2449,79 @@ fn validate_manifest_links(manifest: &ModuleManifest, findings: &mut Vec<Validat
             });
         }
     }
+    let mut public_api_keys = BTreeSet::new();
+    for (index, api_route) in manifest.public_api_routes.iter().enumerate() {
+        let base = format!("public_api_routes[{index}]");
+        let key = (api_route.method, api_route.path_template.as_str());
+        if !public_api_keys.insert(key) {
+            findings.push(ValidationFinding {
+                code: "duplicate_public_api_route".into(),
+                path: base.clone(),
+                message: "public API method and path must be unique".into(),
+            });
+        }
+        if !api_route.path_template.starts_with("/api/")
+            || api_route.path_template.contains("..")
+            || api_route.path_template.starts_with("/api/private/")
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_public_api_path_template".into(),
+                path: format!("{base}.path_template"),
+                message: "public API paths must be local /api paths outside /api/private".into(),
+            });
+        }
+        if !capability_ids.contains(api_route.required_capability.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_public_api_capability".into(),
+                path: format!("{base}.required_capability"),
+                message: "public API capability must be declared by the manifest".into(),
+            });
+        }
+        if !contract_ids.contains(api_route.functional_contract.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_public_api_contract".into(),
+                path: format!("{base}.functional_contract"),
+                message: "public API contract must be provided by the manifest".into(),
+            });
+        }
+        require_text(
+            &format!("{base}.authorization_action"),
+            &api_route.authorization_action,
+            findings,
+        );
+        if api_route.idempotency == PublicApiIdempotency::ForwardOrGenerateHeader
+            && api_route.operation != AuthorizationGrantOperationV1::Mutation
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_public_api_idempotency".into(),
+                path: format!("{base}.idempotency"),
+                message: "idempotency headers are declared only for mutation routes".into(),
+            });
+        }
+    }
+    let mut projection_kinds = BTreeSet::new();
+    for (index, projection) in manifest.control_projections.iter().enumerate() {
+        let base = format!("control_projections[{index}]");
+        if !projection_kinds.insert(projection.kind) {
+            findings.push(ValidationFinding {
+                code: "duplicate_control_projection".into(),
+                path: base.clone(),
+                message: "control projection kinds must be unique".into(),
+            });
+        }
+        if !projection.path.starts_with("/api/private/") || projection.path.contains("..") {
+            findings.push(ValidationFinding {
+                code: "invalid_control_projection_path".into(),
+                path: format!("{base}.path"),
+                message: "control projections require local /api/private paths".into(),
+            });
+        }
+        require_text(
+            &format!("{base}.revision_field"),
+            &projection.revision_field,
+            findings,
+        );
+    }
     for (path, route_name, expected_kind) in [
         (
             "operational_routes.configuration_validation",
@@ -2465,8 +2589,10 @@ fn browser_path_templates_overlap(left: &str, right: &str) -> bool {
     left.len() == right.len()
         && left.iter().zip(right).all(|(left, right)| {
             *left == right
-                || (left.starts_with('{') && left.ends_with('}'))
-                || (right.starts_with('{') && right.ends_with('}'))
+                || (left.starts_with('{')
+                    && left.ends_with('}')
+                    && right.starts_with('{')
+                    && right.ends_with('}'))
         })
 }
 
@@ -2879,17 +3005,17 @@ mod tests {
             platform_versions: ModulePlatformVersions {
                 core_release: Version::new(0, 1, 0),
                 shell_context_schema: Version::new(1, 0, 0),
-                module_control_protocol: Version::new(1, 0, 0),
-                module_contract: Version::new(0, 1, 0),
-                module_runtime: Version::new(0, 1, 0),
-                module_ui: Version::new(0, 1, 0),
+                module_control_protocol: Version::new(1, 1, 0),
+                module_contract: Version::new(0, 2, 0),
+                module_runtime: Version::new(0, 2, 0),
+                module_ui: Version::new(0, 2, 0),
                 design_system_asset_abi: Version::new(1, 0, 0),
-                conformance_suite: Version::new(1, 0, 0),
+                conformance_suite: Version::new(1, 1, 0),
             },
             linked_packages: LinkedModulePackages {
-                module_contract: Version::new(0, 1, 0),
-                module_runtime: Some(Version::new(0, 1, 0)),
-                module_ui: Some(Version::new(0, 1, 0)),
+                module_contract: Version::new(0, 2, 0),
+                module_runtime: Some(Version::new(0, 2, 0)),
+                module_ui: Some(Version::new(0, 2, 0)),
             },
             deployment: DeploymentProfile::TessaraOciV1(TessaraOciV1 {
                 runtime_image: OciImageDeclaration {
@@ -2944,6 +3070,8 @@ mod tests {
             }],
             routes: transition.routes,
             browser_routes: Vec::new(),
+            public_api_routes: Vec::new(),
+            control_projections: Vec::new(),
             assets: Vec::new(),
             navigation: transition.navigation,
             security_capabilities: transition.security_capabilities,
@@ -3130,8 +3258,8 @@ mod tests {
     }
 
     #[test]
-    fn browser_path_templates_reject_parameterized_ambiguity() {
-        assert!(browser_path_templates_overlap(
+    fn browser_path_templates_allow_static_precedence_and_reject_parameter_ambiguity() {
+        assert!(!browser_path_templates_overlap(
             "/reference/example/{organization_id}",
             "/reference/example/current",
         ));

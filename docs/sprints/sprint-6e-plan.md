@@ -1,7 +1,7 @@
 # Sprint 6E Plan: Dashboard SDK Adoption And Source Independence
 
-Status: draft for review. Implementation is explicitly blocked until this
-plan is approved and its open decisions are resolved.
+Status: implemented at the `2.0.0` baseline on 2026-07-31; retained
+deployment-cycle verification remains in progress.
 
 - Branch: `codex/sprint-6e`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6e`
@@ -42,14 +42,18 @@ approves this plan.
   transitive path from the Dashboard release to root `tessara-web`,
   `tessara-api`, Core-private DTO/state/bootstrap code, or another module
   implementation.
-- Retain `tessara-web-dashboards` as Dashboard-owned UI source unless a rename
-  is proven necessary. Make the Dashboard release its sole production
+- Rename `tessara-web-dashboards` to `tessara-dashboard-ui`. Make the
+  Dashboard release its sole production
   consumer and remove it from root `tessara-web` features, dependencies,
   routing, hydration, and document bootstrap.
-- Remove the Dashboard UI dependency on
-  `tessara-web-component-viewer`. Dashboard may consume only the declared
-  Components provider contract and policy-neutral shared SDK/UI mechanics;
-  Components product rendering code must not enter the Dashboard image.
+- Retain the audited, route-free `tessara-web-component-viewer` leaf. It may
+  consume the provider-owned Components wire contract, but neither
+  `tessara-web-components` nor another Components feature implementation may
+  enter the Dashboard image.
+- Add `tessara-components-contract` as the permanent provider-owned contract
+  package for ComponentVersion references, catalog/metadata, resolution, and
+  execution wire types. Sprint 8A moves this package into Components module
+  source/release ownership without merging it into the implementation crate.
 - Keep Dashboard domain, persistence, migrations, configuration semantics,
   product validation, visibility/redaction rules, and placement policy with
   Dashboard.
@@ -86,9 +90,9 @@ approves this plan.
   upgrading, unavailable, and rollback-transition states.
 - Forward only short-lived signed projections and safe request metadata. Do
   not forward browser credentials or reusable Core authority.
-- Keep Dashboard product APIs module-owned. Any same-origin product API
-  routing added or changed in this sprint must be generic and
-  manifest/service-registration driven, not a Dashboard-specific Core path.
+- Keep Dashboard product APIs module-owned. Replace the Dashboard-specific
+  Core gateway with generic manifest/service-registration-driven browser,
+  asset, and product-API routing.
 
 ### Release, upgrade, and rollback contract
 
@@ -96,8 +100,9 @@ approves this plan.
   documented, idempotent bootstrap/materialization command.
 - Build Dashboard as an independently replaceable image with exact source
   commit, tree, dirty-state, release identity, and asset digests.
-- Capture an installed baseline, upgrade only Dashboard, health-gate the
-  switch, then roll back only Dashboard.
+- Capture a clean extracted baseline release `2.0.0`, then build a Dashboard-
+  only candidate release `2.0.1` from a second clean commit. Upgrade only
+  Dashboard, health-gate the switch, then roll back only Dashboard.
 - Prove Core, gateway, installation control, Scoped Records, reference SDK,
   and database service image digests and container identities do not change or
   restart during the Dashboard-only upgrade/rollback.
@@ -224,19 +229,17 @@ Planned commands:
   installation and releases; a second invocation must be an exact no-op.
 - Provenance: every built image records exact commit, tree, dirty state, and
   release profile; Dashboard additionally records release and asset digests.
-- Migrations: do not change the Dashboard baseline unless product persistence
-  requires it. If any schema changes, squash the pre-production baseline and
-  apply all affected baselines to disposable empty databases before retained
-  evidence.
+- Migrations: the Dashboard schema is frozen for Sprint 6E. Verify the existing
+  baseline byte-for-byte and apply it to a disposable empty database.
 - Evidence: write canonical retained files under
   `artifacts/sprint-6e-closeout/`, including source provenance, deployment,
   bootstrap first/no-op, migration checkpoint, package boundaries,
   SDK conformance, Dashboard product regression, authorization,
   provider-outage recovery, upgrade/rollback chronology, smoke, UAT,
   Playwright result/summary, and manual UAT.
-- Source binding: final deployment, smoke, UAT, Playwright, and manual evidence
-  must come from one clean implementation commit. Documentation-only closeout
-  may follow without rebuilding images.
+- Source binding: the baseline full stack is built from the clean extraction
+  commit; the candidate Dashboard image is built from the following clean,
+  Dashboard-only candidate commit. Evidence records both exact source trees.
 - Acceptance mapping: the final verification document maps each roadmap
   clause to one manual and one automated proof.
 - Non-admin proof: retain scoped-manager and constrained-reader scenarios.
@@ -246,51 +249,49 @@ Planned commands:
 
 ## Ordered Implementation Plan
 
-Implementation remains blocked until this plan is approved.
-
-1. Approve the source-ownership decisions and release-observation mechanism
-   below.
-2. Write the Sprint 6E verification contract and exact test-change inventory
+1. Write the Sprint 6E verification contract and exact test-change inventory
    before changing production code.
-3. Add failing native/WASM boundary and source-ownership assertions for the
+2. Add failing native/WASM boundary and source-ownership assertions for the
    current root-web and Components-implementation edges.
-4. Make Dashboard UI and bootstrap types module-owned and remove dependencies
+3. Make Dashboard UI and bootstrap types module-owned and remove dependencies
    on Core/private and Components implementation code.
-5. Adopt canonical runtime/UI/testkit in the Dashboard process.
-6. Move complete route composition, SSR, hydration, and assets into the
+4. Adopt canonical runtime/UI/testkit in the Dashboard process.
+5. Move complete route composition, SSR, hydration, and assets into the
    Dashboard release.
-7. Switch Core to generic manifest/service-registration document, asset, and
+6. Switch Core to generic manifest/service-registration document, asset, and
    product-route integration; then remove Dashboard-specific root paths.
-8. Add the Sprint 6E deployment/bootstrap and Dashboard-only
+7. Add the Sprint 6E deployment/bootstrap and Dashboard-only
    upgrade/rollback evidence path.
-9. Preserve and extend targeted product, authorization, provider degradation,
+8. Preserve and extend targeted product, authorization, provider degradation,
    no-JavaScript, hydration, and asset tests alongside each boundary slice.
-10. Squash and verify migrations if needed, complete the closeout-readiness
+9. Verify the unchanged migration, complete the closeout-readiness
     audit, commit the clean implementation source, and run the retained
     source-exact cycle.
+10. Create the Dashboard-only `2.0.1` candidate commit and run the health-gated
+    upgrade/rollback chronology without rebuilding or restarting Core.
 
 ## Dependencies And Blockers
 
-### Required decisions before implementation
+### Approved implementation decisions
 
-1. **Dashboard UI package:** recommended: retain
-   `tessara-web-dashboards` as Dashboard-owned source for this sprint, make
-   Dashboard its sole production consumer, and defer naming cleanup unless an
-   audit proves the name itself creates ambiguity.
-2. **Components rendering seam:** recommended: replace the direct
-   `tessara-web-component-viewer` dependency with a Dashboard-owned adapter
-   over the declared Components provider contract plus canonical UI
-   primitives. Do not extract Components product implementation into a new
-   shared library.
-3. **Release observation:** recommended: bind a module release identity and
-   content-addressed asset digest into the normal Dashboard document as
-   machine-readable metadata and expose the same identity in diagnostics and
-   receipts. The manual walkthrough observes the metadata/asset change; no
-   user-facing redesign is added.
-4. **Rollback mechanism:** recommended: use immutable Dashboard image/release
-   identities and an installation-control receipt change, health-gated before
-   route switch. Rollback restores the prior receipt without rebuilding or
-   restarting unrelated services.
+1. Rename the Dashboard UI crate to `tessara-dashboard-ui`.
+2. Retain the audited route-free Component viewer leaf and prohibit the
+   Components feature implementation.
+3. Introduce one provider-owned `tessara-components-contract` package rather
+   than relationship-specific DTO packages.
+4. Declare all five browser routes, all eight public APIs, required projection
+   feeds, action, capability, operation, and idempotency behavior in manifest
+   schema v3.
+5. Preserve the full private revisioned Organization projection in the
+   Dashboard database; signed actor grants continue to determine the visible
+   and manageable subset.
+6. Forward or generate `X-Idempotency-Key` generically for mutations. Core
+   does not rewrite Dashboard JSON bodies.
+7. Observe releases through machine-readable document metadata, asset
+   digests, diagnostics, and receipts without a visible product label.
+8. Use the existing Traefik gateway with a private service-network entrypoint
+   and an atomically replaced dynamic route file for health-gated blue/green
+   switching.
 
 ### Known dependencies
 

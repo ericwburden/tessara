@@ -34,6 +34,7 @@ pub struct DashboardInputV1 {
     pub description: Option<String>,
     #[serde(default)]
     pub visibility_node_ids: Vec<Uuid>,
+    #[serde(default)]
     pub idempotency_key: String,
 }
 
@@ -164,7 +165,7 @@ async fn update_organization_projection(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-async fn list_dashboards(
+pub(super) async fn list_dashboards(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<DashboardSummaryV1>>, DashboardModuleError> {
@@ -182,7 +183,7 @@ async fn list_dashboards(
     ))
 }
 
-async fn list_manageable_dashboards(
+pub(super) async fn list_manageable_dashboards(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<DashboardSummaryV1>>, DashboardModuleError> {
@@ -222,8 +223,9 @@ pub(super) async fn get_dashboard_summary(
 async fn create_dashboard(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
-    Json(input): Json<DashboardInputV1>,
+    Json(mut input): Json<DashboardInputV1>,
 ) -> Result<Json<DashboardIdResponseV1>, DashboardModuleError> {
+    input.idempotency_key = mutation_idempotency_key(&headers)?.to_string();
     let grant = authorize(
         &state,
         &headers,
@@ -274,8 +276,9 @@ async fn update_dashboard(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
-    Json(input): Json<DashboardInputV1>,
+    Json(mut input): Json<DashboardInputV1>,
 ) -> Result<Json<DashboardIdResponseV1>, DashboardModuleError> {
+    input.idempotency_key = mutation_idempotency_key(&headers)?.to_string();
     let grant = authorize(
         &state,
         &headers,
@@ -600,6 +603,15 @@ fn normalized_optional_text(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+fn mutation_idempotency_key(headers: &HeaderMap) -> Result<&str, DashboardModuleError> {
+    headers
+        .get("x-idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.chars().count() <= 200)
+        .ok_or_else(|| DashboardModuleError::BadRequest("missing X-Idempotency-Key".into()))
 }
 
 pub(super) fn mutation_digest<T: Serialize>(

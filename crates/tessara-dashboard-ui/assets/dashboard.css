@@ -1,0 +1,6 @@
+.dashboards-page { display: grid; gap: 1rem; }
+.route-panel { border: 1px solid color-mix(in srgb, currentColor 16%, transparent); border-radius: .75rem; padding: 1rem; }
+.button-row { display: flex; flex-wrap: wrap; gap: .75rem; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: .75rem; }
+@media (max-width: 768px) { .dashboard-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .dashboard-grid { display: block; } }

@@ -1,0 +1,11 @@
+http:
+  routers:
+    dashboard-active:
+      entryPoints: [module]
+      rule: PathPrefix(`/`)
+      service: dashboard-active
+  services:
+    dashboard-active:
+      loadBalancer:
+        servers:
+          - url: http://dashboards:8091

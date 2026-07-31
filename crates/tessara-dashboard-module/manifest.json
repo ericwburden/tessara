@@ -1,7 +1,7 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "definition_id": "tessara.dashboards",
-  "release_version": "1.0.0",
+  "release_version": "2.0.0",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -279,17 +279,17 @@
   "platform_versions": {
     "core_release": "0.1.0",
     "shell_context_schema": "1.0.0",
-    "module_control_protocol": "1.0.0",
-    "module_contract": "0.1.0",
-    "module_runtime": "0.1.0",
-    "module_ui": "0.1.0",
+    "module_control_protocol": "1.1.0",
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0",
     "design_system_asset_abi": "1.0.0",
-    "conformance_suite": "1.0.0"
+    "conformance_suite": "1.1.0"
   },
   "linked_packages": {
-    "module_contract": "0.1.0",
-    "module_runtime": null,
-    "module_ui": null
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0"
   },
   "browser_routes": [
     {
@@ -300,9 +300,86 @@
         "HEAD"
       ],
       "required_capability": "dashboards:read",
-      "authorization_action": "dashboards.directory.read",
+      "authorization_action": "dashboards.list",
+      "dependency_binding": "tessara.core.dashboards",
       "functional_contract": "tessara.dashboards.dashboard",
       "organization_scope_parameter": null
+    },
+    {
+      "destination": "dashboards.create",
+      "path_template": "/dashboards/new",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "dashboards:manage",
+      "authorization_action": "dashboards.list_manageable",
+      "dependency_binding": "tessara.core.dashboards",
+      "functional_contract": "tessara.dashboards.dashboard",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "dashboards.detail",
+      "path_template": "/dashboards/{dashboard_id}",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "dashboards:read",
+      "authorization_action": "dashboards.get",
+      "dependency_binding": "tessara.core.dashboards",
+      "functional_contract": "tessara.dashboards.dashboard",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "dashboards.edit",
+      "path_template": "/dashboards/{dashboard_id}/edit",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "dashboards:manage",
+      "authorization_action": "dashboards.load_composition",
+      "dependency_binding": "tessara.core.dashboards",
+      "functional_contract": "tessara.dashboards.composition",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "dashboards.view",
+      "path_template": "/dashboards/{dashboard_id}/view",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "dashboards:read",
+      "authorization_action": "dashboards.get",
+      "dependency_binding": "tessara.core.dashboards",
+      "functional_contract": "tessara.dashboards.dashboard",
+      "organization_scope_parameter": null
+    }
+  ],
+  "public_api_routes": [
+    {"path_template":"/api/dashboards","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.list","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
+    {"path_template":"/api/dashboards/{dashboard_id}","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.get","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
+    {"path_template":"/api/admin/dashboards","method":"POST","required_capability":"dashboards:manage","authorization_action":"dashboards.create","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/visibility-nodes","method":"GET","required_capability":"dashboards:manage","authorization_action":"dashboards.list_manageable","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.update","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"DELETE","required_capability":"dashboards:manage","authorization_action":"dashboards.delete","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"GET","required_capability":"dashboards:manage","authorization_action":"dashboards.load_composition","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.composition","idempotency":"none"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.reconcile_composition","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"}
+  ],
+  "control_projections": [
+    {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"},
+    {"kind":"organization","path":"/api/private/organization-projection","revision_field":"organization_revision"}
+  ],
+  "assets": [
+    {
+      "path": "/dashboard.css",
+      "digest": "sha256:a88186f05236add56720b1580c3e8ba872eb3ea35f9dbf37b64fb4e38ffc817d",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/dashboard.js",
+      "digest": "sha256:8795628ec3677c50e09645bd83a88ef61684e2b299db818105632979ed40e828",
+      "content_type": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "/dashboard-bindings.js",
+      "digest": "sha256:855e7c29bf8ed443779055c20148134aaa9ee10be91725cd89accf3ae93fde54",
+      "content_type": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "/dashboard.wasm",
+      "digest": "sha256:12c1a5f9437a0ec2520156f0a90365d914665517f5703f825a65a14fcc812a07",
+      "content_type": "application/wasm"
     }
   ]
 }

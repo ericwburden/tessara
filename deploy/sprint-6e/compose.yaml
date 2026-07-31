@@ -1,0 +1,9 @@
+name: tessara
+
+# Sprint 6E adds a private gateway entrypoint and a second Dashboard slot.
+# Core always calls the stable gateway address; the dynamic file selects the
+# healthy Dashboard release without restarting Core or the public gateway.
+include:
+  - path:
+      - ../sprint-6d/compose.yaml
+      - ./compose.override.yaml

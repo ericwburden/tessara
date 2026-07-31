@@ -1,0 +1,32 @@
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$repoRoot = Split-Path -Parent $PSScriptRoot
+
+$forbidden = & rg -n `
+    "tessara-web-dashboards|tessara_web_dashboards|tessara-web\s*=|tessara-api|tessara-core|tessara-web-components" `
+    (Join-Path $repoRoot "crates/tessara-dashboard-module") `
+    (Join-Path $repoRoot "crates/tessara-dashboard-ui") `
+    (Join-Path $repoRoot "crates/tessara-dashboards") `
+    (Join-Path $repoRoot "crates/tessara-components-contract") `
+    -g "!target/**"
+if ($LASTEXITCODE -eq 0 -or $forbidden) {
+    throw "Dashboard release boundary contains a forbidden root/Core/feature dependency:`n$forbidden"
+}
+if ($LASTEXITCODE -ne 1) {
+    throw "Dashboard boundary audit failed to execute."
+}
+
+$rootReferences = & rg -n "tessara-dashboard-ui|tessara_dashboard_ui" `
+    (Join-Path $repoRoot "crates/tessara-web") `
+    (Join-Path $repoRoot "crates/tessara-api")
+if ($LASTEXITCODE -eq 0 -or $rootReferences) {
+    throw "Core/root web still consumes Dashboard UI source:`n$rootReferences"
+}
+if ($LASTEXITCODE -ne 1) {
+    throw "Root Dashboard UI ownership audit failed to execute."
+}
+
+Write-Host "Sprint 6E Dashboard source and package boundaries passed."

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tessara_core::grid_layout::{GridPlacement, GridRect, GridSize};
+use tessara_module_contract::grid_layout::{GridPlacement, GridRect, GridSize};
 
 use crate::composition::{
     CompositionError, DASHBOARD_GRID_CONSTRAINTS, DASHBOARD_HARD_MINIMUM, validate_dashboard_layout,
@@ -289,7 +289,7 @@ pub fn parse_dashboard_placement_configs<Id: Clone + Ord>(
                     .map_err(|_| CompositionError::ConfigNeedsRepair)?;
             let bottom = config.grid_row.checked_add(config.grid_height - 1).ok_or(
                 CompositionError::InvalidGeometry(
-                    tessara_core::grid_layout::GridLayoutError::ArithmeticOverflow,
+                    tessara_module_contract::grid_layout::GridLayoutError::ArithmeticOverflow,
                 ),
             )?;
             occupied.extend(config.grid_row..=bottom);
@@ -453,7 +453,7 @@ fn string_title(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
-    use tessara_core::grid_layout::{GridRect, GridSize};
+    use tessara_module_contract::grid_layout::{GridRect, GridSize};
 
     use super::{
         DashboardPlacementConfigInput, DashboardPlacementConfigState, DashboardPlacementConfigV1,

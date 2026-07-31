@@ -1747,9 +1747,15 @@ fn module_control_url(definition: &str) -> ApiResult<String> {
         .map(|value| parse_module_control_endpoints(&value))
         .transpose()?
         .and_then(|endpoints| endpoints.get(definition).cloned());
-    let endpoint = configured.or_else(|| match definition {
+    let registration = definition.rsplit('.').next().unwrap_or(definition);
+    let registered = std::env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| parse_module_control_endpoints(&value))
+        .transpose()?
+        .and_then(|endpoints| endpoints.get(registration).cloned());
+    let endpoint = configured.or(registered).or_else(|| match definition {
         tessara_reference_scoped_records::MODULE_DEFINITION_ID => Some(scoped_records_url()),
-        "tessara.dashboards" => Some(dashboard_module_url()),
         _ => None,
     });
     endpoint
@@ -2051,13 +2057,6 @@ fn configuration_form_payload(
         )));
     }
     Ok(Value::Object(configuration))
-}
-
-fn dashboard_module_url() -> String {
-    std::env::var("TESSARA_DASHBOARD_MODULE_URL")
-        .unwrap_or_else(|_| "http://dashboards:8091".into())
-        .trim_end_matches('/')
-        .to_string()
 }
 
 #[derive(Clone, Deserialize)]

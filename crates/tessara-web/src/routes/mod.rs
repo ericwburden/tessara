@@ -4,7 +4,6 @@
 
 pub mod administration;
 pub mod components;
-pub mod dashboards;
 pub mod datasets;
 pub mod forms;
 pub mod home;
@@ -33,7 +32,6 @@ pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
         responses::response_routes(),
         operations::operation_routes(),
         components::component_routes(),
-        dashboards::dashboard_routes(),
         datasets::dataset_routes(),
         administration::administration_routes(),
     )

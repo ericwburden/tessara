@@ -11,7 +11,7 @@ use tessara_module_contract::{
 const VALID_MANIFEST: &str = include_str!("fixtures/valid-manifest.json");
 const VALID_MANIFEST_DIGEST_SIDECAR: &str = include_str!("fixtures/valid-manifest.json.sha256");
 const VALID_MANIFEST_SHA256: &str =
-    "sha256:ae989fe7c4b01cbabb09fda22b264d2cc16a88d816c592704ee96deea1654529";
+    "sha256:2f3b838209a45fd51efb437b7a3e88ed1cdd7a97f65f65b571de2837215da9bc";
 const INVALID_MANIFEST_PROFILE: &str =
     include_str!("fixtures/invalid-manifest-unsupported-profile.json");
 const INVALID_TRANSITION_DEPLOYMENT: &str =
@@ -1174,7 +1174,7 @@ fn invalid_fixtures_have_specific_wire_rejections() {
     assert!(
         manifest_schema_error
             .to_string()
-            .contains("module manifest schema version 1 is unsupported; expected 2")
+            .contains("module manifest schema version 1 is unsupported; expected 3")
     );
 
     let transition_schema_error =

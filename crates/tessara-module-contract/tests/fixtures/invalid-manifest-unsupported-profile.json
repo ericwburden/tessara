@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "definition_id": "tessara.forms",
   "release_version": "1.0.0",
   "publisher": "tessara.first_party",
@@ -33,17 +33,17 @@
   "platform_versions": {
     "core_release": "0.1.0",
     "shell_context_schema": "1.0.0",
-    "module_control_protocol": "1.0.0",
-    "module_contract": "0.1.0",
-    "module_runtime": "0.1.0",
-    "module_ui": "0.1.0",
+    "module_control_protocol": "1.1.0",
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0",
     "design_system_asset_abi": "1.0.0",
-    "conformance_suite": "1.0.0"
+    "conformance_suite": "1.1.0"
   },
   "linked_packages": {
-    "module_contract": "0.1.0",
-    "module_runtime": "0.1.0",
-    "module_ui": "0.1.0"
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0"
   },
   "browser_routes": []
 }

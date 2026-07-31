@@ -15,14 +15,20 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
+use tessara_components_contract::{
+    COMPONENT_RESOURCE_TYPE as DASHBOARD_COMPONENT_RESOURCE_TYPE,
+    ComponentAction as DashboardComponentTransitionAction,
+    ComponentCatalogResponseV1 as DashboardComponentCatalogResponseV1,
+    ComponentMetadataV1 as DashboardComponentMetadataV1,
+    ComponentResolutionRequestV1 as DashboardComponentResolutionRequestV1,
+    ComponentResolutionResponseV1 as DashboardComponentResolutionResponseV1,
+    ComponentVersionReferenceV1 as DashboardComponentVersionReferenceV1,
+};
 use tessara_dashboards::{
-    DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentCatalogResponseV1,
-    DashboardComponentMetadataV1, DashboardComponentResolutionRequestV1,
-    DashboardComponentResolutionResponseV1, DashboardComponentTransitionAction,
-    DashboardComponentVersionReferenceV1, DashboardPlacementConfigInput,
-    DashboardPlacementConfigState, DashboardPlacementConfigV1, DashboardPlacementOperation,
-    DashboardPlacementSizePolicy, GridPlacement, GridRect, encode_dashboard_placement_config,
-    parse_dashboard_placement_configs, validate_dashboard_layout,
+    DashboardPlacementConfigInput, DashboardPlacementConfigState, DashboardPlacementConfigV1,
+    DashboardPlacementOperation, DashboardPlacementSizePolicy, GridPlacement, GridRect,
+    encode_dashboard_placement_config, parse_dashboard_placement_configs,
+    validate_dashboard_layout,
 };
 use tessara_module_contract::{
     ContractCompatibilityState, ModuleInstanceOwnerState, OwnerDataState,
@@ -675,7 +681,7 @@ async fn load_composition_response(
     }))
 }
 
-async fn get_dashboard(
+pub(super) async fn get_dashboard(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
@@ -690,7 +696,7 @@ async fn get_dashboard(
     }))
 }
 
-async fn get_composition(
+pub(super) async fn get_composition(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
@@ -753,7 +759,7 @@ async fn get_composition(
     }))
 }
 
-async fn list_visibility_nodes(
+pub(super) async fn list_visibility_nodes(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<DashboardVisibilityNodeOptionV1>>, DashboardModuleError> {
@@ -768,6 +774,13 @@ async fn list_visibility_nodes(
     if scope.is_empty() {
         return Err(DashboardModuleError::Forbidden);
     }
+    Ok(Json(load_visibility_nodes_for_scope(&state, scope).await?))
+}
+
+pub(super) async fn load_visibility_nodes_for_scope(
+    state: &DashboardModuleState,
+    scope: BTreeSet<Uuid>,
+) -> Result<Vec<DashboardVisibilityNodeOptionV1>, DashboardModuleError> {
     let ids = scope.into_iter().collect::<Vec<_>>();
     let rows = sqlx::query(
         "SELECT child.node_id AS id,child.node_type_name,
@@ -792,7 +805,7 @@ async fn list_visibility_nodes(
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
-    Ok(Json(options))
+    Ok(options)
 }
 
 async fn load_placements(

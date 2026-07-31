@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use tessara_core::grid_layout::{
+use tessara_module_contract::grid_layout::{
     GridConstraints, GridLayoutError, GridPlacement, GridRect, GridSize, reflow_movement,
     validate_resize,
 };
@@ -158,7 +158,7 @@ impl DashboardPlacementSizePolicy {
         if canonical_kind.is_empty()
             || DASHBOARD_GRID_CONSTRAINTS
                 .validate_rect_with_minimum(
-                    tessara_core::grid_layout::GridRect::new(
+                    tessara_module_contract::grid_layout::GridRect::new(
                         1,
                         1,
                         rule.minimum.width,
@@ -169,7 +169,7 @@ impl DashboardPlacementSizePolicy {
                 .is_err()
             || DASHBOARD_GRID_CONSTRAINTS
                 .validate_rect_with_minimum(
-                    tessara_core::grid_layout::GridRect::new(
+                    tessara_module_contract::grid_layout::GridRect::new(
                         1,
                         1,
                         rule.recommended.width,
@@ -312,7 +312,9 @@ impl From<GridLayoutError> for CompositionError {
 
 #[cfg(test)]
 mod tests {
-    use tessara_core::grid_layout::{GridLayoutError, GridPlacement, GridRect, GridSize};
+    use tessara_module_contract::grid_layout::{
+        GridLayoutError, GridPlacement, GridRect, GridSize,
+    };
 
     use super::{
         CompositionError, DASHBOARD_GRID_CONSTRAINTS, DashboardPlacementOperation,

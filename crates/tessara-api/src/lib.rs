@@ -13,13 +13,13 @@ pub mod config;
 mod core_security;
 mod dashboard_components_adapter;
 mod dashboard_dependencies;
-mod dashboard_gateway;
 mod datasets;
 pub mod db;
 pub mod demo;
 pub mod error;
 mod forms;
 mod hierarchy;
+mod module_gateway;
 mod modules;
 mod operations;
 mod submissions;
@@ -91,6 +91,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/enrollment", get(core_security::enrollment_page))
         .route("/api/module-unavailable", get(module_unavailable_fallback))
+        .route(
+            "/_tessara/modules/{*asset_path}",
+            get(module_gateway::asset),
+        )
         .route("/assets/{asset_name}", get(static_asset))
         .nest_service("/pkg", ServeDir::new(shell_pkg_dir()))
         .route(
@@ -467,6 +471,7 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .merge(api_routes())
+        .fallback(module_gateway::dispatch)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(
@@ -492,7 +497,6 @@ fn api_routes() -> Router<AppState> {
         .merge(datasets::routes())
         .merge(components::routes())
         .merge(dashboard_components_adapter::routes())
-        .merge(dashboard_gateway::routes())
         .merge(modules::routes())
         .merge(demo::routes())
 }
@@ -545,7 +549,9 @@ fn is_protected_ui_request(request: &Request) -> bool {
         || path == "/assets"
         || path.starts_with("/assets/")
         || path == "/pkg"
-        || path.starts_with("/pkg/"))
+        || path.starts_with("/pkg/")
+        || path == "/_tessara"
+        || path.starts_with("/_tessara/"))
 }
 
 async fn static_asset(Path(asset_name): Path<String>) -> impl IntoResponse {

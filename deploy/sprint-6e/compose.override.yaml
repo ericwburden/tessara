@@ -1,0 +1,52 @@
+services:
+  gateway:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=tessara_tessara-edge
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:8080
+      - --entrypoints.module.address=:8081
+      - --api.dashboard=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../../target/sprint-6e-routing:/etc/traefik/dynamic:ro
+    networks: [tessara-edge, tessara-services]
+
+  core:
+    environment:
+      TESSARA_DASHBOARD_MODULE_URL: ""
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"dashboards":"http://gateway:8081","scoped-records":"http://scoped-records:8090","module-sdk":"http://reference-module-sdk:8091"}'
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.reference.module-sdk":"http://reference-module-sdk:8091"}'
+
+  dashboards:
+    image: ${TESSARA_DASHBOARD_BASELINE_IMAGE:-tessara-dashboards:2.0.0}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8091/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 30s
+
+  dashboards-candidate:
+    image: ${TESSARA_DASHBOARD_CANDIDATE_IMAGE:-tessara-dashboards:2.0.1}
+    environment:
+      DATABASE_URL: postgres://tessara_dashboard_runtime:${TESSARA_DASHBOARD_RUNTIME_PASSWORD:-local-dashboard-runtime}@postgres:5432/tessara_module_dashboards
+      DASHBOARD_MODULE_BIND_ADDR: 0.0.0.0:8091
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_CORE_INTERNAL_URL: http://core:8080
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+    depends_on:
+      dashboards-migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8091/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-data, tessara-services]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    profiles: ["candidate"]

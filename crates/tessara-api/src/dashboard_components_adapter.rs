@@ -10,11 +10,14 @@ use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
 use sqlx::Row;
-use tessara_dashboards::{
-    DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
-    DashboardComponentCatalogResponseV1, DashboardComponentMetadataV1,
-    DashboardComponentResolutionRequestV1, DashboardComponentResolutionResponseV1,
-    DashboardComponentTransitionAction,
+use tessara_components_contract::{
+    COMPONENT_BINDING_KEY as DASHBOARD_COMPONENT_BINDING_KEY,
+    COMPONENT_CONTRACT_ID as DASHBOARD_COMPONENT_CONTRACT_ID,
+    ComponentAction as DashboardComponentTransitionAction,
+    ComponentCatalogResponseV1 as DashboardComponentCatalogResponseV1,
+    ComponentMetadataV1 as DashboardComponentMetadataV1,
+    ComponentResolutionRequestV1 as DashboardComponentResolutionRequestV1,
+    ComponentResolutionResponseV1 as DashboardComponentResolutionResponseV1,
 };
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,

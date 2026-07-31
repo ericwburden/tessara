@@ -10,11 +10,11 @@ use icons::{
     SquareActivity, Table2, TriangleAlert,
 };
 use leptos::{ev, prelude::*};
-use tessara_core::{resolve_move_request, resolve_resize_request};
 use tessara_dashboards::{
     DASHBOARD_GRID_CONSTRAINTS, DashboardPlacementSizePolicy, GridPlacement, GridRect, GridSize,
     reflow_dashboard_movement, validate_dashboard_layout, validate_dashboard_resize,
 };
+use tessara_module_contract::grid_layout::{resolve_move_request, resolve_resize_request};
 use tessara_module_ui::placement_editor::{
     GridMoveDirection, GridMoveRequest, GridResizeRequest, PlacementDragPreview,
     PlacementGridCanvas, PlacementGridCell, PlacementGridGuides, PlacementGridTarget,

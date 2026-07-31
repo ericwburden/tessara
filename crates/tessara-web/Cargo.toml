@@ -11,7 +11,6 @@ default = ["ssr"]
 hydrate = [
     "leptos/hydrate",
     "tessara-web-components/hydrate",
-    "tessara-web-dashboards/hydrate",
     "tessara-web-datasets/hydrate",
     "tessara-web-forms/hydrate",
     "tessara-web-http/hydrate",
@@ -25,7 +24,6 @@ ssr = [
     "leptos_meta/ssr",
     "leptos_router/ssr",
     "tessara-web-components/ssr",
-    "tessara-web-dashboards/ssr",
     "tessara-web-datasets/ssr",
     "tessara-web-forms/ssr",
     "tessara-web-organization/ssr",
@@ -47,7 +45,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-web-components = { path = "../tessara-web-components", default-features = false }
-tessara-web-dashboards = { path = "../tessara-web-dashboards", default-features = false }
 tessara-web-datasets = { path = "../tessara-web-datasets" }
 tessara-web-forms = { path = "../tessara-web-forms", default-features = false }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }

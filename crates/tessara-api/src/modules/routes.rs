@@ -242,6 +242,43 @@ async fn import_deployment_receipt(
             )
             .await?;
         }
+        for route in &manifest.browser_routes {
+            sqlx::query(
+                "INSERT INTO core_module_action_declarations
+                 (target_definition_id,dependency_binding,functional_contract,action,operation,required_capability)
+                 VALUES ($1,$2,$3,$4,'read',$5)
+                 ON CONFLICT (target_definition_id,dependency_binding,functional_contract,action)
+                 DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability",
+            )
+            .bind(module.definition_id.as_str())
+            .bind(route.dependency_binding.as_str())
+            .bind(route.functional_contract.as_str())
+            .bind(&route.authorization_action)
+            .bind(route.required_capability.as_str())
+            .execute(&mut *tx)
+            .await?;
+        }
+        for route in &manifest.public_api_routes {
+            let operation = match route.operation {
+                tessara_module_contract::AuthorizationGrantOperationV1::Read => "read",
+                tessara_module_contract::AuthorizationGrantOperationV1::Mutation => "mutation",
+            };
+            sqlx::query(
+                "INSERT INTO core_module_action_declarations
+                 (target_definition_id,dependency_binding,functional_contract,action,operation,required_capability)
+                 VALUES ($1,$2,$3,$4,$5,$6)
+                 ON CONFLICT (target_definition_id,dependency_binding,functional_contract,action)
+                 DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability",
+            )
+            .bind(module.definition_id.as_str())
+            .bind(route.dependency_binding.as_str())
+            .bind(route.functional_contract.as_str())
+            .bind(&route.authorization_action)
+            .bind(operation)
+            .bind(route.required_capability.as_str())
+            .execute(&mut *tx)
+            .await?;
+        }
         sqlx::query("INSERT INTO module_instances (id, installation_id, definition_id, release_id, identity_state, data_state, database_name, configuration, route_prefix, installed, deployed, configured, ready, enabled, healthy, last_observed_at) VALUES ($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,true,true,true,$8) ON CONFLICT (installation_id, definition_id) DO UPDATE SET release_id=EXCLUDED.release_id, identity_state='live', data_state='retained', database_name=EXCLUDED.database_name, configuration=EXCLUDED.configuration, route_prefix=EXCLUDED.route_prefix, installed=true, deployed=true, configured=true, ready=true, enabled=true, healthy=true, last_observed_at=EXCLUDED.last_observed_at")
             .bind(module.instance_id).bind(receipt.installation_id).bind(module.definition_id.as_str()).bind(module.release_id).bind(&module.database_name).bind(sqlx::types::Json(&module.configuration)).bind(&module.route_prefix).bind(applied_at).execute(&mut *tx).await?;
     }
