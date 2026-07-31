@@ -18,7 +18,7 @@ pub const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 pub const DASHBOARD_BINDINGS_JS: &str = include_str!("../assets/dashboard-bindings.js");
 pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
-    "281dbf40c836959d6494ec96ee216a4eba59753d5d384310ca4d12e35d1e2578";
+    "252c2f8357e49ef744e56316d08ebf67b6e44547ac8536fdf3e666c095ba1b73";
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99";
 pub const DASHBOARD_JS_SHA256: &str =

@@ -117,7 +117,7 @@ pub fn empty_view() -> AnyView {
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MODULE_SHELL_CSS: &str = include_str!("../assets/module-shell.css");
 pub const MODULE_SHELL_CSS_SHA256: &str =
-    "434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d";
+    "fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
@@ -295,6 +295,7 @@ mod tests {
 
     #[test]
     fn published_stylesheet_digest_matches_canonical_bytes() {
+        assert!(MODULE_SHELL_CSS.contains("@media (max-width: 780px)"));
         assert_eq!(
             format!("{:x}", Sha256::digest(MODULE_SHELL_CSS.as_bytes())),
             MODULE_SHELL_CSS_SHA256,

@@ -110,7 +110,10 @@ function attachConsoleGuard(page: Page) {
 
 async function gotoHydrated(page: Page, url: string) {
   await page.goto(url);
-  await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
 }
 
 function isComponentExecutionPath(pathname: string) {
@@ -408,8 +411,10 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         );
         expect(cardTops).toEqual([...cardTops].sort((left, right) => left - right));
         expect(
-          await page.locator(".app-main").evaluate(
-            (main) => main.scrollWidth <= main.clientWidth + 1,
+          await page.evaluate(
+            () =>
+              document.documentElement.scrollWidth <=
+              document.documentElement.clientWidth + 1,
           ),
           `Dashboard route should not overflow horizontally at ${width}px`,
         ).toBe(true);
@@ -957,7 +962,10 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.locator(`a[href="/dashboards/${fixture.id}/view"]`).click();
       await expect(page).toHaveURL(`${BASE_URL}/dashboards/${fixture.id}/view`);
-      await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+      await expect(page.locator("#module-content")).toHaveAttribute(
+        "data-hydration",
+        "ready",
+      );
 
       await sessionCard.scrollIntoViewIfNeeded();
       await expect(sessionCard.locator("tbody tr[data-row-id]")).toHaveCount(10, {
