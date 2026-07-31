@@ -17,7 +17,9 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
   database tests now use four role-based API fresh/API integration/reference
   module/API enrollment variables, and the pre-production reference module no
   longer carries a legacy-binary rollback compatibility test or dedicated
-  upgrade-test database.
+  upgrade-test database. The workspace-only installation-control fixture now
+  likewise uses the role-specific
+  `TEST_INSTALLATION_CONTROL_DATABASE_URL` contract.
 - Added the canonical contract/runtime/UI/testkit packages and the independent
   non-product reference module with native SSR, WASM hydration, exact manifest
   declarations, JSON configuration/security persistence, probes, sanitized

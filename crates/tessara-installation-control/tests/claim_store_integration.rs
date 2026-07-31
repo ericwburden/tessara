@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn claim_lifecycle_is_concurrent_idempotent_and_secret_free_after_issue() {
-    let database_url = std::env::var("TEST_DEPLOYMENT_DATABASE_URL").expect(
-        "TEST_DEPLOYMENT_DATABASE_URL is required for installation-control integration tests",
+    let database_url = std::env::var("TEST_INSTALLATION_CONTROL_DATABASE_URL").expect(
+        "TEST_INSTALLATION_CONTROL_DATABASE_URL is required for installation-control integration tests",
     );
     let pool = PgPoolOptions::new()
         .max_connections(6)

@@ -215,7 +215,7 @@ $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = 'I_UNDERSTAND_THIS_DATABASE_WIL
 .\scripts\validate.ps1
 
 # The workspace-wide suite additionally exercises installation control.
-$env:TEST_DEPLOYMENT_DATABASE_URL = '<disposable-installation-control-database-url>'
+$env:TEST_INSTALLATION_CONTROL_DATABASE_URL = '<disposable-installation-control-database-url>'
 cargo test --workspace --all-features --locked
 
 .\scripts\check-web-crate-boundaries.ps1
