@@ -8,6 +8,23 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-07-31 - Sprint 6E Implementation
+
+- Extracted the Dashboard domain, complete documents, immutable JS/WASM
+  hydration bundle, and provider-owned Components contract from root web/Core
+  source ownership.
+- Replaced the Dashboard-specific Core gateway with manifest-driven document,
+  public API, asset, authorization, security, and Organization projection
+  routing.
+- Produced the source-exact Dashboard `2.0.0` baseline at `7b3e0341` and the
+  Dashboard-only `2.0.1` candidate at `69d19dae`.
+- Upgraded the retained deployment to receipt revision 3, switched a healthy
+  `2.0.1` candidate without restarting the baseline Dashboard container, and
+  restored the active route to healthy `2.0.0`.
+- The Sprint 6E stack remains running on the baseline slot; the candidate
+  container is stopped and its image is retained for the next verification
+  pass.
+
 ## 2026-07-31 - Sprint 6E Planning Kickoff
 
 - Sprint: `Sprint 6E: Dashboard SDK Adoption And Source Independence Slice`,

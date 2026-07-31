@@ -113,10 +113,6 @@ pub(crate) fn routes() -> Router<AppState> {
             "/reference/{*module_path}",
             get(proxy_manifest_module_document),
         )
-        .route(
-            "/_tessara/modules/{definition}/{release}/{digest}/{*asset_path}",
-            get(proxy_manifest_module_asset),
-        )
 }
 
 #[derive(Default, Deserialize)]
@@ -1110,53 +1106,6 @@ async fn proxy_manifest_module_document(
         return Ok(crate::module_unavailable_fallback_response());
     }
     module_response(response, Some("no-store")).await
-}
-
-async fn proxy_manifest_module_asset(
-    State(state): State<AppState>,
-    Path((definition, release, digest, asset_path)): Path<(String, String, String, String)>,
-) -> ApiResult<Response> {
-    let row = sqlx::query(
-        "SELECT releases.manifest
-         FROM module_instances instances
-         JOIN module_releases releases ON releases.id=instances.release_id
-         WHERE instances.identity_state='live' AND instances.installed=true
-           AND instances.deployed=true AND instances.definition_id=$1
-           AND releases.version=$2
-         ORDER BY instances.id
-         LIMIT 1",
-    )
-    .bind(&definition)
-    .bind(&release)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound("module asset".into()))?;
-    let manifest: ModuleManifest = serde_json::from_value(row.try_get("manifest")?)
-        .map_err(|error| ApiError::Internal(error.into()))?;
-    let requested_path = format!("/_tessara/modules/{definition}/{release}/{digest}/{asset_path}");
-    let asset = manifest
-        .assets
-        .iter()
-        .find(|asset| asset.path == requested_path && asset.digest.as_str() == digest)
-        .ok_or_else(|| ApiError::NotFound("module asset".into()))?;
-    let endpoint = module_control_url(&definition)?;
-    let response = reqwest::Client::new()
-        .get(format!("{endpoint}{}", asset.path))
-        .send()
-        .await
-        .map_err(|_| ApiError::ServiceUnavailable("module asset unavailable".into()))?;
-    let response = module_response(response, Some("public, max-age=31536000, immutable")).await?;
-    if response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        != Some(asset.content_type.as_str())
-    {
-        return Err(ApiError::ServiceUnavailable(
-            "module asset content type mismatch".into(),
-        ));
-    }
-    Ok(response)
 }
 
 fn match_browser_path(template: &str, requested: &str) -> Option<BTreeMap<String, String>> {

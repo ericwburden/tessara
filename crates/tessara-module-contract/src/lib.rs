@@ -88,7 +88,7 @@ where
     D: Deserializer<'de>,
 {
     let schema_version = u16::deserialize(deserializer)?;
-    if schema_version != MODULE_MANIFEST_SCHEMA_VERSION {
+    if !matches!(schema_version, 2 | MODULE_MANIFEST_SCHEMA_VERSION) {
         return Err(de::Error::custom(format!(
             "module manifest schema version {schema_version} is unsupported; expected {MODULE_MANIFEST_SCHEMA_VERSION}"
         )));
@@ -1409,9 +1409,15 @@ pub struct BrowserRouteDeclaration {
     pub methods: Vec<BrowserDocumentMethod>,
     pub required_capability: SecurityCapabilityId,
     pub authorization_action: String,
+    #[serde(default = "legacy_browser_dependency_binding")]
     pub dependency_binding: DependencyBindingKey,
     pub functional_contract: FunctionalContractId,
     pub organization_scope_parameter: Option<String>,
+}
+
+fn legacy_browser_dependency_binding() -> DependencyBindingKey {
+    DependencyBindingKey::new("tessara.core.legacy-module-document")
+        .expect("static legacy dependency binding is valid")
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]

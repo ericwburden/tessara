@@ -1,7 +1,7 @@
 # Sprint 6E Verification Contract
 
-Status: source and package verification passed; retained deployment-cycle
-verification in progress.
+Status: source/package verification and the live baseline-candidate-baseline
+route cycle passed; retained product/UAT evidence remains in progress.
 
 This document is the retained acceptance map for Dashboard SDK adoption and
 source independence. Final run outputs belong under
