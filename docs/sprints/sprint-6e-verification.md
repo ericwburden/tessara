@@ -1,8 +1,9 @@
 # Sprint 6E Verification Contract
 
-Status: source/package verification and the live baseline-candidate-baseline
-slot cycle passed. Manual UAT on 2026-07-31 failed because the public Core
-router captures the private gateway entrypoint; product acceptance is blocked.
+Status: UAT fixes are implemented and the administrator product flow plus
+live baseline-candidate-baseline cycle pass. Final acceptance remains blocked
+on scoped-manager/nondisclosure fixtures, the explicit presentation sweep,
+provider degradation, and a new source-exact retained chronology.
 
 This document is the retained acceptance map for Dashboard SDK adoption and
 source independence. Final run outputs belong under
