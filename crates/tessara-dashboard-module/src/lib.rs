@@ -32,7 +32,7 @@ pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
-pub const MODULE_RELEASE_VERSION: &str = "2.0.1";
+pub const MODULE_RELEASE_VERSION: &str = "2.0.2";
 
 #[derive(Clone)]
 pub struct DashboardModuleState {
@@ -204,6 +204,11 @@ async fn dashboard_asset(
             tessara_dashboard_ui::DASHBOARD_CSS_SHA256,
             "text/css; charset=utf-8",
             tessara_dashboard_ui::DASHBOARD_CSS.as_bytes(),
+        ),
+        "dashboard-lifecycle.css" => (
+            tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS_SHA256,
+            "text/css; charset=utf-8",
+            tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS.as_bytes(),
         ),
         "dashboard.js" => (
             tessara_dashboard_ui::DASHBOARD_JS_SHA256,
@@ -490,6 +495,14 @@ mod tests {
         let manifest: ModuleManifest =
             serde_json::from_str(include_str!("../manifest.json")).expect("valid manifest");
         assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
+        assert_eq!(manifest.release_version.to_string(), "2.0.2");
+        let lifecycle = manifest
+            .browser_lifecycle
+            .as_ref()
+            .expect("Dashboard declares lifecycle v1");
+        assert_eq!(lifecycle.lifecycle_abi.to_string(), "1.0.0");
+        assert_eq!(lifecycle.entry_asset, "/dashboard.js");
+        assert!(lifecycle.complete_document_fallback);
         let tessara_module_contract::DeploymentProfile::TessaraOciV1(deployment) =
             &manifest.deployment;
         assert_eq!(deployment.listen.port, 8091);

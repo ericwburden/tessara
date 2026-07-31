@@ -6,6 +6,7 @@ pub mod administration;
 pub mod auth;
 pub mod home;
 pub mod login;
+pub mod module_lifecycle;
 pub mod modules;
 pub mod operations;
 pub mod shared;

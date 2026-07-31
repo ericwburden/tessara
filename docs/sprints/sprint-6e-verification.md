@@ -15,9 +15,9 @@ source independence. Final run outputs belong under
 | --- | --- | --- |
 | Dashboard release has no root Core/web or Components feature implementation dependency | `scripts/verify-sprint-6e-boundaries.ps1`; native and WASM Cargo checks | Inspect Dashboard image package/source inventory |
 | Dashboard owns five complete documents and immutable assets | manifest-schema tests; Dashboard document tests; same-origin route checks | Direct-load all five routes with JavaScript disabled and enabled |
-| Core retains auth, navigation, lifecycle, and fallback ownership generically | `tessara-api` module-gateway and manifest tests | Sign in, navigate from Core, disable Dashboard, confirm Core remains usable |
+| Core retains auth, navigation, lifecycle, and fallback ownership generically | lifecycle manifest/bootstrap validation; gateway negotiation tests; Core host route and shell projection tests | Run UAT-6E-07 across Core, Dashboard, history, guard, direct-load, and recovery paths |
 | Product, authorization, redaction, and provider degradation remain stable | Dashboard/UI tests; existing API, UAT, and Playwright suites | Administrator, scoped-manager, reader, provider-outage, and recovery walkthroughs |
-| Only Dashboard upgrades and rolls back | Compose config; route-switch refusal/success records; chronology validator | Observe `2.0.0`, refuse unhealthy `2.0.1`, switch healthy candidate, then restore baseline |
+| Only Dashboard upgrades and rolls back | Compose config; route-switch refusal/success records; chronology validator | Observe `2.0.0`, refuse unhealthy `2.0.2`, switch healthy candidate, then restore baseline |
 | Unrelated services do not restart or change image | before/after Docker inspection captured in chronology | Compare Core, gateway, installation-control, Scoped Records, reference SDK, and PostgreSQL |
 | Existing Dashboard persistence is preserved | migration byte pin; disposable baseline apply; before/after data digest | Edit before upgrade, confirm after upgrade and rollback |
 | Candidate is observable without product redesign | document metadata, diagnostics, image labels, and asset digest assertions | Inspect normal Dashboard document metadata and Module diagnostics |

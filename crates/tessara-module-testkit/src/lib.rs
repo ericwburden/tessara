@@ -2,14 +2,44 @@
 
 use chrono::{Duration, Utc};
 use tessara_module_contract::{
-    ModuleDefinitionId, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
-    PurposeBoundSigningKeyV1, ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
+    ArtifactDigest, BrowserLifecycleAssetV1, BrowserLifecycleBootstrapV1, ModuleDefinitionId,
+    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
+    SemanticRouteName, ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
 pub struct SignedShellFixture {
     pub signer: PurposeBoundSigningKeyV1,
     pub envelope: SignedEnvelopeV1<ShellContextV1>,
+}
+
+/// Deterministic lifecycle-v1 projection for host, gateway, and module
+/// conformance tests. The payload deliberately remains caller-owned JSON.
+pub fn browser_lifecycle_fixture(
+    definition_id: &str,
+    release_version: &str,
+    destination: &str,
+    path: &str,
+    payload: serde_json::Value,
+) -> BrowserLifecycleBootstrapV1 {
+    let digest = ArtifactDigest::new(format!("sha256:{}", "d".repeat(64))).unwrap();
+    BrowserLifecycleBootstrapV1 {
+        schema_version: BrowserLifecycleBootstrapV1::SCHEMA_VERSION,
+        definition_id: ModuleDefinitionId::new(definition_id).expect("definition ID"),
+        release_version: release_version.parse().expect("release version"),
+        lifecycle_abi: "1.0.0".parse().expect("lifecycle ABI"),
+        destination: SemanticRouteName::new(destination).expect("semantic destination"),
+        path: path.into(),
+        title: "Lifecycle conformance fixture".into(),
+        document_state: ShellDocumentStateV1::Active,
+        entry_asset: BrowserLifecycleAssetV1 {
+            url: format!("/_tessara/modules/{definition_id}/{release_version}/{digest}/module.js"),
+            digest,
+            content_type: "text/javascript; charset=utf-8".into(),
+        },
+        stylesheet_assets: Vec::new(),
+        payload,
+    }
 }
 
 pub fn signed_shell_fixture(definition_id: &str) -> SignedShellFixture {
@@ -68,5 +98,17 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn browser_fixture_conforms_to_lifecycle_host_validation() {
+        let fixture = browser_lifecycle_fixture(
+            "tessara.reference.lifecycle",
+            "1.0.0",
+            "tessara.reference.lifecycle.root",
+            "/reference/lifecycle",
+            serde_json::json!({"framework":"independent"}),
+        );
+        assert!(fixture.is_supported());
     }
 }

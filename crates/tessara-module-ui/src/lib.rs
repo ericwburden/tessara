@@ -17,6 +17,8 @@ mod empty_state;
 pub use tessara_module_contract::grid_layout;
 #[cfg(feature = "components")]
 mod info_list;
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+mod lifecycle;
 #[cfg(feature = "components")]
 mod modal_dialog;
 #[cfg(feature = "components")]
@@ -76,6 +78,8 @@ pub use dropdown::DropdownMenu;
 pub use empty_state::EmptyState;
 #[cfg(feature = "components")]
 pub use info_list::{InfoListTable, InfoRow};
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+pub use lifecycle::LeptosLifecycleRoot;
 #[cfg(feature = "components")]
 pub use modal_dialog::{FullscreenDialog, ModalDialog, ModalDialogSize};
 #[cfg(feature = "components")]

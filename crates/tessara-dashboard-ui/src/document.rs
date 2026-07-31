@@ -13,17 +13,20 @@ pub const DASHBOARD_CSS: &str = concat!(
     "\n",
     include_str!("../assets/dashboard.css")
 );
+pub const DASHBOARD_LIFECYCLE_CSS: &str = include_str!("../assets/dashboard-lifecycle.css");
 pub const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 pub const DASHBOARD_BINDINGS_JS: &str = include_str!("../assets/dashboard-bindings.js");
 pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
     "a88186f05236add56720b1580c3e8ba872eb3ea35f9dbf37b64fb4e38ffc817d";
+pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
+    "ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99";
 pub const DASHBOARD_JS_SHA256: &str =
-    "17efdd4586b8b2ca4139a469686ac121972dd9e8ecf0c9332364b8eb3086a953";
+    "1bbbc78877f4b916e3e18f36ab60b83173d49f944acc440dc9d2c1c7b1765490";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "855e7c29bf8ed443779055c20148134aaa9ee10be91725cd89accf3ae93fde54";
+    "1f06971942239807f70ccf096fe7abf4357f5a76c8c7383d8fa84020221193ab";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "12c1a5f9437a0ec2520156f0a90365d914665517f5703f825a65a14fcc812a07";
+    "63b4aa94e59b4c05d162a4bc4c4993615a03f459b975cf408812f5ddb18ac0cb";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")
@@ -155,11 +158,11 @@ mod tests {
                     can_manage: false,
                 }],
             ),
-            "2.0.1",
+            "2.0.2",
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("Delivery"));
-        assert!(html.contains(r#"name="tessara-module-release" content="2.0.1""#));
+        assert!(html.contains(r#"name="tessara-module-release" content="2.0.2""#));
         assert!(html.contains(DASHBOARD_BOOTSTRAP_SCRIPT_ID));
         assert!(!html.contains("tessara-web"));
     }

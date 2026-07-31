@@ -91,11 +91,10 @@ try {
     $desired.revision = [int64]$latestReceipt.revision + 1
 
     $dashboardManifest = Get-Content -LiteralPath `
-        (Join-Path $repoRoot "crates/tessara-dashboard-module/manifest.json") -Raw |
+        (Join-Path $repoRoot "deploy/sprint-6e/dashboard-manifest.baseline.json") -Raw |
         ConvertFrom-Json
-    # The active slot is deliberately the committed baseline even when this
-    # script is run from the 2.0.1 candidate checkout.
-    $dashboardManifest.release_version = "2.0.0"
+    # The active slot is deliberately the immutable baseline manifest even
+    # when this script runs from the current Sprint 6E candidate checkout.
     $dashboardDigest = Get-ImageDigest -Service "dashboards"
     Set-RuntimeImage $dashboardManifest $dashboardDigest "local/tessara-dashboards"
 

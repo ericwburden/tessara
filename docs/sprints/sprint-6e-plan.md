@@ -93,6 +93,17 @@ approves this plan.
 - Keep Dashboard product APIs module-owned. Replace the Dashboard-specific
   Core gateway with generic manifest/service-registration-driven browser,
   asset, and product-API routing.
+- Establish Module Browser Lifecycle v1 as the reusable browser integration
+  model. Core owns the persistent shell, history, activation failure state,
+  complete-document recovery, and bounded lifecycle calls; the module owns
+  its mounted DOM, styles, route state, and unsaved-change decision.
+- Adopt the full lifecycle in Dashboard: create, mount, same-release navigate,
+  can-deactivate, suspend, resume, unmount, and dispose. Core-to-Dashboard,
+  Dashboard-internal, and Dashboard-to-Core navigation must avoid a full-page
+  reload when the declared lifecycle is compatible.
+- Keep complete Dashboard documents as the progressive-enhancement and hard
+  recovery path for direct loads, disabled JavaScript, incompatible lifecycle
+  declarations, and activation failure.
 
 ### Release, upgrade, and rollback contract
 
@@ -101,7 +112,7 @@ approves this plan.
 - Build Dashboard as an independently replaceable image with exact source
   commit, tree, dirty-state, release identity, and asset digests.
 - Capture a clean extracted baseline release `2.0.0`, then build a Dashboard-
-  only candidate release `2.0.1` from a second clean commit. Upgrade only
+  only candidate release `2.0.2` from a second clean commit. Upgrade only
   Dashboard, health-gate the switch, then roll back only Dashboard.
 - Prove Core, gateway, installation control, Scoped Records, reference SDK,
   and database service image digests and container identities do not change or
@@ -145,6 +156,10 @@ approves this plan.
    redesign.
 8. Every roadmap and exit-condition clause has both a manual walkthrough and
    an automated assertion in retained closeout evidence.
+9. Dashboard conforms to Module Browser Lifecycle v1 without full-page reloads
+   during compatible shell navigation, while browser history, unsaved-change
+   protection, repeat mount/unmount, direct loads, and complete-document
+   recovery remain correct.
 
 ## Manual Test Plan
 
@@ -267,7 +282,7 @@ Planned commands:
 9. Verify the unchanged migration, complete the closeout-readiness
     audit, commit the clean implementation source, and run the retained
     source-exact cycle.
-10. Create the Dashboard-only `2.0.1` candidate commit and run the health-gated
+10. Create the Dashboard-only `2.0.2` candidate commit and run the health-gated
     upgrade/rollback chronology without rebuilding or restarting Core.
 
 ## Dependencies And Blockers

@@ -54,4 +54,4 @@ tessara-web-workflows = { path = "../tessara-web-workflows", default-features = 
 tessara-module-ui = { path = "../tessara-module-ui", features = ["components"] }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true }
+web-sys = { workspace = true, features = ["HtmlAnchorElement"] }

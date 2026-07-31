@@ -110,8 +110,8 @@ try {
     $dashboardManifest = Get-Content -LiteralPath `
         (Join-Path $repoRoot "crates/tessara-dashboard-module/Cargo.toml") -Raw
     $dashboardTransition = $dashboardManifest -match 'tessara-web\s*='
-    if (-not $dashboardTransition) {
-        throw "The expected Sprint 6E Dashboard -> root tessara-web transition finding disappeared."
+    if ($dashboardTransition) {
+        throw "Dashboard still depends on root tessara-web after the Sprint 6E lifecycle migration."
     }
 
     $result = [pscustomobject][ordered]@{
@@ -125,6 +125,7 @@ try {
             owner = "Sprint 6E"
             allowlisted = $false
             observed = $dashboardTransition
+            resolved = -not $dashboardTransition
         }
         findings = @($findings)
         passed = $findings.Count -eq 0

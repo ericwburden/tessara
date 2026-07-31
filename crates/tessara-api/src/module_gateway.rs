@@ -17,11 +17,11 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::Row;
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, CapabilityScopeBindingV1,
-    DependencyBindingKey, DeploymentProfile, FunctionalContractId, ModuleDefinitionId,
-    ModuleManifest, NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
-    ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId,
-    ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
+    AuthorizationGrantOperationV1, AuthorizationGrantV1, BrowserLifecycleBootstrapV1,
+    CapabilityScopeBindingV1, DependencyBindingKey, DeploymentProfile, FunctionalContractId,
+    ModuleDefinitionId, ModuleManifest, NavigationContributionId, NavigationProjectionV1,
+    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod,
+    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
 };
 use uuid::Uuid;
 
@@ -447,6 +447,12 @@ async fn forward(
     {
         outbound = outbound.header(reqwest::header::CONTENT_TYPE, content_type);
     }
+    if let Some(accept) = inbound_headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+    {
+        outbound = outbound.header(reqwest::header::ACCEPT, accept);
+    }
     if idempotent {
         outbound = outbound.header("x-idempotency-key", idempotency_key(inbound_headers));
     }
@@ -454,10 +460,14 @@ async fn forward(
         outbound = outbound.body(body.to_vec());
     }
     let response = outbound.send().await.map_err(|_| module_unavailable())?;
-    module_response(response).await
+    module_response(response, &module.manifest, path).await
 }
 
-async fn module_response(response: reqwest::Response) -> ApiResult<Response> {
+async fn module_response(
+    response: reqwest::Response,
+    manifest: &ModuleManifest,
+    requested_path: &str,
+) -> ApiResult<Response> {
     let status = StatusCode::from_u16(response.status().as_u16())
         .map_err(|error| ApiError::Internal(error.into()))?;
     let content_type = response
@@ -471,19 +481,76 @@ async fn module_response(response: reqwest::Response) -> ApiResult<Response> {
         .get(reqwest::header::CACHE_CONTROL)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
+    let vary = response
+        .headers()
+        .get(reqwest::header::VARY)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
     let bytes = response
         .bytes()
         .await
         .map_err(|error| ApiError::Internal(error.into()))?;
+    if content_type.starts_with("application/vnd.tessara.module-view+json") {
+        let bootstrap = serde_json::from_slice::<BrowserLifecycleBootstrapV1>(&bytes)
+            .map_err(|_| incompatible_lifecycle_response())?;
+        if !lifecycle_response_matches_manifest(&bootstrap, manifest, requested_path) {
+            return Err(incompatible_lifecycle_response());
+        }
+    }
     let mut builder = Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, content_type);
     if let Some(cache_control) = cache_control {
         builder = builder.header(header::CACHE_CONTROL, cache_control);
     }
+    if let Some(vary) = vary {
+        builder = builder.header(header::VARY, vary);
+    }
     builder
         .body(Body::from(bytes))
         .map_err(|error| ApiError::Internal(error.into()))
+}
+
+fn lifecycle_response_matches_manifest(
+    bootstrap: &BrowserLifecycleBootstrapV1,
+    manifest: &ModuleManifest,
+    requested_path: &str,
+) -> bool {
+    let Some(lifecycle) = &manifest.browser_lifecycle else {
+        return false;
+    };
+    if !bootstrap.is_supported()
+        || bootstrap.definition_id != manifest.definition_id
+        || bootstrap.release_version != manifest.release_version
+        || bootstrap.lifecycle_abi != lifecycle.lifecycle_abi
+        || bootstrap.path != requested_path
+        || !manifest.browser_routes.iter().any(|route| {
+            route.destination == bootstrap.destination
+                && path_template_matches(&route.path_template, requested_path)
+        })
+    {
+        return false;
+    }
+    let asset_matches = |projected: &tessara_module_contract::BrowserLifecycleAssetV1,
+                         declared_path: &str| {
+        manifest.assets.iter().any(|asset| {
+            asset.path == declared_path
+                && asset.digest == projected.digest
+                && asset.content_type == projected.content_type
+                && projected.url.ends_with(declared_path)
+        })
+    };
+    asset_matches(&bootstrap.entry_asset, &lifecycle.entry_asset)
+        && bootstrap.stylesheet_assets.len() == lifecycle.stylesheet_assets.len()
+        && bootstrap
+            .stylesheet_assets
+            .iter()
+            .zip(&lifecycle.stylesheet_assets)
+            .all(|(projected, declared)| asset_matches(projected, declared))
+}
+
+fn incompatible_lifecycle_response() -> ApiError {
+    ApiError::ServiceUnavailable("module lifecycle response is incompatible".into())
 }
 
 fn service_endpoint(manifest: &ModuleManifest) -> ApiResult<String> {
@@ -609,6 +676,64 @@ mod tests {
         assert!(!asset_path_targets_module(
             "/_tessara/modules/tessara.other/2.0.2/sha256:candidate/dashboard.js",
             &manifest
+        ));
+    }
+
+    #[test]
+    fn lifecycle_bootstrap_must_match_the_installed_manifest_and_route() {
+        use tessara_module_contract::{BrowserLifecycleAssetV1, ShellDocumentStateV1};
+
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-dashboard-module/manifest.json"))
+                .expect("Dashboard manifest");
+        let lifecycle = manifest.browser_lifecycle.as_ref().unwrap();
+        let projected = |path: &str| {
+            let asset = manifest
+                .assets
+                .iter()
+                .find(|asset| asset.path == path)
+                .unwrap();
+            BrowserLifecycleAssetV1 {
+                url: format!(
+                    "/_tessara/modules/{}/{}/{}/{}",
+                    manifest.definition_id,
+                    manifest.release_version,
+                    asset.digest,
+                    path.trim_start_matches('/')
+                ),
+                digest: asset.digest.clone(),
+                content_type: asset.content_type.clone(),
+            }
+        };
+        let mut bootstrap = BrowserLifecycleBootstrapV1 {
+            schema_version: 1,
+            definition_id: manifest.definition_id.clone(),
+            release_version: manifest.release_version.clone(),
+            lifecycle_abi: lifecycle.lifecycle_abi.clone(),
+            destination: tessara_module_contract::SemanticRouteName::new("dashboards.directory")
+                .unwrap(),
+            path: "/dashboards".into(),
+            title: "Dashboards".into(),
+            document_state: ShellDocumentStateV1::Active,
+            entry_asset: projected(&lifecycle.entry_asset),
+            stylesheet_assets: lifecycle
+                .stylesheet_assets
+                .iter()
+                .map(|path| projected(path))
+                .collect(),
+            payload: json!({"route":"directory"}),
+        };
+        assert!(lifecycle_response_matches_manifest(
+            &bootstrap,
+            &manifest,
+            "/dashboards"
+        ));
+
+        bootstrap.release_version = "9.0.0".parse().unwrap();
+        assert!(!lifecycle_response_matches_manifest(
+            &bootstrap,
+            &manifest,
+            "/dashboards"
         ));
     }
 }

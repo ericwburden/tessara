@@ -163,11 +163,25 @@ pub fn App(initial_shell_navigation: Option<ShellNavigationResponseV1>) -> impl 
 
     view! {
         <Router>
+            <ModuleLifecycleRouteMonitor/>
             <Routes
                 fallback=|| view! { <routes::NotFoundPage/> }
                 children=ToChildren::to_children(routes::routes)
             />
         </Router>
+    }
+}
+
+#[component]
+fn ModuleLifecycleRouteMonitor() -> impl IntoView {
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    {
+        let location = leptos_router::hooks::use_location();
+        Effect::new(move |_| {
+            if !location.pathname.get().starts_with("/dashboards") {
+                crate::features::module_lifecycle::deactivate_current();
+            }
+        });
     }
 }
 
@@ -190,7 +204,7 @@ mod tests {
         assert_eq!(parse_module_bootstrap_json(&module_json), Some(module));
 
         let shell = ShellNavigationResponseV1 {
-            schema_version: 2,
+            schema_version: 3,
             policy_revision: Some(0),
             state: ShellNavigationStateV1::Available,
             groups: vec![ShellNavigationGroupV1 {
@@ -202,6 +216,7 @@ mod tests {
                     href: "/".into(),
                     owner: ShellNavigationItemOwnerV1::Core,
                     contribution_id: None,
+                    navigation_mode: crate::state::shell_navigation::ShellNavigationModeV1::Shell,
                 }],
             }],
             unavailable: None,

@@ -213,9 +213,7 @@ fn delete_dashboard(dashboard_id: String, error: RwSignal<Option<String>>) {
     leptos::task::spawn_local(async move {
         match crate::api::delete_dashboard(&dashboard_id).await {
             Ok(()) => {
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/dashboards");
-                }
+                crate::navigate_dashboard_href("/dashboards");
             }
             Err(message) => error.set(Some(message)),
         }

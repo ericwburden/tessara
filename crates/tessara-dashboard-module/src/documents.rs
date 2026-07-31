@@ -1,12 +1,16 @@
 use axum::{
-    Router,
+    Json, Router,
     extract::{Path, State},
     http::{HeaderMap, HeaderValue, header},
     response::{Html, IntoResponse, Response},
     routing::get,
 };
+use semver::Version;
 use tessara_dashboard_ui::{DashboardRouteBootstrap, SessionAccount};
-use tessara_module_contract::AuthorizationGrantOperationV1;
+use tessara_module_contract::{
+    ArtifactDigest, AuthorizationGrantOperationV1, BrowserLifecycleAssetV1,
+    BrowserLifecycleBootstrapV1, ModuleDefinitionId, SemanticRouteName,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -173,6 +177,48 @@ async fn document(
     bootstrap: DashboardRouteBootstrap,
 ) -> Result<Response, DashboardModuleError> {
     let context = verified_shell_context(state, headers).await?;
+    if accepts_lifecycle_bootstrap(headers) {
+        let destination = match &bootstrap {
+            DashboardRouteBootstrap::Unavailable { .. } => "dashboards.directory",
+            DashboardRouteBootstrap::Directory { .. } => "dashboards.directory",
+            DashboardRouteBootstrap::Create { .. } => "dashboards.create",
+            DashboardRouteBootstrap::Detail { .. } => "dashboards.detail",
+            DashboardRouteBootstrap::Editor { .. } => "dashboards.edit",
+            DashboardRouteBootstrap::Viewer { .. } => "dashboards.view",
+        };
+        let projection = BrowserLifecycleBootstrapV1 {
+            schema_version: BrowserLifecycleBootstrapV1::SCHEMA_VERSION,
+            definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
+                .expect("static Dashboard definition id is valid"),
+            release_version: Version::parse(MODULE_RELEASE_VERSION)
+                .expect("static Dashboard release is valid"),
+            lifecycle_abi: Version::new(1, 0, 0),
+            destination: SemanticRouteName::new(destination)
+                .expect("static Dashboard destination is valid"),
+            path: path.to_string(),
+            title: title.to_string(),
+            document_state: context.document_state,
+            entry_asset: lifecycle_asset(
+                tessara_dashboard_ui::DASHBOARD_JS_SHA256,
+                "dashboard.js",
+                "text/javascript; charset=utf-8",
+            ),
+            stylesheet_assets: vec![lifecycle_asset(
+                tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS_SHA256,
+                "dashboard-lifecycle.css",
+                "text/css; charset=utf-8",
+            )],
+            payload: serde_json::to_value(&bootstrap)
+                .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?,
+        };
+        let mut response = Json(projection).into_response();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/vnd.tessara.module-view+json; version=1"),
+        );
+        no_store_vary(&mut response);
+        return Ok(response);
+    }
     let html = tessara_dashboard_ui::render_dashboard_document(
         &context,
         path,
@@ -181,14 +227,41 @@ async fn document(
         MODULE_RELEASE_VERSION,
     );
     let mut response = Html(html).into_response();
+    no_store_vary(&mut response);
+    Ok(response)
+}
+
+fn accepts_lifecycle_bootstrap(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value.split(',').any(|media| {
+                media
+                    .trim()
+                    .starts_with("application/vnd.tessara.module-view+json")
+            })
+        })
+}
+
+fn lifecycle_asset(digest: &str, name: &str, content_type: &str) -> BrowserLifecycleAssetV1 {
+    BrowserLifecycleAssetV1 {
+        url: tessara_dashboard_ui::dashboard_asset_path(MODULE_RELEASE_VERSION, digest, name),
+        digest: ArtifactDigest::new(format!("sha256:{digest}"))
+            .expect("compiled Dashboard asset digest is valid"),
+        content_type: content_type.to_string(),
+    }
+}
+
+fn no_store_vary(response: &mut Response) {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),
     );
-    response
-        .headers_mut()
-        .insert(header::VARY, HeaderValue::from_static("Authorization"));
-    Ok(response)
+    response.headers_mut().insert(
+        header::VARY,
+        HeaderValue::from_static("Accept, Authorization"),
+    );
 }
 
 fn dashboards_to_ui<T: serde::Serialize>(
@@ -207,4 +280,33 @@ where
             .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?,
     )
     .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lifecycle_bootstrap_requires_the_versioned_accept_media_type() {
+        let mut headers = HeaderMap::new();
+        assert!(!accepts_lifecycle_bootstrap(&headers));
+        headers.insert(
+            header::ACCEPT,
+            HeaderValue::from_static(
+                "text/html, application/vnd.tessara.module-view+json; version=1",
+            ),
+        );
+        assert!(accepts_lifecycle_bootstrap(&headers));
+    }
+
+    #[test]
+    fn projected_lifecycle_assets_are_release_and_digest_addressed() {
+        let asset = lifecycle_asset(
+            tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS_SHA256,
+            "dashboard-lifecycle.css",
+            "text/css; charset=utf-8",
+        );
+        assert!(asset.url.contains("/tessara.dashboards/2.0.2/"));
+        assert!(asset.url.contains(asset.digest.as_str()));
+    }
 }

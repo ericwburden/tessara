@@ -117,7 +117,7 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
         authorized_request("GET", "/api/shell/navigation", &reader.token, None),
     )
     .await;
-    assert_eq!(reader_shell["schema_version"], 2);
+    assert_eq!(reader_shell["schema_version"], 3);
     assert_eq!(reader_shell["state"], "available");
     assert!(shell_item(&reader_shell, "module_management").is_some());
     assert!(shell_item(&reader_shell, "administration").is_none());
@@ -149,7 +149,10 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     for key in ["user_management", "roles_access", "node_types"] {
         assert!(shell_item(&admin_shell, key).is_some(), "missing {key}");
     }
-
+    assert_eq!(
+        shell_item(&admin_shell, "dashboards").map(|item| &item["navigation_mode"]),
+        Some(&json!("shell"))
+    );
     for (name, actor) in [
         ("scoped read", &scoped_reader),
         ("scoped manage", &scoped_manager),

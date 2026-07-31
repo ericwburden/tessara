@@ -75,9 +75,7 @@ impl HistorySentinel {
 
 #[cfg(feature = "hydrate")]
 pub(super) fn navigate(href: &str) {
-    if let Some(window) = web_sys::window() {
-        let _ = window.location().set_href(href);
-    }
+    crate::navigate_dashboard_href(href);
 }
 
 #[cfg(not(feature = "hydrate"))]

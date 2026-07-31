@@ -22,7 +22,8 @@ pub use features::modules::{
 };
 pub use state::shell_navigation::{
     ShellNavigationGroupV1, ShellNavigationItemOwnerV1, ShellNavigationItemV1,
-    ShellNavigationResponseV1, ShellNavigationStateV1, ShellNavigationUnavailableV1,
+    ShellNavigationModeV1, ShellNavigationResponseV1, ShellNavigationStateV1,
+    ShellNavigationUnavailableV1,
 };
 /// DOM id for the request-scoped, actor-filtered shell navigation payload.
 pub const SHELL_NAVIGATION_BOOTSTRAP_SCRIPT_ID: &str = "tessara-shell-navigation-bootstrap";
@@ -123,5 +124,15 @@ mod tests {
         assert!(html.contains("Sign In"));
         assert!(html.contains(r#"<form class="login-form""#));
         assert!(html.contains(r#"href="/""#));
+    }
+
+    #[test]
+    fn lifecycle_host_route_covers_module_root_and_deep_links() {
+        initialize_test_executor();
+        for path in ["/dashboards", "/dashboards/new", "/dashboards/example/edit"] {
+            let html = application_html(path, "Dashboards", "Lifecycle module host.");
+            assert!(html.contains(r#"id="tessara-module-outlet""#), "{path}");
+            assert!(html.contains(r#"data-module-definition="tessara.dashboards""#));
+        }
     }
 }

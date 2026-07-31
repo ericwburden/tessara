@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-pub const SHELL_NAVIGATION_SCHEMA_VERSION_V1: u16 = 2;
+pub const SHELL_NAVIGATION_SCHEMA_VERSION_V1: u16 = 3;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -42,6 +42,14 @@ pub enum ShellNavigationItemOwnerV1 {
     Contribution,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShellNavigationModeV1 {
+    Shell,
+    #[default]
+    Document,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShellNavigationItemV1 {
@@ -50,11 +58,13 @@ pub struct ShellNavigationItemV1 {
     pub href: String,
     pub owner: ShellNavigationItemOwnerV1,
     pub contribution_id: Option<String>,
+    #[serde(default)]
+    pub navigation_mode: ShellNavigationModeV1,
 }
 
 impl ShellNavigationItemV1 {
     pub(crate) fn requires_document_navigation(&self) -> bool {
-        self.owner == ShellNavigationItemOwnerV1::Contribution
+        self.navigation_mode == ShellNavigationModeV1::Document
     }
 }
 
@@ -301,12 +311,19 @@ mod tests {
             href: spec.href.to_string(),
             owner: spec.owner,
             contribution_id: spec.contribution_id.map(str::to_string),
+            navigation_mode: if spec.owner == ShellNavigationItemOwnerV1::Core
+                || !matches!(key, "scoped_records")
+            {
+                ShellNavigationModeV1::Shell
+            } else {
+                ShellNavigationModeV1::Document
+            },
         }
     }
 
     fn available() -> ShellNavigationResponseV1 {
         ShellNavigationResponseV1 {
-            schema_version: 2,
+            schema_version: 3,
             policy_revision: Some(3),
             state: ShellNavigationStateV1::Available,
             groups: vec![
@@ -340,9 +357,10 @@ mod tests {
     }
 
     #[test]
-    fn contributed_destinations_leave_the_core_client_router() {
-        assert!(item("dashboards").requires_document_navigation());
-        assert!(item("forms").requires_document_navigation());
+    fn delivery_mode_controls_document_navigation_independently_of_ownership() {
+        assert!(!item("dashboards").requires_document_navigation());
+        assert!(!item("forms").requires_document_navigation());
+        assert!(item("scoped_records").requires_document_navigation());
         assert!(!item("home").requires_document_navigation());
     }
 
@@ -395,7 +413,7 @@ mod tests {
         assert!(!response.is_supported());
 
         let mut response = available();
-        response.schema_version = 3;
+        response.schema_version = 4;
         assert!(!response.is_supported());
     }
 
@@ -428,6 +446,7 @@ mod tests {
             href: "/reference/example".into(),
             owner: ShellNavigationItemOwnerV1::Contribution,
             contribution_id: Some("example.module.navigation".into()),
+            navigation_mode: ShellNavigationModeV1::Document,
         });
         assert!(response.is_supported());
 

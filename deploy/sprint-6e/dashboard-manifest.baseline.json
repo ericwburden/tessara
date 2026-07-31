@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.dashboards",
-  "release_version": "2.0.2",
+  "release_version": "2.0.0",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -346,16 +346,6 @@
       "organization_scope_parameter": null
     }
   ],
-  "browser_lifecycle": {
-    "lifecycle_abi": "1.0.0",
-    "entry_asset": "/dashboard.js",
-    "stylesheet_assets": ["/dashboard-lifecycle.css"],
-    "complete_document_fallback": true,
-    "capabilities": {
-      "navigation_guard": true,
-      "suspend_resume": true
-    }
-  },
   "public_api_routes": [
     {"path_template":"/api/dashboards","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.list","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
     {"path_template":"/api/dashboards/{dashboard_id}","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.get","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
@@ -377,23 +367,18 @@
       "content_type": "text/css; charset=utf-8"
     },
     {
-      "path": "/dashboard-lifecycle.css",
-      "digest": "sha256:ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99",
-      "content_type": "text/css; charset=utf-8"
-    },
-    {
       "path": "/dashboard.js",
-      "digest": "sha256:1bbbc78877f4b916e3e18f36ab60b83173d49f944acc440dc9d2c1c7b1765490",
+      "digest": "sha256:8795628ec3677c50e09645bd83a88ef61684e2b299db818105632979ed40e828",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dashboard-bindings.js",
-      "digest": "sha256:1f06971942239807f70ccf096fe7abf4357f5a76c8c7383d8fa84020221193ab",
+      "digest": "sha256:855e7c29bf8ed443779055c20148134aaa9ee10be91725cd89accf3ae93fde54",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dashboard.wasm",
-      "digest": "sha256:63b4aa94e59b4c05d162a4bc4c4993615a03f459b975cf408812f5ddb18ac0cb",
+      "digest": "sha256:12c1a5f9437a0ec2520156f0a90365d914665517f5703f825a65a14fcc812a07",
       "content_type": "application/wasm"
     }
   ]

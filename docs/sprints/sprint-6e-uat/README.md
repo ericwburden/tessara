@@ -9,6 +9,7 @@ Run these scripts in order against the dedicated Sprint 6E stack at
 4. [Preserve authorization and nondisclosure](./uat-6e-04-authorization.md)
 5. [Contain lifecycle and provider outages](./uat-6e-05-outage-containment.md)
 6. [Upgrade and roll back only Dashboard](./uat-6e-06-upgrade-rollback.md)
+7. [Navigate Dashboard through the reusable module lifecycle](./uat-6e-07-module-lifecycle.md)
 
 ## Sprint Acceptance Criteria
 
@@ -25,12 +26,15 @@ Sprint 6E is accepted only when all of the following are observable:
    resources disclose no distinguishing information.
 5. Dashboard lifecycle changes and Components-provider degradation remain
    contained; unrelated Core and module experiences remain available.
-6. A healthy `2.0.1` candidate can replace `2.0.0` and be rolled back without
+6. A healthy `2.0.2` candidate can replace `2.0.0` and be rolled back without
    losing Dashboard data or restarting unrelated services.
 7. Normal Dashboard documents, diagnostics, immutable assets, and image labels
    expose the active release identity without adding product UI clutter.
 8. Any failed or blocked step is retained explicitly and prevents unconditional
    business acceptance.
+9. Core-to-Dashboard, Dashboard-internal, and Dashboard-to-Core navigation use
+   the persistent Tessara shell without a full-page reload; history, unsaved
+   change protection, direct loads, and complete-document recovery remain usable.
 
 Completed manual results are retained at
 `artifacts/sprint-6e-closeout/manual-uat.md`.

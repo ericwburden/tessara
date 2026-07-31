@@ -37,7 +37,7 @@ services:
     stop_grace_period: 30s
 
   dashboards-candidate:
-    image: ${TESSARA_DASHBOARD_CANDIDATE_IMAGE:-tessara-dashboards:2.0.1}
+    image: ${TESSARA_DASHBOARD_CANDIDATE_IMAGE:-tessara-dashboards:2.0.2}
     environment:
       DATABASE_URL: postgres://tessara_dashboard_runtime:${TESSARA_DASHBOARD_RUNTIME_PASSWORD:-local-dashboard-runtime}@postgres:5432/tessara_module_dashboards
       DASHBOARD_MODULE_BIND_ADDR: 0.0.0.0:8091

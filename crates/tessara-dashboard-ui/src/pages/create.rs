@@ -172,11 +172,7 @@ fn create_dashboard(
         error.set(None);
         match crate::api::create_dashboard(&payload).await {
             Ok(created) => {
-                if let Some(window) = web_sys::window() {
-                    let _ = window
-                        .location()
-                        .set_href(&format!("/dashboards/{}/edit", created.id));
-                }
+                crate::navigate_dashboard_href(&format!("/dashboards/{}/edit", created.id));
             }
             Err(message) => error.set(Some(message)),
         }

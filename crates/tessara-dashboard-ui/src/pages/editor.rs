@@ -128,6 +128,8 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
     });
 
     install_dirty_navigation_guard(dirty, confirmed_navigation);
+    Effect::new(move |_| crate::set_lifecycle_dirty(dirty.get()));
+    on_cleanup(|| crate::set_lifecycle_dirty(false));
 
     let local_placement_count = Signal::derive(move || {
         placements

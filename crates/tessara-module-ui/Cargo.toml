@@ -23,7 +23,7 @@ tessara-module-contract = { path = "../tessara-module-contract" }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 wasm-bindgen = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true, features = ["CssStyleDeclaration", "HtmlCollection", "KeyboardEvent"] }
+web-sys = { workspace = true, optional = true, features = ["CssStyleDeclaration", "HtmlCollection", "HtmlElement", "KeyboardEvent"] }
 
 [dev-dependencies]
 chrono = { workspace = true }

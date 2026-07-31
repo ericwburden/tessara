@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn shell_navigation_json_cannot_terminate_its_script_tag() {
         let bootstrap = ShellNavigationResponseV1 {
-            schema_version: 2,
+            schema_version: 3,
             policy_revision: None,
             state: ShellNavigationStateV1::Unavailable,
             groups: vec![ShellNavigationGroupV1 {
@@ -159,6 +159,7 @@ mod tests {
                     href: "/".into(),
                     owner: ShellNavigationItemOwnerV1::Core,
                     contribution_id: None,
+                    navigation_mode: crate::state::shell_navigation::ShellNavigationModeV1::Shell,
                 }],
             }],
             unavailable: Some(ShellNavigationUnavailableV1 {
