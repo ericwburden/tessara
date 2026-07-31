@@ -24,7 +24,8 @@ $manifestPath = if ($Slot -eq "candidate") {
 }
 $expectedVersion = if ($Slot -eq "candidate") { "2.0.2" } else { "2.0.0" }
 
-$container = (& docker compose -f $composePath --profile candidate ps -q $service).Trim()
+$container = [string](& docker compose -f $composePath --profile candidate ps -aq $service)
+$container = $container.Trim()
 if ($LASTEXITCODE -ne 0 -or $container -notmatch "^[0-9a-f]{64}$") {
     throw "Dashboard slot '$Slot' is not running; release metadata was not changed."
 }
