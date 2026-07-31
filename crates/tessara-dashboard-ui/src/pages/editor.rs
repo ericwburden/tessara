@@ -98,6 +98,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
     let load_error = RwSignal::new(None::<String>);
     let selected = RwSignal::new(None::<String>);
     let dirty = RwSignal::new(false);
+    let settings_dirty = RwSignal::new(false);
     let operation = RwSignal::new(EditorOperation::Idle);
     let save_error = RwSignal::new(None::<String>);
     let announcement = RwSignal::new(String::new());
@@ -128,7 +129,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
     });
 
     install_dirty_navigation_guard(dirty, confirmed_navigation);
-    Effect::new(move |_| crate::set_lifecycle_dirty(dirty.get()));
+    Effect::new(move |_| crate::set_lifecycle_dirty(dirty.get() || settings_dirty.get()));
     on_cleanup(|| crate::set_lifecycle_dirty(false));
 
     let local_placement_count = Signal::derive(move || {
@@ -258,14 +259,15 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                             </div>
                         </header>
 
-                        <DashboardMetadataSettings
+                            <DashboardMetadataSettings
                             dashboard_id=metadata_dashboard_id
                             composition
                             announcement
                             nodes=settings_nodes
                             nodes_bootstrapped=bootstrapped
                             placements
-                            layout_dirty=dirty
+                                layout_dirty=dirty
+                                settings_dirty
                             operation
                         />
 
@@ -1065,6 +1067,7 @@ fn DashboardMetadataSettings(
     nodes_bootstrapped: bool,
     placements: RwSignal<Vec<EditorPlacement>>,
     layout_dirty: RwSignal<bool>,
+    settings_dirty: RwSignal<bool>,
     operation: RwSignal<EditorOperation>,
 ) -> impl IntoView {
     let open = RwSignal::new(false);
@@ -1103,8 +1106,14 @@ fn DashboardMetadataSettings(
         }>
             <summary>"Dashboard settings"</summary>
             <div class="dashboard-settings__panel">
-                <label>"Name" <input class="text-input" prop:value=move || name.get() on:input=move |event| name.set(event_target_value(&event))/></label>
-                <label>"Description" <textarea class="text-input" prop:value=move || description.get() on:input=move |event| description.set(event_target_value(&event))></textarea></label>
+                <label>"Name" <input class="text-input" prop:value=move || name.get() on:input=move |event| {
+                    name.set(event_target_value(&event));
+                    settings_dirty.set(true);
+                }/></label>
+                <label>"Description" <textarea class="text-input" prop:value=move || description.get() on:input=move |event| {
+                    description.set(event_target_value(&event));
+                    settings_dirty.set(true);
+                }></textarea></label>
                 <fieldset>
                     <legend>"Visibility"</legend>
                     {move || nodes.get().into_iter().map(|node| {
@@ -1120,6 +1129,7 @@ fn DashboardMetadataSettings(
                                         selected.retain(|id| id != &node_id);
                                     }
                                     selected_nodes.set(selected);
+                                    settings_dirty.set(true);
                                 }/>
                                 {node.label()}
                             </label>
@@ -1154,6 +1164,7 @@ fn DashboardMetadataSettings(
                                 error,
                                 announcement,
                                 open,
+                                dirty: settings_dirty,
                             },
                         );
                     }
