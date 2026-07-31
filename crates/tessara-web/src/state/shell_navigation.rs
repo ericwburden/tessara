@@ -54,7 +54,7 @@ pub struct ShellNavigationItemV1 {
 
 impl ShellNavigationItemV1 {
     pub(crate) fn requires_document_navigation(&self) -> bool {
-        self.owner == ShellNavigationItemOwnerV1::Contribution && item_spec(&self.key).is_none()
+        self.owner == ShellNavigationItemOwnerV1::Contribution
     }
 }
 
@@ -337,6 +337,13 @@ mod tests {
             ],
             unavailable: None,
         }
+    }
+
+    #[test]
+    fn contributed_destinations_leave_the_core_client_router() {
+        assert!(item("dashboards").requires_document_navigation());
+        assert!(item("forms").requires_document_navigation());
+        assert!(!item("home").requires_document_navigation());
     }
 
     #[test]
