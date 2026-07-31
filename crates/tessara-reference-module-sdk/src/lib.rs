@@ -10,8 +10,8 @@ pub const RELEASE_VERSION: &str = "1.0.0";
 pub const READ_CAPABILITY: &str = "tessara.reference.module-sdk:read";
 pub const ROOT_PATH: &str = "/reference/module-sdk";
 pub const MODULE_SHELL_CSS_DIGEST: &str =
-    "sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d";
-pub const MODULE_SHELL_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d/module-shell.css";
+    "sha256:fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3";
+pub const MODULE_SHELL_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3/module-shell.css";
 pub const MODULE_SHELL_JS_DIGEST: &str =
     "sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
 pub const MODULE_SHELL_JS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js";
