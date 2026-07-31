@@ -50,12 +50,33 @@ $temporary = Join-Path $routeDirectory "dashboard.$([Guid]::NewGuid().ToString('
 )
 Move-Item -LiteralPath $temporary -Destination $routeTarget -Force
 
+# Docker Desktop propagates the atomically replaced bind-mounted file but may
+# not forward the host filesystem notification to Traefik. SIGHUP makes
+# Traefik reread the dynamic provider without restarting the gateway process.
+$gatewayContainer = (& docker compose -f $composePath --profile candidate ps -q gateway).Trim()
+if ($LASTEXITCODE -ne 0 -or $gatewayContainer -notmatch "^[0-9a-f]{64}$") {
+    throw "Gateway is not running; Dashboard route notification failed."
+}
+$gatewayRestartCount = [int](& docker inspect --format "{{.RestartCount}}" $gatewayContainer).Trim()
+& docker kill --signal=HUP $gatewayContainer | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Gateway did not accept the Dashboard route reload signal."
+}
+Start-Sleep -Milliseconds 500
+$gatewayState = (& docker inspect --format "{{.State.Status}} {{.RestartCount}}" $gatewayContainer).Trim()
+if ($LASTEXITCODE -ne 0 -or $gatewayState -ne "running $gatewayRestartCount") {
+    throw "Gateway did not remain running without restart after the route reload signal."
+}
+
 $record = [ordered]@{
     schema_version = 1
     switched_at = [DateTimeOffset]::UtcNow.ToString("o")
     active_slot = $Slot
     container = $container
     health = $health
+    gateway_container = $gatewayContainer
+    gateway_restart_count = $gatewayRestartCount
+    gateway_reload_signal = "HUP"
     route_sha256 = (Get-FileHash -LiteralPath $routeTarget -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 [IO.File]::WriteAllText(

@@ -41,5 +41,11 @@ foreach ($slot in @("baseline", "candidate")) {
         throw "Sprint 6E Dashboard slot '$slot' is not isolated to the module entrypoint."
     }
 }
+$slotSwitch = Get-Content -LiteralPath `
+    (Join-Path $repoRoot "scripts/set-sprint-6e-dashboard-slot.ps1") -Raw
+if ($slotSwitch -notmatch "docker kill --signal=HUP" `
+    -or $slotSwitch -notmatch "gateway_restart_count") {
+    throw "Sprint 6E slot switching must reload Traefik without restarting it."
+}
 
 Write-Host "Sprint 6E Dashboard source and package boundaries passed."
