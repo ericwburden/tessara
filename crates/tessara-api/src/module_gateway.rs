@@ -142,10 +142,7 @@ pub(crate) async fn asset(State(state): State<AppState>, request: Request) -> Re
     match installed_modules(&state.pool).await {
         Ok(installed) => {
             for module in installed {
-                if module.manifest.assets.iter().any(|asset| {
-                    public_asset_path(&module.manifest, asset.path.as_str(), asset.digest.as_str())
-                        == path
-                }) {
+                if asset_path_targets_module(&path, &module.manifest) {
                     return forward(
                         &module,
                         Method::GET,
@@ -506,17 +503,12 @@ fn service_endpoint(manifest: &ModuleManifest) -> ApiResult<String> {
         .to_string())
 }
 
-fn public_asset_path(manifest: &ModuleManifest, local_path: &str, digest: &str) -> String {
-    if local_path.starts_with("/_tessara/") {
-        return local_path.to_string();
-    }
-    format!(
-        "/_tessara/modules/{}/{}/{}/{}",
-        manifest.definition_id,
-        manifest.release_version,
-        digest,
-        local_path.trim_start_matches('/')
-    )
+fn asset_path_targets_module(path: &str, manifest: &ModuleManifest) -> bool {
+    path.strip_prefix("/_tessara/modules/")
+        .and_then(|path| path.split_once('/'))
+        .is_some_and(|(definition_id, remaining)| {
+            definition_id == manifest.definition_id.as_str() && !remaining.is_empty()
+        })
 }
 
 fn path_template_matches(template: &str, path: &str) -> bool {
@@ -603,5 +595,20 @@ mod tests {
         );
         assert_eq!(idempotency_key(&headers), "dashboard-save-42");
         assert!(!idempotency_key(&HeaderMap::new()).is_empty());
+    }
+
+    #[test]
+    fn candidate_assets_route_to_the_installed_module_identity() {
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-dashboard-module/manifest.json"))
+                .expect("Dashboard manifest");
+        assert!(asset_path_targets_module(
+            "/_tessara/modules/tessara.dashboards/2.0.2/sha256:candidate/dashboard.js",
+            &manifest
+        ));
+        assert!(!asset_path_targets_module(
+            "/_tessara/modules/tessara.other/2.0.2/sha256:candidate/dashboard.js",
+            &manifest
+        ));
     }
 }
