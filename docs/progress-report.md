@@ -13,6 +13,11 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
 - User approved the complete Sprint 6D test/harness change packet and
   implementation proceeded without compatibility facades or old-manifest
   readers.
+- User subsequently approved a forward-only validation cleanup: active
+  database tests now use four role-based API fresh/API integration/reference
+  module/API enrollment variables, and the pre-production reference module no
+  longer carries a legacy-binary rollback compatibility test or dedicated
+  upgrade-test database.
 - Added the canonical contract/runtime/UI/testkit packages and the independent
   non-product reference module with native SSR, WASM hydration, exact manifest
   declarations, JSON configuration/security persistence, probes, sanitized
@@ -33,11 +38,17 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
 - Pre-commit validation passed: workspace all-target checking; formatting and
   diff whitespace; 62 contract unit tests plus contract fixture/protocol
   suites; runtime, testkit, 28 module-UI, and four reference-module tests;
-  contract/UI/reference WASM checks; the two database-backed Scoped Records
-  integration tests against disposable clean databases; the generic Core
+  contract/UI/reference WASM checks; the database-backed Scoped Records
+  integration test against a disposable clean database; the generic Core
   route matcher; native/WASM source boundaries; exact compatibility
   inventory; Markdown links; Compose configuration; all PowerShell parsers;
   and Playwright discovery of exactly 62 tests in seven files.
+- The hardened validation contract subsequently passed its preflight
+  self-test, database-free fast gate, canonical full gate against four freshly
+  provisioned databases, and serial workspace all-features suite against those
+  fixtures plus the installation-control database. The full gate ran both API
+  library database proofs; the workspace run also passed installation-control
+  and the current reference-module integration test.
 - Retained source-exact deployment, smoke, UAT, complete Playwright execution,
   outage/recovery, graceful-shutdown, and manual closeout evidence remains to
   be captured from committed source.

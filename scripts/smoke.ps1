@@ -34,7 +34,7 @@ if (-not (Test-Path -LiteralPath $acceptanceEvidenceCommon -PathType Leaf)) {
 . $acceptanceEvidenceCommon
 $environmentSnapshot = Get-Sprint6AProcessEnvironmentSnapshot -Names @(
     'DATABASE_URL',
-    'TEST_DATABASE_URL',
+    'TEST_API_DATABASE_URL',
     'TESSARA_BIND_ADDR',
     'RUST_LOG'
 )
@@ -323,7 +323,7 @@ try {
     }
 
     $env:DATABASE_URL = "postgres://tessara:tessara@localhost:5432/tessara"
-    $env:TEST_DATABASE_URL = "postgres://tessara:tessara@localhost:5432/tessara_test"
+    $env:TEST_API_DATABASE_URL = "postgres://tessara:tessara@localhost:5432/tessara_test"
     $env:TESSARA_BIND_ADDR = "127.0.0.1:8080"
     $env:RUST_LOG = "tessara_api=debug,sqlx=warn"
 

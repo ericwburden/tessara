@@ -2394,25 +2394,26 @@ mod tests {
 
     #[tokio::test]
     async fn catalog_sync_is_repeatable_concurrent_and_rolls_back_injected_failure() {
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL is required; database integration tests must never skip");
+        let database_url = std::env::var("TEST_API_DATABASE_URL").expect(
+            "TEST_API_DATABASE_URL is required; database integration tests must never skip",
+        );
         assert!(
             !database_url.trim().is_empty(),
-            "TEST_DATABASE_URL is required and must not be empty"
+            "TEST_API_DATABASE_URL is required and must not be empty"
         );
 
         let preflight_pool = PgPoolOptions::new()
             .max_connections(1)
             .connect(&database_url)
             .await
-            .expect("TEST_DATABASE_URL must be reachable for the read-only safety preflight");
+            .expect("TEST_API_DATABASE_URL must be reachable for the read-only safety preflight");
         let database_name: String = sqlx::query_scalar("SELECT current_database()")
             .fetch_one(&preflight_pool)
             .await
             .expect("the preflight must read the current database name");
         assert!(
             is_disposable_database_name(&database_name),
-            "TEST_DATABASE_URL must name a token-bounded disposable database ({}); got '{database_name}'",
+            "TEST_API_DATABASE_URL must name a token-bounded disposable database ({}); got '{database_name}'",
             DISPOSABLE_DATABASE_NAME_TOKENS.join(", ")
         );
         preflight_pool.close().await;

@@ -328,7 +328,9 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         .expect("composition should include placements");
     assert_eq!(composition_placements.len(), 9);
     let seed_pool = PgPoolOptions::new()
-        .connect(&std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set"))
+        .connect(
+            &std::env::var("TEST_API_DATABASE_URL").expect("TEST_API_DATABASE_URL should be set"),
+        )
         .await
         .expect("seed config verification pool");
     let seeded_configs = sqlx::query_scalar::<_, Value>(
@@ -4008,11 +4010,11 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
 
 async fn test_app() -> axum::Router {
     LazyLock::force(&TEST_TRACING);
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .expect("TEST_DATABASE_URL is required; database integration tests must never skip");
+    let database_url = std::env::var("TEST_API_DATABASE_URL")
+        .expect("TEST_API_DATABASE_URL is required; database integration tests must never skip");
     assert!(
         !database_url.trim().is_empty(),
-        "TEST_DATABASE_URL is required and must not be empty"
+        "TEST_API_DATABASE_URL is required and must not be empty"
     );
     let reset_pool = PgPoolOptions::new()
         .max_connections(1)
@@ -4025,7 +4027,7 @@ async fn test_app() -> axum::Router {
         .expect("current database should be readable");
     assert!(
         is_disposable_database_name(&database_name),
-        "TEST_DATABASE_URL must point at a database with a token-bounded disposable name marker ({}); got '{database_name}'",
+        "TEST_API_DATABASE_URL must point at a database with a token-bounded disposable name marker ({}); got '{database_name}'",
         DISPOSABLE_DATABASE_NAME_TOKENS.join(", ")
     );
     sqlx::query("DROP SCHEMA public CASCADE")
@@ -4158,7 +4160,8 @@ async fn assert_major_line_null_fills_added_field(
     version_major: i32,
     field_key: &str,
 ) {
-    let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set");
+    let database_url =
+        std::env::var("TEST_API_DATABASE_URL").expect("TEST_API_DATABASE_URL should be set");
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&database_url)
@@ -4216,7 +4219,8 @@ async fn set_major_line_materialization_status(
     version_major: i32,
     rebuild_status: &str,
 ) {
-    let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set");
+    let database_url =
+        std::env::var("TEST_API_DATABASE_URL").expect("TEST_API_DATABASE_URL should be set");
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&database_url)
@@ -4245,7 +4249,8 @@ async fn set_major_line_materialization_status(
 }
 
 async fn remove_major_line_materialization(dataset_id: &str, version_major: i32) {
-    let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set");
+    let database_url =
+        std::env::var("TEST_API_DATABASE_URL").expect("TEST_API_DATABASE_URL should be set");
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&database_url)

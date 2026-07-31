@@ -2771,8 +2771,9 @@ mod tests {
 
     #[tokio::test]
     async fn local_enrollment_is_atomic_global_and_idempotent() {
-        let database_url = std::env::var("TEST_ENROLLMENT_DATABASE_URL")
-            .expect("TEST_ENROLLMENT_DATABASE_URL is required for enrollment integration tests");
+        let database_url = std::env::var("TEST_API_ENROLLMENT_DATABASE_URL").expect(
+            "TEST_API_ENROLLMENT_DATABASE_URL is required for enrollment integration tests",
+        );
         let config = crate::config::Config {
             database_url,
             bind_addr: "127.0.0.1:0".into(),

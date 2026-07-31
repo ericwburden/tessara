@@ -183,17 +183,21 @@ itself authorization to change the test.
 ## Canonical Closeout Validation
 
 Run the check-only and reproducible gate from the repository root. The
-fresh-sprint lifecycle uses two independently provisioned disposable databases:
-one general test target and one distinct fresh-start/seed-lock target.
-`scripts/validate.ps1` intentionally refuses to run without both URLs and the
-exact destructive-reset acknowledgement so database-backed assertions cannot
-silently skip and the fresh-start proof cannot reset the general test target.
+full gate uses four freshly provisioned, pairwise-distinct disposable
+databases: the general API integration target, the destructive API
+fresh-start/seed-lock target, the independent reference-module target, and the
+API enrollment target isolated from concurrently executing API library tests.
+Do not reuse these fixture databases for a second complete suite; recreate
+them first. `scripts/validate.ps1`
+intentionally refuses to run without all four URLs and the exact
+destructive-reset acknowledgement so database-backed assertions cannot
+silently skip or interfere with one another.
 Each sprint starts from one squashed baseline migration and a freshly seeded
 database; upgrade and rollback evidence are not current closeout inputs.
 `scripts/validate.ps1 -Fast` is an inner-loop check. Its API step runs
-`cargo test -p tessara-api --lib --locked`; provide `TEST_DATABASE_URL` when
-that library suite includes an intentional database-backed catalog-sync proof.
-Fast mode never claims the destructive fresh-start proof.
+the API library suite while explicitly excluding its two database-backed
+catalog-sync and enrollment proofs. The full gate runs those proofs. Fast mode
+never claims database integration or the destructive fresh-start proof.
 
 ```powershell
 cargo fmt --all -- --check
@@ -203,10 +207,15 @@ cargo test -p tessara-module-contract --locked
 npm --prefix .\end2end ci
 npm --prefix .\end2end run install-browsers
 
-$env:TEST_DATABASE_URL = '<disposable-test-database-url>'
-$env:SPRINT_6A_FRESH_DATABASE_URL = '<second-dedicated-disposable-fresh-database-url>'
+$env:TEST_API_DATABASE_URL = '<disposable-api-test-database-url>'
+$env:TEST_API_FRESH_DATABASE_URL = '<disposable-api-fresh-database-url>'
+$env:TEST_REFERENCE_MODULE_DATABASE_URL = '<disposable-reference-module-database-url>'
+$env:TEST_API_ENROLLMENT_DATABASE_URL = '<disposable-api-enrollment-database-url>'
 $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
 .\scripts\validate.ps1
+
+# The workspace-wide suite additionally exercises installation control.
+$env:TEST_DEPLOYMENT_DATABASE_URL = '<disposable-installation-control-database-url>'
 cargo test --workspace --all-features --locked
 
 .\scripts\check-web-crate-boundaries.ps1

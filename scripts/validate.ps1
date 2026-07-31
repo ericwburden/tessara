@@ -1,12 +1,212 @@
 [CmdletBinding()]
 param(
-    [switch]$Fast
+    [switch]$Fast,
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$fullValidationDatabaseEnvironmentNames = @(
+    "TEST_API_DATABASE_URL",
+    "TEST_API_FRESH_DATABASE_URL",
+    "TEST_REFERENCE_MODULE_DATABASE_URL",
+    "TEST_API_ENROLLMENT_DATABASE_URL"
+)
+$destructiveFreshResetAcknowledgement =
+    "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET"
+
+function Test-TessaraDisposableDatabaseName {
+    param([Parameter(Mandatory)][string]$DatabaseName)
+
+    $tokens = @(
+        $DatabaseName.ToLowerInvariant() -split "[^a-z0-9]+" |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    $acceptedTokens = @(
+        "test",
+        "tests",
+        "testing",
+        "upgrade",
+        "clone",
+        "rollback",
+        "sprint6a"
+    )
+    if (@($tokens | Where-Object { $_ -in $acceptedTokens }).Count -gt 0) {
+        return $true
+    }
+
+    for ($index = 0; $index -lt ($tokens.Count - 1); $index++) {
+        if ($tokens[$index] -eq "sprint" -and $tokens[$index + 1] -eq "6a") {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function ConvertFrom-TessaraValidationDatabaseUrl {
+    param(
+        [Parameter(Mandatory)][string]$EnvironmentName,
+        [Parameter(Mandatory)][string]$DatabaseUrl
+    )
+
+    try {
+        $uri = [Uri]::new($DatabaseUrl, [UriKind]::Absolute)
+    } catch {
+        throw "Full validation requires $EnvironmentName to be an absolute PostgreSQL URL."
+    }
+    if ($uri.Scheme -notin @("postgres", "postgresql") -or
+        [string]::IsNullOrWhiteSpace($uri.Host)) {
+        throw "Full validation requires $EnvironmentName to be an absolute postgres:// or postgresql:// URL with a host."
+    }
+
+    $databaseName = [Uri]::UnescapeDataString($uri.AbsolutePath.TrimStart("/"))
+    if ([string]::IsNullOrWhiteSpace($databaseName) -or
+        $databaseName.Contains("/") -or
+        $databaseName -notmatch "^[A-Za-z_][A-Za-z0-9_-]*$") {
+        throw "Full validation requires $EnvironmentName to name one explicit PostgreSQL database."
+    }
+    if (-not (Test-TessaraDisposableDatabaseName -DatabaseName $databaseName)) {
+        throw "Full validation refuses $EnvironmentName database '$databaseName': its name lacks a token-bounded disposable marker."
+    }
+
+    $port = if ($uri.IsDefaultPort -or $uri.Port -lt 0) { 5432 } else { $uri.Port }
+    [pscustomobject][ordered]@{
+        EnvironmentName = $EnvironmentName
+        DatabaseName = $databaseName
+        Identity = "$($uri.Host.ToLowerInvariant()):$port/$($databaseName.ToLowerInvariant())"
+    }
+}
+
+function Assert-TessaraFullValidationDatabaseEnvironment {
+    param([Parameter(Mandatory)][Collections.IDictionary]$Environment)
+
+    $endpoints = @(
+        foreach ($environmentName in $fullValidationDatabaseEnvironmentNames) {
+            $value = $Environment[$environmentName]
+            if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) {
+                throw "Full validation requires $environmentName so its database integration tests cannot silently skip."
+            }
+            ConvertFrom-TessaraValidationDatabaseUrl `
+                -EnvironmentName $environmentName `
+                -DatabaseUrl $value
+        }
+    )
+
+    $duplicateIdentity = @(
+        $endpoints |
+            Group-Object Identity |
+            Where-Object Count -gt 1
+    ) | Select-Object -First 1
+    if ($null -ne $duplicateIdentity) {
+        $environmentNames = @(
+            $duplicateIdentity.Group |
+                ForEach-Object EnvironmentName |
+                Sort-Object
+        )
+        throw "Full validation database URLs must resolve to pairwise-distinct host/port/database identities; duplicate: $($environmentNames -join ', ')."
+    }
+
+    if ($Environment["SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET"] -ne
+        $destructiveFreshResetAcknowledgement) {
+        throw "Full validation requires SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET=$destructiveFreshResetAcknowledgement because the fresh-baseline proof destroys and recreates its dedicated database."
+    }
+
+    return $endpoints
+}
+
+function Invoke-TessaraValidationPreflightSelfTest {
+    function Assert-Rejected {
+        param(
+            [Parameter(Mandatory)][scriptblock]$Action,
+            [Parameter(Mandatory)][string]$ExpectedMessage
+        )
+
+        try {
+            & $Action
+            throw "Expected validation preflight rejection containing '$ExpectedMessage'."
+        } catch {
+            if (-not $_.Exception.Message.Contains($ExpectedMessage)) {
+                throw
+            }
+        }
+    }
+
+    foreach ($accepted in @(
+        "tessara_sprint6a_test",
+        "tessara_sprint6a_upgrade_test",
+        "tessara-clone-01",
+        "ROLLBACK_snapshot",
+        "tessara-tests-01",
+        "tessara_testing_01",
+        "tessara-sprint-6a-fresh"
+    )) {
+        if (-not (Test-TessaraDisposableDatabaseName -DatabaseName $accepted)) {
+            throw "Validation preflight self-test rejected disposable database name '$accepted'."
+        }
+    }
+    foreach ($rejected in @(
+        "latest",
+        "contest",
+        "attested",
+        "production_upgradeable",
+        "sprint6atest",
+        "production"
+    )) {
+        if (Test-TessaraDisposableDatabaseName -DatabaseName $rejected) {
+            throw "Validation preflight self-test accepted unsafe database name '$rejected'."
+        }
+    }
+
+    $validEnvironment = [ordered]@{
+        TEST_API_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_api"
+        TEST_API_FRESH_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_api_fresh"
+        TEST_REFERENCE_MODULE_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_reference_module"
+        TEST_API_ENROLLMENT_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_api_enrollment"
+        SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = $destructiveFreshResetAcknowledgement
+    }
+    $endpoints = @(
+        Assert-TessaraFullValidationDatabaseEnvironment -Environment $validEnvironment
+    )
+    if ($endpoints.Count -ne $fullValidationDatabaseEnvironmentNames.Count) {
+        throw "Validation preflight self-test did not return every required database endpoint."
+    }
+
+    $missing = [ordered]@{} + $validEnvironment
+    [void]$missing.Remove("TEST_API_ENROLLMENT_DATABASE_URL")
+    Assert-Rejected `
+        -Action { Assert-TessaraFullValidationDatabaseEnvironment -Environment $missing } `
+        -ExpectedMessage "requires TEST_API_ENROLLMENT_DATABASE_URL"
+
+    $duplicate = [ordered]@{} + $validEnvironment
+    $duplicate.TEST_API_ENROLLMENT_DATABASE_URL =
+        "postgres://other-credentials@127.0.0.1:55432/tessara_test_api"
+    Assert-Rejected `
+        -Action { Assert-TessaraFullValidationDatabaseEnvironment -Environment $duplicate } `
+        -ExpectedMessage "pairwise-distinct"
+
+    $unsafe = [ordered]@{} + $validEnvironment
+    $unsafe.TEST_API_DATABASE_URL = "postgres://tester@127.0.0.1:55432/production"
+    Assert-Rejected `
+        -Action { Assert-TessaraFullValidationDatabaseEnvironment -Environment $unsafe } `
+        -ExpectedMessage "token-bounded disposable marker"
+
+    $wrongScheme = [ordered]@{} + $validEnvironment
+    $wrongScheme.TEST_API_DATABASE_URL = "https://127.0.0.1/tessara_test_api"
+    Assert-Rejected `
+        -Action { Assert-TessaraFullValidationDatabaseEnvironment -Environment $wrongScheme } `
+        -ExpectedMessage "postgres:// or postgresql://"
+
+    $missingAcknowledgement = [ordered]@{} + $validEnvironment
+    $missingAcknowledgement.SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = ""
+    Assert-Rejected `
+        -Action { Assert-TessaraFullValidationDatabaseEnvironment -Environment $missingAcknowledgement } `
+        -ExpectedMessage "SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET"
+
+    Write-Host "Full-validation database preflight self-test passed." -ForegroundColor Green
+}
 
 function Invoke-CheckedStep {
     param(
@@ -55,24 +255,27 @@ function Clear-TessaraWebTestArtifacts {
     Write-Host ("Cleaned in {0:mm\:ss}" -f $elapsed) -ForegroundColor Green
 }
 
+if ($SelfTest) {
+    Invoke-TessaraValidationPreflightSelfTest
+    return
+}
+
 Push-Location $repoRoot
 try {
     if ($Fast) {
         Write-Host "Running fast Tessara validation. Use .\scripts\validate.ps1 for the full pre-commit matrix." -ForegroundColor Yellow
     } else {
         Write-Host "Running full Tessara validation sequentially. This avoids Cargo lock contention on Windows." -ForegroundColor Yellow
-        if ([string]::IsNullOrWhiteSpace($env:TEST_DATABASE_URL)) {
-            throw "Full validation requires TEST_DATABASE_URL so database integration tests cannot silently skip. Use -Fast for a non-database development check."
+        $validationEnvironment = [ordered]@{
+            SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET =
+                $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET
         }
-        if ([string]::IsNullOrWhiteSpace($env:SPRINT_6A_FRESH_DATABASE_URL)) {
-            throw "Full validation requires SPRINT_6A_FRESH_DATABASE_URL pointing at a second dedicated disposable database. The fresh-baseline proof resets that database and must not share TEST_DATABASE_URL."
+        foreach ($environmentName in $fullValidationDatabaseEnvironmentNames) {
+            $validationEnvironment[$environmentName] =
+                [Environment]::GetEnvironmentVariable($environmentName)
         }
-        if ($env:SPRINT_6A_FRESH_DATABASE_URL -eq $env:TEST_DATABASE_URL) {
-            throw "SPRINT_6A_FRESH_DATABASE_URL must differ from TEST_DATABASE_URL."
-        }
-        if ($env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET -ne "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET") {
-            throw "Full validation requires SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET because the fresh-baseline proof destroys and recreates its dedicated database."
-        }
+        [void](Assert-TessaraFullValidationDatabaseEnvironment `
+            -Environment $validationEnvironment)
     }
 
     Invoke-CheckedStep -Label "Sprint 6A evidence PowerShell contracts" -Command {
@@ -89,6 +292,8 @@ try {
                 throw "PowerShell AST validation failed for '$relativePath': $($parseErrors[0].Message)"
             }
         }
+        & .\scripts\validate.ps1 -SelfTest
+        if (-not $?) { throw "validation preflight self-test failed" }
         & .\scripts\local-launch.ps1 -SelfTest
         if ($LASTEXITCODE -ne 0) { throw "local-launch self-test failed with exit code $LASTEXITCODE" }
         & .\scripts\capture-sprint-6a-deployment-evidence.ps1 -SelfTest
@@ -181,9 +386,12 @@ try {
     Invoke-CheckedStep -Label "API tests" -Command {
         if ($Fast) {
             # Integration targets include database proofs that intentionally
-            # fail when their dedicated URLs are absent. Fast mode remains a
-            # truthful non-database loop by selecting library tests only.
-            cargo test -p tessara-api --lib --locked
+            # fail when their dedicated URLs are absent. Two database proofs
+            # live in the library target, so the fast loop names and skips
+            # only those tests; the full gate still executes both.
+            cargo test -p tessara-api --lib --locked -- `
+                --skip core_security::tests::local_enrollment_is_atomic_global_and_idempotent `
+                --skip modules::service::tests::catalog_sync_is_repeatable_concurrent_and_rolls_back_injected_failure
         } else {
             cargo test -p tessara-api --all-features --locked
         }

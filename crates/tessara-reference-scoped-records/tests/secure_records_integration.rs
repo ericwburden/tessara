@@ -21,8 +21,8 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
-    let database_url = std::env::var("TEST_SCOPED_RECORDS_DATABASE_URL")
-        .expect("TEST_SCOPED_RECORDS_DATABASE_URL is required for module integration tests");
+    let database_url = std::env::var("TEST_REFERENCE_MODULE_DATABASE_URL")
+        .expect("TEST_REFERENCE_MODULE_DATABASE_URL is required for module integration tests");
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -352,62 +352,4 @@ fn module_request(method: &str, path: &str, authorization: &str, body: Value) ->
             serde_json::to_vec(&body).unwrap()
         }))
         .unwrap()
-}
-
-#[tokio::test]
-async fn squashed_baseline_preserves_the_legacy_binary_record_shape() {
-    let database_url = std::env::var("TEST_SCOPED_RECORDS_UPGRADE_DATABASE_URL")
-        .expect("TEST_SCOPED_RECORDS_UPGRADE_DATABASE_URL is required for lifecycle tests");
-    let pool = PgPoolOptions::new()
-        .max_connections(2)
-        .connect(&database_url)
-        .await
-        .expect("baseline compatibility test database is reachable");
-    sqlx::raw_sql(include_str!("../migrations/001_scoped_records.sql"))
-        .execute(&pool)
-        .await
-        .expect("Sprint 6B2 baseline applies");
-    let original_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO scoped_records (id,label,scope) VALUES ($1,$2,$3)")
-        .bind(original_id)
-        .bind("Pre-upgrade record")
-        .bind("North Region")
-        .execute(&pool)
-        .await
-        .unwrap();
-    let upgraded: (Uuid, String, String, Uuid) = sqlx::query_as(
-        "SELECT id,label,scope,organization_owner_id FROM scoped_records WHERE id=$1",
-    )
-    .bind(original_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(upgraded.0, original_id);
-    assert_eq!(upgraded.1, "Pre-upgrade record");
-    assert_eq!(upgraded.2, "North Region");
-
-    // This is the exact Sprint 6B1 read/write shape. Keeping it operational is
-    // what makes a compatible binary rollback possible after schema upgrade.
-    let rollback_read: (Uuid, String, String, chrono::DateTime<Utc>) =
-        sqlx::query_as("SELECT id,label,scope,created_at FROM scoped_records WHERE id=$1")
-            .bind(original_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(rollback_read.0, original_id);
-    let rollback_created_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO scoped_records (id,label,scope) VALUES ($1,$2,$3)")
-        .bind(rollback_created_id)
-        .bind("Created after rollback")
-        .bind("West Region")
-        .execute(&pool)
-        .await
-        .expect("the Sprint 6B1 binary write shape remains compatible");
-    let derived_owner: Option<Uuid> =
-        sqlx::query_scalar("SELECT organization_owner_id FROM scoped_records WHERE id=$1")
-            .bind(rollback_created_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert!(derived_owner.is_some());
 }

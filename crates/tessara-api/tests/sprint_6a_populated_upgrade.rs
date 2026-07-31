@@ -270,7 +270,7 @@ const FIXTURE_ACCOUNT_ID: &str = "60000000-0000-0000-0000-000000000002";
 const FIXTURE_SESSION_TOKEN: &str = "60000000-0000-0000-0000-000000000301";
 const DESTRUCTIVE_RESET_ACKNOWLEDGEMENT_ENV: &str = "SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET";
 const DESTRUCTIVE_RESET_ACKNOWLEDGEMENT: &str = "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET";
-const FRESH_DATABASE_URL_ENV: &str = "SPRINT_6A_FRESH_DATABASE_URL";
+const FRESH_DATABASE_URL_ENV: &str = "TEST_API_FRESH_DATABASE_URL";
 
 #[test]
 fn disposable_database_names_require_token_boundaries() {
@@ -491,7 +491,7 @@ async fn fresh_startup_and_seed_assignment_lock_order_use_a_separate_database() 
     assert_destructive_fresh_reset_acknowledged();
     let database_url = std::env::var(FRESH_DATABASE_URL_ENV).unwrap_or_else(|_| {
         panic!(
-            "{FRESH_DATABASE_URL_ENV} is required; fresh-start and lock-order proof must never reset the populated upgrade clone"
+            "{FRESH_DATABASE_URL_ENV} is required; fresh-start and lock-order proof must never reset the general API integration database"
         )
     });
     assert!(

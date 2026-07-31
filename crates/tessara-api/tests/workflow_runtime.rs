@@ -2706,11 +2706,11 @@ async fn test_state() -> db::AppState {
 
 async fn test_state_with_cookie_name(auth_cookie_name: &str) -> db::AppState {
     LazyLock::force(&TEST_TRACING);
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .expect("TEST_DATABASE_URL is required; database integration tests must never skip");
+    let database_url = std::env::var("TEST_API_DATABASE_URL")
+        .expect("TEST_API_DATABASE_URL is required; database integration tests must never skip");
     assert!(
         !database_url.trim().is_empty(),
-        "TEST_DATABASE_URL is required and must not be empty"
+        "TEST_API_DATABASE_URL is required and must not be empty"
     );
 
     reset_database(&database_url).await;
@@ -2920,7 +2920,7 @@ async fn reset_database(database_url: &str) {
         .expect("current database should be readable");
     assert!(
         is_disposable_database_name(&database_name),
-        "TEST_DATABASE_URL must point at a database with a token-bounded disposable name marker ({}); got '{database_name}'",
+        "TEST_API_DATABASE_URL must point at a database with a token-bounded disposable name marker ({}); got '{database_name}'",
         DISPOSABLE_DATABASE_NAME_TOKENS.join(", ")
     );
 
