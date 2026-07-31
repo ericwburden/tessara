@@ -43,9 +43,13 @@ pub(crate) async fn dispatch(
     actor: AuthenticatedRequest,
     request: Request,
 ) -> Response {
+    let path = request.uri().path().to_string();
     dispatch_result(&state, &actor, request)
         .await
-        .unwrap_or_else(|error| error.into_response())
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, %path, "Generic module gateway request failed");
+            error.into_response()
+        })
 }
 
 async fn dispatch_result(
@@ -237,6 +241,12 @@ async fn module_authorization(
         .iter()
         .any(|binding| binding.capability == *required_capability)
     {
+        tracing::warn!(
+            actor_id = %actor.account.account_id,
+            required_capability = required_capability.as_str(),
+            binding_count = bindings.len(),
+            "Generic module action has no authorized capability binding"
+        );
         return Err(ApiError::Forbidden("module action unavailable".into()));
     }
 

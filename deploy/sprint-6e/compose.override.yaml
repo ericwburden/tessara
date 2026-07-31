@@ -27,6 +27,8 @@ services:
 
   dashboards:
     image: ${TESSARA_DASHBOARD_BASELINE_IMAGE:-tessara-dashboards:2.0.0}
+    environment:
+      RUST_LOG: ${TESSARA_DASHBOARD_LOG_LEVEL:-warn}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8091/health/live"]
       interval: 5s
@@ -39,6 +41,7 @@ services:
     environment:
       DATABASE_URL: postgres://tessara_dashboard_runtime:${TESSARA_DASHBOARD_RUNTIME_PASSWORD:-local-dashboard-runtime}@postgres:5432/tessara_module_dashboards
       DASHBOARD_MODULE_BIND_ADDR: 0.0.0.0:8091
+      RUST_LOG: ${TESSARA_DASHBOARD_LOG_LEVEL:-warn}
       TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
       TESSARA_CORE_INTERNAL_URL: http://core:8080
       TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
