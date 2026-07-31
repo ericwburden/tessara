@@ -8,6 +8,26 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-07-31 - Sprint 6E Planning Kickoff
+
+- Sprint: `Sprint 6E: Dashboard SDK Adoption And Source Independence Slice`,
+  selected from the sole roadmap heading marked `(Next)`.
+- Status: planning worktree prepared from clean post-Sprint-6D `main` commit
+  `3f2acf6a7151fa59983bd2fab42123db65b804aa`; implementation is explicitly
+  blocked until the sprint plan and its four source/release decisions are
+  approved.
+- Branch: `codex/sprint-6e`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6e`.
+- Plan: `docs/sprints/sprint-6e-plan.md`.
+- Planned verification: formatting; targeted Dashboard/canonical SDK tests;
+  native/WASM package and source audits; Dashboard-owned SSR/hydration/assets;
+  API/web regressions; Sprint 6E Compose and idempotent bootstrap;
+  Dashboard-only upgrade/rollback evidence; smoke; UAT; direct and retained
+  Playwright.
+- Immediate focus: review and solidify Dashboard UI ownership, the Components
+  provider seam, release observation, and health-gated rollback. No product
+  functionality or test/harness implementation is authorized yet.
+
 ## 2026-07-31 - Sprint 6D Source-Exact Closeout
 
 ### Completed
