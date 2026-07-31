@@ -32,7 +32,7 @@ pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
-pub const MODULE_RELEASE_VERSION: &str = "2.0.0";
+pub const MODULE_RELEASE_VERSION: &str = "2.0.1";
 
 #[derive(Clone)]
 pub struct DashboardModuleState {

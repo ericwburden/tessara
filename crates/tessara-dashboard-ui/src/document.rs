@@ -19,7 +19,7 @@ pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
     "a88186f05236add56720b1580c3e8ba872eb3ea35f9dbf37b64fb4e38ffc817d";
 pub const DASHBOARD_JS_SHA256: &str =
-    "8795628ec3677c50e09645bd83a88ef61684e2b299db818105632979ed40e828";
+    "17efdd4586b8b2ca4139a469686ac121972dd9e8ecf0c9332364b8eb3086a953";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
     "855e7c29bf8ed443779055c20148134aaa9ee10be91725cd89accf3ae93fde54";
 pub const DASHBOARD_WASM_SHA256: &str =
@@ -155,11 +155,11 @@ mod tests {
                     can_manage: false,
                 }],
             ),
-            "2.0.0",
+            "2.0.1",
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("Delivery"));
-        assert!(html.contains(r#"name="tessara-module-release" content="2.0.0""#));
+        assert!(html.contains(r#"name="tessara-module-release" content="2.0.1""#));
         assert!(html.contains(DASHBOARD_BOOTSTRAP_SCRIPT_ID));
         assert!(!html.contains("tessara-web"));
     }

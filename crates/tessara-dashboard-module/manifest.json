@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.dashboards",
-  "release_version": "2.0.0",
+  "release_version": "2.0.1",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -368,7 +368,7 @@
     },
     {
       "path": "/dashboard.js",
-      "digest": "sha256:8795628ec3677c50e09645bd83a88ef61684e2b299db818105632979ed40e828",
+      "digest": "sha256:17efdd4586b8b2ca4139a469686ac121972dd9e8ecf0c9332364b8eb3086a953",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
