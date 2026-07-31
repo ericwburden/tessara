@@ -420,6 +420,7 @@ pub(super) async fn authorize(
             "Dashboard module is not enabled".into(),
         ));
     }
+    let expected_contract = contract_for_action(action);
     envelope
         .payload
         .validate_for(&AuthorizationValidationContextV1 {
@@ -427,15 +428,23 @@ pub(super) async fn authorize(
             presenting_service: ModuleDefinitionId::new("tessara.core").expect("Core id"),
             audience_module_instance_id: security.module_instance_id,
             dependency_binding: DependencyBindingKey::new(CORE_DASHBOARD_BINDING).expect("binding"),
-            functional_contract: FunctionalContractId::new(contract_for_action(action))
-                .expect("contract"),
+            functional_contract: FunctionalContractId::new(expected_contract).expect("contract"),
             action: action.into(),
             operation,
             authorization_revision: security.authorization_revision as u64,
             organization_revision: security.organization_revision as u64,
             now: Utc::now(),
         })
-        .map_err(|_| DashboardModuleError::Forbidden)?;
+        .map_err(|error| {
+            tracing::warn!(
+                %error,
+                action,
+                expected_contract,
+                presented_contract = envelope.payload.functional_contract.as_str(),
+                "Dashboard authorization grant validation failed"
+            );
+            DashboardModuleError::Forbidden
+        })?;
     Ok(envelope)
 }
 
