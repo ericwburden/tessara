@@ -4,7 +4,7 @@
 
 - System / Module: Tessara Dashboards
 - Requirement: Dashboard-owned same-origin documents
-- Test environment: `http://127.0.0.1:8080`, Sprint 6E baseline `2.0.0`
+- Test environment: `http://127.0.0.1:8080`, Dashboard candidate `2.0.2`
 - User role: Administrator / Dashboard author
 - Business scenario: An administrator uses normal Tessara navigation to find,
   inspect, edit, and view an existing Dashboard after its UI is extracted from
@@ -17,7 +17,7 @@
 
 Preconditions:
 
-1. The Sprint 6E stack is running on Dashboard `2.0.0`.
+1. The Sprint 6E stack is running on Dashboard candidate `2.0.2`.
 2. Sign in as `admin@tessara.local`.
 3. At least one representative Dashboard exists.
 
@@ -51,4 +51,3 @@ Record Actually Tested:
 - Defect IDs: None /
 - Tester comments:
 - Business acceptance: Accepted / Not Accepted / Accepted with Defects
-

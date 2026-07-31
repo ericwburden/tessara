@@ -50,4 +50,6 @@ web-sys = { workspace = true, features = [
 
 [dev-dependencies]
 chrono = { workspace = true }
+leptos = { workspace = true, features = ["ssr"] }
+sha2 = { workspace = true }
 uuid = { workspace = true }

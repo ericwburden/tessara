@@ -4,7 +4,7 @@
 
 - System / Module: Tessara Dashboards and Module Management
 - Requirement: Core fallback ownership and provider degradation containment
-- Test environment: `http://127.0.0.1:8080`, Dashboard `2.0.0`
+- Test environment: `http://127.0.0.1:8080`, Dashboard candidate `2.0.2`
 - User role: Administrator / Dashboard author
 - Business scenario: An administrator disables or temporarily disrupts a
   Dashboard dependency and confirms users receive contained states while Core
@@ -47,4 +47,3 @@ Record Actually Tested:
 - Defect IDs: None /
 - Tester comments:
 - Business acceptance: Accepted / Not Accepted / Accepted with Defects
-

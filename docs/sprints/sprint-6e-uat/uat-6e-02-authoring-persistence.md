@@ -4,7 +4,7 @@
 
 - System / Module: Tessara Dashboards
 - Requirement: Product behavior and persistence preservation
-- Test environment: `http://127.0.0.1:8080`, Sprint 6E baseline `2.0.0`
+- Test environment: `http://127.0.0.1:8080`, Dashboard candidate `2.0.2`
 - User role: Administrator / Dashboard author
 - Business scenario: An administrator creates a disposable Dashboard, updates
   its metadata and composition, and confirms the saved result remains visible
@@ -56,4 +56,3 @@ Input Values to Use During Test:
 - Defect IDs: None /
 - Tester comments:
 - Business acceptance: Accepted / Not Accepted / Accepted with Defects
-

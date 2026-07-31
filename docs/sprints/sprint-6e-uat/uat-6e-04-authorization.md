@@ -4,7 +4,7 @@
 
 - System / Module: Tessara Dashboards authorization
 - Requirement: Role, organization-scope, and nondisclosure preservation
-- Test environment: `http://127.0.0.1:8080`, Dashboard `2.0.0`
+- Test environment: `http://127.0.0.1:8080`, Dashboard candidate `2.0.2`
 - User roles: Administrator, scoped manager, constrained reader
 - Business scenario: Users with different authority open the same Dashboard
   area and receive only the actions, records, and placement information they
@@ -54,4 +54,3 @@ Record Actually Tested:
 - Defect IDs: None /
 - Tester comments:
 - Business acceptance: Accepted / Not Accepted / Accepted with Defects
-

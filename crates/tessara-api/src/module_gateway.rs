@@ -36,6 +36,7 @@ struct InstalledModule {
     instance_id: Uuid,
     installation_id: Uuid,
     manifest: ModuleManifest,
+    serving: bool,
 }
 
 pub(crate) async fn dispatch(
@@ -77,6 +78,9 @@ async fn dispatch_result(
                     && path_template_matches(&route.path_template, &path)
             })
         {
+            if !module.serving {
+                return Ok(crate::module_unavailable_fallback_response());
+            }
             let grant = module_authorization(
                 state,
                 actor,
@@ -102,10 +106,12 @@ async fn dispatch_result(
             .await;
         }
 
-        if let Some(route) = module.manifest.public_api_routes.iter().find(|route| {
-            api_method_matches(route.method, &method)
-                && path_template_matches(&route.path_template, &path)
-        }) {
+        if module.serving
+            && let Some(route) = module.manifest.public_api_routes.iter().find(|route| {
+                api_method_matches(route.method, &method)
+                    && path_template_matches(&route.path_template, &path)
+            })
+        {
             let grant = module_authorization(
                 state,
                 actor,
@@ -142,7 +148,7 @@ pub(crate) async fn asset(State(state): State<AppState>, request: Request) -> Re
     match installed_modules(&state.pool).await {
         Ok(installed) => {
             for module in installed {
-                if asset_path_targets_module(&path, &module.manifest) {
+                if module.serving && asset_path_targets_module(&path, &module.manifest) {
                     return forward(
                         &module,
                         Method::GET,
@@ -165,12 +171,12 @@ pub(crate) async fn asset(State(state): State<AppState>, request: Request) -> Re
 
 async fn installed_modules(pool: &sqlx::PgPool) -> ApiResult<Vec<InstalledModule>> {
     let rows = sqlx::query(
-        "SELECT instances.id,instances.installation_id,releases.manifest
+        "SELECT instances.id,instances.installation_id,releases.manifest,
+                instances.deployed,instances.configured,instances.enabled,
+                instances.ready,instances.healthy
          FROM module_instances instances
          JOIN module_releases releases ON releases.id=instances.release_id
          WHERE instances.identity_state='live' AND instances.installed
-           AND instances.deployed AND instances.configured AND instances.enabled
-           AND instances.ready AND instances.healthy
            AND releases.manifest IS NOT NULL
          ORDER BY instances.definition_id",
     )
@@ -181,6 +187,11 @@ async fn installed_modules(pool: &sqlx::PgPool) -> ApiResult<Vec<InstalledModule
             Ok(InstalledModule {
                 instance_id: row.try_get("id")?,
                 installation_id: row.try_get("installation_id")?,
+                serving: row.try_get::<bool, _>("deployed")?
+                    && row.try_get::<bool, _>("configured")?
+                    && row.try_get::<bool, _>("enabled")?
+                    && row.try_get::<bool, _>("ready")?
+                    && row.try_get::<bool, _>("healthy")?,
                 manifest: row
                     .try_get::<sqlx::types::Json<ModuleManifest>, _>("manifest")?
                     .0,

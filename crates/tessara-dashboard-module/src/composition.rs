@@ -31,9 +31,10 @@ use tessara_dashboards::{
     validate_dashboard_layout,
 };
 use tessara_module_contract::{
-    ContractCompatibilityState, ModuleInstanceOwnerState, OwnerDataState,
-    ProviderAvailabilityState, ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
-    ResourceOwner, ResourceOwnerState, ResourceTypeId, TypedResourceReference,
+    ContractCompatibilityState, CoreInstallationOwnerState, ModuleInstanceOwnerState,
+    OwnerDataState, ProviderAvailabilityState, ResourceAccessState, ResourceIdentityState,
+    ResourceLifecycleState, ResourceOwner, ResourceOwnerState, ResourceResolutionV1,
+    ResourceTypeId, TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -959,7 +960,7 @@ async fn resolve_component(
     authorization: &str,
     reference: DashboardComponentVersionReferenceV1,
 ) -> Result<DashboardComponentResolutionResponseV1, DashboardModuleError> {
-    reqwest::Client::new()
+    let response = reqwest::Client::new()
         .post(format!(
             "{}/api/private/dashboard-components/resolve",
             core_url()
@@ -970,32 +971,78 @@ async fn resolve_component(
             reference,
         ))
         .send()
-        .await
-        .map_err(|_| DashboardModuleError::Unavailable("Components provider unavailable".into()))?
-        .error_for_status()
-        .map_err(|_| DashboardModuleError::Unavailable("Component resolution unavailable".into()))?
-        .json()
-        .await
-        .map_err(|_| DashboardModuleError::Unavailable("Component resolution invalid".into()))
+        .await;
+    let Ok(response) = response else {
+        tracing::warn!("Components provider could not be reached; degrading Dashboard placement");
+        return Ok(provider_unavailable_resolution());
+    };
+    let Ok(response) = response.error_for_status() else {
+        tracing::warn!("Components provider rejected resolution; degrading Dashboard placement");
+        return Ok(provider_unavailable_resolution());
+    };
+    match response.json().await {
+        Ok(resolution) => Ok(resolution),
+        Err(_) => {
+            tracing::warn!(
+                "Components provider returned invalid resolution; degrading Dashboard placement"
+            );
+            Ok(provider_unavailable_resolution())
+        }
+    }
 }
 
 async fn component_catalog(
     authorization: &str,
 ) -> Result<DashboardComponentCatalogResponseV1, DashboardModuleError> {
-    reqwest::Client::new()
+    let response = reqwest::Client::new()
         .post(format!(
             "{}/api/private/dashboard-components/catalog",
             core_url()
         ))
         .header("x-tessara-authorization", authorization)
         .send()
-        .await
-        .map_err(|_| DashboardModuleError::Unavailable("Components catalog unavailable".into()))?
-        .error_for_status()
-        .map_err(|_| DashboardModuleError::Unavailable("Components catalog unavailable".into()))?
-        .json()
-        .await
-        .map_err(|_| DashboardModuleError::Unavailable("Components catalog invalid".into()))
+        .await;
+    let Ok(response) = response else {
+        tracing::warn!("Components catalog could not be reached; continuing without add options");
+        return Ok(unavailable_component_catalog());
+    };
+    let Ok(response) = response.error_for_status() else {
+        tracing::warn!("Components catalog request failed; continuing without add options");
+        return Ok(unavailable_component_catalog());
+    };
+    match response.json().await {
+        Ok(catalog) => Ok(catalog),
+        Err(_) => {
+            tracing::warn!(
+                "Components catalog response was invalid; continuing without add options"
+            );
+            Ok(unavailable_component_catalog())
+        }
+    }
+}
+
+fn provider_unavailable_resolution() -> DashboardComponentResolutionResponseV1 {
+    DashboardComponentResolutionResponseV1::new(
+        ResourceResolutionV1::authorized(
+            ResourceOwnerState::CoreInstallation {
+                state: CoreInstallationOwnerState::Live,
+            },
+            ResourceIdentityState::NotEvaluated,
+            ResourceLifecycleState::NotEvaluated,
+            ContractCompatibilityState::Compatible,
+            ProviderAvailabilityState::Unavailable,
+        )
+        .expect("provider-unavailable resolution is valid"),
+        None,
+    )
+    .expect("provider-unavailable Dashboard response is metadata-free")
+}
+
+fn unavailable_component_catalog() -> DashboardComponentCatalogResponseV1 {
+    DashboardComponentCatalogResponseV1 {
+        schema_version: 1,
+        components: Vec::new(),
+    }
 }
 
 async fn get_dashboard_summary_with_grant(
@@ -1163,13 +1210,12 @@ pub(super) fn component_reference(
 
 #[cfg(test)]
 mod tests {
-    use tessara_module_contract::{
-        ContractCompatibilityState, CoreInstallationOwnerState, ProviderAvailabilityState,
-        ResourceAccessState, ResourceIdentityState, ResourceLifecycleState, ResourceOwnerState,
-        ResourceResolutionV1,
-    };
+    use tessara_module_contract::{ResourceAccessState, ResourceResolutionV1};
 
-    use super::{disclosed_title, reconciled_title, resolution_state};
+    use super::{
+        disclosed_title, provider_unavailable_resolution, reconciled_title, resolution_state,
+        unavailable_component_catalog,
+    };
 
     #[test]
     fn omitted_title_is_retained_and_explicit_blank_title_is_cleared() {
@@ -1186,19 +1232,15 @@ mod tests {
 
     #[test]
     fn approved_resolution_states_have_stable_ui_vocabulary() {
-        let unavailable = ResourceResolutionV1::authorized(
-            ResourceOwnerState::CoreInstallation {
-                state: CoreInstallationOwnerState::Live,
-            },
-            ResourceIdentityState::NotEvaluated,
-            ResourceLifecycleState::NotEvaluated,
-            ContractCompatibilityState::Compatible,
-            ProviderAvailabilityState::Unavailable,
-        )
-        .expect("valid");
-        assert_eq!(resolution_state(&unavailable), "provider_unavailable");
+        let unavailable = provider_unavailable_resolution();
         assert_eq!(
-            disclosed_title(&unavailable, &Some("Partner Profile".into())),
+            resolution_state(unavailable.resolution()),
+            "provider_unavailable"
+        );
+        assert!(unavailable.metadata().is_none());
+        assert!(unavailable_component_catalog().components.is_empty());
+        assert_eq!(
+            disclosed_title(unavailable.resolution(), &Some("Partner Profile".into())),
             Some("Partner Profile".into())
         );
         assert_eq!(

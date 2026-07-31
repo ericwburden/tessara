@@ -4,7 +4,7 @@
 
 - System / Module: Tessara Dashboard documents
 - Requirement: Dashboard-owned SSR, hydration, assets, and presentation
-- Test environment: `http://127.0.0.1:8080`, Dashboard `2.0.0`
+- Test environment: `http://127.0.0.1:8080`, Dashboard candidate `2.0.2`
 - User role: Administrator / Dashboard reader
 - Business scenario: A user directly loads Dashboard documents with and without
   JavaScript and uses them at common desktop, tablet, and mobile widths.
@@ -32,7 +32,7 @@ Record Actually Tested:
 | --- | --- | --- | --- | --- | --- |
 | 1 | Disable JavaScript and directly load directory, detail, editor, and viewer routes. | Each route returns useful, authorized Dashboard content rather than a blank root or Core-owned Dashboard bootstrap. |  |  |  |
 | 2 | Re-enable JavaScript and reload the viewer. | The document remains stable and interactive; no hydration failure is visible. |  |  |  |
-| 3 | Inspect the document metadata and Dashboard assets. | Release `2.0.0` and content-addressed CSS, loader JS, bindings JS, and WASM assets are present; immutable assets load successfully. |  |  |  |
+| 3 | Inspect the document metadata and Dashboard assets. | Release `2.0.2` and content-addressed CSS, loader JS, bindings JS, and WASM assets are present; immutable assets load successfully. |  |  |  |
 | 4 | Use keyboard navigation through primary actions and editor controls. | Focus is visible, order is logical, and actions can be reached without a pointer. |  |  |  |
 | 5 | Inspect at approximately 1280 px, 768 px, and 390 px widths. | Content remains readable and operable without horizontal page overflow or obscured primary actions. |  |  |  |
 | 6 | Switch between light, dark, or system theme when available. | Dashboard-owned content remains legible and visually consistent with the shell. |  |  |  |
@@ -45,4 +45,3 @@ Record Actually Tested:
 - Defect IDs: None /
 - Tester comments:
 - Business acceptance: Accepted / Not Accepted / Accepted with Defects
-

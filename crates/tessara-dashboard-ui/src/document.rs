@@ -18,7 +18,7 @@ pub const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 pub const DASHBOARD_BINDINGS_JS: &str = include_str!("../assets/dashboard-bindings.js");
 pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
-    "a88186f05236add56720b1580c3e8ba872eb3ea35f9dbf37b64fb4e38ffc817d";
+    "281dbf40c836959d6494ec96ee216a4eba59753d5d384310ca4d12e35d1e2578";
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99";
 pub const DASHBOARD_JS_SHA256: &str =
@@ -110,6 +110,7 @@ fn escaped_bootstrap_json(bootstrap: &DashboardRouteBootstrap) -> String {
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Utc};
+    use sha2::{Digest, Sha256};
     use tessara_module_contract::{
         ModuleDefinitionId, OriginalActorProjectionV1, ShellDocumentStateV1, ShellThemeV1,
     };
@@ -117,6 +118,18 @@ mod tests {
 
     use super::*;
     use crate::{DashboardSummary, SessionAccount};
+
+    #[test]
+    fn complete_document_stylesheet_is_self_contained_responsive_and_digest_pinned() {
+        assert!(!DASHBOARD_CSS.contains("@import"));
+        assert!(DASHBOARD_CSS.contains(".dashboard-saved-grid"));
+        assert!(DASHBOARD_CSS.contains("@media (max-width: 780px)"));
+        assert!(DASHBOARD_CSS.contains(".dashboard-saved-grid > *"));
+        assert!(DASHBOARD_CSS.contains(".dashboard-viewer-placement"));
+
+        let digest = format!("{:x}", Sha256::digest(DASHBOARD_CSS.as_bytes()));
+        assert_eq!(digest, DASHBOARD_CSS_SHA256);
+    }
 
     #[test]
     fn complete_document_is_dashboard_owned_and_release_observable() {

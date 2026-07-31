@@ -163,6 +163,8 @@ pub fn render_module_document(
     hydration_script_href: Option<&str>,
     body_html: &str,
 ) -> String {
+    let theme = theme_name(presentation.theme);
+    let theme_bootstrap = theme_bootstrap_script(theme);
     let navigation = presentation
         .navigation
         .iter()
@@ -183,10 +185,12 @@ pub fn render_module_document(
         })
         .unwrap_or_default();
     format!(
-        r#"<!doctype html><html lang="{}" data-theme="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{} · Tessara</title><link rel="stylesheet" href="{}"></head><body data-shell-state="{}" data-correlation-id="{}"><aside><a href="{}">Tessara</a><nav aria-label="Main navigation"><ul>{}</ul></nav></aside><header><strong>{}</strong><span>{}</span></header><main id="module-content">{}</main>{}</body></html>"#,
+        r#"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{} · Tessara</title><script>{}</script><link rel="stylesheet" href="{}"></head><body data-shell-state="{}" data-correlation-id="{}"><aside><a href="{}">Tessara</a><nav aria-label="Main navigation"><ul>{}</ul></nav></aside><header><strong>{}</strong><span>{}</span></header><main id="module-content">{}</main>{}</body></html>"#,
         escape_attribute(&presentation.locale),
-        theme_name(presentation.theme),
+        theme,
+        theme,
         escape_text(&presentation.document_title),
+        theme_bootstrap,
         escape_attribute(stylesheet_href),
         document_state_name(presentation.document_state),
         presentation.correlation_id,
@@ -196,6 +200,12 @@ pub fn render_module_document(
         escape_text(&presentation.actor.display_name),
         body_html,
         hydration,
+    )
+}
+
+fn theme_bootstrap_script(fallback: &str) -> String {
+    format!(
+        r#"(function(){{const root=document.documentElement;const fallback="{fallback}";let preference=fallback;try{{const stored=window.localStorage.getItem("tessara.themePreference");if(stored==="light"||stored==="dark"||stored==="system"){{preference=stored;}}}}catch(_error){{preference=fallback;}}const systemDark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;root.dataset.themePreference=preference;root.dataset.theme=preference==="system"?(systemDark?"dark":"light"):preference;}})();"#
     )
 }
 
@@ -276,9 +286,11 @@ mod tests {
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("data-shell-state=\"recovery\""));
+        assert!(html.contains("data-theme-preference=\"dark\""));
+        assert!(html.contains("tessara.themePreference"));
         assert!(html.contains("&lt;Operator&gt;"));
         assert!(html.contains("<main id=\"module-content\"><p>Recovery</p></main>"));
-        assert!(!html.contains("<script"));
+        assert!(!html.contains("type=\"module\""));
     }
 
     #[test]
