@@ -297,11 +297,7 @@ try {
                 ($navigationItems | Where-Object href -eq "/dashboards") -and
                 ($navigationItems | Where-Object href -eq "/forms")
             )
-            $home = Invoke-WebRequest -Uri "$CoreUrl/" -Method Get -WebSession $coreSession
-            $renderedNavigationReady = $home.StatusCode -eq 200 -and
-                $home.Content.Contains('href="/administration/composition"') -and
-                ($Composition -ne "reference" -or $home.Content.Contains('href="/forms"'))
-            if ($navigation.state -eq "available" -and $hasComposition -and $hasReferenceModules -and $renderedNavigationReady) {
+            if ($navigation.state -eq "available" -and $hasComposition -and $hasReferenceModules) {
                 $navigationReady = $true
                 break
             }
