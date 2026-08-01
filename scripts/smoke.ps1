@@ -523,7 +523,7 @@ try {
     $shellNavigation = Invoke-Json -Method "Get" -Uri "$baseUrl/api/shell/navigation" -Headers $headers
     $shellItems = @($shellNavigation.groups | ForEach-Object { $_.items })
     if (
-        $shellNavigation.schema_version -ne 2 `
+        $shellNavigation.schema_version -ne 3 `
         -or $shellNavigation.state -ne "available" `
         -or -not ($shellItems | Where-Object { $_.key -eq "module_management" }) `
         -or ($shellItems | Where-Object { $_.key -eq "administration" }) `
@@ -531,7 +531,7 @@ try {
         -or -not ($shellItems | Where-Object { $_.key -eq "roles_access" }) `
         -or -not ($shellItems | Where-Object { $_.key -eq "node_types" })
     ) {
-        throw "Smoke failure: schema-v2 administrator shell did not expose the four direct Core Admin destinations"
+        throw "Smoke failure: schema-v3 administrator shell did not expose the four direct Core Admin destinations"
     }
 
     $formsModule = $moduleInventory.entries | Where-Object {
