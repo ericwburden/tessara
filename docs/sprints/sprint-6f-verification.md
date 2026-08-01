@@ -1,9 +1,8 @@
 # Sprint 6F Validation Record
 
-Status: implementation milestone completed on 2026-08-01 with exploratory
-reference-composition and unchanged no-op runtime proofs. Candidate preflight,
-freeze, formal SIT, reduced deployed proof, restart injection, and UAT have not
-begun; exploratory results are not candidate evidence.
+Status: validation preflight failed on 2026-08-01. Candidate freeze, SIT, and
+UAT did not begin. The exploratory reference-composition results remain
+diagnostic only and are not candidate evidence.
 
 ## Scope and acceptance inventory
 
@@ -53,8 +52,11 @@ begun; exploratory results are not candidate evidence.
 
 ## Preflight
 
-- Status: Not Run
+- Status: **Failed — stopped before candidate freeze**
 - Intended branch/worktree: `codex/sprint-6f` at `C:\Users\eric-dev\Projects\tessara-sprint-6f`
+- Intended implementation commit: `56be613d333aee3800a8b698b50618fce77cb515`
+  with tree `4f807d79cf0789edd781fe13570b4d578c19fa14`; worktree was
+  clean when audited.
 - Environment and reset authorization: Must be confirmed before SIT; fresh/disposable database and installation destruction require explicit confirmation at execution time.
 - Test state: Planned fresh Core, Dashboard, and Scoped Records PostgreSQL
   databases plus a protected Supervisor SQLite ledger named by the final
@@ -66,6 +68,40 @@ begun; exploratory results are not candidate evidence.
 - Harness/inventory reconciliation: Not Run; reconcile routes, navigation, roles, catalogs, releases, services, seeds, lifecycle schemas, bootstrap declarations, smoke, UAT, and Playwright before freeze.
 - Migration from-scratch proof: Not Run; after the final schema change, squash sprint-owned migrations and apply each finalized baseline to disposable empty databases. Record N/A only if no schema changes land.
 - Evidence paths: Planned `artifacts/sprint-6f-closeout/`; must be empty or explicitly overwriteable before SIT.
+
+### Preflight failures
+
+1. **Harness inventory is stale.** `scripts/smoke.ps1`,
+   `scripts/uat-sprint.ps1`, and the 62-test Playwright acceptance manifest have
+   no Sprint 6F Application Composition assertions. The only smoke occurrence
+   of `supervisor_materializable` is older module-manifest metadata, not
+   composition acceptance coverage.
+2. **Roadmap exit paths are not executable.** The CLI has no detached
+   pre-resolved lockfile/plan signature verification path. Core exposes only
+   disposition updates for an already-existing drift row; no implemented path
+   creates deliberate UI drift or performs adoption/reconciliation. The
+   Supervisor schema contains `emergency_overrides`, but no emergency-disable
+   API, ledger workflow, expiry behavior, or UI action uses it. No supported
+   fault hook or resumable Core-restart-during-apply scenario exists.
+3. **Observed deployment provenance is not observed.** The deployed adapter
+   records `AcquireImage` digests from the submitted plan as
+   `observed_artifacts`; it does not inspect or verify the running source-exact
+   images. Compose starts and migrates services before the Supervisor apply, so
+   the current receipt cannot prove Supervisor-owned reproduction of the
+   locked composition.
+4. **Manual UAT is not executable as frozen.** Six prepared scripts retain
+   `NEEDS INFO` prerequisites for isolated reduced bootstrap, detached input,
+   constrained accounts, restart timing, drift UI, emergency disable, and CAS
+   tamper execution. Per the script rules, those scenarios would be Blocked.
+5. **The running stack is diagnostic only.** Its images were built before the
+   intended implementation/UAT commit and therefore cannot establish the
+   frozen candidate's source provenance.
+
+Required correction: implement the missing roadmap behaviors and source-exact
+deployment observation, reconcile smoke/scripted-UAT/Playwright coverage in
+the same change, eliminate candidate-independent `NEEDS INFO` blockers, then
+rerun preflight from the beginning. Migration baseline proof remains pending
+until that corrected implementation is final.
 
 ## SIT
 
@@ -110,7 +146,7 @@ not start UAT or satisfy any evidence requirement.
 
 | Time | Gate/lane | Candidate | Classification | Correction | Narrow proof | SIT restart |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-08-01 06:15 -04:00 | Preflight | Intended `56be613d` / `4f807d79` | `preflight/setup` plus implementation gaps | Not corrected during validation request; recorded exact missing product and harness paths | Source/harness inventory, Compose/runtime identity audit | SIT never began |
 
 Permitted classifications are `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, and `product-decision`. A `product-decision` pauses for
