@@ -103,8 +103,7 @@ SELECT
   + (SELECT COUNT(*) FROM datasets)
   + (SELECT COUNT(*) FROM dataset_revisions)
   + (SELECT COUNT(*) FROM components)
-  + (SELECT COUNT(*) FROM component_versions)
-  + (SELECT COUNT(*) FROM dashboards);
+  + (SELECT COUNT(*) FROM component_versions);
 "@
 
     $rawCount = docker compose exec -T postgres psql -U tessara -d tessara -Atc $sql
