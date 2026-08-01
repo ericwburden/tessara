@@ -16,7 +16,7 @@ mod service;
 mod shell_navigation;
 
 pub(crate) use native::{detail as native_detail, directory as native_directory};
-pub(crate) use service::synchronize_catalog;
+pub(crate) use service::{project_composition_modules, synchronize_catalog};
 
 pub(crate) fn routes() -> axum::Router<crate::db::AppState> {
     routes::routes().merge(shell_navigation::routes())

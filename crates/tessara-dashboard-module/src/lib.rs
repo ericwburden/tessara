@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
-    ModuleDefinitionId, PurposeBoundVerifyingKeyV1, ShellContextV1,
+    ModuleDefinitionId, ModuleManifest, PurposeBoundVerifyingKeyV1, ShellContextV1,
     ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
@@ -142,6 +142,7 @@ pub fn router(state: DashboardModuleState) -> Router {
         )
         .route("/api/private/security-state", put(update_security_state))
         .route("/api/private/bootstrap", post(apply_bootstrap))
+        .route("/api/manifest", get(get_manifest))
         .route(
             "/_tessara/modules/tessara.dashboards/{release}/{digest}/{asset}",
             get(dashboard_asset),
@@ -152,6 +153,16 @@ pub fn router(state: DashboardModuleState) -> Router {
         .route("/health/ready", get(ready))
         .route("/api/diagnostics", get(diagnostics))
         .with_state(state)
+}
+
+pub fn manifest() -> ModuleManifest {
+    serde_json::from_str(include_str!("../manifest.json"))
+        .expect("Dashboard manifest must remain valid")
+}
+
+async fn get_manifest(headers: HeaderMap) -> Result<Json<ModuleManifest>, DashboardModuleError> {
+    require_private_key(&headers)?;
+    Ok(Json(manifest()))
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -445,15 +456,19 @@ async fn update_security_state(
           organization_revision, enabled, document_state)
          VALUES (true,$1,$2,$3,$4,$5,$6)
          ON CONFLICT (singleton) DO UPDATE SET
-           installation_id=EXCLUDED.installation_id,
-           module_instance_id=EXCLUDED.module_instance_id,
-           authorization_revision=EXCLUDED.authorization_revision,
-           organization_revision=EXCLUDED.organization_revision,
+           authorization_revision=GREATEST(
+             dashboard_security_state.authorization_revision,
+             EXCLUDED.authorization_revision
+           ),
+           organization_revision=GREATEST(
+             dashboard_security_state.organization_revision,
+             EXCLUDED.organization_revision
+           ),
            enabled=EXCLUDED.enabled,
            document_state=EXCLUDED.document_state,
            updated_at=now()
-         WHERE dashboard_security_state.authorization_revision <= EXCLUDED.authorization_revision
-           AND dashboard_security_state.organization_revision <= EXCLUDED.organization_revision",
+         WHERE dashboard_security_state.installation_id=EXCLUDED.installation_id
+           AND dashboard_security_state.module_instance_id=EXCLUDED.module_instance_id",
     )
     .bind(input.installation_id)
     .bind(input.module_instance_id)
@@ -465,7 +480,7 @@ async fn update_security_state(
     .await?;
     if updated.rows_affected() == 0 {
         return Err(DashboardModuleError::Conflict(
-            "security state revision cannot move backwards".into(),
+            "security state identity cannot change".into(),
         ));
     }
     Ok(StatusCode::NO_CONTENT)

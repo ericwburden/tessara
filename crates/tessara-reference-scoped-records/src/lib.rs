@@ -16,8 +16,9 @@ use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, PurposeBoundVerifyingKeyV1,
-    SecurityCapabilityId, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
+    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleManifest,
+    PurposeBoundVerifyingKeyV1, SecurityCapabilityId, ShellContextV1,
+    ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use tessara_module_runtime::{
     decode_signed_envelope_header, request_correlation_id, verify_shell_context,
@@ -171,6 +172,7 @@ pub fn router(state: ModuleState) -> Router {
             "/api/configuration",
             get(get_configuration).put(put_configuration),
         )
+        .route("/api/manifest", get(get_manifest))
         .route("/api/private/security-state", put(update_security_state))
         .route(
             "/api/private/bootstrap",
@@ -187,6 +189,16 @@ pub fn router(state: ModuleState) -> Router {
         .route("/diagnostics", get(diagnostics_page))
         .route(MODULE_SHELL_CSS_PATH, get(module_shell_stylesheet))
         .with_state(state)
+}
+
+pub fn manifest() -> ModuleManifest {
+    serde_json::from_str(include_str!("../manifest.json"))
+        .expect("Scoped Records manifest must remain valid")
+}
+
+async fn get_manifest(headers: HeaderMap) -> Result<Json<ModuleManifest>, ApiError> {
+    require_private_key(&headers)?;
+    Ok(Json(manifest()))
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -335,18 +347,24 @@ async fn update_security_state(
     {
         return Err(ApiError::bad_request("invalid security state"));
     }
-    sqlx::query(
+    let updated = sqlx::query(
         "INSERT INTO scoped_records_security_state
          (singleton, installation_id, module_instance_id, authorization_revision,
           organization_revision, enabled, document_state)
          VALUES (true,$1,$2,$3,$4,$5,$6)
          ON CONFLICT (singleton) DO UPDATE SET
-           installation_id=EXCLUDED.installation_id,
-           module_instance_id=EXCLUDED.module_instance_id,
-           authorization_revision=EXCLUDED.authorization_revision,
-           organization_revision=EXCLUDED.organization_revision,
+           authorization_revision=GREATEST(
+             scoped_records_security_state.authorization_revision,
+             EXCLUDED.authorization_revision
+           ),
+           organization_revision=GREATEST(
+             scoped_records_security_state.organization_revision,
+             EXCLUDED.organization_revision
+           ),
            enabled=EXCLUDED.enabled, document_state=EXCLUDED.document_state,
-           updated_at=now()",
+           updated_at=now()
+         WHERE scoped_records_security_state.installation_id=EXCLUDED.installation_id
+           AND scoped_records_security_state.module_instance_id=EXCLUDED.module_instance_id",
     )
     .bind(input.installation_id)
     .bind(input.module_instance_id)
@@ -356,6 +374,9 @@ async fn update_security_state(
     .bind(input.document_state)
     .execute(&state.pool)
     .await?;
+    if updated.rows_affected() == 0 {
+        return Err(ApiError::security_identity_conflict());
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1365,6 +1386,13 @@ impl ApiError {
             status: StatusCode::CONFLICT,
             code: "authorization_stale",
             message: "Authorization changed. Refresh through Core and try again.".into(),
+        }
+    }
+    fn security_identity_conflict() -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code: "security_identity_conflict",
+            message: "Security state identity cannot change.".into(),
         }
     }
     fn unavailable(message: &str) -> Self {

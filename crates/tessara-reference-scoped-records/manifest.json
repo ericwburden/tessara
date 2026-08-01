@@ -1,0 +1,238 @@
+{
+  "schema_version": 3,
+  "definition_id": "tessara.reference.scoped-records",
+  "release_version": "1.0.0",
+  "publisher": "tessara.first_party",
+  "support": {
+    "support_tier": "first_party",
+    "contact": "support@tessara.example",
+    "documentation": "https://docs.tessara.example/modules/scoped-records"
+  },
+  "deployment": {
+    "profile": "tessara-oci-v1",
+    "declaration": {
+      "runtime_image": {
+        "image_reference": "registry.example/tessara/scoped-records@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": ["/app/scoped-records", "serve"]
+      },
+      "migration_image": null,
+      "listen": {
+        "protocol": "http",
+        "port": 8090,
+        "registration_name": "scoped-records"
+      },
+      "configuration_keys": ["DISPLAY_LABEL", "RETENTION_MODE"],
+      "secret_keys": ["DATABASE_URL"],
+      "runtime_identity": "scoped-records-runtime",
+      "migration_identity": "scoped-records-migration",
+      "readiness_path": "/health/ready",
+      "liveness_path": "/health/live",
+      "graceful_shutdown_seconds": 30,
+      "resources": {
+        "cpu_request_millis": 100,
+        "cpu_limit_millis": 250,
+        "memory_request_mebibytes": 64,
+        "memory_limit_mebibytes": 128
+      }
+    }
+  },
+  "features": [
+    {
+      "id": "tessara.reference.scoped-records.directory",
+      "name": "Scoped record directory",
+      "description": "Demonstrates independently deployed scoped record behavior.",
+      "use_cases": ["Inspect scoped records"],
+      "inputs": ["Scope"],
+      "outcomes": ["Scoped record list"],
+      "constraints": ["Reference use only"],
+      "contracts": ["tessara.reference.scoped-records.record"],
+      "resource_types": ["tessara.reference.scoped-records.record"],
+      "destinations": ["tessara.reference.scoped-records.directory"],
+      "capabilities": ["tessara.reference.scoped-records:read"],
+      "configuration_pointers": [
+        "/properties/display_label",
+        "/properties/retention_mode"
+      ]
+    }
+  ],
+  "provided_contracts": [
+    {
+      "id": "tessara.reference.scoped-records.record",
+      "version": "1.0.0",
+      "kind": "resource",
+      "description": "Resolve a reference scoped record."
+    }
+  ],
+  "dependencies": [],
+  "resource_types": [
+    {
+      "id": "tessara.reference.scoped-records.record",
+      "description": "A scoped record owned by the reference module."
+    }
+  ],
+  "typed_reference_schemas": [
+    {
+      "resource_type": "tessara.reference.scoped-records.record",
+      "resource_id": {
+        "format": "opaque_string",
+        "min_length": 1,
+        "max_length": 256
+      }
+    }
+  ],
+  "routes": [
+    {
+      "name": "tessara.reference.scoped-records.directory",
+      "kind": "product",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.scoped-records.configuration.validate",
+      "kind": "configuration",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.scoped-records.compatibility",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.scoped-records.status",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "tessara.reference.scoped-records.diagnostics",
+      "kind": "diagnostics",
+      "parameters": []
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.reference.scoped-records.navigation",
+      "destination": "tessara.reference.scoped-records.directory",
+      "label": "Scoped Records",
+      "group": "Main",
+      "order_hint": 30,
+      "required_capabilities_any_of": [
+        "tessara.reference.scoped-records:read",
+        "tessara.reference.scoped-records:manage"
+      ]
+    }
+  ],
+  "security_capabilities": [
+    {
+      "id": "tessara.reference.scoped-records:read",
+      "description": "Inspect scoped records."
+    },
+    {
+      "id": "tessara.reference.scoped-records:manage",
+      "description": "Manage scoped records."
+    }
+  ],
+  "configuration_schema": {
+    "type": "object",
+    "properties": {
+      "display_label": { "type": "string" },
+      "retention_mode": { "type": "string", "enum": ["retain_on_undeploy"] }
+    }
+  },
+  "operational_routes": {
+    "configuration_validation": "tessara.reference.scoped-records.configuration.validate",
+    "compatibility": "tessara.reference.scoped-records.compatibility",
+    "status": "tessara.reference.scoped-records.status",
+    "diagnostics": "tessara.reference.scoped-records.diagnostics"
+  },
+  "shell_contribution_contracts": null,
+  "platform_versions": {
+    "core_release": "0.1.0",
+    "shell_context_schema": "1.0.0",
+    "module_control_protocol": "1.1.0",
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0",
+    "design_system_asset_abi": "1.0.0",
+    "conformance_suite": "1.1.0"
+  },
+  "linked_packages": {
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0"
+  },
+  "browser_lifecycle": null,
+  "browser_routes": [
+    {
+      "destination": "tessara.reference.scoped-records.directory",
+      "path_template": "/reference/scoped-records",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "tessara.reference.scoped-records:read",
+      "authorization_action": "records.list",
+      "functional_contract": "tessara.reference.scoped-records.record",
+      "organization_scope_parameter": null,
+      "dependency_binding": "tessara.core.scoped-records"
+    },
+    {
+      "destination": "tessara.reference.scoped-records.detail",
+      "path_template": "/reference/scoped-records/records/{record_id}",
+      "methods": ["GET", "HEAD"],
+      "required_capability": "tessara.reference.scoped-records:read",
+      "authorization_action": "records.get",
+      "functional_contract": "tessara.reference.scoped-records.record",
+      "organization_scope_parameter": null,
+      "dependency_binding": "tessara.core.scoped-records"
+    }
+  ],
+  "assets": [
+    {
+      "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.0/sha256:fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3/module-shell.css",
+      "digest": "sha256:fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3",
+      "content_type": "text/css; charset=utf-8"
+    }
+  ],
+  "public_api_routes": [
+    {
+      "path_template": "/reference/scoped-records/api/records",
+      "method": "GET",
+      "required_capability": "tessara.reference.scoped-records:read",
+      "authorization_action": "records.list",
+      "dependency_binding": "tessara.core.scoped-records",
+      "operation": "read",
+      "functional_contract": "tessara.reference.scoped-records.record",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/reference/scoped-records/api/records/{record_id}",
+      "method": "GET",
+      "required_capability": "tessara.reference.scoped-records:read",
+      "authorization_action": "records.get",
+      "dependency_binding": "tessara.core.scoped-records",
+      "operation": "read",
+      "functional_contract": "tessara.reference.scoped-records.record",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/reference/scoped-records/api/records",
+      "method": "POST",
+      "required_capability": "tessara.reference.scoped-records:manage",
+      "authorization_action": "records.create",
+      "dependency_binding": "tessara.core.scoped-records",
+      "operation": "mutation",
+      "functional_contract": "tessara.reference.scoped-records.record",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/reference/scoped-records/api/records/{record_id}",
+      "method": "PUT",
+      "required_capability": "tessara.reference.scoped-records:manage",
+      "authorization_action": "records.update",
+      "dependency_binding": "tessara.core.scoped-records",
+      "operation": "mutation",
+      "functional_contract": "tessara.reference.scoped-records.record",
+      "idempotency": "forward_or_generate_header"
+    }
+  ],
+  "control_projections": []
+}

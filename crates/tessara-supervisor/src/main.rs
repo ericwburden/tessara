@@ -313,22 +313,8 @@ async fn apply_module_enablement(
         .module_urls
         .get(owner)
         .ok_or_else(|| anyhow::anyhow!("no owner endpoint is configured for {owner}"))?;
-    let identity_digest = tessara_composition::canonical_digest(&(
-        lockfile.installation_id,
-        owner,
-        "module-instance",
-    ))?;
-    let hex = identity_digest
-        .as_str()
-        .strip_prefix("sha256:")
-        .ok_or_else(|| anyhow::anyhow!("module instance identity digest is invalid"))?;
-    let mut bytes = [0_u8; 16];
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16)?;
-    }
-    bytes[6] = (bytes[6] & 0x0f) | 0x80;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    let module_instance_id = Uuid::from_bytes(bytes);
+    let module_instance_id =
+        tessara_composition::module_instance_id(lockfile.installation_id, owner);
     let status = state
         .client
         .put(format!(

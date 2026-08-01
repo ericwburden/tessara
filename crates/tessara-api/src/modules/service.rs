@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
+use tessara_composition::{ApplicationLockfileV1, InstallationReceiptV1};
 use tessara_module_contract::{DeploymentReceiptV1, ModuleManifest};
 use uuid::Uuid;
 
@@ -33,6 +34,217 @@ const MODULE_CAPABILITIES: [(&str, &str); 2] = [
         "Manage installation navigation visibility and ordering",
     ),
 ];
+
+pub(crate) async fn project_composition_modules(
+    pool: &PgPool,
+    lockfile: &ApplicationLockfileV1,
+    receipt: &InstallationReceiptV1,
+    manifests: &BTreeMap<String, ModuleManifest>,
+) -> anyhow::Result<()> {
+    if lockfile.installation_id != receipt.installation_id {
+        anyhow::bail!("composition lockfile and receipt installation identities differ");
+    }
+
+    let mut tx = pool.begin().await?;
+    let previous_instances = sqlx::query_as::<_, (String, Uuid)>(
+        "SELECT definition_id,id FROM module_instances WHERE installation_id=$1",
+    )
+    .bind(lockfile.installation_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let previous_instance_ids = previous_instances
+        .iter()
+        .cloned()
+        .collect::<BTreeMap<_, _>>();
+    for (definition_id, _) in previous_instances {
+        sqlx::query("DELETE FROM core_module_action_declarations WHERE target_definition_id=$1")
+            .bind(definition_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query("DELETE FROM module_instances WHERE installation_id=$1")
+        .bind(lockfile.installation_id)
+        .execute(&mut *tx)
+        .await?;
+
+    for module in &lockfile.modules {
+        let manifest = manifests.get(&module.definition_id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "composition manifest is absent for '{}'",
+                module.definition_id
+            )
+        })?;
+        if manifest.definition_id.as_str() != module.definition_id
+            || manifest.release_version != module.version
+        {
+            anyhow::bail!(
+                "composition manifest identity differs for '{}'",
+                module.definition_id
+            );
+        }
+        let manifest_digest = tessara_composition::canonical_digest(manifest)?.to_string();
+        if manifest_digest != module.manifest_digest.to_string() {
+            anyhow::bail!(
+                "composition manifest digest differs for '{}'",
+                module.definition_id
+            );
+        }
+
+        let display_name = module
+            .definition_id
+            .rsplit(['.', ':'])
+            .next()
+            .unwrap_or(&module.definition_id)
+            .replace(['-', '_'], " ");
+        sqlx::query("INSERT INTO module_definition_reservations(definition_id,display_name) VALUES($1,$2) ON CONFLICT(definition_id) DO NOTHING")
+            .bind(&module.definition_id)
+            .bind(display_name)
+            .execute(&mut *tx)
+            .await?;
+        let release_id = sqlx::query_scalar::<_, Uuid>("INSERT INTO module_releases(id,definition_id,version,manifest_digest,manifest,runtime_image_digest,publisher,trust_state,compatibility_state) VALUES($1,$2,$3,$4,$5,$6,$7,'curated','compatible') ON CONFLICT(definition_id,manifest_digest) DO UPDATE SET version=EXCLUDED.version,manifest=EXCLUDED.manifest,runtime_image_digest=EXCLUDED.runtime_image_digest,publisher=EXCLUDED.publisher,trust_state='curated',compatibility_state='compatible' RETURNING id")
+            .bind(Uuid::new_v4())
+            .bind(&module.definition_id)
+            .bind(module.version.to_string())
+            .bind(&manifest_digest)
+            .bind(sqlx::types::Json(manifest))
+            .bind(module.runtime_image.to_string())
+            .bind(manifest.publisher.as_str())
+            .fetch_one(&mut *tx)
+            .await?;
+        for declaration in &manifest.security_capabilities {
+            repository::ensure_declared_module_capability(
+                &mut tx,
+                declaration.id.as_str(),
+                &declaration.description,
+            )
+            .await?;
+        }
+        for route in &manifest.browser_routes {
+            sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,'read',$5) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
+                .bind(&module.definition_id)
+                .bind(route.dependency_binding.as_str())
+                .bind(route.functional_contract.as_str())
+                .bind(&route.authorization_action)
+                .bind(route.required_capability.as_str())
+                .execute(&mut *tx)
+                .await?;
+        }
+        for route in &manifest.public_api_routes {
+            let operation = match route.operation {
+                tessara_module_contract::AuthorizationGrantOperationV1::Read => "read",
+                tessara_module_contract::AuthorizationGrantOperationV1::Mutation => "mutation",
+            };
+            sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
+                .bind(&module.definition_id)
+                .bind(route.dependency_binding.as_str())
+                .bind(route.functional_contract.as_str())
+                .bind(&route.authorization_action)
+                .bind(operation)
+                .bind(route.required_capability.as_str())
+                .execute(&mut *tx)
+                .await?;
+        }
+        let route_prefix = manifest
+            .browser_routes
+            .iter()
+            .filter(|route| !route.path_template.contains('{'))
+            .map(|route| route.path_template.as_str())
+            .min_by_key(|path| path.len())
+            .map(str::to_owned);
+        let instance_id = previous_instance_ids
+            .get(&module.definition_id)
+            .copied()
+            .unwrap_or_else(|| {
+                tessara_composition::module_instance_id(
+                    lockfile.installation_id,
+                    &module.definition_id,
+                )
+            });
+        let enabled = receipt
+            .observed_enablement
+            .get(&module.definition_id)
+            .copied()
+            .unwrap_or(module.enabled);
+        sqlx::query("INSERT INTO module_instances(id,installation_id,definition_id,release_id,identity_state,data_state,database_name,configuration,route_prefix,installed,deployed,configured,ready,enabled,healthy,last_observed_at) VALUES($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,$8,$8,$8,$9)")
+            .bind(instance_id)
+            .bind(lockfile.installation_id)
+            .bind(&module.definition_id)
+            .bind(release_id)
+            .bind(format!("composition:{}", module.definition_id))
+            .bind(sqlx::types::Json(&module.configuration))
+            .bind(route_prefix)
+            .bind(enabled)
+            .bind(receipt.applied_at)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    for role in &lockfile.roles {
+        let role_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO roles(id,name) VALUES($1,$2)
+             ON CONFLICT(name) DO UPDATE SET name=EXCLUDED.name
+             RETURNING id",
+        )
+        .bind(Uuid::new_v4())
+        .bind(&role.name)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query("DELETE FROM role_capabilities WHERE role_id=$1")
+            .bind(role_id)
+            .execute(&mut *tx)
+            .await?;
+        for capability in &role.capabilities {
+            let inserted = sqlx::query(
+                "INSERT INTO role_capabilities(role_id,capability_id)
+                 SELECT $1,id FROM capabilities WHERE key=$2",
+            )
+            .bind(role_id)
+            .bind(capability)
+            .execute(&mut *tx)
+            .await?;
+            if inserted.rows_affected() != 1 {
+                anyhow::bail!(
+                    "composition role '{}' references undeclared capability '{}'",
+                    role.name,
+                    capability
+                );
+            }
+        }
+    }
+    if !lockfile
+        .roles
+        .iter()
+        .any(|role| role.name == lockfile.administrator_enrollment_role)
+    {
+        anyhow::bail!("composition administrator enrollment role is absent");
+    }
+
+    ensure_navigation_composition_v2(&mut tx, lockfile.installation_id, Uuid::new_v4()).await?;
+    let placements = repository::load_navigation_placements(&mut tx, lockfile.installation_id)
+        .await?
+        .into_iter()
+        .map(|placement| (placement.destination_id.clone(), placement))
+        .collect::<BTreeMap<_, _>>();
+    for desired in &lockfile.navigation {
+        let observed = placements.get(&desired.destination_id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "composition navigation destination '{}' is absent",
+                desired.destination_id
+            )
+        })?;
+        if observed.group_id != desired.group_id
+            || observed.display_order != desired.order as i32
+            || observed.visible != desired.visible
+        {
+            anyhow::bail!(
+                "composition navigation destination '{}' differs from the resolved policy",
+                desired.destination_id
+            );
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CatalogSyncOutcome {

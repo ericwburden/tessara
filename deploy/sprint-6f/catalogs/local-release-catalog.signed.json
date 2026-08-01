@@ -32,7 +32,7 @@
       {
         "definition_id": "tessara.dashboards",
         "version": "2.0.2",
-        "manifest_digest": "sha256:a88186f05236add56720b1580c3e8ba872eb3ea35f9dbf37b64fb4e38ffc817d",
+        "manifest_digest": "sha256:3e30d6df11ab9f61993346cd0875a3cf0dd7843556d99ecc4981123235a4f7a8",
         "runtime_image": "sha256:609a004d7f1147c09514aacc656ac57d3a253dd39df722bef0e174f37ab8e48d",
         "deployment_profile": "tessara-oci-v1",
         "configuration_schema_version": "tessara.io/dashboard-configuration/v1",
@@ -63,7 +63,7 @@
       {
         "definition_id": "tessara.reference.scoped-records",
         "version": "1.0.0",
-        "manifest_digest": "sha256:8795628ec3677c50e09645bd83a88ef61684e2b299db818105632979ed40e828",
+        "manifest_digest": "sha256:a21fce25a296e63e8bbb20998a140c9ff949718f4a9fcb8652d131cb7723264e",
         "runtime_image": "sha256:fb94bedd35332380c4c7a6a5992bd6f07058a67839150dc3c8eaf6483be3d427",
         "deployment_profile": "tessara-oci-v1",
         "configuration_schema_version": "tessara.io/scoped-records-configuration/v1",
@@ -84,5 +84,5 @@
       }
     ]
   },
-  "signature": "ML44zoQYl3FSaL4Z5J6qOxuY29kN621azcMDAsdYk3stHL4TNqftwCpZ7gerXBeskS5TpF-VG2Xif8NtrXtNAg"
+  "signature": "BE_M7Peq-G7T88psMvxSizi4d8XochdjGntijWJDeNDoVjxFpTIVTTEGQjzah8qc4JUnlpoh5w4nhxmAVbXxBQ"
 }

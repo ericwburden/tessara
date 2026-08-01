@@ -246,6 +246,7 @@ where
             "/api/private/security-state",
             get(current_security::<P>).put(apply_security::<P>),
         )
+        .route("/api/manifest", get(current_manifest::<P>))
         .route("/api/diagnostics", get(diagnostics::<P>))
 }
 
@@ -378,6 +379,16 @@ where
         findings,
     })
     .into_response()
+}
+
+async fn current_manifest<P>(State(provider): State<Arc<P>>, headers: HeaderMap) -> Response
+where
+    P: ModuleDefinitionProvider,
+{
+    if !control_key_is_valid(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    Json(provider.manifest().clone()).into_response()
 }
 
 async fn liveness() -> Json<RuntimeHealthEnvelope> {

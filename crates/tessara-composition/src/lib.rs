@@ -603,6 +603,25 @@ pub fn canonical_digest<T: Serialize>(value: &T) -> Result<ArtifactDigest, serde
     )
 }
 
+/// Returns the stable runtime identity shared by Core and the Supervisor for
+/// one module in one installation.
+pub fn module_instance_id(installation_id: Uuid, definition_id: &str) -> Uuid {
+    let digest = canonical_digest(&(installation_id, definition_id, "module-instance"))
+        .expect("module instance identity inputs are always serializable");
+    let hex = digest
+        .as_str()
+        .strip_prefix("sha256:")
+        .expect("canonical digests use the sha256 prefix");
+    let mut bytes = [0_u8; 16];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16)
+            .expect("canonical digests contain hexadecimal bytes");
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x80;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
+}
+
 pub fn acquire_bootstrap_input(
     input: &BootstrapInputV1,
     local_cas_root: &Path,
@@ -1190,6 +1209,19 @@ mod tests {
 
     fn digest(byte: char) -> ArtifactDigest {
         ArtifactDigest::new(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
+    }
+
+    #[test]
+    fn module_instance_identity_is_stable_and_definition_scoped() {
+        let installation_id = Uuid::parse_str("01980000-0000-7000-8000-00000000006f").unwrap();
+        assert_eq!(
+            module_instance_id(installation_id, "tessara.dashboards"),
+            module_instance_id(installation_id, "tessara.dashboards")
+        );
+        assert_ne!(
+            module_instance_id(installation_id, "tessara.dashboards"),
+            module_instance_id(installation_id, "tessara.reference.scoped-records")
+        );
     }
 
     fn catalog() -> ReleaseCatalogV1 {

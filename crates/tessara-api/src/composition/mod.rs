@@ -19,7 +19,9 @@ use tessara_composition::{
     CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1,
     ReleaseCatalogV1, canonical_digest, required_effects, resolve,
 };
-use tessara_module_contract::{ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1};
+use tessara_module_contract::{
+    ModuleManifest, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -620,6 +622,57 @@ async fn project_receipt(
     Json(request): Json<ReceiptProjectionRequestV1>,
 ) -> ApiResult<StatusCode> {
     require_projection_token(&headers)?;
+    let lockfile_value: Value = sqlx::query_scalar("SELECT document FROM composition_lockfiles WHERE installation_id=$1 AND lockfile_digest=$2")
+        .bind(request.receipt.installation_id)
+        .bind(request.receipt.lockfile_digest.to_string())
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::BadRequest("Projected receipt does not match a resolved Core lockfile".into()))?;
+    let lockfile: ApplicationLockfileV1 =
+        serde_json::from_value(lockfile_value).map_err(|error| ApiError::Internal(error.into()))?;
+    let endpoints = module_control_endpoints()?;
+    let client = reqwest::Client::new();
+    let control_key = module_control_key()?;
+    let mut manifests = BTreeMap::new();
+    for module in &lockfile.modules {
+        let endpoint = endpoints.get(&module.definition_id).ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "Composition module '{}' has no configured control endpoint",
+                module.definition_id
+            ))
+        })?;
+        let manifest = client
+            .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+            .header("x-tessara-module-control-key", &control_key)
+            .send()
+            .await
+            .map_err(|error| ApiError::Internal(error.into()))?
+            .error_for_status()
+            .map_err(|error| ApiError::Internal(error.into()))?
+            .json::<ModuleManifest>()
+            .await
+            .map_err(|error| ApiError::Internal(error.into()))?;
+        let digest =
+            canonical_digest(&manifest).map_err(|error| ApiError::Internal(error.into()))?;
+        if manifest.definition_id.as_str() != module.definition_id
+            || manifest.release_version != module.version
+            || digest != module.manifest_digest
+        {
+            return Err(ApiError::BadRequest(format!(
+                "Live manifest does not match resolved release '{}'",
+                module.definition_id
+            )));
+        }
+        manifests.insert(module.definition_id.clone(), manifest);
+    }
+    crate::modules::project_composition_modules(
+        &state.pool,
+        &lockfile,
+        &request.receipt,
+        &manifests,
+    )
+    .await
+    .map_err(ApiError::Internal)?;
     let digest = canonical_digest(&request.receipt)
         .map_err(|error| ApiError::Internal(error.into()))?
         .to_string();
@@ -1137,5 +1190,44 @@ pub(crate) async fn native_page(State(state): State<AppState>, headers: HeaderMa
             Redirect::to("/login").into_response()
         }
         Err(error) => error.into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checked_catalog_manifest_digests_match_runtime_manifests() {
+        let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-6f/catalogs/local-release-catalog.json"
+        )))
+        .expect("valid Sprint 6F catalog");
+        let manifests = [
+            serde_json::from_str::<ModuleManifest>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tessara-dashboard-module/manifest.json"
+            )))
+            .expect("valid Dashboard manifest"),
+            serde_json::from_str::<ModuleManifest>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tessara-reference-scoped-records/manifest.json"
+            )))
+            .expect("valid Scoped Records manifest"),
+        ];
+        for manifest in manifests {
+            let release = catalog
+                .module_releases
+                .iter()
+                .find(|release| release.definition_id == manifest.definition_id.as_str())
+                .expect("runtime manifest must have a catalog release");
+            assert_eq!(
+                canonical_digest(&manifest).expect("manifest digest"),
+                release.manifest_digest,
+                "{} manifest digest must be catalog-bound",
+                manifest.definition_id
+            );
+        }
     }
 }

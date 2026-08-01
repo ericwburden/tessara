@@ -171,6 +171,7 @@ try {
     if ($null -ne $compositionSummary.latest_lockfile) {
         $projectedPlanDigest = $compositionSummary.latest_lockfile.materialization_plan_digest
     }
+    $resolveAndApprove = $false
     if ($projectedPlanDigest -ne $lockfile.materialization_plan_digest) {
         if ($null -ne $compositionSummary.latest_blueprint) {
             throw "Core already contains a different Blueprint; use -ReplaceExisting for a fresh Sprint 6F installation."
@@ -182,6 +183,18 @@ try {
             -WebSession $coreSession `
             -ContentType "application/json" `
             -Body $blueprintJson | Out-Null
+        $resolveAndApprove = $true
+    } elseif ($compositionSummary.latest_lockfile.catalog_digest -ne $lockfile.catalog_digest) {
+        # A freshly signed runtime catalog can produce a source-distinct
+        # lockfile while retaining the same materialization plan. Core must
+        # still persist and approve that exact lockfile before Supervisor can
+        # project its receipt.
+        $resolveAndApprove = $true
+    } elseif ($compositionSummary.latest_approval.plan_digest -ne $lockfile.materialization_plan_digest) {
+        throw "Core has the expected resolved plan without its matching explicit approval."
+    }
+
+    if ($resolveAndApprove) {
         $resolved = Invoke-RestMethod `
             -Uri "$CoreUrl/api/admin/composition/blueprints/$($lockfile.blueprint_revision)/resolve" `
             -Method Post `
@@ -190,6 +203,10 @@ try {
             -Body (@{ catalog = $catalog } | ConvertTo-Json -Depth 100)
         if ($resolved.plan_digest -ne $lockfile.materialization_plan_digest) {
             throw "Core resolved a different materialization plan than the verified CLI lockfile."
+        }
+        $cliLockfileDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $lockfilePath).Trim()
+        if ($LASTEXITCODE -ne 0 -or $resolved.lockfile_digest -ne $cliLockfileDigest) {
+            throw "Core resolved a different lockfile than the verified CLI lockfile."
         }
         Invoke-RestMethod `
             -Uri "$CoreUrl/api/admin/composition/blueprints/$($lockfile.blueprint_revision)/approve" `
@@ -200,8 +217,6 @@ try {
                 approved_effects = $approvedEffects
                 reason = "Sprint 6F $Composition reference materialization"
             } | ConvertTo-Json -Depth 20) | Out-Null
-    } elseif ($compositionSummary.latest_approval.plan_digest -ne $lockfile.materialization_plan_digest) {
-        throw "Core has the expected resolved plan without its matching explicit approval."
     }
 
     $now = [DateTimeOffset]::UtcNow
