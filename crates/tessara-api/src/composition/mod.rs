@@ -162,6 +162,7 @@ struct OperationProjectionRequestV1 {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReceiptProjectionRequestV1 {
+    lockfile: ApplicationLockfileV1,
     receipt: InstallationReceiptV1,
 }
 
@@ -622,14 +623,35 @@ async fn project_receipt(
     Json(request): Json<ReceiptProjectionRequestV1>,
 ) -> ApiResult<StatusCode> {
     require_projection_token(&headers)?;
-    let lockfile_value: Value = sqlx::query_scalar("SELECT document FROM composition_lockfiles WHERE installation_id=$1 AND lockfile_digest=$2")
+    let projected_digest =
+        canonical_digest(&request.lockfile).map_err(|error| ApiError::Internal(error.into()))?;
+    if projected_digest != request.receipt.lockfile_digest {
+        return Err(ApiError::BadRequest(
+            "Projected receipt does not bind the supplied lockfile".into(),
+        ));
+    }
+    let lockfile_value: Value = sqlx::query_scalar("SELECT document FROM composition_lockfiles WHERE installation_id=$1 AND blueprint_revision=$2")
         .bind(request.receipt.installation_id)
-        .bind(request.receipt.lockfile_digest.to_string())
+        .bind(request.lockfile.blueprint_revision as i64)
         .fetch_optional(&state.pool)
         .await?
         .ok_or_else(|| ApiError::BadRequest("Projected receipt does not match a resolved Core lockfile".into()))?;
-    let lockfile: ApplicationLockfileV1 =
+    let resolved_lockfile: ApplicationLockfileV1 =
         serde_json::from_value(lockfile_value).map_err(|error| ApiError::Internal(error.into()))?;
+    if request.lockfile != resolved_lockfile
+        && !is_constrained_emergency_lockfile(
+            &resolved_lockfile,
+            &request.lockfile,
+            &request.receipt,
+        )
+        .map_err(|error| ApiError::Internal(error.into()))?
+    {
+        return Err(ApiError::BadRequest(
+            "Projected receipt lockfile is not the resolved plan or a constrained emergency disable"
+                .into(),
+        ));
+    }
+    let lockfile = request.lockfile;
     let endpoints = module_control_endpoints()?;
     let client = reqwest::Client::new();
     let control_key = module_control_key()?;
@@ -682,6 +704,44 @@ async fn project_receipt(
         .bind(request.receipt.installation_id).bind(request.receipt.revision as i64).bind(digest).bind(value)
         .execute(&state.pool).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+fn is_constrained_emergency_lockfile(
+    resolved: &ApplicationLockfileV1,
+    projected: &ApplicationLockfileV1,
+    receipt: &InstallationReceiptV1,
+) -> Result<bool, serde_json::Error> {
+    let [
+        MaterializationActionV1::SetEnablement {
+            definition_id,
+            enabled: false,
+        },
+        MaterializationActionV1::VerifyReadBack,
+    ] = projected.materialization_plan.actions.as_slice()
+    else {
+        return Ok(false);
+    };
+    if !resolved
+        .modules
+        .iter()
+        .any(|module| module.definition_id == *definition_id && module.enabled)
+        || projected.materialization_plan.api_version != PLAN_API_V1
+        || projected.materialization_plan.installation_id != resolved.installation_id
+        || projected.materialization_plan.desired_revision != resolved.blueprint_revision
+        || receipt.plan_digest != projected.materialization_plan_digest
+        || receipt.desired_enablement.get(definition_id) != Some(&true)
+        || receipt.observed_enablement.get(definition_id) != Some(&false)
+    {
+        return Ok(false);
+    }
+    let expected_plan_digest = canonical_digest(&projected.materialization_plan)?;
+    if expected_plan_digest != projected.materialization_plan_digest {
+        return Ok(false);
+    }
+    let mut expected = resolved.clone();
+    expected.materialization_plan = projected.materialization_plan.clone();
+    expected.materialization_plan_digest = expected_plan_digest;
+    Ok(&expected == projected)
 }
 
 async fn apply_core_bootstrap(
@@ -1229,5 +1289,82 @@ mod tests {
                 manifest.definition_id
             );
         }
+    }
+
+    #[test]
+    fn emergency_receipt_accepts_only_the_exact_derived_disable_lockfile() {
+        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-6f/blueprints/reference.json"
+        )))
+        .expect("valid Sprint 6F Blueprint");
+        let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-6f/catalogs/local-release-catalog.json"
+        )))
+        .expect("valid Sprint 6F catalog");
+        let resolved = resolve(&blueprint, &catalog).expect("reference composition resolves");
+        let definition_id = "tessara.reference.scoped-records".to_string();
+        let mut emergency = resolved.clone();
+        emergency.materialization_plan = tessara_composition::MaterializationPlanV1 {
+            api_version: PLAN_API_V1.into(),
+            installation_id: resolved.installation_id,
+            desired_revision: resolved.blueprint_revision,
+            actions: vec![
+                MaterializationActionV1::SetEnablement {
+                    definition_id: definition_id.clone(),
+                    enabled: false,
+                },
+                MaterializationActionV1::VerifyReadBack,
+            ],
+        };
+        emergency.materialization_plan_digest =
+            canonical_digest(&emergency.materialization_plan).expect("emergency plan digest");
+        let desired_enablement = resolved
+            .modules
+            .iter()
+            .map(|module| (module.definition_id.clone(), module.enabled))
+            .collect::<BTreeMap<_, _>>();
+        let mut observed_enablement = desired_enablement.clone();
+        observed_enablement.insert(definition_id.clone(), false);
+        let receipt = InstallationReceiptV1 {
+            api_version: "tessara.io/installation-receipt/v1".into(),
+            installation_id: resolved.installation_id,
+            revision: 2,
+            lockfile_digest: canonical_digest(&emergency).expect("emergency lockfile digest"),
+            plan_digest: emergency.materialization_plan_digest.clone(),
+            authorization_digest: canonical_digest(&"authorization").expect("authorization digest"),
+            composition_engine_version: resolved.composition_engine_version.clone(),
+            supervisor_version: resolved.supervisor_contract_version.clone(),
+            deployment_adapter_version: resolved.deployment_adapter_version.clone(),
+            desired_enablement,
+            observed_enablement,
+            observed_artifacts: BTreeMap::new(),
+            configuration_digests: BTreeMap::new(),
+            bootstrap_receipts: Vec::new(),
+            applied_at: Utc::now(),
+            previous_receipt_digest: None,
+            no_op: false,
+        };
+
+        assert!(
+            is_constrained_emergency_lockfile(&resolved, &emergency, &receipt)
+                .expect("valid emergency check")
+        );
+
+        let mut tampered = emergency.clone();
+        tampered.navigation.clear();
+        assert!(
+            !is_constrained_emergency_lockfile(&resolved, &tampered, &receipt)
+                .expect("tampered emergency check")
+        );
+        let mut wrong_observation = receipt.clone();
+        wrong_observation
+            .observed_enablement
+            .insert(definition_id, true);
+        assert!(
+            !is_constrained_emergency_lockfile(&resolved, &emergency, &wrong_observation)
+                .expect("wrong observation check")
+        );
     }
 }

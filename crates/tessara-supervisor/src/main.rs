@@ -159,6 +159,7 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
         project_result(
             state,
             request.lockfile.blueprint_revision,
+            &request.lockfile,
             &accepted,
             &receipt,
         )
@@ -221,6 +222,7 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
     project_result(
         state,
         request.lockfile.blueprint_revision,
+        &request.lockfile,
         &operation,
         &receipt,
     )
@@ -461,6 +463,7 @@ async fn verify_owner_health(state: &AppState, owner: &str) -> anyhow::Result<()
 async fn project_result(
     state: &AppState,
     blueprint_revision: u64,
+    lockfile: &ApplicationLockfileV1,
     operation: &CompositionOperationV1,
     receipt: &InstallationReceiptV1,
 ) -> anyhow::Result<()> {
@@ -471,7 +474,7 @@ async fn project_result(
         ),
         (
             "/api/internal/composition/receipts",
-            serde_json::json!({"receipt": receipt}),
+            serde_json::json!({"lockfile": lockfile, "receipt": receipt}),
         ),
     ] {
         let status = state
