@@ -169,10 +169,11 @@ function Assert-ProtectedShell {
     param(
         [string]$Content,
         [string[]]$Needles,
-        [string]$Context
+        [string]$Context,
+        [string]$RootMarker = "app-root"
     )
 
-    foreach ($needle in @("app-root") + $Needles) {
+    foreach ($needle in @($RootMarker) + $Needles) {
         if ($Content -notlike "*$needle*") {
             throw "Smoke failure in $Context. Missing marker: $needle"
         }
@@ -436,7 +437,7 @@ try {
         throw "Smoke failure: retired Migration detail referenced a legacy bridge route"
     }
     $dashboardsShell = Invoke-Html -Uri "$baseUrl/dashboards" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell"
+    Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell" -RootMarker "module-content"
     $sdkReferenceShell = Invoke-Html -Uri "$baseUrl/reference/module-sdk" -CookieJarPath $adminBrowserSession
     if (
         $sdkReferenceShell -notlike "*Module SDK Reference*" `
@@ -805,13 +806,13 @@ try {
     $responseNew = Invoke-Html -Uri "$baseUrl/responses/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $responseNew -Needles @("Start Response") -Context "response create shell"
     $dashboardDetailPage = Invoke-Html -Uri "$baseUrl/dashboards/$($seed.dashboard_id)" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $dashboardDetailPage -Needles @("Dashboard Detail") -Context "dashboard detail shell"
+    Assert-ProtectedShell -Content $dashboardDetailPage -Needles @("Dashboard Detail") -Context "dashboard detail shell" -RootMarker "module-content"
     $dashboardNew = Invoke-Html -Uri "$baseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $dashboardNew -Needles @("Create Dashboard") -Context "dashboard create shell"
+    Assert-ProtectedShell -Content $dashboardNew -Needles @("Create Dashboard") -Context "dashboard create shell" -RootMarker "module-content"
     $dashboardEditorPage = Invoke-Html -Uri "$baseUrl/dashboards/$($seed.dashboard_id)/edit" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $dashboardEditorPage -Needles @("Dashboard") -Context "dashboard editor shell"
+    Assert-ProtectedShell -Content $dashboardEditorPage -Needles @("Dashboard") -Context "dashboard editor shell" -RootMarker "module-content"
     $dashboardViewerPage = Invoke-Html -Uri "$baseUrl/dashboards/$($seed.dashboard_id)/view" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $dashboardViewerPage -Needles @("Dashboard") -Context "dashboard viewer shell"
+    Assert-ProtectedShell -Content $dashboardViewerPage -Needles @("Dashboard") -Context "dashboard viewer shell" -RootMarker "module-content"
     $datasetDetailPage = Invoke-Html -Uri "$baseUrl/datasets/$($seed.dataset_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $datasetDetailPage -Needles @("Dataset Detail") -Context "dataset detail shell"
     $datasetEditPage = Invoke-Html -Uri "$baseUrl/datasets/$($seed.dataset_id)/edit" -CookieJarPath $adminBrowserSession
