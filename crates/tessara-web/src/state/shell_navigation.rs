@@ -295,6 +295,13 @@ fn item_spec(key: &str) -> Option<ItemSpec> {
             owner: core,
             contribution_id: None,
         },
+        "application_composition" => ItemSpec {
+            label: "Application Composition",
+            href: "/administration/composition",
+            locked_group: Some("core.admin"),
+            owner: core,
+            contribution_id: None,
+        },
         _ => return None,
     })
 }
@@ -349,6 +356,7 @@ mod tests {
                         item("roles_access"),
                         item("node_types"),
                         item("module_management"),
+                        item("application_composition"),
                     ],
                 },
             ],

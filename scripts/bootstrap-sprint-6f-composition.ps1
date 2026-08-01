@@ -3,6 +3,7 @@ param(
     [ValidateSet("reference", "reduced")]
     [string]$Composition = "reference",
     [string]$ComposeFile = "deploy/sprint-6f/compose.yaml",
+    [string]$CoreUrl = "http://127.0.0.1:8080",
     [string]$SupervisorUrl = "http://127.0.0.1:8095",
     [string]$ResolvedCompositionEnvelope,
     [switch]$SkipBuild,
@@ -67,6 +68,53 @@ try {
     & docker @composeArguments up -d --no-build
     if ($LASTEXITCODE -ne 0) { throw "Sprint 6F service startup failed." }
 
+    $coreSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+    $coreReady = $false
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        try {
+            Invoke-RestMethod `
+                -Uri "$CoreUrl/api/auth/login" `
+                -Method Post `
+                -WebSession $coreSession `
+                -ContentType "application/json" `
+                -Body (@{
+                    email = "admin@tessara.local"
+                    password = "tessara-dev-admin"
+                } | ConvertTo-Json) | Out-Null
+            $coreReady = $true
+            break
+        } catch {
+            if ($attempt -eq 60) { throw }
+            Start-Sleep -Seconds 1
+        }
+    }
+    if (-not $coreReady) { throw "Sprint 6F Core did not become ready." }
+
+    # The reference acceptance suite builds on the established UAT demo data.
+    # Seed it while Core is still empty, before composition bootstrap resources
+    # are materialized. A no-op rerun may encounter the deliberate empty-store
+    # refusal, which is acceptable only when the expected demo fixture exists.
+    if ($Composition -eq "reference") {
+        try {
+            Invoke-RestMethod `
+                -Uri "$CoreUrl/api/demo/seed" `
+                -Method Post `
+                -WebSession $coreSession `
+                -ContentType "application/json" `
+                -Body "{}" | Out-Null
+        } catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+            if ($statusCode -ne 400) { throw }
+            $nodeTypes = Invoke-RestMethod `
+                -Uri "$CoreUrl/api/admin/node-types" `
+                -Method Get `
+                -WebSession $coreSession
+            if (-not ($nodeTypes | Where-Object slug -eq "activity")) {
+                throw "Core refused demo seeding, but the expected demo fixture is absent."
+            }
+        }
+    }
+
     function Get-ImageDigest([string]$Image) {
         $digest = (& docker image inspect --format "{{.Id}}" $Image).Trim()
         if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[0-9a-f]{64}$') {
@@ -105,6 +153,57 @@ try {
     }
 
     $lockfile = Get-Content -LiteralPath $lockfilePath -Raw | ConvertFrom-Json
+    $approvedEffects = @("install", "upgrade", "configure")
+    if ($null -ne $lockfile.core.bootstrap -or @($lockfile.modules | Where-Object { $null -ne $_.bootstrap }).Count -gt 0) {
+        $approvedEffects += "bootstrap"
+    }
+    if (@($lockfile.modules | Where-Object { $_.enabled }).Count -gt 0) { $approvedEffects += "enable" }
+    if (@($lockfile.modules | Where-Object { -not $_.enabled }).Count -gt 0) { $approvedEffects += "disable" }
+
+    # Persist the same desired state and explicit approval through Core before
+    # the operator-authorized Supervisor apply. This keeps Core read-back
+    # complete while retaining the offline/detached CLI execution boundary.
+    $compositionSummary = Invoke-RestMethod `
+        -Uri "$CoreUrl/api/admin/composition" `
+        -Method Get `
+        -WebSession $coreSession
+    $projectedPlanDigest = $null
+    if ($null -ne $compositionSummary.latest_lockfile) {
+        $projectedPlanDigest = $compositionSummary.latest_lockfile.materialization_plan_digest
+    }
+    if ($projectedPlanDigest -ne $lockfile.materialization_plan_digest) {
+        if ($null -ne $compositionSummary.latest_blueprint) {
+            throw "Core already contains a different Blueprint; use -ReplaceExisting for a fresh Sprint 6F installation."
+        }
+        $blueprintJson = Get-Content -LiteralPath $blueprintPath -Raw
+        Invoke-RestMethod `
+            -Uri "$CoreUrl/api/admin/composition/blueprints" `
+            -Method Post `
+            -WebSession $coreSession `
+            -ContentType "application/json" `
+            -Body $blueprintJson | Out-Null
+        $resolved = Invoke-RestMethod `
+            -Uri "$CoreUrl/api/admin/composition/blueprints/$($lockfile.blueprint_revision)/resolve" `
+            -Method Post `
+            -WebSession $coreSession `
+            -ContentType "application/json" `
+            -Body (@{ catalog = $catalog } | ConvertTo-Json -Depth 100)
+        if ($resolved.plan_digest -ne $lockfile.materialization_plan_digest) {
+            throw "Core resolved a different materialization plan than the verified CLI lockfile."
+        }
+        Invoke-RestMethod `
+            -Uri "$CoreUrl/api/admin/composition/blueprints/$($lockfile.blueprint_revision)/approve" `
+            -Method Post `
+            -WebSession $coreSession `
+            -ContentType "application/json" `
+            -Body (@{
+                approved_effects = $approvedEffects
+                reason = "Sprint 6F $Composition reference materialization"
+            } | ConvertTo-Json -Depth 20) | Out-Null
+    } elseif ($compositionSummary.latest_approval.plan_digest -ne $lockfile.materialization_plan_digest) {
+        throw "Core has the expected resolved plan without its matching explicit approval."
+    }
+
     $now = [DateTimeOffset]::UtcNow
     if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
         $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
@@ -135,12 +234,6 @@ try {
     } catch {
         if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
     }
-    $approvedEffects = @("install", "upgrade", "configure")
-    if ($null -ne $lockfile.core.bootstrap -or @($lockfile.modules | Where-Object { $null -ne $_.bootstrap }).Count -gt 0) {
-        $approvedEffects += "bootstrap"
-    }
-    if (@($lockfile.modules | Where-Object { $_.enabled }).Count -gt 0) { $approvedEffects += "enable" }
-    if (@($lockfile.modules | Where-Object { -not $_.enabled }).Count -gt 0) { $approvedEffects += "disable" }
     $reuseAuthorization = $false
     if (Test-Path -LiteralPath $signedAuthorizationPath) {
         $existingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
@@ -190,6 +283,37 @@ try {
         apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
     if ($LASTEXITCODE -ne 0) { throw "Supervisor apply failed." }
     [IO.File]::WriteAllLines($receiptPath, $response, [Text.UTF8Encoding]::new($false))
+
+    $navigationReady = $false
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        try {
+            $navigation = Invoke-RestMethod `
+                -Uri "$CoreUrl/api/shell/navigation" `
+                -Method Get `
+                -WebSession $coreSession
+            $navigationItems = @($navigation.groups | ForEach-Object { $_.items })
+            $hasComposition = $navigationItems | Where-Object href -eq "/administration/composition"
+            $hasReferenceModules = $Composition -ne "reference" -or (
+                ($navigationItems | Where-Object href -eq "/dashboards") -and
+                ($navigationItems | Where-Object href -eq "/forms")
+            )
+            $home = Invoke-WebRequest -Uri "$CoreUrl/" -Method Get -WebSession $coreSession
+            $renderedNavigationReady = $home.StatusCode -eq 200 -and
+                $home.Content.Contains('href="/administration/composition"') -and
+                ($Composition -ne "reference" -or $home.Content.Contains('href="/forms"'))
+            if ($navigation.state -eq "available" -and $hasComposition -and $hasReferenceModules -and $renderedNavigationReady) {
+                $navigationReady = $true
+                break
+            }
+        } catch {
+            if ($attempt -eq 30) { throw }
+        }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $navigationReady) {
+        throw "Sprint 6F shell navigation did not reach the expected post-apply state."
+    }
+
     Write-Host "Sprint 6F $Composition composition materialized."
     Write-Host "Receipt: $receiptPath"
 } finally {
