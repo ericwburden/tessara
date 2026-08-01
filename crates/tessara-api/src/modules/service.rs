@@ -415,11 +415,42 @@ async fn load_navigation_catalog(
     .fetch_all(&mut **tx)
     .await?;
 
+    let active_definition_ids = manifests
+        .iter()
+        .map(|manifest| manifest.0.definition_id.to_string())
+        .collect::<BTreeSet<_>>();
     let manifests = manifests
         .into_iter()
         .map(|manifest| manifest.0)
         .collect::<Vec<_>>();
-    Ok(resolve_navigation_catalog(&manifests))
+    let mut catalog = resolve_navigation_catalog(&manifests);
+    let managed_definition_ids = std::env::var("TESSARA_MODULE_CONTROL_ENDPOINTS")
+        .ok()
+        .and_then(|value| serde_json::from_str::<BTreeMap<String, String>>(&value).ok())
+        .map(|endpoints| endpoints.into_keys().collect::<BTreeSet<_>>())
+        .unwrap_or_default();
+    retain_active_composition_destinations(
+        &mut catalog,
+        &managed_definition_ids,
+        &active_definition_ids,
+    );
+    Ok(catalog)
+}
+
+fn retain_active_composition_destinations(
+    catalog: &mut Vec<ResolvedNavigationDestination>,
+    managed_definition_ids: &BTreeSet<String>,
+    active_definition_ids: &BTreeSet<String>,
+) {
+    catalog.retain(|destination| {
+        destination
+            .definition_id
+            .as_ref()
+            .is_none_or(|definition_id| {
+                !managed_definition_ids.contains(definition_id)
+                    || active_definition_ids.contains(definition_id)
+            })
+    });
 }
 
 fn resolve_navigation_catalog(manifests: &[ModuleManifest]) -> Vec<ResolvedNavigationDestination> {
@@ -2281,6 +2312,39 @@ mod tests {
     use sqlx::{Row, postgres::PgPoolOptions};
 
     use super::*;
+
+    #[test]
+    fn composition_managed_navigation_requires_an_active_module_instance() {
+        let managed = BTreeSet::from([
+            "tessara.dashboards".to_string(),
+            "tessara.reference.scoped-records".to_string(),
+        ]);
+        let mut reduced = navigation_catalog::resolved_destinations();
+        retain_active_composition_destinations(&mut reduced, &managed, &BTreeSet::new());
+        let reduced_ids = reduced
+            .iter()
+            .map(|destination| destination.id.as_str())
+            .collect::<BTreeSet<_>>();
+        assert!(!reduced_ids.contains("tessara.dashboards.navigation"));
+        assert!(!reduced_ids.contains("tessara.reference.scoped-records.navigation"));
+        assert!(reduced_ids.contains("tessara.forms.navigation"));
+
+        let mut reference = navigation_catalog::resolved_destinations();
+        retain_active_composition_destinations(
+            &mut reference,
+            &managed,
+            &BTreeSet::from([
+                "tessara.dashboards".to_string(),
+                "tessara.reference.scoped-records".to_string(),
+            ]),
+        );
+        let reference_ids = reference
+            .iter()
+            .map(|destination| destination.id.as_str())
+            .collect::<BTreeSet<_>>();
+        assert!(reference_ids.contains("tessara.dashboards.navigation"));
+        assert!(reference_ids.contains("tessara.reference.scoped-records.navigation"));
+    }
 
     const DISPOSABLE_DATABASE_NAME_TOKENS: &[&str] = &[
         "test", "tests", "testing", "upgrade", "clone", "rollback", "sprint6a",

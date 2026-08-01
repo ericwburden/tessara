@@ -37,6 +37,24 @@ foreach ($module in @($lockfile.modules)) {
     Assert-Check "observed-enablement:$($module.definition_id)" ($observed -eq $module.enabled) "desired=$($module.enabled); observed=$observed"
 }
 
+$login = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/login" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body (@{ email = "admin@tessara.local"; password = "tessara-dev-admin" } | ConvertTo-Json)
+$shell = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/shell/navigation" `
+    -Headers @{ Authorization = "Bearer $($login.token)" }
+$shellItems = @($shell.groups | ForEach-Object { $_.items })
+foreach ($moduleNavigation in @(
+    @{ definition_id = "tessara.dashboards"; href = "/dashboards" },
+    @{ definition_id = "tessara.reference.scoped-records"; href = "/reference/scoped-records" }
+)) {
+    $expected = @($lockfile.modules | Where-Object definition_id -eq $moduleNavigation.definition_id).Count -eq 1
+    $observed = @($shellItems | Where-Object href -eq $moduleNavigation.href).Count -eq 1
+    Assert-Check "navigation:$($moduleNavigation.definition_id)" ($observed -eq $expected) "expected=$expected; observed=$observed"
+}
+
 $result = [pscustomobject][ordered]@{
     schema_version = 1
     checked_at = [DateTimeOffset]::UtcNow.ToString("o")
@@ -53,4 +71,3 @@ if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     [IO.File]::WriteAllText($fullOutput, ($result | ConvertTo-Json -Depth 20) + "`n", [Text.UTF8Encoding]::new($false))
 }
 $result | ConvertTo-Json -Depth 20
-
