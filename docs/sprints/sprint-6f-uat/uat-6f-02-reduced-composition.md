@@ -26,7 +26,10 @@ Preconditions:
 3. Resolve `deploy/sprint-6f/blueprints/reduced.json`, sign it with
    `tessara-compose resolved-sign`, then bootstrap with
    `scripts/bootstrap-sprint-6f-composition.ps1 -Composition reduced
-   -ResolvedCompositionEnvelope <signed-envelope> -ReplaceExisting`.
+   -ResolvedCompositionEnvelope <signed-envelope> -ReleaseCatalogEnvelope
+   <signed-catalog-used-to-resolve-the-envelope> -ReplaceExisting`. The same
+   signed catalog must be supplied so Core reproduces the detached lockfile's
+   exact catalog digest.
 4. The tester can sign in as an administrator after bootstrap.
 
 Record Selection Criteria:

@@ -6,6 +6,7 @@ param(
     [string]$CoreUrl = "http://127.0.0.1:8080",
     [string]$SupervisorUrl = "http://127.0.0.1:8095",
     [string]$ResolvedCompositionEnvelope,
+    [string]$ReleaseCatalogEnvelope,
     [switch]$SkipBuild,
     [switch]$ReplaceExisting
 )
@@ -26,6 +27,13 @@ $lockfilePath = Join-Path $runtimeDirectory "lockfile.json"
 $authorizationPath = Join-Path $runtimeDirectory "authorization.json"
 $signedAuthorizationPath = Join-Path $runtimeDirectory "authorization.signed.json"
 $receiptPath = Join-Path $runtimeDirectory "apply-response.json"
+
+function Resolve-RepositoryPath([string]$Path) {
+    if ([IO.Path]::IsPathRooted($Path)) {
+        return [IO.Path]::GetFullPath($Path)
+    }
+    return [IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
+}
 
 if (-not (Test-Path -LiteralPath $composePath)) { throw "Compose file not found: $composePath" }
 if (-not (Test-Path -LiteralPath $blueprintPath)) { throw "Blueprint not found: $blueprintPath" }
@@ -122,21 +130,31 @@ try {
         }
         return $digest
     }
-    $catalog = Get-Content -LiteralPath $catalogTemplatePath -Raw | ConvertFrom-Json
-    $catalog.issued_at = [DateTimeOffset]::UtcNow.ToString("o")
-    $catalog.core_releases[0].core_image = Get-ImageDigest "tessara-sprint-6f-core"
-    $catalog.core_releases[0].gateway_image = Get-ImageDigest "traefik:v3.6"
-    $catalog.core_releases[0].database_image = Get-ImageDigest "postgres:17"
-    ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest "tessara-sprint-6f-scoped-records"
-    ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest "tessara-sprint-6f-dashboards"
-    [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
     $env:TESSARA_SIGNING_ISSUER = "tessara.local.sprint-6f"
     $env:TESSARA_SIGNING_KEY_ID = "catalog-dev-v1"
     if ([string]::IsNullOrWhiteSpace($env:TESSARA_SIGNING_SECRET_HEX)) {
         $env:TESSARA_SIGNING_SECRET_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
     }
-    & cargo run -q -p tessara-supervisor --bin tessara-compose -- catalog-sign $catalogPayloadPath $catalogPath
-    if ($LASTEXITCODE -ne 0) { throw "Runtime release catalog signing failed." }
+
+    if ([string]::IsNullOrWhiteSpace($ReleaseCatalogEnvelope)) {
+        $catalog = Get-Content -LiteralPath $catalogTemplatePath -Raw | ConvertFrom-Json
+        $catalog.issued_at = [DateTimeOffset]::UtcNow.ToString("o")
+        $catalog.core_releases[0].core_image = Get-ImageDigest "tessara-sprint-6f-core"
+        $catalog.core_releases[0].gateway_image = Get-ImageDigest "traefik:v3.6"
+        $catalog.core_releases[0].database_image = Get-ImageDigest "postgres:17"
+        ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest "tessara-sprint-6f-scoped-records"
+        ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest "tessara-sprint-6f-dashboards"
+        [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
+        & cargo run -q -p tessara-supervisor --bin tessara-compose -- catalog-sign $catalogPayloadPath $catalogPath
+        if ($LASTEXITCODE -ne 0) { throw "Runtime release catalog signing failed." }
+    } else {
+        $catalogPath = Resolve-RepositoryPath $ReleaseCatalogEnvelope
+        if (-not (Test-Path -LiteralPath $catalogPath)) {
+            throw "Signed release catalog not found: $catalogPath"
+        }
+        $catalogEnvelope = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json
+        $catalog = $catalogEnvelope.payload
+    }
 
     & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
         catalog-verify $catalogPath $catalogKeyPath
@@ -146,7 +164,10 @@ try {
             resolve $blueprintPath $catalogPath $catalogKeyPath $lockfilePath
         if ($LASTEXITCODE -ne 0) { throw "Blueprint resolution failed." }
     } else {
-        $resolvedPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ResolvedCompositionEnvelope))
+        if ([string]::IsNullOrWhiteSpace($ReleaseCatalogEnvelope)) {
+            throw "Detached bootstrap requires -ReleaseCatalogEnvelope so Core resolves the exact signed catalog digest."
+        }
+        $resolvedPath = Resolve-RepositoryPath $ResolvedCompositionEnvelope
         & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
             resolved-verify $resolvedPath $catalogKeyPath $lockfilePath
         if ($LASTEXITCODE -ne 0) { throw "Detached resolved composition verification failed." }
