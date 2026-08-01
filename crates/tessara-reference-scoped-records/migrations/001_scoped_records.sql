@@ -61,3 +61,11 @@ CREATE TABLE scoped_records_mutation_replays (
     result JSONB NOT NULL,
     consumed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE scoped_records_bootstrap_receipts (
+    idempotency_key TEXT PRIMARY KEY CHECK (btrim(idempotency_key) <> ''),
+    input_digest TEXT NOT NULL CHECK (input_digest ~ '^sha256:[0-9a-f]{64}$'),
+    desired_revision BIGINT NOT NULL CHECK (desired_revision > 0),
+    receipt JSONB NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

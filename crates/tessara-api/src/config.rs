@@ -8,6 +8,9 @@
 pub struct Config {
     /// PostgreSQL connection string used for migrations and runtime queries.
     pub database_url: String,
+    /// Supervisor/Blueprint installation identity for composition-aware runs.
+    /// When set, database preparation binds the fresh singleton to this UUID.
+    pub installation_id: Option<uuid::Uuid>,
     /// Socket address the API binds to, for example `0.0.0.0:8080`.
     pub bind_addr: String,
     /// Development administrator email seeded at startup.
@@ -29,6 +32,13 @@ impl Config {
         Ok(Self {
             database_url: std::env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://tessara:tessara@localhost:5432/tessara".into()),
+            installation_id: std::env::var("TESSARA_INSTALLATION_ID")
+                .ok()
+                .map(|value| value.parse::<uuid::Uuid>())
+                .transpose()
+                .map_err(|error| {
+                    anyhow::anyhow!("TESSARA_INSTALLATION_ID must be a UUID: {error}")
+                })?,
             bind_addr: std::env::var("TESSARA_BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into()),
             dev_admin_email: std::env::var("TESSARA_DEV_ADMIN_EMAIL")
                 .unwrap_or_else(|_| "admin@tessara.local".into()),

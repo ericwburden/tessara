@@ -4,6 +4,7 @@
 
 pub mod administration;
 pub mod auth;
+pub mod composition;
 pub mod home;
 pub mod login;
 pub mod module_lifecycle;

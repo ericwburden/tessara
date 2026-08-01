@@ -1,7 +1,9 @@
 # Sprint 6F Validation Record
 
-Status: acceptance inventory established at kickoff on 2026-08-01. No
-implementation, preflight result, candidate freeze, SIT, or UAT has begun.
+Status: implementation milestone completed on 2026-08-01 with exploratory
+reference-composition and unchanged no-op runtime proofs. Candidate preflight,
+freeze, formal SIT, reduced deployed proof, restart injection, and UAT have not
+begun; exploratory results are not candidate evidence.
 
 ## Scope and acceptance inventory
 
@@ -37,7 +39,7 @@ implementation, preflight result, candidate freeze, SIT, or UAT has begun.
 
 ## Candidate identity
 
-- Implementation commit: Not frozen
+- Implementation commit: Pending implementation commit; not frozen
 - Tree: Not frozen
 - Dirty state: Not evaluated
 - Image digest(s): Not recorded
@@ -54,9 +56,13 @@ implementation, preflight result, candidate freeze, SIT, or UAT has begun.
 - Status: Not Run
 - Intended branch/worktree: `codex/sprint-6f` at `C:\Users\eric-dev\Projects\tessara-sprint-6f`
 - Environment and reset authorization: Must be confirmed before SIT; fresh/disposable database and installation destruction require explicit confirmation at execution time.
-- Test databases: Planned isolated Core, installation-control/Supervisor ledger, Dashboard, Scoped Records, and any bootstrap-owner databases named by the final profile.
+- Test state: Planned fresh Core, Dashboard, and Scoped Records PostgreSQL
+  databases plus a protected Supervisor SQLite ledger named by the final
+  profile. No Sprint 6E database state is migrated.
 - Deployment profile: Planned `deploy/sprint-6f/compose.yaml` using `tessara-oci-v1`.
-- Bootstrap/materialization and no-op proof: Planned `scripts/bootstrap-sprint-6f-deployment.ps1`; first and unchanged second runs retained separately.
+- Bootstrap/materialization and no-op proof: Implemented as
+  `scripts/bootstrap-sprint-6f-composition.ps1`; exploratory reference first
+  apply and unchanged no-op passed. Candidate evidence has not been retained.
 - Harness/inventory reconciliation: Not Run; reconcile routes, navigation, roles, catalogs, releases, services, seeds, lifecycle schemas, bootstrap declarations, smoke, UAT, and Playwright before freeze.
 - Migration from-scratch proof: Not Run; after the final schema change, squash sprint-owned migrations and apply each finalized baseline to disposable empty databases. Record N/A only if no schema changes land.
 - Evidence paths: Planned `artifacts/sprint-6f-closeout/`; must be empty or explicitly overwriteable before SIT.
@@ -66,7 +72,7 @@ implementation, preflight result, candidate freeze, SIT, or UAT has begun.
 | Lane | Command/evidence | Result | Duration |
 |---|---|---|---|
 | Static and boundaries | `cargo fmt --all -- --check`; composition/catalog/schema/package/secret/provenance checks; `docker compose -f .\deploy\sprint-6f\compose.yaml config` | Not Run | |
-| Targeted Rust | `cargo test -p tessara-composition`; `cargo test -p tessara-deploy`; `cargo test -p tessara-installation-control`; `cargo test -p tessara-api`; `cargo test -p tessara-web` | Not Run | |
+| Targeted Rust | `cargo test -p tessara-composition`; `cargo test -p tessara-supervisor`; `cargo test -p tessara-api`; `cargo test -p tessara-web` | Not Run | |
 | Rust workspace | `cargo test --workspace --locked` | Not Run | |
 | Playwright | `npm --prefix .\end2end test` with Sprint 6F evidence wrapper/manifest | Not Run | |
 | Deployed acceptance smoke | `.\scripts\smoke.ps1` against the frozen `deploy/sprint-6f/compose.yaml` candidate, including Blueprint/signature, authorization, restart, drift, no-op, non-admin, and exact-provenance assertions | Not Run | |

@@ -24,6 +24,7 @@ sha2 = { workspace = true }
 sqlx = { workspace = true }
 tessara-core = { path = "../tessara-core" }
 tessara-components-contract = { path = "../tessara-components-contract" }
+tessara-composition = { path = "../tessara-composition" }
 tessara-data-ops = { path = "../tessara-data-ops" }
 tessara-datasets = { path = "../tessara-datasets" }
 tessara-dashboards = { path = "../tessara-dashboards" }

@@ -1,16 +1,16 @@
 [package]
-name = "tessara-module-contract"
-version = "0.2.0"
-edition = "2024"
+name = "tessara-composition"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-base64 = { workspace = true }
 chrono = { workspace = true }
-ed25519-dalek = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 serde_jcs = { workspace = true }
+serde_json = { workspace = true }
 sha2 = { workspace = true }
+tessara-module-contract = { path = "../tessara-module-contract" }
 thiserror = { workspace = true }
 uuid = { workspace = true }

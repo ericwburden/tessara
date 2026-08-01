@@ -141,6 +141,7 @@ pub fn router(state: DashboardModuleState) -> Router {
             get(get_configuration).put(put_configuration),
         )
         .route("/api/private/security-state", put(update_security_state))
+        .route("/api/private/bootstrap", post(apply_bootstrap))
         .route(
             "/_tessara/modules/tessara.dashboards/{release}/{digest}/{asset}",
             get(dashboard_asset),
@@ -151,6 +152,140 @@ pub fn router(state: DashboardModuleState) -> Router {
         .route("/health/ready", get(ready))
         .route("/api/diagnostics", get(diagnostics))
         .with_state(state)
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DashboardBootstrapV1 {
+    pub schema_version: String,
+    pub dashboard_id: Uuid,
+    pub external_key: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub scope_node_id: Uuid,
+    pub placements: Vec<DashboardBootstrapPlacementV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DashboardBootstrapPlacementV1 {
+    pub placement_id: Uuid,
+    pub placement_key: String,
+    pub component_version_id: Uuid,
+    pub column: u16,
+    pub row: u16,
+    pub width: u16,
+    pub height: u16,
+}
+
+async fn apply_bootstrap(
+    State(state): State<DashboardModuleState>,
+    headers: HeaderMap,
+    Json(request): Json<tessara_composition::OwnerBootstrapRequestV1<DashboardBootstrapV1>>,
+) -> Result<Json<tessara_composition::OwnerBootstrapResponseV1>, DashboardModuleError> {
+    require_private_key(&headers)?;
+    if request.input.schema_version != "tessara.io/dashboard-bootstrap/v1"
+        || request.idempotency_key.trim().is_empty()
+        || !request
+            .validate_input_digest()
+            .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?
+    {
+        return Err(DashboardModuleError::BadRequest(
+            "Dashboard bootstrap contract or digest is invalid".into(),
+        ));
+    }
+    if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
+        "SELECT input_digest,receipt FROM dashboard_bootstrap_receipts WHERE idempotency_key=$1",
+    )
+    .bind(&request.idempotency_key)
+    .fetch_optional(&state.pool)
+    .await?
+    {
+        if digest != request.input_digest.to_string() {
+            return Err(DashboardModuleError::Conflict(
+                "Bootstrap idempotency key was reused with different input".into(),
+            ));
+        }
+        let mut response: tessara_composition::OwnerBootstrapResponseV1 =
+            serde_json::from_value(receipt)
+                .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
+        response.receipt.changed = false;
+        return Ok(Json(response));
+    }
+    if request.input.name.trim().is_empty()
+        || request.input.placements.len() > 240
+        || request.input.placements.iter().any(|placement| {
+            placement.column >= 12
+                || placement.width == 0
+                || placement.column + placement.width > 12
+                || placement.height == 0
+        })
+    {
+        return Err(DashboardModuleError::BadRequest(
+            "Dashboard bootstrap layout is invalid".into(),
+        ));
+    }
+    let mut transaction = state.pool.begin().await?;
+    // The composition bootstrap may introduce the Core scope node in the same
+    // apply operation. Seed the module-owned projection before linking the
+    // dashboard; a later Core organization projection enriches this row.
+    sqlx::query("INSERT INTO dashboard_organization_nodes(node_id,node_name,node_type_name,parent_node_id,node_path,active,projection_revision) VALUES($1,$2,'Organization',NULL,$3,true,$4) ON CONFLICT(node_id) DO NOTHING")
+        .bind(request.input.scope_node_id)
+        .bind("Composition bootstrap scope")
+        .bind(format!("/{}", request.input.scope_node_id))
+        .bind(request.desired_revision as i64)
+        .execute(&mut *transaction).await?;
+    sqlx::query("INSERT INTO dashboards(id,name,description) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,updated_at=now()")
+        .bind(request.input.dashboard_id).bind(request.input.name.trim()).bind(&request.input.description)
+        .execute(&mut *transaction).await?;
+    sqlx::query("INSERT INTO dashboard_scope_nodes(dashboard_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING")
+        .bind(request.input.dashboard_id).bind(request.input.scope_node_id)
+        .execute(&mut *transaction).await?;
+    for placement in &request.input.placements {
+        let reference = composition::component_reference(
+            request.installation_id,
+            placement.component_version_id,
+        )
+        .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
+        let position = i32::from(placement.row) * 12 + i32::from(placement.column);
+        let config = serde_json::json!({
+            "placement_key": placement.placement_key,
+            "width": placement.width,
+            "height": placement.height
+        });
+        sqlx::query("INSERT INTO dashboard_placements(id,dashboard_id,component_reference,position,config) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET component_reference=EXCLUDED.component_reference,position=EXCLUDED.position,config=EXCLUDED.config,updated_at=now()")
+            .bind(placement.placement_id).bind(request.input.dashboard_id)
+            .bind(serde_json::to_value(reference).map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?)
+            .bind(position).bind(config).execute(&mut *transaction).await?;
+    }
+    let result_digest = tessara_composition::canonical_digest(&serde_json::json!({
+        "dashboard_id": request.input.dashboard_id,
+        "placements": request.input.placements.iter().map(|placement| placement.placement_id).collect::<Vec<_>>()
+    }))
+    .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
+    let response = tessara_composition::OwnerBootstrapResponseV1 {
+        receipt: tessara_composition::BootstrapReceiptV1 {
+            owner: MODULE_DEFINITION_ID.into(),
+            schema_version: request.input.schema_version.clone(),
+            input_digest: request.input_digest.clone(),
+            result_digest,
+            changed: true,
+            resource_ids: [
+                ("dashboard".into(), request.input.dashboard_id.to_string()),
+                ("external_key".into(), request.input.external_key.clone()),
+            ]
+            .into_iter()
+            .collect(),
+        },
+    };
+    let receipt = serde_json::to_value(&response)
+        .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
+    sqlx::query("INSERT INTO dashboard_bootstrap_receipts(idempotency_key,input_digest,desired_revision,receipt) VALUES($1,$2,$3,$4)")
+        .bind(&request.idempotency_key).bind(request.input_digest.to_string())
+        .bind(request.desired_revision as i64).bind(receipt).execute(&mut *transaction).await?;
+    transaction.commit().await?;
+    Ok(Json(response))
 }
 
 pub(crate) async fn verified_shell_context(
@@ -551,7 +686,7 @@ mod tests {
         let baseline = include_bytes!("../migrations/001_dashboard_module.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "cccbe5738103b6bbe73d74b7e9e1cfd0b40f5474088f0da1b44e6500c152e48b"
+            "cd7b4834c4681fff0824dcfb1890b71f119b4e5c9aa4f6b933d82e6874838c9c"
         );
     }
 }

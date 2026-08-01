@@ -24,6 +24,12 @@ pub enum ProtocolSignaturePurposeV1 {
     EnrollmentRedemption,
     RecoveryOperatorAuthorization,
     FixtureExternalIdentity,
+    ReleaseCatalog,
+    ResolvedComposition,
+    ApplyAuthorization,
+    SupervisorRequest,
+    SupervisorResponse,
+    InstallationReceipt,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -184,62 +190,14 @@ pub fn canonical_protocol_signing_bytes<T>(
 where
     T: Serialize,
 {
-    let value = serde_json::to_value(SigningInputV1 {
+    serde_jcs::to_vec(&SigningInputV1 {
         schema_version,
         issuer,
         key_id,
         purpose,
         payload,
     })
-    .map_err(|error| ProtocolEnvelopeError::Serialization(error.to_string()))?;
-    let mut output = Vec::new();
-    write_canonical_json(&value, &mut output)?;
-    Ok(output)
-}
-
-fn write_canonical_json(
-    value: &serde_json::Value,
-    output: &mut Vec<u8>,
-) -> Result<(), ProtocolEnvelopeError> {
-    match value {
-        serde_json::Value::Null => output.extend_from_slice(b"null"),
-        serde_json::Value::Bool(value) => {
-            output.extend_from_slice(if *value { b"true" } else { b"false" })
-        }
-        serde_json::Value::Number(value) => output.extend_from_slice(value.to_string().as_bytes()),
-        serde_json::Value::String(value) => {
-            let encoded = serde_json::to_string(value)
-                .map_err(|error| ProtocolEnvelopeError::Serialization(error.to_string()))?;
-            output.extend_from_slice(encoded.as_bytes());
-        }
-        serde_json::Value::Array(values) => {
-            output.push(b'[');
-            for (index, value) in values.iter().enumerate() {
-                if index > 0 {
-                    output.push(b',');
-                }
-                write_canonical_json(value, output)?;
-            }
-            output.push(b']');
-        }
-        serde_json::Value::Object(values) => {
-            output.push(b'{');
-            let mut entries = values.iter().collect::<Vec<_>>();
-            entries.sort_unstable_by_key(|(key, _)| *key);
-            for (index, (key, value)) in entries.into_iter().enumerate() {
-                if index > 0 {
-                    output.push(b',');
-                }
-                let encoded_key = serde_json::to_string(key)
-                    .map_err(|error| ProtocolEnvelopeError::Serialization(error.to_string()))?;
-                output.extend_from_slice(encoded_key.as_bytes());
-                output.push(b':');
-                write_canonical_json(value, output)?;
-            }
-            output.push(b'}');
-        }
-    }
-    Ok(())
+    .map_err(|error| ProtocolEnvelopeError::Serialization(error.to_string()))
 }
 
 fn required_identifier(

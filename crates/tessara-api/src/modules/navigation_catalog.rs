@@ -74,7 +74,7 @@ pub(crate) fn is_frozen_destination(id: &str) -> bool {
     DESTINATIONS.iter().any(|destination| destination.id == id)
 }
 
-pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 14] = [
+pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 15] = [
     NavigationCatalogDestination {
         id: "core.home",
         key: "home",
@@ -226,6 +226,20 @@ pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 14] = [
         required_capabilities_any_of: &["modules:read"],
         default_group_id: "core.admin",
         default_order: 3,
+        can_hide: false,
+        can_move_between_groups: false,
+    },
+    NavigationCatalogDestination {
+        id: "core.admin.composition",
+        key: "application_composition",
+        label: "Application Composition",
+        route: "/administration/composition",
+        semantic_destination: None,
+        definition_id: None,
+        owner: NavigationCatalogOwner::Core,
+        required_capabilities_any_of: &["composition:read"],
+        default_group_id: "core.admin",
+        default_order: 4,
         can_hide: false,
         can_move_between_groups: false,
     },

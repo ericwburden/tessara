@@ -1,0 +1,8 @@
+name: tessara-sprint-6f
+
+# Fresh Sprint 6F topology. Product modules are profile-selected so the same
+# source-exact Core/Supervisor stack materializes complete and reduced plans.
+include:
+  - path:
+      - ../sprint-6c/compose.yaml
+      - ./compose.override.yaml

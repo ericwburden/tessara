@@ -207,7 +207,7 @@ fn capability_keys(scopes: &[CapabilityScope]) -> Vec<String> {
         .collect::<Vec<_>>();
     let implied_reads = capabilities
         .iter()
-        .filter_map(|capability| implied_read_capability(capability))
+        .flat_map(|capability| implied_capabilities(capability))
         .collect::<Vec<_>>();
     capabilities.extend(implied_reads);
     if capabilities
@@ -234,6 +234,14 @@ fn implied_read_capability(granted: &str) -> Option<String> {
         .strip_suffix(":manage")
         .filter(|domain| *domain != "dashboards")
         .map(|domain| format!("{domain}:read"))
+}
+
+fn implied_capabilities(granted: &str) -> Vec<String> {
+    match granted {
+        "composition:approve" => vec!["composition:plan".into(), "composition:read".into()],
+        "composition:plan" => vec!["composition:read".into()],
+        _ => implied_read_capability(granted).into_iter().collect(),
+    }
 }
 
 pub async fn resolve_accessible_delegate_account_id(

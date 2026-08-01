@@ -1,0 +1,85 @@
+services:
+  gateway:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=tessara-sprint-6f_tessara-edge
+      - --entrypoints.web.address=:8080
+      - --api.dashboard=false
+
+  installation-control-migrate:
+    profiles: ["legacy-installation-control"]
+
+  installation-control:
+    profiles: ["legacy-installation-control"]
+
+  core:
+    image: tessara-sprint-6f-core
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000006f}
+      TESSARA_INSTALLATION_CONTROL_URL: ""
+      TESSARA_SUPERVISOR_URL: http://supervisor:8090
+      TESSARA_SUPERVISOR_PROJECTION_TOKEN: ${TESSARA_SUPERVISOR_PROJECTION_TOKEN:-local-supervisor-projection-token}
+      TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER: ${TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER:-tessara.local.sprint-6f}
+      TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID: ${TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID:-apply-dev-v1}
+      TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX: ${TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX:-000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f}
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"dashboards":"http://dashboards:8091","scoped-records":"http://scoped-records:8090"}'
+    depends_on: !override
+      core-migrate: { condition: service_completed_successfully }
+      supervisor: { condition: service_healthy }
+
+  core-migrate:
+    image: tessara-sprint-6f-core
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000006f}
+
+  supervisor:
+    image: tessara-sprint-6f-supervisor
+    build:
+      context: ../..
+      dockerfile: Dockerfile.supervisor
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    environment:
+      TESSARA_SUPERVISOR_ADDR: 0.0.0.0:8090
+      TESSARA_SUPERVISOR_LEDGER: /var/lib/tessara-supervisor/ledger.sqlite3
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000006f}
+      TESSARA_CORE_INTERNAL_URL: http://core:8080
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+      TESSARA_SUPERVISOR_PROJECTION_TOKEN: ${TESSARA_SUPERVISOR_PROJECTION_TOKEN:-local-supervisor-projection-token}
+      TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-6f}
+      TESSARA_SUPERVISOR_OPERATOR_KEY_ID: ${TESSARA_SUPERVISOR_OPERATOR_KEY_ID:-apply-dev-v1}
+      TESSARA_SUPERVISOR_OPERATOR_PUBLIC_KEY_HEX: ${TESSARA_SUPERVISOR_OPERATOR_PUBLIC_KEY_HEX:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports: ["127.0.0.1:${TESSARA_SUPERVISOR_PORT:-8095}:8090"]
+    networks: [tessara-services, tessara-edge]
+    restart: unless-stopped
+    volumes:
+      - tessara-supervisor:/var/lib/tessara-supervisor
+
+  scoped-records-migrate:
+    image: tessara-sprint-6f-scoped-records
+    profiles: ["reference"]
+
+  scoped-records:
+    image: tessara-sprint-6f-scoped-records
+    profiles: ["reference"]
+
+  dashboards-migrate:
+    image: tessara-sprint-6f-dashboards
+    profiles: ["reference"]
+
+  dashboards:
+    image: tessara-sprint-6f-dashboards
+    profiles: ["reference"]
+
+volumes:
+  tessara-supervisor: {}

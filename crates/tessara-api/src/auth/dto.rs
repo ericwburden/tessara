@@ -121,15 +121,12 @@ impl AccountContext {
     /// reusing `capability_scope`: an account may hold a scoped direct grant
     /// and a separate global grant that implies the same read capability.
     pub fn has_global_capability(&self, required: &str) -> bool {
-        let implied = implied_manage_capability(required);
         self.capability_scopes.iter().any(|scope| {
             scope.global
                 && (scope.capability == "admin:all"
                     || (scope.capability == "core:admin" && core_admin_implies(required))
                     || scope.capability == required
-                    || implied
-                        .as_deref()
-                        .is_some_and(|capability| scope.capability == capability))
+                    || capability_implies(&scope.capability, required))
         })
     }
 
@@ -161,11 +158,10 @@ impl AccountContext {
             return Some((scope, scope.capability.clone()));
         }
 
-        let implied = implied_manage_capability(required)?;
         self.capability_scopes
             .iter()
-            .find(|scope| scope.capability == implied)
-            .map(|scope| (scope, implied))
+            .find(|scope| capability_implies(&scope.capability, required))
+            .map(|scope| (scope, scope.capability.clone()))
     }
 }
 
@@ -190,6 +186,16 @@ pub fn implied_manage_capability(required: &str) -> Option<String> {
     // Other established feature areas retain the historical manage=>read
     // implication.
     (domain != "dashboards").then(|| format!("{domain}:manage"))
+}
+
+pub fn capability_implies(granted: &str, required: &str) -> bool {
+    matches!(
+        (granted, required),
+        (
+            "composition:approve",
+            "composition:plan" | "composition:read"
+        ) | ("composition:plan", "composition:read")
+    ) || implied_manage_capability(required).as_deref() == Some(granted)
 }
 
 #[cfg(test)]

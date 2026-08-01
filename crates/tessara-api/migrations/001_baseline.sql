@@ -1574,3 +1574,96 @@ CREATE TABLE administrator_enrollment_handoffs (
 CREATE INDEX administrator_enrollment_handoffs_expiry
     ON administrator_enrollment_handoffs (expires_at)
     WHERE consumed_at IS NULL;
+
+-- Sprint 6F Core projection of desired and observed application composition.
+-- The Supervisor remains authoritative for execution and receipts; these
+-- tables support planning, explicit approval, UI read-back, and drift review.
+
+INSERT INTO capabilities (key, description, scope_mode)
+VALUES
+    ('composition:read', 'Inspect application composition and receipts', 'installation_global'),
+    ('composition:plan', 'Create and resolve application Blueprint revisions', 'installation_global'),
+    ('composition:approve', 'Approve and apply composition plans or emergency disables', 'installation_global')
+ON CONFLICT (key) DO UPDATE SET
+    description = EXCLUDED.description,
+    scope_mode = EXCLUDED.scope_mode;
+
+CREATE TABLE composition_blueprints (
+    installation_id UUID NOT NULL REFERENCES application_installations(id) ON DELETE RESTRICT,
+    revision BIGINT NOT NULL CHECK (revision > 0),
+    digest TEXT NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
+    document JSONB NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('draft', 'resolved', 'approved', 'superseded')),
+    created_by UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, revision),
+    UNIQUE (installation_id, digest)
+);
+
+CREATE TABLE composition_lockfiles (
+    installation_id UUID NOT NULL,
+    blueprint_revision BIGINT NOT NULL,
+    lockfile_digest TEXT NOT NULL CHECK (lockfile_digest ~ '^sha256:[0-9a-f]{64}$'),
+    plan_digest TEXT NOT NULL CHECK (plan_digest ~ '^sha256:[0-9a-f]{64}$'),
+    catalog_digest TEXT NOT NULL CHECK (catalog_digest ~ '^sha256:[0-9a-f]{64}$'),
+    document JSONB NOT NULL,
+    resolved_by UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+    resolved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, blueprint_revision),
+    UNIQUE (installation_id, lockfile_digest),
+    FOREIGN KEY (installation_id, blueprint_revision)
+        REFERENCES composition_blueprints(installation_id, revision) ON DELETE RESTRICT
+);
+
+CREATE TABLE composition_approvals (
+    installation_id UUID NOT NULL,
+    blueprint_revision BIGINT NOT NULL,
+    lockfile_digest TEXT NOT NULL,
+    plan_digest TEXT NOT NULL,
+    approved_effects JSONB NOT NULL,
+    reason TEXT,
+    approved_by UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+    approved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, blueprint_revision),
+    FOREIGN KEY (installation_id, blueprint_revision)
+        REFERENCES composition_lockfiles(installation_id, blueprint_revision) ON DELETE RESTRICT
+);
+
+CREATE TABLE composition_operation_projections (
+    operation_id UUID PRIMARY KEY,
+    installation_id UUID NOT NULL REFERENCES application_installations(id) ON DELETE RESTRICT,
+    blueprint_revision BIGINT NOT NULL,
+    state TEXT NOT NULL,
+    operation JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE composition_receipt_projections (
+    installation_id UUID NOT NULL REFERENCES application_installations(id) ON DELETE RESTRICT,
+    revision BIGINT NOT NULL CHECK (revision > 0),
+    digest TEXT NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
+    receipt JSONB NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, revision),
+    UNIQUE (installation_id, digest)
+);
+
+CREATE TABLE composition_drift_findings (
+    finding_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    installation_id UUID NOT NULL REFERENCES application_installations(id) ON DELETE RESTRICT,
+    code TEXT NOT NULL,
+    path TEXT NOT NULL,
+    desired JSONB,
+    observed JSONB,
+    disposition TEXT NOT NULL DEFAULT 'open' CHECK (disposition IN ('open', 'adopted', 'reconciled')),
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ
+);
+
+CREATE TABLE core_bootstrap_receipts (
+    idempotency_key TEXT PRIMARY KEY CHECK (btrim(idempotency_key) <> ''),
+    input_digest TEXT NOT NULL CHECK (input_digest ~ '^sha256:[0-9a-f]{64}$'),
+    desired_revision BIGINT NOT NULL CHECK (desired_revision > 0),
+    receipt JSONB NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -10,6 +10,7 @@ use crate::features::administration::{
     AdministrationNodeTypesPage, AdministrationRolesPage, AdministrationUserAccessPage,
     AdministrationUserDetailPage, AdministrationUserEditPage, AdministrationUsersPage,
 };
+use crate::features::composition::ApplicationCompositionPage;
 use crate::features::modules::{ModuleManagementDetailPage, ModuleManagementDirectoryPage};
 
 use crate::routes::PRIMARY_SSR_MODE;
@@ -55,6 +56,11 @@ pub fn administration_routes() -> impl MatchNestedRoutes + Clone {
             <Route
                 path=path!("/administration/modules/:definition_id")
                 view=ModuleManagementDetailPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
+                path=path!("/administration/composition")
+                view=ApplicationCompositionPage
                 ssr=PRIMARY_SSR_MODE
             />
         </>

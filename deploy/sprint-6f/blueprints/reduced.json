@@ -1,0 +1,30 @@
+{
+  "api_version": "tessara.io/application-blueprint/v1",
+  "installation_id": "01980000-0000-7000-8000-00000000006f",
+  "revision": 1,
+  "core": {
+    "version_requirement": "^0.1",
+    "configuration": {
+      "deployment_profile": "sprint-6f-reduced",
+      "gateway_mode": "core_owned"
+    }
+  },
+  "modules": [],
+  "navigation": [
+    { "destination_id": "core.admin.composition", "group_id": "core.admin", "order": 4, "visible": true }
+  ],
+  "roles": [
+    {
+      "name": "admin",
+      "capabilities": ["admin:all", "composition:approve", "composition:plan", "composition:read"]
+    }
+  ],
+  "administrator_enrollment_role": "admin",
+  "secret_references": {
+    "core_database_password": {
+      "provider": "environment",
+      "name": "TESSARA_DATABASE_PASSWORD",
+      "revision": "sprint-6f-v1"
+    }
+  }
+}

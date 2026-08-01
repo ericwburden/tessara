@@ -9,6 +9,7 @@ mod analytics;
 mod app_summary;
 mod auth;
 mod components;
+mod composition;
 pub mod config;
 mod core_security;
 mod dashboard_components_adapter;
@@ -416,6 +417,7 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route("/administration/modules", get(modules::native_directory))
+        .route("/administration/composition", get(composition::native_page))
         .route(
             "/administration/modules/{definition_id}",
             get(modules::native_detail),
@@ -496,6 +498,7 @@ fn api_routes() -> Router<AppState> {
         .merge(analytics::routes())
         .merge(datasets::routes())
         .merge(components::routes())
+        .merge(composition::routes())
         .merge(dashboard_components_adapter::routes())
         .merge(modules::routes())
         .merge(demo::routes())

@@ -120,6 +120,7 @@ pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
             .await?
             .run(&pool)
             .await?;
+        bind_configured_installation_identity(&pool, config).await?;
         if let Ok(runtime_role) = std::env::var("TESSARA_RUNTIME_DATABASE_ROLE") {
             grant_runtime_privileges(&pool, &runtime_role).await?;
         }
@@ -128,6 +129,38 @@ pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
     }
 
     Ok(pool)
+}
+
+/// Binds a newly prepared database to the installation identity carried by
+/// the composition Blueprint and Supervisor. PostgreSQL foreign keys reject a
+/// late identity rewrite once any installation-owned state exists.
+async fn bind_configured_installation_identity(
+    pool: &PgPool,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let Some(configured_id) = config.installation_id else {
+        return Ok(());
+    };
+
+    let mut transaction = pool.begin().await?;
+    let current_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM application_installations WHERE singleton = true FOR UPDATE",
+    )
+    .fetch_one(&mut *transaction)
+    .await?;
+    if current_id != configured_id {
+        sqlx::query("UPDATE application_installations SET id = $1 WHERE singleton = true")
+            .bind(configured_id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "cannot bind database installation {current_id} to configured identity {configured_id}; installation-owned state already exists or the database is inconsistent: {error}"
+                )
+            })?;
+    }
+    transaction.commit().await?;
+    Ok(())
 }
 
 async fn grant_runtime_privileges(pool: &PgPool, runtime_role: &str) -> anyhow::Result<()> {
@@ -281,6 +314,18 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         ("components:read", "Inspect component definitions"),
         ("dashboards:manage", "Manage dashboard definitions"),
         ("dashboards:read", "Inspect dashboard definitions"),
+        (
+            "composition:read",
+            "Inspect application composition and receipts",
+        ),
+        (
+            "composition:plan",
+            "Create and resolve application Blueprint revisions",
+        ),
+        (
+            "composition:approve",
+            "Approve and apply composition plans or emergency disables",
+        ),
     ];
 
     for (key, description) in capabilities {
@@ -447,7 +492,7 @@ mod tests {
 
     #[test]
     fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0xad87_ed8f_5e92_c62f);
+        assert_eq!(fnv1a(BASELINE), 0x99cc_a9e1_7330_e99c);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains(
             "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"

@@ -2724,6 +2724,7 @@ mod tests {
         );
         let config = crate::config::Config {
             database_url,
+            installation_id: None,
             bind_addr: "127.0.0.1:0".into(),
             dev_admin_email: "existing-breakglass@tessara.local".into(),
             dev_admin_password: "existing-breakglass-password".into(),

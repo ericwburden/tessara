@@ -4,6 +4,7 @@ members = [
     "crates/tessara-api",
     "crates/tessara-auth",
     "crates/tessara-components-contract",
+    "crates/tessara-composition",
     "crates/tessara-core",
     "crates/tessara-data-ops",
     "crates/tessara-deploy",
@@ -19,6 +20,7 @@ members = [
     "crates/tessara-module-runtime",
     "crates/tessara-module-testkit",
     "crates/tessara-module-ui",
+    "crates/tessara-supervisor",
     "crates/tessara-reference-module-sdk",
     "crates/tessara-reference-scoped-records",
     "crates/tessara-submissions",
@@ -67,6 +69,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_jcs = "0.2"
 sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "migrate", "derive"] }
 thiserror = "2"
@@ -76,6 +79,7 @@ tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1", features = ["serde", "v4", "js"] }
+rusqlite = { version = "0.32.1", default-features = false, features = ["bundled"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Clipboard", "Crypto", "DataTransfer", "Document", "DragEvent", "Element", "Event", "EventTarget", "History", "HtmlElement", "HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement", "Location", "MediaQueryList", "MouseEvent", "Navigator", "NodeList", "Storage", "UrlSearchParams", "Window"] }

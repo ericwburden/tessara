@@ -1,7 +1,7 @@
 # Sprint 6F Plan: Application Blueprint And Composition Automation
 
-Status: kickoff complete and ready for review on 2026-08-01. Per kickoff
-direction, no implementation has started.
+Status: approved on 2026-08-01. The core implementation slices are complete;
+candidate freeze, formal validation, and closeout authorization remain pending.
 
 - Branch: `codex/sprint-6f`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6f`
@@ -29,8 +29,35 @@ verified no-op. Product artifacts may be bootstrapped only through typed,
 module-owned APIs.
 
 This plan is the implementation contract. Scope changes require an explicit
-plan amendment. The kickoff itself creates only Git and documentation
-artifacts; implementation awaits a later instruction.
+plan amendment.
+
+### Approved implementation decisions
+
+- Application Composition is a dedicated native Core administration surface
+  at `/administration/composition`, separate from Module Management.
+- Core adds installation-global `composition:read`, `composition:plan`, and
+  `composition:approve` capabilities. Plan implies read; approve implies plan
+  and read; `admin:all` implies all three. V1 separates capabilities and the
+  approval action but does not require a different human approver.
+- Ordinary UI changes create draft Blueprint revisions. Drift is reserved for
+  observed out-of-band change and emergency overrides.
+- All public composition documents are strict JSON. RFC 8785 canonical JSON
+  bytes are used for digests and signatures.
+- Release discovery uses purpose-bound Ed25519-signed catalog snapshots and
+  Supervisor-held trust anchors. V1 external inputs are versioned environment
+  secret references and SHA-256-addressed files in a configured local CAS.
+- Add a host-local `tessara-supervisor` process with a protected SQLite WAL
+  ledger and signed request/response envelopes over a private HTTP transport.
+  Move enrollment into that boundary; retain `tessara-deploy` only as a
+  compatibility wrapper while callers move, then remove it within the sprint.
+- The complete composition is Core/gateway plus Dashboard and Scoped Records;
+  the reduced composition is Core/gateway only. Core, Scoped Records, and
+  Dashboard expose owner-specific typed bootstrap operations. The reference
+  Dashboard includes exact ComponentVersion-backed placements.
+- Sprint 6F starts from a fresh installation. The retained Sprint 6E Compose
+  stack and database volumes are explicitly replaced after exact target
+  verification; retained Sprint 6E closeout evidence is preserved. No legacy
+  PostgreSQL enrollment-ledger import is in scope.
 
 ## Sprint Specifications
 
@@ -307,15 +334,14 @@ artifacts; implementation awaits a later instruction.
 
 - `cargo fmt --all -- --check`
 - `cargo test -p tessara-composition` (planned new targeted engine suite)
-- `cargo test -p tessara-deploy`
-- `cargo test -p tessara-installation-control`
+- `cargo test -p tessara-supervisor`
 - `cargo test -p tessara-api`
 - `cargo test -p tessara-web`
 - `cargo test --workspace --locked`
 - `npm --prefix .\end2end test`
 - `docker compose -f .\deploy\sprint-6f\compose.yaml config`
 - `.\scripts\local-launch.ps1` (standard local compatibility lane)
-- `.\scripts\bootstrap-sprint-6f-deployment.ps1 -BlueprintPath .\deploy\sprint-6f\blueprints\reference.yaml -EvidenceDirectory .\artifacts\sprint-6f-closeout`
+- `.\scripts\bootstrap-sprint-6f-composition.ps1 -Composition reference`
 - Repeat the preceding bootstrap command unchanged and assert a no-op.
 - `.\scripts\smoke.ps1`
 - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
@@ -333,7 +359,7 @@ the corresponding route, role, seed, service, or deployment-contract change.
   preflight -> freeze clean candidate -> complete SIT -> complete UAT ->
   authorize closeout.
 - Use `deploy/sprint-6f/compose.yaml` as the sprint deployment profile and
-  `scripts/bootstrap-sprint-6f-deployment.ps1` as the planned repeatable
+  `scripts/bootstrap-sprint-6f-composition.ps1` as the repeatable
   materialization entrypoint. Its second identical invocation must be a
   verified no-op.
 - Build every sprint image with `org.opencontainers.image.revision`, exact Git

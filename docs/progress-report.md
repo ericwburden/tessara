@@ -8,6 +8,36 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-01 - Sprint 6F Implementation Milestone
+
+- Added strict, RFC 8785-canonical Application Blueprint, signed release
+  catalog, lockfile, deterministic plan/diff, authorization, operation,
+  bootstrap, and receipt contracts in the shared `tessara-composition` crate.
+- Added the out-of-process `tessara-supervisor` service and CLI with a SQLite
+  WAL ledger, trust anchors, nonce/idempotency and stale-base enforcement,
+  monotonically sequenced apply, typed owner bootstrap execution, module
+  enablement/health gates, and Core operation/receipt projection.
+- Added Core composition persistence and installation-global read/plan/approve
+  RBAC, native `/administration/composition` planning/approval/apply UI, exact
+  approval-bound Core-to-Supervisor handoff, and adopt/reconcile projections.
+- Added idempotent typed bootstrap contracts owned by Core, Dashboard, and
+  Scoped Records. The reference composition creates two exact Core
+  ComponentVersions, a Dashboard with two placements, and one Scoped Record
+  without Supervisor or cross-module database writes.
+- Added complete/reference and reduced Blueprints, a purpose-bound signed
+  local catalog, source-digest lockfile inputs, a Sprint 6F Compose topology,
+  and a repeatable PowerShell bootstrap harness.
+- Exploratory deployed proof completed for the reference composition: the
+  signed first apply produced all three bootstrap receipts, healthy enabled
+  modules, and a Core-projected receipt; the unchanged second apply returned
+  `no_op=true` with one owner receipt row per product.
+- Targeted composition/Supervisor suites, native SSR and wasm hydration checks,
+  157 non-environment Core library tests, module-contract tests, Scoped Records
+  tests, and migration identity checks pass. The environment-required local
+  enrollment integration test remains reserved for the disposable SIT lane.
+- Candidate freeze, full SIT, reduced deployed proof, restart fault injection,
+  Playwright, smoke, and UAT have not begun; closeout remains unauthorized.
+
 ## 2026-08-01 - Sprint 6F Planning Kickoff
 
 - Sprint: `Sprint 6F: Application Blueprint And Composition Automation Slice`,
@@ -26,6 +56,19 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
 - Immediate implementation focus when separately authorized: freeze canonical
   complete/reduced catalog and Blueprint fixtures, then build deterministic
   schemas, normalization, digests, stable validation errors, and golden tests.
+
+### Plan Review Decisions
+
+- Approved a separate Application Composition administration surface and
+  installation-global read/plan/approve capabilities without mandatory
+  four-eyes approval.
+- Approved strict JSON and RFC 8785 canonicalization, signed local catalogs,
+  environment secret references, and a local SHA-256 content store.
+- Approved a new host-local SQLite-backed Supervisor, complete and reduced
+  reference compositions, and real Core, Scoped Records, and full Dashboard
+  bootstrap proofs.
+- Sprint 6F will replace the retained Sprint 6E stack with a fresh installation
+  while preserving its retained closeout evidence.
 
 ## 2026-07-31 - Sprint 6E Source-Exact Closeout
 

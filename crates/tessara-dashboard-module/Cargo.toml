@@ -16,6 +16,7 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
 tessara-components-contract = { path = "../tessara-components-contract" }
+tessara-composition = { path = "../tessara-composition" }
 tessara-dashboard-ui = { path = "../tessara-dashboard-ui", default-features = false, features = ["ssr"] }
 tessara-dashboards = { path = "../tessara-dashboards" }
 tessara-module-contract = { path = "../tessara-module-contract" }

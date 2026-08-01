@@ -172,6 +172,10 @@ pub fn router(state: ModuleState) -> Router {
             get(get_configuration).put(put_configuration),
         )
         .route("/api/private/security-state", put(update_security_state))
+        .route(
+            "/api/private/bootstrap",
+            axum::routing::post(apply_bootstrap),
+        )
         .route("/api/records", get(list_records).post(create_record))
         .route(
             "/api/records/{record_id}",
@@ -183,6 +187,95 @@ pub fn router(state: ModuleState) -> Router {
         .route("/diagnostics", get(diagnostics_page))
         .route(MODULE_SHELL_CSS_PATH, get(module_shell_stylesheet))
         .with_state(state)
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScopedRecordsBootstrapV1 {
+    pub schema_version: String,
+    pub records: Vec<ScopedRecordBootstrapEntryV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScopedRecordBootstrapEntryV1 {
+    pub record_id: Uuid,
+    pub external_key: String,
+    pub label: String,
+    pub organization_owner_id: Uuid,
+}
+
+async fn apply_bootstrap(
+    State(state): State<ModuleState>,
+    headers: HeaderMap,
+    Json(request): Json<tessara_composition::OwnerBootstrapRequestV1<ScopedRecordsBootstrapV1>>,
+) -> Result<Json<tessara_composition::OwnerBootstrapResponseV1>, ApiError> {
+    require_private_key(&headers)?;
+    if request.input.schema_version != "tessara.io/scoped-records-bootstrap/v1"
+        || request.idempotency_key.trim().is_empty()
+        || !request
+            .validate_input_digest()
+            .map_err(|_| ApiError::bad_request("Bootstrap input digest is invalid"))?
+    {
+        return Err(ApiError::bad_request(
+            "Scoped Records bootstrap contract is invalid",
+        ));
+    }
+    if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
+        "SELECT input_digest,receipt FROM scoped_records_bootstrap_receipts WHERE idempotency_key=$1",
+    )
+    .bind(&request.idempotency_key)
+    .fetch_optional(&state.pool)
+    .await?
+    {
+        if digest != request.input_digest.to_string() {
+            return Err(ApiError::stale_or_restricted());
+        }
+        let mut response: tessara_composition::OwnerBootstrapResponseV1 =
+            serde_json::from_value(receipt)?;
+        response.receipt.changed = false;
+        return Ok(Json(response));
+    }
+    if request
+        .input
+        .records
+        .iter()
+        .any(|record| record.external_key.trim().is_empty() || record.label.trim().is_empty())
+    {
+        return Err(ApiError::bad_request(
+            "Bootstrap record keys and labels are required",
+        ));
+    }
+    let mut transaction = state.pool.begin().await?;
+    for record in &request.input.records {
+        sqlx::query("INSERT INTO scoped_records(id,label,scope,organization_owner_id) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET label=EXCLUDED.label,scope=EXCLUDED.scope,organization_owner_id=EXCLUDED.organization_owner_id,updated_at=now()")
+            .bind(record.record_id).bind(record.label.trim()).bind(&record.external_key)
+            .bind(record.organization_owner_id).execute(&mut *transaction).await?;
+    }
+    let resource_ids = request
+        .input
+        .records
+        .iter()
+        .map(|record| (record.external_key.clone(), record.record_id.to_string()))
+        .collect();
+    let result_digest = tessara_composition::canonical_digest(&resource_ids)
+        .map_err(|_| ApiError::bad_request("Bootstrap result is invalid"))?;
+    let response = tessara_composition::OwnerBootstrapResponseV1 {
+        receipt: tessara_composition::BootstrapReceiptV1 {
+            owner: MODULE_DEFINITION_ID.into(),
+            schema_version: request.input.schema_version.clone(),
+            input_digest: request.input_digest.clone(),
+            result_digest,
+            changed: true,
+            resource_ids,
+        },
+    };
+    sqlx::query("INSERT INTO scoped_records_bootstrap_receipts(idempotency_key,input_digest,desired_revision,receipt) VALUES($1,$2,$3,$4)")
+        .bind(&request.idempotency_key).bind(request.input_digest.to_string())
+        .bind(request.desired_revision as i64).bind(serde_json::to_value(&response)?)
+        .execute(&mut *transaction).await?;
+    transaction.commit().await?;
+    Ok(Json(response))
 }
 
 async fn validate_configuration_api(

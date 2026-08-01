@@ -1,0 +1,23 @@
+FROM rust:1.94-bookworm AS builder
+WORKDIR /app
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release -p tessara-supervisor --bin tessara-supervisor \
+    && cp /app/target/release/tessara-supervisor /tmp/tessara-supervisor
+
+FROM debian:trixie-slim
+ARG TESSARA_SOURCE_COMMIT=unknown
+ARG TESSARA_SOURCE_TREE=unknown
+ARG TESSARA_SOURCE_DIRTY=unknown
+LABEL org.opencontainers.image.revision="$TESSARA_SOURCE_COMMIT" \
+      com.tessara.source-tree="$TESSARA_SOURCE_TREE" \
+      com.tessara.source-dirty="$TESSARA_SOURCE_DIRTY" \
+      com.tessara.build-profile="release"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /tmp/tessara-supervisor /usr/local/bin/tessara-supervisor
+EXPOSE 8090
+ENTRYPOINT ["tessara-supervisor"]
