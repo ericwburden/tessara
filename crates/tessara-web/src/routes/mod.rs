@@ -4,11 +4,11 @@
 
 pub mod administration;
 pub mod components;
-pub mod dashboards;
 pub mod datasets;
 pub mod forms;
 pub mod home;
 pub mod login;
+pub mod module_lifecycle;
 pub mod module_unavailable;
 pub mod not_found;
 pub mod operations;
@@ -27,13 +27,13 @@ pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
         home::home_routes(),
         login::login_routes(),
         module_unavailable::module_unavailable_routes(),
+        module_lifecycle::module_lifecycle_routes(),
         organization::organization_routes(),
         forms::form_routes(),
         workflows::workflow_routes(),
         responses::response_routes(),
         operations::operation_routes(),
         components::component_routes(),
-        dashboards::dashboard_routes(),
         datasets::dataset_routes(),
         administration::administration_routes(),
     )

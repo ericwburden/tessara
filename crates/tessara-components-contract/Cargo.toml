@@ -1,0 +1,15 @@
+[package]
+name = "tessara-components-contract"
+version = "1.0.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+tessara-module-contract = { path = "../tessara-module-contract" }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

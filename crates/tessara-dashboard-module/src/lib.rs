@@ -6,9 +6,10 @@
 
 use axum::{
     Json, Router,
+    body::Body,
     extract::State,
-    http::{HeaderMap, StatusCode},
-    response::Html,
+    http::{HeaderMap, StatusCode, header},
+    response::{IntoResponse, Response},
     routing::{get, post, put},
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -23,6 +24,7 @@ use tessara_module_contract::{
 use uuid::Uuid;
 
 mod composition;
+mod documents;
 mod product;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.dashboards";
@@ -30,6 +32,7 @@ pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
+pub const MODULE_RELEASE_VERSION: &str = "2.0.2";
 
 #[derive(Clone)]
 pub struct DashboardModuleState {
@@ -126,28 +129,22 @@ struct SecurityState {
     updated_at: DateTime<Utc>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct DashboardRenderRequestV1 {
-    schema_version: u16,
-    path: String,
-    title: String,
-    description: String,
-    bootstrap: tessara_web::DashboardRouteBootstrap,
-}
-
 pub fn router(state: DashboardModuleState) -> Router {
     Router::new()
         .route(
             "/api/configuration/validate",
             post(validate_configuration_api),
         )
+        .merge(documents::routes())
         .route(
             "/api/configuration",
             get(get_configuration).put(put_configuration),
         )
         .route("/api/private/security-state", put(update_security_state))
-        .route("/api/private/render", post(render_dashboard_document))
+        .route(
+            "/_tessara/modules/tessara.dashboards/{release}/{digest}/{asset}",
+            get(dashboard_asset),
+        )
         .merge(product::routes())
         .merge(composition::routes())
         .route("/health/live", get(live))
@@ -156,20 +153,10 @@ pub fn router(state: DashboardModuleState) -> Router {
         .with_state(state)
 }
 
-async fn render_dashboard_document(
-    State(state): State<DashboardModuleState>,
-    headers: HeaderMap,
-    Json(input): Json<DashboardRenderRequestV1>,
-) -> Result<Html<String>, DashboardModuleError> {
-    if input.schema_version != 1
-        || !input.path.starts_with("/dashboards")
-        || input.title.trim().is_empty()
-        || input.description.trim().is_empty()
-    {
-        return Err(DashboardModuleError::BadRequest(
-            "invalid Dashboard render request".into(),
-        ));
-    }
+pub(crate) async fn verified_shell_context(
+    state: &DashboardModuleState,
+    headers: &HeaderMap,
+) -> Result<ShellContextV1, DashboardModuleError> {
     let encoded = headers
         .get("x-tessara-shell-context")
         .and_then(|value| value.to_str().ok())
@@ -203,14 +190,55 @@ async fn render_dashboard_document(
             now: Utc::now(),
         })
         .map_err(|_| DashboardModuleError::Forbidden)?;
-    Ok(Html(
-        tessara_web::application_html_with_dashboard_bootstrap(
-            &input.path,
-            &input.title,
-            &input.description,
-            &input.bootstrap,
+    Ok(envelope.payload)
+}
+
+async fn dashboard_asset(
+    axum::extract::Path((release, digest, asset)): axum::extract::Path<(String, String, String)>,
+) -> Response {
+    if release != MODULE_RELEASE_VERSION {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let (expected_digest, content_type, bytes): (&str, &str, &'static [u8]) = match asset.as_str() {
+        "dashboard.css" => (
+            tessara_dashboard_ui::DASHBOARD_CSS_SHA256,
+            "text/css; charset=utf-8",
+            tessara_dashboard_ui::DASHBOARD_CSS.as_bytes(),
         ),
-    ))
+        "dashboard-lifecycle.css" => (
+            tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS_SHA256,
+            "text/css; charset=utf-8",
+            tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS.as_bytes(),
+        ),
+        "dashboard.js" => (
+            tessara_dashboard_ui::DASHBOARD_JS_SHA256,
+            "text/javascript; charset=utf-8",
+            tessara_dashboard_ui::DASHBOARD_JS.as_bytes(),
+        ),
+        "dashboard-bindings.js" => (
+            tessara_dashboard_ui::DASHBOARD_BINDINGS_JS_SHA256,
+            "text/javascript; charset=utf-8",
+            tessara_dashboard_ui::DASHBOARD_BINDINGS_JS.as_bytes(),
+        ),
+        "dashboard.wasm" => (
+            tessara_dashboard_ui::DASHBOARD_WASM_SHA256,
+            "application/wasm",
+            tessara_dashboard_ui::DASHBOARD_WASM,
+        ),
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    if digest != format!("sha256:{expected_digest}") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        Body::from(bytes),
+    )
+        .into_response()
 }
 
 async fn validate_configuration_api(
@@ -343,6 +371,13 @@ async fn diagnostics(
     Ok(Json(json!({
         "schema_version": 1,
         "module": MODULE_DEFINITION_ID,
+        "release": MODULE_RELEASE_VERSION,
+        "assets": {
+            "dashboard_css": format!("sha256:{}", tessara_dashboard_ui::DASHBOARD_CSS_SHA256),
+            "dashboard_js": format!("sha256:{}", tessara_dashboard_ui::DASHBOARD_JS_SHA256),
+            "dashboard_bindings_js": format!("sha256:{}", tessara_dashboard_ui::DASHBOARD_BINDINGS_JS_SHA256),
+            "dashboard_wasm": format!("sha256:{}", tessara_dashboard_ui::DASHBOARD_WASM_SHA256),
+        },
         "configuration": configuration,
         "database": {"status": "connected", "binding": "dashboard_module_instance"},
         "authorization": security.as_ref().map(|value| json!({
@@ -460,6 +495,14 @@ mod tests {
         let manifest: ModuleManifest =
             serde_json::from_str(include_str!("../manifest.json")).expect("valid manifest");
         assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
+        assert_eq!(manifest.release_version.to_string(), "2.0.2");
+        let lifecycle = manifest
+            .browser_lifecycle
+            .as_ref()
+            .expect("Dashboard declares lifecycle v1");
+        assert_eq!(lifecycle.lifecycle_abi.to_string(), "1.0.0");
+        assert_eq!(lifecycle.entry_asset, "/dashboard.js");
+        assert!(lifecycle.complete_document_fallback);
         let tessara_module_contract::DeploymentProfile::TessaraOciV1(deployment) =
             &manifest.deployment;
         assert_eq!(deployment.listen.port, 8091);
@@ -474,6 +517,33 @@ mod tests {
                 .iter()
                 .any(|capability| capability.id.as_str() == "dashboards:read")
         );
+
+        for (path, expected_digest) in [
+            ("/dashboard.css", tessara_dashboard_ui::DASHBOARD_CSS_SHA256),
+            (
+                "/dashboard-lifecycle.css",
+                tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS_SHA256,
+            ),
+            ("/dashboard.js", tessara_dashboard_ui::DASHBOARD_JS_SHA256),
+            (
+                "/dashboard-bindings.js",
+                tessara_dashboard_ui::DASHBOARD_BINDINGS_JS_SHA256,
+            ),
+            (
+                "/dashboard.wasm",
+                tessara_dashboard_ui::DASHBOARD_WASM_SHA256,
+            ),
+        ] {
+            let declared = manifest
+                .assets
+                .iter()
+                .find(|asset| asset.path == path)
+                .unwrap_or_else(|| panic!("manifest should declare {path}"));
+            assert_eq!(
+                declared.digest.to_string(),
+                format!("sha256:{expected_digest}")
+            );
+        }
     }
 
     #[test]

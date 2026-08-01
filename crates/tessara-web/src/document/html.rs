@@ -6,7 +6,6 @@
 use leptos::context::Provider;
 use leptos::prelude::*;
 use leptos_router::location::RequestUrl;
-use tessara_web_dashboards::DashboardRouteBootstrap;
 
 use crate::{
     app,
@@ -19,23 +18,7 @@ use crate::{
 };
 
 pub(crate) fn render_native_app_document(title: &str, description: &str, path: &str) -> String {
-    render_native_app_document_with_optional_bootstraps(title, description, path, None, None, None)
-}
-
-pub(crate) fn render_native_app_document_with_dashboard_bootstrap(
-    title: &str,
-    description: &str,
-    path: &str,
-    bootstrap: &DashboardRouteBootstrap,
-) -> String {
-    render_native_app_document_with_optional_bootstraps(
-        title,
-        description,
-        path,
-        Some(bootstrap),
-        None,
-        None,
-    )
+    render_native_app_document_with_optional_bootstraps(title, description, path, None, None)
 }
 
 pub(crate) fn render_native_app_document_with_module_management_bootstrap(
@@ -48,7 +31,6 @@ pub(crate) fn render_native_app_document_with_module_management_bootstrap(
         title,
         description,
         path,
-        None,
         Some(bootstrap),
         None,
     )
@@ -65,7 +47,6 @@ pub(crate) fn render_native_app_document_with_module_management_and_shell_naviga
         title,
         description,
         path,
-        None,
         Some(bootstrap),
         Some(shell_navigation),
     )
@@ -75,7 +56,6 @@ fn render_native_app_document_with_optional_bootstraps(
     title: &str,
     description: &str,
     path: &str,
-    dashboard_bootstrap: Option<&DashboardRouteBootstrap>,
     module_management_bootstrap: Option<&ModuleManagementRouteBootstrapV1>,
     shell_navigation_bootstrap: Option<&ShellNavigationResponseV1>,
 ) -> String {
@@ -86,30 +66,11 @@ fn render_native_app_document_with_optional_bootstraps(
     #[cfg(all(feature = "hydrate", not(target_arch = "wasm32")))]
     let _ = any_spawner::Executor::init_futures_executor();
 
-    let shell_bootstrap = dashboard_bootstrap.cloned();
     let module_shell_bootstrap = module_management_bootstrap.cloned();
     let navigation_shell_bootstrap = shell_navigation_bootstrap.cloned();
     let shell_path = path.to_string();
-    let shell = Owner::new().with(move || match (shell_bootstrap, module_shell_bootstrap) {
-        (Some(dashboard), Some(module_management)) => view! {
-            <Provider value=RequestUrl::new(&shell_path)>
-                <Provider value=dashboard>
-                    <Provider value=module_management>
-                        <app::App initial_shell_navigation=navigation_shell_bootstrap/>
-                    </Provider>
-                </Provider>
-            </Provider>
-        }
-        .to_html(),
-        (Some(dashboard), None) => view! {
-            <Provider value=RequestUrl::new(&shell_path)>
-                <Provider value=dashboard>
-                    <app::App initial_shell_navigation=navigation_shell_bootstrap/>
-                </Provider>
-            </Provider>
-        }
-        .to_html(),
-        (None, Some(module_management)) => view! {
+    let shell = Owner::new().with(move || match module_shell_bootstrap {
+        Some(module_management) => view! {
             <Provider value=RequestUrl::new(&shell_path)>
                 <Provider value=module_management>
                     <app::App initial_shell_navigation=navigation_shell_bootstrap/>
@@ -117,7 +78,7 @@ fn render_native_app_document_with_optional_bootstraps(
             </Provider>
         }
         .to_html(),
-        (None, None) => view! {
+        None => view! {
             <Provider value=RequestUrl::new(&shell_path)>
                 <app::App initial_shell_navigation=navigation_shell_bootstrap/>
             </Provider>
@@ -127,13 +88,7 @@ fn render_native_app_document_with_optional_bootstraps(
     let brand = crate::document::document_head_tags(title, description);
     let theme_bootstrap = crate::document::bootstrap_script();
     let stylesheets = crate::document::stylesheet_links();
-    let mut route_bootstrap = dashboard_bootstrap.map_or_else(String::new, |bootstrap| {
-        let json = escaped_dashboard_bootstrap_json(bootstrap);
-        format!(
-            "    <script id=\"{}\" type=\"application/json\">{json}</script>\n",
-            crate::DASHBOARD_BOOTSTRAP_SCRIPT_ID
-        )
-    });
+    let mut route_bootstrap = String::new();
     if let Some(bootstrap) = module_management_bootstrap {
         let json = escaped_module_management_bootstrap_json(bootstrap);
         route_bootstrap.push_str(&format!(
@@ -181,56 +136,18 @@ fn escaped_shell_navigation_bootstrap_json(bootstrap: &ShellNavigationResponseV1
         .replace('\u{2029}', "\\u2029")
 }
 
-fn escaped_dashboard_bootstrap_json(bootstrap: &DashboardRouteBootstrap) -> String {
-    serde_json::to_string(bootstrap)
-        .expect("Dashboard route bootstrap should serialize")
-        .replace('&', "\\u0026")
-        .replace('<', "\\u003c")
-        .replace('>', "\\u003e")
-        .replace('\u{2028}', "\\u2028")
-        .replace('\u{2029}', "\\u2029")
-}
-
 #[cfg(test)]
 mod tests {
+    use super::escaped_shell_navigation_bootstrap_json;
     use crate::state::shell_navigation::{
         ShellNavigationGroupV1, ShellNavigationItemOwnerV1, ShellNavigationItemV1,
         ShellNavigationResponseV1, ShellNavigationStateV1, ShellNavigationUnavailableV1,
     };
-    use tessara_web_dashboards::{DashboardRouteBootstrap, DashboardSummary, SessionAccount};
-
-    use super::{escaped_dashboard_bootstrap_json, escaped_shell_navigation_bootstrap_json};
-
-    #[test]
-    fn bootstrap_json_cannot_terminate_its_script_tag() {
-        let bootstrap = DashboardRouteBootstrap::directory(
-            SessionAccount {
-                capabilities: vec!["dashboards:read".into()],
-            },
-            vec![DashboardSummary {
-                id: "dashboard-1".into(),
-                name: "</script><script>alert('x')</script>".into(),
-                description: Some("A&B".into()),
-                visibility_nodes: Vec::new(),
-                placement_count: 0,
-                can_manage: false,
-            }],
-        );
-
-        let json = escaped_dashboard_bootstrap_json(&bootstrap);
-        assert!(!json.contains('<'));
-        assert!(!json.contains('&'));
-        assert!(json.contains("\\u003c/script\\u003e"));
-        assert_eq!(
-            serde_json::from_str::<DashboardRouteBootstrap>(&json).expect("parse escaped JSON"),
-            bootstrap
-        );
-    }
 
     #[test]
     fn shell_navigation_json_cannot_terminate_its_script_tag() {
         let bootstrap = ShellNavigationResponseV1 {
-            schema_version: 2,
+            schema_version: 3,
             policy_revision: None,
             state: ShellNavigationStateV1::Unavailable,
             groups: vec![ShellNavigationGroupV1 {
@@ -242,6 +159,7 @@ mod tests {
                     href: "/".into(),
                     owner: ShellNavigationItemOwnerV1::Core,
                     contribution_id: None,
+                    navigation_mode: crate::state::shell_navigation::ShellNavigationModeV1::Shell,
                 }],
             }],
             unavailable: Some(ShellNavigationUnavailableV1 {

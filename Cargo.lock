@@ -4619,6 +4619,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlx",
+ "tessara-components-contract",
  "tessara-core",
  "tessara-dashboards",
  "tessara-data-ops",
@@ -4643,6 +4644,17 @@ name = "tessara-auth"
 version = "0.1.0"
 
 [[package]]
+name = "tessara-components-contract"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tessara-module-contract",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "tessara-core"
 version = "0.1.0"
 dependencies = [
@@ -4654,20 +4666,25 @@ dependencies = [
 
 [[package]]
 name = "tessara-dashboard-module"
-version = "0.1.0"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "axum",
  "base64",
  "chrono",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "sha2",
  "sqlx",
+ "tessara-components-contract",
+ "tessara-dashboard-ui",
  "tessara-dashboards",
  "tessara-module-contract",
- "tessara-web",
+ "tessara-module-runtime",
+ "tessara-module-testkit",
+ "tessara-module-ui",
  "thiserror 2.0.18",
  "tokio",
  "tower-http",
@@ -4677,12 +4694,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessara-dashboard-ui"
+version = "2.0.2"
+dependencies = [
+ "any_spawner",
+ "chrono",
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tessara-dashboards",
+ "tessara-module-contract",
+ "tessara-module-ui",
+ "tessara-web-component-viewer",
+ "tessara-web-http",
+ "uuid",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "tessara-dashboards"
 version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "tessara-core",
+ "tessara-components-contract",
  "tessara-module-contract",
  "thiserror 2.0.18",
  "uuid",
@@ -4762,7 +4802,7 @@ version = "0.1.0"
 
 [[package]]
 name = "tessara-module-contract"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "chrono",
@@ -4777,7 +4817,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-module-runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4797,7 +4837,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-module-testkit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -4810,7 +4850,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-module-ui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "icons",
@@ -4891,7 +4931,6 @@ dependencies = [
  "tessara-module-contract",
  "tessara-module-ui",
  "tessara-web-components",
- "tessara-web-dashboards",
  "tessara-web-datasets",
  "tessara-web-forms",
  "tessara-web-http",
@@ -4929,26 +4968,6 @@ dependencies = [
  "tessara-web-component-viewer",
  "tessara-web-data-ops",
  "tessara-web-http",
- "web-sys",
-]
-
-[[package]]
-name = "tessara-web-dashboards"
-version = "0.1.0"
-dependencies = [
- "any_spawner",
- "gloo-net",
- "icons",
- "js-sys",
- "leptos",
- "serde",
- "serde_json",
- "tessara-core",
- "tessara-dashboards",
- "tessara-module-ui",
- "tessara-web-component-viewer",
- "tessara-web-http",
- "wasm-bindgen",
  "web-sys",
 ]
 

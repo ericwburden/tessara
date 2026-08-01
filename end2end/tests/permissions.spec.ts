@@ -19,6 +19,7 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-permissions-${Date.now()}`;
 const PLAYWRIGHT_ENTITY_PREFIX = "pw-permissions-";
 const PASSWORD = "tessara-dev-permissions";
+const DASHBOARD_DOCUMENT_ROOT = "#module-content";
 
 type IdResponse = { id: string };
 type CapabilitySummary = { id: string; key: string };
@@ -153,6 +154,7 @@ type FrozenNativeRoute = {
   path: string;
   expectedText: string;
   expectedRootMarkup?: string;
+  documentRootSelector?: string;
   contentSelector?: string;
 };
 
@@ -288,6 +290,7 @@ async function expectNoJavaScriptRoutes(
     await expectNoJavaScriptNativeRouteDirectLoadAndRefresh(page, {
       path: route.path,
       expectedRootMarkup: route.expectedRootMarkup,
+      documentRootSelector: route.documentRootSelector,
       ready: async (routePage) => {
         const routeContent = routePage.locator(
           route.contentSelector ?? ".route-panel",
@@ -309,6 +312,7 @@ async function expectHydratedRoute(page: Page, route: FrozenNativeRoute) {
   await expectHydratedNativeRouteDirectLoadAndRefresh(page, {
     path: route.path,
     expectedRootMarkup: route.expectedRootMarkup,
+    documentRootSelector: route.documentRootSelector,
     ready: async (routePage) => {
       await expect(
         routePage
@@ -1303,11 +1307,13 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expectHydratedRoute(page, {
       path: "/dashboards/new",
       expectedText: "Create Dashboard",
+      documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
     });
     await expect(page.getByRole("heading", { level: 1, name: "Create Dashboard" })).toBeVisible();
     await expectHydratedRoute(page, {
       path: `/dashboards/${dashboard.id}`,
       expectedText: `${RUN_ID} Managed Dashboard Updated`,
+      documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
     });
     await expect(
       page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
@@ -1315,6 +1321,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expectHydratedRoute(page, {
       path: `/dashboards/${dashboard.id}/edit`,
       expectedText: `${RUN_ID} Managed Dashboard Updated`,
+      documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
     });
     await expect(
       page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
@@ -1323,6 +1330,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expectHydratedRoute(page, {
       path: `/dashboards/${dashboard.id}/view`,
       expectedText: `${RUN_ID} Managed Dashboard Updated`,
+      documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
     });
     await expect(
       page.getByRole("heading", { level: 1, name: `${RUN_ID} Managed Dashboard Updated` }),
@@ -2279,19 +2287,30 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           path: `/components/${fixtures.inScopeComponent.slug}/view`,
           expectedText: "Loading configuration",
         },
-        { path: "/dashboards", expectedText: "Dashboards" },
-        { path: "/dashboards/new", expectedText: "Create Dashboard" },
+        {
+          path: "/dashboards",
+          expectedText: "Dashboards",
+          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
+        },
+        {
+          path: "/dashboards/new",
+          expectedText: "Create Dashboard",
+          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
+        },
         {
           path: `/dashboards/${fixtures.inScopeDashboard.id}`,
           expectedText: "Dashboard Detail",
+          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
         },
         {
           path: `/dashboards/${fixtures.inScopeDashboard.id}/edit`,
           expectedText: "Dashboard builder",
+          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
         },
         {
           path: `/dashboards/${fixtures.inScopeDashboard.id}/view`,
           expectedText: "Viewer",
+          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
         },
       ]);
     });

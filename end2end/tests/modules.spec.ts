@@ -1121,6 +1121,15 @@ test.describe.serial("Sprint 6A Module Management", () => {
             page.locator('.sidebar a[href="/dashboards"]'),
           ).toHaveCount(0);
 
+          const disabledRoute = await page.request.get("/dashboards", {
+            headers: { accept: "text/html" },
+          });
+          expect(disabledRoute.status()).toBe(503);
+          expect(disabledRoute.headers()["content-type"]).toContain("text/html");
+          const disabledRouteBody = await disabledRoute.text();
+          expect(disabledRouteBody).toContain("Module temporarily unavailable");
+          expect(disabledRouteBody).toContain("Open Module Management");
+
           await page.getByRole("tab", { name: "Overview" }).click();
           const lifecycle = page.locator(
             ".module-detail-independent-stack .module-detail-overview-card",

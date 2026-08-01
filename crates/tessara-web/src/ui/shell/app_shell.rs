@@ -15,6 +15,16 @@ pub fn AppShell(
 ) -> impl IntoView {
     auth::guards::require_authenticated_route(active_route);
 
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    {
+        let document_title = title.clone();
+        Effect::new(move |_| {
+            if let Some(document) = web_sys::window().and_then(|window| window.document()) {
+                document.set_title(&format!("{document_title} · Tessara"));
+            }
+        });
+    }
+
     view! {
         <main class="app-shell">
             <Sidebar active_route/>

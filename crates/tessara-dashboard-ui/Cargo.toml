@@ -1,8 +1,11 @@
 [package]
-name = "tessara-web-dashboards"
-version = "0.1.0"
+name = "tessara-dashboard-ui"
+version = "2.0.2"
 edition = "2024"
 publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
@@ -19,26 +22,34 @@ ssr = [
 ]
 
 [dependencies]
+any_spawner = { version = "0.3", features = ["wasm-bindgen"] }
 gloo-net = { workspace = true }
 icons = { workspace = true }
 js-sys = { workspace = true }
 leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tessara-core = { path = "../tessara-core" }
 tessara-dashboards = { path = "../tessara-dashboards" }
 tessara-web-component-viewer = { path = "../tessara-web-component-viewer", default-features = false }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-module-ui = { path = "../tessara-module-ui", default-features = false }
+tessara-module-contract = { path = "../tessara-module-contract" }
 wasm-bindgen = { workspace = true }
 web-sys = { workspace = true, features = [
+    "Document",
     "DomRect",
+    "Element",
     "HtmlAnchorElement",
     "HtmlDetailsElement",
+    "HtmlElement",
     "IntersectionObserver",
     "IntersectionObserverEntry",
     "IntersectionObserverInit",
+    "Window",
 ] }
 
 [dev-dependencies]
-any_spawner = "0.3"
+chrono = { workspace = true }
+leptos = { workspace = true, features = ["ssr"] }
+sha2 = { workspace = true }
+uuid = { workspace = true }

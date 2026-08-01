@@ -103,14 +103,15 @@ function Assert-ProtectedShell {
     param(
         [string]$Content,
         [string[]]$Needles,
-        [string]$Context
+        [string]$Context,
+        [string[]]$ShellMarkers = @(
+            "top-app-bar",
+            "Search Tessara",
+            "Primary navigation"
+        )
     )
 
-    foreach ($needle in @(
-        "top-app-bar",
-        "Search Tessara",
-        "Primary navigation"
-    ) + $Needles) {
+    foreach ($needle in $ShellMarkers + $Needles) {
         if ($Content -notlike "*$needle*") {
             throw "Sprint UAT failure in $Context. Missing marker: $needle"
         }
@@ -335,7 +336,7 @@ if (
 $shellNavigation = Invoke-RestMethod -Uri "$BaseUrl/api/shell/navigation" -Headers $headers -TimeoutSec 30
 $shellItems = @($shellNavigation.groups | ForEach-Object { $_.items })
 if (
-    $shellNavigation.schema_version -ne 2 `
+    $shellNavigation.schema_version -ne 3 `
     -or $shellNavigation.state -ne "available" `
     -or -not ($shellItems | Where-Object { $_.key -eq "module_management" }) `
     -or ($shellItems | Where-Object { $_.key -eq "administration" }) `
@@ -343,7 +344,7 @@ if (
     -or -not ($shellItems | Where-Object { $_.key -eq "roles_access" }) `
     -or -not ($shellItems | Where-Object { $_.key -eq "node_types" })
 ) {
-    throw "Sprint UAT failure: schema-v2 administrator shell did not expose the four direct Core Admin destinations."
+    throw "Sprint UAT failure: schema-v3 administrator shell did not expose the four direct Core Admin destinations."
 }
 
 $removedAdministration = & curl.exe -sS -o NUL -D - -b $adminBrowserSession -w "STATUS:%{http_code}" "$BaseUrl/administration"
@@ -558,7 +559,7 @@ foreach ($placement in $dashboardApi.placements) {
 }
 
 $dashboardsList = Invoke-Html -Uri "$BaseUrl/dashboards" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $dashboardsList -Needles @("Dashboards") -Context "dashboard directory"
+Assert-ProtectedShell -Content $dashboardsList -Needles @("Dashboards") -Context "dashboard directory" -ShellMarkers @("module-content")
 
 $sdkReference = Invoke-Html -Uri "$BaseUrl/reference/module-sdk" -CookieJarPath $adminBrowserSession
 Assert-Contains -Content $sdkReference -Needles @(
@@ -568,16 +569,16 @@ Assert-Contains -Content $sdkReference -Needles @(
 ) -Context "canonical SDK reference"
 
 $dashboardCreate = Invoke-Html -Uri "$BaseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $dashboardCreate -Needles @("Create Dashboard") -Context "dashboard create"
+Assert-ProtectedShell -Content $dashboardCreate -Needles @("Create Dashboard") -Context "dashboard create" -ShellMarkers @("module-content")
 
 $dashboardDetail = Invoke-Html -Uri "$BaseUrl/dashboards/$($seedSummary.dashboard_id)" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $dashboardDetail -Needles @("Dashboard Detail", "9 total placements") -Context "dashboard detail"
+Assert-ProtectedShell -Content $dashboardDetail -Needles @("Dashboard Detail", "9 total placements") -Context "dashboard detail" -ShellMarkers @("module-content")
 
 $dashboardEditor = Invoke-Html -Uri "$BaseUrl/dashboards/$($seedSummary.dashboard_id)/edit" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $dashboardEditor -Needles @("Dashboard") -Context "dashboard editor"
+Assert-ProtectedShell -Content $dashboardEditor -Needles @("Dashboard") -Context "dashboard editor" -ShellMarkers @("module-content")
 
 $dashboardViewer = Invoke-Html -Uri "$BaseUrl/dashboards/$($seedSummary.dashboard_id)/view" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $dashboardViewer -Needles @("Dashboard", "Edit Dashboard") -Context "dashboard viewer"
+Assert-ProtectedShell -Content $dashboardViewer -Needles @("Dashboard", "Edit Dashboard") -Context "dashboard viewer" -ShellMarkers @("module-content")
 
 $workflowsList = Invoke-Html -Uri "$BaseUrl/workflows" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $workflowsList -Needles @("Workflows") -Context "workflow directory"

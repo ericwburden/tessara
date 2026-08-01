@@ -170,6 +170,7 @@ pub(super) struct SettingsSaveContext {
     pub(super) error: RwSignal<Option<String>>,
     pub(super) announcement: RwSignal<String>,
     pub(super) open: RwSignal<bool>,
+    pub(super) dirty: RwSignal<bool>,
 }
 
 pub(super) fn save_settings(
@@ -184,6 +185,7 @@ pub(super) fn save_settings(
         error,
         announcement,
         open,
+        dirty,
     } = context;
     #[cfg(feature = "hydrate")]
     {
@@ -193,7 +195,9 @@ pub(super) fn save_settings(
         leptos::task::spawn_local(async move {
             error.set(None);
             match crate::api::update_dashboard(&dashboard_id, &payload).await {
-                Ok(_) => match crate::api::fetch_composition(&dashboard_id).await {
+                Ok(_) => {
+                    dirty.set(false);
+                    match crate::api::fetch_composition(&dashboard_id).await {
                     Ok(refreshed) => {
                         placements.set(
                             refreshed
@@ -211,7 +215,8 @@ pub(super) fn save_settings(
                     Err(message) => error.set(Some(format!(
                         "Dashboard settings saved, but refreshed composition could not be loaded: {message}"
                     ))),
-                },
+                    }
+                }
                 Err(message) => error.set(Some(message)),
             }
             finish_operation(operation, EditorOperation::SavingSettings);
@@ -227,5 +232,6 @@ pub(super) fn save_settings(
         error,
         announcement,
         open,
+        dirty,
     );
 }

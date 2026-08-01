@@ -14,8 +14,6 @@ use crate::features::modules::ModuleManagementRouteBootstrapV1;
 use crate::routes;
 use crate::state::session::provide_shell_session;
 use crate::state::shell_navigation::ShellNavigationResponseV1;
-#[cfg(any(feature = "hydrate", test))]
-use tessara_web_dashboards::DashboardRouteBootstrap;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen]
@@ -35,10 +33,6 @@ pub fn hydrate_app(root_id: &str) {
         return;
     };
 
-    let dashboard_bootstrap = document
-        .get_element_by_id(crate::DASHBOARD_BOOTSTRAP_SCRIPT_ID)
-        .and_then(|script| script.text_content())
-        .and_then(|json| parse_dashboard_bootstrap_json(&json));
     let module_management_bootstrap = document
         .get_element_by_id(crate::MODULE_MANAGEMENT_BOOTSTRAP_SCRIPT_ID)
         .and_then(|script| script.text_content())
@@ -50,32 +44,8 @@ pub fn hydrate_app(root_id: &str) {
         .filter(ShellNavigationResponseV1::is_supported);
     let has_shell_navigation_bootstrap = shell_navigation_bootstrap.is_some();
 
-    match (dashboard_bootstrap, module_management_bootstrap) {
-        (Some(dashboard), Some(module_management)) => {
-            let handle = hydrate_from(root, move || {
-                view! {
-                    <Provider value=dashboard>
-                        <Provider value=module_management>
-                            <App initial_shell_navigation=shell_navigation_bootstrap/>
-                        </Provider>
-                    </Provider>
-                }
-            });
-            schedule_hydration_ready(true, true, has_shell_navigation_bootstrap);
-            handle.forget();
-        }
-        (Some(dashboard), None) => {
-            let handle = hydrate_from(root, move || {
-                view! {
-                    <Provider value=dashboard>
-                        <App initial_shell_navigation=shell_navigation_bootstrap/>
-                    </Provider>
-                }
-            });
-            schedule_hydration_ready(true, false, has_shell_navigation_bootstrap);
-            handle.forget();
-        }
-        (None, Some(module_management)) => {
+    match module_management_bootstrap {
+        Some(module_management) => {
             let handle = hydrate_from(root, move || {
                 view! {
                     <Provider value=module_management>
@@ -83,10 +53,10 @@ pub fn hydrate_app(root_id: &str) {
                     </Provider>
                 }
             });
-            schedule_hydration_ready(false, true, has_shell_navigation_bootstrap);
+            schedule_hydration_ready(true, has_shell_navigation_bootstrap);
             handle.forget();
         }
-        (None, None) => {
+        None => {
             let handle = if has_shell_navigation_bootstrap {
                 hydrate_from(root, move || {
                     view! { <App initial_shell_navigation=shell_navigation_bootstrap/> }
@@ -95,7 +65,7 @@ pub fn hydrate_app(root_id: &str) {
                 root.set_inner_html("");
                 mount_to(root, || view! { <App initial_shell_navigation=None/> })
             };
-            schedule_hydration_ready(false, false, has_shell_navigation_bootstrap);
+            schedule_hydration_ready(false, has_shell_navigation_bootstrap);
             handle.forget();
         }
     }
@@ -103,13 +73,11 @@ pub fn hydrate_app(root_id: &str) {
 
 #[cfg(feature = "hydrate")]
 fn schedule_hydration_ready(
-    clear_dashboard_bootstrap: bool,
     clear_module_management_bootstrap: bool,
     clear_shell_navigation_bootstrap: bool,
 ) {
     let second_frame = Closure::once(move |_: f64| {
         mark_hydration_ready(
-            clear_dashboard_bootstrap,
             clear_module_management_bootstrap,
             clear_shell_navigation_bootstrap,
         );
@@ -117,7 +85,6 @@ fn schedule_hydration_ready(
     let first_frame = Closure::once(move |_: f64| {
         let Some(window) = web_sys::window() else {
             mark_hydration_ready(
-                clear_dashboard_bootstrap,
                 clear_module_management_bootstrap,
                 clear_shell_navigation_bootstrap,
             );
@@ -130,7 +97,6 @@ fn schedule_hydration_ready(
             second_frame.forget();
         } else {
             mark_hydration_ready(
-                clear_dashboard_bootstrap,
                 clear_module_management_bootstrap,
                 clear_shell_navigation_bootstrap,
             );
@@ -138,7 +104,6 @@ fn schedule_hydration_ready(
     });
     let Some(window) = web_sys::window() else {
         mark_hydration_ready(
-            clear_dashboard_bootstrap,
             clear_module_management_bootstrap,
             clear_shell_navigation_bootstrap,
         );
@@ -151,7 +116,6 @@ fn schedule_hydration_ready(
         first_frame.forget();
     } else {
         mark_hydration_ready(
-            clear_dashboard_bootstrap,
             clear_module_management_bootstrap,
             clear_shell_navigation_bootstrap,
         );
@@ -160,13 +124,9 @@ fn schedule_hydration_ready(
 
 #[cfg(feature = "hydrate")]
 fn mark_hydration_ready(
-    clear_dashboard_bootstrap: bool,
     clear_module_management_bootstrap: bool,
     clear_shell_navigation_bootstrap: bool,
 ) {
-    if clear_dashboard_bootstrap {
-        tessara_web_dashboards::clear_dashboard_route_bootstrap();
-    }
     if clear_module_management_bootstrap {
         crate::features::modules::clear_module_management_route_bootstrap();
     }
@@ -188,11 +148,6 @@ fn mark_hydration_ready(
 }
 
 #[cfg(any(feature = "hydrate", test))]
-fn parse_dashboard_bootstrap_json(json: &str) -> Option<DashboardRouteBootstrap> {
-    serde_json::from_str(json).ok()
-}
-
-#[cfg(any(feature = "hydrate", test))]
 fn parse_module_bootstrap_json(json: &str) -> Option<ModuleManagementRouteBootstrapV1> {
     crate::features::modules::parse_module_management_bootstrap_json(json)
 }
@@ -208,6 +163,7 @@ pub fn App(initial_shell_navigation: Option<ShellNavigationResponseV1>) -> impl 
 
     view! {
         <Router>
+            <ModuleLifecycleRouteMonitor/>
             <Routes
                 fallback=|| view! { <routes::NotFoundPage/> }
                 children=ToChildren::to_children(routes::routes)
@@ -216,8 +172,22 @@ pub fn App(initial_shell_navigation: Option<ShellNavigationResponseV1>) -> impl 
     }
 }
 
+#[component]
+fn ModuleLifecycleRouteMonitor() -> impl IntoView {
+    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+    {
+        let location = leptos_router::hooks::use_location();
+        Effect::new(move |_| {
+            if !location.pathname.get().starts_with("/dashboards") {
+                crate::features::module_lifecycle::deactivate_current();
+            }
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::{parse_module_bootstrap_json, parse_shell_navigation_bootstrap_json};
     use crate::{
         features::modules::{ModuleManagementRouteBootstrapV1, ModuleManagementSurfaceV1},
         state::shell_navigation::{
@@ -225,33 +195,6 @@ mod tests {
             ShellNavigationResponseV1, ShellNavigationStateV1,
         },
     };
-    use tessara_web_dashboards::{DashboardRouteBootstrap, DashboardSummary, SessionAccount};
-
-    use super::{
-        parse_dashboard_bootstrap_json, parse_module_bootstrap_json,
-        parse_shell_navigation_bootstrap_json,
-    };
-
-    #[test]
-    fn hydration_parser_accepts_serialized_route_state_and_rejects_invalid_json() {
-        let bootstrap = DashboardRouteBootstrap::directory(
-            SessionAccount {
-                capabilities: vec!["dashboards:read".into()],
-            },
-            vec![DashboardSummary {
-                id: "dashboard-7".into(),
-                name: "Operations".into(),
-                description: None,
-                visibility_nodes: Vec::new(),
-                placement_count: 4,
-                can_manage: false,
-            }],
-        );
-        let json = serde_json::to_string(&bootstrap).expect("serialize bootstrap");
-
-        assert_eq!(parse_dashboard_bootstrap_json(&json), Some(bootstrap));
-        assert_eq!(parse_dashboard_bootstrap_json("{"), None);
-    }
 
     #[test]
     fn hydration_parsers_preserve_module_and_shell_request_state() {
@@ -261,7 +204,7 @@ mod tests {
         assert_eq!(parse_module_bootstrap_json(&module_json), Some(module));
 
         let shell = ShellNavigationResponseV1 {
-            schema_version: 2,
+            schema_version: 3,
             policy_revision: Some(0),
             state: ShellNavigationStateV1::Available,
             groups: vec![ShellNavigationGroupV1 {
@@ -273,6 +216,7 @@ mod tests {
                     href: "/".into(),
                     owner: ShellNavigationItemOwnerV1::Core,
                     contribution_id: None,
+                    navigation_mode: crate::state::shell_navigation::ShellNavigationModeV1::Shell,
                 }],
             }],
             unavailable: None,

@@ -5,7 +5,6 @@
 
 mod composition;
 mod placement_config;
-mod transition_component;
 
 pub use composition::{
     CompositionError, DASHBOARD_GRID_CONSTRAINTS, DASHBOARD_HARD_MINIMUM,
@@ -20,7 +19,7 @@ pub use placement_config::{
     encode_dashboard_placement_config, legacy_fallback_layout, parse_dashboard_placement_config,
     parse_dashboard_placement_configs,
 };
-pub use transition_component::{
+pub use tessara_components_contract::{
     DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
     DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentCatalogResponseV1,
     DashboardComponentMetadataV1, DashboardComponentResolutionRequestV1,
@@ -29,4 +28,4 @@ pub use transition_component::{
     DashboardComponentVersionReferenceValidationError,
 };
 
-pub use tessara_core::grid_layout::{GridPlacement, GridRect, GridSize};
+pub use tessara_module_contract::grid_layout::{GridPlacement, GridRect, GridSize};

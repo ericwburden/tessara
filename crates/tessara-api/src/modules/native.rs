@@ -255,7 +255,7 @@ async fn shell_navigation_bootstrap(
 #[cfg(feature = "ssr")]
 fn fail_closed_shell_navigation() -> tessara_web::ShellNavigationResponseV1 {
     tessara_web::ShellNavigationResponseV1 {
-        schema_version: 2,
+        schema_version: 3,
         policy_revision: None,
         state: tessara_web::ShellNavigationStateV1::Unavailable,
         groups: vec![tessara_web::ShellNavigationGroupV1 {
@@ -267,6 +267,7 @@ fn fail_closed_shell_navigation() -> tessara_web::ShellNavigationResponseV1 {
                 href: "/".to_string(),
                 owner: tessara_web::ShellNavigationItemOwnerV1::Core,
                 contribution_id: None,
+                navigation_mode: tessara_web::ShellNavigationModeV1::Shell,
             }],
         }],
         unavailable: Some(tessara_web::ShellNavigationUnavailableV1 {

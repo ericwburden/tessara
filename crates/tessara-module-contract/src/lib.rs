@@ -60,15 +60,15 @@ use uuid::Uuid;
 
 /// The first supported module manifest and transition descriptor schema.
 pub const CONTRACT_SCHEMA_VERSION_V1: u16 = 1;
-pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 2;
+pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 3;
 pub const CURRENT_CORE_RELEASE: &str = "0.1.0";
 pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "1.0.0";
-pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.0.0";
+pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.1.0";
 pub const CURRENT_MODULE_CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.1.0";
-pub const CURRENT_MODULE_UI_VERSION: &str = "0.1.0";
+pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.2.0";
+pub const CURRENT_MODULE_UI_VERSION: &str = "0.2.0";
 pub const CURRENT_DESIGN_SYSTEM_ASSET_ABI: &str = "1.0.0";
-pub const CURRENT_CONFORMANCE_SUITE_VERSION: &str = "1.0.0";
+pub const CURRENT_CONFORMANCE_SUITE_VERSION: &str = "1.1.0";
 
 fn deserialize_schema_version_v1<'de, D>(deserializer: D) -> Result<u16, D::Error>
 where
@@ -88,7 +88,7 @@ where
     D: Deserializer<'de>,
 {
     let schema_version = u16::deserialize(deserializer)?;
-    if schema_version != MODULE_MANIFEST_SCHEMA_VERSION {
+    if !matches!(schema_version, 2 | MODULE_MANIFEST_SCHEMA_VERSION) {
         return Err(de::Error::custom(format!(
             "module manifest schema version {schema_version} is unsupported; expected {MODULE_MANIFEST_SCHEMA_VERSION}"
         )));
@@ -382,7 +382,7 @@ pub struct ModuleRelease {
 }
 
 /// Trust is not implied by compatibility.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReleaseTrustState {
     Unknown,
@@ -1409,8 +1409,159 @@ pub struct BrowserRouteDeclaration {
     pub methods: Vec<BrowserDocumentMethod>,
     pub required_capability: SecurityCapabilityId,
     pub authorization_action: String,
+    #[serde(default = "legacy_browser_dependency_binding")]
+    pub dependency_binding: DependencyBindingKey,
     pub functional_contract: FunctionalContractId,
     pub organization_scope_parameter: Option<String>,
+}
+
+/// Framework-neutral browser lifecycle implemented by an interactive module.
+///
+/// Core imports `entry_asset` as an ECMAScript module and calls its exported
+/// `createModule(host)` factory. Asset paths are module-local manifest paths;
+/// Core binds them to the installed release and immutable digest at runtime.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserLifecycleDeclaration {
+    pub lifecycle_abi: Version,
+    pub entry_asset: String,
+    #[serde(default)]
+    pub stylesheet_assets: Vec<String>,
+    /// Whether the declared browser routes also return complete HTML documents
+    /// for direct loads, no-JavaScript clients, and compatibility recovery.
+    pub complete_document_fallback: bool,
+    #[serde(default)]
+    pub capabilities: BrowserLifecycleCapabilities,
+}
+
+/// Optional lifecycle operations supported by the module instance.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserLifecycleCapabilities {
+    #[serde(default)]
+    pub navigation_guard: bool,
+    #[serde(default)]
+    pub suspend_resume: bool,
+}
+
+/// Immutable, same-origin asset projected to the browser lifecycle host.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserLifecycleAssetV1 {
+    pub url: String,
+    pub digest: ArtifactDigest,
+    pub content_type: String,
+}
+
+/// Authorization-filtered route state returned when Core requests a module
+/// browser route with the lifecycle-v1 media type. `payload` remains opaque to
+/// Core and is interpreted only by the owning module runtime.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserLifecycleBootstrapV1 {
+    pub schema_version: u16,
+    pub definition_id: ModuleDefinitionId,
+    pub release_version: Version,
+    pub lifecycle_abi: Version,
+    pub destination: SemanticRouteName,
+    pub path: String,
+    pub title: String,
+    pub document_state: ShellDocumentStateV1,
+    pub entry_asset: BrowserLifecycleAssetV1,
+    #[serde(default)]
+    pub stylesheet_assets: Vec<BrowserLifecycleAssetV1>,
+    pub payload: Value,
+}
+
+impl BrowserLifecycleBootstrapV1 {
+    pub const SCHEMA_VERSION: u16 = 1;
+
+    /// Fail-closed checks that can be performed by a framework-neutral host.
+    pub fn is_supported(&self) -> bool {
+        self.schema_version == Self::SCHEMA_VERSION
+            && self.lifecycle_abi == Version::new(1, 0, 0)
+            && valid_same_origin_path(&self.path)
+            && valid_lifecycle_asset(
+                &self.entry_asset,
+                &self.definition_id,
+                &self.release_version,
+                "text/javascript",
+            )
+            && self.stylesheet_assets.iter().all(|asset| {
+                valid_lifecycle_asset(
+                    asset,
+                    &self.definition_id,
+                    &self.release_version,
+                    "text/css",
+                )
+            })
+            && !self.title.trim().is_empty()
+    }
+}
+
+fn valid_lifecycle_asset(
+    asset: &BrowserLifecycleAssetV1,
+    definition_id: &ModuleDefinitionId,
+    release_version: &Version,
+    media_prefix: &str,
+) -> bool {
+    valid_same_origin_path(&asset.url)
+        && asset.url.starts_with(&format!(
+            "/_tessara/modules/{definition_id}/{release_version}/"
+        ))
+        && asset.url.contains(&format!("/{}/", asset.digest.as_str()))
+        && asset.content_type.starts_with(media_prefix)
+}
+
+fn legacy_browser_dependency_binding() -> DependencyBindingKey {
+    DependencyBindingKey::new("tessara.core.legacy-module-document")
+        .expect("static legacy dependency binding is valid")
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum PublicApiMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicApiRouteDeclaration {
+    pub path_template: String,
+    pub method: PublicApiMethod,
+    pub required_capability: SecurityCapabilityId,
+    pub authorization_action: String,
+    pub dependency_binding: DependencyBindingKey,
+    pub operation: AuthorizationGrantOperationV1,
+    pub functional_contract: FunctionalContractId,
+    #[serde(default)]
+    pub idempotency: PublicApiIdempotency,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublicApiIdempotency {
+    #[default]
+    None,
+    ForwardOrGenerateHeader,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ControlProjectionKind {
+    SecurityState,
+    Organization,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ControlProjectionDeclaration {
+    pub kind: ControlProjectionKind,
+    pub path: String,
+    pub revision_field: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1451,6 +1602,14 @@ pub struct ModuleManifest {
     pub routes: Vec<RouteDeclaration>,
     #[serde(default)]
     pub browser_routes: Vec<BrowserRouteDeclaration>,
+    /// Interactive browser runtime. Absence means every browser route uses
+    /// complete-document navigation.
+    #[serde(default)]
+    pub browser_lifecycle: Option<BrowserLifecycleDeclaration>,
+    #[serde(default)]
+    pub public_api_routes: Vec<PublicApiRouteDeclaration>,
+    #[serde(default)]
+    pub control_projections: Vec<ControlProjectionDeclaration>,
     #[serde(default)]
     pub assets: Vec<ModuleAssetDeclaration>,
     #[serde(default)]
@@ -1487,6 +1646,7 @@ impl ModuleManifest {
         );
         validate_manifest_links(self, &mut findings);
         validate_module_assets(&self.assets, &mut findings);
+        validate_browser_lifecycle(self, &mut findings);
         match &self.deployment {
             DeploymentProfile::TessaraOciV1(deployment) => {
                 validate_deployment(deployment, &mut findings);
@@ -1532,6 +1692,65 @@ fn validate_module_assets(
             &asset.content_type,
             findings,
         );
+    }
+}
+
+fn validate_browser_lifecycle(manifest: &ModuleManifest, findings: &mut Vec<ValidationFinding>) {
+    let Some(lifecycle) = &manifest.browser_lifecycle else {
+        return;
+    };
+    if lifecycle.lifecycle_abi != Version::new(1, 0, 0) {
+        findings.push(ValidationFinding {
+            code: "unsupported_browser_lifecycle_abi".into(),
+            path: "browser_lifecycle.lifecycle_abi".into(),
+            message: "Core supports browser lifecycle ABI 1.0.0".into(),
+        });
+    }
+    if manifest.browser_routes.is_empty() {
+        findings.push(ValidationFinding {
+            code: "browser_lifecycle_without_routes".into(),
+            path: "browser_lifecycle".into(),
+            message: "an interactive browser lifecycle requires at least one browser route".into(),
+        });
+    }
+    if !lifecycle.complete_document_fallback {
+        findings.push(ValidationFinding {
+            code: "missing_complete_document_fallback".into(),
+            path: "browser_lifecycle.complete_document_fallback".into(),
+            message: "lifecycle v1 modules must retain complete-document fallback".into(),
+        });
+    }
+
+    let assets = manifest
+        .assets
+        .iter()
+        .map(|asset| (asset.path.as_str(), asset.content_type.as_str()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    match assets.get(lifecycle.entry_asset.as_str()) {
+        Some(content_type) if content_type.starts_with("text/javascript") => {}
+        _ => findings.push(ValidationFinding {
+            code: "invalid_browser_lifecycle_entry_asset".into(),
+            path: "browser_lifecycle.entry_asset".into(),
+            message: "entry asset must name a declared JavaScript module asset".into(),
+        }),
+    }
+    let mut stylesheets = BTreeSet::new();
+    for (index, path) in lifecycle.stylesheet_assets.iter().enumerate() {
+        if !stylesheets.insert(path.as_str()) {
+            findings.push(ValidationFinding {
+                code: "duplicate_browser_lifecycle_stylesheet".into(),
+                path: format!("browser_lifecycle.stylesheet_assets[{index}]"),
+                message: "lifecycle stylesheet assets must be unique".into(),
+            });
+        }
+        match assets.get(path.as_str()) {
+            Some(content_type) if content_type.starts_with("text/css") => {}
+            _ => findings.push(ValidationFinding {
+                code: "invalid_browser_lifecycle_stylesheet_asset".into(),
+                path: format!("browser_lifecycle.stylesheet_assets[{index}]"),
+                message: "stylesheet must name a declared CSS asset".into(),
+            }),
+        }
     }
 }
 
@@ -2398,6 +2617,79 @@ fn validate_manifest_links(manifest: &ModuleManifest, findings: &mut Vec<Validat
             });
         }
     }
+    let mut public_api_keys = BTreeSet::new();
+    for (index, api_route) in manifest.public_api_routes.iter().enumerate() {
+        let base = format!("public_api_routes[{index}]");
+        let key = (api_route.method, api_route.path_template.as_str());
+        if !public_api_keys.insert(key) {
+            findings.push(ValidationFinding {
+                code: "duplicate_public_api_route".into(),
+                path: base.clone(),
+                message: "public API method and path must be unique".into(),
+            });
+        }
+        if !api_route.path_template.starts_with("/api/")
+            || api_route.path_template.contains("..")
+            || api_route.path_template.starts_with("/api/private/")
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_public_api_path_template".into(),
+                path: format!("{base}.path_template"),
+                message: "public API paths must be local /api paths outside /api/private".into(),
+            });
+        }
+        if !capability_ids.contains(api_route.required_capability.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_public_api_capability".into(),
+                path: format!("{base}.required_capability"),
+                message: "public API capability must be declared by the manifest".into(),
+            });
+        }
+        if !contract_ids.contains(api_route.functional_contract.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_public_api_contract".into(),
+                path: format!("{base}.functional_contract"),
+                message: "public API contract must be provided by the manifest".into(),
+            });
+        }
+        require_text(
+            &format!("{base}.authorization_action"),
+            &api_route.authorization_action,
+            findings,
+        );
+        if api_route.idempotency == PublicApiIdempotency::ForwardOrGenerateHeader
+            && api_route.operation != AuthorizationGrantOperationV1::Mutation
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_public_api_idempotency".into(),
+                path: format!("{base}.idempotency"),
+                message: "idempotency headers are declared only for mutation routes".into(),
+            });
+        }
+    }
+    let mut projection_kinds = BTreeSet::new();
+    for (index, projection) in manifest.control_projections.iter().enumerate() {
+        let base = format!("control_projections[{index}]");
+        if !projection_kinds.insert(projection.kind) {
+            findings.push(ValidationFinding {
+                code: "duplicate_control_projection".into(),
+                path: base.clone(),
+                message: "control projection kinds must be unique".into(),
+            });
+        }
+        if !projection.path.starts_with("/api/private/") || projection.path.contains("..") {
+            findings.push(ValidationFinding {
+                code: "invalid_control_projection_path".into(),
+                path: format!("{base}.path"),
+                message: "control projections require local /api/private paths".into(),
+            });
+        }
+        require_text(
+            &format!("{base}.revision_field"),
+            &projection.revision_field,
+            findings,
+        );
+    }
     for (path, route_name, expected_kind) in [
         (
             "operational_routes.configuration_validation",
@@ -2465,8 +2757,10 @@ fn browser_path_templates_overlap(left: &str, right: &str) -> bool {
     left.len() == right.len()
         && left.iter().zip(right).all(|(left, right)| {
             *left == right
-                || (left.starts_with('{') && left.ends_with('}'))
-                || (right.starts_with('{') && right.ends_with('}'))
+                || (left.starts_with('{')
+                    && left.ends_with('}')
+                    && right.starts_with('{')
+                    && right.ends_with('}'))
         })
 }
 
@@ -2879,17 +3173,17 @@ mod tests {
             platform_versions: ModulePlatformVersions {
                 core_release: Version::new(0, 1, 0),
                 shell_context_schema: Version::new(1, 0, 0),
-                module_control_protocol: Version::new(1, 0, 0),
-                module_contract: Version::new(0, 1, 0),
-                module_runtime: Version::new(0, 1, 0),
-                module_ui: Version::new(0, 1, 0),
+                module_control_protocol: Version::new(1, 1, 0),
+                module_contract: Version::new(0, 2, 0),
+                module_runtime: Version::new(0, 2, 0),
+                module_ui: Version::new(0, 2, 0),
                 design_system_asset_abi: Version::new(1, 0, 0),
-                conformance_suite: Version::new(1, 0, 0),
+                conformance_suite: Version::new(1, 1, 0),
             },
             linked_packages: LinkedModulePackages {
-                module_contract: Version::new(0, 1, 0),
-                module_runtime: Some(Version::new(0, 1, 0)),
-                module_ui: Some(Version::new(0, 1, 0)),
+                module_contract: Version::new(0, 2, 0),
+                module_runtime: Some(Version::new(0, 2, 0)),
+                module_ui: Some(Version::new(0, 2, 0)),
             },
             deployment: DeploymentProfile::TessaraOciV1(TessaraOciV1 {
                 runtime_image: OciImageDeclaration {
@@ -2944,6 +3238,9 @@ mod tests {
             }],
             routes: transition.routes,
             browser_routes: Vec::new(),
+            browser_lifecycle: None,
+            public_api_routes: Vec::new(),
+            control_projections: Vec::new(),
             assets: Vec::new(),
             navigation: transition.navigation,
             security_capabilities: transition.security_capabilities,
@@ -3130,8 +3427,8 @@ mod tests {
     }
 
     #[test]
-    fn browser_path_templates_reject_parameterized_ambiguity() {
-        assert!(browser_path_templates_overlap(
+    fn browser_path_templates_allow_static_precedence_and_reject_parameter_ambiguity() {
+        assert!(!browser_path_templates_overlap(
             "/reference/example/{organization_id}",
             "/reference/example/current",
         ));
@@ -4083,5 +4380,86 @@ mod tests {
             finding.code == "unsupported_configuration_field_type"
                 && finding.path == "configuration_schema.properties.unsupported.type"
         }));
+    }
+
+    #[test]
+    fn browser_lifecycle_v1_requires_declared_typed_assets_and_document_fallback() {
+        let mut manifest = forms_manifest();
+        manifest.browser_routes.push(BrowserRouteDeclaration {
+            destination: manifest.routes[0].name.clone(),
+            path_template: "/forms".into(),
+            methods: vec![BrowserDocumentMethod::Get],
+            required_capability: manifest.security_capabilities[0].id.clone(),
+            authorization_action: "forms.list".into(),
+            dependency_binding: id("tessara.core.forms"),
+            functional_contract: manifest.provided_contracts[0].id.clone(),
+            organization_scope_parameter: None,
+        });
+        manifest.assets = vec![
+            ModuleAssetDeclaration {
+                path: "/module.js".into(),
+                digest: ArtifactDigest::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
+                content_type: "text/javascript; charset=utf-8".into(),
+            },
+            ModuleAssetDeclaration {
+                path: "/module.css".into(),
+                digest: ArtifactDigest::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
+                content_type: "text/css; charset=utf-8".into(),
+            },
+        ];
+        manifest.browser_lifecycle = Some(BrowserLifecycleDeclaration {
+            lifecycle_abi: Version::new(1, 0, 0),
+            entry_asset: "/module.js".into(),
+            stylesheet_assets: vec!["/module.css".into()],
+            complete_document_fallback: true,
+            capabilities: BrowserLifecycleCapabilities {
+                navigation_guard: true,
+                suspend_resume: true,
+            },
+        });
+
+        let mut findings = Vec::new();
+        validate_browser_lifecycle(&manifest, &mut findings);
+        assert!(findings.is_empty(), "{findings:?}");
+
+        let lifecycle = manifest.browser_lifecycle.as_mut().unwrap();
+        lifecycle.entry_asset = "/module.css".into();
+        lifecycle.complete_document_fallback = false;
+        lifecycle.stylesheet_assets.push("/missing.css".into());
+        validate_browser_lifecycle(&manifest, &mut findings);
+        let codes = findings
+            .iter()
+            .map(|finding| finding.code.as_str())
+            .collect::<BTreeSet<_>>();
+        assert!(codes.contains("invalid_browser_lifecycle_entry_asset"));
+        assert!(codes.contains("invalid_browser_lifecycle_stylesheet_asset"));
+        assert!(codes.contains("missing_complete_document_fallback"));
+    }
+
+    #[test]
+    fn browser_lifecycle_bootstrap_is_opaque_but_release_and_assets_are_fail_closed() {
+        let digest = ArtifactDigest::new(format!("sha256:{}", "c".repeat(64))).unwrap();
+        let bootstrap = BrowserLifecycleBootstrapV1 {
+            schema_version: 1,
+            definition_id: id("tessara.example"),
+            release_version: Version::new(1, 2, 3),
+            lifecycle_abi: Version::new(1, 0, 0),
+            destination: id("example.directory"),
+            path: "/example".into(),
+            title: "Example".into(),
+            document_state: ShellDocumentStateV1::Active,
+            entry_asset: BrowserLifecycleAssetV1 {
+                url: format!("/_tessara/modules/tessara.example/1.2.3/{digest}/module.js"),
+                digest,
+                content_type: "text/javascript; charset=utf-8".into(),
+            },
+            stylesheet_assets: Vec::new(),
+            payload: json!({"module_owned": true}),
+        };
+        assert!(bootstrap.is_supported());
+
+        let mut incompatible = bootstrap;
+        incompatible.entry_asset.url = "https://example.invalid/module.js".into();
+        assert!(!incompatible.is_supported());
     }
 }

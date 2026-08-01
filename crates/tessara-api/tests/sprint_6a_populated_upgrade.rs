@@ -765,7 +765,7 @@ fn pre_control_plane_navigation(actor: &PreservedActorSnapshot) -> NavigationSna
 }
 
 fn assert_available_operator_navigation(response: &Value) {
-    assert_eq!(response["schema_version"], 2);
+    assert_eq!(response["schema_version"], 3);
     assert_eq!(response["state"], "available");
     assert_eq!(response["policy_revision"], 0);
     assert!(response["unavailable"].is_null());

@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-tessara-core = { path = "../tessara-core" }
+tessara-components-contract = { path = "../tessara-components-contract" }
 tessara-module-contract = { path = "../tessara-module-contract" }
 thiserror = { workspace = true }
 uuid = { workspace = true }

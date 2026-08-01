@@ -10,11 +10,14 @@ use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
 use sqlx::Row;
-use tessara_dashboards::{
-    DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
-    DashboardComponentCatalogResponseV1, DashboardComponentMetadataV1,
-    DashboardComponentResolutionRequestV1, DashboardComponentResolutionResponseV1,
-    DashboardComponentTransitionAction,
+use tessara_components_contract::{
+    COMPONENT_BINDING_KEY as DASHBOARD_COMPONENT_BINDING_KEY,
+    COMPONENT_CONTRACT_ID as DASHBOARD_COMPONENT_CONTRACT_ID,
+    ComponentAction as DashboardComponentTransitionAction,
+    ComponentCatalogResponseV1 as DashboardComponentCatalogResponseV1,
+    ComponentMetadataV1 as DashboardComponentMetadataV1,
+    ComponentResolutionRequestV1 as DashboardComponentResolutionRequestV1,
+    ComponentResolutionResponseV1 as DashboardComponentResolutionResponseV1,
 };
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
@@ -35,7 +38,17 @@ use crate::{
 const DASHBOARD_DEFINITION_ID: &str = "tessara.dashboards";
 const CORE_DASHBOARD_BINDING: &str = "tessara.core.dashboards";
 const DASHBOARD_CONTRACT: &str = "tessara.dashboards.dashboard";
+const DASHBOARD_COMPOSITION_CONTRACT: &str = "tessara.dashboards.composition";
 const COMPONENT_READ_CAPABILITY: &str = "components:read";
+
+fn dashboard_contract_for_action(action: &str) -> &'static str {
+    match action {
+        "dashboards.load_composition" | "dashboards.reconcile_composition" => {
+            DASHBOARD_COMPOSITION_CONTRACT
+        }
+        _ => DASHBOARD_CONTRACT,
+    }
+}
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
@@ -312,8 +325,10 @@ async fn validate_inbound_dashboard_grant(
             audience_module_instance_id: envelope.payload.audience_module_instance_id,
             dependency_binding: DependencyBindingKey::new(CORE_DASHBOARD_BINDING)
                 .map_err(|error| ApiError::Internal(error.into()))?,
-            functional_contract: FunctionalContractId::new(DASHBOARD_CONTRACT)
-                .map_err(|error| ApiError::Internal(error.into()))?,
+            functional_contract: FunctionalContractId::new(dashboard_contract_for_action(
+                &envelope.payload.action,
+            ))
+            .map_err(|error| ApiError::Internal(error.into()))?,
             action: envelope.payload.action.clone(),
             operation: expected_operation,
             authorization_revision: revisions.try_get::<i64, _>("authorization_revision")? as u64,
@@ -576,7 +591,26 @@ mod tests {
         ResourceOwnerState,
     };
 
-    use super::{parse_canonical_uuid, provider_fixture};
+    use super::{
+        DASHBOARD_COMPOSITION_CONTRACT, DASHBOARD_CONTRACT, dashboard_contract_for_action,
+        parse_canonical_uuid, provider_fixture,
+    };
+
+    #[test]
+    fn inbound_dashboard_contract_matches_the_action_family() {
+        assert_eq!(
+            dashboard_contract_for_action("dashboards.load_composition"),
+            DASHBOARD_COMPOSITION_CONTRACT
+        );
+        assert_eq!(
+            dashboard_contract_for_action("dashboards.reconcile_composition"),
+            DASHBOARD_COMPOSITION_CONTRACT
+        );
+        assert_eq!(
+            dashboard_contract_for_action("dashboards.get"),
+            DASHBOARD_CONTRACT
+        );
+    }
 
     #[test]
     fn component_resource_ids_are_canonical_uuids() {

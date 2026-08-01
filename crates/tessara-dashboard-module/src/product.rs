@@ -26,6 +26,14 @@ use crate::{
 
 const CORE_DASHBOARD_BINDING: &str = "tessara.core.dashboards";
 const DASHBOARD_CONTRACT: &str = "tessara.dashboards.dashboard";
+const COMPOSITION_CONTRACT: &str = "tessara.dashboards.composition";
+
+fn contract_for_action(action: &str) -> &'static str {
+    match action {
+        "dashboards.load_composition" | "dashboards.reconcile_composition" => COMPOSITION_CONTRACT,
+        _ => DASHBOARD_CONTRACT,
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -34,6 +42,7 @@ pub struct DashboardInputV1 {
     pub description: Option<String>,
     #[serde(default)]
     pub visibility_node_ids: Vec<Uuid>,
+    #[serde(default)]
     pub idempotency_key: String,
 }
 
@@ -164,7 +173,7 @@ async fn update_organization_projection(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-async fn list_dashboards(
+pub(super) async fn list_dashboards(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<DashboardSummaryV1>>, DashboardModuleError> {
@@ -182,7 +191,7 @@ async fn list_dashboards(
     ))
 }
 
-async fn list_manageable_dashboards(
+pub(super) async fn list_manageable_dashboards(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<DashboardSummaryV1>>, DashboardModuleError> {
@@ -222,8 +231,9 @@ pub(super) async fn get_dashboard_summary(
 async fn create_dashboard(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
-    Json(input): Json<DashboardInputV1>,
+    Json(mut input): Json<DashboardInputV1>,
 ) -> Result<Json<DashboardIdResponseV1>, DashboardModuleError> {
+    input.idempotency_key = mutation_idempotency_key(&headers)?.to_string();
     let grant = authorize(
         &state,
         &headers,
@@ -274,8 +284,9 @@ async fn update_dashboard(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
-    Json(input): Json<DashboardInputV1>,
+    Json(mut input): Json<DashboardInputV1>,
 ) -> Result<Json<DashboardIdResponseV1>, DashboardModuleError> {
+    input.idempotency_key = mutation_idempotency_key(&headers)?.to_string();
     let grant = authorize(
         &state,
         &headers,
@@ -391,16 +402,29 @@ pub(super) async fn authorize(
     let encoded = headers
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
-        .ok_or(DashboardModuleError::Forbidden)?;
-    let bytes = URL_SAFE_NO_PAD
-        .decode(encoded)
-        .map_err(|_| DashboardModuleError::Forbidden)?;
+        .ok_or_else(|| {
+            tracing::warn!(
+                action,
+                "Dashboard authorization header is missing or invalid"
+            );
+            DashboardModuleError::Forbidden
+        })?;
+    let bytes = URL_SAFE_NO_PAD.decode(encoded).map_err(|error| {
+        tracing::warn!(%error, action, "Dashboard authorization envelope is not base64url");
+        DashboardModuleError::Forbidden
+    })?;
     let envelope: SignedEnvelopeV1<AuthorizationGrantV1> =
-        serde_json::from_slice(&bytes).map_err(|_| DashboardModuleError::Forbidden)?;
+        serde_json::from_slice(&bytes).map_err(|error| {
+            tracing::warn!(%error, action, "Dashboard authorization envelope is invalid");
+            DashboardModuleError::Forbidden
+        })?;
     state
         .core_authorization_verifier
         .verify(&envelope)
-        .map_err(|_| DashboardModuleError::Forbidden)?;
+        .map_err(|error| {
+            tracing::warn!(%error, action, "Dashboard authorization signature is invalid");
+            DashboardModuleError::Forbidden
+        })?;
     let security = load_security_state(&state.pool)
         .await?
         .ok_or_else(|| DashboardModuleError::Unavailable("security state unavailable".into()))?;
@@ -409,6 +433,7 @@ pub(super) async fn authorize(
             "Dashboard module is not enabled".into(),
         ));
     }
+    let expected_contract = contract_for_action(action);
     envelope
         .payload
         .validate_for(&AuthorizationValidationContextV1 {
@@ -416,14 +441,23 @@ pub(super) async fn authorize(
             presenting_service: ModuleDefinitionId::new("tessara.core").expect("Core id"),
             audience_module_instance_id: security.module_instance_id,
             dependency_binding: DependencyBindingKey::new(CORE_DASHBOARD_BINDING).expect("binding"),
-            functional_contract: FunctionalContractId::new(DASHBOARD_CONTRACT).expect("contract"),
+            functional_contract: FunctionalContractId::new(expected_contract).expect("contract"),
             action: action.into(),
             operation,
             authorization_revision: security.authorization_revision as u64,
             organization_revision: security.organization_revision as u64,
             now: Utc::now(),
         })
-        .map_err(|_| DashboardModuleError::Forbidden)?;
+        .map_err(|error| {
+            tracing::warn!(
+                %error,
+                action,
+                expected_contract,
+                presented_contract = envelope.payload.functional_contract.as_str(),
+                "Dashboard authorization grant validation failed"
+            );
+            DashboardModuleError::Forbidden
+        })?;
     Ok(envelope)
 }
 
@@ -602,6 +636,15 @@ fn normalized_optional_text(value: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
+fn mutation_idempotency_key(headers: &HeaderMap) -> Result<&str, DashboardModuleError> {
+    headers
+        .get("x-idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.chars().count() <= 200)
+        .ok_or_else(|| DashboardModuleError::BadRequest("missing X-Idempotency-Key".into()))
+}
+
 pub(super) fn mutation_digest<T: Serialize>(
     action: &str,
     dashboard_id: Option<Uuid>,
@@ -769,7 +812,10 @@ async fn load_scope_ids_pool(
 
 #[cfg(test)]
 mod tests {
-    use super::{DashboardInputV1, normalized_scope, validate_dashboard_input};
+    use super::{
+        COMPOSITION_CONTRACT, DASHBOARD_CONTRACT, DashboardInputV1, contract_for_action,
+        normalized_scope, validate_dashboard_input,
+    };
     use uuid::Uuid;
 
     #[test]
@@ -788,5 +834,19 @@ mod tests {
             })
             .is_ok()
         );
+    }
+
+    #[test]
+    fn authorization_contract_matches_the_manifest_action_family() {
+        assert_eq!(
+            contract_for_action("dashboards.load_composition"),
+            COMPOSITION_CONTRACT
+        );
+        assert_eq!(
+            contract_for_action("dashboards.reconcile_composition"),
+            COMPOSITION_CONTRACT
+        );
+        assert_eq!(contract_for_action("dashboards.list"), DASHBOARD_CONTRACT);
+        assert_eq!(contract_for_action("dashboards.update"), DASHBOARD_CONTRACT);
     }
 }

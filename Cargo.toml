@@ -3,6 +3,7 @@ members = [
     "crates/tessara-analytics",
     "crates/tessara-api",
     "crates/tessara-auth",
+    "crates/tessara-components-contract",
     "crates/tessara-core",
     "crates/tessara-data-ops",
     "crates/tessara-deploy",
@@ -24,7 +25,7 @@ members = [
     "crates/tessara-web",
     "crates/tessara-web-component-viewer",
     "crates/tessara-web-components",
-    "crates/tessara-web-dashboards",
+    "crates/tessara-dashboard-ui",
     "crates/tessara-web-data-ops",
     "crates/tessara-web-datasets",
     "crates/tessara-web-forms",
@@ -97,3 +98,16 @@ lib-default-features = false
 end2end-cmd = "npx playwright test"
 end2end-dir = "end2end"
 reload-port = 3001
+
+[[workspace.metadata.leptos]]
+name = "tessara-dashboard-ui"
+bin-package = "tessara-dashboard-module"
+lib-package = "tessara-dashboard-ui"
+output-name = "tessara-dashboard-ui"
+site-root = "target/dashboard-site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:8091"
+browserquery = "defaults"
+lib-features = ["hydrate"]
+bin-default-features = true
+lib-default-features = false

@@ -113,10 +113,6 @@ pub(crate) fn routes() -> Router<AppState> {
             "/reference/{*module_path}",
             get(proxy_manifest_module_document),
         )
-        .route(
-            "/_tessara/modules/{definition}/{release}/{digest}/{*asset_path}",
-            get(proxy_manifest_module_asset),
-        )
 }
 
 #[derive(Default, Deserialize)]
@@ -1112,53 +1108,6 @@ async fn proxy_manifest_module_document(
     module_response(response, Some("no-store")).await
 }
 
-async fn proxy_manifest_module_asset(
-    State(state): State<AppState>,
-    Path((definition, release, digest, asset_path)): Path<(String, String, String, String)>,
-) -> ApiResult<Response> {
-    let row = sqlx::query(
-        "SELECT releases.manifest
-         FROM module_instances instances
-         JOIN module_releases releases ON releases.id=instances.release_id
-         WHERE instances.identity_state='live' AND instances.installed=true
-           AND instances.deployed=true AND instances.definition_id=$1
-           AND releases.version=$2
-         ORDER BY instances.id
-         LIMIT 1",
-    )
-    .bind(&definition)
-    .bind(&release)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound("module asset".into()))?;
-    let manifest: ModuleManifest = serde_json::from_value(row.try_get("manifest")?)
-        .map_err(|error| ApiError::Internal(error.into()))?;
-    let requested_path = format!("/_tessara/modules/{definition}/{release}/{digest}/{asset_path}");
-    let asset = manifest
-        .assets
-        .iter()
-        .find(|asset| asset.path == requested_path && asset.digest.as_str() == digest)
-        .ok_or_else(|| ApiError::NotFound("module asset".into()))?;
-    let endpoint = module_control_url(&definition)?;
-    let response = reqwest::Client::new()
-        .get(format!("{endpoint}{}", asset.path))
-        .send()
-        .await
-        .map_err(|_| ApiError::ServiceUnavailable("module asset unavailable".into()))?;
-    let response = module_response(response, Some("public, max-age=31536000, immutable")).await?;
-    if response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        != Some(asset.content_type.as_str())
-    {
-        return Err(ApiError::ServiceUnavailable(
-            "module asset content type mismatch".into(),
-        ));
-    }
-    Ok(response)
-}
-
 fn match_browser_path(template: &str, requested: &str) -> Option<BTreeMap<String, String>> {
     let template_segments = template.trim_matches('/').split('/').collect::<Vec<_>>();
     let requested_segments = requested.trim_matches('/').split('/').collect::<Vec<_>>();
@@ -1747,9 +1696,15 @@ fn module_control_url(definition: &str) -> ApiResult<String> {
         .map(|value| parse_module_control_endpoints(&value))
         .transpose()?
         .and_then(|endpoints| endpoints.get(definition).cloned());
-    let endpoint = configured.or_else(|| match definition {
+    let registration = definition.rsplit('.').next().unwrap_or(definition);
+    let registered = std::env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| parse_module_control_endpoints(&value))
+        .transpose()?
+        .and_then(|endpoints| endpoints.get(registration).cloned());
+    let endpoint = configured.or(registered).or_else(|| match definition {
         tessara_reference_scoped_records::MODULE_DEFINITION_ID => Some(scoped_records_url()),
-        "tessara.dashboards" => Some(dashboard_module_url()),
         _ => None,
     });
     endpoint
@@ -2051,13 +2006,6 @@ fn configuration_form_payload(
         )));
     }
     Ok(Value::Object(configuration))
-}
-
-fn dashboard_module_url() -> String {
-    std::env::var("TESSARA_DASHBOARD_MODULE_URL")
-        .unwrap_or_else(|_| "http://dashboards:8091".into())
-        .trim_end_matches('/')
-        .to_string()
 }
 
 #[derive(Clone, Deserialize)]

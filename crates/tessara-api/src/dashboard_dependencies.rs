@@ -63,8 +63,13 @@ pub(crate) async fn load() -> ApiResult<DashboardDependencyProjectionV1> {
 }
 
 fn dashboard_url() -> String {
-    std::env::var("TESSARA_DASHBOARD_MODULE_URL")
-        .unwrap_or_else(|_| "http://dashboards:8091".into())
+    std::env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
+        .ok()
+        .and_then(|value| {
+            serde_json::from_str::<std::collections::BTreeMap<String, String>>(&value).ok()
+        })
+        .and_then(|endpoints| endpoints.get("dashboards").cloned())
+        .unwrap_or_else(|| "http://dashboards:8091".into())
         .trim_end_matches('/')
         .to_string()
 }

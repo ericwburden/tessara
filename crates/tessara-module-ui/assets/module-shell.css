@@ -41,7 +41,7 @@ header span { color: var(--module-muted); }
 main { align-self: start; width: min(74rem, calc(100% - 2rem)); margin: 2rem auto; padding: 1.5rem; background: var(--module-surface); border: 1px solid var(--module-border); border-radius: .5rem; }
 a, button { color: var(--module-accent); }
 code, pre { overflow-wrap: anywhere; }
-@media (max-width: 48rem) {
+@media (max-width: 780px) {
   body { display: block; }
   aside { padding: 1rem; border: 0; border-bottom: 1px solid var(--module-border); }
   aside > a { margin-bottom: .75rem; }

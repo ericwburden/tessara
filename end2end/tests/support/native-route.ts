@@ -33,12 +33,14 @@ type StandaloneRouteExpectation = {
 type NativeRouteExpectation = {
   path: string;
   expectedRootMarkup?: string;
+  documentRootSelector?: string;
   ready: ReadyAssertion;
 };
 
 type NoJavaScriptNativeRouteExpectation = {
   path: string;
   expectedRootMarkup?: string;
+  documentRootSelector?: string;
   ready: ReadyAssertion;
 };
 
@@ -154,6 +156,7 @@ async function expectNativeDocument(
   response: Response | null,
   path: string,
   expectedRootMarkup: string,
+  documentRootSelector = "#app-root",
 ) {
   expect(response, `${path} should return a document response`).not.toBeNull();
   expect(response!.status(), `${path} should return a successful document`).toBe(200);
@@ -162,11 +165,15 @@ async function expectNativeDocument(
   expect(new URL(page.url()).pathname).toBe(path);
 
   const html = await response!.text();
-  expect(html).toContain('id="app-root"');
+  expect(html).toContain(
+    documentRootSelector === "#module-content"
+      ? 'id="module-content"'
+      : 'id="app-root"',
+  );
   expect(html).toContain(expectedRootMarkup);
   expect(html).not.toContain("/bridge/");
 
-  await expect(page.locator("#app-root")).toHaveAttribute(
+  await expect(page.locator(documentRootSelector)).toHaveAttribute(
     "data-hydration",
     "ready",
   );
@@ -177,6 +184,7 @@ async function expectNoJavaScriptNativeDocument(
   response: Response | null,
   path: string,
   expectedRootMarkup: string,
+  documentRootSelector = "#app-root",
 ) {
   expect(response, `${path} should return a document response`).not.toBeNull();
   expect(response!.status(), `${path} should return a successful document`).toBe(200);
@@ -185,11 +193,15 @@ async function expectNoJavaScriptNativeDocument(
   expect(new URL(page.url()).pathname).toBe(path);
 
   const html = await response!.text();
-  expect(html).toContain('id="app-root"');
+  expect(html).toContain(
+    documentRootSelector === "#module-content"
+      ? 'id="module-content"'
+      : 'id="app-root"',
+  );
   expect(html).toContain(expectedRootMarkup);
   expect(html).not.toContain("/bridge/");
 
-  await expect(page.locator("#app-root")).toHaveCount(1);
+  await expect(page.locator(documentRootSelector)).toHaveCount(1);
 }
 
 async function expectNoPageLevelHorizontalOverflow(page: Page, path: string) {
@@ -306,8 +318,13 @@ export async function expectHydratedNativeRouteDirectLoadAndRefresh(
   page: Page,
   expectation: NativeRouteExpectation,
 ) {
+  const documentRootSelector =
+    expectation.documentRootSelector ?? "#app-root";
   const expectedRootMarkup =
-    expectation.expectedRootMarkup ?? 'class="app-shell"';
+    expectation.expectedRootMarkup ??
+    (documentRootSelector === "#module-content"
+      ? 'id="module-content"'
+      : 'class="app-shell"');
 
   await page.setViewportSize(DESKTOP_VIEWPORT);
   await expectNativeDocument(
@@ -315,6 +332,7 @@ export async function expectHydratedNativeRouteDirectLoadAndRefresh(
     await page.goto(expectation.path),
     expectation.path,
     expectedRootMarkup,
+    documentRootSelector,
   );
   await expectation.ready(page);
   await expectNoPageLevelHorizontalOverflow(page, expectation.path);
@@ -325,6 +343,7 @@ export async function expectHydratedNativeRouteDirectLoadAndRefresh(
     await page.reload(),
     expectation.path,
     expectedRootMarkup,
+    documentRootSelector,
   );
   await expectation.ready(page);
   await expectNoPageLevelHorizontalOverflow(page, expectation.path);
@@ -336,8 +355,13 @@ export async function expectNoJavaScriptNativeRouteDirectLoadAndRefresh(
   page: Page,
   expectation: NoJavaScriptNativeRouteExpectation,
 ) {
+  const documentRootSelector =
+    expectation.documentRootSelector ?? "#app-root";
   const expectedRootMarkup =
-    expectation.expectedRootMarkup ?? 'class="app-shell"';
+    expectation.expectedRootMarkup ??
+    (documentRootSelector === "#module-content"
+      ? 'id="module-content"'
+      : 'class="app-shell"');
 
   await page.setViewportSize(DESKTOP_VIEWPORT);
   await expectNoJavaScriptNativeDocument(
@@ -345,6 +369,7 @@ export async function expectNoJavaScriptNativeRouteDirectLoadAndRefresh(
     await page.goto(expectation.path),
     expectation.path,
     expectedRootMarkup,
+    documentRootSelector,
   );
   await expectation.ready(page);
   await expectNoPageLevelHorizontalOverflow(page, expectation.path);
@@ -355,6 +380,7 @@ export async function expectNoJavaScriptNativeRouteDirectLoadAndRefresh(
     await page.reload(),
     expectation.path,
     expectedRootMarkup,
+    documentRootSelector,
   );
   await expectation.ready(page);
   await expectNoPageLevelHorizontalOverflow(page, expectation.path);

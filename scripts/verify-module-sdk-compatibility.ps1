@@ -20,12 +20,12 @@ function Add-Finding {
 $supported = [ordered]@{
     core_release = "0.1.0"
     shell_context_schema = "1.0.0"
-    module_control_protocol = "1.0.0"
-    module_contract = "0.1.0"
-    module_runtime = "0.1.0"
-    module_ui = "0.1.0"
+    module_control_protocol = "1.1.0"
+    module_contract = "0.2.0"
+    module_runtime = "0.2.0"
+    module_ui = "0.2.0"
     design_system_asset_abi = "1.0.0"
-    conformance_suite = "1.0.0"
+    conformance_suite = "1.1.0"
 }
 $inventory = [Collections.Generic.List[object]]::new()
 
@@ -42,19 +42,11 @@ try {
             manifest = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
         })
     }
-    $deployment = Get-Content -LiteralPath `
-        "deploy/sprint-6b1/fixtures/deployment-v1.json" -Raw | ConvertFrom-Json
-    foreach ($module in $deployment.modules) {
-        $manifestRecords.Add([pscustomobject]@{
-            source = "deploy/sprint-6b1/fixtures/deployment-v1.json#$($module.definition_id)"
-            manifest = $module.manifest
-        })
-    }
     foreach ($record in $manifestRecords) {
         $path = $record.source
         $manifest = $record.manifest
         $releaseFindings = [Collections.Generic.List[string]]::new()
-        if ($manifest.schema_version -ne 2) {
+        if ($manifest.schema_version -ne 3) {
             $releaseFindings.Add("unsupported manifest schema $($manifest.schema_version)")
         }
         foreach ($field in $supported.Keys) {

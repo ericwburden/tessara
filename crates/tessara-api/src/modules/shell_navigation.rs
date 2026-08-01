@@ -4,7 +4,7 @@
 //! catalog remains authoritative for labels, routes, ownership, protection,
 //! and capability predicates. Route authorization remains independent.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{
     Json, Router,
@@ -17,7 +17,10 @@ use axum::{
     routing::get,
 };
 use serde::Serialize;
-use tessara_module_contract::{ResourceOwner, SemanticDestination, SemanticRouteName};
+use sqlx::Row;
+use tessara_module_contract::{
+    ModuleManifest, ResourceOwner, SemanticDestination, SemanticRouteName,
+};
 
 use crate::{
     auth::{AccountContext, AuthenticatedRequest},
@@ -31,7 +34,7 @@ use super::{
     service::{self, NavigationPolicyReadModelV2},
 };
 
-const SHELL_NAVIGATION_SCHEMA_VERSION_V2: u16 = 2;
+const SHELL_NAVIGATION_SCHEMA_VERSION_V3: u16 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -64,6 +67,13 @@ pub(super) enum ShellNavigationItemOwnerV1 {
     Contribution,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum ShellNavigationModeV1 {
+    Shell,
+    Document,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(super) struct ShellNavigationItemV1 {
     pub(crate) key: String,
@@ -71,6 +81,7 @@ pub(super) struct ShellNavigationItemV1 {
     pub(crate) href: String,
     pub(crate) owner: ShellNavigationItemOwnerV1,
     pub(crate) contribution_id: Option<String>,
+    pub(crate) navigation_mode: ShellNavigationModeV1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -101,10 +112,19 @@ pub(super) async fn load_response(
     state: &AppState,
     account: &AccountContext,
 ) -> ShellNavigationResponseV1 {
+    let (installed_definitions, lifecycle_definitions) = browser_delivery_inventory(&state.pool).await.unwrap_or_else(|error| {
+        tracing::warn!(%error, "module lifecycle inventory is unavailable; contribution navigation will use document fallback");
+        (BTreeSet::new(), BTreeSet::new())
+    });
     match service::load_navigation_policy_v2(&state.pool).await {
-        Ok(policy) => match compose_groups(&policy, account) {
+        Ok(policy) => match compose_groups(
+            &policy,
+            account,
+            &installed_definitions,
+            &lifecycle_definitions,
+        ) {
             Ok(groups) => ShellNavigationResponseV1 {
-                schema_version: SHELL_NAVIGATION_SCHEMA_VERSION_V2,
+                schema_version: SHELL_NAVIGATION_SCHEMA_VERSION_V3,
                 policy_revision: Some(policy.revision),
                 state: ShellNavigationStateV1::Available,
                 groups,
@@ -125,6 +145,8 @@ pub(super) async fn load_response(
 fn compose_groups(
     policy: &NavigationPolicyReadModelV2,
     account: &AccountContext,
+    installed_definitions: &BTreeSet<String>,
+    lifecycle_definitions: &BTreeSet<String>,
 ) -> Result<Vec<ShellNavigationGroupV1>, ()> {
     let mut groups = Vec::new();
     for group in &policy.groups {
@@ -186,6 +208,17 @@ fn compose_groups(
                 },
                 contribution_id: (destination.owner == NavigationCatalogOwner::Contribution)
                     .then(|| destination.id.clone()),
+                navigation_mode: match destination.definition_id.as_deref() {
+                    None => ShellNavigationModeV1::Shell,
+                    Some(definition) if lifecycle_definitions.contains(definition) => {
+                        ShellNavigationModeV1::Shell
+                    }
+                    Some(definition) if installed_definitions.contains(definition) => {
+                        ShellNavigationModeV1::Document
+                    }
+                    // Transitional contributions are still rendered by Core.
+                    Some(_) => ShellNavigationModeV1::Shell,
+                },
             });
         }
         if !items.is_empty() {
@@ -204,7 +237,7 @@ fn unavailable_response(
     policy_revision: Option<i64>,
 ) -> ShellNavigationResponseV1 {
     ShellNavigationResponseV1 {
-        schema_version: SHELL_NAVIGATION_SCHEMA_VERSION_V2,
+        schema_version: SHELL_NAVIGATION_SCHEMA_VERSION_V3,
         policy_revision,
         state: ShellNavigationStateV1::Unavailable,
         groups: fail_closed_core_groups(account),
@@ -236,6 +269,7 @@ fn fail_closed_core_groups(account: &AccountContext) -> Vec<ShellNavigationGroup
                     href: destination.route.to_string(),
                     owner: ShellNavigationItemOwnerV1::Core,
                     contribution_id: None,
+                    navigation_mode: ShellNavigationModeV1::Shell,
                 })
                 .collect::<Vec<_>>();
             (!items.is_empty()).then(|| ShellNavigationGroupV1 {
@@ -245,6 +279,38 @@ fn fail_closed_core_groups(account: &AccountContext) -> Vec<ShellNavigationGroup
             })
         })
         .collect()
+}
+
+async fn browser_delivery_inventory(
+    pool: &sqlx::PgPool,
+) -> Result<(BTreeSet<String>, BTreeSet<String>), sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT releases.manifest
+         FROM module_instances instances
+         JOIN module_releases releases ON releases.id=instances.release_id
+         WHERE instances.identity_state='live' AND instances.installed
+           AND instances.deployed AND instances.configured AND instances.enabled
+           AND instances.ready AND instances.healthy
+           AND releases.manifest IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|row| row.try_get::<sqlx::types::Json<ModuleManifest>, _>("manifest"))
+        .collect::<Result<Vec<_>, _>>()
+        .map(|manifests| {
+            let mut installed = BTreeSet::new();
+            let mut lifecycle = BTreeSet::new();
+            for manifest in manifests {
+                let manifest = manifest.0;
+                let definition = manifest.definition_id.as_str().to_string();
+                installed.insert(definition.clone());
+                if manifest.browser_lifecycle.is_some() {
+                    lifecycle.insert(definition);
+                }
+            }
+            (installed, lifecycle)
+        })
 }
 
 fn is_same_origin_path(path: &str) -> bool {

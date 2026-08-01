@@ -503,6 +503,7 @@ mod tests {
                     href: "/reference/scoped-records".into(),
                     owner: crate::state::shell_navigation::ShellNavigationItemOwnerV1::Contribution,
                     contribution_id: Some("tessara.reference.scoped-records.directory".into()),
+                    navigation_mode: crate::state::shell_navigation::ShellNavigationModeV1::Shell,
                 },
                 "home",
             )
@@ -523,6 +524,8 @@ mod tests {
                     href: "/reference/example".into(),
                     owner: crate::state::shell_navigation::ShellNavigationItemOwnerV1::Contribution,
                     contribution_id: Some("example.module.navigation".into()),
+                    navigation_mode:
+                        crate::state::shell_navigation::ShellNavigationModeV1::Document,
                 },
                 "home",
             )

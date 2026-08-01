@@ -10,6 +10,20 @@ use tessara_module_contract::{
     ContractCompatibilityState, ProviderAvailabilityState, ResourceAccessState,
     ResourceIdentityState, ResourceOwner, ResourceResolutionV1, TypedResourceReference,
 };
+
+/// Provider-domain names for the ComponentVersion wire contract.
+pub type ComponentAction = DashboardComponentTransitionAction;
+pub type ComponentCatalogResponseV1 = DashboardComponentCatalogResponseV1;
+pub type ComponentMetadataV1 = DashboardComponentMetadataV1;
+pub type ComponentResolutionRequestV1 = DashboardComponentResolutionRequestV1;
+pub type ComponentResolutionResponseV1 = DashboardComponentResolutionResponseV1;
+pub type ComponentResolutionValidationError = DashboardComponentResolutionValidationError;
+pub type ComponentVersionReferenceV1 = DashboardComponentVersionReferenceV1;
+pub type ComponentVersionReferenceValidationError =
+    DashboardComponentVersionReferenceValidationError;
+pub const COMPONENT_BINDING_KEY: &str = DASHBOARD_COMPONENT_BINDING_KEY;
+pub const COMPONENT_CONTRACT_ID: &str = DASHBOARD_COMPONENT_CONTRACT_ID;
+pub const COMPONENT_RESOURCE_TYPE: &str = DASHBOARD_COMPONENT_RESOURCE_TYPE;
 use uuid::Uuid;
 
 /// Manifest binding key for Dashboard's transition-only Components dependency.

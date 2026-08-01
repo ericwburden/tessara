@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "definition_id": "tessara.reference.module-sdk",
   "release_version": "1.0.0",
   "publisher": "tessara.first_party",
@@ -11,17 +11,17 @@
   "platform_versions": {
     "core_release": "0.1.0",
     "shell_context_schema": "1.0.0",
-    "module_control_protocol": "1.0.0",
-    "module_contract": "0.1.0",
-    "module_runtime": "0.1.0",
-    "module_ui": "0.1.0",
+    "module_control_protocol": "1.1.0",
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0",
     "design_system_asset_abi": "1.0.0",
-    "conformance_suite": "1.0.0"
+    "conformance_suite": "1.1.0"
   },
   "linked_packages": {
-    "module_contract": "0.1.0",
-    "module_runtime": "0.1.0",
-    "module_ui": "0.1.0"
+    "module_contract": "0.2.0",
+    "module_runtime": "0.2.0",
+    "module_ui": "0.2.0"
   },
   "deployment": {
     "profile": "tessara-oci-v1",
@@ -126,6 +126,7 @@
       "methods": ["GET", "HEAD"],
       "required_capability": "tessara.reference.module-sdk:read",
       "authorization_action": "reference.module-sdk.read",
+      "dependency_binding": "tessara.core.module-document",
       "functional_contract": "tessara.reference.module-sdk.conformance",
       "organization_scope_parameter": null
     },
@@ -135,6 +136,7 @@
       "methods": ["GET", "HEAD"],
       "required_capability": "tessara.reference.module-sdk:read",
       "authorization_action": "reference.module-sdk.scope.read",
+      "dependency_binding": "tessara.core.module-document",
       "functional_contract": "tessara.reference.module-sdk.conformance",
       "organization_scope_parameter": "organization_id"
     },
@@ -144,14 +146,15 @@
       "methods": ["GET", "HEAD"],
       "required_capability": "tessara.reference.module-sdk:read",
       "authorization_action": "reference.module-sdk.diagnostics.read",
+      "dependency_binding": "tessara.core.module-document",
       "functional_contract": "tessara.reference.module-sdk.conformance",
       "organization_scope_parameter": null
     }
   ],
   "assets": [
     {
-      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d/module-shell.css",
-      "digest": "sha256:434af171e5fa0f16dc4864ef9bef3a3e524a6feb1828aa6c1a1468256dd9e83d",
+      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3/module-shell.css",
+      "digest": "sha256:fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3",
       "content_type": "text/css; charset=utf-8"
     },
     {

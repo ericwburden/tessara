@@ -22,18 +22,9 @@ pub use features::modules::{
 };
 pub use state::shell_navigation::{
     ShellNavigationGroupV1, ShellNavigationItemOwnerV1, ShellNavigationItemV1,
-    ShellNavigationResponseV1, ShellNavigationStateV1, ShellNavigationUnavailableV1,
+    ShellNavigationModeV1, ShellNavigationResponseV1, ShellNavigationStateV1,
+    ShellNavigationUnavailableV1,
 };
-pub use tessara_web_dashboards::{
-    Dashboard, DashboardComponentVersion, DashboardComponentVersionOption, DashboardComposition,
-    DashboardPlacement, DashboardPlacementAvailability, DashboardPlacementIdMapping,
-    DashboardPlacementResolutionState, DashboardRouteBootstrap, DashboardSummary,
-    DashboardVisibilityNode, SessionAccount, VisibilityNodeOption, dashboard_route_bootstrap,
-};
-
-/// DOM id for the request-scoped Dashboard hydration payload.
-pub const DASHBOARD_BOOTSTRAP_SCRIPT_ID: &str = "tessara-dashboard-bootstrap";
-
 /// DOM id for the request-scoped, actor-filtered shell navigation payload.
 pub const SHELL_NAVIGATION_BOOTSTRAP_SCRIPT_ID: &str = "tessara-shell-navigation-bootstrap";
 
@@ -49,22 +40,6 @@ pub fn start() {
 
 pub fn application_html(path: &str, title: &str, description: &str) -> String {
     document::render_native_app_document(title, description, path)
-}
-
-/// Renders one authenticated Dashboard route with its authorization-filtered
-/// request bootstrap available to both SSR content and client hydration.
-pub fn application_html_with_dashboard_bootstrap(
-    path: &str,
-    title: &str,
-    description: &str,
-    bootstrap: &DashboardRouteBootstrap,
-) -> String {
-    document::render_native_app_document_with_dashboard_bootstrap(
-        title,
-        description,
-        path,
-        bootstrap,
-    )
 }
 
 /// Renders one authenticated Module Management route with its authorization-
@@ -124,10 +99,7 @@ pub fn static_asset(name: &str) -> Option<(&'static str, &'static str)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        Dashboard, DashboardPlacement, DashboardPlacementAvailability, DashboardRouteBootstrap,
-        SessionAccount, application_html, application_html_with_dashboard_bootstrap,
-    };
+    use super::application_html;
 
     fn initialize_test_executor() {
         let _ = any_spawner::Executor::init_futures_executor();
@@ -155,100 +127,12 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_routes_keep_root_shell_and_feature_content_boundaries() {
+    fn lifecycle_host_route_covers_module_root_and_deep_links() {
         initialize_test_executor();
-        for (path, heading) in [
-            ("/dashboards", "Dashboards"),
-            ("/dashboards/new", "Create Dashboard"),
-            ("/dashboards/dashboard-42", "Dashboard Detail"),
-            ("/dashboards/dashboard-42/edit", "Edit Dashboard"),
-            ("/dashboards/dashboard-42/view", "Dashboard Viewer"),
-        ] {
-            let html = application_html(path, heading, "Dashboard route.");
-            assert!(
-                html.contains(r#"class="app-shell""#),
-                "missing shell for {path}"
-            );
-            assert!(html.contains(heading), "missing heading for {path}");
-            assert!(
-                html.contains("dashboards-page"),
-                "missing feature content for {path}"
-            );
-            assert!(!html.contains("Native route placeholder"));
+        for path in ["/dashboards", "/dashboards/new", "/dashboards/example/edit"] {
+            let html = application_html(path, "Dashboards", "Lifecycle module host.");
+            assert!(html.contains(r#"id="tessara-module-outlet""#), "{path}");
+            assert!(html.contains(r#"data-module-definition="tessara.dashboards""#));
         }
-    }
-
-    #[test]
-    fn dashboard_module_outage_stays_inside_the_authenticated_core_shell() {
-        initialize_test_executor();
-        let html = application_html_with_dashboard_bootstrap(
-            "/dashboards",
-            "Dashboard module unavailable",
-            "Dashboard module unavailable.",
-            &DashboardRouteBootstrap::unavailable(
-                SessionAccount {
-                    capabilities: vec!["dashboards:read".into()],
-                },
-                "/dashboards",
-            ),
-        );
-
-        assert!(html.contains(r#"class="app-shell""#));
-        assert!(html.contains("Dashboard module unavailable"));
-        assert!(html.contains("Dashboards cannot be reached right now"));
-        assert!(html.contains("Try Dashboards again"));
-        assert!(html.contains("Open Module diagnostics"));
-        assert!(
-            html.contains("Your Dashboard data remains in the Dashboard Module Instance database")
-        );
-        assert!(html.contains("No Dashboard request was sent to another provider"));
-        assert!(html.contains("Existing Dashboard references and configuration are preserved"));
-    }
-
-    #[test]
-    fn dashboard_document_provides_and_embeds_the_same_redacted_route_state() {
-        initialize_test_executor();
-        let bootstrap = DashboardRouteBootstrap::viewer(
-            SessionAccount {
-                capabilities: vec!["dashboards:read".into()],
-            },
-            Dashboard {
-                id: "dashboard-42".into(),
-                name: "Delivery health".into(),
-                description: Some("Current delivery status".into()),
-                visibility_nodes: Vec::new(),
-                placement_count: 1,
-                can_manage: false,
-                placements: vec![DashboardPlacement {
-                    placement_id: "placement-opaque".into(),
-                    position: 0,
-                    grid_row: 3,
-                    grid_column: 7,
-                    grid_width: 6,
-                    grid_height: 2,
-                    availability: DashboardPlacementAvailability::Unavailable,
-                    resolution_state: Some(
-                        tessara_web_dashboards::DashboardPlacementResolutionState::Restricted,
-                    ),
-                    config_state: None,
-                    title: None,
-                    component: None,
-                    allowed_operations: None,
-                }],
-            },
-        );
-        let html = application_html_with_dashboard_bootstrap(
-            "/dashboards/dashboard-42/view",
-            "Dashboard Viewer",
-            "View Dashboard.",
-            &bootstrap,
-        );
-
-        assert!(html.contains(r#"id="tessara-dashboard-bootstrap""#));
-        assert!(html.contains("Delivery health"));
-        assert!(html.contains(r#""grid_column":7"#));
-        assert!(html.contains("Unavailable placement"));
-        assert!(!html.contains("component_version_id"));
-        assert!(!html.contains("dataset_id"));
     }
 }

@@ -91,8 +91,8 @@ impl DashboardRouteBootstrap {
     }
 }
 
-/// Returns the request bootstrap supplied by root `tessara-web`, when it
-/// matches the currently rendered application request.
+/// Returns the request bootstrap embedded by the Dashboard document boundary,
+/// when it matches the currently rendered application request.
 ///
 /// Dashboard pages should pattern-match the expected route variant and fall
 /// back to their REST loader when this returns `None` or a different variant.
