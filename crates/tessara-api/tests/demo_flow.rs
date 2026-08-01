@@ -4045,6 +4045,7 @@ async fn test_app() -> axum::Router {
     reset_pool.close().await;
     let config = Config {
         database_url,
+        installation_id: None,
         bind_addr: "127.0.0.1:0".into(),
         dev_admin_email: "admin@tessara.local".into(),
         dev_admin_password: "tessara-dev-admin".into(),

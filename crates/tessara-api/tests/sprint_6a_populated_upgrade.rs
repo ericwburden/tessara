@@ -322,6 +322,7 @@ async fn historical_populated_sprint_5a_upgrade_preserves_invariants_and_replace
     assert_destructive_fresh_reset_acknowledged();
     let config = Config {
         database_url: database_url.clone(),
+        installation_id: None,
         bind_addr: "127.0.0.1:0".to_string(),
         dev_admin_email: "admin@tessara.local".to_string(),
         dev_admin_password: "sprint-6a-upgrade-proof".to_string(),
@@ -500,6 +501,7 @@ async fn fresh_startup_and_seed_assignment_lock_order_use_a_separate_database() 
     );
     let config = Config {
         database_url: database_url.clone(),
+        installation_id: None,
         bind_addr: "127.0.0.1:0".to_string(),
         dev_admin_email: "admin@tessara.local".to_string(),
         dev_admin_password: "sprint-6a-fresh-proof".to_string(),

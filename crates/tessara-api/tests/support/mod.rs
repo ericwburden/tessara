@@ -193,6 +193,7 @@ pub async fn test_state_with_cookie_name(auth_cookie_name: &str) -> db::AppState
     reset_database(&database_url).await;
     let config = Config {
         database_url,
+        installation_id: None,
         bind_addr: "127.0.0.1:0".to_string(),
         dev_admin_email: "admin@tessara.local".to_string(),
         dev_admin_password: "tessara-dev-admin".to_string(),
