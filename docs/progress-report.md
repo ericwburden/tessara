@@ -37,6 +37,9 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
   enrollment integration test remains reserved for the disposable SIT lane.
 - Candidate freeze, full SIT, reduced deployed proof, restart fault injection,
   Playwright, smoke, and UAT have not begun; closeout remains unauthorized.
+- Eight single-scenario tester-ready manual UAT scripts are prepared under
+  `docs/sprints/sprint-6f-uat/`. Candidate-specific missing prerequisites are
+  marked explicitly and block execution rather than being assumed.
 
 ## 2026-08-01 - Sprint 6F Planning Kickoff
 

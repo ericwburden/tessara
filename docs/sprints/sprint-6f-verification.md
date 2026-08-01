@@ -82,6 +82,10 @@ Deployed acceptance smoke is part of SIT, not a closeout activity.
 
 ## UAT
 
+Tester-ready source scripts are indexed in
+[Sprint 6F UAT Scripts](./sprint-6f-uat/README.md). Preparing these scripts does
+not start UAT or satisfy any evidence requirement.
+
 ### Scripted UAT
 
 - Command: `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
