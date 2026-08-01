@@ -43,6 +43,24 @@ left running at `http://127.0.0.1:8080` with the candidate route active.
 - complete pre-closeout SIT: pass, including Rust workspace and 62/62 Playwright.
 - complete manual UAT: 7/7 pass.
 
-Per the requested operating sequence, the repository is closed out before the
-next full SIT cycle begins. That post-closeout SIT/UAT cycle is a validation
-loop and does not reopen Sprint 6E scope unless it finds a defect.
+## Post-Closeout Validation And Authorization
+
+The requested post-closeout validation loop completed on 2026-08-01 without a
+candidate-source change:
+
+- preflight identified the missing destructive-reset confirmation, corrected
+  the environment, reset the disposable databases, and restarted SIT;
+- full `cargo test --workspace --locked` passed;
+- direct Playwright passed 62/62;
+- deployed smoke and scripted sprint UAT passed;
+- hands-on lifecycle, dirty-state, complete-document, theme, responsive,
+  outage/recovery, rollback, persistence, and candidate-restoration UAT passed;
+- the final evidence-integrity audit verified all 22 SHA-256 sidecars after
+  refreshing the route-switch sidecars overwritten by the repeated rollback
+  walkthrough; and
+- Dashboard `2.0.2` is healthy and active, with the application health endpoint
+  returning HTTP 200.
+
+Closeout authorization: **Granted for candidate `815d24b5`, tree
+`f2e71bbf`.** Sprint 6E may be integrated into `main`; Sprint 6F remains the
+sole roadmap item marked `(Next)`.

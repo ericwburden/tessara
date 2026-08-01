@@ -41,6 +41,11 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
 - Closeout uncovered and corrected stale generic smoke/UAT expectations for
   the Dashboard-owned document root and shell navigation schema v3; no
   runtime functionality changed.
+- The post-closeout validation loop then restarted at SIT and passed the full
+  Rust workspace, 62/62 Playwright, deployed smoke, scripted UAT, and the
+  hands-on lifecycle/rollback acceptance sweep. The 2026-08-01 integrity audit
+  verified all 22 retained evidence sidecars and formally authorized the
+  candidate for integration into `main`.
 - Retained evidence and SHA-256 sidecars are under
   `artifacts/sprint-6e-closeout/`.
 
