@@ -78,7 +78,7 @@ try {
     $catalog.issued_at = [DateTimeOffset]::UtcNow.ToString("o")
     $catalog.core_releases[0].core_image = Get-ImageDigest "tessara-sprint-6f-core"
     $catalog.core_releases[0].gateway_image = Get-ImageDigest "traefik:v3.6"
-    $catalog.core_releases[0].database_image = Get-ImageDigest "postgres:16-alpine"
+    $catalog.core_releases[0].database_image = Get-ImageDigest "postgres:17"
     ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest "tessara-sprint-6f-scoped-records"
     ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest "tessara-sprint-6f-dashboards"
     [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
