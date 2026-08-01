@@ -18,10 +18,13 @@
 Preconditions:
 
 1. The reference Blueprint provides the inline bootstrap declaration.
-2. **NEEDS INFO:** Provide the UAT CAS root, prepared `sha256/<digest>` input,
-   Blueprint or lockfile that references it, and expected business content.
-3. **NEEDS INFO:** Provide a disposable tampered copy and the supported command
-   for attempting its acquisition without altering the trusted original.
+2. Use the repository's composition unit fixture for the local-CAS contract:
+   `cargo test -p tessara-composition local_cas_acquisition_rejects_tampered_content`.
+   Use the reference Blueprint's inline Core, Dashboard, and Scoped Records
+   inputs for owner-level business verification.
+3. The named test creates an isolated temporary CAS object, verifies the exact
+   digest, tampers that disposable object, and proves rejection without touching
+   the reference installation or a trusted original.
 
 Record Selection Criteria:
 
@@ -38,7 +41,7 @@ Record Actually Tested:
 Input Values to Use During Test:
 
 1. Inline composition: `reference`
-2. CAS source: coordinator-supplied immutable SHA-256 path
+2. CAS source: isolated test-owned `sha256/<digest>` fixture
 
 Tester Instructions: Never place a secret in inline or CAS bootstrap content.
 

@@ -18,6 +18,7 @@ struct CompositionSummaryV1 {
     active_operation: Option<Value>,
     latest_receipt: Option<Value>,
     drift_findings: Vec<Value>,
+    emergency_overrides: Vec<Value>,
 }
 
 #[component]
@@ -27,6 +28,8 @@ pub fn ApplicationCompositionPage() -> impl IntoView {
     let busy = RwSignal::new(false);
     let blueprint_json = RwSignal::new(String::new());
     let catalog_json = RwSignal::new(String::new());
+    let emergency_module = RwSignal::new(String::new());
+    let emergency_reason = RwSignal::new(String::new());
 
     #[cfg(feature = "hydrate")]
     Effect::new(move |_| {
@@ -152,6 +155,59 @@ pub fn ApplicationCompositionPage() -> impl IntoView {
         });
     };
 
+    let resolve_drift = move |finding_id: String, disposition: &'static str| {
+        #[cfg(not(feature = "hydrate"))]
+        let _ = (&finding_id, disposition);
+        #[cfg(feature = "hydrate")]
+        leptos::task::spawn_local(async move {
+            busy.set(true);
+            error.set(None);
+            let result = tessara_web_http::send_json_without_response(
+                gloo_net::http::Request::post(&format!(
+                    "/api/admin/composition/drift/{finding_id}/{disposition}"
+                )),
+                &json!({}),
+                if disposition == "adopt" {
+                    "Adopt drift"
+                } else {
+                    "Reconcile drift"
+                },
+            )
+            .await;
+            if let Err(request_error) = result {
+                error.set(Some(request_error.into_message()));
+            } else {
+                reload(summary, error).await;
+            }
+            busy.set(false);
+        });
+    };
+
+    let emergency_disable = move |_| {
+        #[cfg(feature = "hydrate")]
+        leptos::task::spawn_local(async move {
+            busy.set(true);
+            error.set(None);
+            let definition_id = emergency_module.get_untracked();
+            let reason = emergency_reason.get_untracked();
+            let result = tessara_web_http::send_json::<Value, _>(
+                gloo_net::http::Request::post(&format!(
+                    "/api/admin/composition/modules/{definition_id}/emergency-disable"
+                )),
+                &json!({ "reason": reason, "expires_in_minutes": 60 }),
+                "Emergency disable",
+            )
+            .await;
+            if let Err(request_error) = result {
+                error.set(Some(request_error.into_message()));
+            } else {
+                emergency_reason.set(String::new());
+                reload(summary, error).await;
+            }
+            busy.set(false);
+        });
+    };
+
     view! {
         <AppShell active_route="application_composition" title="Application Composition">
             <section class="route-panel composition-page">
@@ -193,6 +249,43 @@ pub fn ApplicationCompositionPage() -> impl IntoView {
                 <section class="panel-card">
                     <h2>"Drift"</h2>
                     <p>{move || summary.get().map_or("Loading composition state…".into(), |state| format!("{} open finding(s)", state.drift_findings.len()))}</p>
+                    <div class="composition-drift-list">
+                        {move || summary.get().map(|state| state.drift_findings.into_iter().map(|finding| {
+                            let finding_id = finding.get("finding_id").and_then(Value::as_str).unwrap_or_default().to_string();
+                            let path = finding.get("path").and_then(Value::as_str).unwrap_or("unknown path").to_string();
+                            let desired = finding.get("desired").cloned().unwrap_or(Value::Null);
+                            let observed = finding.get("observed").cloned().unwrap_or(Value::Null);
+                            let adopt_id = finding_id.clone();
+                            let reconcile_id = finding_id.clone();
+                            view! {
+                                <article class="summary-card">
+                                    <strong>{path}</strong>
+                                    <p>"Desired: "<code>{desired.to_string()}</code></p>
+                                    <p>"Observed: "<code>{observed.to_string()}</code></p>
+                                    <div class="button-row">
+                                        <button class="button button--secondary" disabled=move || busy.get() on:click=move |_| resolve_drift(adopt_id.clone(), "adopt")>"Adopt as new draft"</button>
+                                        <button class="button" disabled=move || busy.get() on:click=move |_| resolve_drift(reconcile_id.clone(), "reconcile")>"Restore desired"</button>
+                                    </div>
+                                </article>
+                            }
+                        }).collect_view())}
+                    </div>
+                </section>
+                <section class="panel-card">
+                    <h2>"Emergency module disable"</h2>
+                    <p>"Apply a signed, single-module disable override with a required reason and a one-hour expiry. The approved Blueprint is unchanged."</p>
+                    <label>"Module definition ID"<input prop:value=move || emergency_module.get() on:input=move |event| emergency_module.set(event_target_value(&event)) /></label>
+                    <label>"Reason"<input prop:value=move || emergency_reason.get() on:input=move |event| emergency_reason.set(event_target_value(&event)) /></label>
+                    <button class="button" disabled=move || busy.get() || emergency_module.get().trim().is_empty() || emergency_reason.get().trim().is_empty() on:click=emergency_disable>"Emergency disable for 1 hour"</button>
+                    <div class="composition-drift-list">
+                        {move || summary.get().map(|state| state.emergency_overrides.into_iter().map(|override_record| {
+                            let definition = override_record.get("definition_id").and_then(Value::as_str).unwrap_or("unknown module").to_string();
+                            let reason = override_record.get("reason").and_then(Value::as_str).unwrap_or("No reason recorded").to_string();
+                            let expiry = override_record.get("expires_at").and_then(Value::as_str).unwrap_or("no expiry").to_string();
+                            let status = if override_record.get("reconciled_at").is_some_and(|value| !value.is_null()) { "Reconciled" } else if override_record.get("expired").and_then(Value::as_bool) == Some(true) { "Expired; restore or adopt still required" } else { "Active" };
+                            view! { <article class="summary-card"><strong>{definition}</strong><p>{reason}</p><small>{format!("{status} · Expires {expiry}")}</small></article> }
+                        }).collect_view())}
+                    </div>
                 </section>
             </section>
         </AppShell>

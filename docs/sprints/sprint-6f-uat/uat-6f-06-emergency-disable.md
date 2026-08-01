@@ -18,10 +18,11 @@
 Preconditions:
 
 1. Dashboard and Scoped Records are enabled and contain their reference data.
-2. **NEEDS INFO:** Provide the candidate UI path for emergency disable and the
-   supported expiry choices.
-3. **NEEDS INFO:** Confirm which reference module the UAT coordinator has
-   approved for temporary disable.
+2. Use **Application Composition → Emergency module disable**. Enter a module
+   definition ID and reason; the candidate creates a one-hour override.
+3. Use `tessara.reference.scoped-records`. Restore it with **Restore desired**
+   on its enablement drift finding, which reapplies the separately approved
+   Blueprint and reconciles the Supervisor override.
 4. Record the selected module's starting receipt, data, and enabled state.
 
 Record Selection Criteria:
@@ -52,7 +53,7 @@ stop the module container.
 | 2 | Enter the supplied reason and expiry, then confirm. | Supervisor records an authorized disable override and only the selected module becomes disabled. |  |  |  |
 | 3 | Use primary navigation and open unrelated Core/module experiences. | Unrelated experiences remain healthy; the selected module has a clear contained unavailable state. |  |  |  |
 | 4 | Reopen **Application Composition**. | The override, reason, expiry, desired-versus-observed drift, and available adopt/reconcile choices are visible. |  |  |  |
-| 5 | Use the coordinator-selected restore path: allow expiry or select **Reconcile**. | The selected module returns to enabled, healthy state through an audited operation. |  |  |  |
+| 5 | Select **Restore desired** on the enablement drift finding. | The approved Blueprint is reapplied, the selected module returns to enabled, healthy state, and the override is reconciled. Expiry alone ends the authorization window but intentionally leaves the disable as visible drift. |  |  |  |
 | 6 | Reopen the selected module and inspect its starting record or Dashboard. | Previously retained data remains available and no duplicate starter content was created. |  |  |  |
 
 ## 4. Overall Test Result

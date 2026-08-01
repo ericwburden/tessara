@@ -21,7 +21,8 @@ Preconditions:
 
 1. A reference composition is healthy and has Blueprint, plan, approval, and
    receipt state available for inspection.
-2. **NEEDS INFO:** Provide credentials for the constrained read-only account.
+2. Use the temporary `UAT Composition Reader` account created in UAT-6F-03;
+   the coordinator supplies its one-time password out of band.
 3. The UAT operator may stop and restart only Supervisor for the failure check.
 4. Browser developer tools are available for viewport and console checks.
 

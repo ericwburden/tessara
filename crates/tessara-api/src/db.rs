@@ -508,7 +508,7 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "c7793c1fa4529d29edebd1805eab9269abb2e3f0a610bf2e0371f0c1a8d0c209"
+            "2251a8a5ce2c4ff56747ad53d7d9869580a7c6c091b4339af8599f59e2c6f365"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));

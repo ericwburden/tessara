@@ -10,13 +10,14 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tessara_composition::{
-    ApplicationLockfileV1, ApplyAuthorizationV1, BootstrapInputV1, BootstrapReceiptV1,
-    CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1, MaterializationPlanV1,
-    OwnerBootstrapRequestV1, OwnerBootstrapResponseV1,
+    ApplicationLockfileV1, ApplyAuthorizationV1, ApplyOperationKindV1, BootstrapInputV1,
+    BootstrapReceiptV1, CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1,
+    MaterializationPlanV1, OwnerBootstrapRequestV1, OwnerBootstrapResponseV1,
 };
 use tessara_module_contract::{ArtifactDigest, ProtocolSignaturePurposeV1, SignedEnvelopeV1};
 use tessara_supervisor::{
-    MaterializationAdapter, RecordingAdapter, SupervisorError, SupervisorLedger,
+    EmergencyOverrideV1, MaterializationAdapter, RecordingAdapter, SupervisorError,
+    SupervisorLedger,
 };
 use uuid::Uuid;
 
@@ -26,6 +27,7 @@ struct AppState {
     client: reqwest::Client,
     core_url: String,
     module_urls: BTreeMap<String, String>,
+    artifact_images: BTreeMap<String, String>,
     projection_token: String,
     module_control_key: String,
     local_cas_root: PathBuf,
@@ -57,12 +59,18 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/apply", post(apply))
         .route("/v1/operations/{operation_id}", get(operation))
         .route("/v1/receipts/current", get(current_receipt))
+        .route("/v1/emergency-overrides", get(emergency_overrides))
         .with_state(AppState {
             ledger,
             client: reqwest::Client::new(),
             core_url: env::var("TESSARA_CORE_INTERNAL_URL")
                 .unwrap_or_else(|_| "http://core:8080".into()),
             module_urls: env::var("TESSARA_MODULE_CONTROL_ENDPOINTS")
+                .ok()
+                .map(|value| serde_json::from_str(&value))
+                .transpose()?
+                .unwrap_or_default(),
+            artifact_images: env::var("TESSARA_ARTIFACT_IMAGE_REFERENCES")
                 .ok()
                 .map(|value| serde_json::from_str(&value))
                 .transpose()?
@@ -148,10 +156,22 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
             .ledger
             .current_receipt()?
             .ok_or_else(|| anyhow::anyhow!("idempotent operation receipt is missing"))?;
+        project_result(
+            state,
+            request.lockfile.blueprint_revision,
+            &accepted,
+            &receipt,
+        )
+        .await?;
         return Ok(ApplyResponseV1 {
             operation: accepted,
             receipt,
         });
+    }
+    if let Ok(delay) = env::var("TESSARA_SUPERVISOR_APPLY_DELAY_MS") {
+        if let Ok(delay) = delay.parse::<u64>() {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+        }
     }
     let lockfile_digest: ArtifactDigest = tessara_composition::canonical_digest(&request.lockfile)?;
     let mut adapter = OwnerHttpAdapter::prepare(state, &request.lockfile).await?;
@@ -161,6 +181,39 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
         &mut adapter,
         chrono::Utc::now(),
     )?;
+    if request.authorization.payload.operation == ApplyOperationKindV1::EmergencyDisable {
+        let definition_id = plan
+            .actions
+            .iter()
+            .find_map(|action| match action {
+                MaterializationActionV1::SetEnablement {
+                    definition_id,
+                    enabled: false,
+                } => Some(definition_id.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| anyhow::anyhow!("emergency authorization has no disable target"))?;
+        state
+            .ledger
+            .record_emergency_override(&EmergencyOverrideV1 {
+                override_id: Uuid::new_v4(),
+                definition_id,
+                reason: request
+                    .authorization
+                    .payload
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "Emergency disable".into()),
+                actor: serde_json::to_value(&request.authorization.payload.initiator)?,
+                issued_at: request.authorization.payload.issued_at,
+                expires_at: Some(request.authorization.payload.expires_at),
+                authorization_digest: tessara_composition::canonical_digest(
+                    &request.authorization,
+                )?,
+                reconciled_at: None,
+                expired: false,
+            })?;
+    }
     let operation = state
         .ledger
         .operation(accepted.operation_id)?
@@ -178,11 +231,36 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
 struct OwnerHttpAdapter {
     recording: RecordingAdapter,
     bootstrap_receipts: BTreeMap<String, BootstrapReceiptV1>,
+    observed_artifacts: BTreeMap<String, ArtifactDigest>,
 }
 
 impl OwnerHttpAdapter {
     async fn prepare(state: &AppState, lockfile: &ApplicationLockfileV1) -> anyhow::Result<Self> {
         let mut bootstrap_receipts = BTreeMap::new();
+        let mut observed_artifacts = BTreeMap::new();
+        for action in &lockfile.materialization_plan.actions {
+            if let MaterializationActionV1::AcquireImage { component, digest } = action {
+                let image = state.artifact_images.get(component).ok_or_else(|| {
+                    anyhow::anyhow!("no runtime image reference is configured for {component}")
+                })?;
+                let output = std::process::Command::new("docker")
+                    .args(["image", "inspect", "--format={{.Id}}", image])
+                    .output()
+                    .context("inspect runtime image through the Docker owner adapter")?;
+                anyhow::ensure!(
+                    output.status.success(),
+                    "Docker could not inspect runtime image {image}: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                let observed =
+                    ArtifactDigest::new(String::from_utf8(output.stdout)?.trim().to_string())?;
+                anyhow::ensure!(
+                    &observed == digest,
+                    "observed runtime image for {component} is {observed}, not locked digest {digest}"
+                );
+                observed_artifacts.insert(component.clone(), observed);
+            }
+        }
         if let Some(input) = &lockfile.core.bootstrap {
             let receipt = invoke_bootstrap(state, lockfile, "core", input).await?;
             bootstrap_receipts.insert("core".into(), receipt);
@@ -220,6 +298,7 @@ impl OwnerHttpAdapter {
         Ok(Self {
             recording: RecordingAdapter::default(),
             bootstrap_receipts,
+            observed_artifacts,
         })
     }
 }
@@ -290,7 +369,7 @@ impl MaterializationAdapter for OwnerHttpAdapter {
     }
 
     fn observed_artifacts(&self) -> BTreeMap<String, ArtifactDigest> {
-        self.recording.observed_artifacts()
+        self.observed_artifacts.clone()
     }
 
     fn configuration_digests(&self) -> BTreeMap<String, ArtifactDigest> {
@@ -429,6 +508,13 @@ async fn current_receipt(State(state): State<AppState>) -> axum::response::Respo
     match state.ledger.current_receipt() {
         Ok(Some(receipt)) => Json(receipt).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => error_response(error.to_string()),
+    }
+}
+
+async fn emergency_overrides(State(state): State<AppState>) -> axum::response::Response {
+    match state.ledger.emergency_overrides() {
+        Ok(overrides) => Json(overrides).into_response(),
         Err(error) => error_response(error.to_string()),
     }
 }

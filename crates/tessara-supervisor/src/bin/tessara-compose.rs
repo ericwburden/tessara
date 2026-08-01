@@ -60,6 +60,28 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", canonical_digest(&lockfile)?);
             write_json(output, &lockfile)?;
         }
+        [command, input, output] if command == "resolved-sign" => {
+            let lockfile: ApplicationLockfileV1 = read_json(input)?;
+            let signer = signer(ProtocolSignaturePurposeV1::ResolvedComposition)?;
+            write_json(output, &signer.sign(lockfile)?)?;
+            println!("signed resolved composition written to {output}");
+        }
+        [command, input, public_key, output] if command == "resolved-verify" => {
+            let envelope: SignedEnvelopeV1<ApplicationLockfileV1> = read_json(input)?;
+            anyhow::ensure!(
+                envelope.purpose == ProtocolSignaturePurposeV1::ResolvedComposition,
+                "resolved composition envelope has the wrong signature purpose"
+            );
+            verifier(
+                &envelope.issuer,
+                &envelope.key_id,
+                ProtocolSignaturePurposeV1::ResolvedComposition,
+                public_key,
+            )?
+            .verify(&envelope)?;
+            println!("{}", canonical_digest(&envelope.payload)?);
+            write_json(output, &envelope.payload)?;
+        }
         [command, current, desired] if command == "diff" => {
             let current: ApplicationLockfileV1 = read_json(current)?;
             let desired: ApplicationLockfileV1 = read_json(desired)?;
@@ -117,7 +139,7 @@ async fn main() -> anyhow::Result<()> {
             print_response(response).await?;
         }
         _ => bail!(
-            "usage: tessara-compose <catalog-sign|catalog-verify|resolve|diff|authorization-sign|init|trust-register|apply|status|read-back> ..."
+            "usage: tessara-compose <catalog-sign|catalog-verify|resolve|resolved-sign|resolved-verify|diff|authorization-sign|init|trust-register|apply|status|read-back> ..."
         ),
     }
     Ok(())
@@ -164,6 +186,7 @@ fn encode_hex(bytes: &[u8]) -> String {
 fn parse_purpose(value: &str) -> anyhow::Result<ProtocolSignaturePurposeV1> {
     match value {
         "release_catalog" => Ok(ProtocolSignaturePurposeV1::ReleaseCatalog),
+        "resolved_composition" => Ok(ProtocolSignaturePurposeV1::ResolvedComposition),
         "apply_authorization" => Ok(ProtocolSignaturePurposeV1::ApplyAuthorization),
         "installation_receipt" => Ok(ProtocolSignaturePurposeV1::InstallationReceipt),
         _ => bail!("unsupported trust-anchor purpose '{value}'"),

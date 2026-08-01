@@ -4,6 +4,7 @@ param(
     [string]$Composition = "reference",
     [string]$ComposeFile = "deploy/sprint-6f/compose.yaml",
     [string]$SupervisorUrl = "http://127.0.0.1:8095",
+    [string]$ResolvedCompositionEnvelope,
     [switch]$SkipBuild,
     [switch]$ReplaceExisting
 )
@@ -16,7 +17,9 @@ $expectedProject = "tessara-sprint-6f"
 $installationId = "01980000-0000-7000-8000-00000000006f"
 $runtimeDirectory = Join-Path $repoRoot "target/sprint-6f-bootstrap/$Composition"
 $blueprintPath = Join-Path $repoRoot "deploy/sprint-6f/blueprints/$Composition.json"
-$catalogPath = Join-Path $repoRoot "deploy/sprint-6f/catalogs/local-release-catalog.signed.json"
+$catalogTemplatePath = Join-Path $repoRoot "deploy/sprint-6f/catalogs/local-release-catalog.json"
+$catalogPayloadPath = Join-Path $runtimeDirectory "release-catalog.json"
+$catalogPath = Join-Path $runtimeDirectory "release-catalog.signed.json"
 $catalogKeyPath = Join-Path $repoRoot "deploy/sprint-6f/catalogs/catalog-dev-v1.public.hex"
 $lockfilePath = Join-Path $runtimeDirectory "lockfile.json"
 $authorizationPath = Join-Path $runtimeDirectory "authorization.json"
@@ -54,10 +57,7 @@ try {
 
     $composeArguments = @("compose", "-f", $composePath)
     if ($Composition -eq "reference") { $composeArguments += @("--profile", "reference") }
-    $buildServices = @("supervisor", "core")
-    if ($Composition -eq "reference") {
-        $buildServices += @("scoped-records", "dashboards")
-    }
+    $buildServices = @("supervisor", "core", "scoped-records", "dashboards")
     if (-not $SkipBuild) {
         foreach ($service in $buildServices) {
             & docker @composeArguments build $service
@@ -67,15 +67,59 @@ try {
     & docker @composeArguments up -d --no-build
     if ($LASTEXITCODE -ne 0) { throw "Sprint 6F service startup failed." }
 
+    function Get-ImageDigest([string]$Image) {
+        $digest = (& docker image inspect --format "{{.Id}}" $Image).Trim()
+        if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw "Could not determine immutable image identity for $Image."
+        }
+        return $digest
+    }
+    $catalog = Get-Content -LiteralPath $catalogTemplatePath -Raw | ConvertFrom-Json
+    $catalog.issued_at = [DateTimeOffset]::UtcNow.ToString("o")
+    $catalog.core_releases[0].core_image = Get-ImageDigest "tessara-sprint-6f-core"
+    $catalog.core_releases[0].gateway_image = Get-ImageDigest "traefik:v3.6"
+    $catalog.core_releases[0].database_image = Get-ImageDigest "postgres:16-alpine"
+    ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest "tessara-sprint-6f-scoped-records"
+    ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest "tessara-sprint-6f-dashboards"
+    [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
+    $env:TESSARA_SIGNING_ISSUER = "tessara.local.sprint-6f"
+    $env:TESSARA_SIGNING_KEY_ID = "catalog-dev-v1"
+    if ([string]::IsNullOrWhiteSpace($env:TESSARA_SIGNING_SECRET_HEX)) {
+        $env:TESSARA_SIGNING_SECRET_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    }
+    & cargo run -q -p tessara-supervisor --bin tessara-compose -- catalog-sign $catalogPayloadPath $catalogPath
+    if ($LASTEXITCODE -ne 0) { throw "Runtime release catalog signing failed." }
+
     & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
         catalog-verify $catalogPath $catalogKeyPath
     if ($LASTEXITCODE -ne 0) { throw "Signed release catalog verification failed." }
-    & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-        resolve $blueprintPath $catalogPath $catalogKeyPath $lockfilePath
-    if ($LASTEXITCODE -ne 0) { throw "Blueprint resolution failed." }
+    if ([string]::IsNullOrWhiteSpace($ResolvedCompositionEnvelope)) {
+        & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
+            resolve $blueprintPath $catalogPath $catalogKeyPath $lockfilePath
+        if ($LASTEXITCODE -ne 0) { throw "Blueprint resolution failed." }
+    } else {
+        $resolvedPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ResolvedCompositionEnvelope))
+        & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
+            resolved-verify $resolvedPath $catalogKeyPath $lockfilePath
+        if ($LASTEXITCODE -ne 0) { throw "Detached resolved composition verification failed." }
+    }
 
     $lockfile = Get-Content -LiteralPath $lockfilePath -Raw | ConvertFrom-Json
     $now = [DateTimeOffset]::UtcNow
+    if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
+        $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
+        if ($pendingAuthorization.payload.target_plan_digest -eq $lockfile.materialization_plan_digest -and `
+            [DateTimeOffset]::Parse($pendingAuthorization.payload.expires_at) -gt $now) {
+            $recoveredResponse = & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
+                apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
+            if ($LASTEXITCODE -eq 0) {
+                [IO.File]::WriteAllLines($receiptPath, $recoveredResponse, [Text.UTF8Encoding]::new($false))
+                Write-Host "Recovered the accepted Sprint 6F operation with its original signed authorization."
+                Write-Host "Receipt: $receiptPath"
+                return
+            }
+        }
+    }
     $baseReceiptDigest = $null
     $applySequence = [uint64]1
     try {

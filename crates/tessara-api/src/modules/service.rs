@@ -2148,7 +2148,7 @@ mod tests {
             &catalog,
         )
         .expect("manifest and transition destinations form one dense policy");
-        assert_eq!(policy.destinations.len(), 15);
+        assert_eq!(policy.destinations.len(), 16);
     }
 
     #[test]

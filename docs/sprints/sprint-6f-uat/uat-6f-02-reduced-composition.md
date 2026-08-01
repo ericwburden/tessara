@@ -20,10 +20,13 @@
 Preconditions:
 
 1. Use an empty installation isolated from UAT-6F-01.
-2. **NEEDS INFO:** Provide the isolated environment URL, Supervisor URL, and
-   Compose project name assigned to the reduced-composition test.
-3. **NEEDS INFO:** Provide the frozen pre-resolved reduced lockfile, detached
-   signature, trusted public key, and exact verification/apply command.
+2. Use the disposable `tessara-sprint-6f` Compose project at
+   `http://127.0.0.1:8080`; Supervisor is `http://127.0.0.1:8095`. Run this
+   scenario after tearing down the reference installation and its named volumes.
+3. Resolve `deploy/sprint-6f/blueprints/reduced.json`, sign it with
+   `tessara-compose resolved-sign`, then bootstrap with
+   `scripts/bootstrap-sprint-6f-composition.ps1 -Composition reduced
+   -ResolvedCompositionEnvelope <signed-envelope> -ReplaceExisting`.
 4. The tester can sign in as an administrator after bootstrap.
 
 Record Selection Criteria:

@@ -18,9 +18,11 @@ business scenario and records its own acceptance decision.
    browser, and tester in every script.
 2. Run scripts in order unless the UAT coordinator supplies isolated
    environments for scenarios that require an empty installation.
-3. Do not replace `NEEDS INFO` markers with assumptions. The UAT coordinator
-   must provide the requested candidate-specific information before execution.
-4. Mark any scenario with an unresolved `NEEDS INFO` item as **Blocked**.
+3. Use the candidate-supported paths and fixtures recorded in each script. The
+   UAT coordinator supplies temporary account passwords out of band after the
+   candidate and environment are frozen.
+4. Mark a scenario **Blocked** if its stated environment or temporary account
+   cannot be prepared exactly as written.
 5. Any failed or blocked scenario prevents unconditional Sprint 6F business
    acceptance.
 

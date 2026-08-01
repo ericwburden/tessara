@@ -19,8 +19,11 @@ Preconditions:
 
 1. Capture the starting receipt, owner bootstrap counts, and container identities.
 2. Prepare an approved, reversible composition change.
-3. **NEEDS INFO:** Provide a candidate-supported apply scenario or fault hook
-   that remains active long enough to restart Core before completion.
+3. Set `TESSARA_SUPERVISOR_APPLY_DELAY_MS=15000`, recreate only Supervisor,
+   start `scripts/bootstrap-sprint-6f-composition.ps1`, and restart only Core
+   after Supervisor reports the operation accepted. Rerun the same bootstrap
+   command after Core is ready; it reuses the original signed authorization
+   and projects the single completed operation.
 4. The operator is authorized to restart only the Core container.
 
 Record Selection Criteria:

@@ -9,10 +9,12 @@ use std::{
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use tessara_composition::{
-    ApplyAuthorizationV1, BootstrapReceiptV1, CompositionFindingV1, CompositionOperationStateV1,
-    CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1, MaterializationPlanV1,
-    OPERATION_API_V1, RECEIPT_API_V1, canonical_digest,
+    ApplyAuthorizationV1, ApplyOperationKindV1, BootstrapReceiptV1, CompositionFindingV1,
+    CompositionOperationStateV1, CompositionOperationV1, InstallationReceiptV1,
+    MaterializationActionV1, MaterializationPlanV1, OPERATION_API_V1, RECEIPT_API_V1,
+    canonical_digest,
 };
 use tessara_module_contract::{
     ArtifactDigest, ProtocolSignaturePurposeV1, PurposeBoundVerifyingKeyV1, SignedEnvelopeV1,
@@ -21,6 +23,19 @@ use uuid::Uuid;
 
 pub const SUPERVISOR_VERSION_V1: &str = "1.0.0";
 pub const DEPLOYMENT_ADAPTER_VERSION_V1: &str = "1.0.0";
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EmergencyOverrideV1 {
+    pub override_id: Uuid,
+    pub definition_id: String,
+    pub reason: String,
+    pub actor: serde_json::Value,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub authorization_digest: ArtifactDigest,
+    pub reconciled_at: Option<DateTime<Utc>>,
+    pub expired: bool,
+}
 
 #[derive(Clone)]
 pub struct SupervisorLedger {
@@ -241,10 +256,16 @@ impl SupervisorLedger {
             }
         }
         let previous = self.current_receipt()?;
+        let authorization = self.authorization(operation_id)?;
+        let emergency = authorization.payload.operation == ApplyOperationKindV1::EmergencyDisable;
         let no_op = previous
             .as_ref()
             .is_some_and(|receipt| receipt.plan_digest == operation.plan_digest);
-        let desired_enablement = plan
+        let mut desired_enablement = previous
+            .as_ref()
+            .map(|receipt| receipt.desired_enablement.clone())
+            .unwrap_or_default();
+        let action_enablement = plan
             .actions
             .iter()
             .filter_map(|action| match action {
@@ -255,6 +276,30 @@ impl SupervisorLedger {
                 _ => None,
             })
             .collect::<BTreeMap<_, _>>();
+        if !emergency {
+            desired_enablement.extend(action_enablement.clone());
+        }
+        let mut observed_enablement = previous
+            .as_ref()
+            .map(|receipt| receipt.observed_enablement.clone())
+            .unwrap_or_default();
+        observed_enablement.extend(action_enablement.clone());
+        let mut observed_artifacts = previous
+            .as_ref()
+            .map(|receipt| receipt.observed_artifacts.clone())
+            .unwrap_or_default();
+        observed_artifacts.extend(adapter.observed_artifacts());
+        let mut configuration_digests = previous
+            .as_ref()
+            .map(|receipt| receipt.configuration_digests.clone())
+            .unwrap_or_default();
+        configuration_digests.extend(adapter.configuration_digests());
+        if emergency {
+            bootstrap_receipts = previous
+                .as_ref()
+                .map(|receipt| receipt.bootstrap_receipts.clone())
+                .unwrap_or_default();
+        }
         let receipt = InstallationReceiptV1 {
             api_version: RECEIPT_API_V1.into(),
             installation_id: operation.installation_id,
@@ -266,9 +311,9 @@ impl SupervisorLedger {
             supervisor_version: Version::parse(SUPERVISOR_VERSION_V1).unwrap(),
             deployment_adapter_version: Version::parse(DEPLOYMENT_ADAPTER_VERSION_V1).unwrap(),
             desired_enablement: desired_enablement.clone(),
-            observed_enablement: desired_enablement,
-            observed_artifacts: adapter.observed_artifacts(),
-            configuration_digests: adapter.configuration_digests(),
+            observed_enablement,
+            observed_artifacts,
+            configuration_digests,
             bootstrap_receipts,
             applied_at: now,
             previous_receipt_digest: previous.as_ref().map(canonical_digest).transpose()?,
@@ -281,6 +326,13 @@ impl SupervisorLedger {
             .map_err(|_| SupervisorError::LedgerPoisoned)?;
         connection.execute("INSERT INTO receipts(revision,receipt_digest,receipt_json,applied_at) VALUES(?1,?2,?3,?4)", params![receipt.revision, receipt_digest.to_string(), serde_json::to_string(&receipt)?, now.to_rfc3339()])?;
         connection.execute("UPDATE operations SET state='succeeded',updated_at=?2,receipt_digest=?3 WHERE operation_id=?1", params![operation_id.to_string(), now.to_rfc3339(), receipt_digest.to_string()])?;
+        if !emergency {
+            for (definition_id, enabled) in action_enablement {
+                if enabled {
+                    connection.execute("UPDATE emergency_overrides SET reconciled_at=?2 WHERE definition_id=?1 AND reconciled_at IS NULL", params![definition_id, now.to_rfc3339()])?;
+                }
+            }
+        }
         Ok(receipt)
     }
 
@@ -318,6 +370,57 @@ impl SupervisorLedger {
             .transpose()
     }
 
+    pub fn record_emergency_override(
+        &self,
+        override_record: &EmergencyOverrideV1,
+    ) -> Result<(), SupervisorError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SupervisorError::LedgerPoisoned)?;
+        connection.execute(
+            "INSERT INTO emergency_overrides(override_id,definition_id,reason,actor_json,issued_at,expires_at,authorization_digest,reconciled_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![override_record.override_id.to_string(), override_record.definition_id,
+                override_record.reason, serde_json::to_string(&override_record.actor)?,
+                override_record.issued_at.to_rfc3339(), override_record.expires_at.map(|value| value.to_rfc3339()),
+                override_record.authorization_digest.to_string(), override_record.reconciled_at.map(|value| value.to_rfc3339())],
+        )?;
+        Ok(())
+    }
+
+    pub fn emergency_overrides(&self) -> Result<Vec<EmergencyOverrideV1>, SupervisorError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SupervisorError::LedgerPoisoned)?;
+        let mut statement = connection.prepare("SELECT override_id,definition_id,reason,actor_json,issued_at,expires_at,authorization_digest,reconciled_at FROM emergency_overrides ORDER BY issued_at DESC")?;
+        let rows = statement.query_map([], |row| {
+            Ok(EmergencyOverrideV1 {
+                override_id: parse_uuid(row.get::<_, String>(0)?)?,
+                definition_id: row.get(1)?,
+                reason: row.get(2)?,
+                actor: serde_json::from_str(&row.get::<_, String>(3)?).map_err(to_sql_error)?,
+                issued_at: parse_time(row.get::<_, String>(4)?)?,
+                expires_at: row
+                    .get::<_, Option<String>>(5)?
+                    .map(parse_time)
+                    .transpose()?,
+                authorization_digest: parse_digest_sql(row.get(6)?)?,
+                reconciled_at: row
+                    .get::<_, Option<String>>(7)?
+                    .map(parse_time)
+                    .transpose()?,
+                expired: row
+                    .get::<_, Option<String>>(5)?
+                    .map(parse_time)
+                    .transpose()?
+                    .is_some_and(|expires_at| expires_at <= Utc::now()),
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(SupervisorError::Sqlite)
+    }
+
     fn plan(&self, operation_id: Uuid) -> Result<MaterializationPlanV1, SupervisorError> {
         let connection = self
             .connection
@@ -325,6 +428,22 @@ impl SupervisorLedger {
             .map_err(|_| SupervisorError::LedgerPoisoned)?;
         let json: String = connection.query_row(
             "SELECT plan_json FROM operations WHERE operation_id=?1",
+            [operation_id.to_string()],
+            |row| row.get(0),
+        )?;
+        Ok(serde_json::from_str(&json)?)
+    }
+
+    fn authorization(
+        &self,
+        operation_id: Uuid,
+    ) -> Result<SignedEnvelopeV1<ApplyAuthorizationV1>, SupervisorError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SupervisorError::LedgerPoisoned)?;
+        let json: String = connection.query_row(
+            "SELECT authorization_json FROM operations WHERE operation_id=?1",
             [operation_id.to_string()],
             |row| row.get(0),
         )?;
@@ -621,5 +740,70 @@ mod tests {
                 .state,
             CompositionOperationStateV1::Succeeded
         );
+    }
+
+    #[test]
+    fn emergency_disable_preserves_desired_enablement_as_visible_drift() {
+        let ledger = SupervisorLedger::open(":memory:").unwrap();
+        let installation = Uuid::new_v4();
+        let now = Utc::now();
+        ledger.initialize_installation(installation, now).unwrap();
+        let signer = signer();
+        let mut initial = plan(installation);
+        initial.actions.insert(
+            0,
+            MaterializationActionV1::SetEnablement {
+                definition_id: "example.module".into(),
+                enabled: true,
+            },
+        );
+        let signed_initial = signer
+            .sign(authorization(installation, &initial, now, "initial"))
+            .unwrap();
+        let initial_operation = ledger
+            .accept_apply(&initial, &signed_initial, &signer.verifier(), now)
+            .unwrap();
+        let initial_receipt = ledger
+            .execute(
+                initial_operation.operation_id,
+                digest('a'),
+                &mut RecordingAdapter::default(),
+                now,
+            )
+            .unwrap();
+
+        let emergency_plan = MaterializationPlanV1 {
+            api_version: PLAN_API_V1.into(),
+            installation_id: installation,
+            desired_revision: 1,
+            actions: vec![
+                MaterializationActionV1::SetEnablement {
+                    definition_id: "example.module".into(),
+                    enabled: false,
+                },
+                MaterializationActionV1::VerifyReadBack,
+            ],
+        };
+        let mut emergency = authorization(installation, &emergency_plan, now, "emergency");
+        emergency.operation = ApplyOperationKindV1::EmergencyDisable;
+        emergency.base_receipt_digest = Some(canonical_digest(&initial_receipt).unwrap());
+        emergency.apply_sequence = 2;
+        emergency.approved_effects =
+            std::collections::BTreeSet::from([tessara_composition::ApprovedEffectV1::Disable]);
+        emergency.reason = Some("Contain unsafe behavior".into());
+        let signed_emergency = signer.sign(emergency).unwrap();
+        let operation = ledger
+            .accept_apply(&emergency_plan, &signed_emergency, &signer.verifier(), now)
+            .unwrap();
+        let receipt = ledger
+            .execute(
+                operation.operation_id,
+                digest('b'),
+                &mut RecordingAdapter::default(),
+                now,
+            )
+            .unwrap();
+        assert_eq!(receipt.desired_enablement["example.module"], true);
+        assert_eq!(receipt.observed_enablement["example.module"], false);
     }
 }

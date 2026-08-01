@@ -19,9 +19,11 @@ Preconditions:
 
 1. A healthy installation has a draft Blueprint that differs safely from the
    current receipt and does not remove data.
-2. **NEEDS INFO:** Provide credentials for a `composition:read` user, a
-   `composition:plan` user without approval, a constrained non-admin, and an
-   authorized `composition:approve` user.
+2. Before UAT, use Roles & Access to create `UAT Composition Reader`
+   (`composition:read`), `UAT Composition Planner` (`composition:read` and
+   `composition:plan`), and `UAT Constrained User` (no composition capability),
+   then create one temporary account for each role. The coordinator supplies
+   one-time passwords out of band. Use `admin@tessara.local` as the approver.
 3. Record the starting receipt revision and plan digest.
 
 Record Selection Criteria:

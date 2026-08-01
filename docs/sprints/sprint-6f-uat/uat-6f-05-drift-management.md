@@ -19,8 +19,10 @@ Preconditions:
 
 1. Desired and observed composition state currently match.
 2. Select one reversible module configuration or navigation setting.
-3. **NEEDS INFO:** Provide the candidate-supported UI path that records this
-   deliberate change as drift and exposes **Adopt** and **Reconcile** actions.
+3. Change **Display label** on a Module Management configuration page, then
+   open **Application Composition → Drift**. Refresh once to run live owner
+   read-back; each finding shows desired/observed JSON plus **Adopt as new
+   draft** and **Restore desired**.
 
 Record Selection Criteria:
 

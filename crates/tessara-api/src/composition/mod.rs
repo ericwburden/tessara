@@ -1,6 +1,6 @@
 //! Core-owned composition planning, approval, and read-back projection.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{
     Json, Router,
@@ -16,8 +16,8 @@ use sqlx::Row;
 use tessara_composition::{
     AUTHORIZATION_API_V1, ActorEvidenceV1, ApplicationBlueprintV1, ApplicationLockfileV1,
     ApplyAuthorizationV1, ApplyOperationKindV1, ApprovedEffectV1, CompositionError,
-    CompositionOperationV1, InstallationReceiptV1, ReleaseCatalogV1, canonical_digest,
-    required_effects, resolve,
+    CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1,
+    ReleaseCatalogV1, canonical_digest, required_effects, resolve,
 };
 use tessara_module_contract::{ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1};
 use uuid::Uuid;
@@ -67,6 +67,10 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/admin/composition/drift/{finding_id}/reconcile",
             post(reconcile_drift),
         )
+        .route(
+            "/api/admin/composition/modules/{definition_id}/emergency-disable",
+            post(emergency_disable),
+        )
 }
 
 #[derive(Debug, Serialize)]
@@ -79,6 +83,7 @@ struct SummaryResponseV1 {
     active_operation: Option<Value>,
     latest_receipt: Option<Value>,
     drift_findings: Vec<DriftProjectionV1>,
+    emergency_overrides: Vec<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -122,6 +127,18 @@ struct ApproveRequestV1 {
     approved_effects: BTreeSet<ApprovedEffectV1>,
     #[serde(default)]
     reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmergencyDisableRequestV1 {
+    reason: String,
+    #[serde(default = "default_emergency_minutes")]
+    expires_in_minutes: u32,
+}
+
+fn default_emergency_minutes() -> u32 {
+    60
 }
 
 #[derive(Debug, Serialize)]
@@ -185,7 +202,7 @@ async fn summary(
     .bind(installation_id)
     .fetch_optional(&state.pool)
     .await?;
-    let latest_lockfile = sqlx::query_scalar(
+    let latest_lockfile: Option<Value> = sqlx::query_scalar(
         "SELECT document FROM composition_lockfiles WHERE installation_id=$1 ORDER BY blueprint_revision DESC LIMIT 1",
     )
     .bind(installation_id)
@@ -212,12 +229,38 @@ async fn summary(
     .bind(installation_id)
     .fetch_optional(&state.pool)
     .await?;
-    let latest_receipt = sqlx::query_scalar(
+    let mut latest_receipt: Option<Value> = sqlx::query_scalar(
         "SELECT receipt FROM composition_receipt_projections WHERE installation_id=$1 ORDER BY revision DESC LIMIT 1",
     )
     .bind(installation_id)
     .fetch_optional(&state.pool)
     .await?;
+    if latest_receipt.is_none() {
+        if let Ok(supervisor_url) = std::env::var("TESSARA_SUPERVISOR_URL") {
+            if let Ok(response) = reqwest::Client::new()
+                .get(format!(
+                    "{}/v1/receipts/current",
+                    supervisor_url.trim_end_matches('/')
+                ))
+                .send()
+                .await
+            {
+                if response.status().is_success() {
+                    latest_receipt = response.json::<Value>().await.ok();
+                }
+            }
+        }
+    }
+    if let Some(document) = &latest_lockfile {
+        detect_composition_drift(
+            &state,
+            installation_id,
+            document,
+            latest_blueprint.as_ref(),
+            latest_receipt.as_ref(),
+        )
+        .await?;
+    }
     let drift_findings = sqlx::query(
         "SELECT finding_id,code,path,desired,observed,disposition,recorded_at FROM composition_drift_findings WHERE installation_id=$1 AND disposition='open' ORDER BY recorded_at,finding_id",
     )
@@ -235,6 +278,23 @@ async fn summary(
         recorded_at: row.get("recorded_at"),
     })
     .collect();
+    let emergency_overrides = if let Ok(supervisor_url) = std::env::var("TESSARA_SUPERVISOR_URL") {
+        match reqwest::Client::new()
+            .get(format!(
+                "{}/v1/emergency-overrides",
+                supervisor_url.trim_end_matches('/')
+            ))
+            .send()
+            .await
+        {
+            Ok(response) if response.status().is_success() => {
+                response.json::<Vec<Value>>().await.unwrap_or_default()
+            }
+            _ => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
     Ok(Json(SummaryResponseV1 {
         schema_version: COMPOSITION_HTTP_SCHEMA_VERSION_V1,
         installation_id,
@@ -244,6 +304,7 @@ async fn summary(
         active_operation,
         latest_receipt,
         drift_findings,
+        emergency_overrides,
     }))
 }
 
@@ -687,7 +748,52 @@ async fn adopt_drift(
     auth: AuthenticatedRequest,
     Path(finding_id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    resolve_drift(&state, &auth, finding_id, "adopted").await
+    require_global(&auth, "composition:approve")?;
+    let installation_id = installation_id(&state).await?;
+    let row = sqlx::query("SELECT path,observed FROM composition_drift_findings WHERE finding_id=$1 AND installation_id=$2 AND disposition='open'")
+        .bind(finding_id).bind(installation_id).fetch_optional(&state.pool).await?
+        .ok_or_else(|| ApiError::NotFound("Open drift finding was not found".into()))?;
+    let path: String = row.try_get("path")?;
+    let observed: Value = row.try_get("observed")?;
+    let (definition_id, dimension) = drift_target(&path)?;
+    let mut blueprint: ApplicationBlueprintV1 = serde_json::from_value(
+        sqlx::query_scalar("SELECT document FROM composition_blueprints WHERE installation_id=$1 ORDER BY revision DESC LIMIT 1")
+            .bind(installation_id).fetch_one(&state.pool).await?,
+    ).map_err(|error| ApiError::Internal(error.into()))?;
+    let module = blueprint
+        .modules
+        .iter_mut()
+        .find(|module| module.definition_id == definition_id)
+        .ok_or_else(|| {
+            ApiError::BadRequest("Drift owner is not in the current Blueprint".into())
+        })?;
+    match dimension {
+        "configuration" => module.configuration = observed,
+        "enabled" => {
+            module.enabled = observed.as_bool().ok_or_else(|| {
+                ApiError::BadRequest("Observed enablement drift is invalid".into())
+            })?
+        }
+        _ => unreachable!(),
+    }
+    blueprint.revision = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(MAX(revision),0)+1 FROM composition_blueprints WHERE installation_id=$1",
+    )
+    .bind(installation_id)
+    .fetch_one(&state.pool)
+    .await? as u64;
+    let digest = canonical_digest(&blueprint)
+        .map_err(|error| ApiError::Internal(error.into()))?
+        .to_string();
+    let mut transaction = state.pool.begin().await?;
+    sqlx::query("INSERT INTO composition_blueprints(installation_id,revision,digest,document,state,created_by) VALUES($1,$2,$3,$4,'draft',$5)")
+        .bind(installation_id).bind(blueprint.revision as i64).bind(digest)
+        .bind(serde_json::to_value(&blueprint).map_err(|error| ApiError::Internal(error.into()))?)
+        .bind(auth.account_id).execute(&mut *transaction).await?;
+    sqlx::query("UPDATE composition_drift_findings SET disposition='adopted',resolved_at=now() WHERE finding_id=$1")
+        .bind(finding_id).execute(&mut *transaction).await?;
+    transaction.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn reconcile_drift(
@@ -695,24 +801,287 @@ async fn reconcile_drift(
     auth: AuthenticatedRequest,
     Path(finding_id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    resolve_drift(&state, &auth, finding_id, "reconciled").await
-}
-
-async fn resolve_drift(
-    state: &AppState,
-    auth: &AuthenticatedRequest,
-    finding_id: Uuid,
-    disposition: &str,
-) -> ApiResult<StatusCode> {
-    require_global(auth, "composition:approve")?;
-    let result = sqlx::query("UPDATE composition_drift_findings SET disposition=$2,resolved_at=now() WHERE finding_id=$1 AND disposition='open'")
-        .bind(finding_id).bind(disposition).execute(&state.pool).await?;
-    if result.rows_affected() == 0 {
-        return Err(ApiError::NotFound(
-            "Open drift finding was not found".into(),
+    require_global(&auth, "composition:approve")?;
+    let installation_id = installation_id(&state).await?;
+    let row = sqlx::query("SELECT path,desired FROM composition_drift_findings WHERE finding_id=$1 AND installation_id=$2 AND disposition='open'")
+        .bind(finding_id).bind(installation_id).fetch_optional(&state.pool).await?
+        .ok_or_else(|| ApiError::NotFound("Open drift finding was not found".into()))?;
+    let path: String = row.try_get("path")?;
+    let desired: Value = row.try_get("desired")?;
+    let (definition_id, dimension) = drift_target(&path)?;
+    if dimension == "enabled" {
+        let revision: i64 = sqlx::query_scalar("SELECT blueprint_revision FROM composition_lockfiles WHERE installation_id=$1 ORDER BY blueprint_revision DESC LIMIT 1")
+            .bind(installation_id).fetch_one(&state.pool).await?;
+        let _ = apply_blueprint(State(state.clone()), auth.clone(), Path(revision)).await?;
+        sqlx::query("UPDATE composition_drift_findings SET disposition='reconciled',resolved_at=now() WHERE finding_id=$1")
+            .bind(finding_id).execute(&state.pool).await?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let endpoints = module_control_endpoints()?;
+    let base = endpoints.get(definition_id).ok_or_else(|| {
+        ApiError::BadRequest("Drift owner has no configured control endpoint".into())
+    })?;
+    let client = reqwest::Client::new();
+    client
+        .put(format!("{}/api/configuration", base.trim_end_matches('/')))
+        .header("x-tessara-module-control-key", module_control_key()?)
+        .json(&desired)
+        .send()
+        .await
+        .map_err(|error| ApiError::Internal(error.into()))?
+        .error_for_status()
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let observed = read_owner_configuration(&client, base).await?;
+    if canonical_digest(&observed).map_err(|error| ApiError::Internal(error.into()))?
+        != canonical_digest(&desired).map_err(|error| ApiError::Internal(error.into()))?
+    {
+        return Err(ApiError::BadRequest(
+            "Owner read-back does not match desired configuration".into(),
         ));
     }
+    sqlx::query("UPDATE composition_drift_findings SET disposition='reconciled',resolved_at=now() WHERE finding_id=$1")
+        .bind(finding_id).execute(&state.pool).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn emergency_disable(
+    State(state): State<AppState>,
+    auth: AuthenticatedRequest,
+    Path(definition_id): Path<String>,
+    Json(request): Json<EmergencyDisableRequestV1>,
+) -> ApiResult<Json<Value>> {
+    require_global(&auth, "composition:approve")?;
+    if request.reason.trim().is_empty() || !(1..=1440).contains(&request.expires_in_minutes) {
+        return Err(ApiError::BadRequest(
+            "Emergency reason and an expiry from 1 to 1440 minutes are required".into(),
+        ));
+    }
+    let installation_id = installation_id(&state).await?;
+    let mut lockfile: ApplicationLockfileV1 = serde_json::from_value(
+        sqlx::query_scalar("SELECT document FROM composition_lockfiles WHERE installation_id=$1 ORDER BY blueprint_revision DESC LIMIT 1")
+            .bind(installation_id).fetch_optional(&state.pool).await?
+            .ok_or_else(|| ApiError::BadRequest("Resolve a composition before using emergency disable".into()))?,
+    ).map_err(|error| ApiError::Internal(error.into()))?;
+    if !lockfile
+        .modules
+        .iter()
+        .any(|module| module.definition_id == definition_id)
+    {
+        return Err(ApiError::NotFound(
+            "Module is not present in the resolved composition".into(),
+        ));
+    }
+    lockfile.materialization_plan = tessara_composition::MaterializationPlanV1 {
+        api_version: PLAN_API_V1.into(),
+        installation_id,
+        desired_revision: lockfile.blueprint_revision,
+        actions: vec![
+            MaterializationActionV1::SetEnablement {
+                definition_id: definition_id.clone(),
+                enabled: false,
+            },
+            MaterializationActionV1::VerifyReadBack,
+        ],
+    };
+    lockfile.materialization_plan_digest = canonical_digest(&lockfile.materialization_plan)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let supervisor_url = std::env::var("TESSARA_SUPERVISOR_URL")
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("Supervisor URL is not configured")))?;
+    let client = reqwest::Client::new();
+    let current = client
+        .get(format!(
+            "{}/v1/receipts/current",
+            supervisor_url.trim_end_matches('/')
+        ))
+        .send()
+        .await
+        .map_err(|_| ApiError::NotFound("Supervisor is unavailable".into()))?
+        .error_for_status()
+        .map_err(|_| {
+            ApiError::BadRequest(
+                "Emergency disable requires an existing installation receipt".into(),
+            )
+        })?
+        .json::<InstallationReceiptV1>()
+        .await
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let now = Utc::now();
+    let authorization = ApplyAuthorizationV1 {
+        api_version: AUTHORIZATION_API_V1.into(),
+        operation: ApplyOperationKindV1::EmergencyDisable,
+        installation_id,
+        base_receipt_digest: Some(
+            canonical_digest(&current).map_err(|error| ApiError::Internal(error.into()))?,
+        ),
+        target_plan_digest: lockfile.materialization_plan_digest.clone(),
+        desired_revision: lockfile.blueprint_revision,
+        apply_sequence: current.revision + 1,
+        nonce: Uuid::new_v4(),
+        idempotency_key: format!("emergency-disable-{definition_id}-{}", Uuid::new_v4()),
+        initiator: ActorEvidenceV1 {
+            actor_id: auth.account_id.to_string(),
+            actor_kind: "account".into(),
+            authority: "composition:approve".into(),
+        },
+        approver: ActorEvidenceV1 {
+            actor_id: auth.account_id.to_string(),
+            actor_kind: "account".into(),
+            authority: "composition:approve".into(),
+        },
+        issued_at: now,
+        expires_at: now + Duration::minutes(i64::from(request.expires_in_minutes)),
+        approved_effects: BTreeSet::from([ApprovedEffectV1::Disable]),
+        reason: Some(request.reason.trim().into()),
+    };
+    let signer = PurposeBoundSigningKeyV1::from_secret_bytes(
+        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER")
+            .unwrap_or_else(|_| "tessara.local.sprint-6f".into()),
+        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID")
+            .unwrap_or_else(|_| "apply-dev-v1".into()),
+        ProtocolSignaturePurposeV1::ApplyAuthorization,
+        decode_secret_hex("TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX")?,
+    )
+    .map_err(|error| ApiError::Internal(error.into()))?;
+    let signed = signer
+        .sign(authorization)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let response = client
+        .post(format!("{}/v1/apply", supervisor_url.trim_end_matches('/')))
+        .json(&serde_json::json!({"lockfile": lockfile, "authorization": signed}))
+        .send()
+        .await
+        .map_err(|_| ApiError::NotFound("Supervisor is unavailable".into()))?;
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    if !status.is_success() {
+        return Err(ApiError::BadRequest(format!(
+            "Supervisor rejected emergency disable: {body}"
+        )));
+    }
+    Ok(Json(body))
+}
+
+async fn detect_composition_drift(
+    state: &AppState,
+    installation_id: Uuid,
+    document: &Value,
+    blueprint_document: Option<&Value>,
+    receipt: Option<&Value>,
+) -> ApiResult<()> {
+    let lockfile: ApplicationLockfileV1 = serde_json::from_value(document.clone())
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let desired_blueprint = blueprint_document
+        .map(|value| serde_json::from_value::<ApplicationBlueprintV1>(value.clone()))
+        .transpose()
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let endpoints = module_control_endpoints()?;
+    let client = reqwest::Client::new();
+    for module in &lockfile.modules {
+        let desired_module = desired_blueprint.as_ref().and_then(|blueprint| {
+            blueprint
+                .modules
+                .iter()
+                .find(|desired| desired.definition_id == module.definition_id)
+        });
+        let desired_configuration =
+            desired_module.map_or(&module.configuration, |desired| &desired.configuration);
+        let Some(base) = endpoints.get(&module.definition_id) else {
+            continue;
+        };
+        let observed = match read_owner_configuration(&client, base).await {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let desired_digest = canonical_digest(desired_configuration)
+            .map_err(|error| ApiError::Internal(error.into()))?;
+        let observed_digest =
+            canonical_digest(&observed).map_err(|error| ApiError::Internal(error.into()))?;
+        let path = format!("/modules/{}/configuration", module.definition_id);
+        if desired_digest != observed_digest {
+            sqlx::query("INSERT INTO composition_drift_findings(installation_id,code,path,desired,observed) SELECT $1,'configuration_drift',$2,$3,$4 WHERE NOT EXISTS (SELECT 1 FROM composition_drift_findings WHERE installation_id=$1 AND path=$2 AND disposition='open')")
+                .bind(installation_id).bind(path).bind(desired_configuration).bind(observed)
+                .execute(&state.pool).await?;
+        } else {
+            sqlx::query("UPDATE composition_drift_findings SET disposition='reconciled',resolved_at=now() WHERE installation_id=$1 AND path=$2 AND disposition='open'")
+                .bind(installation_id).bind(path).execute(&state.pool).await?;
+        }
+    }
+    if let Some(receipt) = receipt {
+        for module in &lockfile.modules {
+            let desired_enabled = desired_blueprint
+                .as_ref()
+                .and_then(|blueprint| {
+                    blueprint
+                        .modules
+                        .iter()
+                        .find(|desired| desired.definition_id == module.definition_id)
+                })
+                .map_or(module.enabled, |desired| desired.enabled);
+            let observed = receipt
+                .pointer(&format!(
+                    "/observed_enablement/{}",
+                    module.definition_id.replace('~', "~0").replace('/', "~1")
+                ))
+                .and_then(Value::as_bool);
+            let Some(observed) = observed else { continue };
+            let path = format!("/modules/{}/enabled", module.definition_id);
+            if desired_enabled != observed {
+                sqlx::query("INSERT INTO composition_drift_findings(installation_id,code,path,desired,observed) SELECT $1,'enablement_override',$2,$3,$4 WHERE NOT EXISTS (SELECT 1 FROM composition_drift_findings WHERE installation_id=$1 AND path=$2 AND disposition='open')")
+                    .bind(installation_id).bind(path).bind(Value::Bool(desired_enabled)).bind(Value::Bool(observed))
+                    .execute(&state.pool).await?;
+            } else {
+                sqlx::query("UPDATE composition_drift_findings SET disposition='reconciled',resolved_at=now() WHERE installation_id=$1 AND path=$2 AND disposition='open'")
+                    .bind(installation_id).bind(path).execute(&state.pool).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn read_owner_configuration(client: &reqwest::Client, base: &str) -> ApiResult<Value> {
+    let mut value: Value = client
+        .get(format!("{}/api/configuration", base.trim_end_matches('/')))
+        .send()
+        .await
+        .map_err(|error| ApiError::Internal(error.into()))?
+        .error_for_status()
+        .map_err(|error| ApiError::Internal(error.into()))?
+        .json()
+        .await
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    if let Some(object) = value.as_object_mut() {
+        object.remove("updated_at");
+    }
+    Ok(value)
+}
+
+fn module_control_endpoints() -> ApiResult<BTreeMap<String, String>> {
+    let Ok(raw) = std::env::var("TESSARA_MODULE_CONTROL_ENDPOINTS") else {
+        return Ok(BTreeMap::new());
+    };
+    serde_json::from_str(&raw).map_err(|error| ApiError::Internal(error.into()))
+}
+
+fn module_control_key() -> ApiResult<String> {
+    std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("Module control key is not configured")))
+}
+
+fn drift_target(path: &str) -> ApiResult<(&str, &str)> {
+    let value = path
+        .strip_prefix("/modules/")
+        .ok_or_else(|| ApiError::BadRequest("Unsupported drift path".into()))?;
+    for dimension in ["configuration", "enabled"] {
+        if let Some(definition_id) = value.strip_suffix(&format!("/{dimension}")) {
+            if !definition_id.is_empty() {
+                return Ok((definition_id, dimension));
+            }
+        }
+    }
+    Err(ApiError::BadRequest("Unsupported drift path".into()))
 }
 
 fn findings_error(error: CompositionError) -> ApiError {
