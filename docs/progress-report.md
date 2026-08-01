@@ -8,6 +8,25 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-01 - Sprint 6F Planning Kickoff
+
+- Sprint: `Sprint 6F: Application Blueprint And Composition Automation Slice`,
+  selected from the sole roadmap heading marked `(Next)`.
+- Status: kickoff planning complete from clean `main` commit
+  `57aaf1f1d37d6e240015de1282508409b4947b05`; implementation intentionally not
+  started per kickoff direction.
+- Branch: `codex/sprint-6f`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6f`.
+- Plan: `docs/sprints/sprint-6f-plan.md`.
+- Validation record: `docs/sprints/sprint-6f-verification.md`.
+- Planned verification: `cargo fmt --all -- --check`; targeted composition,
+  deploy, installation-control, API, and web tests; full locked Rust workspace;
+  Sprint 6F Compose and twice-run bootstrap/no-op proof; smoke; scripted UAT;
+  manual UAT; and Playwright with retained source-exact evidence.
+- Immediate implementation focus when separately authorized: freeze canonical
+  complete/reduced catalog and Blueprint fixtures, then build deterministic
+  schemas, normalization, digests, stable validation errors, and golden tests.
+
 ## 2026-07-31 - Sprint 6E Source-Exact Closeout
 
 ### Completed
