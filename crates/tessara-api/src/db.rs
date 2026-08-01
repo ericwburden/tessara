@@ -383,7 +383,21 @@ async fn synchronize_seed_role_capabilities(pool: &PgPool) -> anyhow::Result<()>
         .await?;
     }
 
-    let seed_role_names = BUILT_IN_ROLE_CAPABILITY_SEED
+    // A role declared by the latest composition Blueprint is owned by the
+    // composition projection. Startup may ensure its row exists, but must not
+    // replace its exact projected capability membership on a later restart.
+    let latest_blueprint: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT document FROM composition_blueprints ORDER BY revision DESC LIMIT 1",
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    let composition_role_names = composition_role_names(latest_blueprint.as_ref());
+    let seed_owned_roles = BUILT_IN_ROLE_CAPABILITY_SEED
+        .iter()
+        .copied()
+        .filter(|(role_name, _)| !composition_role_names.contains(*role_name))
+        .collect::<Vec<_>>();
+    let seed_role_names = seed_owned_roles
         .iter()
         .map(|(role_name, _)| (*role_name).to_string())
         .collect::<Vec<_>>();
@@ -403,12 +417,12 @@ async fn synchronize_seed_role_capabilities(pool: &PgPool) -> anyhow::Result<()>
     .fetch_all(&mut *tx)
     .await?;
     anyhow::ensure!(
-        locked_roles.len() == BUILT_IN_ROLE_CAPABILITY_SEED.len(),
+        locked_roles.len() == seed_owned_roles.len(),
         "not every built-in seed role could be locked"
     );
 
-    let mut role_ids = Vec::with_capacity(BUILT_IN_ROLE_CAPABILITY_SEED.len());
-    for &(role_name, capability_keys) in BUILT_IN_ROLE_CAPABILITY_SEED {
+    let mut role_ids = Vec::with_capacity(seed_owned_roles.len());
+    for (role_name, capability_keys) in seed_owned_roles {
         let role_id = locked_roles
             .iter()
             .find_map(|(role_id, stored_name)| (stored_name == role_name).then_some(*role_id))
@@ -460,13 +474,25 @@ async fn synchronize_seed_role_capabilities(pool: &PgPool) -> anyhow::Result<()>
     Ok(())
 }
 
+fn composition_role_names(
+    document: Option<&serde_json::Value>,
+) -> std::collections::BTreeSet<&str> {
+    document
+        .and_then(|document| document.get("roles"))
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|role| role.get("name").and_then(serde_json::Value::as_str))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use sha2::{Digest, Sha256};
 
     use super::{
         BUILT_IN_ROLE_CAPABILITY_SEED_SHA256, BUILT_IN_ROLE_CAPABILITY_SEED_VERSION,
-        built_in_role_capability_seed_canonical_bytes,
+        built_in_role_capability_seed_canonical_bytes, composition_role_names,
         verify_built_in_role_capability_seed_contract,
     };
 
@@ -488,6 +514,22 @@ mod tests {
         );
         verify_built_in_role_capability_seed_contract()
             .expect("checked-in membership contract should match its version and digest");
+    }
+
+    #[test]
+    fn composition_roles_are_excluded_from_startup_seed_ownership() {
+        let blueprint = serde_json::json!({
+            "roles": [
+                {"name": "admin", "capabilities": ["admin:all", "composition:read"]},
+                {"name": "reference-operator", "capabilities": ["components:read"]}
+            ]
+        });
+
+        assert_eq!(
+            composition_role_names(Some(&blueprint)),
+            std::collections::BTreeSet::from(["admin", "reference-operator"])
+        );
+        assert!(composition_role_names(None).is_empty());
     }
 
     #[test]
