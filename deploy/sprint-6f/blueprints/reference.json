@@ -97,7 +97,8 @@
       "dependency_bindings": {},
       "configuration": {
         "schema_version": 1,
-        "display_label": "Scoped Records"
+        "display_label": "Scoped Records",
+        "retention_mode": "retain_on_undeploy"
       },
       "bootstrap": {
         "source": "inline",
