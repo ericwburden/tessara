@@ -8,6 +8,71 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-07-31 - Sprint 6E Source-Exact Closeout
+
+### Completed
+
+- Sprint 6E is complete. Dashboard now owns its domain, five complete
+  documents, hydration bundle, immutable assets, provider contract usage,
+  process, database, and release lifecycle without a dependency on root
+  `tessara-web`, `tessara-api`, or the Components implementation.
+- Core integrates Dashboard through generic manifest schema v3 document,
+  asset, public/control API, authorization, Organization projection,
+  navigation, lifecycle, and fallback contracts.
+- Module Browser Lifecycle v1 provides soft Core-to-Dashboard navigation,
+  history, dirty-state negotiation, deterministic teardown, failure
+  containment, and complete-document recovery as the reusable extraction
+  model for later modules.
+- The closing implementation and harness commit is
+  `815d24b5eba5b217201a6384de6e7f9e6cc956be`, tree
+  `f2e71bbfc1fa91a1e004a17fc750a63231c24582`. The immutable Dashboard
+  `2.0.0` rollback image remains pinned to `27ae979c`; the active Dashboard
+  `2.0.2` candidate is source-exact to the closing commit.
+
+### Validation
+
+- Fresh deployment capture, acceptance smoke, scripted sprint UAT, package
+  boundaries, Compose configuration, and formatting all pass against the
+  clean closing tree.
+- The complete pre-closeout SIT passed the Rust workspace and 62/62
+  Playwright tests. Full manual UAT passed 7/7 scenarios, including direct
+  SSR/hydration/presentation, scoped nondisclosure, provider degradation,
+  module disable/re-enable, upgrade/rollback, and lifecycle behavior.
+- Closeout uncovered and corrected stale generic smoke/UAT expectations for
+  the Dashboard-owned document root and shell navigation schema v3; no
+  runtime functionality changed.
+- Retained evidence and SHA-256 sidecars are under
+  `artifacts/sprint-6e-closeout/`.
+
+### Next Sprint
+
+Sprint 6F - Application Blueprint And Composition Automation Slice.
+
+### Sprint Handoff / Demo Instructions
+
+The source-exact Sprint 6E stack remains running at
+`http://127.0.0.1:8080` with Dashboard candidate `2.0.2` active.
+
+1. Sign in as `admin@tessara.local` with `tessara-dev-admin`.
+2. Navigate from Home to **Dashboards** and observe the soft lifecycle mount;
+   use directory, detail, editor, and viewer routes, then browser Back.
+3. Edit a Dashboard and attempt to leave to demonstrate the dirty-state
+   cancel/confirm contract.
+4. Use Module Management to inspect Dashboard release/diagnostic metadata.
+5. Release operators can use the Sprint 6E slot scripts to demonstrate an
+   unhealthy-candidate refusal and a health-gated baseline/candidate switch.
+
+### Acceptance Mapping
+
+- Source independence: package-boundary audit and candidate image provenance.
+- Complete documents/assets: direct routes, immutable digest checks, and
+  presentation UAT.
+- Generic lifecycle: browser navigation/history/guard/teardown/recovery UAT.
+- Product and security preservation: smoke, scripted UAT, scoped manager,
+  constrained reader, and provider-outage evidence.
+- Independent upgrade/rollback: refused/success route records, persistence
+  check, and unchanged unrelated-service tuples.
+
 ## 2026-07-31 - Sprint 6E Implementation
 
 - Extracted the Dashboard domain, complete documents, immutable JS/WASM

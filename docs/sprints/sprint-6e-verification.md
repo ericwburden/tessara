@@ -1,68 +1,48 @@
 # Sprint 6E Verification Contract
 
-Status: Module Browser Lifecycle v1 and Dashboard adoption pass focused manual
-UAT on candidate `2.0.2`, including history, dirty-state negotiation, repeat
-mount/unmount, failure containment, and complete-document recovery. Final Sprint
-acceptance remains blocked on scoped-manager/nondisclosure fixtures, the
-explicit JavaScript-disabled/presentation sweep, provider degradation, and a
-new source-exact retained chronology.
+Status: **Complete and accepted on 2026-07-31.** The final runtime candidate
+is Dashboard `2.0.2`; the source-exact closeout commit is `815d24b5` with tree
+`f2e71bbf`. The immutable rollback release remains Dashboard `2.0.0` from
+`27ae979c`.
 
-This document is the retained acceptance map for Dashboard SDK adoption and
-source independence. Final run outputs belong under
-`artifacts/sprint-6e-closeout/`.
+Retained outputs are under `artifacts/sprint-6e-closeout/`. The application is
+left running at `http://127.0.0.1:8080` with the candidate route active.
 
-## Acceptance Map
+## Acceptance Mapping
 
-| Roadmap clause | Automated proof | Manual proof |
-| --- | --- | --- |
-| Dashboard release has no root Core/web or Components feature implementation dependency | `scripts/verify-sprint-6e-boundaries.ps1`; native and WASM Cargo checks | Inspect Dashboard image package/source inventory |
-| Dashboard owns five complete documents and immutable assets | manifest-schema tests; Dashboard document tests; same-origin route checks | Direct-load all five routes with JavaScript disabled and enabled |
-| Core retains auth, navigation, lifecycle, and fallback ownership generically | lifecycle manifest/bootstrap validation; gateway negotiation tests; Core host route and shell projection tests | Run UAT-6E-07 across Core, Dashboard, history, guard, direct-load, and recovery paths |
-| Product, authorization, redaction, and provider degradation remain stable | Dashboard/UI tests; existing API, UAT, and Playwright suites | Administrator, scoped-manager, reader, provider-outage, and recovery walkthroughs |
-| Only Dashboard upgrades and rolls back | Compose config; route-switch refusal/success records; chronology validator | Observe `2.0.0`, refuse unhealthy `2.0.2`, switch healthy candidate, then restore baseline |
-| Unrelated services do not restart or change image | before/after Docker inspection captured in chronology | Compare Core, gateway, installation-control, Scoped Records, reference SDK, and PostgreSQL |
-| Existing Dashboard persistence is preserved | migration byte pin; disposable baseline apply; before/after data digest | Edit before upgrade, confirm after upgrade and rollback |
-| Candidate is observable without product redesign | document metadata, diagnostics, image labels, and asset digest assertions | Inspect normal Dashboard document metadata and Module diagnostics |
+| Roadmap clause | Automated proof | Manual proof | Result |
+| --- | --- | --- | --- |
+| Dashboard release has no root Core/web or Components implementation dependency | `verify-sprint-6e-boundaries.ps1`; native/WASM checks | Image package/source inspection | Pass |
+| Dashboard owns five complete documents and immutable assets | Dashboard document/manifest tests; asset digest checks | Direct-load, JavaScript-disabled, hydration, theme, keyboard, and responsive sweep | Pass |
+| Core generically owns auth, navigation, lifecycle, and fallback | lifecycle/bootstrap tests; gateway negotiation tests | Soft navigation, history, dirty guard, repeat mount/unmount, failure containment, recovery | Pass |
+| Product, authorization, redaction, and provider degradation remain stable | API/web/Playwright suites; smoke; scripted UAT | Administrator, scoped manager, reader, provider-outage, and recovery walkthroughs | Pass |
+| Only Dashboard upgrades and rolls back | health-gated refusal/success records and chronology | `2.0.0` → `2.0.2` → `2.0.0` → `2.0.2` walkthrough | Pass |
+| Unrelated services remain unchanged during route switch | before/after container, image, and restart tuples | Operator comparison across Core, gateway, installation control, modules, and PostgreSQL | Pass |
+| Existing Dashboard persistence is preserved | pinned migration and database regression | Edit before switch; read after upgrade and rollback | Pass |
+| Candidate is observable without product redesign | document metadata, diagnostics, labels, and asset digest | Normal Dashboard documents and Module diagnostics | Pass |
 
-## Required Retained Files
+## Retained Evidence
 
-- `source-provenance-baseline.json`
-- `source-provenance-candidate.json`
-- `bootstrap-first.json`
-- `bootstrap-second-noop.json`
-- `migration-checkpoint.json`
-- `package-boundaries.json`
-- `dashboard-product-regression.json`
-- `authorization.json`
-- `provider-outage-recovery.json`
-- `route-switch-refused-candidate.json`
-- `route-switch-candidate.json`
-- `route-switch-baseline.json`
-- `upgrade-rollback-chronology.json`
-- `smoke.json`
-- `uat.json`
-- `playwright-summary.json`
-- `manual-uat.json`
+- source provenance for baseline and candidate;
+- first bootstrap and exact second-bootstrap no-op;
+- fresh deployment capture and migration checkpoint;
+- package boundaries and Dashboard product regression;
+- authorization/nondisclosure and provider outage/recovery;
+- refused switch, candidate switch, baseline rollback, and full chronology;
+- smoke and scripted UAT with SHA-256 sidecars;
+- 62/62 Playwright summary and accepted 7/7 manual UAT record.
 
-## Commands
+## Closing Validation
 
-```powershell
-cargo fmt --all -- --check
-cargo test -p tessara-module-contract --locked
-cargo test -p tessara-dashboard-module --locked
-cargo test -p tessara-dashboard-ui --locked
-cargo leptos build -p tessara-dashboard-ui --release
-cargo check -p tessara-dashboard-ui --target wasm32-unknown-unknown --no-default-features --features hydrate --locked
-cargo test -p tessara-api --locked
-cargo test -p tessara-web --locked
-.\scripts\verify-sprint-6e-boundaries.ps1
-docker compose -f deploy/sprint-6e/compose.yaml --profile candidate config --quiet
-.\scripts\bootstrap-sprint-6e-deployment.ps1
-npm --prefix .\end2end test
-.\scripts\smoke.ps1
-.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"
-```
+- `cargo fmt --all -- --check`: pass.
+- `scripts/verify-sprint-6e-boundaries.ps1`: pass.
+- candidate Compose configuration: pass.
+- fresh deployment evidence: pass at `815d24b5`.
+- acceptance smoke: pass.
+- scripted sprint UAT: pass.
+- complete pre-closeout SIT: pass, including Rust workspace and 62/62 Playwright.
+- complete manual UAT: 7/7 pass.
 
-Database-backed `tessara-api` tests require their existing disposable
-`TEST_API_DATABASE_URL` and `TEST_API_ENROLLMENT_DATABASE_URL` bindings; they
-must not be reported as passing when those variables are absent.
+Per the requested operating sequence, the repository is closed out before the
+next full SIT cycle begins. That post-closeout SIT/UAT cycle is a validation
+loop and does not reopen Sprint 6E scope unless it finds a defect.

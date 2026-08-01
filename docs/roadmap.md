@@ -987,7 +987,7 @@ unavailable states, and run the shared conformance suite. Package/source audits
 show one canonical implementation for each extracted platform behavior, while
 the module image contains its own compiled runtime/UI code and assets.
 
-### Sprint 6E: Dashboard SDK Adoption And Source Independence Slice (Next)
+### Sprint 6E: Dashboard SDK Adoption And Source Independence Slice (Complete)
 
 **Outcome:** Dashboards completes the first full extraction pass: its already
 independent Sprint 6C process and database also become independently built,
@@ -1043,7 +1043,7 @@ no Dashboard release dependency on root `tessara-web`, `tessara-api`, or
 another module implementation, and installation receipts prove only the
 Dashboard release digest changed.
 
-### Sprint 6F: Application Blueprint And Composition Automation Slice
+### Sprint 6F: Application Blueprint And Composition Automation Slice (Next)
 
 **Outcome:** a Tessara application is a declarative, validated, reproducible composition suitable for human and LLM-driven construction.
 

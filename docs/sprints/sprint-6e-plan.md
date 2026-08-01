@@ -1,13 +1,14 @@
 # Sprint 6E Plan: Dashboard SDK Adoption And Source Independence
 
-Status: implemented at the `2.0.0` baseline on 2026-07-31; retained
-deployment-cycle verification remains in progress.
+Status: complete on 2026-07-31. Dashboard SDK adoption, Module Browser
+Lifecycle v1, source-independent release packaging, retained deployment
+evidence, full UAT, and closeout are accepted.
 
 - Branch: `codex/sprint-6e`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6e`
 - Base commit: `3f2acf6a7151fa59983bd2fab42123db65b804aa`
 - Roadmap authority:
-  `Sprint 6E: Dashboard SDK Adoption And Source Independence Slice (Next)`
+  `Sprint 6E: Dashboard SDK Adoption And Source Independence Slice (Complete)`
 - Sprint 6D handoff:
   [Sprint 6D Verification](./sprint-6d-verification.md)
 - Planned evidence directory: `artifacts/sprint-6e-closeout/`
