@@ -3,7 +3,9 @@ param(
     [string]$BaseUrl = "http://127.0.0.1:8080",
     [string]$ComposeFile = "deploy/sprint-6d/compose.yaml",
     [string]$ImportToken = "local-deploy-import-token",
-    [string]$EvidenceDirectory = "artifacts/sprint-6d-closeout"
+    [string]$EvidenceDirectory = "artifacts/sprint-6d-closeout",
+    [string]$DashboardManifestPath = "crates/tessara-dashboard-module/manifest.json",
+    [switch]$ModernizeScopedRecordsManifest
 )
 
 Set-StrictMode -Version Latest
@@ -46,7 +48,9 @@ try {
     & .\scripts\bootstrap-sprint-6c-deployment.ps1 `
         -BaseUrl $BaseUrl `
         -ComposeFile $ComposeFile `
-        -ImportToken $ImportToken
+        -ImportToken $ImportToken `
+        -DashboardManifestPath $DashboardManifestPath `
+        -ModernizeScopedRecordsManifest:$ModernizeScopedRecordsManifest
     if ($LASTEXITCODE -ne 0) {
         throw "Sprint 6C prerequisite bootstrap failed."
     }
@@ -93,7 +97,7 @@ try {
         (Join-Path $repoRoot "deploy/sprint-6b1/fixtures/deployment-v1.json") -Raw |
         ConvertFrom-Json
     $dashboardManifest = Get-Content -LiteralPath `
-        (Join-Path $repoRoot "crates/tessara-dashboard-module/manifest.json") -Raw |
+        ([IO.Path]::GetFullPath((Join-Path $repoRoot $DashboardManifestPath))) -Raw |
         ConvertFrom-Json
     $referenceManifest = Get-Content -LiteralPath `
         (Join-Path $repoRoot "crates/tessara-reference-module-sdk/manifest.json") -Raw |
@@ -133,6 +137,37 @@ try {
         "sha256:$([Convert]::ToHexString(
             [Security.Cryptography.SHA256]::HashData($bytes)
         ).ToLowerInvariant())"
+    }
+
+    if ($ModernizeScopedRecordsManifest) {
+        $scopedModule = @($desired.modules | Where-Object definition_id -eq "tessara.reference.scoped-records")
+        if ($scopedModule.Count -ne 1) {
+            throw "The Sprint 6D fixture must contain one replaceable Scoped Records declaration."
+        }
+        $scopedManifest = $scopedModule[0].manifest
+        $scopedManifest.schema_version = 3
+        $scopedManifest | Add-Member -NotePropertyName public_api_routes -NotePropertyValue @() -Force
+        $scopedManifest | Add-Member -NotePropertyName control_projections -NotePropertyValue @() -Force
+        foreach ($route in @($scopedManifest.browser_routes)) {
+            $route | Add-Member -NotePropertyName dependency_binding `
+                -NotePropertyValue "tessara.core.scoped-records" -Force
+        }
+        $scopedManifest.linked_packages.module_contract = "0.2.0"
+        $scopedManifest.linked_packages.module_runtime = "0.2.0"
+        $scopedManifest.linked_packages.module_ui = "0.2.0"
+        $scopedManifest.platform_versions.module_contract = "0.2.0"
+        $scopedManifest.platform_versions.module_runtime = "0.2.0"
+        $scopedManifest.platform_versions.module_ui = "0.2.0"
+        $scopedManifest.platform_versions.module_control_protocol = "1.1.0"
+        $scopedManifest.platform_versions.conformance_suite = "1.1.0"
+        $scopedDigest = Get-ComposeImageDigest -Service "scoped-records"
+        Set-ManifestRuntimeImage -Manifest $scopedManifest -Digest $scopedDigest `
+            -Repository "local/tessara-scoped-records"
+        $scopedModule[0].version = $scopedManifest.release_version
+        $scopedModule[0].manifest = $scopedManifest
+        $scopedModule[0].manifest_digest = Get-ManifestDigest -Manifest $scopedManifest
+        $scopedModule[0].runtime_image = $scopedDigest
+        $scopedModule[0].publisher = $scopedManifest.publisher
     }
 
     $dashboardDigest = Get-ComposeImageDigest -Service "dashboards"

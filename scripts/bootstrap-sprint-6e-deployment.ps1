@@ -26,7 +26,9 @@ try {
         -BaseUrl $BaseUrl `
         -ComposeFile $ComposeFile `
         -ImportToken $ImportToken `
-        -EvidenceDirectory $EvidenceDirectory
+        -EvidenceDirectory $EvidenceDirectory `
+        -DashboardManifestPath "deploy/sprint-6e/dashboard-manifest.baseline.json" `
+        -ModernizeScopedRecordsManifest
     if ($LASTEXITCODE -ne 0) {
         throw "Sprint 6E prerequisite materialization failed."
     }
