@@ -1,158 +1,132 @@
 ---
 name: tessara-sprint-closeout
-description: Execute and document a Tessara sprint closeout as a repeatable handoff process, including roadmap and progress updates, mandatory environment and test validation, and reviewer-ready demo instructions. Use when a Tessara sprint is ending or when a user asks to produce the sprint handoff and closeout package.
+description: Execute and document a Tessara sprint closeout after the tessara-sprint-validation regime has authorized the exact candidate, including evidence audit, roadmap and progress updates, reviewer-ready demo instructions, and final handoff state. Use when a validated Tessara sprint is ending or when a user asks to produce its closeout and next-sprint handoff package.
 ---
 
 # Tessara Sprint Closeout
 
-Use this skill whenever a Tessara sprint is ending or when asked to produce the next-sprint handoff package.
+Use this skill only after `tessara-sprint-validation` has authorized closeout.
+Treat `docs/roadmap.md` as the authoritative scope and the sprint plan and
+verification record as supporting inputs.
 
-## Core behavior
+## Boundary with validation
 
-Create a closeout that is directly testable by a non-developer:
+Closeout consumes validation evidence; it does not create it.
 
-- audit closeout readiness before any destructive reset or full-suite run
-- use targeted checks to resolve gaps before the source-exact cycle
-- budget one full source-exact acceptance cycle
-- update roadmap and progress-report completion only after evidence passes
-- run required verification commands
-- produce a structured handoff section with role-based demonstration steps by functionality
-- map each sprint exit condition to both manual and automated/scripted evidence
-
-When a kickoff plan exists under `docs/sprints/`, use it as supporting scope input. Treat `docs/roadmap.md` as authoritative if the plan and roadmap drift.
+- Do not run an acceptance, smoke, SIT, or UAT check for the first time here.
+- If no authorized verification record exists, invoke
+  `tessara-sprint-validation` and complete its full regime before continuing.
+- If evidence is missing, stale, or tied to multiple candidates, reopen
+  validation rather than filling the gap during closeout.
+- If closeout reveals a missing acceptance assertion or changes executable,
+  harness, migration, seed, manifest, bootstrap, or deployment source, create
+  a new candidate and restart SIT.
+- Allow documentation-only corrections to remain in closeout when they cannot
+  alter executable behavior or test interpretation.
 
 ## Inputs
 
-- sprint name (example: `Sprint 2A`)
-- sprint status date (`YYYY-MM-DD`)
-- evidence set (test outputs, smoke/UAT results, screenshots/transcripts)
-- optional kickoff plan path under `docs/sprints/`
-- optional next-sprint target if not already inferred
+- sprint name and status date
+- `docs/roadmap.md`
+- optional `docs/sprints/<slug>-plan.md`
+- authorized `docs/sprints/<slug>-verification.md`
+- retained source-exact evidence and its candidate identity
+- optional next-sprint target when the roadmap does not identify one
 
 ## Required execution order
 
-1. Confirm the sprint completion target and derive a clause-level acceptance
-   checklist from the roadmap.
-2. Run the closeout-readiness audit below. Resolve and commit every gap with
-   targeted checks before any destructive reset or full-suite run.
-3. If the sprint changed the database schema, finalize migrations:
-   - squash development migrations into the repository baseline
-   - apply every baseline to disposable empty databases
-   - verify the expected ledger contents
-   - commit the finalized migration state
-4. Confirm the sprint deployment bootstrap/materialization command works on
-   the sprint stack and a second invocation is an idempotent no-op.
-5. Commit all implementation, migration, bootstrap, smoke, UAT, and Playwright
-   corrections. Record this clean commit as the evidence source commit.
-6. Run the one fresh environment bootstrap and source-provenance build:
-   - `.\scripts\local-launch.ps1 -FreshData` when the root profile applies
-   - when the sprint has a dedicated deployment profile, use its documented
-     destructive reset, build, launch, and bootstrap equivalent and record why
-     the root launcher is not applicable
-7. Capture deployment evidence from the clean implementation commit.
-8. Run `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
-9. Run smoke checks `.\scripts\smoke.ps1` and the mandatory crate tests.
-10. Run Playwright coverage:
-    - direct runner from the repository root:
-      `npm --prefix .\end2end test`
-    - retained evidence: `.\scripts\validate-e2e.ps1 ...`
-    - never run bare `npx playwright test` from the repository root
-11. Run formatting check `cargo fmt --all`.
-12. Update the repo roadmap, using Tessara's current path by default:
-   - `D:/Projects/tessara/docs/roadmap.md`
-   - set completed sprint label to `(Complete)`
-   - set next sprint label to `(Next)`
-13. Prepend a new entry to the repo progress report, using Tessara's current path by default:
-   - `D:/Projects/tessara/docs/progress-report.md`
-   - date title
-   - achievements
-   - validation status
-   - next focus
-14. Add the **Sprint Handoff / Demo Instructions** subsection to the progress report entry using the required template below.
-15. For each sprint acceptance/exit condition:
-    - capture at least one manual demo step
-    - capture at least one automated/scripted assertion
-16. Commit the closeout-only documentation separately. Do not rebuild product
-    images for a documentation-only commit; name the implementation/evidence
-    commit explicitly.
-17. Leave the application running in a user-testable state at the close of the workflow unless the user explicitly asks to shut it down.
+1. Derive the clause-level completion checklist from the roadmap.
+2. Audit the verification record and retained evidence against the closeout
+   authorization requirements below.
+3. Confirm the evidence-source implementation commit is clean and identify
+   any later documentation-only commit separately.
+4. Confirm the intended candidate slot is active, all required services are
+   healthy, and the application is reachable at the handoff URL.
+5. Update the roadmap:
+   - mark the completed sprint `(Complete)`
+   - mark exactly one next sprint `(Next)`
+6. Prepend the closeout entry to `docs/progress-report.md` with achievements,
+   validation status, next focus, handoff instructions, and acceptance mapping.
+7. Update the sprint plan and verification file to reflect final completion
+   without rewriting source-exact test results.
+8. Commit closeout-only documentation separately. Do not rebuild images for a
+   documentation-only commit.
+9. Verify clean Git state, active route, application health, and documentation
+   links after the closeout commit.
+10. Leave the application running and reviewer-testable unless the user asks
+    to stop it.
 
-## Closeout-readiness audit
+## Closeout authorization audit
 
-Finish this cheap audit before the final cycle:
+Require all of the following before changing roadmap status:
 
-- working tree changes are understood and belong to the sprint
-- every roadmap exit-condition clause has a planned manual and automated proof
-- sprint plan, smoke, UAT, Playwright manifest/tests, seed assumptions, and
-  navigation/module inventories agree with the implementation
-- Compose/deployment configuration parses and identifies the correct databases,
-  roles, private/public routes, bootstrap command, and health checks
-- bootstrap/materialization succeeds and is idempotent
-- source provenance arguments and image labels can represent the exact clean
-  commit
-- migration baselines apply transactionally to disposable empty databases
-- the expected migration-ledger shape is explicit
-- targeted tests for all changed crates, routes, contracts, and harnesses pass
-- evidence output paths are empty, versioned intentionally, or explicitly
-  overwriteable
+- preflight preceded SIT
+- one complete clean candidate identity covers all retained SIT and UAT evidence
+- static/boundary, Rust workspace, Playwright, and deployed acceptance-smoke
+  SIT lanes passed
+- scripted and manual UAT passed after SIT
+- the failure chronology shows every SIT or UAT correction followed by a new
+  SIT run from its first lane
+- every roadmap exit-condition clause maps to automated and manual evidence
+- changed route, navigation, lifecycle, role, seed, manifest, bootstrap, and
+  deployment contracts have explicit coverage
+- no acceptance test first appeared during closeout
+- no unresolved product decision, unsupported scenario, or unowned blocker
+- intended candidate routing, health, provenance, and rollback state are recorded
 
-Do not begin the expensive fresh-stack/full-suite cycle while any audit item is
-unknown or failing.
+Stop if any item is false or unknown. Return to `tessara-sprint-validation`.
 
-## Rerun policy
+## Evidence integrity
 
-- Treat the final source-exact cycle as a one-run budget, not a discovery pass.
-- On failure, classify the smallest affected layer, fix it, and run its
-  targeted reproducer first.
-- A source change invalidates the image and source-bound deployment, smoke,
-  UAT, and browser evidence. Rebuild and recapture those after the targeted
-  fix passes.
-- Do not rerun unrelated Rust or browser suites when their exact-source result
-  remains valid and the fix cannot affect them; record the rationale.
-- Never reuse evidence from a different source commit, database state, image,
-  or acceptance manifest.
-- Record command durations and the reason for every repeated full run in the
-  verification document.
+- Match deployment, smoke, Playwright, scripted UAT, and manual UAT evidence
+  to the recorded commit, tree, image digest, configuration, migration state,
+  and acceptance inventory.
+- Never combine passing results from different candidate identities.
+- Verify evidence hashes and files without rerunning the tests they represent.
+- Record command durations and restart reasons already captured during
+  validation; do not manufacture missing chronology during closeout.
+- Preserve the immutable rollback baseline and confirm the intended candidate
+  route is restored after validation.
 
-## Mandatory verification commands
+## Progress report requirements
 
-- `cargo fmt --all`
-- `cargo test -p tessara-api`
-- `cargo test -p tessara-web`
-- `npm --prefix .\end2end test`
-- `.\scripts\validate-e2e.ps1 ...` with the sprint's deployment evidence, expected data state, and evidence output path
-- `.\scripts\smoke.ps1`
-- `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+Prepend a dated closeout entry containing:
 
-If a command is out of scope for the sprint, document explicit rationale and still keep the required checklist complete. Do not silently skip it.
+- completed functionality
+- evidence-source implementation commit and tree
+- closeout documentation commit when available
+- SIT and UAT pass summary
+- active candidate/release and health state
+- next sprint
+- `Sprint Handoff / Demo Instructions`
+- `Acceptance Mapping`
 
-## Mandatory closeout documentation sections
+## Sprint Handoff / Demo Instructions
 
-Every closeout entry in `progress-report.md` must include these headings:
-
-### Sprint Handoff / Demo Instructions
-
-Use this section for reviewer-ready demonstration steps.
-
-For each functionality delivered, provide:
+For each delivered functionality, provide:
 
 - functionality name
-- role required (`admin`, `operator`, `respondent`)
-- paths to open (URLs and endpoints)
+- required role
+- URLs and endpoints
 - step-by-step user actions
 - expected visible result
-- acceptance check (pass/fail criteria)
-- evidence location (test output, console output, screenshot, or transcript)
+- explicit pass/fail acceptance check
+- evidence location
 
-### Acceptance Mapping
+Use the validated manual UAT scenarios as the source. Do not invent an
+untested demonstration path during closeout.
 
-For every sprint user-testable exit condition, include:
+## Acceptance Mapping
 
-- exit condition text
-- manual walkthrough artifact (`Sprint Handoff / Demo Instructions` step)
-- automated/scripted evidence command or assertion
+For every roadmap exit-condition clause, include:
 
-## Suggested handoff section template
+- exact or faithfully preserved exit-condition text
+- corresponding handoff/manual demonstration
+- automated assertion or command
+- deployed-smoke assertion when the clause changes an integration contract
+- evidence location and candidate identity
+
+## Handoff template
 
 ```md
 ## YYYY-MM-DD - <Sprint Name> Closeout
@@ -160,12 +134,11 @@ For every sprint user-testable exit condition, include:
 - Completed:
   - ...
 - Validation:
-  - `local-launch` run completed
-  - `scripts\uat-sprint.ps1` run completed
-  - `scripts\smoke.ps1` completed
-  - Relevant tests run:
-    - ...
-- Next Sprint: <Sprint Name>
+  - Candidate: `<commit>` / `<tree>` / `<image digest>`
+  - SIT: Passed
+  - UAT: Passed
+- Active release: ...
+- Next Sprint: ...
 
 ## Sprint Handoff / Demo Instructions
 
@@ -190,48 +163,32 @@ For every sprint user-testable exit condition, include:
   - ...
 - Automated check:
   - ...
+- Smoke check:
+  - ...
 ```
 
-## Baseline requirements
+## Tessara defaults
 
 - Base URL: `http://localhost:8080`
-- Demonstration account set:
-  - admin: `admin@tessara.local`
-- In Tessara, prefer repo-local docs and scripts:
-  - roadmap: `D:/Projects/tessara/docs/roadmap.md`
-  - progress report: `D:/Projects/tessara/docs/progress-report.md`
-  - local launch: `D:/Projects/tessara/scripts/local-launch.ps1`
-  - sprint UAT: `D:/Projects/tessara/scripts/uat-sprint.ps1`
-  - smoke: `D:/Projects/tessara/scripts/smoke.ps1`
-  - Playwright: `D:/Projects/tessara/end2end/tests`
-- Direct Playwright execution must resolve the repository-owned runner with
-  `npm --prefix .\end2end test` from the repository root, or by running
-  `npx playwright test` only after changing the working directory to `end2end`.
-  The root package does not own `@playwright/test` or its configuration.
-- Add one constrained non-admin validation where role gating is relevant.
-- Attach at least one evidence artifact for each functional area: screenshot, transcript, or test/log output.
-- Any unsupported or deferred demo scenario must be explicitly marked as blocked with owner and next-step date.
-- When schema changes are in scope, migration squashing and a from-scratch migration check must precede the final source-exact build and all retained evidence.
-- Retained deployment, smoke, UAT, and Playwright evidence is valid only for the exact clean source commit it records. A later source change requires rebuilding and recapturing the affected evidence.
-- Unless the user says otherwise, finish with the application still reachable at `http://localhost:8080` for manual walkthrough.
-
-## Standard functionality checklist
-
-- Use the sprint roadmap block to derive the functional checklist instead of hard-coding the prior sprint's areas.
-- When a kickoff plan exists in `docs/sprints/`, use it to seed the functionality checklist and acceptance mapping.
-- For Tessara, always include:
-  - the sprint's product routes and UI flows
-  - access control / role gating where relevant
-  - read-only and authoring surfaces touched by the sprint
-  - UI/build/style surface changes if touched
-  - any repo script or smoke/UAT updates made for the sprint
+- Admin account: `admin@tessara.local`
+- Roadmap: `docs/roadmap.md`
+- Progress report: `docs/progress-report.md`
+- Sprint artifacts: `docs/sprints/`
+- Validation authority: `tessara-sprint-validation`
+- Keep one constrained non-admin demonstration for authorization-sensitive work.
+- Mark a deferred scenario with owner and next-step date; do not call the
+  sprint complete while it remains an exit-condition blocker.
 
 ## Finish criteria
 
 Do not finalize closeout if:
 
-- roadmap/progress updates are missing
-- schema-changing sprint migrations have not been squashed and verified from scratch before final evidence capture
-- uat/smoke/test/format checks are not recorded
-- at least one functionality in the sprint has no handoff demo step
-- any acceptance condition lacks both a manual and scripted evidence entry
+- the verification record did not authorize closeout
+- closeout was the first execution point for any acceptance check
+- roadmap or progress updates are missing or inconsistent
+- any exit condition lacks both automated and manual evidence
+- evidence does not resolve to one clean candidate
+- an executable or harness change was made without restarting SIT
+- the closeout documentation commit is not distinguished from the evidence
+  source commit
+- the intended application route is unhealthy or not left reviewer-testable

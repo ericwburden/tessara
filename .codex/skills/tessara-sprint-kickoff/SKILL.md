@@ -15,7 +15,7 @@ Treat the roadmap as authoritative and make kickoff execution-ready.
 - derive the sprint from the roadmap marker `(Next)` unless the user explicitly overrides it
 - create a separate sprint worktree from `main`
 - write an implementation-ready sprint plan artifact under `docs/sprints/`
-- define a closeout-readiness lane before implementation begins
+- instantiate the `tessara-sprint-validation` acceptance inventory before implementation begins
 - prepend a kickoff entry to `docs/progress-report.md`
 - continue into implementation from the sprint worktree
 
@@ -29,6 +29,7 @@ Confirm all of the following before making sprint artifacts:
 - `docs/roadmap.md` exists
 - `docs/progress-report.md` exists
 - `scripts/local-launch.ps1` exists
+- `scripts/smoke.ps1` exists
 - `scripts/uat-sprint.ps1` exists
 
 If any precondition fails, stop and explain the corrective action. Do not create a sprint branch, worktree, or plan file from a non-`main` checkout.
@@ -68,7 +69,9 @@ Keep the worktree as a sibling of the current repo directory. Abort if the branc
 6. Review the sprint roadmap block in planning mode before coding.
 7. Write `docs/sprints/<slug>-plan.md`.
 8. Prepend a kickoff entry to `docs/progress-report.md`.
-9. Establish the sprint's closeout-readiness checklist and evidence paths.
+9. Use `tessara-sprint-validation` and its record template to establish the
+   sprint's preflight, SIT, deployed-smoke, UAT, evidence, and closeout-
+   authorization contract.
 10. Begin implementation in the new sprint worktree using the written plan as the execution contract.
 
 ## Sprint plan file requirements
@@ -80,7 +83,7 @@ Write the plan file in Markdown and include these sections:
 - acceptance criteria
 - manual test plan
 - automated test plan
-- closeout-readiness plan
+- validation and closeout-authorization plan
 - ordered implementation plan
 - dependencies and blockers
 
@@ -100,6 +103,10 @@ items in the sprint plan before coding:
 - which existing smoke/UAT/Playwright assertions must change as the feature
   inventory, navigation, roles, routes, or seed data changes
 - the non-admin role/scope scenario required for authorization-sensitive work
+- the rule that deployed acceptance smoke runs inside SIT and no acceptance
+  check may execute for the first time during closeout
+- the rule that any SIT or UAT failure is corrected and followed by a full SIT
+  restart before UAT resumes
 
 Prefer semantic assertions over duplicated literal inventory counts. When an
 exact count is itself a contract, keep its expected source in one shared
@@ -121,8 +128,9 @@ Maintain closeout readiness throughout the sprint:
    no acceptance-mapping gaps, no stale harness inventory, valid Compose
    configuration, working provenance inputs, idempotent bootstrap, and clean
    targeted tests.
-6. Commit implementation, migrations, bootstrap, and harness corrections
-   before starting the single full source-exact closeout cycle.
+6. Commit implementation, migrations, bootstrap, and harness corrections,
+   then invoke `tessara-sprint-validation` against the clean source-exact
+   candidate before requesting closeout.
 
 ## Kickoff progress entry requirements
 
@@ -162,4 +170,5 @@ Do not consider kickoff complete if:
 - the sprint plan file was not written
 - the kickoff progress entry was not prepended
 - the closeout-readiness plan was not recorded
+- the sprint validation record was not created and seeded from the roadmap
 - implementation did not continue from the sprint worktree
