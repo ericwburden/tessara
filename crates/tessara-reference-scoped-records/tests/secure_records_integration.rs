@@ -72,7 +72,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     let now = Utc::now();
     let shell = shell_signer
         .sign(ShellContextV1 {
-            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+            schema_version: tessara_module_contract::CONTRACT_SCHEMA_VERSION_V1,
             installation_id,
             module_definition_id: ModuleDefinitionId::new(
                 tessara_reference_scoped_records::MODULE_DEFINITION_ID,

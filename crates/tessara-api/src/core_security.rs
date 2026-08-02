@@ -17,12 +17,13 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AdministratorEligibilityDecisionV1,
     AdministratorEnrollmentClaimKindV1, AuthorizationGrantOperationV1, AuthorizationGrantV2,
-    CapabilityScopeBindingV1, DependencyBindingKey, EnrollmentRedemptionResultV1,
-    EnrollmentReservationV1, ExternalIdentityAssertionV1, FunctionalContractId,
-    LocalOperatorAuthorizationV1, ModuleDefinitionId, ModuleManifest, NavigationContributionId,
-    NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
-    PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV2,
-    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
+    CONTRACT_SCHEMA_VERSION_V1, CapabilityScopeBindingV1, DependencyBindingKey,
+    EnrollmentRedemptionResultV1, EnrollmentReservationV1, ExternalIdentityAssertionV1,
+    FunctionalContractId, LocalOperatorAuthorizationV1, ModuleDefinitionId, ModuleManifest,
+    NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
+    ResourceAuthorizationAssertionV2, SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1,
+    ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -1035,7 +1036,7 @@ async fn proxy_manifest_module_document(
         .collect();
     let shell = protocol_signer(ProtocolSignaturePurposeV1::ShellContext)?
         .sign(ShellContextV1 {
-            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+            schema_version: CONTRACT_SCHEMA_VERSION_V1,
             installation_id,
             module_definition_id: manifest.definition_id.clone(),
             module_instance_id: instance_id,
@@ -1446,7 +1447,7 @@ async fn scoped_records_shell_context(
         ShellDocumentStateV1::Active
     };
     let context = ShellContextV1 {
-        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+        schema_version: CONTRACT_SCHEMA_VERSION_V1,
         installation_id,
         module_definition_id: ModuleDefinitionId::new(
             tessara_reference_scoped_records::MODULE_DEFINITION_ID,
