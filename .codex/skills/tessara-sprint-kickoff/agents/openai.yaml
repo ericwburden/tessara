@@ -1,4 +1,4 @@
 interface:
   display_name: "Tessara Sprint Kickoff"
-  short_description: "Start Tessara sprints with a clean kickoff workflow"
-  default_prompt: "Use $tessara-sprint-kickoff to start the next Tessara sprint from roadmap selection through branch, worktree, and kickoff plan setup."
+  short_description: "Plan Tessara sprints through a clean handoff"
+  default_prompt: "Use $tessara-sprint-kickoff to select and comprehensively plan the next Tessara sprint, create its branch and worktree, and stop before implementation."
