@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tessara Implementation"
+  short_description: "Forward-only Tessara implementation workflow"
+  default_prompt: "Use $tessara-implementation to implement this Tessara change with forward-only cleanup and focused validation."

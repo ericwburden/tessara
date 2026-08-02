@@ -32,19 +32,18 @@ The normal deployment unit is a full-stack module with its own product or admini
 
 The current codebase is a useful transition baseline:
 
-- Core and the Sprint 6C Dashboard and Scoped Records modules run as separate
-  processes with separate databases, while the remaining feature areas still
-  run through the Core Axum/Leptos application and Core database
+- Core, Dashboard, and Scoped Records run as separate processes with separate
+  databases, while the remaining feature areas still run through the Core
+  Axum/Leptos application and Core database
 - `tessara-web` still owns the root shell, route adapters, authentication
-  policy, document integration, hydration entrypoint, CSS, and public assets;
-  Dashboard currently reuses that root crate from its independent process
+  policy, Core document integration, hydration entrypoint, CSS, and public
+  assets
 - focused `tessara-web-*` and domain crates separate several feature areas at
   compile time
 - most remaining feature routes and DTOs are still registered at the root
   application
-- Dashboard has a real Module Release/Instance and process/data boundary, but
-  its source/build boundary is incomplete until the canonical module SDK and
-  runtime replace its root `tessara-web` and Core-private bootstrap coupling
+- Dashboard and Scoped Records use the canonical module contract, runtime, and
+  UI packages without depending on the root `tessara-web` application
 
 These are descriptions of current implementation, not target deployment constraints. Feature crates are extraction seams. They should first acquire explicit manifests and contracts, then move behind module-owned APIs and routes, and finally into independent processes and databases.
 
