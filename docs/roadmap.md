@@ -1043,7 +1043,7 @@ no Dashboard release dependency on root `tessara-web`, `tessara-api`, or
 another module implementation, and installation receipts prove only the
 Dashboard release digest changed.
 
-### Sprint 6F: Application Blueprint And Composition Automation Slice (Next)
+### Sprint 6F: Application Blueprint And Composition Automation Slice (Complete)
 
 **Outcome:** a Tessara application is a declarative, validated, reproducible composition suitable for human and LLM-driven construction.
 
@@ -1073,7 +1073,7 @@ Dashboard release digest changed.
 
 ## Phase 7: Cross-Module Authorization And Resource Correctness
 
-### Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice
+### Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice (Next)
 
 **Outcome:** dataset, component, and dashboard execution is scope-safe across the real Dashboard process boundary to the transition-only Core Components compatibility contract and the typed adapters later extractions retain.
 

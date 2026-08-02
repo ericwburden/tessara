@@ -63,8 +63,8 @@ candidate.
 
 | Lane | Command/evidence | Result | Duration |
 |---|---|---|---|
-| Full validation | `.\scripts\validate.ps1` | Passed, including format/static/boundaries, module contracts, native/WASM/web/API integration, migration/upgrade, and 200-sample timing | 24m 02.6s |
-| Rust workspace | `cargo test --workspace --locked` | Passed; API suite included 163 tests and the Sprint 6F navigation regression | 9m 17.6s |
+| Full validation | `.\scripts\validate.ps1` | Passed, including format/static/boundaries, module contracts, native/WASM/web/API integration, migration/upgrade, and 200-sample timing | 22m 07.7s authoritative rerun |
+| Rust workspace | `cargo test --workspace --locked` | Passed; all database-dependent integration targets and workspace doc tests ran | 9m 06.9s authoritative rerun |
 | Source-exact reference deployment | Fresh `bootstrap-sprint-6f-composition.ps1 -Composition reference` plus provenance audit and smoke | Passed; all four product images matched commit/tree with `dirty=false` | 4m 43.8s build/apply; smoke 10.9s |
 | Roles and access | Exact role-capability SQL/read-back plus 200/403/401 access matrix | Passed | <2s |
 | Unchanged no-op | Reference bootstrap with `-SkipBuild` | Passed; receipt revision 2, `no_op=true`, stable plan | <11s |
@@ -74,7 +74,7 @@ candidate.
 | Focused composition browser | `npm --prefix .\end2end test -- composition.spec.ts` | 3/3 passed | 6.1s |
 | Detached reduced composition | Detached resolve/sign, fresh reduced bootstrap, smoke, Core restart | Passed; zero locked modules and zero module bootstrap receipts | 50.2s |
 | Compatibility topology/provenance | Fresh Sprint 6E build, bootstrap, seed, five-image label audit | Passed | Included in compatibility batch |
-| Full browser compatibility | `npm --prefix .\end2end test` | 65/65 passed | 3m 07.8s |
+| Full browser compatibility | `npm --prefix .\end2end test` | 65/65 passed | 3m 13s test runtime; 15m 55.1s including exact rebuild/bootstrap/audit |
 | Supervisor failure containment | Stop/status failure/Core checks/restart/receipt read-back/smoke | Passed; Core, shell, and composition page stayed 200 | <30s |
 | Final canonical smoke | Fresh canonical reference restore and `smoke-sprint-6f.ps1` | Passed at reference plan identity | 44.3s |
 
@@ -113,6 +113,28 @@ Detailed retained outcomes are in
 | Emergency UAT precondition | Harness | PowerShell aggregation misread a one-record array as absent and stopped before mutation. | Corrected response handling; emergency batch passed without repeating prior lanes. |
 | UAT authorization collector | Harness | Plain-text 403 and HTTP 201 success were initially treated as JSON/200-only failures. | Collector corrected; no candidate change. Valid-body reader probes returned 403 and full separation scenario passed. |
 | Canonical restore | Expected environment guard | Non-replacing bootstrap refused the UAT revision-2 Blueprint. | Disposable project recreated with `-ReplaceExisting`; final canonical smoke passed. |
+| Closeout evidence audit | Missing prerequisite | The closeout evidence directory was absent, so closeout stopped without changing roadmap or progress state. | Reopened the full validation regime and generated a source-exact retained evidence set before resuming closeout. |
+| Reopened SIT preflight | Environment | The first validation command omitted the explicit destructive-reset acknowledgement. | Added the required acknowledgement and restarted SIT from lane one; the failure log is retained. |
+| Reopened browser attempt 1 | Transient environment | One intentionally unknown module navigation emitted a single `Failed to fetch`; 60 tests passed and 4 did not run. | Focused reproduction passed 1/1 unchanged; SIT restarted from lane one. The authoritative full batch later passed 65/65. |
+| Reopened Rust lane | Environment | `TEST_INSTALLATION_CONTROL_DATABASE_URL` was absent because a similarly named non-test variable was supplied. | Audited all six exact database variable names and restarted SIT from lane one; the authoritative workspace passed. |
+| Reopened browser pre-test gate | Evidence harness | Source-exact build/bootstrap/seed passed, but the audit queried the wrong provenance label keys and stopped before tests. | Corrected the verified label mapping, restarted SIT from lane one, and retained the authoritative five-image audit plus 65/65 result. |
+| Restart-containment checkpoint | Evidence harness | Core restart and identity checks passed, but an absolute smoke output path was rejected before smoke; Supervisor had not been stopped. | Corrected the repository-relative output path and reran the complete checkpoint; restart smoke and Supervisor containment/recovery passed. |
+
+## Retained closeout evidence
+
+- Directory: `artifacts/sprint-6f-closeout/`
+- Evidence manifest: `evidence-manifest.json`
+- Manifest file count: 100
+- Manifest SHA-256:
+  `1b760a3405a06247f830e0de2050b1f0d9fca8232883c0b435524051846b64d6`
+- Required evidence includes source provenance, rendered Compose
+  configuration, migration baselines, signed catalogs and authorization
+  envelopes, both Blueprints/lockfiles/Materialization Plans, Supervisor and
+  installation receipts, first/no-op/restart results, reference and reduced
+  smoke, scripted/manual UAT, the authoritative Playwright summary, and all
+  failure classifications and logs.
+- The manifest and its `.sha256` sidecar were regenerated only after every
+  required JSON artifact parsed successfully.
 
 ## Closeout authorization
 
@@ -128,5 +150,5 @@ Detailed retained outcomes are in
   `http://127.0.0.1:8080`
 - Application health: Core 200, Supervisor 204, final smoke passed
 - Evidence-source commit: `599680992771fb2ac05633e36cae2ad84026318d`
-- Documentation commit: pending at time of this record
-- Authorization timestamp: 2026-08-02T00:08:35Z
+- Documentation commit: the closeout-only commit containing this record
+- Authorization timestamp: 2026-08-02T03:24:00Z

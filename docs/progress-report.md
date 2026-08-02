@@ -8,6 +8,32 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-01/02 - Sprint 6F Source-Exact Closeout
+
+- Sprint 6F is complete and Sprint 7A is now the sole roadmap item marked
+  `(Next)`.
+- The authorized evidence source is commit
+  `599680992771fb2ac05633e36cae2ad84026318d`, tree
+  `773b15f3798c79e7223de75de9e956d033cae901`, frozen clean. The later
+  validation and closeout commits are documentation-only and do not redefine
+  the tested candidate.
+- The final contiguous SIT sequence passed: full validation in 1,327.7
+  seconds, the complete locked Rust workspace in 546.9 seconds, and a fresh
+  source-exact Sprint 6E compatibility build/bootstrap/provenance audit with
+  all 65 Playwright tests passing.
+- Deployed Sprint 6F acceptance passed for fresh reference apply, exact
+  catalog/Blueprint/lockfile/plan/authorization identities, unchanged no-op,
+  Core restart recovery, Supervisor failure containment, signed reduced
+  composition and restart, canonical reference restore, and final smoke.
+- Scripted UAT passed twice, including 3/3 focused composition browser tests;
+  all eight recorded business scenarios remain accepted with no open defect.
+- `artifacts/sprint-6f-closeout/evidence-manifest.json` covers 100 retained
+  files. Its SHA-256 is
+  `1b760a3405a06247f830e0de2050b1f0d9fca8232883c0b435524051846b64d6`.
+- The canonical Sprint 6F reference composition remains running at
+  `http://127.0.0.1:8080`; Core readiness is 200 and Supervisor readiness is
+  204.
+
 ## 2026-08-01 - Sprint 6F Implementation Milestone
 
 - Added strict, RFC 8785-canonical Application Blueprint, signed release

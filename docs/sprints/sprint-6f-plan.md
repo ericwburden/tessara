@@ -1,16 +1,22 @@
 # Sprint 6F Plan: Application Blueprint And Composition Automation
 
-Status: approved on 2026-08-01. The core implementation slices are complete;
-candidate freeze, formal validation, and closeout authorization remain pending.
+Status: **Complete and closed** on 2026-08-01/02. Implementation, source-exact
+SIT, deployed acceptance, scripted and manual UAT, evidence audit, and closeout
+authorization all passed for the frozen candidate.
 
 - Branch: `codex/sprint-6f`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-6f`
 - Base commit: `57aaf1f1d37d6e240015de1282508409b4947b05`
 - Roadmap authority:
-  `Sprint 6F: Application Blueprint And Composition Automation Slice (Next)`
+  `Sprint 6F: Application Blueprint And Composition Automation Slice (Complete)`
 - Validation record: [Sprint 6F Verification](./sprint-6f-verification.md)
-- Planned deployment profile: `deploy/sprint-6f/compose.yaml`
-- Planned evidence directory: `artifacts/sprint-6f-closeout/`
+- Deployment profile: `deploy/sprint-6f/compose.yaml`
+- Evidence directory: `artifacts/sprint-6f-closeout/`
+- Authorized evidence source:
+  `599680992771fb2ac05633e36cae2ad84026318d` /
+  `773b15f3798c79e7223de75de9e956d033cae901`
+- Evidence manifest SHA-256:
+  `1b760a3405a06247f830e0de2050b1f0d9fca8232883c0b435524051846b64d6`
 
 ## Sprint Summary
 
