@@ -39,6 +39,13 @@ pub fn render_dashboard_document(
     bootstrap: &DashboardRouteBootstrap,
     release: &str,
 ) -> String {
+    // Workspace-wide `--all-features` builds intentionally unify `ssr` and
+    // `hydrate`. Browser-only components can therefore construct Effects while
+    // this native renderer is exercised in tests; give those Effects a local
+    // executor without changing the normal SSR-only production feature set.
+    #[cfg(all(feature = "hydrate", not(target_arch = "wasm32")))]
+    let _ = any_spawner::Executor::init_futures_executor();
+
     let bootstrap_for_view = bootstrap.clone();
     let content = Owner::new().with(move || {
         view! {
