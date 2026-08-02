@@ -3,6 +3,9 @@
 Run each script against a frozen Sprint 6F UAT candidate. Each file covers one
 business scenario and records its own acceptance decision.
 
+The frozen-candidate execution outcomes are retained in
+[Sprint 6F UAT Results](../sprint-6f-uat-results.md).
+
 1. [Bootstrap the complete reference application](./uat-6f-01-reference-composition.md)
 2. [Bootstrap the signed reduced application](./uat-6f-02-reduced-composition.md)
 3. [Keep planning, approval, and restricted access separate](./uat-6f-03-approval-and-access.md)
