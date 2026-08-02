@@ -127,7 +127,9 @@ Seed the validation record before implementation with:
 - source provenance, candidate identity, migration-baseline, and evidence rules
 - the rule that deployed acceptance smoke runs inside SIT
 - the rule that a candidate or harness change invalidates downstream evidence
-- the rule that any SIT or UAT failure requires a complete SIT restart
+- the shared validation-protocol invalidation matrix, including complete SIT
+  restart for candidate or tracked-harness changes and scoped reruns only when
+  immutable candidate/environment receipts prove earlier results unaffected
 
 Plan updates to smoke, UAT, Playwright, fixtures, manifests, and deployment
 bootstrap in the same implementation slice as the behavior that makes them
@@ -135,7 +137,10 @@ stale. Prefer semantic assertions over duplicated literal inventory counts;
 when an exact count is contractual, identify one shared source of truth.
 
 Do not record a validation result, freeze a candidate, launch the stack, or run
-SIT/UAT during kickoff. Commands belong in the plan as future execution steps.
+preflight/SIT/UAT during kickoff. Commands belong in the plan as future
+execution steps. Plan the receipt chain produced by
+`tessara-validation-preflight`, `tessara-sit`, `tessara-uat`, and the
+`tessara-sprint-validation` coordinator.
 
 ## Planning audit
 

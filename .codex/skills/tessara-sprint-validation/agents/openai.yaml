@@ -1,4 +1,4 @@
 interface:
   display_name: "Tessara Sprint Validation"
-  short_description: "Run Tessara SIT, UAT, and closeout gates"
-  default_prompt: "Use $tessara-sprint-validation to execute the Tessara preflight, SIT, UAT, and closeout validation regime."
+  short_description: "Coordinate Tessara validation and rerun scope"
+  default_prompt: "Use $tessara-sprint-validation to coordinate preflight, SIT, UAT, evidence integrity, and closeout authorization."

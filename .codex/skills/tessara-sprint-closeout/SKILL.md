@@ -16,6 +16,8 @@ Closeout consumes validation evidence; it does not create it.
 - Do not run an acceptance, smoke, SIT, or UAT check for the first time here.
 - If no authorized verification record exists, invoke
   `tessara-sprint-validation` and complete its full regime before continuing.
+- Require the coordinator-issued `closeout-authorization.json` and verify its
+  prerequisite receipt and evidence-manifest hashes.
 - If evidence is missing, stale, or tied to multiple candidates, reopen
   validation rather than filling the gap during closeout.
 - If closeout reveals a missing acceptance assertion or changes executable,
@@ -65,8 +67,8 @@ Require all of the following before changing roadmap status:
 - static/boundary, Rust workspace, Playwright, and deployed acceptance-smoke
   SIT lanes passed
 - scripted and manual UAT passed after SIT
-- the failure chronology shows every SIT or UAT correction followed by a new
-  SIT run from its first lane
+- the failure chronology shows a coordinator-issued invalidation decision for
+  every correction and proves every required scoped or complete rerun passed
 - every roadmap exit-condition clause maps to automated and manual evidence
 - changed route, navigation, lifecycle, role, seed, manifest, bootstrap, and
   deployment contracts have explicit coverage
@@ -83,6 +85,9 @@ Stop if any item is false or unknown. Return to `tessara-sprint-validation`.
   and acceptance inventory.
 - Never combine passing results from different candidate identities.
 - Verify evidence hashes and files without rerunning the tests they represent.
+- Verify `preflight-result.json`, `candidate.json`, `sit-result.json`,
+  `uat-result.json`, and `closeout-authorization.json` form one valid hashed
+  receipt chain.
 - Record command durations and restart reasons already captured during
   validation; do not manufacture missing chronology during closeout.
 - Preserve the immutable rollback baseline and confirm the intended candidate
