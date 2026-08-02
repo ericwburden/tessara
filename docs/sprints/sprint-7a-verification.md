@@ -1,8 +1,8 @@
 # Sprint 7A Validation Record
 
 - Sprint: `Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice`
-- Status: Implementation verification passed; formal candidate validation not run
-- Candidate: Not Frozen
+- Status: Preflight passed; candidate frozen; SIT and UAT not started
+- Candidate: `526f4392c4374faa824ead268a47f920e79857a619f4202102fc43e737d7fe07`
 - Closeout: Not Authorized
 - Evidence root: `artifacts/sprint-7a-closeout/`
 
@@ -108,21 +108,20 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 ## Candidate Identity
 
-- Implementation commit: Not Frozen
-- Tree: Not Frozen
-- Dirty state: Must be `false`
-- Candidate fingerprint: Not Calculated
-- Acceptance-inventory identity: SHA-256 of this planned inventory plus the
-  implemented smoke/UAT/Playwright/conformance manifests
-- Deployment profile/configuration digest: rendered `deploy/sprint-7a/`
-  Compose plus catalog, Blueprint, lockfile inputs, and Supervisor adapter tuple
-- Migration/baseline identity: Core `crates/tessara-api/migrations/001_baseline.sql`,
-  Dashboard `crates/tessara-dashboard-module/migrations/001_dashboard_module.sql`,
-  Supervisor baseline, and all module migration checksums
+- Implementation commit: `c14823da7a14a9d21beecc67696a4974c87654ac`
+- Tree: `d225d22dc379a133015d306140a642284160c92e`
+- Dirty state: `false`
+- Candidate fingerprint: `526f4392c4374faa824ead268a47f920e79857a619f4202102fc43e737d7fe07`
+- Acceptance-inventory identity: `95a57efc05c9344bfb03a208d39020a2a1a031ac52a1506eb5087ab950941943`
+- Deployment profile/configuration digest: `50d6a7dd72d1e469d4ef0dc9ad1bc0790e854cf5b283043ff59c10444dca2f78`
+- Migration/baseline identity: `a701c08eaa53325676016d140fbe5a5b1d225b6c23c00966314f22f75fdd7a23`
 - Expected provenance labels: repository URL, candidate commit, candidate tree,
   `dirty=false`, build profile, Core/gateway/Dashboard/Scoped Records/Supervisor
   component identity
-- Observed image digest(s): Not Run
+- Observed image digest(s): Supervisor `sha256:daabbc369eafbfc0f35b510f13eec665ea17e876916800a2902035d71aa89c41`;
+  Core `sha256:9f59a9063253e06de7c347aa1d669d91defcb70e6e0fd63023ceb253cb213c1a`;
+  Scoped Records `sha256:8e22d9d2494da53c5f4faad4549de8c69ed27eeb07b345609fc2a2c4df8ae86e`;
+  Dashboard `sha256:66fb43b551b9929c9ea3df366eeb47be8090104e92e31df1e60df3b108c18570`
 - Source rules: product, contract, test, fixture, migration, manifest,
   deployment, bootstrap, smoke, UAT, Playwright, conformance, or acceptance
   inventory changes create a new candidate. Documentation-only corrections may
@@ -131,7 +130,7 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 ## Environment Contract
 
-- Environment fingerprint: Not Calculated
+- Environment fingerprint: `92db7bd283fc3cba14b20e6170316fde54b1c67508bcf6ae24b20346c0b50853`
 - Host: Windows PowerShell orchestration with Docker Desktop/Linux containers
 - Tool versions: record `git`, Rust/Cargo, wasm target/tooling, Node/npm,
   Playwright browsers, Docker/Compose, PostgreSQL client where used, and
@@ -177,11 +176,12 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 ## Preflight
 
-- Status: Failed during candidate-readiness preparation; no assertions started
-- Attempt receipt: `artifacts/sprint-7a-closeout/attempts/preflight-1.json`
-- Receipt: Not issued; a passing `preflight-result.json` requires a clean,
-  acceptance-complete implementation commit
-- Candidate receipt: Not issued
+- Status: Passed on attempt 3; no SIT or UAT assertions started
+- Superseded attempts: `artifacts/sprint-7a-closeout/attempts/preflight-1.json`
+  and `artifacts/sprint-7a-closeout/attempts/preflight-2.json`
+- Authoritative attempt: `artifacts/sprint-7a-closeout/attempts/preflight-3.json`
+- Receipt: `artifacts/sprint-7a-closeout/preflight-result.json`
+- Candidate receipt: `artifacts/sprint-7a-closeout/candidate.json`
 - Repository gate: clean `codex/sprint-7a`, intended commit, no untracked
   acceptance inputs, all submodule/dependency locks present
 - Environment/reset authorization: verify exact Sprint 7A project, databases,
@@ -267,6 +267,8 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 | Time | Phase/lane/stage | Assertions started | Candidate | Classification | Correction / narrow proof | Invalidation scope | Authoritative replacement |
 |---|---|---|---|---|---|---|---|
 | 2026-08-02T18:08:47Z | Preflight / candidate readiness / preparing | No | Not Frozen | preflight/setup | Complete the missing Sprint 7A smoke, UAT, authorization-conformance, analytics-nondisclosure, and Playwright inventory; commit a clean implementation candidate; rebuild source-exact images | No SIT or UAT evidence exists; rerun preflight from the corrected clean commit | `artifacts/sprint-7a-closeout/attempts/preflight-1.json` |
+| 2026-08-02T19:15:19Z | Preflight / audit / preparing | No | `526f4392...` | preflight/setup | Quote `HEAD^{tree}` as one literal Git revision; narrow proof returned tree `d225d22d...` | Preflight attempt only; candidate and environment unchanged | `artifacts/sprint-7a-closeout/attempts/preflight-2.json` |
+| 2026-08-02T19:17:00Z | Preflight / candidate freeze / passed | No | `526f4392...` | — | All environment, harness, inventory, topology, provenance, and evidence-path checks passed | SIT and UAT remain not started and must bind to the exact fingerprints | `artifacts/sprint-7a-closeout/attempts/preflight-3.json` |
 
 Allowed classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, and `product-decision`.
