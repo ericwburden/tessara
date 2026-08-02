@@ -1436,7 +1436,7 @@ mod tests {
     #[test]
     fn configuration_validator_normalizes_and_returns_stable_findings() {
         let valid = validate_configuration(&ScopedRecordsConfigurationV1 {
-            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+            schema_version: 1,
             display_label: "  Regional Records  ".into(),
             retention_mode: "retain_on_undeploy".into(),
         });
