@@ -14,8 +14,8 @@ that as the runtime/data boundary and completes source/build independence in
 two steps:
 
 1. **Sprint 6D: Canonical Module SDK And Runtime Extraction** is complete.
-2. **Sprint 6E: Dashboard SDK Adoption And Source Independence** is next.
-3. **Sprint 6F: Application Blueprint And Composition Automation** retains the
+2. **Sprint 6E: Dashboard SDK Adoption And Source Independence** is complete.
+3. **Sprint 6F: Application Blueprint And Composition Automation** is next and retains the
    former Sprint 6D Blueprint scope.
 
 Later module extractions apply the completed Sprint 6D/6E pattern. See the
@@ -44,6 +44,10 @@ and the accepted
 ## Historical Planning Artifacts
 
 - [Sprint 3C Plan](./sprint-3c-plan.md)
+
+## Approved Future Planning Artifacts
+
+- [Sprint 8D2 Workflow Branching And Data Flow Plan](./sprint-8d2-plan.md)
 
 ## Completed Sprint 5A Artifacts
 

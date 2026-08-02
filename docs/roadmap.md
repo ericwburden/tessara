@@ -194,11 +194,11 @@ Workflow and response runtime:
 
 - Improve workflow assignment lists with table-grade sort and filter controls for workflow, node, assignee, assignment status, and acting context.
 - Decide whether workflow assignments need explicit one-time versus recurring behavior before introducing recurring assignment UX or scheduling semantics.
-- Review workflow publish semantics for branching and sibling step form scopes. Older workflow-runtime expectations treated some branching/sibling scope combinations as invalid at publish time, while the current workflow publisher permits them. Decide whether this was stale test coverage or a dropped product rule; then either implement and document publish-time validation with regression coverage, or document the permissive behavior and keep tests aligned with it.
+- Until Sprint 8D2, preserve and document the current workflow publish semantics for branching and sibling step form scopes; Sprint 8D2 owns the definitive nonlinear graph and publish-time validation model.
 - Extend workflow runtime beyond same-assignee automatic handoff only when there is a complete model for per-step assignees, operator-mediated handoff, and capability-aware reassignment.
 - In the Forms and Workflows module roadmaps, decide their respective draft, active, retired, and publication rules. Expose those states through typed contracts so Responses can retain its references and Workflows can decide whether assignments migrate; do not make Core the owner of that policy.
 - Keep response starts assignment-only. Form-first starts should continue to flow through generated single-form workflow shortcuts and then start a workflow assignment.
-- Make workflow steps the owner of target/context semantics, including explicit workflow availability nodes, step target metadata, cross-step data passing, prefills, hidden or locked carried-forward values, derived target nodes, and future nonlinear branching.
+- Sprint 8D2 makes workflow steps the owner of target/context semantics, including explicit workflow availability nodes, step target metadata, cross-step data passing, prefills, hidden or locked carried-forward values, derived target nodes, and nonlinear branching.
 - Redesign Home delegated-work discovery so accounts with accessible delegate work can discover, switch, or default into delegated work without relying on the Responses route first.
 
 Datasets, components, dashboards, and operations:
@@ -1191,7 +1191,7 @@ rollback proofs against the newly physical boundary.
 
 **User-testable exit condition:** a tester can complete and review a response through module contracts and consume its output in Datasets without shared database access.
 
-### Sprint 8D: Workflow Module Separation Slice
+### Sprint 8D1: Workflow Module Separation Slice
 
 **Outcome:** Workflows is independently deployed and coordinates Forms and Responses through public contracts.
 
@@ -1207,6 +1207,72 @@ rollback proofs against the newly physical boundary.
 **Application UI delivered this sprint:** unchanged Workflow authoring, assignment, execution, configuration, and diagnostics surfaces through the shared shell.
 
 **User-testable exit condition:** a tester can publish and execute a Workflow over referenced FormVersions and separately deployed Responses while provider lifecycle changes and outages remain visible and contained.
+
+### Sprint 8D2: Workflow Branching And Data Flow Slice
+
+Detailed requirements and implementation decisions are recorded in the
+[Sprint 8D2 plan](./sprints/sprint-8d2-plan.md).
+
+**Outcome:** the independently deployed Workflow module supports deterministic
+branching driven by typed workflow inputs and step outputs, while preserving
+the data and decision provenance used for every form entry.
+
+**Build:**
+
+- define versioned workflow-variable schemas for caller-supplied initial input,
+  workflow-owned context, and explicitly exported step output; validate values
+  at workflow start and at every step transition
+- let workflow authors map initial inputs and prior step outputs into later-step
+  inputs, including explicit defaults, required values, allowlisted coercions,
+  and prefills or hidden/locked carried-forward form values
+- add declarative branch conditions over typed workflow variables and eligible
+  step results, with ordered evaluation, an explicit default path, and stable
+  deterministic expression semantics
+- extend the workflow graph and publisher to validate reachability, terminal
+  paths, missing/default branches, incompatible variable types, unavailable
+  references, invalid sibling scopes, and cycles unless a separately bounded
+  loop model is introduced
+- keep branch evaluation and transition selection authoritative in Workflows;
+  Forms owns form semantics and Responses owns form entries and answers
+- extend the Workflow-to-Response contract so each created form entry records
+  immutable workflow metadata: Workflow and WorkflowVersion references,
+  assignment and step identities, the applicable input/context snapshot,
+  upstream value provenance, and the branch decision or transition that led to
+  the entry; keep workflow metadata distinct from user-entered answers
+- persist an append-only transition and branch-decision history with the
+  evaluated rule/version, input digest, selected edge, actor/service context,
+  and correlation identity so executions can be explained and replayed without
+  silently re-evaluating them under a newer WorkflowVersion
+- propagate authorization and Organization scope through initial input,
+  inter-step data, branch evaluation, Response creation, and metadata readback;
+  reject unauthorized or undisclosed referenced values without leaking them
+- define retry/idempotency behavior for workflow start, step completion,
+  Response creation, and branch selection so duplicate events cannot create
+  duplicate form entries or advance an assignment twice
+- add migration behavior for existing linear workflows by treating their sole
+  outgoing transition as an unconditional default branch
+- add contract, publisher, runtime, authorization, nondisclosure, audit,
+  upgrade, outage, and compatibility coverage across the independently deployed
+  Workflow and Response modules
+
+**Application UI delivered this sprint:**
+
+- Workflow authoring for input variables, step input/output mappings, and
+  branch rules, with graph-level validation and a readable default-path model
+- execution and assignment views that show authorized current context,
+  transition history, and why a branch was selected without exposing hidden or
+  out-of-scope values
+- form-entry and response-review metadata that identifies the originating
+  workflow step and authorized carried-forward context separately from answers
+
+**User-testable exit condition:** a tester can start a published Workflow with
+validated input, complete a form step whose exported values select one of at
+least two branches, carry approved data into the selected next step, and verify
+that the resulting form entry records the WorkflowVersion, assignment, step,
+input provenance, and branch decision metadata. Invalid or unauthorized input
+is rejected without advancing the assignment or disclosing protected data;
+retries are idempotent; and the recorded execution remains explainable after a
+new WorkflowVersion is published.
 
 ### Sprint 8E: Forms Module Separation Slice
 
