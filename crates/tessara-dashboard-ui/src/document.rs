@@ -22,11 +22,11 @@ pub const DASHBOARD_CSS_SHA256: &str =
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99";
 pub const DASHBOARD_JS_SHA256: &str =
-    "e9c5428a7d08f0e38e380d23bb47ddfa6a81713601aef27ef1923fb7ae6a6714";
+    "84c6078852c6fc1f9145366bb8bfcf2da13c18f4cd0068e72aca14db036e84b2";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "1f06971942239807f70ccf096fe7abf4357f5a76c8c7383d8fa84020221193ab";
+    "ca2bca20d4495516457f431d82117517b0fb6fe31496d2c9b0f86409c7dc68cb";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "f6281709e51db7c9c3dabc720e497bfa561a21ac4632ca6d84d5e1d58bfb8337";
+    "8058f7895f1d72fe03a94bb2224ef8f83b0676a3e0a174a9d0ebb62bac183d28";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")
@@ -171,11 +171,11 @@ mod tests {
                     can_manage: false,
                 }],
             ),
-            "2.0.2",
+            "2.1.0",
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("Delivery"));
-        assert!(html.contains(r#"name="tessara-module-release" content="2.0.2""#));
+        assert!(html.contains(r#"name="tessara-module-release" content="2.1.0""#));
         assert!(html.contains(DASHBOARD_BOOTSTRAP_SCRIPT_ID));
         assert!(!html.contains("tessara-web"));
     }

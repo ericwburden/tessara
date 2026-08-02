@@ -8,6 +8,62 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-02 - Sprint 7A Implementation Complete
+
+- Implemented same-governing-node analytics authorization so base access and
+  elevated row-tier authority cannot combine across disjoint Organization
+  subtrees; filtering now precedes counts, paging, and aggregates.
+- Added provider-owned authority revisions for Datasets, ComponentVersions,
+  and Dashboards, plus exact resource assertions in authorization grant V2.
+- Added per-instance Ed25519 Dashboard service requests bound to installation,
+  actor grant, method/path/body, module instance, correlation, nonce, and a
+  30-second lifetime. Core persists service identities and consumed nonces, so
+  replay remains blocked across restarts. JWTs were not introduced.
+- Added the placement-owned Dashboard render route and server-side proxy. The
+  browser supplies only Dashboard, placement, and render kind; Dashboard and
+  Core jointly authorize the current provider revision and same Dataset root.
+- Updated the shared viewer for mediated placement targets, released Dashboard
+  module/UI `2.1.0`, rebuilt release WASM/bindings, and added the isolated
+  Sprint 7A deployment/catalog/Blueprint/bootstrap profile.
+- Added tracked focused smoke, provider-neutral authorization conformance,
+  balanced known/random nondisclosure, scripted UAT, eleven manual UAT scripts,
+  acceptance actors, and three Playwright scenarios in the exact 68-test
+  inventory.
+- Diagnostic reference materialization rendered both stat-card and table
+  placements from the real Dashboard process, retained one service identity
+  and four unique request nonces, and returned `no_op=true` on an unchanged
+  apply. A clean candidate rebuild and formal preflight remain required;
+  authoritative SIT, UAT, and closeout have not been claimed.
+
+## 2026-08-02 - Sprint 7A Planning Kickoff
+
+- Sprint: `Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice`,
+  selected from the sole current roadmap heading marked `(Next)` after local
+  `main` was reconciled with the completed Sprint 6F remote baseline.
+- Status: kickoff planning complete from clean `main` commit
+  `634bede53aad2ed46551541f50254c6cc3599dc1`; implementation intentionally has
+  not started and awaits a separate request.
+- Branch: `codex/sprint-7a`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-7a`.
+- Plan: `docs/sprints/sprint-7a-plan.md`.
+- Validation record: `docs/sprints/sprint-7a-verification.md`.
+- Planned verification: format/check/clippy; targeted platform-contract,
+  Dataset, Component, Dashboard, SSR, and wasm suites; full locked Rust
+  workspace; provider-neutral analytics authorization conformance; optimized
+  known/random nondisclosure; source-exact Sprint 7A reference composition and
+  unchanged no-op materialization; general and focused deployed smoke; full
+  Playwright; scripted and eleven manual UAT scenarios; provenance, receipt,
+  topology, recovery, and evidence-manifest audits.
+- Product decisions are firm: same-governing-node capability intersection,
+  provider-owned resource revisions, a placement-bound Dashboard server proxy,
+  per-instance Ed25519 service requests with persistent replay protection, and
+  post-filter counts/paging/aggregates. JWTs, direct browser/Core rendering, and
+  a new row-level Organization policy model are out of scope.
+- Recommended first implementation slice: version and freeze the shared
+  analytics access, provider-freshness/resource-assertion, and Dashboard
+  `render` exchange contracts with golden provider/consumer fixtures and exact
+  negative validation.
+
 ## 2026-08-01/02 - Sprint 6F Source-Exact Closeout
 
 - Sprint 6F is complete and Sprint 7A is now the sole roadmap item marked

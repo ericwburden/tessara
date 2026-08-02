@@ -490,6 +490,7 @@ pub fn signature_purpose_name(purpose: ProtocolSignaturePurposeV1) -> &'static s
         ProtocolSignaturePurposeV1::FixtureExternalIdentity => "fixture_external_identity",
         ProtocolSignaturePurposeV1::ShellContext => "shell_context",
         ProtocolSignaturePurposeV1::AuthorizationGrant => "authorization_grant",
+        ProtocolSignaturePurposeV1::ModuleServiceRequest => "module_service_request",
     }
 }
 
@@ -803,7 +804,7 @@ mod tests {
                 now,
             )
             .unwrap();
-        assert_eq!(receipt.desired_enablement["example.module"], true);
-        assert_eq!(receipt.observed_enablement["example.module"], false);
+        assert!(receipt.desired_enablement["example.module"]);
+        assert!(!receipt.observed_enablement["example.module"]);
     }
 }

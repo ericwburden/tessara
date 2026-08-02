@@ -169,10 +169,10 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
             receipt,
         });
     }
-    if let Ok(delay) = env::var("TESSARA_SUPERVISOR_APPLY_DELAY_MS") {
-        if let Ok(delay) = delay.parse::<u64>() {
-            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-        }
+    if let Ok(delay) = env::var("TESSARA_SUPERVISOR_APPLY_DELAY_MS")
+        && let Ok(delay) = delay.parse::<u64>()
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     }
     let lockfile_digest: ArtifactDigest = tessara_composition::canonical_digest(&request.lockfile)?;
     let mut adapter = OwnerHttpAdapter::prepare(state, &request.lockfile).await?;

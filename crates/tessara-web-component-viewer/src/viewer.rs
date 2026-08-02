@@ -66,8 +66,8 @@ impl ComponentVersionKind {
         }
     }
 
-    #[cfg(any(feature = "hydrate", test))]
-    const fn endpoint_segment(self) -> &'static str {
+    /// Returns the canonical execution endpoint segment for this kind.
+    pub const fn endpoint_segment(self) -> &'static str {
         match self {
             Self::StatCard => "stat-card",
             other => other.as_api_value(),
@@ -92,6 +92,13 @@ pub struct ComponentVersionTarget {
     component_ref: String,
     component_version_id: String,
     kind: ComponentVersionKind,
+    execution_route: ComponentExecutionRoute,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ComponentExecutionRoute {
+    Direct,
+    Mediated { endpoint_path: String },
 }
 
 impl ComponentVersionTarget {
@@ -105,6 +112,26 @@ impl ComponentVersionTarget {
             component_ref: component_ref.into(),
             component_version_id: component_version_id.into(),
             kind,
+            execution_route: ComponentExecutionRoute::Direct,
+        }
+    }
+
+    /// Creates a target whose functional owner supplies the exact execution
+    /// endpoint. Component identifiers remain presentation metadata and need
+    /// not be included in that endpoint.
+    pub fn mediated(
+        component_ref: impl Into<String>,
+        component_version_id: impl Into<String>,
+        kind: ComponentVersionKind,
+        endpoint_path: impl Into<String>,
+    ) -> Self {
+        Self {
+            component_ref: component_ref.into(),
+            component_version_id: component_version_id.into(),
+            kind,
+            execution_route: ComponentExecutionRoute::Mediated {
+                endpoint_path: endpoint_path.into(),
+            },
         }
     }
 
@@ -125,12 +152,15 @@ impl ComponentVersionTarget {
 
     #[cfg(any(feature = "hydrate", test))]
     pub(crate) fn endpoint_path(&self) -> String {
-        format!(
-            "/api/components/{}/versions/{}/{}",
-            self.component_ref,
-            self.component_version_id,
-            self.kind.endpoint_segment()
-        )
+        match &self.execution_route {
+            ComponentExecutionRoute::Direct => format!(
+                "/api/components/{}/versions/{}/{}",
+                self.component_ref,
+                self.component_version_id,
+                self.kind.endpoint_segment()
+            ),
+            ComponentExecutionRoute::Mediated { endpoint_path } => endpoint_path.clone(),
+        }
     }
 }
 
@@ -1224,7 +1254,7 @@ pub(crate) fn materialization_empty_state(state: &str) -> (&'static str, String)
     }
 }
 
-#[cfg(any(feature = "hydrate", test))]
+#[cfg(feature = "hydrate")]
 fn materialization_is_retryable(state: &str) -> bool {
     !matches!(state, "ready" | "failed" | "error")
 }
@@ -1410,6 +1440,23 @@ mod tests {
                 format!("/api/components/attendance/versions/version-2/{segment}")
             );
         }
+    }
+
+    #[test]
+    fn mediated_targets_use_only_the_owner_supplied_endpoint() {
+        let target = ComponentVersionTarget::mediated(
+            "attendance",
+            "secret-version-id",
+            ComponentVersionKind::Table,
+            "/api/presentations/container-1/items/item-2/render/table",
+        );
+        let endpoint = target.endpoint_path();
+        assert_eq!(
+            endpoint,
+            "/api/presentations/container-1/items/item-2/render/table"
+        );
+        assert!(!endpoint.contains("attendance"));
+        assert!(!endpoint.contains("secret-version-id"));
     }
 
     #[test]

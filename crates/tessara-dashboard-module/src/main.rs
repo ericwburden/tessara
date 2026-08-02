@@ -1,10 +1,12 @@
-use std::{env, net::SocketAddr};
+use std::{env, net::SocketAddr, sync::Arc};
 
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sqlx::postgres::PgPoolOptions;
 use tessara_dashboard_module::{DashboardModuleState, router};
-use tessara_module_contract::{ProtocolSignaturePurposeV1, PurposeBoundVerifyingKeyV1};
+use tessara_module_contract::{
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
+};
 use tower_http::trace::TraceLayer;
 
 #[tokio::main]
@@ -42,6 +44,20 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::ShellContext,
         public_key,
     )?;
+    let service_secret: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(
+            env::var("TESSARA_DASHBOARD_SERVICE_SIGNING_KEY")
+                .context("TESSARA_DASHBOARD_SERVICE_SIGNING_KEY is required")?,
+        )?
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Dashboard service signing key must contain 32 bytes"))?;
+    let service_request_signer = Arc::new(PurposeBoundSigningKeyV1::from_secret_bytes(
+        "tessara.dashboards",
+        env::var("TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID")
+            .unwrap_or_else(|_| "dashboard-development-v1".into()),
+        ProtocolSignaturePurposeV1::ModuleServiceRequest,
+        service_secret,
+    )?);
 
     let address: SocketAddr = env::var("DASHBOARD_MODULE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8091".into())
@@ -50,6 +66,7 @@ async fn main() -> Result<()> {
         pool,
         core_authorization_verifier: authorization_verifier,
         core_shell_verifier: shell_verifier,
+        service_request_signer,
     })
     .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(address).await?;

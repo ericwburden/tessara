@@ -1152,6 +1152,43 @@ pub async fn run_component_version_stat_card(
     run_component_visual_kind(state, headers, component_ref, Some(version_id), "stat_card").await
 }
 
+pub(crate) async fn render_version_for_account(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    version_id: Uuid,
+    expected_kind: &'static str,
+    raw_query: &str,
+) -> ApiResult<serde_json::Value> {
+    let component_ref: String = sqlx::query_scalar(
+        "SELECT components.slug FROM component_versions
+         JOIN components ON components.id=component_versions.component_id
+         WHERE component_versions.id=$1",
+    )
+    .bind(version_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("component version not found".into()))?;
+    let version =
+        load_component_version_for_table(pool, account, &component_ref, Some(version_id)).await?;
+    if version.component_type != expected_kind {
+        return Err(ApiError::NotFound("component render kind not found".into()));
+    }
+    if expected_kind == "table" {
+        let uri: axum::http::Uri = format!("/?{raw_query}")
+            .parse()
+            .map_err(|_| ApiError::BadRequest("invalid component query".into()))?;
+        let query = Query::<ComponentTableQuery>::try_from_uri(&uri)
+            .map_err(|_| ApiError::BadRequest("invalid component query".into()))?
+            .0;
+        let table =
+            execute_component_table(pool, account, version, query.into_runtime_query()?).await?;
+        serde_json::to_value(table).map_err(|error| ApiError::Internal(error.into()))
+    } else {
+        let visual = execute_component_visual(pool, account, version, expected_kind, None).await?;
+        serde_json::to_value(visual).map_err(|error| ApiError::Internal(error.into()))
+    }
+}
+
 struct ComponentVersionForTable {
     id: Uuid,
     component_id: Uuid,

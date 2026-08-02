@@ -8,7 +8,7 @@ pub(super) async fn materialize_dataset_revision(
     materialize_dataset_revision_sql(tx, revision_id, &compiled.generated_sql).await
 }
 
-async fn materialize_dataset_revision_sql(
+pub(super) async fn materialize_dataset_revision_sql(
     tx: &mut Transaction<'_, Postgres>,
     revision_id: Uuid,
     generated_sql: &str,

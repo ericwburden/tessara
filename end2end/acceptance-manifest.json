@@ -1,12 +1,20 @@
 {
   "schema_version": 2,
-  "expected_total": 65,
+  "expected_total": 68,
   "files": [
+    {
+      "path": "analytics-sprint-7a.spec.ts",
+      "tests": [
+        "Sprint 7A scoped analytics boundary › source-exact reference inventory exposes the canonical Dataset Components and Dashboard",
+        "Sprint 7A scoped analytics boundary › real Dashboard mediation renders exact stat and table results",
+        "Sprint 7A scoped analytics boundary › private compatibility endpoints reject browser authority without disclosing resources"
+      ]
+    },
     {
       "path": "composition.spec.ts",
       "tests": [
         "Sprint 6F Application Composition › administrator sees desired, approval, observed, drift, and emergency controls",
-        "Sprint 6F Application Composition › composition read-back exposes lockfile, receipt, and explicit drift arrays",
+        "Sprint 6F Application Composition › composition read-back keeps materialization state coherent and exposes explicit drift arrays",
         "Sprint 6F Application Composition › unauthenticated users cannot inspect or mutate composition"
       ]
     },

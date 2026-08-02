@@ -7,7 +7,7 @@ use argon2::{
 use axum::http::{HeaderMap, header};
 use chrono::{Duration, Utc};
 use rand_core::OsRng;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
@@ -85,6 +85,33 @@ pub async fn require_capability(
     let account = require_authenticated(pool, headers).await?;
     ensure_capability(&account, required)?;
     Ok(account)
+}
+
+pub(crate) async fn account_context_for_actor(
+    pool: &PgPool,
+    account_id: Uuid,
+) -> ApiResult<AccountContext> {
+    let row = sqlx::query("SELECT email,display_name,is_active FROM accounts WHERE id=$1")
+        .bind(account_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
+    let is_active: bool = row.try_get("is_active")?;
+    if !is_active {
+        return Err(ApiError::Unauthorized);
+    }
+    let capability_scopes = repo::load_capability_scopes(pool, account_id).await?;
+    Ok(AccountContext {
+        account_id,
+        email: row.try_get("email")?,
+        display_name: row.try_get("display_name")?,
+        is_active,
+        roles: repo::load_role_names(pool, account_id).await?,
+        capabilities: capability_keys(&capability_scopes),
+        capability_scopes,
+        scope_nodes: repo::load_scope_nodes(pool, account_id).await?,
+        delegations: repo::load_delegations(pool, account_id).await?,
+    })
 }
 
 async fn authenticate_request_with_cookie_name(

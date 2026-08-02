@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.dashboards",
-  "release_version": "2.0.2",
+  "release_version": "2.1.0",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -359,6 +359,7 @@
   "public_api_routes": [
     {"path_template":"/api/dashboards","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.list","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
     {"path_template":"/api/dashboards/{dashboard_id}","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.get","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
+    {"path_template":"/api/dashboards/{dashboard_id}/placements/{placement_id}/render/{kind}","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.render_placement","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
     {"path_template":"/api/admin/dashboards","method":"POST","required_capability":"dashboards:manage","authorization_action":"dashboards.create","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/dashboards/visibility-nodes","method":"GET","required_capability":"dashboards:manage","authorization_action":"dashboards.list_manageable","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
     {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.update","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
@@ -383,17 +384,17 @@
     },
     {
       "path": "/dashboard.js",
-      "digest": "sha256:e9c5428a7d08f0e38e380d23bb47ddfa6a81713601aef27ef1923fb7ae6a6714",
+      "digest": "sha256:84c6078852c6fc1f9145366bb8bfcf2da13c18f4cd0068e72aca14db036e84b2",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dashboard-bindings.js",
-      "digest": "sha256:1f06971942239807f70ccf096fe7abf4357f5a76c8c7383d8fa84020221193ab",
+      "digest": "sha256:ca2bca20d4495516457f431d82117517b0fb6fe31496d2c9b0f86409c7dc68cb",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dashboard.wasm",
-      "digest": "sha256:f6281709e51db7c9c3dabc720e497bfa561a21ac4632ca6d84d5e1d58bfb8337",
+      "digest": "sha256:8058f7895f1d72fe03a94bb2224ef8f83b0676a3e0a174a9d0ebb62bac183d28",
       "content_type": "application/wasm"
     }
   ]

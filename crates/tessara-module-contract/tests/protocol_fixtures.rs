@@ -3,16 +3,16 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
+    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
     DependencyBindingKey, ExternalIdentityAssertionV1, FunctionalContractId, ModuleDefinitionId,
     ProtocolEnvelopeError, ProtocolSignaturePurposeV1, PurposeBoundVerifyingKeyV1, ShellContextV1,
     ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
-const VALID_PROTOCOL_MESSAGES: &[u8] = include_bytes!("fixtures/valid-protocol-messages-v1.json");
+const VALID_PROTOCOL_MESSAGES: &[u8] = include_bytes!("fixtures/valid-protocol-messages-v2.json");
 const VALID_PROTOCOL_MESSAGES_DIGEST: &str =
-    include_str!("fixtures/valid-protocol-messages-v1.json.sha256");
+    include_str!("fixtures/valid-protocol-messages-v2.json.sha256");
 const TAMPERED_SHELL_CONTEXT: &[u8] =
     include_bytes!("fixtures/invalid-tampered-shell-context-v1.json");
 const TAMPERED_SHELL_CONTEXT_DIGEST: &str =
@@ -21,7 +21,7 @@ const TAMPERED_SHELL_CONTEXT_DIGEST: &str =
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProtocolFixtures {
-    authorization_grant: SignedEnvelopeV1<AuthorizationGrantV1>,
+    authorization_grant: SignedEnvelopeV1<AuthorizationGrantV2>,
     external_identity: SignedEnvelopeV1<ExternalIdentityAssertionV1>,
     shell_context: SignedEnvelopeV1<ShellContextV1>,
     trust: DevelopmentTrustV1,
@@ -118,7 +118,7 @@ fn canonical_protocol_messages_verify_with_purpose_specific_public_keys() {
     fixtures
         .authorization_grant
         .payload
-        .validate_for(&AuthorizationValidationContextV1 {
+        .validate_for(&AuthorizationValidationContextV2 {
             installation_id: Uuid::from_u128(1),
             presenting_service: ModuleDefinitionId::new("tessara.core.gateway").unwrap(),
             audience_module_instance_id: Uuid::from_u128(2),
@@ -128,6 +128,7 @@ fn canonical_protocol_messages_verify_with_purpose_specific_public_keys() {
                 .unwrap(),
             action: "records.list".into(),
             operation: AuthorizationGrantOperationV1::Read,
+            resource_assertion: None,
             authorization_revision: 42,
             organization_revision: 17,
             now: now(),

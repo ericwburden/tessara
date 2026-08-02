@@ -14,12 +14,15 @@ use crate::{
 pub const SHELL_CONTEXT_MAX_LIFETIME_SECONDS: i64 = 60;
 pub const AUTHORIZATION_READ_MAX_LIFETIME_SECONDS: i64 = 60;
 pub const AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS: i64 = 30;
+pub const AUTHORIZATION_GRANT_SCHEMA_VERSION_V2: u16 = 2;
+pub const MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS: i64 = 30;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtocolSignaturePurposeV1 {
     ShellContext,
     AuthorizationGrant,
+    ModuleServiceRequest,
     EnrollmentEligibility,
     EnrollmentRedemption,
     RecoveryOperatorAuthorization,
@@ -373,10 +376,30 @@ impl CapabilityScopeBindingV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ResourceAuthorizationAssertionV1 {
+pub struct ResourceAuthorizationAssertionV2 {
     pub resource_type: ResourceTypeId,
     pub resource_id: String,
-    pub owner_organization_id: Uuid,
+    pub authority_revision: u64,
+    pub governing_organization_ids: Vec<Uuid>,
+}
+
+impl ResourceAuthorizationAssertionV2 {
+    fn validate(&self) -> Result<(), AuthorizationValidationError> {
+        if self.resource_id.trim().is_empty()
+            || self.authority_revision == 0
+            || self.governing_organization_ids.is_empty()
+        {
+            return Err(AuthorizationValidationError::InvalidResourceAssertion);
+        }
+        if self
+            .governing_organization_ids
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+        {
+            return Err(AuthorizationValidationError::InvalidResourceAssertion);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -390,7 +413,7 @@ pub struct DelegationBasisV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct AuthorizationGrantV1 {
+pub struct AuthorizationGrantV2 {
     pub schema_version: u16,
     pub installation_id: Uuid,
     pub original_actor_id: Uuid,
@@ -401,7 +424,7 @@ pub struct AuthorizationGrantV1 {
     pub action: String,
     pub operation: AuthorizationGrantOperationV1,
     pub capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
-    pub resource_assertion: Option<ResourceAuthorizationAssertionV1>,
+    pub resource_assertion: Option<ResourceAuthorizationAssertionV2>,
     pub delegation_basis: Vec<DelegationBasisV1>,
     pub authorization_revision: u64,
     pub organization_revision: u64,
@@ -411,7 +434,7 @@ pub struct AuthorizationGrantV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuthorizationValidationContextV1 {
+pub struct AuthorizationValidationContextV2 {
     pub installation_id: Uuid,
     pub presenting_service: ModuleDefinitionId,
     pub audience_module_instance_id: Uuid,
@@ -419,17 +442,18 @@ pub struct AuthorizationValidationContextV1 {
     pub functional_contract: FunctionalContractId,
     pub action: String,
     pub operation: AuthorizationGrantOperationV1,
+    pub resource_assertion: Option<ResourceAuthorizationAssertionV2>,
     pub authorization_revision: u64,
     pub organization_revision: u64,
     pub now: DateTime<Utc>,
 }
 
-impl AuthorizationGrantV1 {
+impl AuthorizationGrantV2 {
     pub fn validate_for(
         &self,
-        expected: &AuthorizationValidationContextV1,
+        expected: &AuthorizationValidationContextV2,
     ) -> Result<(), AuthorizationValidationError> {
-        if self.schema_version != CONTRACT_SCHEMA_VERSION_V1 {
+        if self.schema_version != AUTHORIZATION_GRANT_SCHEMA_VERSION_V2 {
             return Err(AuthorizationValidationError::UnsupportedSchemaVersion);
         }
         if self.installation_id != expected.installation_id {
@@ -449,6 +473,12 @@ impl AuthorizationGrantV1 {
         if self.action != expected.action || self.operation != expected.operation {
             return Err(AuthorizationValidationError::WrongAction);
         }
+        if self.resource_assertion != expected.resource_assertion {
+            return Err(AuthorizationValidationError::StaleResourceAssertion);
+        }
+        if let Some(assertion) = &self.resource_assertion {
+            assertion.validate()?;
+        }
         if self.authorization_revision != expected.authorization_revision {
             return Err(AuthorizationValidationError::StaleAuthorizationRevision);
         }
@@ -458,20 +488,7 @@ impl AuthorizationGrantV1 {
         if self.jti.is_nil() {
             return Err(AuthorizationValidationError::MissingReplayIdentifier);
         }
-        if self.capability_scope_bindings.is_empty() {
-            return Err(AuthorizationValidationError::MissingCapabilityBindings);
-        }
-        for binding in &self.capability_scope_bindings {
-            let mut organizations = BTreeSet::new();
-            organizations.insert(binding.organization_root_id);
-            if binding
-                .authorized_organization_ids
-                .iter()
-                .any(|organization_id| !organizations.insert(*organization_id))
-            {
-                return Err(AuthorizationValidationError::DuplicateOrganizationBinding);
-            }
-        }
+        validate_capability_bindings(&self.capability_scope_bindings)?;
         let max_lifetime = match self.operation {
             AuthorizationGrantOperationV1::Read => AUTHORIZATION_READ_MAX_LIFETIME_SECONDS,
             AuthorizationGrantOperationV1::Mutation => AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS,
@@ -485,6 +502,101 @@ impl AuthorizationGrantV1 {
             .iter()
             .any(|binding| binding.authorizes(capability, organization_id))
     }
+}
+
+fn validate_capability_bindings(
+    bindings: &[CapabilityScopeBindingV1],
+) -> Result<(), AuthorizationValidationError> {
+    if bindings.is_empty() {
+        return Err(AuthorizationValidationError::MissingCapabilityBindings);
+    }
+    for binding in bindings {
+        let mut organizations = BTreeSet::new();
+        organizations.insert(binding.organization_root_id);
+        if binding
+            .authorized_organization_ids
+            .iter()
+            .any(|organization_id| !organizations.insert(*organization_id))
+        {
+            return Err(AuthorizationValidationError::DuplicateOrganizationBinding);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleServiceRequestV1 {
+    pub schema_version: u16,
+    pub installation_id: Uuid,
+    pub module_instance_id: Uuid,
+    pub module_definition_id: ModuleDefinitionId,
+    pub method: String,
+    pub path: String,
+    pub canonical_body_digest: String,
+    pub inbound_grant_digest: String,
+    pub correlation_id: String,
+    pub nonce: Uuid,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleServiceRequestValidationContextV1 {
+    pub installation_id: Uuid,
+    pub module_instance_id: Uuid,
+    pub module_definition_id: ModuleDefinitionId,
+    pub method: String,
+    pub path: String,
+    pub canonical_body_digest: String,
+    pub inbound_grant_digest: String,
+    pub now: DateTime<Utc>,
+}
+
+impl ModuleServiceRequestV1 {
+    pub fn validate_for(
+        &self,
+        expected: &ModuleServiceRequestValidationContextV1,
+    ) -> Result<(), ModuleServiceRequestValidationError> {
+        if self.schema_version != CONTRACT_SCHEMA_VERSION_V1 {
+            return Err(ModuleServiceRequestValidationError::UnsupportedSchemaVersion);
+        }
+        if self.installation_id != expected.installation_id {
+            return Err(ModuleServiceRequestValidationError::WrongInstallation);
+        }
+        if self.module_instance_id != expected.module_instance_id
+            || self.module_definition_id != expected.module_definition_id
+        {
+            return Err(ModuleServiceRequestValidationError::WrongService);
+        }
+        if self.method != expected.method || self.path != expected.path {
+            return Err(ModuleServiceRequestValidationError::WrongTarget);
+        }
+        if self.canonical_body_digest != expected.canonical_body_digest
+            || self.inbound_grant_digest != expected.inbound_grant_digest
+        {
+            return Err(ModuleServiceRequestValidationError::WrongDigest);
+        }
+        if !is_sha256_digest(&self.canonical_body_digest)
+            || !is_sha256_digest(&self.inbound_grant_digest)
+        {
+            return Err(ModuleServiceRequestValidationError::InvalidDigest);
+        }
+        if self.correlation_id.trim().is_empty() || self.nonce.is_nil() {
+            return Err(ModuleServiceRequestValidationError::MissingReplayIdentity);
+        }
+        validate_window(
+            self.issued_at,
+            self.expires_at,
+            expected.now,
+            MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
+        )
+        .map_err(ModuleServiceRequestValidationError::Window)
+    }
+}
+
+fn is_sha256_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -511,6 +623,30 @@ pub enum AuthorizationValidationError {
     MissingCapabilityBindings,
     #[error("authorization grant repeats an organization inside one capability binding")]
     DuplicateOrganizationBinding,
+    #[error("authorization grant resource assertion is invalid")]
+    InvalidResourceAssertion,
+    #[error("authorization grant resource assertion is stale or targets another resource")]
+    StaleResourceAssertion,
+    #[error(transparent)]
+    Window(#[from] SignedWindowError),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ModuleServiceRequestValidationError {
+    #[error("module service request schema version is unsupported")]
+    UnsupportedSchemaVersion,
+    #[error("module service request is bound to another installation")]
+    WrongInstallation,
+    #[error("module service request identity does not match")]
+    WrongService,
+    #[error("module service request target does not match")]
+    WrongTarget,
+    #[error("module service request digest does not match")]
+    WrongDigest,
+    #[error("module service request digest is not a SHA-256 hex digest")]
+    InvalidDigest,
+    #[error("module service request is missing correlation or nonce identity")]
+    MissingReplayIdentity,
     #[error(transparent)]
     Window(#[from] SignedWindowError),
 }
@@ -623,10 +759,10 @@ mod tests {
         }
     }
 
-    fn grant(operation: AuthorizationGrantOperationV1) -> AuthorizationGrantV1 {
+    fn grant(operation: AuthorizationGrantOperationV1) -> AuthorizationGrantV2 {
         let now = now();
-        AuthorizationGrantV1 {
-            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+        AuthorizationGrantV2 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
             installation_id: id(1),
             original_actor_id: id(3),
             presenting_service: module("tessara.core.gateway"),
@@ -667,8 +803,8 @@ mod tests {
 
     fn grant_validation(
         operation: AuthorizationGrantOperationV1,
-    ) -> AuthorizationValidationContextV1 {
-        AuthorizationValidationContextV1 {
+    ) -> AuthorizationValidationContextV2 {
+        AuthorizationValidationContextV2 {
             installation_id: id(1),
             presenting_service: module("tessara.core.gateway"),
             audience_module_instance_id: id(2),
@@ -680,8 +816,50 @@ mod tests {
             }
             .into(),
             operation,
+            resource_assertion: None,
             authorization_revision: 42,
             organization_revision: 17,
+            now: now() + Duration::seconds(1),
+        }
+    }
+
+    fn resource_assertion(revision: u64) -> ResourceAuthorizationAssertionV2 {
+        ResourceAuthorizationAssertionV2 {
+            resource_type: ResourceTypeId::new("tessara.components.component-version").unwrap(),
+            resource_id: id(40).to_string(),
+            authority_revision: revision,
+            governing_organization_ids: vec![id(10), id(11)],
+        }
+    }
+
+    fn service_request() -> ModuleServiceRequestV1 {
+        let now = now();
+        ModuleServiceRequestV1 {
+            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+            installation_id: id(1),
+            module_instance_id: id(2),
+            module_definition_id: module("tessara.dashboard"),
+            method: "POST".into(),
+            path: "/api/private/dashboard-components/render".into(),
+            canonical_body_digest: "a".repeat(64),
+            inbound_grant_digest: "b".repeat(64),
+            correlation_id: "corr-7a-1".into(),
+            nonce: id(50),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        }
+    }
+
+    fn service_request_validation() -> ModuleServiceRequestValidationContextV1 {
+        let request = service_request();
+        ModuleServiceRequestValidationContextV1 {
+            installation_id: request.installation_id,
+            module_instance_id: request.module_instance_id,
+            module_definition_id: request.module_definition_id,
+            method: request.method,
+            path: request.path,
+            canonical_body_digest: request.canonical_body_digest,
+            inbound_grant_digest: request.inbound_grant_digest,
             now: now() + Duration::seconds(1),
         }
     }
@@ -846,6 +1024,57 @@ mod tests {
         assert_eq!(
             duplicate_scope.validate_for(&grant_validation(AuthorizationGrantOperationV1::Read)),
             Err(AuthorizationValidationError::DuplicateOrganizationBinding)
+        );
+    }
+
+    #[test]
+    fn v2_resource_assertion_is_exact_and_provider_fresh() {
+        let assertion = resource_assertion(7);
+        let mut grant = grant(AuthorizationGrantOperationV1::Read);
+        grant.resource_assertion = Some(assertion.clone());
+        let mut context = grant_validation(AuthorizationGrantOperationV1::Read);
+        context.resource_assertion = Some(assertion);
+        grant.validate_for(&context).unwrap();
+
+        context
+            .resource_assertion
+            .as_mut()
+            .unwrap()
+            .authority_revision += 1;
+        assert_eq!(
+            grant.validate_for(&context),
+            Err(AuthorizationValidationError::StaleResourceAssertion)
+        );
+    }
+
+    #[test]
+    fn service_request_binds_target_and_digests() {
+        let request = service_request();
+        let mut expected = service_request_validation();
+        request.validate_for(&expected).unwrap();
+
+        expected.path = "/api/private/dashboard-components/catalog".into();
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(ModuleServiceRequestValidationError::WrongTarget)
+        );
+        expected = service_request_validation();
+        expected.inbound_grant_digest = "c".repeat(64);
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(ModuleServiceRequestValidationError::WrongDigest)
+        );
+    }
+
+    #[test]
+    fn service_request_lifetime_is_capped_at_thirty_seconds() {
+        let mut request = service_request();
+        request.expires_at += Duration::seconds(1);
+        assert_eq!(
+            request.validate_for(&service_request_validation()),
+            Err(ModuleServiceRequestValidationError::Window(
+                SignedWindowError::LifetimeTooLong
+            ))
         );
     }
 }

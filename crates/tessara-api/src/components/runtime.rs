@@ -127,8 +127,15 @@ async fn execute_table_component(
         .iter()
         .map(|field| quote_identifier(&field.key))
         .collect::<Vec<_>>();
-    let mut predicates =
-        vec![tier_access_predicate_for_materialization(pool, account, &materialization).await?];
+    let mut predicates = vec![
+        tier_access_predicate_for_materialization(
+            pool,
+            account,
+            version.dataset_id,
+            &materialization,
+        )
+        .await?,
+    ];
     predicates.extend(component_filter_sql(&config.filters, &field_refs)?);
     predicates.extend(component_filter_sql(
         &query.filters,
@@ -195,9 +202,11 @@ pub(super) async fn execute_component_visual(
             &state,
         ));
     }
+    let dataset_id = version.dataset_id;
     let rows = component_visual_aggregated_rows(
         pool,
         account,
+        dataset_id,
         &materialization,
         &config,
         &fields,
@@ -235,6 +244,7 @@ fn empty_component_visual(
 async fn component_visual_aggregated_rows(
     pool: &sqlx::PgPool,
     account: &auth::AccountContext,
+    dataset_id: Uuid,
     materialization: &MajorLineMaterialization,
     config: &VisualComponentConfig,
     fields: &[DataField],
@@ -251,8 +261,10 @@ async fn component_visual_aggregated_rows(
     select_columns.sort();
     select_columns.dedup();
     let field_refs = fields.iter().collect::<Vec<_>>();
-    let mut predicates =
-        vec![tier_access_predicate_for_materialization(pool, account, materialization).await?];
+    let mut predicates = vec![
+        tier_access_predicate_for_materialization(pool, account, dataset_id, materialization)
+            .await?,
+    ];
     predicates.extend(component_filter_sql(&config.shared().filters, &field_refs)?);
     let full_name = materialized_full_name(materialization);
     let limit_clause = component_visual_source_limit_clause(source_row_limit);
@@ -1511,19 +1523,10 @@ fn nullable_boolean_expression_sql(expression: &str) -> String {
     )
 }
 
-fn tier_access_predicate(account: &auth::AccountContext) -> &'static str {
-    if account.has_capability("admin:all") || account.has_capability("datasets:read_confidential") {
-        "TRUE"
-    } else if account.has_capability("datasets:read_restricted") {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal', 'restricted')"
-    } else {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal')"
-    }
-}
-
 async fn tier_access_predicate_for_materialization(
     pool: &sqlx::PgPool,
     account: &auth::AccountContext,
+    dataset_id: Uuid,
     materialization: &MajorLineMaterialization,
 ) -> ApiResult<String> {
     let has_restriction_tier: bool = sqlx::query_scalar(
@@ -1543,7 +1546,16 @@ async fn tier_access_predicate_for_materialization(
     .await?;
 
     if has_restriction_tier {
-        Ok(tier_access_predicate(account).to_string())
+        Ok(
+            crate::analytics_authorization::tier_access_predicate_for_dataset(
+                pool,
+                account,
+                dataset_id,
+                "components:read",
+            )
+            .await?
+            .to_string(),
+        )
     } else {
         Ok("TRUE".into())
     }

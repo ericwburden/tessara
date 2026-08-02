@@ -238,21 +238,18 @@ async fn summary(
     .bind(installation_id)
     .fetch_optional(&state.pool)
     .await?;
-    if latest_receipt.is_none() {
-        if let Ok(supervisor_url) = std::env::var("TESSARA_SUPERVISOR_URL") {
-            if let Ok(response) = reqwest::Client::new()
-                .get(format!(
-                    "{}/v1/receipts/current",
-                    supervisor_url.trim_end_matches('/')
-                ))
-                .send()
-                .await
-            {
-                if response.status().is_success() {
-                    latest_receipt = response.json::<Value>().await.ok();
-                }
-            }
-        }
+    if latest_receipt.is_none()
+        && let Ok(supervisor_url) = std::env::var("TESSARA_SUPERVISOR_URL")
+        && let Ok(response) = reqwest::Client::new()
+            .get(format!(
+                "{}/v1/receipts/current",
+                supervisor_url.trim_end_matches('/')
+            ))
+            .send()
+            .await
+        && response.status().is_success()
+    {
+        latest_receipt = response.json::<Value>().await.ok();
     }
     if let Some(document) = &latest_lockfile {
         detect_composition_drift(
@@ -812,6 +809,55 @@ async fn apply_core_bootstrap(
     .bind(request.input.root_node_id)
     .execute(&mut *transaction)
     .await?;
+    let generated_sql = "SELECT 'composition-bootstrap'::text AS __row_id, \
+                         'public'::text AS __restriction_tier, \
+                         'Reference row'::text AS label";
+    let dataset_revision_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO dataset_revisions
+            (dataset_id, version_number, version_label, version_major, version_minor,
+             version_patch, semantic_bump, started_new_major_line, status, published_at,
+             initial_source, operations, generated_sql, output_fields, definition_metadata)
+        VALUES ($1, 1, '1.0.0', 1, 0, 0, 'INITIAL', true, 'published', now(),
+                '{"kind":"composition_bootstrap"}'::jsonb, '[]'::jsonb, $2,
+                jsonb_build_array(jsonb_build_object(
+                    'id', '01980000-0002-7000-8000-000000000006'::uuid,
+                    'key', 'label',
+                    'label', 'Label',
+                    'source_alias', 'composition_bootstrap',
+                    'source_field_key', 'label',
+                    'field_type', 'text',
+                    'position', 0)),
+                jsonb_build_object('name', 'Composition Bootstrap Dataset',
+                                   'slug', $3::text,
+                                   'grain', 'node',
+                                   'visibility_node_ids', jsonb_build_array($4::uuid)))
+        ON CONFLICT (dataset_id, version_number)
+        DO UPDATE SET version_label = EXCLUDED.version_label,
+                      version_major = EXCLUDED.version_major,
+                      version_minor = EXCLUDED.version_minor,
+                      version_patch = EXCLUDED.version_patch,
+                      status = EXCLUDED.status,
+                      published_at = EXCLUDED.published_at,
+                      generated_sql = EXCLUDED.generated_sql,
+                      output_fields = EXCLUDED.output_fields,
+                      definition_metadata = EXCLUDED.definition_metadata
+        RETURNING id
+        "#,
+    )
+    .bind(request.input.dataset_id)
+    .bind(generated_sql)
+    .bind(&request.input.dataset_external_key)
+    .bind(request.input.root_node_id)
+    .fetch_one(&mut *transaction)
+    .await?;
+    crate::datasets::materialize_composition_bootstrap_dataset(
+        &mut transaction,
+        request.input.dataset_id,
+        dataset_revision_id,
+        generated_sql,
+    )
+    .await?;
     for component in &request.input.components {
         sqlx::query("INSERT INTO components(id,name,slug,description) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description")
             .bind(component.component_id).bind(component.name.trim()).bind(&component.slug)
@@ -1188,10 +1234,10 @@ fn drift_target(path: &str) -> ApiResult<(&str, &str)> {
         .strip_prefix("/modules/")
         .ok_or_else(|| ApiError::BadRequest("Unsupported drift path".into()))?;
     for dimension in ["configuration", "enabled"] {
-        if let Some(definition_id) = value.strip_suffix(&format!("/{dimension}")) {
-            if !definition_id.is_empty() {
-                return Ok((definition_id, dimension));
-            }
+        if let Some(definition_id) = value.strip_suffix(&format!("/{dimension}"))
+            && !definition_id.is_empty()
+        {
+            return Ok((definition_id, dimension));
         }
     }
     Err(ApiError::BadRequest("Unsupported drift path".into()))
@@ -1261,9 +1307,9 @@ mod tests {
     fn checked_catalog_manifest_digests_match_runtime_manifests() {
         let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../deploy/sprint-6f/catalogs/local-release-catalog.json"
+            "/../../deploy/sprint-7a/catalogs/local-release-catalog.json"
         )))
-        .expect("valid Sprint 6F catalog");
+        .expect("valid Sprint 7A catalog");
         let manifests = [
             serde_json::from_str::<ModuleManifest>(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),

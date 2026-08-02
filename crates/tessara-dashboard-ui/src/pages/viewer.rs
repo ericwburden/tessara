@@ -450,6 +450,7 @@ pub fn DashboardViewerContent(dashboard_id: String) -> impl IntoView {
             } else if let Some(message) = error.get() {
                 view! { <EmptyState title="Dashboard unavailable" message=message/> }.into_any()
             } else if let Some(loaded) = dashboard.get() {
+                let dashboard_id = loaded.id.clone();
                 let detail_href = format!("/dashboards/{}", loaded.id);
                 let edit_href = format!("/dashboards/{}/edit", loaded.id);
                 let title = loaded.name.clone();
@@ -496,7 +497,7 @@ pub fn DashboardViewerContent(dashboard_id: String) -> impl IntoView {
                                 style="--dashboard-track-size: clamp(48px, 5.8vw, 80px)"
                             >
                                 {loaded.placements.into_iter().map(|placement| {
-                                    view! { <DashboardViewerPlacement placement/> }
+                                    view! { <DashboardViewerPlacement dashboard_id=dashboard_id.clone() placement/> }
                                 }).collect_view()}
                             </div>
                         }.into_any()
@@ -510,7 +511,7 @@ pub fn DashboardViewerContent(dashboard_id: String) -> impl IntoView {
 }
 
 #[component]
-fn DashboardViewerPlacement(placement: DashboardPlacement) -> impl IntoView {
+fn DashboardViewerPlacement(dashboard_id: String, placement: DashboardPlacement) -> impl IntoView {
     let style = placement_style(
         placement.grid_row,
         placement.grid_column,
@@ -572,10 +573,15 @@ fn DashboardViewerPlacement(placement: DashboardPlacement) -> impl IntoView {
     let busy = ArcRwSignal::new(false);
     let target = component.as_ref().and_then(|component| {
         ComponentVersionKind::from_api_kind(&component.component_type).map(|kind| {
-            ComponentVersionTarget::new(
+            let endpoint = format!(
+                "/api/dashboards/{dashboard_id}/placements/{placement_id}/render/{}",
+                kind.endpoint_segment()
+            );
+            ComponentVersionTarget::mediated(
                 component.component_slug.clone(),
                 component.component_version_id.clone(),
                 kind,
+                endpoint,
             )
         })
     });
@@ -1028,7 +1034,7 @@ mod tests {
     fn table_placements_delegate_title_and_fullscreen_chrome_to_the_standard_renderer() {
         let _ = any_spawner::Executor::init_futures_executor();
         let html = Owner::new()
-            .with(|| view! { <DashboardViewerPlacement placement=table_placement()/> }.to_html());
+            .with(|| view! { <DashboardViewerPlacement dashboard_id="dashboard-1".to_string() placement=table_placement()/> }.to_html());
 
         assert!(html.contains("data-placement-presentation=\"table\""));
         assert!(html.contains("aria-label=\"Program table\""));
@@ -1047,7 +1053,7 @@ mod tests {
             let title = format!("{kind} delivery summary");
             let html = Owner::new().with(|| {
                 view! {
-                    <DashboardViewerPlacement placement=component_placement(kind, &title)/>
+                    <DashboardViewerPlacement dashboard_id="dashboard-1".to_string() placement=component_placement(kind, &title)/>
                 }
                 .to_html()
             });
@@ -1078,6 +1084,7 @@ mod tests {
         let html = Owner::new().with(|| {
             view! {
                 <DashboardViewerPlacement
+                    dashboard_id="dashboard-1".to_string()
                     placement=component_placement("stat_card", "Total participants")
                 />
             }
@@ -1104,7 +1111,7 @@ mod tests {
             .as_mut()
             .expect("fixture component")
             .component_slug = "confidential-performance-chart".into();
-        let html = Owner::new().with(|| view! { <DashboardViewerPlacement placement/> }.to_html());
+        let html = Owner::new().with(|| view! { <DashboardViewerPlacement dashboard_id="dashboard-1".to_string() placement/> }.to_html());
 
         assert!(html.contains("data-placement-presentation=\"unavailable\""));
         assert!(html.contains("dashboard-viewer-placement__header"));
@@ -1135,7 +1142,7 @@ mod tests {
             placement.availability = DashboardPlacementAvailability::Unavailable;
             placement.resolution_state = Some(state);
             let html =
-                Owner::new().with(|| view! { <DashboardViewerPlacement placement/> }.to_html());
+                Owner::new().with(|| view! { <DashboardViewerPlacement dashboard_id="dashboard-1".to_string() placement/> }.to_html());
 
             assert!(html.contains(state.label()), "{state:?}: {html}");
             assert!(html.contains(state.message()), "{state:?}: {html}");

@@ -11,6 +11,7 @@ use super::{
     category_labels_map, csv_field_keys,
 };
 
+#[cfg(feature = "hydrate")]
 pub(super) fn build_component_config(values: &ComponentFormValues) -> Value {
     ComponentConfigDraft::from_form(values).into_json()
 }
@@ -83,6 +84,7 @@ pub(super) enum ComponentConfigDraft {
 }
 
 impl ComponentConfigDraft {
+    #[cfg(feature = "hydrate")]
     fn from_form(values: &ComponentFormValues) -> Self {
         if values.component_type == "table" {
             return Self::Table(TableConfigDraft {
@@ -157,6 +159,7 @@ impl ComponentConfigDraft {
 }
 
 impl VisualSharedDraft {
+    #[cfg(feature = "hydrate")]
     fn from_form(values: &ComponentFormValues) -> Self {
         Self {
             summary_field: values.visual_summary_field.trim().into(),

@@ -1,0 +1,9 @@
+name: tessara-sprint-7a
+
+# Fresh Sprint 7A topology. Sprint 6F supplies the stable Supervisor and
+# isolated-module baseline; this source-exact override owns all Sprint 7A image and identity
+# changes without modifying a retained deployment profile.
+include:
+  - path:
+      - ../sprint-6f/compose.yaml
+      - ./compose.override.yaml

@@ -1009,13 +1009,13 @@ fn validate_module_cycles(
             continue;
         };
         for dependency in &release.dependencies {
-            if let Some(provider) = selection.dependency_bindings.get(&dependency.binding_key) {
-                if selected.contains_key(provider.as_str()) {
-                    edges
-                        .entry(&selection.definition_id)
-                        .or_default()
-                        .push(provider);
-                }
+            if let Some(provider) = selection.dependency_bindings.get(&dependency.binding_key)
+                && selected.contains_key(provider.as_str())
+            {
+                edges
+                    .entry(&selection.definition_id)
+                    .or_default()
+                    .push(provider);
             }
         }
     }

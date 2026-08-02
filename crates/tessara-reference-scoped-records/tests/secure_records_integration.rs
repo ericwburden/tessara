@@ -7,7 +7,7 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPoolOptions;
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, CapabilityScopeBindingV1,
+    AuthorizationGrantOperationV1, AuthorizationGrantV2, CapabilityScopeBindingV1,
     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, NavigationContributionId,
     NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
     PurposeBoundSigningKeyV1, SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1,
@@ -72,7 +72,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     let now = Utc::now();
     let shell = shell_signer
         .sign(ShellContextV1 {
-            schema_version: 1,
+            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
             installation_id,
             module_definition_id: ModuleDefinitionId::new(
                 tessara_reference_scoped_records::MODULE_DEFINITION_ID,
@@ -306,8 +306,8 @@ fn signed_grant(
 ) -> String {
     let now = Utc::now();
     let envelope = signer
-        .sign(AuthorizationGrantV1 {
-            schema_version: 1,
+        .sign(AuthorizationGrantV2 {
+            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
             installation_id: context.installation_id,
             original_actor_id: context.actor_id,
             presenting_service: ModuleDefinitionId::new("tessara.core").unwrap(),

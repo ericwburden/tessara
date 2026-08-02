@@ -1,0 +1,332 @@
+# Sprint 7A Validation Record
+
+- Sprint: `Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice`
+- Status: Implementation verification passed; formal candidate validation not run
+- Candidate: Not Frozen
+- Closeout: Not Authorized
+- Evidence root: `artifacts/sprint-7a-closeout/`
+
+This record is the planned acceptance inventory. Kickoff does not execute
+preflight, candidate freeze, SIT, deployed smoke, UAT, or closeout.
+
+## Implementation Verification (2026-08-02)
+
+This evidence is an implementation confidence check only. It does not freeze a
+candidate or satisfy the formal SIT/UAT/closeout regime below.
+
+- `cargo fmt --all -- --check`: passed.
+- `cargo check --workspace --all-targets --locked`: passed.
+- Focused protocol, Components contract, analytics authorization, Dashboard
+  module/UI, shared viewer, migration checksum, and catalog digest tests passed.
+- Core API library tests passed `163/163` after filtering the two explicitly
+  database-environment-gated integration tests; those require
+  `TEST_API_DATABASE_URL` and `TEST_API_ENROLLMENT_DATABASE_URL`.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`:
+  passed after correcting every reported warning without suppressions.
+- The implementation was re-audited under the forward-only implementation
+  skill pulled from `main`. The audit removed the Dashboard-specific route
+  variant from the shared viewer, advanced all repository authorization grant
+  producers/consumers and canonical fixtures to `AuthorizationGrantV2`, and
+  removed the duplicate direct Core administration port.
+- The web-crate boundary, module-SDK boundary, and exact compatibility tuple
+  scripts passed with no findings.
+- Focused all-feature tests for the contract, composition, Components contract,
+  Dashboard module, shared viewer, Components web crate, Supervisor, and
+  reference module SDK passed. A full all-workspace/all-feature test attempt was
+  blocked by an MSVC `link.exe` internal `LNK1000` crash while linking the
+  `tessara-api` `hierarchy_metadata_fields` test executable; the same source
+  passed workspace check and strict Clippy, so this remains an environment/tool
+  limitation rather than a product-test assertion failure.
+- Dashboard `2.1.0` release WASM and bindings were rebuilt; manifest and
+  catalog digests were verified.
+- Fresh source-exact Sprint 7A reference apply succeeded. The subsequent
+  unchanged apply returned `no_op=true` with receipt digest
+  `sha256:68db214639016049aed90733ffb6c5542794e4df1c1b843033f63df6b806111a`.
+- Placement-owned stat-card and table renders passed through the `8086` public
+  gateway, Core's module proxy, and the real Dashboard process. The stat value
+  was `1`; the table returned `Reference row`; both reported ready
+  materialization.
+- Core retained one Dashboard service identity and four consumed one-time
+  nonces after the two renders (metadata resolution plus render for each).
+- The disposable reference topology uses gateway `8086` and Supervisor `8096`.
+  Docker discovery is constrained to the Sprint 7A Compose project so retained
+  profiles cannot contribute colliding route/service identities.
+
+## Scope And Acceptance Inventory
+
+| Roadmap clause | Risk / contract | Automated proof | Deployed smoke proof | Manual UAT proof | Status |
+|---|---|---|---|---|---|
+| Dataset previews enforce authored scoped restriction rules | Blocked rows or tier contributions leak when capability and scope are evaluated separately | Dataset integration fixture asserts source predicates precede count/filter/page/aggregate and tier authority covers the same governing roots | Focused smoke compares exact admin/scoped row values and counts | UAT-02 Dataset tier rows | Not Run |
+| Component execution enforces authored scoped restriction rules | Table/chart/stat output includes blocked rows or aggregates | Component runtime integration tests for all presentation kinds, search, filters, pagination, and aggregation | Execute seeded table/chart/stat as admin and scoped actors | UAT-03 Component execution | Not Run |
+| Dashboard viewing enforces authored scoped restriction rules | Dashboard scope or placement reference becomes implicit Component authority | Dashboard/Core integration proves joint Dashboard and Component decisions | View seeded mixed-placement Dashboard through real module/gateway boundary | UAT-04 Dashboard viewing | Not Run |
+| Dataset and revision metadata is scoped | Names, revisions, fields, policy, counts, links, or scope nodes leak | API known/random and filtered-count tests | Directory/detail/revision requests under admin/scoped/no-access sessions | UAT-01 Scoped Dataset catalog | Not Run |
+| ComponentVersion and linked presentation metadata is scoped | Hidden Dataset/Component identity leaks through linked assets | Provider decision and DTO redaction tests | Direct and Dashboard adapter metadata calls for blocked known/random IDs | UAT-03 and UAT-06 | Not Run |
+| Dashboard composition metadata is scoped | Placement titles, types, references, or available catalog reveal blocked Components | Restricted resolution serialization and SSR/bootstrap/DOM absence tests | Dashboard detail/editor/viewer response and rendered HTML audit | UAT-04 Dashboard viewing | Not Run |
+| Propagate installation and original actor | Cross-installation or actor substitution | Signed fixture and live receipt assertions | Capture exact successful exchange without secret/grant bytes | UAT-05 Cross-boundary recovery | Not Run |
+| Propagate Dashboard presenting-service identity | Confused deputy; Core and Dashboard identities collapse | Wrong-presenter and downstream-exchange integration tests | Real Dashboard-presented render succeeds; forged presenter fails | UAT-05 and UAT-07 | Not Run |
+| Bind declared compatibility dependency, contract, and action | An installed but undeclared service invokes Components | Wrong binding/contract/action/operation matrix | Live forged calls return one stable restricted result | UAT-07 Service misuse | Not Run |
+| Verify scope-bound grants/Core decisions and downstream audience | Capability set and scope set form a cross-product or audience is replayed | Protocol plus mixed-scope provider/consumer tests | Exact grant/decision receipt fields and wrong-audience failure | UAT-05–UAT-07 | Not Run |
+| Verify freshness | Old role, scope, ownership/visibility, Organization, or delegation authority remains usable | Issue-mutate-replay integration matrix | Live mutation invalidates retained grant; fresh request reflects change | UAT-08 Freshness | Not Run |
+| Blocked rows, entities, metadata, and Dashboard content | Partial redaction still leaks values or counts | Negative assertions over response, SQL result, bootstrap, DOM, and network payloads | Scoped actor exact expected inventory and recognizable blocked sentinels absent | UAT-02–UAT-06 | Not Run |
+| Mixed capabilities on disjoint Organization subtrees | `read@A × restricted@B` or `component@A × dashboard@B` is accepted | Dedicated disjoint-role fixture across Dataset, Component, Dashboard, and adapter | Focused conformance smoke with positive controls for A and B | UAT-06 Disjoint negatives | Not Run |
+| Undeclared and wrong-audience/action services fail closed | User authority can be exchanged/replayed by another service | Provider-neutral conformance negative matrix | Live wrong-service/action/audience requests produce no execution or metadata | UAT-07 Service misuse | Not Run |
+| Known versus random identifiers meet 6B non-disclosure profile | Status/body/header/timing reveals resource existence | Optimized balanced known/random runner and schema/publication self-test | Retained JSON and SHA-256 for Dataset, ComponentVersion, Dashboard states | UAT-06 known/random comparison | Not Run |
+| Deprecated analytical endpoints remain adapter-only | Compatibility route becomes new product authority or bypass | Static route/dependency audit and shared-decision integration tests | Baseline smoke inventory unchanged | UAT-09 Compatibility | Not Run |
+| Dataset and Component paths move toward extractable boundaries | New policy remains embedded in large route/runtime files | Boundary check for typed dto/service/repo decision seams | Conformance runner invokes typed provider adapter, not private DB access | UAT-09 Compatibility | Not Run |
+| Empty, unavailable, and forbidden states are clear and non-leaking | Generic failures are confusing or detailed failures disclose metadata | SSR copy, accessibility, redaction, hydration, and console tests | Fault injection plus focused browser smoke | UAT-01–UAT-05 and UAT-10 | Not Run |
+| Existing Dataset, Component, and Dashboard surfaces remain usable | Security fix breaks normal application tasks | Full API/workspace/Playwright regression | General smoke and scripted UAT | UAT-01–UAT-05 and UAT-11 | Not Run |
+| Operators receive understandable cross-module failure states | Provider outage strands user or erases shell context | Dashboard degraded-state and retry tests | Stop/restore provider; shell, route, recovery link, and retry remain useful | UAT-05 and UAT-10 | Not Run |
+| Scoped operator can preview Datasets, execute/view Components, and view Dashboards | End-to-end exit is proved only in isolated layers | Complete scoped analytics integration scenario | Focused deployed acceptance through gateway and real Dashboard process | UAT-01–UAT-05 | Not Run |
+| Administrator sees the full seeded analytical set | Fix accidentally narrows global administrator authority | Exact admin inventory and all-tier results | Admin focused smoke exact assets/rows/placements | UAT-11 Administrator control | Not Run |
+| Phase 8 extractions can rerun the proof | Tests are tied to Core-private implementation | Provider-neutral conformance self-test and documented adapter inputs | Run conformance against current transition provider | UAT-09 Compatibility | Not Run |
+
+## Required Evidence Inventory
+
+| Artifact | Producer | Required before | Planned path / rule | Status |
+|---|---|---|---|---|
+| `preflight-result.json` | Validation preflight | Candidate freeze | Evidence root; passing and hashed | Not Run |
+| `candidate.json` | Validation preflight | SIT | Exact clean implementation commit/tree and fingerprint | Not Run |
+| Phase attempt receipts | Every phase/lane | Result collection | `attempts/<phase>-<attempt>.json`; authoritative flag explicit | Not Run |
+| Static/boundary logs | SIT | SIT result | Commands, start/end, exit status, raw logs | Not Run |
+| Rust workspace logs/results | SIT | SIT result | Locked workspace plus targeted suites | Not Run |
+| Source-exact build/provenance receipt | SIT | Deployed lanes | Image digests and commit/tree/dirty labels | Not Run |
+| Fresh apply/materialization receipt | SIT | Deployed lanes | Exact catalog/Blueprint/lockfile/plan/authorization/operation identities | Not Run |
+| Idempotent second-run receipt | SIT | Deployed lanes | Stable plan/lockfile and `no_op=true`; exact owner receipt cardinality | Not Run |
+| Authorization exchange evidence | SIT | Deployed smoke | Non-secret installation/actor/service/audience/binding/contract/action/revision identities | Not Run |
+| Analytics conformance report | SIT | Deployed smoke | Positive and full wrong-service/disjoint/stale matrix | Not Run |
+| Nondisclosure JSON and sidecar | SIT | SIT result | Known/random exact shape plus warmed timing profile | Not Run |
+| `smoke.json` and sidecar | SIT | SIT result | General deployed acceptance; smoke belongs to SIT | Not Run |
+| `smoke-sprint-7a.json` and sidecar | SIT | SIT result | Focused analytics acceptance and fault recovery | Not Run |
+| Playwright report/evidence | SIT | SIT result | Exact acceptance inventory, SSR/hydration/console/network assertions | Not Run |
+| `sit-result.json` | SIT | UAT | Passing and bound to candidate/environment fingerprints | Not Run |
+| Scripted UAT evidence | UAT | UAT result | General plus Sprint 7A focused commands | Not Run |
+| Manual scenario evidence | UAT | UAT result | One retained result per UAT-01 through UAT-11 | Not Run |
+| `uat-result.json` | UAT | Authorization | Passing and hashes `sit-result.json` | Not Run |
+| Canonical restoration receipt | SIT/UAT | Authorization | Complete reference composition, Core 200, Supervisor 204, modules healthy | Not Run |
+| `evidence-manifest.json` and SHA-256 sidecar | Coordinator | Authorization | Every retained file parsed/hashed; superseded attempts distinguished | Not Run |
+| `closeout-authorization.json` | Coordinator | Closeout | Hashes prerequisite receipts and exact authorized candidate | Not Run |
+
+## Candidate Identity
+
+- Implementation commit: Not Frozen
+- Tree: Not Frozen
+- Dirty state: Must be `false`
+- Candidate fingerprint: Not Calculated
+- Acceptance-inventory identity: SHA-256 of this planned inventory plus the
+  implemented smoke/UAT/Playwright/conformance manifests
+- Deployment profile/configuration digest: rendered `deploy/sprint-7a/`
+  Compose plus catalog, Blueprint, lockfile inputs, and Supervisor adapter tuple
+- Migration/baseline identity: Core `crates/tessara-api/migrations/001_baseline.sql`,
+  Dashboard `crates/tessara-dashboard-module/migrations/001_dashboard_module.sql`,
+  Supervisor baseline, and all module migration checksums
+- Expected provenance labels: repository URL, candidate commit, candidate tree,
+  `dirty=false`, build profile, Core/gateway/Dashboard/Scoped Records/Supervisor
+  component identity
+- Observed image digest(s): Not Run
+- Source rules: product, contract, test, fixture, migration, manifest,
+  deployment, bootstrap, smoke, UAT, Playwright, conformance, or acceptance
+  inventory changes create a new candidate. Documentation-only corrections may
+  retain the fingerprint only when they cannot affect executable behavior or
+  test interpretation.
+
+## Environment Contract
+
+- Environment fingerprint: Not Calculated
+- Host: Windows PowerShell orchestration with Docker Desktop/Linux containers
+- Tool versions: record `git`, Rust/Cargo, wasm target/tooling, Node/npm,
+  Playwright browsers, Docker/Compose, PostgreSQL client where used, and
+  PowerShell versions without secret values
+- Test database identities and reset authorization: disposable Sprint 7A Core,
+  Dashboard, Scoped Records, and Supervisor stores; destructive reset must be
+  explicitly authorized by preflight and limited to the Sprint 7A Compose
+  project/volumes
+- Compose project/profile and ports: source-exact `deploy/sprint-7a/` complete
+  reference composition; public gateway `http://127.0.0.1:8086` and Supervisor
+  `http://127.0.0.1:8096`; record exact rendered ports and intended active slots
+- Services/topology: gateway, Core, out-of-process Supervisor, independent
+  Dashboard process/database, Scoped Records process/database; Components and
+  Datasets remain Core-owned transition providers
+- Account/role fixture identities:
+  - administrator with installation-global/full seeded analytics authority
+  - scoped analytics operator with base/tier/Component/Dashboard authority on
+    subtree A
+  - mixed-scope operator with deliberately disjoint capability assignments on
+    subtrees A and B
+  - no-analytics authenticated actor
+  - undeclared and wrong-service test identities/instances
+  Passwords or tokens are supplied out of band and never retained.
+- Product fixtures: four-tier recognizable Dataset rows; authorized and blocked
+  Datasets/revisions; table/chart/stat ComponentVersions; authorized, blocked,
+  and mixed-placement Dashboards; known and generated-random IDs; current and
+  deliberately stale grant/decision specimens
+- Evidence root and output mode: unique paths below
+  `artifacts/sprint-7a-closeout/`; authoritative, diagnostic, and superseded
+  attempts are distinct; writers refuse accidental overwrite unless the phase
+  protocol explicitly supersedes an attempt.
+
+## Changed Integration Contracts And Smoke Assertions
+
+| Contract | Planned change | Required smoke assertion |
+|---|---|---|
+| Signed platform authorization grant/resource assertion | Version provider authority freshness and exact resource basis as needed | Current grant succeeds; old security/provider revision, altered resource, cross-installation, wrong presenter/audience/binding/action fail |
+| Core-to-Dashboard product grant | Preserve exact Dashboard instance/action and scope bindings | Scoped Dashboard directory/detail/view succeeds only in scope; admin full set remains |
+| Dashboard-to-Core Components compatibility contract | Make both `resolve_metadata` and `render` real action-bound exchanges | Real Dashboard process renders allowed placement; wrong service/action gets stable denial; blocked placement returns metadata-free result |
+| Dataset/Component internal analytics decision DTO | Inseparable capability/scope/tier/resource decision | Disjoint fixture never forms cross-product; direct and embedded results match |
+| Shared Component viewer endpoint contract | Allow Dashboard-owned mediated endpoint while preserving direct Core endpoint | Direct Component viewer and Dashboard embedded viewer both work; network audit shows correct route ownership |
+| Provider authority revision/state | Bind ownership/visibility changes to freshness | Mutate visibility/authority, replay old decision fails, fresh decision reflects new scope |
+
+## Preflight
+
+- Status: Failed during candidate-readiness preparation; no assertions started
+- Attempt receipt: `artifacts/sprint-7a-closeout/attempts/preflight-1.json`
+- Receipt: Not issued; a passing `preflight-result.json` requires a clean,
+  acceptance-complete implementation commit
+- Candidate receipt: Not issued
+- Repository gate: clean `codex/sprint-7a`, intended commit, no untracked
+  acceptance inputs, all submodule/dependency locks present
+- Environment/reset authorization: verify exact Sprint 7A project, databases,
+  volumes, ports, evidence root, and explicit fresh-reset permission before any
+  destructive operation
+- Harness/inventory reconciliation: every roadmap row above maps to implemented
+  test IDs, smoke IDs, Playwright IDs, and UAT scenarios; exact contractual
+  counts derive from one shared manifest. The tracked Playwright inventory is
+  68 tests, including three Sprint 7A identities; eleven manual UAT scripts and
+  the focused smoke, conformance, nondisclosure, actor-setup, and scripted-UAT
+  harnesses are present.
+- Planned non-deployed commands:
+  - `cargo fmt --all -- --check`
+  - `cargo check --workspace --all-features --locked`
+  - `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  - targeted contract/API/Dashboard/UI tests from the sprint plan
+  - conformance and nondisclosure `-SelfTest` commands
+  - Sprint 7A smoke, actor-setup, and scripted-UAT `-SelfTest` commands
+  - boundary, Markdown-link, diff, and dependency-audit checks
+- Bootstrap/no-op/restoration commands:
+  - `.\scripts\bootstrap-sprint-7a-composition.ps1 -Composition reference`
+  - `.\scripts\bootstrap-sprint-7a-composition.ps1 -Composition reference -SkipBuild`
+  - restoration uses the same exact reference Blueprint/lockfile, or the
+    retained Sprint 6F rollback inputs when rollback is the scenario
+- Evidence paths and required artifact audit: declare every inventory row
+  before freeze; no late acceptance assertion may be added without a new
+  candidate and complete SIT/UAT restart.
+
+## SIT
+
+| Lane | Planned command/evidence | Assertions | Result |
+|---|---|---|---|
+| Static and boundaries | fmt, check, clippy, boundary scripts, contract fixtures, Markdown links, diff, audit | Native SSR ownership, typed seams, no cross-module DB/credentials/URLs, exact protocol tuple | Not Run |
+| Rust workspace | `cargo test --workspace --locked` plus targeted optimized nondisclosure test | All unit/integration/provider/consumer tests | Not Run |
+| Source-exact deployment | Sprint 7A fresh build and reference bootstrap | Exact images/config/migrations/Blueprint/lockfile/plan/provenance; healthy topology | Not Run |
+| Idempotent materialization | unchanged `-SkipBuild` bootstrap | Stable desired/actual identity, `no_op=true`, no duplicate fixtures/receipts | Not Run |
+| Authorization conformance | `.\scripts\run-analytics-authorization-conformance.ps1` | Positive, disjoint, wrong-service/audience/action, stale, replay, recovery cases | Not Run |
+| Nondisclosure | `.\scripts\validate-analytics-nondisclosure.ps1` | Dataset/ComponentVersion/Dashboard known-random shape and timing | Not Run |
+| Playwright | `npm --prefix .\end2end test` or source-exact validation wrapper | Full inventory; route ownership, hydration, console, DOM/network leakage, responsive state | Not Run |
+| Deployed acceptance smoke | general and Sprint 7A smoke scripts | Admin/scoped inventories, all three surfaces, real exchange, outage/restore, final health | Not Run |
+| Recovery/rollback | provider fault restoration and retained Sprint 6F rollback input audit | Containment, canonical restoration, no unrelated image change | Not Run |
+
+- SIT result receipt: `artifacts/sprint-7a-closeout/sit-result.json`
+- Canonical topology restoration: complete Sprint 7A reference composition at
+  `http://127.0.0.1:8086`, Core readiness 200, Supervisor readiness 204, exact
+  intended module instances healthy/enabled, final smoke passed
+- Rule: deployed acceptance smoke is part of SIT and must pass before UAT.
+
+## UAT
+
+### Scripted UAT
+
+- Commands:
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:8086"`
+  - `.\scripts\uat-sprint-7a.ps1 -BaseUrl "http://127.0.0.1:8086" -OutputPath "artifacts/sprint-7a-closeout/uat/scripted-sprint-7a.json"`
+- Result: Not Run
+- Evidence: structured JSON/sidecars plus append-only logs beneath the evidence
+  root, bound to candidate and environment fingerprints
+
+### Manual UAT
+
+| Scenario | Role / start state | Actions | Expected | Result | Evidence |
+|---|---|---|---|---|---|
+| UAT-01 Scoped Dataset catalog | Scoped operator; fresh reference fixtures | Browse directory/detail/revision and direct blocked ID | Only scoped metadata; generic blocked state | Not Run | Planned |
+| UAT-02 Dataset tier rows | Scoped operator; four-tier Dataset | Preview/query Dataset | Only same-scope authorized tiers; blocked sentinel/count absent | Not Run | Planned |
+| UAT-03 Component execution | Scoped operator; table/chart/stat fixtures | Open and interact with each Component | Scoped rows/aggregates only; blocked version absent | Not Run | Planned |
+| UAT-04 Dashboard viewing | Scoped operator; mixed-placement Dashboard | Open directory/detail/viewer | Allowed placement renders; blocked placement generic/redacted | Not Run | Planned |
+| UAT-05 Cross-boundary recovery | Scoped operator; healthy provider then controlled outage | View, fault provider, observe, restore, retry | Exact exchange; contained failure; healthy recovery | Not Run | Planned |
+| UAT-06 Disjoint and known/random | Mixed-scope operator | Exercise three surfaces and known/random direct paths | No cross-product; equal restricted public outcomes | Not Run | Planned |
+| UAT-07 Service misuse | Test client identities | Wrong presenter/audience/binding/action/replay calls | Stable denial; no metadata/execution | Not Run | Planned |
+| UAT-08 Freshness | Admin mutator plus scoped operator | Issue, mutate role/scope/visibility/delegation, replay, refresh | Old grant stale; fresh result correct | Not Run | Planned |
+| UAT-09 Compatibility | Admin/operator; canonical topology | Direct Component UI, adapter, boundary audit | Existing UI works; no deprecated product surface; reusable gate named | Not Run | Planned |
+| UAT-10 Responsive safe states | Scoped/no-access roles; desktop and narrow viewport | Exercise empty/forbidden/unavailable/recovery with keyboard | Useful SSR, accessible copy, no hydration/console leak | Not Run | Planned |
+| UAT-11 Administrator control | Administrator; fresh reference fixtures | Browse and execute full analytics set | Exact full assets, rows, tiers, and placements visible | Not Run | Planned |
+
+- UAT result receipt: `artifacts/sprint-7a-closeout/uat-result.json`
+- Final topology restoration: same canonical state required by SIT; no
+  intentionally stale role, stopped provider, altered scope, or forged service
+  fixture remains active.
+
+## Failure And Invalidation Chronology
+
+| Time | Phase/lane/stage | Assertions started | Candidate | Classification | Correction / narrow proof | Invalidation scope | Authoritative replacement |
+|---|---|---|---|---|---|---|---|
+| 2026-08-02T18:08:47Z | Preflight / candidate readiness / preparing | No | Not Frozen | preflight/setup | Complete the missing Sprint 7A smoke, UAT, authorization-conformance, analytics-nondisclosure, and Playwright inventory; commit a clean implementation candidate; rebuild source-exact images | No SIT or UAT evidence exists; rerun preflight from the corrected clean commit | `artifacts/sprint-7a-closeout/attempts/preflight-1.json` |
+
+Allowed classifications are exactly `preflight/setup`, `product`, `harness`,
+`environment`, `flaky`, `evidence-finalization`, and `product-decision`.
+
+The coordinator applies this minimum-safe matrix:
+
+| Cause | Minimum invalidation |
+|---|---|
+| Candidate fingerprint changed | All SIT and UAT |
+| Acceptance inventory or tracked harness changed | All SIT and UAT |
+| Shared environment materially changed | Affected lane and downstream phases |
+| Lane-local setup failed before assertions | Failed lane |
+| Evidence finalization failed with complete immutable raw results | Finalization only |
+| Test assertion failed with candidate unchanged | Complete failed lane; assess upstream environment relevance |
+| UAT setup failed before product actions | Affected isolated scenario set after prerequisites reconfirm |
+| Product defect corrected | Refreeze, all SIT, then all UAT |
+| Missing acceptance assertion discovered | Update inventory/candidate, all SIT, then all UAT |
+
+Every failure retains its receipt and raw evidence, records stage and
+`assertions_started`, uses a narrow reproducer only for diagnosis, and marks
+invalidated attempts superseded. Earlier evidence is reusable only with exact
+candidate/environment receipt matches and an explicit non-impact rationale.
+
+## Evidence Integrity
+
+- Required files complete: Not Run
+- Structured artifacts parse: Not Run
+- Repository Markdown links pass: Not Run
+- Authoritative/superseded attempts distinguished: Not Run
+- Every retained file hashed: Not Run
+- Manifest file count: Not Run
+- Manifest SHA-256: Not Run
+- Secret audit: receipts/manifests/logs must exclude passwords, tokens, signing
+  secrets, private keys, browser cookies, database credentials, and grant bytes
+- Long-running work: write start receipts, append logs continuously, retain
+  heartbeats/durations/completion sentinels, and inspect retained completion
+  state before relaunching after a lost controlling session
+
+## Closeout Authorization
+
+- Status: Not Authorized
+- Authorization receipt: `artifacts/sprint-7a-closeout/closeout-authorization.json`
+- Authorized candidate/fingerprint: Not Available
+- Preflight passed before SIT: No
+- SIT passed: No
+- UAT passed after SIT: No
+- Acceptance mapping complete: Planned, not proven
+- Invalidation decisions satisfied: Not Applicable
+- Unresolved product decisions: None at kickoff; implementation stop conditions
+  are recorded in the sprint plan
+- Intended active route/slot: complete Sprint 7A reference composition at
+  `http://127.0.0.1:8086`
+- Application health: Not Run
+- Evidence source commit: Not Available
+- Documentation commit: Not Available
+- Authorization timestamp: Not Available
+
+Closeout may be authorized only after every receipt parses and hashes, one
+candidate fingerprint covers all authoritative evidence, all SIT lanes and
+deployed smoke pass, every scripted/manual UAT scenario passes after SIT, the
+canonical topology is restored and healthy, every roadmap clause has automated
+and manual evidence, all invalidations are satisfied, and no acceptance defect
+or product decision remains.

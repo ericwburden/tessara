@@ -4,6 +4,8 @@
 //! process. Core supplies signed shell and authorization projections; the
 //! module never receives Core browser state or reusable Core authority.
 
+use std::sync::Arc;
+
 use axum::{
     Json, Router,
     body::Body,
@@ -18,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
-    ModuleDefinitionId, ModuleManifest, PurposeBoundVerifyingKeyV1, ShellContextV1,
-    ShellContextValidationContextV1, SignedEnvelopeV1,
+    ModuleDefinitionId, ModuleManifest, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
+    ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -32,13 +34,14 @@ pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
-pub const MODULE_RELEASE_VERSION: &str = "2.0.2";
+pub const MODULE_RELEASE_VERSION: &str = "2.1.0";
 
 #[derive(Clone)]
 pub struct DashboardModuleState {
     pub pool: PgPool,
     pub core_authorization_verifier: PurposeBoundVerifyingKeyV1,
     pub core_shell_verifier: PurposeBoundVerifyingKeyV1,
+    pub service_request_signer: Arc<PurposeBoundSigningKeyV1>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -645,7 +648,7 @@ mod tests {
         let manifest: ModuleManifest =
             serde_json::from_str(include_str!("../manifest.json")).expect("valid manifest");
         assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
-        assert_eq!(manifest.release_version.to_string(), "2.0.2");
+        assert_eq!(manifest.release_version.to_string(), "2.1.0");
         let lifecycle = manifest
             .browser_lifecycle
             .as_ref()
@@ -701,7 +704,7 @@ mod tests {
         let baseline = include_bytes!("../migrations/001_dashboard_module.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "cd7b4834c4681fff0824dcfb1890b71f119b4e5c9aa4f6b933d82e6874838c9c"
+            "2127652718cde7ff7272c5beb80fcd710f8b61a265bc5fcce427ed37b590ab96"
         );
     }
 }

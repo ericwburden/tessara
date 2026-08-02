@@ -1,0 +1,143 @@
+{
+  "api_version": "tessara.io/application-blueprint/v1",
+  "installation_id": "01980000-0000-7000-8000-00000000007a",
+  "revision": 1,
+  "core": {
+    "version_requirement": "^0.1",
+    "configuration": {
+      "deployment_profile": "sprint-7a-reference",
+      "gateway_mode": "core_owned"
+    },
+    "bootstrap": {
+      "source": "inline",
+      "schema_version": "tessara.io/core-bootstrap/v1",
+      "value": {
+        "schema_version": "tessara.io/core-bootstrap/v1",
+        "root_node_type_id": "01980000-0002-7000-8000-000000000001",
+        "root_node_type_external_key": "sprint-7a-organization",
+        "root_node_type_name": "Organization",
+        "root_node_id": "01980000-0002-7000-8000-000000000002",
+        "root_node_external_key": "sprint-7a-root",
+        "root_node_name": "Tessara Reference Organization",
+        "dataset_id": "01980000-0002-7000-8000-000000000003",
+        "dataset_external_key": "sprint-7a-component-dataset",
+        "components": [
+          {
+            "external_key": "sprint-7a-metric-card",
+            "component_id": "01980000-0002-7000-8000-000000000004",
+            "component_version_id": "01980000-0001-7000-8000-000000000001",
+            "name": "Reference Metric Card",
+            "slug": "sprint-7a-metric-card",
+            "component_type": "stat_card",
+            "config": { "label": "Reference metric", "summary_type": "row_count", "summary_field": "" }
+          },
+          {
+            "external_key": "sprint-7a-record-table",
+            "component_id": "01980000-0002-7000-8000-000000000005",
+            "component_version_id": "01980000-0001-7000-8000-000000000002",
+            "name": "Reference Records Table",
+            "slug": "sprint-7a-record-table",
+            "component_type": "table",
+            "config": { "visible_columns": ["label"] }
+          }
+        ]
+      }
+    }
+  },
+  "modules": [
+    {
+      "definition_id": "tessara.dashboards",
+      "version_requirement": "=2.1.0",
+      "enabled": true,
+      "dependency_bindings": {
+        "tessara.dashboards.component-version": "core"
+      },
+      "configuration": {
+        "schema_version": 1,
+        "display_label": "Dashboards",
+        "default_page_size": 25
+      },
+      "bootstrap": {
+        "source": "inline",
+        "schema_version": "tessara.io/dashboard-bootstrap/v1",
+        "value": {
+          "schema_version": "tessara.io/dashboard-bootstrap/v1",
+          "dashboard_id": "01980000-0003-7000-8000-000000000001",
+          "external_key": "sprint-7a-operations-dashboard",
+          "name": "Reference Operations",
+          "description": "Source-exact Sprint 7A reference composition",
+          "scope_node_id": "01980000-0002-7000-8000-000000000002",
+          "placements": [
+            {
+              "placement_id": "01980000-0003-7000-8000-000000000002",
+              "placement_key": "metric-summary",
+              "component_version_id": "01980000-0001-7000-8000-000000000001",
+              "column": 0,
+              "row": 0,
+              "width": 4,
+              "height": 2
+            },
+            {
+              "placement_id": "01980000-0003-7000-8000-000000000003",
+              "placement_key": "records",
+              "component_version_id": "01980000-0001-7000-8000-000000000002",
+              "column": 0,
+              "row": 2,
+              "width": 12,
+              "height": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "definition_id": "tessara.reference.scoped-records",
+      "version_requirement": "=1.0.0",
+      "enabled": true,
+      "dependency_bindings": {},
+      "configuration": {
+        "schema_version": 1,
+        "display_label": "Scoped Records",
+        "retention_mode": "retain_on_undeploy"
+      },
+      "bootstrap": {
+        "source": "inline",
+        "schema_version": "tessara.io/scoped-records-bootstrap/v1",
+        "value": {
+          "schema_version": "tessara.io/scoped-records-bootstrap/v1",
+          "records": [
+            {
+              "record_id": "01980000-0004-7000-8000-000000000001",
+              "external_key": "sprint-7a-reference-record",
+              "label": "Reference record",
+              "organization_owner_id": "01980000-0002-7000-8000-000000000002"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "navigation": [
+    { "destination_id": "tessara.dashboards.navigation", "group_id": "core.main", "order": 8, "visible": true },
+    { "destination_id": "tessara.reference.scoped-records.navigation", "group_id": "core.main", "order": 9, "visible": true },
+    { "destination_id": "core.admin.composition", "group_id": "core.admin", "order": 4, "visible": true }
+  ],
+  "roles": [
+    {
+      "name": "admin",
+      "capabilities": ["admin:all", "composition:approve", "composition:plan", "composition:read"]
+    },
+    {
+      "name": "reference-operator",
+      "capabilities": ["components:read", "dashboards:read", "datasets:read", "tessara.reference.scoped-records:read"]
+    }
+  ],
+  "administrator_enrollment_role": "admin",
+  "secret_references": {
+    "core_database_password": {
+      "provider": "environment",
+      "name": "TESSARA_DATABASE_PASSWORD",
+      "revision": "sprint-7a-v1"
+    }
+  }
+}
