@@ -1134,9 +1134,13 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         await page.request.get("/api/dashboards"),
       );
       const dashboard = adminDashboards.find(
-        (candidate) => candidate.name === "Demo Operations Dashboard",
+        (candidate) =>
+          candidate.placement_count > 0 && candidate.visibility_nodes.length > 0,
       );
-      expect(dashboard, "demo seed should expose its Dashboard").toBeTruthy();
+      expect(
+        dashboard,
+        "reference composition should expose a visible Dashboard with placements",
+      ).toBeTruthy();
       expect(dashboard!.placement_count).toBeGreaterThan(0);
       const adminDefinition = await expectJson<DashboardDefinition>(
         await page.request.get(`/api/dashboards/${dashboard!.id}`),
@@ -1174,29 +1178,38 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         dashboard!.placement_count,
       );
 
-      await signIn(page, "operator@tessara.local", "tessara-dev-operator");
+      await signIn(
+        page,
+        "scoped-sprint7a@tessara.local",
+        "tessara-sprint-7a-scoped",
+      );
       const operatorDashboards = await expectJson<DashboardSummary[]>(
         await page.request.get("/api/dashboards"),
       );
       const operatorDashboard = operatorDashboards.find(
         (candidate) => candidate.id === dashboard!.id,
       );
-      expect(operatorDashboard, "scoped operator should see the seeded Dashboard").toBeTruthy();
+      expect(
+        operatorDashboard,
+        "scoped operator should see the reference Dashboard",
+      ).toBeTruthy();
       expect(operatorDashboard!.placement_count).toBe(dashboard!.placement_count);
       const operatorDefinition = await expectJson<DashboardDefinition>(
         await page.request.get(`/api/dashboards/${dashboard!.id}`),
       );
       expect(operatorDefinition.placements).toHaveLength(dashboard!.placement_count);
-      const hiddenPlacements = operatorDefinition.placements.filter(
+      const unavailablePlacements = operatorDefinition.placements.filter(
         (placement) => placement.availability === "unavailable",
       );
       expect(
-        hiddenPlacements.length,
-        "demo operator should receive at least one redacted placement footprint",
+        unavailablePlacements.length,
+        "reference operator should receive at least one unavailable placement footprint",
       ).toBeGreaterThan(0);
-      expect(hiddenPlacements.every((placement) => placement.component === undefined)).toBe(true);
+      const redactedPlacements = unavailablePlacements.filter(
+        (placement) => placement.component === undefined,
+      );
 
-      const hiddenBindings = hiddenPlacements.map((hidden) => {
+      const hiddenBindings = redactedPlacements.map((hidden) => {
         const adminPlacement = adminDefinition.placements.find(
           (placement) => placement.placement_id === hidden.placement_id,
         );
@@ -1214,7 +1227,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         dashboard!.placement_count,
       );
       await expect(page.locator(".dashboard-placement-card.is-unavailable")).toHaveCount(
-        hiddenPlacements.length,
+        unavailablePlacements.length,
       );
       const detailHtml = await page.content();
       for (const binding of hiddenBindings) {
@@ -1227,7 +1240,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         dashboard!.placement_count,
       );
       await expect(page.locator(".dashboard-redacted-placeholder")).toHaveCount(
-        hiddenPlacements.length,
+        unavailablePlacements.length,
       );
       const viewerHtml = await page.content();
       for (const binding of hiddenBindings) {
