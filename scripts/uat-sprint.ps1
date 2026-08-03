@@ -156,7 +156,7 @@ function Invoke-CurrentRunSessionLogout {
         if ($LASTEXITCODE -ne 0) {
             throw "Browser DELETE /api/auth/logout failed with exit code $LASTEXITCODE."
         }
-        try { $browserLogout = $response | ConvertFrom-Json -NoEnumerate }
+        try { $browserLogout = ConvertFrom-Sprint6AAcceptanceJson -Json $response }
         catch { throw "Browser DELETE /api/auth/logout returned invalid JSON: $($_.Exception.Message)" }
         if ($null -eq $browserLogout.PSObject.Properties['signed_out'] -or
             $browserLogout.signed_out -isnot [bool] -or -not $browserLogout.signed_out) {
@@ -328,9 +328,9 @@ if (
     -or @($modulePolicy.destinations).Count -ne 15 `
     -or -not $moduleDestination `
     -or -not $scopedRecordsDestination `
-    -or -not $sdkReferenceDestination
+    -or $sdkReferenceDestination
 ) {
-    throw "Sprint UAT failure: schema-v2 navigation policy did not preserve required groups, exact membership, protected Module Management, and Scoped Records."
+    throw "Sprint UAT failure: schema-v2 navigation policy did not preserve the exact deployed topology, protected Module Management, and Scoped Records."
 }
 
 $shellNavigation = Invoke-RestMethod -Uri "$BaseUrl/api/shell/navigation" -Headers $headers -TimeoutSec 30
@@ -356,7 +356,7 @@ $moduleDirectory = Invoke-Html -Uri "$BaseUrl/administration/modules" -CookieJar
 Assert-ProtectedShell -Content $moduleDirectory -Needles @(
     "Module inventory",
     "definitions",
-    "Transitional — not independently deployable",
+    "Transitional $([char]0x2014) not independently deployable",
     "No Module Release",
     "No Module Instance",
     "Save navigation"
@@ -561,12 +561,10 @@ foreach ($placement in $dashboardApi.placements) {
 $dashboardsList = Invoke-Html -Uri "$BaseUrl/dashboards" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $dashboardsList -Needles @("Dashboards") -Context "dashboard directory" -ShellMarkers @("module-content")
 
-$sdkReference = Invoke-Html -Uri "$BaseUrl/reference/module-sdk" -CookieJarPath $adminBrowserSession
-Assert-Contains -Content $sdkReference -Needles @(
-    "Module SDK Reference",
-    "data-shell-state=`"active`"",
-    "/_tessara/modules/tessara.reference.module-sdk/1.0.0/"
-) -Context "canonical SDK reference"
+$removedSdkReference = & curl.exe -sS -o NUL -D - -b $adminBrowserSession -w "STATUS:%{http_code}" "$BaseUrl/reference/module-sdk"
+if ($LASTEXITCODE -ne 0 -or $removedSdkReference -notcontains "STATUS:404" -or ($removedSdkReference -match '^Location:')) {
+    throw "Sprint UAT failure: the undeployed Module SDK reference route must be an ordinary 404 without redirect."
+}
 
 $dashboardCreate = Invoke-Html -Uri "$BaseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $dashboardCreate -Needles @("Create Dashboard") -Context "dashboard create" -ShellMarkers @("module-content")

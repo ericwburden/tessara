@@ -35,6 +35,18 @@ function Resolve-RepositoryPath([string]$Path) {
     return [IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
 }
 
+function Prepare-Sprint7AUatFixtures {
+    if ($Composition -ne "reference") { return }
+    & (Join-Path $PSScriptRoot "prepare-sprint-7a-uat-fixtures.ps1") `
+        -BaseUrl $CoreUrl `
+        -AdminEmail "admin@tessara.local" `
+        -AdminPassword "tessara-dev-admin" `
+        -ComposeProject $expectedProject | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Sprint 7A semantic UAT fixture preparation failed."
+    }
+}
+
 if (-not (Test-Path -LiteralPath $composePath)) { throw "Compose file not found: $composePath" }
 if (-not (Test-Path -LiteralPath $blueprintPath)) { throw "Blueprint not found: $blueprintPath" }
 [IO.Directory]::CreateDirectory($runtimeDirectory) | Out-Null
@@ -242,6 +254,7 @@ try {
                 apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
             if ($LASTEXITCODE -eq 0) {
                 [IO.File]::WriteAllLines($receiptPath, $recoveredResponse, [Text.UTF8Encoding]::new($false))
+                Prepare-Sprint7AUatFixtures
                 Write-Host "Recovered the accepted Sprint 7A operation with its original signed authorization."
                 Write-Host "Receipt: $receiptPath"
                 return
@@ -338,6 +351,8 @@ try {
     if (-not $navigationReady) {
         throw "Sprint 7A shell navigation did not reach the expected post-apply state."
     }
+
+    Prepare-Sprint7AUatFixtures
 
     Write-Host "Sprint 7A $Composition composition materialized."
     Write-Host "Receipt: $receiptPath"

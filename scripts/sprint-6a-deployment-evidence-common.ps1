@@ -541,7 +541,11 @@ function ConvertFrom-Sprint6ADeploymentEvidenceJson {
     )
 
     try {
-        ConvertFrom-Json -InputObject $Json -DateKind String
+        $parameters = @{ InputObject = $Json }
+        if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+            $parameters.DateKind = 'String'
+        }
+        ConvertFrom-Json @parameters
     } catch {
         throw "Deployment evidence is not valid JSON: $($_.Exception.Message)"
     }

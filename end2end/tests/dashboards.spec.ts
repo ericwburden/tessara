@@ -484,10 +484,12 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       expect(tableOption, "demo seed should expose a placeable Table").toBeTruthy();
       expect(
         chartOption,
-        "the Sprint 7A reference inventory should not deploy a chart Component",
-      ).toBeUndefined();
+        "the Sprint 7A reference inventory should expose a placeable chart Component",
+      ).toBeTruthy();
       expect(statCardOption, "demo seed should expose a placeable stat card").toBeTruthy();
 
+      // This focused fixture intentionally binds only Table and Stat Card so the
+      // viewer can prove their intrinsic presentation without a chart placement.
       const options = [tableOption!, statCardOption!];
       let nextRow = 1;
       await expectJson<DashboardComposition>(

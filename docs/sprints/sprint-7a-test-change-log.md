@@ -1,5 +1,23 @@
 # Sprint 7A Test Change Log
 
+## 2026-08-03 — UAT fixture contract correction
+
+- Replaced the partial two-actor setup script with one tracked, idempotent
+  semantic fixture preparer/verifier and a machine-readable contract.
+- Added the missing mixed-scope and no-analytics actors, exact disjoint A/B
+  role assignments, four recognizable row tiers, table/chart/stat and blocked
+  ComponentVersions, authorized/blocked/mixed Dashboards, known/random IDs,
+  and current/stale revision specimens.
+- Strengthened focused smoke and scripted UAT to prove filtered table/chart/stat
+  execution and a metadata-free blocked placement.
+- Preflight now has a static semantic self-test instead of treating script
+  presence and manual-script count as proof that the Environment Contract is
+  satisfiable. The deployed verifier publishes a hashed, non-secret inventory.
+
+This is a missing-acceptance-assertion correction. It changes the tracked
+harness and candidate, so all prior SIT and UAT evidence is superseded and the
+complete validation sequence must restart.
+
 ## 2026-08-02 — Scoped analytics acceptance inventory
 
 - Added three exact Playwright identities in

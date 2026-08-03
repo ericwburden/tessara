@@ -278,7 +278,7 @@ try {
             -Environment $validationEnvironment)
     }
 
-    Invoke-CheckedStep -Label "Sprint 6A evidence PowerShell contracts" -Command {
+    Invoke-CheckedStep -Label "Acceptance PowerShell contracts" -Command {
         foreach ($scriptFile in @(Get-ChildItem -Path (Join-Path $repoRoot "scripts") -Filter "*.ps1" -File | Sort-Object FullName)) {
             $relativePath = [IO.Path]::GetRelativePath($repoRoot, $scriptFile.FullName)
             $tokens = $null
@@ -304,6 +304,12 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "nondisclosure-evidence self-test failed with exit code $LASTEXITCODE" }
         & .\scripts\test-sprint-6a-acceptance-evidence.ps1
         if ($LASTEXITCODE -ne 0) { throw "smoke/UAT acceptance-evidence self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\prepare-sprint-7a-uat-fixtures.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "Sprint 7A semantic fixture self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\smoke-sprint-7a.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "Sprint 7A smoke self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\uat-sprint-7a.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "Sprint 7A UAT self-test failed with exit code $LASTEXITCODE" }
     }
 
     Invoke-CheckedStep -Label "Formatting check" -Command {

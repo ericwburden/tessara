@@ -1,8 +1,8 @@
 # Sprint 7A Validation Record
 
 - Sprint: `Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice`
-- Status: Preflight passed; candidate frozen; SIT and UAT not started
-- Candidate: `526f4392c4374faa824ead268a47f920e79857a619f4202102fc43e737d7fe07`
+- Status: Candidate 14 invalidated during SIT; mutable readiness/rehearsal correction cycle executing
+- Candidate: Candidate 14 `8f388886a0d440e5d48c8fabf8168bd59ef4be7a65f578494312aada2f0595b1` (invalidated)
 - Closeout: Not Authorized
 - Evidence root: `artifacts/sprint-7a-closeout/`
 
@@ -84,6 +84,8 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 | Artifact | Producer | Required before | Planned path / rule | Status |
 |---|---|---|---|---|
+| `validation-readiness-result.json` | Validation coordinator | Rehearsal | Complete derived checklist; passing and hashed | Not Run |
+| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Complete non-authoritative validation-shaped pass; passing and hashed | Not Run |
 | `preflight-result.json` | Validation preflight | Candidate freeze | Evidence root; passing and hashed | Not Run |
 | `candidate.json` | Validation preflight | SIT | Exact clean implementation commit/tree and fingerprint | Not Run |
 | Phase attempt receipts | Every phase/lane | Result collection | `attempts/<phase>-<attempt>.json`; authoritative flag explicit | Not Run |
@@ -190,16 +192,19 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 - Harness/inventory reconciliation: every roadmap row above maps to implemented
   test IDs, smoke IDs, Playwright IDs, and UAT scenarios; exact contractual
   counts derive from one shared manifest. The tracked Playwright inventory is
-  68 tests, including three Sprint 7A identities; eleven manual UAT scripts and
-  the focused smoke, conformance, nondisclosure, actor-setup, and scripted-UAT
-  harnesses are present.
+  70 tests, including the Sprint 7A identities; eleven manual UAT scripts and
+  the focused smoke, conformance, nondisclosure, semantic fixture preparation/
+  verification, and scripted-UAT harnesses are present. Preflight accepts the
+  harness only when `prepare-sprint-7a-uat-fixtures.ps1 -SelfTest` proves the
+  tracked contract covers every actor, product fixture, identifier, and
+  freshness category in the Environment Contract.
 - Planned non-deployed commands:
   - `cargo fmt --all -- --check`
   - `cargo check --workspace --all-features --locked`
   - `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
   - targeted contract/API/Dashboard/UI tests from the sprint plan
   - conformance and nondisclosure `-SelfTest` commands
-  - Sprint 7A smoke, actor-setup, and scripted-UAT `-SelfTest` commands
+  - Sprint 7A smoke, semantic fixture, and scripted-UAT `-SelfTest` commands
   - boundary, Markdown-link, diff, and dependency-audit checks
 - Bootstrap/no-op/restoration commands:
   - `.\scripts\bootstrap-sprint-7a-composition.ps1 -Composition reference`
@@ -209,6 +214,29 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 - Evidence paths and required artifact audit: declare every inventory row
   before freeze; no late acceptance assertion may be added without a new
   candidate and complete SIT/UAT restart.
+
+## Validation Readiness And Candidate Rehearsal
+
+- Test Readiness Gate: derive the Sprint 7A executable checklist from this
+  record and the actual runners; verify exact environment/reset contracts,
+  supported PowerShell runtimes and other tools, ports/Compose/databases/
+  topology/health/provenance, semantic fixtures and idempotence, runner and
+  evidence-finalization paths, and every acceptance-clause mapping.
+- Candidate Rehearsal: run static/boundaries, full Rust and optimized timing,
+  source-exact build/materialization/no-op, the complete Playwright inventory,
+  conformance, nondisclosure, general and focused smoke, recovery/restoration,
+  and automated diagnostic equivalents of UAT-01 through UAT-11.
+- Authority: both gates are mutable and non-authoritative. They cannot satisfy
+  SIT or UAT. Candidate 15 may freeze only after both complete passes are clean
+  for the exact source and environment identities.
+- Readiness receipt: attempt 1 failed and remains non-authoritative. The
+  fail-late shell matrix found PowerShell 5.1 incompatibilities in shared JSON
+  parsing, collection insertion, numeric type validation, file publication,
+  path rejection, native-command preference handling, and non-ASCII script
+  parsing. The consolidated mutable correction passes all 22 focused
+  PowerShell 5.1/7.6 evidence self-tests; the complete gate must restart after
+  the corrected clean commit.
+- Rehearsal receipt: Not Run.
 
 ## SIT
 
@@ -269,6 +297,15 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 | 2026-08-02T18:08:47Z | Preflight / candidate readiness / preparing | No | Not Frozen | preflight/setup | Complete the missing Sprint 7A smoke, UAT, authorization-conformance, analytics-nondisclosure, and Playwright inventory; commit a clean implementation candidate; rebuild source-exact images | No SIT or UAT evidence exists; rerun preflight from the corrected clean commit | `artifacts/sprint-7a-closeout/attempts/preflight-1.json` |
 | 2026-08-02T19:15:19Z | Preflight / audit / preparing | No | `526f4392...` | preflight/setup | Quote `HEAD^{tree}` as one literal Git revision; narrow proof returned tree `d225d22d...` | Preflight attempt only; candidate and environment unchanged | `artifacts/sprint-7a-closeout/attempts/preflight-2.json` |
 | 2026-08-02T19:17:00Z | Preflight / candidate freeze / passed | No | `526f4392...` | — | All environment, harness, inventory, topology, provenance, and evidence-path checks passed | SIT and UAT remain not started and must bind to the exact fingerprints | `artifacts/sprint-7a-closeout/attempts/preflight-3.json` |
+| 2026-08-03T12:00:00Z | UAT / manual fixture setup / preparing | No for affected scenarios | `37ccd808...` | harness | Candidate 11 exposed that script/file counts did not prove the promised semantic fixture inventory. Add the tracked fixture contract, idempotent preparer/live verifier, and behavior assertions. | Missing acceptance assertion changes the candidate and invalidates all prior SIT/UAT under the matrix below. | `artifacts/sprint-7a-closeout/attempts/uat-candidate-11.json` |
+| 2026-08-03T10:22:50-04:00 | SIT / Playwright / executing | Yes | `8f388886...` | harness | Candidate 14's tracked Playwright assertion expected the superseded two-placement/one-row fixture; the live semantic contract correctly returned four placements and four tiers. The narrow three-test diagnostic reproduced exactly two failures and cannot replace the full lane. | Candidate 14 invalidated; failed evidence retained; canonical reference topology restored; stop before Candidate 15 and complete the new readiness/rehearsal cycle. | `artifacts/sprint-7a-closeout/attempts/sit-playwright-candidate-14-attempt-1.json` |
+| 2026-08-03T10:30:00-04:00 | Validation Readiness / supported shells and evidence paths / executing | Yes, non-product self-tests | Mutable, pre-Candidate 15 | harness | Fail-late execution exposed a single PowerShell 5.1 portability batch across deployment, Playwright, nondisclosure, smoke/UAT acceptance evidence, and adversarial finalization paths. Focused correction proof passed all 22 checks under Windows PowerShell 5.1 and PowerShell 7.6. | No candidate exists. Keep source mutable, amend the one implementation commit, and repeat the complete readiness gate; focused proof cannot satisfy it. | `artifacts/sprint-7a-closeout/readiness/shell-selftests.log` |
+| 2026-08-03T11:04:00-04:00 | Candidate Rehearsal / source-exact deployment / preparing | No | Mutable, pre-Candidate 15 | preflight/setup | The first Rust database reset submitted `DROP DATABASE` and `CREATE DATABASE` in one transaction, which PostgreSQL correctly rejected. Separate `dropdb --force` and `createdb` commands then produced the required exact disposable databases. | No candidate exists. Repeat the complete readiness gate and the complete rehearsal; the corrected reset is setup proof only. | `artifacts/sprint-7a-closeout/rehearsal/attempt-2-rust-workspace-rerun.log` |
+| 2026-08-03T11:10:00-04:00 | Candidate Rehearsal / Playwright and deployed diagnostics / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | harness | Fail-late rehearsal found one Dashboard test that treated the canonical chart fixture as absent, plus general smoke and UAT scripts that still required the undeployed Module SDK reference route and navigation destination. Authorization conformance, nondisclosure, Sprint 7A smoke/UAT diagnostics, and recovery/restoration independently passed. | No candidate exists. Correct the three tracked harness mismatches as one batch, amend the clean implementation commit, then repeat the complete readiness gate and complete rehearsal. Narrow reproducers cannot replace either pass. | `artifacts/sprint-7a-closeout/rehearsal/attempt-2-general-diagnostic-lanes.json` |
+| 2026-08-03T11:14:00-04:00 | Candidate Rehearsal / defect-batch narrow proof / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | preflight/setup | The first focused Playwright command used the default `8080` base URL and reached no rehearsal service; Core `8086` and Supervisor `8096` remained healthy. The exact-base-URL rerun and both corrected general diagnostic scripts passed. | Retain the setup failure separately. It does not change the defect batch or satisfy rehearsal; repeat the complete gates from the amended clean source. | `artifacts/sprint-7a-closeout/rehearsal/attempt-2-defect-batch-dashboard-focused-reproducer.log` |
+| 2026-08-03T11:25:00-04:00 | Candidate Rehearsal / static evidence finalization / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | evidence-finalization | Two complete static/boundary runs emitted passing results, but their ad hoc collector read an internal native exit value left by a successful PowerShell script. Direct `pwsh -File` execution returned `0`, and the complete rerun receipt was finalized from the retained raw log. | Static lane only; product assertions and the readiness source identity are unchanged. | `artifacts/sprint-7a-closeout/rehearsal/attempt-3-static-boundaries-final.json` |
+| 2026-08-03T11:26:00-04:00 | Candidate Rehearsal / Rust workspace / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | environment | The complete Rust command passed 163 non-database tests, while two database tests failed authentication because the readiness runner verified host, port, and database identity but omitted the exact disposable credential. | Invalidate the prior readiness pass; retain the Rust failure, correct readiness to authenticate every exact URL without retaining the credential, amend the validation record, then repeat the complete readiness gate and rehearsal. | `artifacts/sprint-7a-closeout/rehearsal/attempt-3-rust-workspace.log` |
+| 2026-08-03T11:54:00-04:00 | Candidate Rehearsal / Playwright / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | environment | Thirty-seven tests passed and thirty serial dependents did not run after the lane supplied a Compose container name where acceptance mode requires the immutable 64-character PostgreSQL container ID; the two failures were cleanup/setup errors reporting a malformed binding. | Invalidate the prior readiness pass; retain the complete Playwright outputs, add active exact Playwright database-binding validation to readiness, amend the validation record, then repeat the complete readiness gate and rehearsal. | `artifacts/sprint-7a-closeout/rehearsal/attempt-4-playwright-results.json` |
 
 Allowed classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, and `product-decision`.

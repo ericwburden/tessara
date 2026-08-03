@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-7a.uat-fixtures",
+  "actors": {
+    "administrator": "admin@tessara.local",
+    "scoped_operator": "scoped-sprint7a@tessara.local",
+    "mixed_scope_operator": "mixed-sprint7a@tessara.local",
+    "no_analytics_actor": "restricted-sprint7a@tessara.local",
+    "undeclared_service": "tessara.uat.undeclared",
+    "wrong_service_instance": "01980000-0005-7000-8000-000000000001"
+  },
+  "scope_nodes": {
+    "subtree_a": "01980000-0002-7000-8000-000000000002",
+    "subtree_b": "01980000-0002-7000-8000-000000000007"
+  },
+  "datasets": {
+    "four_tier": "01980000-0002-7000-8000-000000000003",
+    "blocked": "01980000-0002-7000-8000-000000000008"
+  },
+  "dataset_rows": {
+    "public": "UAT7A-PUBLIC",
+    "internal": "UAT7A-INTERNAL",
+    "restricted": "UAT7A-RESTRICTED",
+    "confidential_blocked": "UAT7A-CONFIDENTIAL-BLOCKED"
+  },
+  "component_versions": {
+    "stat": "01980000-0001-7000-8000-000000000001",
+    "table": "01980000-0001-7000-8000-000000000002",
+    "chart": "01980000-0001-7000-8000-000000000003",
+    "blocked": "01980000-0001-7000-8000-000000000004"
+  },
+  "dashboards": {
+    "mixed": "01980000-0003-7000-8000-000000000001",
+    "blocked": "01980000-0003-7000-8000-000000000006"
+  },
+  "placements": {
+    "stat": "01980000-0003-7000-8000-000000000002",
+    "table": "01980000-0003-7000-8000-000000000003",
+    "chart": "01980000-0003-7000-8000-000000000004",
+    "blocked": "01980000-0003-7000-8000-000000000005"
+  },
+  "identifier_specimens": {
+    "known_blocked": "01980000-0002-7000-8000-000000000008",
+    "random": "01980000-ffff-7000-8000-000000000001"
+  },
+  "freshness_specimens": [
+    "authorization_revision",
+    "organization_revision",
+    "dataset_authority_revision",
+    "component_authority_revision",
+    "dashboard_authority_revision"
+  ]
+}

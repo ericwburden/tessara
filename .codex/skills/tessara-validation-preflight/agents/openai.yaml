@@ -1,4 +1,4 @@
 interface:
   display_name: "Tessara Validation Preflight"
-  short_description: "Verify and freeze a Tessara test candidate"
-  default_prompt: "Use $tessara-validation-preflight to verify the sprint environment and freeze a source-exact candidate."
+  short_description: "Audit rehearsal and freeze a Tessara candidate"
+  default_prompt: "Use $tessara-validation-preflight to audit passing readiness and rehearsal receipts, then freeze a source-exact candidate."

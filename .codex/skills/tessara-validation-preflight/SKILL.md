@@ -1,12 +1,13 @@
 ---
 name: tessara-validation-preflight
-description: Verify Tessara sprint validation prerequisites and freeze one source-exact candidate without running SIT or UAT. Use when preparing a sprint for formal testing, auditing databases and environment variables, reconciling test and acceptance inventories, validating deployment or evidence configuration, or producing the prerequisite receipts consumed by tessara-sit.
+description: Audit passing Tessara Validation Readiness and Candidate Rehearsal receipts, verify unchanged source and environment prerequisites, and freeze one source-exact candidate without running rehearsal, SIT, or UAT. Use after the mandatory mutable readiness/rehearsal cycle passes, when freezing a sprint candidate or producing the prerequisite receipts consumed by tessara-sit.
 ---
 
 # Tessara Validation Preflight
 
 Prepare and freeze a candidate for `tessara-sit`. Do not execute SIT, deployed
-acceptance smoke, scripted UAT, or manual UAT in this skill.
+acceptance smoke, scripted UAT, manual UAT, Test Readiness, or Candidate
+Rehearsal in this skill.
 
 Before acting, read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
@@ -15,6 +16,8 @@ invalidation authority.
 
 ## Inputs
 
+- passing `validation-readiness-result.json` and
+  `candidate-rehearsal-result.json`
 - sprint label and slug
 - intended sprint worktree, branch, and implementation commit
 - roadmap, sprint plan, and validation record
@@ -24,28 +27,35 @@ invalidation authority.
 
 ## Required execution order
 
-1. Confirm repository instructions, worktree, branch, and sprint scope.
-2. Audit all changes and require one clean implementation commit.
-3. Reconcile every roadmap exit condition with automated, smoke, and manual
+1. Parse and hash the readiness and rehearsal receipts. Require both to pass,
+   require rehearsal to name the readiness receipt, and reject any
+   authoritative SIT/UAT claim in rehearsal evidence.
+2. Confirm repository instructions, worktree, branch, and sprint scope.
+3. Verify current clean commit/tree, acceptance inventory, deployment inputs,
+   environment, and source provenance exactly match the passing rehearsal.
+   Any mismatch returns to the coordinator for a complete new readiness and
+   rehearsal cycle; preflight never patches or partially refreshes them.
+4. Audit all changes and require one clean implementation commit.
+5. Reconcile every roadmap exit condition with automated, smoke, and manual
    UAT coverage in the validation record.
-4. Discover required environment variables from the actual test and runner
+6. Discover required environment variables from the actual test and runner
    sources. Do not infer similarly named variables.
-5. Validate database URLs, unique disposable identities, reachability,
+7. Validate database URLs, unique disposable identities, reachability,
    credentials, reset authorization, and actual migration-ledger tables.
-6. Validate Rust, Playwright, smoke, scripted UAT, and manual UAT commands
-   without running their product assertions. Use supported self-test or dry-run
-   modes when present.
-7. Validate Compose files, project/profile identity, ports, expected active
+8. Audit the readiness evidence that validated Rust, Playwright, smoke,
+   scripted UAT, and manual UAT commands without running product assertions.
+9. Validate Compose files, project/profile identity, ports, expected active
    slot, bootstrap/no-op commands, provenance label keys, and canonical
    restoration command.
-8. Validate that every runner accepts its documented output paths and that the
-   evidence directory is empty or intentionally replaceable.
-9. Create the evidence inventory before SIT. Include every mandatory file,
+10. Audit the readiness evidence that every runner accepts its documented
+    output paths, then validate that the evidence directory is empty or
+    intentionally replaceable.
+11. Create the evidence inventory before SIT. Include every mandatory file,
    phase receipt, raw log, failure record, summary, and manifest path.
-10. Record source commit/tree/dirty state, configuration and inventory hashes,
-    migration identity, and expected provenance as the frozen candidate.
-11. Write `preflight-result.json`, then `candidate.json`, only after all checks
-    pass. Update the human verification record with the same identities.
+12. Record source commit/tree/dirty state, configuration and inventory hashes,
+   migration identity, and expected provenance as the frozen candidate.
+13. Write `preflight-result.json`, then `candidate.json`, only after all checks
+   pass. Update the human verification record with the same identities.
 
 ## Executable preflight contract
 
@@ -65,6 +75,10 @@ checks explicitly and retain their outputs. The contract must catch:
 Do not build product images merely to discover labels. Audit Dockerfiles and
 deployment configuration for expected keys; SIT confirms the built values.
 
+Do not repeat the complete readiness gate or rehearsal here. Perform only the
+freeze-boundary audit and inexpensive prerequisite reconfirmation needed to
+prove nothing changed since their passing receipts.
+
 ## Receipts
 
 Write receipts under the sprint evidence directory using the shared protocol:
@@ -75,6 +89,9 @@ Write receipts under the sprint evidence directory using the shared protocol:
 
 The candidate fingerprint is immutable. A later SIT receipt may add observed
 image IDs and labels but must not rewrite the source identity.
+
+Both passing pre-freeze receipts and hashes are prerequisites of
+`preflight-result.json`; `candidate.json` names and hashes preflight as usual.
 
 ## Failure handling
 

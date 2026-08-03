@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 69,
+  "expected_total": 70,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",

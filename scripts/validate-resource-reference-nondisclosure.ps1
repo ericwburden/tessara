@@ -342,6 +342,31 @@ function Assert-ExactJsonType {
     }
 }
 
+function Assert-JsonInteger {
+    param(
+        [Parameter(Mandatory)]$Value,
+        [Parameter(Mandatory)][string]$Context
+    )
+
+    if ($Value -isnot [int] -and $Value -isnot [long]) {
+        $actualType = if ($null -eq $Value) { 'null' } else { $Value.GetType().FullName }
+        throw "$Context must be a JSON integer, got '$actualType'."
+    }
+}
+
+function Assert-JsonNumber {
+    param(
+        [Parameter(Mandatory)]$Value,
+        [Parameter(Mandatory)][string]$Context
+    )
+
+    if ($Value -isnot [int] -and $Value -isnot [long] -and
+        $Value -isnot [double] -and $Value -isnot [decimal]) {
+        $actualType = if ($null -eq $Value) { 'null' } else { $Value.GetType().FullName }
+        throw "$Context must be a JSON number, got '$actualType'."
+    }
+}
+
 function Assert-CanonicalLowercaseUuid {
     param(
         [Parameter(Mandatory)]
@@ -640,16 +665,15 @@ function Assert-NondisclosureMetric {
     Assert-ExactJsonType -Value $Metric.passed -ExpectedType ([bool]) -Context "$Context passed"
 
     foreach ($name in @("known_ms", "random_ms", "delta_ms", "tolerance_ms")) {
-        Assert-ExactJsonType -Value $Metric.$name -ExpectedType ([double]) -Context "$Context $name"
+        Assert-JsonNumber -Value $Metric.$name -Context "$Context $name"
         $value = [double]$Metric.$name
         if ([double]::IsNaN($value) -or [double]::IsInfinity($value) -or $value -lt 0.0) {
             throw "$Context $name must be a finite non-negative number."
         }
     }
     if ($null -ne $Metric.relative_delta_percent) {
-        Assert-ExactJsonType `
+        Assert-JsonNumber `
             -Value $Metric.relative_delta_percent `
-            -ExpectedType ([double]) `
             -Context "$Context relative_delta_percent"
         $relativeDelta = [double]$Metric.relative_delta_percent
         if ([double]::IsNaN($relativeDelta) -or [double]::IsInfinity($relativeDelta) -or $relativeDelta -lt 0.0) {
@@ -766,7 +790,7 @@ function Assert-NondisclosureEvidenceDocument {
         -Value $Document `
         -Expected @("schema_version", "evidence_kind", "generated_at", "passed", "environment", "fixture", "methodology", "states") `
         -Context "nondisclosure evidence"
-    Assert-ExactJsonType -Value $Document.schema_version -ExpectedType ([long]) -Context "nondisclosure evidence schema_version"
+    Assert-JsonInteger -Value $Document.schema_version -Context "nondisclosure evidence schema_version"
     Assert-ExactJsonType -Value $Document.evidence_kind -ExpectedType ([string]) -Context "nondisclosure evidence evidence_kind"
     Assert-ExactJsonType -Value $Document.generated_at -ExpectedType ([string]) -Context "nondisclosure evidence generated_at"
     Assert-ExactJsonType -Value $Document.passed -ExpectedType ([bool]) -Context "nondisclosure evidence passed"
@@ -908,7 +932,7 @@ function Assert-NondisclosureEvidenceDocument {
         Assert-ExactJsonType -Value $methodology.$name -ExpectedType ([string]) -Context "nondisclosure evidence methodology.$name"
     }
     foreach ($name in @("warmup_pairs_per_state", "samples_per_identifier_per_state", "retries")) {
-        Assert-ExactJsonType -Value $methodology.$name -ExpectedType ([long]) -Context "nondisclosure evidence methodology.$name"
+        Assert-JsonInteger -Value $methodology.$name -Context "nondisclosure evidence methodology.$name"
     }
     if ($methodology.endpoint -cne $resolvePath `
         -or $methodology.transport -cne "one persistent loopback HttpClient; one connection at a time; proxy and cookies disabled" `
@@ -957,11 +981,11 @@ function Assert-NondisclosureEvidenceDocument {
             ) `
             -Context "nondisclosure evidence state"
         Assert-ExactJsonType -Value $state.access_state -ExpectedType ([string]) -Context "nondisclosure evidence state access_state"
-        Assert-ExactJsonType -Value $state.response_status -ExpectedType ([long]) -Context "nondisclosure evidence state response_status"
+        Assert-JsonInteger -Value $state.response_status -Context "nondisclosure evidence state response_status"
         Assert-ExactJsonType -Value $state.exact_known_random_body_match -ExpectedType ([bool]) -Context "nondisclosure evidence state exact_known_random_body_match"
         Assert-ExactJsonType -Value $state.restricted_body_sha256 -ExpectedType ([string]) -Context "nondisclosure evidence state restricted_body_sha256"
-        Assert-ExactJsonType -Value $state.known_sample_count -ExpectedType ([long]) -Context "nondisclosure evidence state known_sample_count"
-        Assert-ExactJsonType -Value $state.random_sample_count -ExpectedType ([long]) -Context "nondisclosure evidence state random_sample_count"
+        Assert-JsonInteger -Value $state.known_sample_count -Context "nondisclosure evidence state known_sample_count"
+        Assert-JsonInteger -Value $state.random_sample_count -Context "nondisclosure evidence state random_sample_count"
         Assert-ExactJsonType -Value $state.passed -ExpectedType ([bool]) -Context "nondisclosure evidence state passed"
         $accessState = $state.access_state
         if ($accessState -notin @("unauthorized", "not_evaluated") -or -not $seenStates.Add($accessState)) {
@@ -995,7 +1019,7 @@ function Assert-NondisclosureEvidenceDocument {
             -Context "nondisclosure evidence state '$accessState' envelope"
         Assert-PropertySet -Value $envelope.owner_state -Expected @("kind") -Context "nondisclosure evidence owner_state"
         Assert-PropertySet -Value $envelope.resource_lifecycle_state -Expected @("kind") -Context "nondisclosure evidence lifecycle_state"
-        Assert-ExactJsonType -Value $envelope.schema_version -ExpectedType ([long]) -Context "restricted envelope schema_version"
+        Assert-JsonInteger -Value $envelope.schema_version -Context "restricted envelope schema_version"
         Assert-ExactJsonType -Value $envelope.access_state -ExpectedType ([string]) -Context "restricted envelope access_state"
         Assert-ExactJsonType -Value $envelope.owner_state -ExpectedType ([Management.Automation.PSCustomObject]) -Context "restricted envelope owner_state"
         Assert-ExactJsonType -Value $envelope.owner_state.kind -ExpectedType ([string]) -Context "restricted envelope owner_state.kind"
@@ -1363,7 +1387,8 @@ function Write-ValidatedNondisclosureEvidenceSet {
         )
 
         try {
-            $roundTrippedReport = Get-Content -LiteralPath $temporaryEvidencePath -Raw | ConvertFrom-Json -DateKind String
+            $roundTrippedReport = ConvertFrom-Sprint6ADeploymentEvidenceJson `
+                -Json (Get-Content -LiteralPath $temporaryEvidencePath -Raw)
         } catch {
             throw "Temporary nondisclosure evidence is not complete valid JSON: $($_.Exception.Message)"
         }
@@ -1805,7 +1830,8 @@ if ($SelfTest) {
             [pscustomobject]@{ Name = "live-digest-mismatch"; Mutate = { param($value) $value.states[0].restricted_body_sha256 = "f" * 64 } }
         )
         foreach ($negativeCase in $negativeCases) {
-            $invalidReport = $negativeBaseReport | ConvertTo-Json -Depth 20 | ConvertFrom-Json -DateKind String
+            $invalidReport = ConvertFrom-Sprint6ADeploymentEvidenceJson `
+                -Json ($negativeBaseReport | ConvertTo-Json -Depth 20)
             & $negativeCase.Mutate $invalidReport
             $invalidOutputPath = Join-Path $selfTestRoot "invalid-$($negativeCase.Name).json"
             $invalidArguments = @{} + $commonArguments

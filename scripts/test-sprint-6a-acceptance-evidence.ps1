@@ -332,13 +332,18 @@ try {
     $shimPublishPath = Join-Path $testRoot 'must-not-publish-after-curl-18.json'
     $shimExitObserved = $false
     try {
-        $previousNativePreference = $PSNativeCommandUseErrorActionPreference
-        $PSNativeCommandUseErrorActionPreference = $false
+        $nativePreference = Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue
+        if ($null -ne $nativePreference) {
+            $previousNativePreference = $nativePreference.Value
+            $PSNativeCommandUseErrorActionPreference = $false
+        }
         try {
             $shimResponse = & $shimCommand -sS -f -c $shimCookie -H 'Content-Type: application/json' --data-binary "@$shimPayload" 'http://127.0.0.1:8080/api/auth/login'
             $shimExitCode = $LASTEXITCODE
         } finally {
-            $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+            if ($null -ne $nativePreference) {
+                $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+            }
         }
         Complete-Sprint6ABrowserLoginObservation `
             -Sessions $shimSessions `

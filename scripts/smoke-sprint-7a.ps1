@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 
 if ($SelfTest) {
     Test-Sprint7AAcceptanceContract
-    foreach ($name in @("dataset_id", "metric_component_id", "table_component_id", "dashboard_id")) {
+    foreach ($name in @("dataset_id", "metric_component_id", "table_component_id", "chart_component_id", "dashboard_id", "blocked_dashboard_id")) {
         try {
             $null = [guid]::ParseExact([string]$script:Sprint7AFixture[$name], "D")
         } catch {
@@ -36,13 +36,13 @@ $token = Get-Sprint7AToken -BaseUrl $BaseUrl -Email $AdminEmail -Password $Admin
 $datasets = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/datasets" -Token $token
 Assert-Sprint7A ($datasets.status -eq 200 -and $datasets.body.Contains($script:Sprint7AFixture.dataset_id)) "dataset_inventory" "Reference Dataset is present" $checks
 $components = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/components" -Token $token
-Assert-Sprint7A ($components.status -eq 200 -and $components.body.Contains($script:Sprint7AFixture.metric_component_id) -and $components.body.Contains($script:Sprint7AFixture.table_component_id)) "component_inventory" "Both reference Components are present" $checks
+Assert-Sprint7A ($components.status -eq 200 -and $components.body.Contains($script:Sprint7AFixture.metric_component_id) -and $components.body.Contains($script:Sprint7AFixture.table_component_id) -and $components.body.Contains($script:Sprint7AFixture.chart_component_id)) "component_inventory" "Reference table, chart, and stat Components are present" $checks
 $dashboard = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/dashboards/$($script:Sprint7AFixture.dashboard_id)" -Token $token
-Assert-Sprint7A ($dashboard.status -eq 200 -and $dashboard.body.Contains($script:Sprint7AFixture.metric_placement_id) -and $dashboard.body.Contains($script:Sprint7AFixture.table_placement_id)) "dashboard_inventory" "Reference Dashboard has both placements" $checks
+Assert-Sprint7A ($dashboard.status -eq 200 -and $dashboard.body.Contains($script:Sprint7AFixture.metric_placement_id) -and $dashboard.body.Contains($script:Sprint7AFixture.table_placement_id) -and $dashboard.body.Contains($script:Sprint7AFixture.chart_placement_id) -and $dashboard.body.Contains($script:Sprint7AFixture.blocked_placement_id)) "dashboard_inventory" "Reference Dashboard has the exact mixed-placement inventory" $checks
 $stat = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/dashboards/$($script:Sprint7AFixture.dashboard_id)/placements/$($script:Sprint7AFixture.metric_placement_id)/render/stat-card" -Token $token
-Assert-Sprint7A ($stat.status -eq 200 -and $stat.body.Contains('"display_value":"1"') -and $stat.body.Contains('"materialization_state":"ready"')) "dashboard_stat_render" "Mediated stat-card render is ready and equals 1" $checks
+Assert-Sprint7A ($stat.status -eq 200 -and $stat.body.Contains('"display_value":"4"') -and $stat.body.Contains('"materialization_state":"ready"')) "dashboard_stat_render" "Administrator-mediated stat-card render is ready and includes all four tiers" $checks
 $table = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/dashboards/$($script:Sprint7AFixture.dashboard_id)/placements/$($script:Sprint7AFixture.table_placement_id)/render/table" -Token $token
-Assert-Sprint7A ($table.status -eq 200 -and $table.body.Contains("Reference row") -and $table.body.Contains('"materialization_state":"ready"')) "dashboard_table_render" "Mediated table render contains the exact reference row" $checks
+Assert-Sprint7A ($table.status -eq 200 -and $table.body.Contains("UAT7A-PUBLIC") -and $table.body.Contains("UAT7A-CONFIDENTIAL-BLOCKED") -and $table.body.Contains('"materialization_state":"ready"')) "dashboard_table_render" "Administrator-mediated table render contains the complete four-tier fixture" $checks
 
 $result = [ordered]@{ schema_version = 1; evidence_kind = "tessara.sprint-7a.smoke"; generated_at = [DateTimeOffset]::UtcNow.ToString("o"); base_url = $BaseUrl.TrimEnd('/'); checks = $checks; passed = $true }
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {

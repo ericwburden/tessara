@@ -10,6 +10,8 @@
 
 | Artifact | Producer | Required before | Status |
 |---|---|---|---|
+| `validation-readiness-result.json` | Validation coordinator | Rehearsal | Not Run |
+| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not Run |
 | `preflight-result.json` | Preflight | Candidate freeze | Not Run |
 | `candidate.json` | Preflight | SIT | Not Run |
 | `sit-result.json` | SIT | UAT | Not Run |
@@ -28,6 +30,37 @@
 - Migration/baseline identity:
 - Expected provenance labels:
 - Observed image digest(s):
+
+## Validation Readiness
+
+- Derived executable checklist:
+- Environment variables and reset acknowledgements:
+- Supported tools, shells, and runtimes:
+- Ports, Compose, databases, topology, health, and provenance:
+- Semantic fixture and idempotence audit:
+- Runner, output, receipt, hash, and finalization self-tests:
+- Acceptance-clause evidence mapping:
+- Clean repository and source-exact inputs:
+- Result receipt:
+
+## Candidate Rehearsal
+
+| Diagnostic lane | Command/evidence | Assertions | Result | Defect batch |
+|---|---|---|---|---|
+| Static and boundaries | | | Not Run | |
+| Full Rust | | | Not Run | |
+| Source-exact deployment/materialization | | | Not Run | |
+| Playwright | | | Not Run | |
+| Conformance and nondisclosure | | | Not Run | |
+| Deployed smoke | | | Not Run | |
+| Recovery/restoration | | | Not Run | |
+| Automated UAT diagnostics | | | Not Run | |
+
+- Mutable source/environment identity:
+- Passing readiness prerequisite:
+- Consolidated defects and correction batch:
+- Complete-cycle repetitions:
+- Result receipt:
 
 ## Environment contract
 

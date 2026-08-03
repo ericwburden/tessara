@@ -22,9 +22,14 @@ the run when:
 - the worktree is unexpectedly dirty
 - required databases, reset authorization, ports, tools, evidence paths, or
   deployment inputs no longer match preflight
+- preflight does not name valid passing Validation Readiness and Candidate
+  Rehearsal receipts for the exact frozen source/environment identities
 
 Do not repair a stale prerequisite silently. Return to
 `tessara-sprint-validation` for the invalidation decision.
+
+Do not relabel or reuse rehearsal output as SIT evidence. Every authoritative
+SIT lane reruns after freeze and produces its own receipt.
 
 ## Phase model
 
@@ -111,6 +116,8 @@ returned nonzero. Apply the shared invalidation matrix through
 `tessara-sprint-validation`:
 
 - candidate-affecting correction: refreeze and restart all SIT
+- before any successor freeze, the coordinator must complete the full
+  readiness gate and non-authoritative rehearsal cycle
 - shared-environment correction: rerun affected and downstream lanes
 - lane setup failure before assertions: rerun that lane
 - evidence finalization failure with intact raw results: rerun finalization

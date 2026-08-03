@@ -25,6 +25,11 @@ Reject UAT if their candidate or environment fingerprints differ, any SIT lane
 is incomplete, the UAT inventory changed, required accounts/fixtures are
 missing, or the intended topology is not in its recorded starting state.
 
+Also require the receipt chain to include the passing pre-freeze Validation
+Readiness and Candidate Rehearsal receipts audited by preflight. Rehearsal's
+automated UAT diagnostics are not formal UAT evidence and cannot replace any
+scripted or manual scenario below.
+
 ## Required execution order
 
 1. Reconfirm candidate provenance, SIT authorization, active slot, health,

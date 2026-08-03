@@ -9,6 +9,8 @@ This protocol is the shared contract for `tessara-validation-preflight`,
 Store receipts in the sprint evidence directory:
 
 ```text
+validation-readiness-result.json
+candidate-rehearsal-result.json
 preflight-result.json
 candidate.json
 sit-result.json
@@ -21,6 +23,11 @@ evidence-manifest.json.sha256
 
 Each downstream receipt names and hashes its prerequisite receipts. Reject a
 missing, malformed, stale, failed, or mismatched prerequisite.
+
+Readiness and rehearsal receipts bind mutable source and environment
+identities rather than claiming a frozen candidate fingerprint. Preflight
+verifies those identities still match, then creates the immutable candidate
+fingerprint and receipt. Neither receipt is authoritative SIT or UAT evidence.
 
 ## Fingerprints
 
@@ -38,6 +45,10 @@ Hash canonical values for:
 
 Documentation-only changes after freeze do not change this fingerprint when
 they cannot alter executable behavior or test interpretation.
+
+No fingerprint is frozen until the mandatory Test Readiness Gate and complete
+Candidate Rehearsal both pass. Any correction after rehearsal requires both
+gates to repeat before freeze.
 
 ### Environment fingerprint
 
@@ -119,6 +130,11 @@ The coordinator records the decision and rationale.
 | Product defect corrected | Refreeze, all SIT, then all UAT |
 | Missing acceptance assertion discovered | Update inventory/candidate, all SIT, then all UAT |
 
+When the last row or any other candidate-affecting correction occurs, restore
+the canonical environment and stop formal testing before creating the next
+candidate. Complete the readiness-and-rehearsal cycle before refreeze. A
+narrow reproducer remains diagnostic only.
+
 Never choose a smaller scope merely to save time. Reuse an earlier receipt only
 when its candidate and environment fingerprints still match and the failure
 could not have affected its assertions.
@@ -126,6 +142,9 @@ could not have affected its assertions.
 ## Authority boundaries
 
 - Preflight may freeze a candidate but cannot authorize SIT results.
+- `tessara-sprint-validation` owns pre-freeze readiness, rehearsal, defect
+  batching, and permission to enter preflight.
+- Readiness and rehearsal cannot authorize SIT, UAT, or closeout.
 - SIT may authorize UAT but cannot authorize closeout.
 - UAT may report acceptance but cannot authorize closeout.
 - `tessara-sprint-validation` alone validates the chain, decides invalidation,

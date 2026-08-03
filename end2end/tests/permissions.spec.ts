@@ -1588,25 +1588,25 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.scopedManager,
       "get",
       `/api/components/${fixtures.outOfScopeComponent.slug}`,
-      [403],
+      [404],
     );
     await expectStatus(
       fixtures.scopedManager,
       "get",
       `/api/components/${fixtures.outOfScopeComponent.slug}/table`,
-      [403],
+      [404],
     );
     await expectStatus(
       fixtures.scopedManager,
       "get",
       `/api/components/${fixtures.outOfScopeVisualComponent.slug}`,
-      [403],
+      [404],
     );
     await expectStatus(
       fixtures.scopedManager,
       "get",
       `/api/components/${fixtures.outOfScopeVisualComponent.slug}/bar`,
-      [403],
+      [404],
     );
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
     await assertNativeRouteGuard.whileExpectedForbiddenGets([
@@ -1822,12 +1822,18 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(currentTable.rows.length).toBeGreaterThan(0);
     expect(await getJson<ComponentTable>(fixtures.admin, `/api/components/${slug}/versions/${hiddenHistoryVersion.id}/table`))
       .toMatchObject({ component_version_id: hiddenHistoryVersion.id });
-    await expectStatus(
+    const hiddenHistoryError = await expectErrorStatus(
       fixtures.scopedManager,
       "get",
       `/api/components/${slug}/versions/${hiddenHistoryVersion.id}/table`,
-      [403],
+      404,
+      "not_found",
     );
+    expect(hiddenHistoryError).toEqual({
+      code: "not_found",
+      message: "component not found",
+      error: "component not found",
+    });
     await getJson<ComponentTable>(
       fixtures.scopedManager,
       `/api/components/${slug}/versions/${secondVersion.id}/table`,

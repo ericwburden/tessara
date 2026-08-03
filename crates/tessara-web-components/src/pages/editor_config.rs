@@ -6,9 +6,11 @@ use tessara_web_data_ops::{
     DatasetFieldDraft as DataOpsDatasetFieldDraft, DatasetRowFilterDraft as DataOpsRowFilterDraft,
 };
 
+#[cfg(feature = "hydrate")]
+use super::ComponentFormValues;
 use super::{
-    ComponentDefinition, ComponentFormValues, ComponentVersionSummary, category_colors_map,
-    category_labels_map, csv_field_keys,
+    ComponentDefinition, ComponentVersionSummary, category_colors_map, category_labels_map,
+    csv_field_keys,
 };
 
 #[cfg(feature = "hydrate")]

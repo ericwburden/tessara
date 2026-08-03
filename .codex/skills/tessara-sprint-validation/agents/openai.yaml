@@ -1,4 +1,4 @@
 interface:
   display_name: "Tessara Sprint Validation"
-  short_description: "Coordinate Tessara validation and rerun scope"
-  default_prompt: "Use $tessara-sprint-validation to coordinate preflight, SIT, UAT, evidence integrity, and closeout authorization."
+  short_description: "Coordinate readiness, rehearsal, SIT, and UAT"
+  default_prompt: "Use $tessara-sprint-validation to coordinate readiness, mutable rehearsal, preflight, SIT, UAT, and closeout authorization."

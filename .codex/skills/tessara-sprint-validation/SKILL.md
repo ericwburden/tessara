@@ -1,6 +1,6 @@
 ---
 name: tessara-sprint-validation
-description: Coordinate Tessara sprint validation across preflight and candidate freeze, SIT, deployed acceptance smoke, UAT, evidence integrity, scoped failure invalidation, and closeout authorization. Use when planning or executing the full validation regime, deciding what must rerun after a failure, reconciling phase receipts, determining whether SIT or UAT passed, reopening validation from closeout, or authorizing an exact sprint candidate for closeout.
+description: Coordinate Tessara sprint validation across validation readiness, mutable candidate rehearsal, preflight and candidate freeze, SIT, deployed acceptance smoke, UAT, evidence integrity, scoped failure invalidation, and closeout authorization. Use when planning or executing the full validation regime, preparing a candidate for freeze, batching rehearsal defects, deciding what must rerun after a failure, reconciling phase receipts, determining whether SIT or UAT passed, reopening validation from closeout, or authorizing an exact sprint candidate for closeout.
 ---
 
 # Tessara Sprint Validation Coordinator
@@ -16,18 +16,27 @@ Before acting, read
 completely. It is authoritative for receipts, fingerprints, classifications,
 result collection, and invalidation scope.
 
+Before creating a candidate, also read
+[`references/validation-readiness.md`](references/validation-readiness.md)
+completely. It is authoritative for the Test Readiness Gate and Candidate
+Rehearsal. This coordinator owns both gates; phase skills must not duplicate
+them.
+
 ## State machine
 
 ```text
-preflight -> freeze candidate -> SIT -> UAT -> authorize closeout
-    ^              ^             ^      ^
-    |______________|_____________|______|
-        coordinator-selected invalidation boundary
+Test Readiness -> Candidate Rehearsal -> preflight/freeze -> SIT -> UAT
+      ^                  |                    ^             ^      ^
+      |__________________|____________________|_____________|______|
+                   coordinator-selected invalidation boundary
 ```
 
 Preserve these invariants:
 
 - UAT never starts before authoritative SIT passes.
+- No candidate freezes until the complete readiness gate and rehearsal both
+  pass cleanly against the same mutable source identity.
+- Rehearsal is diagnostic and non-authoritative; it is never called SIT or UAT.
 - Deployed acceptance smoke belongs to SIT.
 - One candidate fingerprint covers all authoritative SIT and UAT evidence.
 - Candidate-affecting corrections invalidate all SIT and UAT.
@@ -60,19 +69,34 @@ stale.
 
 ## Full-regime execution
 
-1. Invoke `tessara-validation-preflight` and require passing
+1. Execute the complete Test Readiness Gate and retain
+   `validation-readiness-result.json`.
+2. Execute the complete non-authoritative Candidate Rehearsal and retain
+   `candidate-rehearsal-result.json`.
+3. Collect all safe-to-discover rehearsal defects into one batch. Correct the
+   batch while source remains mutable, then repeat the complete readiness gate
+   and complete rehearsal until both pass cleanly. A narrow reproducer may
+   diagnose a defect but cannot satisfy either gate or replace an affected
+   rehearsal lane.
+4. Invoke `tessara-validation-preflight` and require passing
    `preflight-result.json` plus `candidate.json`.
-2. Verify their hashes and immutable candidate fingerprint.
-3. Invoke `tessara-sit` and require all authoritative lane receipts plus a
+5. Verify their hashes and immutable candidate fingerprint.
+6. Invoke `tessara-sit` and require all authoritative lane receipts plus a
    passing `sit-result.json`.
-4. Verify SIT used the preflight candidate and declared environment contract.
-5. Invoke `tessara-uat` and require passing scripted/manual evidence plus
+7. Verify SIT used the preflight candidate and declared environment contract.
+8. Invoke `tessara-uat` and require passing scripted/manual evidence plus
    `uat-result.json`.
-6. Audit the failure chronology and every invalidation decision.
-7. Validate the complete evidence manifest, canonical handoff topology,
+9. Audit the failure chronology and every invalidation decision.
+10. Validate the complete evidence manifest, canonical handoff topology,
    provenance, health, and acceptance mapping.
-8. Write `closeout-authorization.json` and update the human verification
+11. Write `closeout-authorization.json` and update the human verification
    record only when every requirement passes.
+
+If an in-flight frozen candidate fails, apply the existing invalidation matrix
+before changing the process. When a candidate-affecting correction is needed,
+retain and classify the failed evidence, restore the canonical environment,
+invalidate the candidate, and stop formal testing. Then perform the readiness
+and rehearsal cycle before freezing its successor.
 
 When the user requests only one phase, route to that phase skill but still
 enforce prerequisite receipts. A phase skill cannot bypass this coordinator's
@@ -98,7 +122,8 @@ Examples:
   valid.
 - A wrong evidence output path after immutable raw results reruns finalization.
 - A changed test, harness, fixture, or product source creates a new candidate
-  and restarts all SIT.
+  only after the complete readiness and rehearsal gates pass, then restarts
+  all SIT.
 - A flaky assertion requires narrow diagnosis and a complete authoritative
   rerun of its lane; upstream reuse requires matching fingerprints and an
   explicit non-impact rationale.
