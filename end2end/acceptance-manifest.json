@@ -42,7 +42,7 @@
         "Sprint 5A Dashboard routes and composition › editor add, direct move, resize, preview, save, and remove preserve dirty-state rules",
         "Sprint 5A Dashboard routes and composition › invalid inspector geometry resets without dirtying or saving the layout",
         "Sprint 5A Dashboard routes and composition › viewer request permits execute twelve visible placements fairly without exceeding six in flight",
-        "Sprint 5A Dashboard routes and composition › saved viewer uses the shared Table toolbar while charts and stat cards use intrinsic presentation",
+        "Sprint 5A Dashboard routes and composition › saved viewer uses the shared Table toolbar while stat cards stay intrinsic and charts stay absent",
         "Sprint 5A Dashboard routes and composition › embedded Table keeps full server-backed paging and page-size controls",
         "Sprint 5A Dashboard routes and composition › mobile Table fullscreen survives returning to a lazily executed viewer",
         "Sprint 5A Dashboard routes and composition › all native routes keep metadata-only surfaces inert and the focused viewer executes exact versions",

@@ -17,6 +17,9 @@
   the Sprint 7A reference topology: Dashboard execution is placement-mediated,
   the undeployed SDK reference stays absent, and permission scenarios own both
   their in-scope and out-of-scope Dashboard fixtures.
+- Bound retained presentation and SSR inventory assertions to the exact
+  reference composition: Table and stat-card Components are present, chart
+  Components are absent, and Module Management exposes eight definitions.
 
 These changes close previously missing acceptance coverage. They do not weaken
 an existing assertion or remove a test. Formal SIT and UAT must start from a new

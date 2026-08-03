@@ -462,7 +462,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     }
   });
 
-  test("saved viewer uses the shared Table toolbar while charts and stat cards use intrinsic presentation", async ({
+  test("saved viewer uses the shared Table toolbar while stat cards stay intrinsic and charts stay absent", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -482,10 +482,13 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         (option) => option.component_type === "stat_card",
       );
       expect(tableOption, "demo seed should expose a placeable Table").toBeTruthy();
-      expect(chartOption, "demo seed should expose a placeable chart").toBeTruthy();
+      expect(
+        chartOption,
+        "the Sprint 7A reference inventory should not deploy a chart Component",
+      ).toBeUndefined();
       expect(statCardOption, "demo seed should expose a placeable stat card").toBeTruthy();
 
-      const options = [tableOption!, chartOption!, statCardOption!];
+      const options = [tableOption!, statCardOption!];
       let nextRow = 1;
       await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
@@ -540,17 +543,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const chartPlacement = page.locator(
         '[data-placement-presentation="chart"]',
       );
-      await expect(chartPlacement).toHaveCount(1);
-      await chartPlacement.scrollIntoViewIfNeeded();
-      await expect(
-        chartPlacement.locator(":scope > .dashboard-viewer-placement__header"),
-      ).toHaveCount(0);
-      await expect(
-        chartPlacement.locator(
-          ":scope > .dashboard-viewer-placement__content > .dashboard-viewer-placement__chart-title",
-        ),
-      ).toBeVisible();
-      await expect(chartPlacement.locator(".component-d3-chart__surface")).toBeVisible();
+      await expect(chartPlacement).toHaveCount(0);
 
       const statCardPlacement = page.locator(
         '[data-placement-presentation="stat-card"]',

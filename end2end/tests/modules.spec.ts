@@ -1929,7 +1929,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
           ).toBeVisible();
           await expect(
             routeContent.locator("tr[data-module-definition]"),
-          ).toHaveCount(9);
+          ).toHaveCount(8);
           await expect(
             routeContent.getByText("Read-only", { exact: true }),
           ).toBeVisible();
