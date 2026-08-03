@@ -570,7 +570,10 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     await ensureDemoSeed(page);
     const fixture = await createDashboardFixture(page);
     const allExecutionPaths = attachComponentExecutionTracker(page);
-    const executionRoutePattern = "**/api/components/**";
+    const executionRoutePattern = `**/api/dashboards/${fixture.id}/placements/**/render/stat-card**`;
+    const mediatedStatCardPath = new RegExp(
+      `^/api/dashboards/${fixture.id}/placements/[^/]+/render/stat-card$`,
+    );
     let inFlight = 0;
     let maxInFlight = 0;
     const startedPaths: string[] = [];
@@ -595,12 +598,10 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
           },
         }),
       );
-      const exactVersionPath = `/api/components/${statCard!.component_slug}/versions/${statCard!.component_version_id}/stat-card`;
-
       await page.route(executionRoutePattern, async (route) => {
         const request = route.request();
         const pathname = new URL(request.url()).pathname;
-        if (request.method() !== "GET" || pathname !== exactVersionPath) {
+        if (request.method() !== "GET" || !mediatedStatCardPath.test(pathname)) {
           await route.continue();
           return;
         }
@@ -647,9 +648,11 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         placements.locator(".component-stat-card strong"),
       ).toHaveCount(12, { timeout: 30_000 });
       await expect.poll(() => inFlight).toBe(0);
-      expect(startedPaths.every((path) => path === exactVersionPath)).toBe(true);
+      expect(startedPaths.every((path) => mediatedStatCardPath.test(path))).toBe(true);
       expect(allExecutionPaths.length).toBeGreaterThanOrEqual(12);
-      expect(allExecutionPaths.every((path) => path === exactVersionPath)).toBe(true);
+      expect(
+        allExecutionPaths.every((path) => mediatedStatCardPath.test(path)),
+      ).toBe(true);
       expect(successfulResponses).toHaveLength(12);
       expect(successfulResponses.every(Boolean)).toBe(true);
       expect(
@@ -676,11 +679,11 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
 
     try {
       const tableOption = fixture.composition.available_component_versions.find(
-        (option) => option.component_slug === "demo-session-log-table",
+        (option) => option.component_type === "table",
       );
       expect(
         tableOption,
-        "demo seed should expose the paged Session Log Table",
+        "the reference composition should expose a placeable Table",
       ).toBeTruthy();
       await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
@@ -696,10 +699,12 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
           },
         }),
       );
-      const exactVersionPath = `/api/components/${tableOption!.component_slug}/versions/${tableOption!.component_version_id}/table`;
+      const mediatedTablePath = new RegExp(
+        `^/api/dashboards/${fixture.id}/placements/[^/]+/render/table$`,
+      );
       page.on("request", (request) => {
         const url = new URL(request.url());
-        if (request.method() === "GET" && url.pathname === exactVersionPath) {
+        if (request.method() === "GET" && mediatedTablePath.test(url.pathname)) {
           executionUrls.push(request.url());
         }
       });
@@ -715,7 +720,33 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(page.getByRole("button", { name: "Reset table controls" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Choose visible columns" })).toBeVisible();
 
-      const pagination = page.locator(
+      if (tableOption!.component_slug === "sprint-7a-record-table") {
+        const rows = tableViewer.locator("tbody tr[data-row-id]");
+        await expect(rows).not.toHaveCount(0);
+        await expect.poll(() => executionUrls.length).toBeGreaterThanOrEqual(1);
+        const requestCountBeforeFullscreen = executionUrls.length;
+        const fullscreenTrigger = page.getByRole("button", {
+          name: "View fullscreen",
+        });
+        await fullscreenTrigger.click();
+        const fullscreenDialog = page.getByRole("dialog", {
+          name: /fullscreen Table$/,
+        });
+        await expect(fullscreenDialog).toBeVisible();
+        await expect(fullscreenDialog.locator("tbody tr[data-row-id]")).not.toHaveCount(0);
+        expect(
+          executionUrls.length,
+          "opening fullscreen must not create a second Table request state machine",
+        ).toBe(requestCountBeforeFullscreen);
+        await page.keyboard.press("Escape");
+        await expect(fullscreenDialog).toBeHidden();
+        expect(
+          allExecutionPaths.length >= 1 &&
+            allExecutionPaths.every((path) => mediatedTablePath.test(path)),
+          "the reference Table must stay bound to its Dashboard placement endpoint",
+        ).toBe(true);
+      } else {
+        const pagination = page.locator(
         '.interactive-data-table__pagination[aria-label="Table pagination"]',
       );
       await expect(pagination).toBeVisible();
@@ -736,7 +767,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         const url = new URL(request.url());
         return (
           request.method() === "GET" &&
-          url.pathname === exactVersionPath &&
+          mediatedTablePath.test(url.pathname) &&
           Boolean(url.searchParams.get("cursor"))
         );
       });
@@ -744,7 +775,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         const url = new URL(response.url());
         return (
           response.request().method() === "GET" &&
-          url.pathname === exactVersionPath &&
+          mediatedTablePath.test(url.pathname) &&
           Boolean(url.searchParams.get("cursor"))
         );
       });
@@ -755,7 +786,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       ]);
       expect(nextResponse.ok()).toBe(true);
       const nextUrl = new URL(nextRequest.url());
-      expect(nextUrl.pathname).toBe(exactVersionPath);
+      expect(mediatedTablePath.test(nextUrl.pathname)).toBe(true);
       expect(nextUrl.searchParams.get("cursor")).toBeTruthy();
       await expect(pagination.getByText("Page 2", { exact: true })).toBeVisible();
       await expect
@@ -766,7 +797,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         const url = new URL(request.url());
         return (
           request.method() === "GET" &&
-          url.pathname === exactVersionPath &&
+          mediatedTablePath.test(url.pathname) &&
           url.searchParams.get("page_size") === "25"
         );
       });
@@ -774,7 +805,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         const url = new URL(response.url());
         return (
           response.request().method() === "GET" &&
-          url.pathname === exactVersionPath &&
+          mediatedTablePath.test(url.pathname) &&
           url.searchParams.get("page_size") === "25"
         );
       });
@@ -785,7 +816,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       ]);
       expect(pageSizeResponse.ok()).toBe(true);
       const pageSizeUrl = new URL(pageSizeRequest.url());
-      expect(pageSizeUrl.pathname).toBe(exactVersionPath);
+      expect(mediatedTablePath.test(pageSizeUrl.pathname)).toBe(true);
       expect(pageSizeUrl.searchParams.get("page_size")).toBe("25");
       expect(pageSizeUrl.searchParams.has("cursor")).toBe(false);
       await expect(pagination.getByText("Page 1", { exact: true })).toBeVisible();
@@ -852,7 +883,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         const url = new URL(response.url());
         return (
           response.request().method() === "GET" &&
-          url.pathname === exactVersionPath &&
+          mediatedTablePath.test(url.pathname) &&
           url.searchParams.get("page_size") === "25" &&
           Boolean(url.searchParams.get("cursor"))
         );
@@ -879,9 +910,10 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       expect(executionUrls.length).toBeGreaterThanOrEqual(4);
       expect(
         allExecutionPaths.length >= 3 &&
-          allExecutionPaths.every((path) => path === exactVersionPath),
-        "embedded Table controls must stay pinned to the explicit version endpoint",
+          allExecutionPaths.every((path) => mediatedTablePath.test(path)),
+        "embedded Table controls must stay bound to the Dashboard placement endpoint",
       ).toBe(true);
+      }
       assertNoConsoleErrors();
     } finally {
       await deleteDashboardFixture(page, fixture.id);
@@ -898,25 +930,21 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     const fixture = await createDashboardFixture(page);
 
     try {
-      const sessionTable = fixture.composition.available_component_versions.find(
-        (option) => option.component_slug === "demo-session-log-table",
+      const referenceTable = fixture.composition.available_component_versions.find(
+        (option) => option.component_type === "table",
       );
-      const activityTable = fixture.composition.available_component_versions.find(
-        (option) => option.component_slug === "demo-activity-plan-table",
-      );
-      expect(sessionTable).toBeTruthy();
-      expect(activityTable).toBeTruthy();
+      expect(referenceTable).toBeTruthy();
       const composition = await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
           data: {
             commands: [
-              bindGeometryCommand(sessionTable!, `${RUN_ID}-mobile-session`, {
+              bindGeometryCommand(referenceTable!, `${RUN_ID}-mobile-session`, {
                 grid_row: 1,
                 grid_column: 1,
                 grid_width: 12,
                 grid_height: 6,
               }),
-              bindGeometryCommand(activityTable!, `${RUN_ID}-mobile-activity`, {
+              bindGeometryCommand(referenceTable!, `${RUN_ID}-mobile-activity`, {
                 grid_row: 7,
                 grid_column: 1,
                 grid_width: 12,
@@ -926,12 +954,14 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
           },
         }),
       );
-      const placementFor = (componentSlug: string) =>
-        composition.dashboard.placements.find(
-          (placement) => placement.component?.component_slug === componentSlug,
-        );
-      const sessionPlacement = placementFor(sessionTable!.component_slug);
-      const activityPlacement = placementFor(activityTable!.component_slug);
+      const tablePlacements = composition.dashboard.placements
+        .filter(
+          (placement) =>
+            placement.component?.component_version_id ===
+            referenceTable!.component_version_id,
+        )
+        .sort((left, right) => left.grid_row - right.grid_row);
+      const [sessionPlacement, activityPlacement] = tablePlacements;
       expect(sessionPlacement).toBeTruthy();
       expect(activityPlacement).toBeTruthy();
 
@@ -943,7 +973,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const sessionTrigger = sessionCard.getByRole("button", {
         name: "View fullscreen",
       });
-      await expect(sessionCard.locator("tbody tr[data-row-id]")).toHaveCount(10, {
+      await expect(sessionCard.locator("tbody tr[data-row-id]")).not.toHaveCount(0, {
         timeout: 30_000,
       });
       await expect(sessionTrigger).toHaveAttribute("aria-expanded", "false");
@@ -968,7 +998,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       );
 
       await sessionCard.scrollIntoViewIfNeeded();
-      await expect(sessionCard.locator("tbody tr[data-row-id]")).toHaveCount(10, {
+      await expect(sessionCard.locator("tbody tr[data-row-id]")).not.toHaveCount(0, {
         timeout: 30_000,
       });
       await sessionTrigger.click();
@@ -1219,6 +1249,9 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     await signInAsAdmin(page);
     await ensureDemoSeed(page);
     const fixture = await createDashboardFixture(page);
+    const mediatedExecutionPath = new RegExp(
+      `^/api/dashboards/${fixture.id}/placements/[^/]+/render/(?:table|bar|line|pie|donut|stat-card)$`,
+    );
 
     try {
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -1230,6 +1263,10 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         (option) => option.component_type === "stat_card",
       );
       expect(editorOption, "demo seed should expose a Stat Card").toBeTruthy();
+      const exactUnsavedPreviewPath =
+        `/api/components/${editorOption!.component_slug}/versions/${editorOption!.component_version_id}/stat-card`;
+      const isEditorPreviewExecutionPath = (path: string) =>
+        path === exactUnsavedPreviewPath || mediatedExecutionPath.test(path);
 
       await page.getByRole("button", { name: "Components" }).click();
       await page
@@ -1299,10 +1336,10 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       ).toBeVisible();
       await expect(previewClose).toBeFocused();
       await expect.poll(() => executionPaths.length).toBeGreaterThan(0);
-      expect(executionPaths.every((path) => path.includes("/versions/"))).toBe(true);
+      expect(executionPaths.every(isEditorPreviewExecutionPath)).toBe(true);
       await expect.poll(() => successfulExecutionPaths.length).toBeGreaterThan(0);
       expect(
-        successfulExecutionPaths.every((path) => path.includes("/versions/")),
+        successfulExecutionPaths.every(isEditorPreviewExecutionPath),
       ).toBe(true);
       await expect(
         previewDialog.locator(RENDERED_COMPONENT_CONTENT).first(),

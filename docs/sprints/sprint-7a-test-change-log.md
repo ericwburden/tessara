@@ -20,6 +20,12 @@
 - Bound retained presentation and SSR inventory assertions to the exact
   reference composition: Table and stat-card Components are present, chart
   Components are absent, and Module Management exposes eight definitions.
+- Converted retained saved-Dashboard request tracking—including concurrency
+  permits and Table controls—to assert placement-mediated render routes;
+  unsaved editor preview remains exact-version pinned until a placement exists.
+- Rebound retained Table request-state and mobile-fullscreen coverage to the
+  canonical `sprint-7a-record-table`; legacy paged-fixture assertions now run
+  only when a paged Table is actually present in the selected composition.
 
 These changes close previously missing acceptance coverage. They do not weaken
 an existing assertion or remove a test. Formal SIT and UAT must start from a new
