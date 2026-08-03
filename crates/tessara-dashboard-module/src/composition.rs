@@ -274,9 +274,7 @@ async fn render_placement(
     };
     let authorization = authorization_header(&headers)?;
     let resolution = resolve_component(&state, authorization, reference.clone()).await?;
-    let metadata = resolution
-        .metadata()
-        .ok_or(DashboardModuleError::Forbidden)?;
+    let metadata = renderable_component_metadata(&resolution)?;
     if metadata.component_type != kind.component_type() {
         return Err(DashboardModuleError::NotFound(
             "render kind not found".into(),
@@ -295,7 +293,8 @@ async fn render_placement(
     let body = serde_json::to_vec(&request)
         .map_err(|_| DashboardModuleError::Unavailable("render request encoding failed".into()))?;
     let service_request = signed_service_request(&state, authorization, "POST", path, &body)?;
-    let response = reqwest::Client::new()
+    let response = state
+        .component_provider_client
         .post(format!("{}{path}", core_url()))
         .header("x-tessara-authorization", authorization)
         .header("x-tessara-module-service-request", service_request)
@@ -1083,7 +1082,8 @@ async fn resolve_component(
     let body = serde_json::to_vec(&request)
         .map_err(|_| DashboardModuleError::Unavailable("service request encoding failed".into()))?;
     let service_request = signed_service_request(state, authorization, "POST", path, &body)?;
-    let response = reqwest::Client::new()
+    let response = state
+        .component_provider_client
         .post(format!("{}{path}", core_url()))
         .header("x-tessara-authorization", authorization)
         .header("x-tessara-module-service-request", service_request)
@@ -1116,7 +1116,8 @@ async fn component_catalog(
 ) -> Result<DashboardComponentCatalogResponseV1, DashboardModuleError> {
     let path = "/api/private/dashboard-components/catalog";
     let service_request = signed_service_request(state, authorization, "POST", path, &[])?;
-    let response = reqwest::Client::new()
+    let response = state
+        .component_provider_client
         .post(format!("{}{path}", core_url()))
         .header("x-tessara-authorization", authorization)
         .header("x-tessara-module-service-request", service_request)
@@ -1207,6 +1208,21 @@ fn provider_unavailable_resolution() -> DashboardComponentResolutionResponseV1 {
         None,
     )
     .expect("provider-unavailable Dashboard response is metadata-free")
+}
+
+fn renderable_component_metadata(
+    response: &DashboardComponentResolutionResponseV1,
+) -> Result<&DashboardComponentMetadataV1, DashboardModuleError> {
+    let resolution = response.resolution();
+    if resolution.access_state() != ResourceAccessState::Authorized {
+        return Err(DashboardModuleError::Forbidden);
+    }
+    if resolution.availability_state() == ProviderAvailabilityState::Unavailable {
+        return Err(DashboardModuleError::Unavailable(
+            "Component provider unavailable".into(),
+        ));
+    }
+    response.metadata().ok_or(DashboardModuleError::Forbidden)
 }
 
 fn unavailable_component_catalog() -> DashboardComponentCatalogResponseV1 {
@@ -1384,7 +1400,8 @@ mod tests {
     use tessara_module_contract::{ResourceAccessState, ResourceResolutionV1};
 
     use super::{
-        disclosed_title, provider_unavailable_resolution, reconciled_title, resolution_state,
+        DashboardComponentResolutionResponseV1, disclosed_title, provider_unavailable_resolution,
+        reconciled_title, renderable_component_metadata, resolution_state,
         unavailable_component_catalog,
     };
 
@@ -1410,6 +1427,21 @@ mod tests {
         );
         assert!(unavailable.metadata().is_none());
         assert!(unavailable_component_catalog().components.is_empty());
+        assert!(matches!(
+            renderable_component_metadata(&unavailable),
+            Err(crate::DashboardModuleError::Unavailable(message))
+                if message == "Component provider unavailable"
+        ));
+        let restricted = DashboardComponentResolutionResponseV1::new(
+            ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized)
+                .expect("valid restricted resolution"),
+            None,
+        )
+        .expect("metadata-free restricted response");
+        assert!(matches!(
+            renderable_component_metadata(&restricted),
+            Err(crate::DashboardModuleError::Forbidden)
+        ));
         assert_eq!(
             disclosed_title(unavailable.resolution(), &Some("Partner Profile".into())),
             Some("Partner Profile".into())

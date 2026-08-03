@@ -30,3 +30,34 @@
 These changes close previously missing acceptance coverage. They do not weaken
 an existing assertion or remove a test. Formal SIT and UAT must start from a new
 candidate because the tracked acceptance inventory changed.
+
+## 2026-08-03 — Dashboard provider-failure containment regression
+
+- Added one exact Dashboard Playwright identity that forces a placement render
+  to return the stable provider-unavailable response while a sibling placement
+  succeeds.
+- Increased the tracked acceptance total from 68 to 69.
+- The test requires the Dashboard shell and healthy placement to remain usable,
+  the failed placement to retain contained unavailable copy while bounded
+  retries run, and the loading placeholder not to replace that failure state.
+- Added focused Rust proof that Dashboard's shared Components-provider client
+  terminates a request at its configured deadline and that an authorized
+  provider outage remains distinct from a forbidden resolution.
+
+This strengthens AC-14 and directly prevents recurrence of UAT-7A-05. It does
+not change an existing expectation, increase a test timeout, or add a retry to
+the Playwright runner. The source and tracked acceptance inventory changes
+require a new candidate and complete SIT and UAT.
+
+## 2026-08-03 — Component editor expected-error synchronization
+
+- Bound the existing visual-component workflow to both expected HTTP 400
+  preview responses produced while the test deliberately selects invalid
+  text-field calculations.
+- The synchronization prevents the browser's corresponding resource errors
+  from racing past the test's expected-error reset. No assertion, timeout,
+  retry, or acceptance identity changed.
+
+This is a harness-integrity correction discovered during Candidate 10 SIT.
+Because tracked test evidence changed, formal validation must restart from a
+new source-exact candidate.

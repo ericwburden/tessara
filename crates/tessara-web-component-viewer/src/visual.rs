@@ -153,8 +153,10 @@ pub(crate) fn ComponentVisualViewer(
             }
             let request_id = active_request_id.get_untracked().wrapping_add(1);
             active_request_id.set(request_id);
-            loading.set(true);
-            error.set(None);
+            if retry_attempt == 0 {
+                loading.set(true);
+                error.set(None);
+            }
             load_component_visual(ComponentVisualRequest {
                 target: target.clone(),
                 request_id,
@@ -179,7 +181,7 @@ pub(crate) fn ComponentVisualViewer(
             aria-busy=move || loading_for_busy.get().to_string()
         >
             {move || {
-                if loading.get() && visual.get().is_none() {
+                if loading.get() && visual.get().is_none() && error.get().is_none() {
                     view! {
                         <EmptyState
                             title="Loading preview"

@@ -1079,6 +1079,12 @@ test.describe.serial("Sprint 4A component workflow", () => {
     ]);
     await barCalculation.selectOption("row_count");
     await expect(barValueField).toHaveCount(0);
+    const invalidNonePreview = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/components/preview") &&
+        response.request().method() === "POST" &&
+        response.status() === 400,
+    );
     await barCalculation.selectOption("none");
     await expect(barValueField).toBeVisible();
     await expect(page.locator(".component-editor__calculation-warning")).toBeVisible();
@@ -1087,9 +1093,17 @@ test.describe.serial("Sprint 4A component workflow", () => {
       "disabled",
       "",
     );
+    await invalidNonePreview;
     assertNoConsoleErrors.reset();
+    const invalidSumPreview = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/components/preview") &&
+        response.request().method() === "POST" &&
+        response.status() === 400,
+    );
     await barCalculation.selectOption("sum");
     await expect(page.locator(".component-editor-preview__badge")).toHaveText("Needs attention");
+    await invalidSumPreview;
     await page.getByRole("button", { name: "Save Draft", exact: true }).click();
     const validationFindings = page.getByRole("region", { name: "Validation Findings" });
     await expect(validationFindings).toBeVisible();

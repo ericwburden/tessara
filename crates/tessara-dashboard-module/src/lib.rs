@@ -4,7 +4,7 @@
 //! process. Core supplies signed shell and authorization projections; the
 //! module never receives Core browser state or reusable Core authority.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     Json, Router,
@@ -36,12 +36,40 @@ pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
 pub const MODULE_RELEASE_VERSION: &str = "2.1.0";
 
+const COMPONENT_PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Clone)]
 pub struct DashboardModuleState {
     pub pool: PgPool,
     pub core_authorization_verifier: PurposeBoundVerifyingKeyV1,
     pub core_shell_verifier: PurposeBoundVerifyingKeyV1,
     pub service_request_signer: Arc<PurposeBoundSigningKeyV1>,
+    pub(crate) component_provider_client: reqwest::Client,
+}
+
+impl DashboardModuleState {
+    pub fn new(
+        pool: PgPool,
+        core_authorization_verifier: PurposeBoundVerifyingKeyV1,
+        core_shell_verifier: PurposeBoundVerifyingKeyV1,
+        service_request_signer: Arc<PurposeBoundSigningKeyV1>,
+    ) -> Result<Self, reqwest::Error> {
+        Ok(Self {
+            pool,
+            core_authorization_verifier,
+            core_shell_verifier,
+            service_request_signer,
+            component_provider_client: component_provider_client_with_timeout(
+                COMPONENT_PROVIDER_REQUEST_TIMEOUT,
+            )?,
+        })
+    }
+}
+
+fn component_provider_client_with_timeout(
+    timeout: Duration,
+) -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder().timeout(timeout).build()
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -616,10 +644,50 @@ impl axum::response::IntoResponse for DashboardModuleError {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, Instant};
+
+    use axum::{Router, routing::get};
     use sha2::{Digest, Sha256};
     use tessara_module_contract::ModuleManifest;
 
-    use super::{DashboardConfigurationV1, validate_configuration};
+    use super::{
+        DashboardConfigurationV1, component_provider_client_with_timeout, validate_configuration,
+    };
+
+    #[tokio::test]
+    async fn component_provider_client_enforces_the_complete_request_deadline() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind delayed provider");
+        let address = listener.local_addr().expect("delayed provider address");
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/",
+                    get(|| async {
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        "late provider response"
+                    }),
+                ),
+            )
+            .await
+            .expect("serve delayed provider");
+        });
+        let client = component_provider_client_with_timeout(Duration::from_millis(50))
+            .expect("bounded provider client");
+        let started = Instant::now();
+
+        let error = client
+            .get(format!("http://{address}/"))
+            .send()
+            .await
+            .expect_err("delayed provider must time out");
+
+        assert!(error.is_timeout());
+        assert!(started.elapsed() < Duration::from_secs(1));
+        server.abort();
+    }
 
     #[test]
     fn configuration_validation_normalizes_and_bounds_values() {

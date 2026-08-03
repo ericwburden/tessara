@@ -62,12 +62,12 @@ async fn main() -> Result<()> {
     let address: SocketAddr = env::var("DASHBOARD_MODULE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8091".into())
         .parse()?;
-    let app = router(DashboardModuleState {
+    let app = router(DashboardModuleState::new(
         pool,
-        core_authorization_verifier: authorization_verifier,
-        core_shell_verifier: shell_verifier,
+        authorization_verifier,
+        shell_verifier,
         service_request_signer,
-    })
+    )?)
     .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(address).await?;
     tracing::info!(%address, "Dashboard module listening");

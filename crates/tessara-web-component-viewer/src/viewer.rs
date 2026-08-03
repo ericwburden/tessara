@@ -571,8 +571,10 @@ fn ComponentTableViewer(
             }
             let request_id = active_request_id.get_untracked().wrapping_add(1);
             active_request_id.set(request_id);
-            loading.set(true);
-            error.set(None);
+            if retry_attempt == 0 {
+                loading.set(true);
+                error.set(None);
+            }
             load_component_table(ComponentTableRequest {
                 target: target.clone(),
                 query,
@@ -629,7 +631,10 @@ fn ComponentTableViewer(
                     })
             }}
             {move || {
-                if loading_for_results.get() && table_for_results.get().is_none() {
+                if loading_for_results.get()
+                    && table_for_results.get().is_none()
+                    && error.get().is_none()
+                {
                     view! {
                         <EmptyState
                             title="Loading preview"
@@ -1312,6 +1317,7 @@ fn load_component_table(request: ComponentTableRequest) {
                     let retryable = materialization_is_retryable(&response.materialization_state);
                     known_columns.update(|known| merge_known_columns(known, &response.columns));
                     table.set(Some(response));
+                    error.set(None);
                     if retryable {
                         schedule_bounded_retry(
                             retry,

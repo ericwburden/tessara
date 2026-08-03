@@ -666,6 +666,76 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     }
   });
 
+  test("viewer keeps provider failure contained while bounded retries run", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await ensureDemoSeed(page);
+    const fixture = await createDashboardFixture(page);
+
+    try {
+      const statCard = fixture.composition.available_component_versions.find(
+        (option) => option.component_type === "stat_card",
+      );
+      expect(statCard, "demo seed should expose a published Stat Card").toBeTruthy();
+      const composition = await expectJson<DashboardComposition>(
+        await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
+          data: {
+            commands: [
+              bindGeometryCommand(statCard!, `${RUN_ID}-contained-failure`, {
+                grid_row: 1,
+                grid_column: 1,
+                grid_width: statCard!.default_grid_width,
+                grid_height: statCard!.default_grid_height,
+              }),
+              bindGeometryCommand(statCard!, `${RUN_ID}-contained-success`, {
+                grid_row: statCard!.default_grid_height + 1,
+                grid_column: 1,
+                grid_width: statCard!.default_grid_width,
+                grid_height: statCard!.default_grid_height,
+              }),
+            ],
+          },
+        }),
+      );
+      expect(composition.dashboard.placements).toHaveLength(2);
+      const failedPlacementId = composition.dashboard.placements[0].placement_id;
+      const failedPath = `/api/dashboards/${fixture.id}/placements/${failedPlacementId}/render/stat-card`;
+      let failedAttempts = 0;
+      await page.route(`**${failedPath}`, async (route) => {
+        failedAttempts += 1;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Component provider unavailable" }),
+        });
+      });
+
+      await gotoHydrated(page, `/dashboards/${fixture.id}/view`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: fixture.name }),
+      ).toBeVisible();
+      const failedPlacement = page.locator(
+        `.dashboard-viewer-placement[data-placement-id="${failedPlacementId}"]`,
+      );
+      await expect(
+        failedPlacement.getByRole("heading", { name: "Preview unavailable" }),
+      ).toBeVisible();
+      await expect(failedPlacement).toContainText("Component provider unavailable");
+      await expect(
+        page.locator(".dashboard-viewer-placement .component-stat-card strong"),
+      ).toHaveCount(1);
+      await expect.poll(() => failedAttempts).toBeGreaterThanOrEqual(2);
+      await expect(
+        failedPlacement.getByRole("heading", { name: "Preview unavailable" }),
+      ).toBeVisible();
+      await expect(failedPlacement).not.toContainText("Loading preview");
+    } finally {
+      await page.unrouteAll({ behavior: "wait" });
+      await deleteDashboardFixture(page, fixture.id);
+    }
+  });
+
   test("embedded Table keeps full server-backed paging and page-size controls", async ({
     page,
   }) => {

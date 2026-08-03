@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 68,
+  "expected_total": 69,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
@@ -42,6 +42,7 @@
         "Sprint 5A Dashboard routes and composition › editor add, direct move, resize, preview, save, and remove preserve dirty-state rules",
         "Sprint 5A Dashboard routes and composition › invalid inspector geometry resets without dirtying or saving the layout",
         "Sprint 5A Dashboard routes and composition › viewer request permits execute twelve visible placements fairly without exceeding six in flight",
+        "Sprint 5A Dashboard routes and composition › viewer keeps provider failure contained while bounded retries run",
         "Sprint 5A Dashboard routes and composition › saved viewer uses the shared Table toolbar while stat cards stay intrinsic and charts stay absent",
         "Sprint 5A Dashboard routes and composition › embedded Table keeps full server-backed paging and page-size controls",
         "Sprint 5A Dashboard routes and composition › mobile Table fullscreen survives returning to a lazily executed viewer",
