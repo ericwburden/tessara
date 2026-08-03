@@ -138,6 +138,14 @@ async fn update_organization_projection(
         }
     }
     let mut tx = state.pool.begin().await?;
+    // Core can refresh control projections concurrently for independent browser
+    // requests. Serialize projection writers before the set-wide deactivation so
+    // PostgreSQL cannot acquire the same node rows in competing update orders.
+    // ACCESS SHARE remains compatible, so Dashboard reads continue while a
+    // projection is refreshed.
+    sqlx::query("LOCK TABLE dashboard_organization_nodes IN SHARE ROW EXCLUSIVE MODE")
+        .execute(&mut *tx)
+        .await?;
     sqlx::query(
         "UPDATE dashboard_organization_nodes
          SET active=false,projection_revision=$1,updated_at=now()
