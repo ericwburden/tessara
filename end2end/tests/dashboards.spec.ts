@@ -117,8 +117,13 @@ async function gotoHydrated(page: Page, url: string) {
 }
 
 function isComponentExecutionPath(pathname: string) {
-  return /\/api\/components\/[^/]+\/(?:versions\/[^/]+\/)?(?:table|bar|line|pie|donut|stat-card)$/.test(
-    pathname,
+  return (
+    /\/api\/components\/[^/]+\/(?:versions\/[^/]+\/)?(?:table|bar|line|pie|donut|stat-card)$/.test(
+      pathname,
+    ) ||
+    /\/api\/dashboards\/[^/]+\/placements\/[^/]+\/render\/(?:table|bar|line|pie|donut|stat-card)$/.test(
+      pathname,
+    )
   );
 }
 
@@ -431,14 +436,16 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(page.locator(".dashboard-viewer-placement .dashboard-placement-card__size"))
         .toHaveCount(0);
 
-      const exactVersionPath = `/api/components/${option.component_slug}/versions/${option.component_version_id}/${executionSuffix(option.component_type)}`;
+      const mediatedPath = new RegExp(
+        `^/api/dashboards/${fixture.id}/placements/[^/]+/render/${executionSuffix(option.component_type)}$`,
+      );
       await expect
-        .poll(() => executionPaths.filter((path) => path === exactVersionPath).length)
+        .poll(() => executionPaths.filter((path) => mediatedPath.test(path)).length)
         .toBeGreaterThanOrEqual(2);
       await expect
         .poll(
           () =>
-            successfulExecutionPaths.filter((path) => path === exactVersionPath)
+            successfulExecutionPaths.filter((path) => mediatedPath.test(path))
               .length,
         )
         .toBeGreaterThanOrEqual(1);
@@ -446,8 +453,8 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         page.locator(".dashboard-viewer").locator(RENDERED_COMPONENT_CONTENT).first(),
       ).toBeVisible();
       expect(
-        executionPaths.every((path) => path.includes("/versions/")),
-        `focused viewer requests should stay exact-version pinned: ${executionPaths.join(", ")}`,
+        executionPaths.every((path) => mediatedPath.test(path)),
+        `focused Dashboard viewer requests should stay placement-bound: ${executionPaths.join(", ")}`,
       ).toBe(true);
       assertNoConsoleErrors();
     } finally {

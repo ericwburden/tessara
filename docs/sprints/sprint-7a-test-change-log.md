@@ -13,6 +13,10 @@
 - Added tracked Sprint 7A smoke, authorization-conformance,
   known-versus-random nondisclosure, scripted UAT, acceptance-actor setup, and
   eleven manual UAT scripts.
+- Aligned retained Dashboard, Module Management, and permissions coverage with
+  the Sprint 7A reference topology: Dashboard execution is placement-mediated,
+  the undeployed SDK reference stays absent, and permission scenarios own both
+  their in-scope and out-of-scope Dashboard fixtures.
 
 These changes close previously missing acceptance coverage. They do not weaken
 an existing assertion or remove a test. Formal SIT and UAT must start from a new

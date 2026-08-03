@@ -695,6 +695,11 @@ async function setupFixtures(): Promise<FixtureState> {
     `${RUN_ID} Hidden Bar Component`,
   );
 
+  const inDashboard = await postJson<IdResponse>(admin, "/api/admin/dashboards", {
+    name: `${RUN_ID} In Dashboard`,
+    description: "In-scope Playwright permission fixture.",
+    visibility_node_ids: [inScopeNode.id],
+  });
   const outDashboard = await postJson<IdResponse>(admin, "/api/admin/dashboards", {
     name: `${RUN_ID} Out Dashboard`,
     description: "Out-of-scope Playwright permission fixture.",
@@ -703,8 +708,8 @@ async function setupFixtures(): Promise<FixtureState> {
   const adminDashboards = await getJson<DashboardSummary[]>(admin, "/api/dashboards");
   const inScopeDashboard = requireItem(
     adminDashboards,
-    (dashboard) => overlaps(dashboard.visibility_nodes, inScopeNodeIds),
-    "an in-scope dashboard should exist",
+    (dashboard) => dashboard.id === inDashboard.id,
+    "the in-scope dashboard fixture should exist",
   );
   const outOfScopeDashboard = requireItem(
     adminDashboards,

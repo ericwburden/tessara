@@ -73,7 +73,7 @@
         "Sprint 6A Module Management › scoped module authority, product-only authority, and no access stay hidden and restricted",
         "Sprint 6A Module Management › keyboard group and placement edits retain focus and persist in desktop and mobile shells",
         "Sprint 6A Module Management › native directory and detail remain useful without JavaScript or bridge requests",
-        "Sprint 6A Module Management › canonical SDK reference owns complete SSR hydration and immutable assets"
+        "Sprint 6A Module Management › undeployed SDK reference stays absent from inventory, routes, and assets"
       ]
     },
     {
