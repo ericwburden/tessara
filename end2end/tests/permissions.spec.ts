@@ -831,6 +831,12 @@ WHERE id IN (SELECT id FROM pw_cleanup_workflow_instances);
 DELETE FROM workflow_assignments
 WHERE id IN (SELECT id FROM pw_cleanup_workflow_assignments);
 
+DELETE FROM component_version_change_events
+WHERE component_version_id IN (
+  SELECT id FROM component_versions
+  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
+);
+
 DELETE FROM component_versions
 WHERE component_id IN (SELECT id FROM pw_cleanup_components);
 

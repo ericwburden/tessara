@@ -552,6 +552,12 @@ SELECT id FROM components
 WHERE slug LIKE '${COMPONENT_PREFIX}%'
    OR name LIKE 'Playwright Component Workflow %';
 
+DELETE FROM component_version_change_events
+WHERE component_version_id IN (
+  SELECT id FROM component_versions
+  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
+);
+
 DELETE FROM component_versions
 WHERE component_id IN (SELECT id FROM pw_cleanup_components);
 
@@ -666,7 +672,7 @@ test.describe.serial("Sprint 4A component workflow", () => {
     );
     const draftDashboardPlacementBody = JSON.parse(draftDashboardPlacement) as ApiErrorBody;
     expect(draftDashboardPlacementBody).toMatchObject({
-      error: expect.stringContaining("scope or lifecycle is incompatible"),
+      error: expect.stringContaining("cannot be bound in its current state"),
     });
     await expectStatus(
       await page.request.delete(`/api/admin/dashboards/${draftDashboard.id}`),

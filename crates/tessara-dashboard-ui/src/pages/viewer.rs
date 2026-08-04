@@ -986,7 +986,7 @@ mod tests {
                 component_type: kind.into(),
                 version_number: 1,
                 version_label: "Published".into(),
-                version_status: "published".into(),
+                publication_state: "published".into(),
             }),
             allowed_operations: None,
         }

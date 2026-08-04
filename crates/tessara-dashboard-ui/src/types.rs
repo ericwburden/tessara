@@ -242,7 +242,7 @@ pub struct DashboardComponentVersion {
     pub component_type: String,
     pub version_number: i32,
     pub version_label: String,
-    pub version_status: String,
+    pub publication_state: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -438,5 +438,30 @@ impl EditorPlacement {
 
     pub fn geometry(&self) -> DashboardPlacementGeometry {
         DashboardPlacementGeometry::from(&self.placement)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DashboardComponentVersion;
+
+    #[test]
+    fn placement_component_accepts_the_current_components_v2_metadata_shape() {
+        let component: DashboardComponentVersion = serde_json::from_value(serde_json::json!({
+            "component_version_id": "01980000-0001-7000-8000-000000000001",
+            "component_id": "01980000-0001-7000-8000-000000000010",
+            "component_name": "Reference Metric Card",
+            "component_slug": "reference-metric-card",
+            "component_type": "stat_card",
+            "version_number": 1,
+            "version_label": "1.0.0",
+            "publication_state": "published",
+            "lifecycle_state": "active",
+            "authority_revision": 1,
+            "scope_node_ids": ["01980000-0002-7000-8000-000000000002"]
+        }))
+        .expect("current Components V2 metadata should deserialize");
+
+        assert_eq!(component.publication_state, "published");
     }
 }

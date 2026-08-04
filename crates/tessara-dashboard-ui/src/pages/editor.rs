@@ -2371,7 +2371,7 @@ fn option_to_component(option: &DashboardComponentVersionOption) -> DashboardCom
         component_type: option.component_type.clone(),
         version_number: option.version_number,
         version_label: option.version_label.clone(),
-        version_status: option.version_status.clone(),
+        publication_state: option.version_status.clone(),
     }
 }
 
@@ -2504,7 +2504,7 @@ mod tests {
                 component_type: "table".into(),
                 version_number: 1,
                 version_label: "Published".into(),
-                version_status: "published".into(),
+                publication_state: "published".into(),
             }),
             allowed_operations: Some(vec![
                 DashboardPlacementOperation::Retain,
