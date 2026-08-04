@@ -1,7 +1,8 @@
 # Sprint 7B Verification Record
 
-Status: execution contract and interactive UI mockup approved; implementation
-is in progress and all formal validation results remain `Not Run`.
+Status: implementation, Test Readiness, and complete Candidate Rehearsal have
+passing receipts for the current clean implementation commit; preflight, SIT,
+formal UAT, and closeout remain `Not Run`.
 
 Plan authority: `docs/sprints/sprint-7b-plan.md`
 
@@ -82,14 +83,14 @@ correction batch and successor candidate.
 
 | Check | Passing condition | Status | Receipt |
 |---|---|---|---|
-| Plan completeness | Every roadmap row maps to AC, slice, automated, deployed, and manual proof | Not Run | |
-| Decision completeness | Lifecycle, update, tombstone, refresh, action, UI, ownership, and baseline decisions match the approved plan | Not Run | |
+| Plan completeness | Every roadmap row maps to AC, slice, automated, deployed, and manual proof | Pass | `artifacts/sprint-7b-closeout/validation-readiness-result.json` |
+| Decision completeness | Lifecycle, update, tombstone, refresh, action, UI, ownership, and baseline decisions match the approved plan | Pass | `artifacts/sprint-7b-closeout/validation-readiness-result.json` |
 | UI approval | Product owner explicitly approved the retained interactive mockup and bounded screen deltas; production UI has not preceded approval | Pass | `sprint-7b-ui-review/approval.md`; approved 2026-08-04 before product UI implementation |
-| Test integrity | Existing accepted tests are not weakened/deleted; V1 fixtures remain byte-identical; V2 fixtures are additive | Not Run | |
-| Warning policy | Exact fmt/check/clippy/test commands defined with `-D warnings` | Not Run | |
-| Environment | Required ports, Docker, Rust, Node, browser, DB, disk, and evidence paths available | Not Run | |
-| Evidence schema | Attempt receipts, raw artifacts, hashes, timestamps, and invalidation links validate | Not Run | |
-| Recovery | Same-candidate recovery and prior-composition rollback procedures are executable | Not Run | |
+| Test integrity | Existing accepted tests are not weakened/deleted; V1 fixtures remain byte-identical; V2 fixtures are additive | Pass | readiness attempt 21; complete 70-test inventory |
+| Warning policy | Exact fmt/check/clippy/test commands defined with `-D warnings` | Pass | readiness attempt 21; zero-warning Clippy |
+| Environment | Required ports, Docker, Rust, Node, browser, DB, disk, and evidence paths available | Pass | `readiness12_*`; reference composition on 8086/8096 |
+| Evidence schema | Attempt receipts, raw artifacts, hashes, timestamps, and invalidation links validate | Pass | readiness `be336c35…`; rehearsal `331d204a…` |
+| Recovery | Same-candidate recovery and prior-composition rollback procedures are executable | Pass | `artifacts/sprint-7b-closeout/rehearsal/recovery.json` |
 
 Readiness is passing only when every row is evidenced. A waiver is not a pass.
 
@@ -97,16 +98,16 @@ Readiness is passing only when every row is evidenced. A waiver is not a pass.
 
 | Lane | Command or action | Passing condition | Status | Receipt |
 |---|---|---|---|---|
-| Format | `cargo fmt --all -- --check` | exit 0; no diff | Not Run | |
-| Check | `cargo check --workspace --all-features --locked` | exit 0; zero warnings | Not Run | |
-| Clippy | `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | exit 0; zero warnings | Not Run | |
-| Rust | `cargo test --workspace --locked` | all tests pass | Not Run | |
-| Browser | `npm --prefix .\end2end test` | all tests pass | Not Run | |
-| Contract/conformance | Sprint 7B targeted suites | full version/state/action/nondisclosure matrix passes | Not Run | |
-| Fresh materialization | source-exact Sprint 7B bootstrap | exact candidate healthy with expected schema/contracts/fixtures | Not Run | |
-| Idempotent rerun | unchanged source-exact rerun | semantic no-op; no duplicates/revision drift | Not Run | |
-| Deployed smoke | general plus Sprint 7B smoke | real process boundary and final health pass | Not Run | |
-| Supply/docs | `cargo audit`, `validate-e2e`, Markdown links, clean diff | no blocking finding or documentation drift | Not Run | |
+| Format | `cargo fmt --all -- --check` | exit 0; no diff | Pass | readiness attempt 21 |
+| Check | `cargo check --workspace --all-features --locked` | exit 0; zero warnings | Pass | readiness attempt 21 |
+| Clippy | `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | exit 0; zero warnings | Pass | readiness attempt 21 |
+| Rust | `cargo test --workspace --locked` | all tests pass | Pass | readiness attempt 21 |
+| Browser | `npm --prefix .\end2end test` | all tests pass | Pass | 70 passed; rehearsal Playwright summary |
+| Contract/conformance | Sprint 7B targeted suites | full version/state/action/nondisclosure matrix passes | Pass | SDK, analytics, and nondisclosure rehearsal evidence |
+| Fresh materialization | source-exact Sprint 7B bootstrap | exact candidate healthy with expected schema/contracts/fixtures | Pass | deployment evidence `441440f4…` |
+| Idempotent rerun | unchanged source-exact rerun | semantic no-op; no duplicates/revision drift | Pass | revision 2; `no_op=true`; zero changed owners |
+| Deployed smoke | general plus Sprint 7B smoke | real process boundary and final health pass | Pass | general, Sprint 7B, and post-recovery smoke evidence |
+| Supply/docs | `cargo audit`, `validate-e2e`, Markdown links, clean diff | no blocking finding or documentation drift | Pass | five policy-allowed warnings; current clean implementation commit |
 
 The developer-only `scripts\local-launch.ps1` cannot substitute for formal
 source-exact materialization evidence.
@@ -204,6 +205,10 @@ Until those conditions are met, Sprint 7B is not validated or complete.
 ## Planning Record
 
 The execution contract was revised and approved on 2026-08-03 after settling
-all outstanding product decisions. This record intentionally reports no passing
-implementation or validation result because product implementation has not
-started.
+all outstanding product decisions. Implementation and the mutable pre-freeze
+validation cycle passed on 2026-08-04. The canonical readiness and rehearsal
+receipts under `artifacts/sprint-7b-closeout/` bind the current clean commit,
+tree, environment, and evidence hashes. Those receipts are non-authoritative
+and do not claim SIT or formal UAT; their identities are intentionally not
+duplicated in this tracked record because doing so would make the record a
+self-invalidating fingerprint input.
