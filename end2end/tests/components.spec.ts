@@ -1,6 +1,5 @@
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
 import { invokeDemoSeedEndpoint } from "./support/demo-seed";
-import { runPlaywrightSql } from "./support/postgres";
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
@@ -545,36 +544,7 @@ async function publishComponentVersion(
   );
 }
 
-function cleanupPlaywrightComponents() {
-  const sql = `
-CREATE TEMP TABLE pw_cleanup_components AS
-SELECT id FROM components
-WHERE slug LIKE '${COMPONENT_PREFIX}%'
-   OR name LIKE 'Playwright Component Workflow %';
-
-DELETE FROM component_version_change_events
-WHERE component_version_id IN (
-  SELECT id FROM component_versions
-  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
-);
-
-DELETE FROM component_versions
-WHERE component_id IN (SELECT id FROM pw_cleanup_components);
-
-DELETE FROM components
-WHERE id IN (SELECT id FROM pw_cleanup_components);
-`;
-
-  try {
-    runPlaywrightSql(sql);
-  } catch (error) {
-    console.warn(`component cleanup skipped: ${String(error)}`);
-  }
-}
-
 test.describe.serial("Sprint 4A component workflow", () => {
-  test.afterAll(() => cleanupPlaywrightComponents());
-
   test("admin can create, update, publish, and view a major-line table component", async ({
     page,
   }) => {
@@ -582,8 +552,6 @@ test.describe.serial("Sprint 4A component workflow", () => {
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
     await ensureDemoSeed(page);
-    cleanupPlaywrightComponents();
-
     const { dataset, major } = await pickDatasetMajor(page);
     const firstField = textLikeField(dataset.output_fields);
     const slug = `${COMPONENT_PREFIX}${RUN_ID}`;
