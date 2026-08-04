@@ -9,6 +9,12 @@ Use this skill only after `tessara-sprint-validation` has authorized closeout.
 Treat `docs/roadmap.md` as the authoritative scope and the sprint plan and
 verification record as supporting inputs.
 
+When retained history contains a candidate-invalidating post-SIT failure,
+read
+[`../tessara-sprint-validation/references/post-sit-defect-convergence.md`](../tessara-sprint-validation/references/post-sit-defect-convergence.md)
+completely and validate its records against
+[`../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json`](../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json).
+
 ## Boundary with validation
 
 Closeout consumes validation evidence; it does not create it.
@@ -20,6 +26,10 @@ Closeout consumes validation evidence; it does not create it.
   prerequisite receipt and evidence-manifest hashes.
 - If evidence is missing, stale, or tied to multiple candidates, reopen
   validation rather than filling the gap during closeout.
+- If a post-SIT convergence cycle occurred, require its complete retained
+  harvest, batch, impact, focused-attempt, restoration, and final-entry chain;
+  verify that the authorized candidate was frozen only after the subsequent
+  complete readiness and rehearsal passed.
 - If closeout reveals a missing acceptance assertion or changes executable,
   harness, migration, seed, manifest, bootstrap, or deployment source, create
   a new candidate and restart SIT.
@@ -69,6 +79,13 @@ Require all of the following before changing roadmap status:
 - scripted and manual UAT passed after SIT
 - the failure chronology shows a coordinator-issued invalidation decision for
   every correction and proves every required scoped or complete rerun passed
+- every post-SIT defect harvest accounts for every UAT scenario as executed or
+  explicitly blocked, every defect converged, and the coordinator authorized
+  return to final readiness/rehearsal
+- focused repair evidence is marked non-authoritative and was not reused to
+  satisfy the successor candidate's complete SIT or UAT
+- the final successor fingerprint has its own complete readiness, rehearsal,
+  preflight, SIT, and UAT chain from the beginning
 - every roadmap exit-condition clause maps to automated and manual evidence
 - changed route, navigation, lifecycle, role, seed, manifest, bootstrap, and
   deployment contracts have explicit coverage
@@ -88,6 +105,9 @@ Stop if any item is false or unknown. Return to `tessara-sprint-validation`.
 - Verify `preflight-result.json`, `candidate.json`, `sit-result.json`,
   `uat-result.json`, and `closeout-authorization.json` form one valid hashed
   receipt chain.
+- Preserve superseded pre-correction authoritative evidence and diagnostic
+  convergence evidence as history, but exclude both from the final passing
+  candidate's authoritative proof.
 - Record command durations and restart reasons already captured during
   validation; do not manufacture missing chronology during closeout.
 - Preserve the immutable rollback baseline and confirm the intended candidate

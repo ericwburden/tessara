@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/post-sit-defect-convergence.schema.json",
+  "title": "Tessara Post-SIT Defect Convergence Record",
+  "type": "object",
+  "required": ["schema_version", "evidence_kind", "sprint", "status"],
+  "properties": {
+    "schema_version": { "const": "tessara.validation.convergence/v1" },
+    "evidence_kind": {
+      "enum": [
+        "uat-defect-harvest",
+        "defect-batch",
+        "correction-impact-assessment",
+        "focused-repair-validation",
+        "canonical-restoration",
+        "final-certification-entry"
+      ]
+    },
+    "sprint": { "type": "string", "minLength": 1 },
+    "status": {
+      "enum": ["open", "corrected", "passed", "failed", "blocked", "superseded"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "authoritative": { "type": "boolean" },
+    "source_identity": { "$ref": "#/$defs/sourceIdentity" },
+    "environment_fingerprint": { "type": "string", "minLength": 1 },
+    "prerequisites": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/hashedEvidence" }
+    },
+    "evidence_paths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "evidence_kind": { "const": "uat-defect-harvest" } } },
+      "then": {
+        "required": [
+          "authoritative",
+          "invalidated_candidate",
+          "first_invalidating_failure",
+          "scenario_dispositions",
+          "canonical_restoration"
+        ],
+        "properties": {
+          "authoritative": { "const": false },
+          "invalidated_candidate": { "$ref": "#/$defs/candidateIdentity" },
+          "first_invalidating_failure": { "$ref": "#/$defs/defect" },
+          "scenario_dispositions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/scenarioDisposition" }
+          },
+          "canonical_restoration": { "$ref": "#/$defs/hashedEvidence" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evidence_kind": { "const": "defect-batch" } } },
+      "then": {
+        "required": ["batch_number", "source_before", "source_after", "defects"],
+        "properties": {
+          "batch_number": { "type": "integer", "minimum": 1 },
+          "source_before": { "$ref": "#/$defs/sourceIdentity" },
+          "source_after": { "$ref": "#/$defs/sourceIdentity" },
+          "defects": { "type": "array", "items": { "$ref": "#/$defs/defect" } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evidence_kind": { "const": "correction-impact-assessment" } } },
+      "then": {
+        "required": [
+          "batch_number",
+          "changes",
+          "impact_categories",
+          "confidence",
+          "escalation",
+          "coordinator_authorization"
+        ],
+        "properties": {
+          "batch_number": { "type": "integer", "minimum": 1 },
+          "changes": { "type": "array", "items": { "$ref": "#/$defs/impactDecision" } },
+          "impact_categories": {
+            "type": "object",
+            "required": [
+              "unit_integration",
+              "static_boundaries",
+              "provider_consumer",
+              "migration_materialization",
+              "playwright",
+              "security_smoke_recovery_deployment",
+              "scripted_manual_uat"
+            ]
+          },
+          "confidence": { "enum": ["high", "bounded", "unbounded"] },
+          "escalation": { "enum": ["declared-focused-cone", "complete-candidate-rehearsal"] },
+          "coordinator_authorization": { "$ref": "#/$defs/authorization" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evidence_kind": { "const": "focused-repair-validation" } } },
+      "then": {
+        "required": [
+          "attempt",
+          "authoritative",
+          "impact_assessment_sha256",
+          "declared_cone",
+          "checks",
+          "new_defect_ids",
+          "restoration"
+        ],
+        "properties": {
+          "attempt": { "type": "integer", "minimum": 1 },
+          "authoritative": { "const": false },
+          "impact_assessment_sha256": { "$ref": "#/$defs/sha256" },
+          "declared_cone": { "type": "array", "items": { "type": "string" } },
+          "checks": { "type": "array", "items": { "$ref": "#/$defs/checkResult" } },
+          "new_defect_ids": { "type": "array", "items": { "type": "string" } },
+          "restoration": { "$ref": "#/$defs/hashedEvidence" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evidence_kind": { "const": "canonical-restoration" } } },
+      "then": {
+        "required": ["trigger", "topology", "service_health", "source_provenance", "prerequisite_reconfirmation", "result"]
+      }
+    },
+    {
+      "if": { "properties": { "evidence_kind": { "const": "final-certification-entry" } } },
+      "then": {
+        "required": [
+          "defect_batch_sha256",
+          "impact_assessment_sha256",
+          "focused_attempt_sha256",
+          "restoration_sha256",
+          "open_defect_count",
+          "current_defect_statuses",
+          "current_scenario_statuses",
+          "decision",
+          "next_boundary"
+        ],
+        "properties": {
+          "defect_batch_sha256": { "$ref": "#/$defs/sha256" },
+          "impact_assessment_sha256": { "$ref": "#/$defs/sha256" },
+          "focused_attempt_sha256": { "$ref": "#/$defs/sha256" },
+          "restoration_sha256": { "$ref": "#/$defs/sha256" },
+          "open_defect_count": { "const": 0 },
+          "current_defect_statuses": { "type": "array", "items": { "enum": ["corrected", "passed", "superseded"] } },
+          "current_scenario_statuses": { "type": "array", "items": { "enum": ["passed", "superseded"] } },
+          "decision": { "const": "enter-full-readiness-rehearsal" },
+          "next_boundary": { "const": "complete-test-readiness-gate" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "hashedEvidence": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "required": ["commit", "tree", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "dirty": { "type": "boolean" }
+      }
+    },
+    "candidateIdentity": {
+      "type": "object",
+      "required": ["fingerprint", "environment_fingerprint"],
+      "properties": {
+        "fingerprint": { "type": "string", "minLength": 1 },
+        "environment_fingerprint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "classification": {
+      "enum": ["preflight/setup", "product", "harness", "environment", "flaky", "evidence-finalization", "product-decision"]
+    },
+    "defect": {
+      "type": "object",
+      "required": ["id", "classification", "status", "description", "evidence"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "classification": { "$ref": "#/$defs/classification" },
+        "status": { "enum": ["open", "corrected", "passed", "blocked", "superseded"] },
+        "description": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "scenarioDisposition": {
+      "type": "object",
+      "required": ["scenario_id", "status", "executed", "authoritative", "prerequisites_reconfirmed", "defect_ids", "evidence_paths"],
+      "properties": {
+        "scenario_id": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["passed", "failed", "blocked", "superseded"] },
+        "executed": { "type": "boolean" },
+        "authoritative": { "const": false },
+        "prerequisites_reconfirmed": { "type": "boolean" },
+        "blocked_reason": { "type": ["string", "null"] },
+        "defect_ids": { "type": "array", "items": { "type": "string" } },
+        "evidence_paths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "impactDecision": {
+      "type": "object",
+      "required": ["subject", "affected", "excluded", "evidence", "rationale"],
+      "properties": {
+        "subject": { "type": "string", "minLength": 1 },
+        "affected": { "type": "array", "items": { "type": "string" } },
+        "excluded": { "type": "array", "items": { "type": "string" } },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "required": ["authorized_by", "authorized_at", "decision"],
+      "properties": {
+        "authorized_by": { "const": "tessara-sprint-validation" },
+        "authorized_at": { "type": "string", "format": "date-time" },
+        "decision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "checkResult": {
+      "type": "object",
+      "required": ["id", "status", "authoritative", "evidence_paths"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["passed", "failed", "blocked", "superseded"] },
+        "authoritative": { "const": false },
+        "blocked_reason": { "type": ["string", "null"] },
+        "evidence_paths": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

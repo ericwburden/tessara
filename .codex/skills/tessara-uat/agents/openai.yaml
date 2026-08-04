@@ -1,4 +1,4 @@
 interface:
   display_name: "Tessara UAT"
-  short_description: "Execute Tessara scripted and manual UAT"
-  default_prompt: "Use $tessara-uat to execute and retain UAT for the SIT-authorized Tessara candidate."
+  short_description: "Execute UAT and fail-late defect harvests"
+  default_prompt: "Use $tessara-uat to execute formal UAT, retain fail-late diagnostic scenario dispositions after invalidation, or run assigned focused repair scenarios."

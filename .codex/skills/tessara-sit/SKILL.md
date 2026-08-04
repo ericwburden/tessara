@@ -1,6 +1,6 @@
 ---
 name: tessara-sit
-description: Execute and retain Tessara system integration testing for one preflight-approved frozen candidate, including static and boundary checks, isolated database-backed Rust tests, full Playwright, source-exact deployment, and integrated acceptance smoke. Use when running or rerunning SIT, collecting complete phase results, diagnosing a SIT lane, or producing the SIT receipt required before UAT.
+description: Execute and retain Tessara system integration testing for one preflight-approved frozen candidate, including static and boundary checks, isolated database-backed Rust tests, full Playwright, source-exact deployment, and integrated acceptance smoke; also execute coordinator-assigned diagnostic SIT portions during focused repair validation. Use when running or rerunning authoritative SIT, collecting complete phase results, diagnosing a SIT lane, executing a declared repair cone, or producing the SIT receipt required before UAT.
 ---
 
 # Tessara SIT
@@ -10,6 +10,10 @@ authorize closeout.
 
 Before acting, read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
+completely.
+
+When the coordinator assigns a focused repair portion, also read
+[`../tessara-sprint-validation/references/post-sit-defect-convergence.md`](../tessara-sprint-validation/references/post-sit-defect-convergence.md)
 completely.
 
 ## Prerequisites
@@ -22,9 +26,14 @@ the run when:
 - the worktree is unexpectedly dirty
 - required databases, reset authorization, ports, tools, evidence paths, or
   deployment inputs no longer match preflight
+- preflight does not name valid passing Validation Readiness and Candidate
+  Rehearsal receipts for the exact frozen source/environment identities
 
 Do not repair a stale prerequisite silently. Return to
 `tessara-sprint-validation` for the invalidation decision.
+
+Do not relabel or reuse rehearsal output as SIT evidence. Every authoritative
+SIT lane reruns after freeze and produces its own receipt.
 
 ## Phase model
 
@@ -111,6 +120,8 @@ returned nonzero. Apply the shared invalidation matrix through
 `tessara-sprint-validation`:
 
 - candidate-affecting correction: refreeze and restart all SIT
+- before any successor freeze, the coordinator must complete the full
+  readiness gate and non-authoritative rehearsal cycle
 - shared-environment correction: rerun affected and downstream lanes
 - lane setup failure before assertions: rerun that lane
 - evidence finalization failure with intact raw results: rerun finalization
@@ -119,6 +130,22 @@ returned nonzero. Apply the shared invalidation matrix through
 
 Mark superseded attempts explicitly. Never merge evidence across candidate
 fingerprints.
+
+## Focused repair assignment
+
+After a post-SIT correction, execute only the static, integration,
+Playwright, deployment, conformance, nondisclosure, smoke, or recovery checks
+in the coordinator-authorized correction-impact cone. Label them `focused
+repair validation` and `authoritative: false`. Bind them to the mutable source
+and environment identities, not a candidate fingerprint, and never emit or
+update `sit-result.json`.
+
+Run safe independent checks fail-late, retain exact blocked dependencies, and
+return newly discovered defects to the coordinator. Do not select or reduce
+the cone, decide convergence, or authorize readiness/rehearsal. A narrow
+reproducer remains diagnostic and cannot satisfy a declared cone item. Even a
+passing focused SIT portion must be rerun in the complete authoritative SIT
+suite after the successor candidate freezes.
 
 ## Finish criteria
 

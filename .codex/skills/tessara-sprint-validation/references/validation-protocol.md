@@ -9,10 +9,18 @@ This protocol is the shared contract for `tessara-validation-preflight`,
 Store receipts in the sprint evidence directory:
 
 ```text
+validation-readiness-result.json
+candidate-rehearsal-result.json
 preflight-result.json
 candidate.json
 sit-result.json
 uat-result.json
+uat-defect-harvest.json
+defect-batch.json
+correction-impact-assessment.json
+focused-repair-validation/attempt-<n>.json
+canonical-restoration.json
+final-certification-entry.json
 closeout-authorization.json
 attempts/<phase>-<attempt>.json
 evidence-manifest.json
@@ -21,6 +29,16 @@ evidence-manifest.json.sha256
 
 Each downstream receipt names and hashes its prerequisite receipts. Reject a
 missing, malformed, stale, failed, or mismatched prerequisite.
+
+Readiness and rehearsal receipts bind mutable source and environment
+identities rather than claiming a frozen candidate fingerprint. Preflight
+verifies those identities still match, then creates the immutable candidate
+fingerprint and receipt. Neither receipt is authoritative SIT or UAT evidence.
+
+Post-SIT convergence records are conditional: plan their paths before
+validation, then require them when a candidate-invalidating UAT defect occurs.
+They are diagnostic history and never substitute for the successor
+candidate's complete authoritative receipt chain.
 
 ## Fingerprints
 
@@ -38,6 +56,10 @@ Hash canonical values for:
 
 Documentation-only changes after freeze do not change this fingerprint when
 they cannot alter executable behavior or test interpretation.
+
+No fingerprint is frozen until the mandatory Test Readiness Gate and complete
+Candidate Rehearsal both pass. Any correction after rehearsal requires both
+gates to repeat before freeze.
 
 ### Environment fingerprint
 
@@ -67,7 +89,9 @@ different invalidation scope from a product assertion failure.
 Every receipt includes at least:
 
 - schema version, sprint, phase/lane, attempt, authoritative flag, and state
-- candidate and environment fingerprints
+- candidate and environment fingerprints for frozen-candidate records, or the
+  mutable source/environment identities for readiness, rehearsal, and focused
+  repair records
 - prerequisite receipt paths and SHA-256 hashes
 - exact commands with start/end timestamps, duration, and exit status
 - assertion counts when available
@@ -119,6 +143,19 @@ The coordinator records the decision and rationale.
 | Product defect corrected | Refreeze, all SIT, then all UAT |
 | Missing acceptance assertion discovered | Update inventory/candidate, all SIT, then all UAT |
 
+When the last row or any other candidate-affecting correction occurs, restore
+the canonical environment and stop formal testing before creating the next
+candidate. Complete the readiness-and-rehearsal cycle before refreeze. A
+narrow reproducer remains diagnostic only.
+
+After authoritative SIT, a candidate-invalidating UAT failure additionally
+enters the Post-SIT Defect Convergence Cycle. Invalidate immediately, harvest
+remaining safe independent UAT scenarios diagnostically, correct one
+consolidated batch while mutable, authorize an evidence-based impact cone, and
+repeat focused repair validation until converged. Then rerun complete
+readiness, rehearsal, SIT, and UAT for a successor candidate. The convergence
+cycle never narrows final certification.
+
 Never choose a smaller scope merely to save time. Reuse an earlier receipt only
 when its candidate and environment fingerprints still match and the failure
 could not have affected its assertions.
@@ -126,8 +163,16 @@ could not have affected its assertions.
 ## Authority boundaries
 
 - Preflight may freeze a candidate but cannot authorize SIT results.
+- `tessara-sprint-validation` owns pre-freeze readiness, rehearsal, defect
+  batching, post-SIT diagnostic harvesting, impact-cone authorization,
+  convergence, and permission to enter preflight or return to full
+  readiness/rehearsal.
+- Readiness and rehearsal cannot authorize SIT, UAT, or closeout.
 - SIT may authorize UAT but cannot authorize closeout.
 - UAT may report acceptance but cannot authorize closeout.
+- SIT and UAT may execute coordinator-assigned focused repair checks but
+  cannot authorize the cone, issue authoritative results for them, or reduce
+  final certification scope.
 - `tessara-sprint-validation` alone validates the chain, decides invalidation,
   and writes `closeout-authorization.json`.
 - Closeout consumes the chain and cannot originate acceptance tests.

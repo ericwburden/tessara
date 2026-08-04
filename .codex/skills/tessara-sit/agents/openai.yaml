@@ -1,4 +1,4 @@
 interface:
   display_name: "Tessara SIT"
   short_description: "Run source-exact Tessara integration testing"
-  default_prompt: "Use $tessara-sit to run and retain all SIT lanes for the frozen Tessara candidate."
+  default_prompt: "Use $tessara-sit to run complete authoritative SIT for a frozen candidate or coordinator-assigned non-authoritative focused repair checks."
