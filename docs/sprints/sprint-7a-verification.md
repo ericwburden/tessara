@@ -370,7 +370,7 @@ candidate/environment receipt matches and an explicit non-impact rationale.
   `http://127.0.0.1:8086`
 - Application health: Core readiness 200; Supervisor readiness 204; exact source provenance confirmed
 - Evidence source commit: `e286e722251d93a1c97dede88a1d8c7638cd74c6`
-- Documentation commit: This documentation-only closeout change; its commit is recorded in the closeout handoff and does not redefine Candidate 16
+- Documentation commit: `8181c10a7ca53a6032ab738e5f3284baac48bfac`; documentation-only and does not redefine Candidate 16
 - Authorization timestamp: `2026-08-04T00:15:32.1953516Z`
 
 Closeout may be authorized only after every receipt parses and hashes, one

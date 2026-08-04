@@ -44,10 +44,10 @@ superseded. Use the current sequencing in `docs/roadmap.md`.
     `http://127.0.0.1:8086`; Core readiness is 200 and Supervisor readiness is
     204. Supervisor, Core, Scoped Records, and Dashboard images all identify
     the evidence-source commit/tree with `dirty=false`.
-- Closeout documentation: this documentation-only closeout commit is separate
-  from the evidence-source implementation commit and does not require image
-  rebuild or validation replay. Its exact hash is recorded in the final
-  closeout handoff.
+- Closeout documentation: commit
+  `8181c10a7ca53a6032ab738e5f3284baac48bfac` is separate from the
+  evidence-source implementation commit and did not require image rebuild or
+  validation replay.
 - Next Sprint: Sprint 7B — Cross-Module Resource Lifecycle And Dependency Slice.
 
 ### Sprint Handoff / Demo Instructions
