@@ -1391,7 +1391,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
       await expect(page.getByText("Source digest", { exact: true })).toHaveCount(0);
       // Let any hydration-owned restricted-state request finish before the
       // next full-document navigation can abort it.
-      await page.waitForTimeout(200);
+      await page.waitForLoadState("networkidle");
     }
 
     for (const actor of [fixtures.productOnly, fixtures.noAccess]) {
