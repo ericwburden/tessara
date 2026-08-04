@@ -81,7 +81,7 @@ pub fn ModuleLifecyclePage() -> impl IntoView {
                             <p class="eyebrow">"Module unavailable"</p>
                             <h1>"Dashboards could not be opened"</h1>
                             <p>{message}</p>
-                            <p><a class="button" rel="external" href=move || browser::document_fallback_href()>"Reload Dashboards"</a></p>
+                            <p><a class="button" rel="external" href=browser::document_fallback_href>"Reload Dashboards"</a></p>
                         </section>
                     }.into_any(),
                 }}

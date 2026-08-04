@@ -43,6 +43,7 @@ CREATE TABLE dashboards (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL CHECK (btrim(name) <> ''),
     description TEXT,
+    authority_revision BIGINT NOT NULL DEFAULT 1 CHECK (authority_revision > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -75,6 +76,41 @@ CREATE TABLE dashboard_placements (
 
 CREATE INDEX dashboard_placements_dashboard_position_idx
     ON dashboard_placements (dashboard_id, position, id);
+
+CREATE OR REPLACE FUNCTION advance_dashboard_authority_revision()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    target_dashboard_id UUID;
+BEGIN
+    target_dashboard_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.dashboard_id ELSE NEW.dashboard_id END;
+    UPDATE dashboards
+    SET authority_revision = authority_revision + 1, updated_at = now()
+    WHERE id = target_dashboard_id;
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+CREATE TRIGGER dashboard_scope_nodes_authority_revision
+AFTER INSERT OR UPDATE OR DELETE ON dashboard_scope_nodes
+FOR EACH ROW EXECUTE FUNCTION advance_dashboard_authority_revision();
+
+CREATE TRIGGER dashboard_placements_authority_revision
+AFTER INSERT OR UPDATE OR DELETE ON dashboard_placements
+FOR EACH ROW EXECUTE FUNCTION advance_dashboard_authority_revision();
+
+CREATE OR REPLACE FUNCTION advance_dashboard_metadata_authority_revision()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF ROW(NEW.name, NEW.description) IS DISTINCT FROM ROW(OLD.name, OLD.description) THEN
+        NEW.authority_revision := OLD.authority_revision + 1;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER dashboards_metadata_authority_revision
+BEFORE UPDATE ON dashboards
+FOR EACH ROW EXECUTE FUNCTION advance_dashboard_metadata_authority_revision();
 
 CREATE OR REPLACE FUNCTION enforce_dashboard_placement_capacity()
 RETURNS trigger LANGUAGE plpgsql AS $$

@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
+    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleManifest,
     PurposeBoundVerifyingKeyV1, SecurityCapabilityId, ShellContextV1,
     ShellContextValidationContextV1, SignedEnvelopeV1,
@@ -552,7 +552,7 @@ async fn authorize(
     headers: &HeaderMap,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> Result<SignedEnvelopeV1<AuthorizationGrantV1>, ApiError> {
+) -> Result<SignedEnvelopeV1<AuthorizationGrantV2>, ApiError> {
     let encoded = headers
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
@@ -560,7 +560,7 @@ async fn authorize(
     let bytes = URL_SAFE_NO_PAD
         .decode(encoded)
         .map_err(|_| ApiError::restricted())?;
-    let envelope: SignedEnvelopeV1<AuthorizationGrantV1> =
+    let envelope: SignedEnvelopeV1<AuthorizationGrantV2> =
         serde_json::from_slice(&bytes).map_err(|_| ApiError::restricted())?;
     state
         .core_authorization_verifier
@@ -572,7 +572,7 @@ async fn authorize(
     }
     envelope
         .payload
-        .validate_for(&AuthorizationValidationContextV1 {
+        .validate_for(&AuthorizationValidationContextV2 {
             installation_id: security.installation_id,
             presenting_service: ModuleDefinitionId::new("tessara.core").unwrap(),
             audience_module_instance_id: security.module_instance_id,
@@ -583,6 +583,7 @@ async fn authorize(
             .unwrap(),
             action: action.to_string(),
             operation,
+            resource_assertion: None,
             authorization_revision: security.authorization_revision as u64,
             organization_revision: security.organization_revision as u64,
             now: Utc::now(),
@@ -592,7 +593,7 @@ async fn authorize(
 }
 
 fn authorized_owners(
-    envelope: &SignedEnvelopeV1<AuthorizationGrantV1>,
+    envelope: &SignedEnvelopeV1<AuthorizationGrantV2>,
     capability: &str,
 ) -> Vec<Uuid> {
     let mut owners = BTreeSet::new();
@@ -606,7 +607,7 @@ fn authorized_owners(
 }
 
 fn authorization_allows(
-    envelope: &SignedEnvelopeV1<AuthorizationGrantV1>,
+    envelope: &SignedEnvelopeV1<AuthorizationGrantV2>,
     capability: &str,
     organization_id: Uuid,
 ) -> bool {
@@ -1457,8 +1458,8 @@ mod tests {
         let manage = SecurityCapabilityId::new(MANAGE_CAPABILITY).unwrap();
         let root_a = Uuid::from_u128(1);
         let root_b = Uuid::from_u128(2);
-        let grant = AuthorizationGrantV1 {
-            schema_version: 1,
+        let grant = AuthorizationGrantV2 {
+            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
             installation_id: Uuid::from_u128(3),
             original_actor_id: Uuid::from_u128(4),
             presenting_service: ModuleDefinitionId::new("tessara.core").unwrap(),

@@ -8,6 +8,246 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-03 - Sprint 7A Source-Exact Closeout
+
+- Completed:
+  - Dataset previews, Component execution, and Dashboard viewing now enforce
+    one same-governing-node capability/scope decision, including row-tier
+    filtering before counts, paging, and aggregation.
+  - Dataset, revision, ComponentVersion, linked presentation, Dashboard, and
+    placement metadata obey scoped visibility and stable nondisclosure rules.
+  - The real Dashboard process uses installation-, actor-, presenting-service-,
+    binding-, contract-, action-, audience-, resource-, and freshness-bound
+    authorization across the transition-only Core Components adapter.
+  - Disjoint-scope, wrong-service/audience/action, replay, stale-authority, and
+    known-versus-random negatives are covered without introducing JWTs or a
+    browser-to-Core rendering path.
+  - Existing Dataset, Component, and Dashboard native SSR surfaces remain
+    usable with accessible empty, forbidden, unavailable, and recovered states.
+- Validation:
+  - Evidence source: commit `e286e722251d93a1c97dede88a1d8c7638cd74c6`,
+    tree `eca5a686c7e0ab3501c328bc1b633f39893483aa`, frozen clean.
+  - Candidate 16 fingerprint:
+    `bdbd231fc6e8369485e3fc3455b16d497205e26fbf7f0e5b34c21f25e77800d9`.
+  - Complete readiness attempt 11, non-authoritative rehearsal attempt 10,
+    preflight audit 24, authoritative SIT, and authoritative UAT passed in
+    order. SIT included 70/70 Playwright tests; UAT passed 11/11 scenarios.
+  - Candidate 15's post-SIT defect remains retained and superseded. Its
+    convergence chain records the actual incomplete harvest, mutable product
+    and harness corrections, complete readiness/rehearsal restart, and the
+    independent Candidate 16 SIT/UAT chain without reusing diagnostic evidence.
+  - `artifacts/sprint-7a-closeout/evidence-manifest.json` hashes 1,195 retained
+    files with zero parse, sidecar, hash, or secret-audit failures. Closeout is
+    authorized by `artifacts/sprint-7a-closeout/closeout-authorization.json`.
+- Active release:
+  - The source-exact Sprint 7A reference composition remains running at
+    `http://127.0.0.1:8086`; Core readiness is 200 and Supervisor readiness is
+    204. Supervisor, Core, Scoped Records, and Dashboard images all identify
+    the evidence-source commit/tree with `dirty=false`.
+- Closeout documentation: commit
+  `8181c10a7ca53a6032ab738e5f3284baac48bfac` is separate from the
+  evidence-source implementation commit and did not require image rebuild or
+  validation replay.
+- Next Sprint: Sprint 7B — Cross-Module Resource Lifecycle And Dependency Slice.
+
+### Sprint Handoff / Demo Instructions
+
+#### Scoped Dataset Catalog And Tier-Safe Preview
+
+- Role: scoped reference operator on the canonical reference composition.
+- Paths: `http://127.0.0.1:8086/datasets`, the seeded Dataset detail and
+  published-revision routes, and the ordinary preview/query UI.
+- Steps:
+  1. Open the Dataset directory, seeded Dataset detail, and published revision.
+  2. Preview the four-tier Dataset and exercise search, filtering, pagination,
+     count, and aggregate presentation.
+  3. Navigate separately to the seeded blocked Dataset ID and a generated
+     random ID.
+- Expected: only authorized metadata and same-scope row tiers appear; blocked
+  values, counts, aggregate contributions, names, fields, scope nodes, and links
+  remain absent. Known and random blocked states are generic.
+- Acceptance check: fail if any blocked sentinel or metadata appears, counts or
+  aggregates include blocked rows, or known/random outcomes are distinguishable.
+- Evidence: `artifacts/sprint-7a-closeout/uat/manual/uat-7a-01.json` and
+  `artifacts/sprint-7a-closeout/uat/manual/uat-7a-02.json`.
+
+#### Scoped Component And Dashboard Execution
+
+- Role: scoped reference operator.
+- Paths: seeded direct Component table/chart/stat routes and the Reference
+  Operations Dashboard under `http://127.0.0.1:8086`.
+- Steps:
+  1. Open and interact with the seeded table, chart, and stat Component versions.
+  2. Open the Reference Operations Dashboard and wait for mediated placements.
+  3. Inspect the mixed-placement fixture, including its disjoint-scope tile.
+- Expected: direct and Dashboard-mediated allowed presentations contain only
+  authorized rows and aggregates. The blocked tile is generic, discloses no
+  Component or Dataset identity, and causes no blocked execution request.
+- Acceptance check: fail if allowed presentations diverge from their scoped
+  fixture, a blocked identity leaks, or Dashboard scope becomes Component
+  authority.
+- Evidence: `artifacts/sprint-7a-closeout/uat/manual/uat-7a-03.json` and
+  `artifacts/sprint-7a-closeout/uat/manual/uat-7a-04.json`.
+
+#### Cross-Boundary Failure Containment And Recovery
+
+- Role: scoped reference operator with control of the isolated provider.
+- Paths: Reference Operations Dashboard, public gateway
+  `http://127.0.0.1:8086`, and Supervisor readiness at
+  `http://127.0.0.1:8096/health/ready`.
+- Steps:
+  1. Capture a successful mediated Dashboard placement render.
+  2. Stop the Core compatibility provider while leaving Dashboard and gateway
+     running, then observe the contained unavailable state.
+  3. Restore the exact provider image and retry the placement.
+- Expected: the Dashboard shell remains usable during the outage and rendering
+  recovers without duplicate placement or receipt state.
+- Acceptance check: fail if the shell becomes unusable, authorization details
+  leak, recovery requires a different image, or duplicate state appears.
+- Evidence: `artifacts/sprint-7a-closeout/uat/manual/uat-7a-05.json`.
+
+#### Authorization Negatives, Freshness, And Compatibility
+
+- Role: mixed-scope operator plus the approved non-secret conformance client;
+  use normal administration paths for each isolated freshness mutation.
+- Paths: Dataset, Component, and Dashboard routes plus the typed
+  Dashboard-to-Components exchange.
+- Steps:
+  1. Compare disjoint-scope known-blocked and random identifiers across all
+     three analytical surfaces.
+  2. Submit wrong presenter, audience, binding, contract, action, operation,
+     and replay variants through the conformance fixture.
+  3. Change role/scope, visibility, provider authority, Organization, and
+     delegation state one dimension at a time; verify stale rejection, obtain a
+     fresh request, and restore each mutation.
+  4. Exercise both direct Component UI and Dashboard-mediated rendering and
+     confirm no deprecated adapter route appears as product navigation.
+- Expected: no capability/scope cross-product succeeds; blocked pairs share one
+  metadata-free public outcome; service misuse performs no resolution or
+  execution; stale authority fails immediately; current paths remain usable.
+- Acceptance check: fail on any distinguishable blocked result, second nonce
+  consumption, stale-request success, unrestored mutation, or deprecated product
+  navigation.
+- Evidence: `artifacts/sprint-7a-closeout/uat/manual/uat-7a-06.json` through
+  `artifacts/sprint-7a-closeout/uat/manual/uat-7a-09.json`.
+
+#### Safe Responsive States And Administrator Control
+
+- Role: scoped/no-access actors for safe-state checks; installation
+  administrator for the full-inventory check.
+- Paths: Dataset, Component, Dashboard, and Module Management surfaces at
+  desktop and narrow viewport widths.
+- Steps:
+  1. Exercise empty, forbidden, provider-unavailable, recovered, SSR, hydrated,
+     keyboard-only, and narrow-viewport states.
+  2. As administrator, browse every seeded Dataset/revision, Component/version,
+     Dashboard, and placement and execute each seeded presentation kind.
+- Expected: safe states are useful and accessible with no hydration, console,
+  DOM, or network disclosure; the administrator sees the exact complete seeded
+  analytical inventory and all authorized row tiers.
+- Acceptance check: fail on inaccessible or leaking state, hydration/console
+  failure, missing seeded asset, or accidental administrator restriction.
+- Evidence: `artifacts/sprint-7a-closeout/uat/manual/uat-7a-10.json` and
+  `artifacts/sprint-7a-closeout/uat/manual/uat-7a-11.json`.
+
+### Acceptance Mapping
+
+- Exit condition — a scoped operator can preview Datasets according to authored
+  visibility and restriction rules:
+  - Manual demonstration: Scoped Dataset Catalog And Tier-Safe Preview
+    (UAT-01 and UAT-02).
+  - Automated check: Dataset scope/tier integration coverage and the Candidate
+    16 Playwright inventory in `artifacts/sprint-7a-closeout/sit/`.
+  - Smoke check: `artifacts/sprint-7a-closeout/sit/smoke-sprint-7a.json`.
+- Exit condition — a scoped operator can execute/view Components according to
+  authored rules through transitional typed adapters:
+  - Manual demonstration: Scoped Component And Dashboard Execution (UAT-03).
+  - Automated check: Component decision/runtime suites, authorization
+    conformance, and 70/70 Playwright evidence under
+    `artifacts/sprint-7a-closeout/sit/`.
+  - Smoke check: `artifacts/sprint-7a-closeout/sit/smoke-sprint-7a.json`.
+- Exit condition — a scoped operator can view Dashboards across the real
+  Dashboard boundary according to authored rules:
+  - Manual demonstration: Scoped Component And Dashboard Execution and
+    Cross-Boundary Failure Containment And Recovery (UAT-04 and UAT-05).
+  - Automated check: Dashboard/Core integration, provider conformance, and
+    Playwright evidence beneath `artifacts/sprint-7a-closeout/sit/`.
+  - Smoke check: `artifacts/sprint-7a-closeout/sit/smoke-sprint-7a.json` and
+    `artifacts/sprint-7a-closeout/sit/recovery-restoration.json`.
+- Exit condition — an administrator sees the full seeded analytical set:
+  - Manual demonstration: Safe Responsive States And Administrator Control
+    (UAT-11).
+  - Automated check: exact fixture inventory and administrator assertions in
+    `artifacts/sprint-7a-closeout/sit/playwright.json`.
+  - Smoke check: `artifacts/sprint-7a-closeout/sit/smoke.json` and
+    `artifacts/sprint-7a-closeout/sit/smoke-sprint-7a.json`.
+- Exit condition — each Phase 8 extraction can rerun this proof when its adapter
+  becomes a process boundary:
+  - Manual demonstration: Authorization Negatives, Freshness, And Compatibility
+    (UAT-06 through UAT-09).
+  - Automated check: provider-neutral conformance and boundary evidence in
+    `artifacts/sprint-7a-closeout/sit/authorization-conformance.json` and
+    `artifacts/sprint-7a-closeout/sit/static-boundaries.json`.
+  - Smoke check: the current transition provider passed source-exact deployment,
+    nondisclosure, and focused smoke; these same gates are mandatory after each
+    extraction.
+
+## 2026-08-02 - Sprint 7A Implementation Complete
+
+- Implemented same-governing-node analytics authorization so base access and
+  elevated row-tier authority cannot combine across disjoint Organization
+  subtrees; filtering now precedes counts, paging, and aggregates.
+- Added provider-owned authority revisions for Datasets, ComponentVersions,
+  and Dashboards, plus exact resource assertions in authorization grant V2.
+- Added per-instance Ed25519 Dashboard service requests bound to installation,
+  actor grant, method/path/body, module instance, correlation, nonce, and a
+  30-second lifetime. Core persists service identities and consumed nonces, so
+  replay remains blocked across restarts. JWTs were not introduced.
+- Added the placement-owned Dashboard render route and server-side proxy. The
+  browser supplies only Dashboard, placement, and render kind; Dashboard and
+  Core jointly authorize the current provider revision and same Dataset root.
+- Updated the shared viewer for mediated placement targets, released Dashboard
+  module/UI `2.1.0`, rebuilt release WASM/bindings, and added the isolated
+  Sprint 7A deployment/catalog/Blueprint/bootstrap profile.
+- Added tracked focused smoke, provider-neutral authorization conformance,
+  balanced known/random nondisclosure, scripted UAT, eleven manual UAT scripts,
+  acceptance actors, and three Playwright scenarios in the exact 68-test
+  inventory.
+- Diagnostic reference materialization rendered both stat-card and table
+  placements from the real Dashboard process, retained one service identity
+  and four unique request nonces, and returned `no_op=true` on an unchanged
+  apply. A clean candidate rebuild and formal preflight remain required;
+  authoritative SIT, UAT, and closeout have not been claimed.
+
+## 2026-08-02 - Sprint 7A Planning Kickoff
+
+- Sprint: `Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice`,
+  selected from the sole current roadmap heading marked `(Next)` after local
+  `main` was reconciled with the completed Sprint 6F remote baseline.
+- Status: kickoff planning complete from clean `main` commit
+  `634bede53aad2ed46551541f50254c6cc3599dc1`; implementation intentionally has
+  not started and awaits a separate request.
+- Branch: `codex/sprint-7a`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-7a`.
+- Plan: `docs/sprints/sprint-7a-plan.md`.
+- Validation record: `docs/sprints/sprint-7a-verification.md`.
+- Planned verification: format/check/clippy; targeted platform-contract,
+  Dataset, Component, Dashboard, SSR, and wasm suites; full locked Rust
+  workspace; provider-neutral analytics authorization conformance; optimized
+  known/random nondisclosure; source-exact Sprint 7A reference composition and
+  unchanged no-op materialization; general and focused deployed smoke; full
+  Playwright; scripted and eleven manual UAT scenarios; provenance, receipt,
+  topology, recovery, and evidence-manifest audits.
+- Product decisions are firm: same-governing-node capability intersection,
+  provider-owned resource revisions, a placement-bound Dashboard server proxy,
+  per-instance Ed25519 service requests with persistent replay protection, and
+  post-filter counts/paging/aggregates. JWTs, direct browser/Core rendering, and
+  a new row-level Organization policy model are out of scope.
+- Recommended first implementation slice: version and freeze the shared
+  analytics access, provider-freshness/resource-assertion, and Dashboard
+  `render` exchange contracts with golden provider/consumer fixtures and exact
+  negative validation.
+
 ## 2026-08-01/02 - Sprint 6F Source-Exact Closeout
 
 - Sprint 6F is complete and Sprint 7A is now the sole roadmap item marked

@@ -17,11 +17,12 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::Row;
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, BrowserLifecycleBootstrapV1,
-    CapabilityScopeBindingV1, DependencyBindingKey, DeploymentProfile, FunctionalContractId,
-    ModuleDefinitionId, ModuleManifest, NavigationContributionId, NavigationProjectionV1,
-    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod,
-    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AuthorizationGrantOperationV1, AuthorizationGrantV2,
+    BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1, DependencyBindingKey, DeploymentProfile,
+    FunctionalContractId, ModuleDefinitionId, ModuleManifest, NavigationContributionId,
+    NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
+    PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId, ShellContextV1,
+    ShellDocumentStateV1, ShellThemeV1,
 };
 use uuid::Uuid;
 
@@ -65,17 +66,18 @@ async fn dispatch_result(
     for module in installed {
         if matches!(method, Method::GET | Method::HEAD)
             && let Some(route) = module.manifest.browser_routes.iter().find(|route| {
-                route
-                    .methods
-                    .iter()
-                    .any(|declared| match (declared, &method) {
-                        (tessara_module_contract::BrowserDocumentMethod::Get, &Method::GET)
-                        | (tessara_module_contract::BrowserDocumentMethod::Head, &Method::HEAD) => {
-                            true
-                        }
-                        _ => false,
-                    })
-                    && path_template_matches(&route.path_template, &path)
+                route.methods.iter().any(|declared| {
+                    matches!(
+                        (declared, &method),
+                        (
+                            tessara_module_contract::BrowserDocumentMethod::Get,
+                            &Method::GET
+                        ) | (
+                            tessara_module_contract::BrowserDocumentMethod::Head,
+                            &Method::HEAD
+                        )
+                    )
+                }) && path_template_matches(&route.path_template, &path)
             })
         {
             if !module.serving {
@@ -85,23 +87,27 @@ async fn dispatch_result(
                 state,
                 actor,
                 &module,
-                &route.authorization_action,
-                &route.dependency_binding,
-                AuthorizationGrantOperationV1::Read,
-                &route.required_capability,
-                &route.functional_contract,
+                AuthorizationRequest {
+                    action: &route.authorization_action,
+                    dependency_binding: &route.dependency_binding,
+                    operation: AuthorizationGrantOperationV1::Read,
+                    required_capability: &route.required_capability,
+                    contract: &route.functional_contract,
+                },
             )
             .await?;
             let shell = shell_context(actor, &module, &path)?;
             return forward(
                 &module,
-                method,
-                &path,
-                request.headers(),
-                Bytes::new(),
-                Some(&grant),
-                Some(&shell),
-                false,
+                ForwardRequest {
+                    method,
+                    path: &path,
+                    inbound_headers: request.headers(),
+                    body: Bytes::new(),
+                    grant: Some(&grant),
+                    shell: Some(&shell),
+                    idempotent: false,
+                },
             )
             .await;
         }
@@ -116,11 +122,13 @@ async fn dispatch_result(
                 state,
                 actor,
                 &module,
-                &route.authorization_action,
-                &route.dependency_binding,
-                route.operation,
-                &route.required_capability,
-                &route.functional_contract,
+                AuthorizationRequest {
+                    action: &route.authorization_action,
+                    dependency_binding: &route.dependency_binding,
+                    operation: route.operation,
+                    required_capability: &route.required_capability,
+                    contract: &route.functional_contract,
+                },
             )
             .await?;
             let (parts, body) = request.into_parts();
@@ -129,13 +137,15 @@ async fn dispatch_result(
                 .map_err(|_| ApiError::BadRequest("module request body is too large".into()))?;
             return forward(
                 &module,
-                method,
-                &path,
-                &parts.headers,
-                bytes,
-                Some(&grant),
-                None,
-                route.idempotency == PublicApiIdempotency::ForwardOrGenerateHeader,
+                ForwardRequest {
+                    method,
+                    path: &path,
+                    inbound_headers: &parts.headers,
+                    body: bytes,
+                    grant: Some(&grant),
+                    shell: None,
+                    idempotent: route.idempotency == PublicApiIdempotency::ForwardOrGenerateHeader,
+                },
             )
             .await;
         }
@@ -151,13 +161,15 @@ pub(crate) async fn asset(State(state): State<AppState>, request: Request) -> Re
                 if module.serving && asset_path_targets_module(&path, &module.manifest) {
                     return forward(
                         &module,
-                        Method::GET,
-                        &path,
-                        request.headers(),
-                        Bytes::new(),
-                        None,
-                        None,
-                        false,
+                        ForwardRequest {
+                            method: Method::GET,
+                            path: &path,
+                            inbound_headers: request.headers(),
+                            body: Bytes::new(),
+                            grant: None,
+                            shell: None,
+                            idempotent: false,
+                        },
                     )
                     .await
                     .unwrap_or_else(|error| error.into_response());
@@ -201,16 +213,20 @@ async fn installed_modules(pool: &sqlx::PgPool) -> ApiResult<Vec<InstalledModule
         .map_err(ApiError::from)
 }
 
+struct AuthorizationRequest<'a> {
+    action: &'a str,
+    dependency_binding: &'a DependencyBindingKey,
+    operation: AuthorizationGrantOperationV1,
+    required_capability: &'a SecurityCapabilityId,
+    contract: &'a FunctionalContractId,
+}
+
 async fn module_authorization(
     state: &AppState,
     actor: &AuthenticatedRequest,
     module: &InstalledModule,
-    action: &str,
-    dependency_binding: &DependencyBindingKey,
-    operation: AuthorizationGrantOperationV1,
-    required_capability: &SecurityCapabilityId,
-    contract: &FunctionalContractId,
-) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV1>> {
+    request: AuthorizationRequest<'_>,
+) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2>> {
     let revisions = sqlx::query(
         "SELECT authorization_revision,organization_revision
          FROM core_security_revisions WHERE singleton=true",
@@ -247,11 +263,11 @@ async fn module_authorization(
     }
     if !bindings
         .iter()
-        .any(|binding| binding.capability == *required_capability)
+        .any(|binding| binding.capability == *request.required_capability)
     {
         tracing::warn!(
             actor_id = %actor.account.account_id,
-            required_capability = required_capability.as_str(),
+            required_capability = request.required_capability.as_str(),
             binding_count = bindings.len(),
             "Generic module action has no authorized capability binding"
         );
@@ -259,17 +275,17 @@ async fn module_authorization(
     }
 
     let now = Utc::now();
-    let grant = AuthorizationGrantV1 {
-        schema_version: 1,
+    let grant = AuthorizationGrantV2 {
+        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
         installation_id: module.installation_id,
         original_actor_id: actor.account.account_id,
         presenting_service: ModuleDefinitionId::new("tessara.core")
             .map_err(|error| ApiError::Internal(error.into()))?,
         audience_module_instance_id: module.instance_id,
-        dependency_binding: dependency_binding.clone(),
-        functional_contract: contract.clone(),
-        action: action.into(),
-        operation,
+        dependency_binding: request.dependency_binding.clone(),
+        functional_contract: request.contract.clone(),
+        action: request.action.into(),
+        operation: request.operation,
         capability_scope_bindings: bindings,
         resource_assertion: None,
         delegation_basis: Vec::new(),
@@ -278,11 +294,13 @@ async fn module_authorization(
         jti: Uuid::new_v4(),
         issued_at: now,
         expires_at: now
-            + Duration::seconds(if operation == AuthorizationGrantOperationV1::Read {
-                60
-            } else {
-                30
-            }),
+            + Duration::seconds(
+                if request.operation == AuthorizationGrantOperationV1::Read {
+                    60
+                } else {
+                    30
+                },
+            ),
     };
     protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
         .sign(grant)
@@ -414,24 +432,25 @@ async fn organization_projection(pool: &sqlx::PgPool) -> ApiResult<Vec<Value>> {
         .map_err(ApiError::from)
 }
 
-async fn forward(
-    module: &InstalledModule,
+struct ForwardRequest<'a> {
     method: Method,
-    path: &str,
-    inbound_headers: &HeaderMap,
+    path: &'a str,
+    inbound_headers: &'a HeaderMap,
     body: Bytes,
-    grant: Option<&tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV1>>,
-    shell: Option<&tessara_module_contract::SignedEnvelopeV1<ShellContextV1>>,
+    grant: Option<&'a tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2>>,
+    shell: Option<&'a tessara_module_contract::SignedEnvelopeV1<ShellContextV1>>,
     idempotent: bool,
-) -> ApiResult<Response> {
+}
+
+async fn forward(module: &InstalledModule, request: ForwardRequest<'_>) -> ApiResult<Response> {
     let endpoint = service_endpoint(&module.manifest)?;
     let client = reqwest::Client::new();
     let mut outbound = client.request(
-        reqwest::Method::from_bytes(method.as_str().as_bytes())
+        reqwest::Method::from_bytes(request.method.as_str().as_bytes())
             .map_err(|error| ApiError::Internal(error.into()))?,
-        format!("{endpoint}{path}"),
+        format!("{endpoint}{}", request.path),
     );
-    if let Some(grant) = grant {
+    if let Some(grant) = request.grant {
         outbound = outbound.header(
             "x-tessara-authorization",
             URL_SAFE_NO_PAD.encode(
@@ -439,7 +458,7 @@ async fn forward(
             ),
         );
     }
-    if let Some(shell) = shell {
+    if let Some(shell) = request.shell {
         outbound = outbound
             .header(
                 "x-tessara-shell-context",
@@ -452,26 +471,31 @@ async fn forward(
                 shell.payload.correlation_id.to_string(),
             );
     }
-    if let Some(content_type) = inbound_headers
+    if let Some(content_type) = request
+        .inbound_headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
     {
         outbound = outbound.header(reqwest::header::CONTENT_TYPE, content_type);
     }
-    if let Some(accept) = inbound_headers
+    if let Some(accept) = request
+        .inbound_headers
         .get(header::ACCEPT)
         .and_then(|value| value.to_str().ok())
     {
         outbound = outbound.header(reqwest::header::ACCEPT, accept);
     }
-    if idempotent {
-        outbound = outbound.header("x-idempotency-key", idempotency_key(inbound_headers));
+    if request.idempotent {
+        outbound = outbound.header(
+            "x-idempotency-key",
+            idempotency_key(request.inbound_headers),
+        );
     }
-    if !body.is_empty() {
-        outbound = outbound.body(body.to_vec());
+    if !request.body.is_empty() {
+        outbound = outbound.body(request.body.to_vec());
     }
     let response = outbound.send().await.map_err(|_| module_unavailable())?;
-    module_response(response, &module.manifest, path).await
+    module_response(response, &module.manifest, request.path).await
 }
 
 async fn module_response(

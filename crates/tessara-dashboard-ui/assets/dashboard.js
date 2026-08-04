@@ -1,4 +1,4 @@
-// Dashboard release 2.0.2 complete-document and lifecycle-v1 entrypoint.
+// Dashboard release 2.1.0 complete-document and lifecycle-v1 entrypoint.
 import init, {
   can_deactivate_dashboard,
   hydrate_dashboard,
@@ -7,9 +7,9 @@ import init, {
   resume_dashboard,
   suspend_dashboard,
   unmount_dashboard,
-} from "/_tessara/modules/tessara.dashboards/2.0.2/sha256:1f06971942239807f70ccf096fe7abf4357f5a76c8c7383d8fa84020221193ab/dashboard-bindings.js";
+} from "/_tessara/modules/tessara.dashboards/2.1.0/sha256:ca2bca20d4495516457f431d82117517b0fb6fe31496d2c9b0f86409c7dc68cb/dashboard-bindings.js";
 
-await init("/_tessara/modules/tessara.dashboards/2.0.2/sha256:f6281709e51db7c9c3dabc720e497bfa561a21ac4632ca6d84d5e1d58bfb8337/dashboard.wasm");
+await init("/_tessara/modules/tessara.dashboards/2.1.0/sha256:8058f7895f1d72fe03a94bb2224ef8f83b0676a3e0a174a9d0ebb62bac183d28/dashboard.wasm");
 
 if (document.getElementById("module-content")) {
   hydrate_dashboard();

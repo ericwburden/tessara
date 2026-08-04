@@ -15,7 +15,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, AuthorizationValidationContextV1,
+    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, SecurityCapabilityId,
     ShellContextValidationContextV1,
 };
@@ -347,6 +347,103 @@ async fn diagnostics_document(
     .into_response()
 }
 
+async fn scoped_probe(
+    State(runtime): State<Arc<ReferenceRuntime>>,
+    Path(organization_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Response {
+    if verify_authorization(
+        &runtime,
+        &headers,
+        "reference.module-sdk.scope.read",
+        Some(organization_id),
+    )
+    .await
+    .is_err()
+    {
+        return (StatusCode::FORBIDDEN, "module action unavailable").into_response();
+    }
+    Json(json!({
+        "schema_version": 1,
+        "organization_id": organization_id,
+        "status": "authorized"
+    }))
+    .into_response()
+}
+
+async fn verify_authorization(
+    runtime: &ReferenceRuntime,
+    headers: &HeaderMap,
+    action: &str,
+    organization_id: Option<Uuid>,
+) -> Result<(), ()> {
+    let envelope: tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2> =
+        decode_signed_envelope_header(headers, "x-tessara-authorization").map_err(|_| ())?;
+    runtime
+        .verifiers
+        .authorization
+        .verify(&envelope)
+        .map_err(|_| ())?;
+    let security = runtime.current_security_state().await.map_err(|_| ())?;
+    envelope
+        .payload
+        .validate_for(&AuthorizationValidationContextV2 {
+            installation_id: security.installation_id,
+            presenting_service: ModuleDefinitionId::new("tessara.core").map_err(|_| ())?,
+            audience_module_instance_id: security.module_instance_id,
+            dependency_binding: DependencyBindingKey::new("tessara.core.module-document")
+                .map_err(|_| ())?,
+            functional_contract: FunctionalContractId::new(
+                "tessara.reference.module-sdk.conformance",
+            )
+            .map_err(|_| ())?,
+            action: action.into(),
+            operation: AuthorizationGrantOperationV1::Read,
+            resource_assertion: None,
+            authorization_revision: security.authorization_revision,
+            organization_revision: security.organization_revision,
+            now: chrono::Utc::now(),
+        })
+        .map_err(|_| ())?;
+    let capability = SecurityCapabilityId::new(READ_CAPABILITY).map_err(|_| ())?;
+    if !envelope
+        .payload
+        .capability_scope_bindings
+        .iter()
+        .any(|binding| binding.capability == capability)
+    {
+        return Err(());
+    }
+    if let Some(organization_id) = organization_id
+        && !envelope.payload.authorizes(&capability, organization_id)
+    {
+        return Err(());
+    }
+    Ok(())
+}
+
+async fn stylesheet() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        Body::from(MODULE_SHELL_CSS),
+    )
+        .into_response()
+}
+
+async fn hydration_script() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        Body::from(tessara_module_ui::MODULE_SHELL_JS),
+    )
+        .into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use axum::{
@@ -483,100 +580,4 @@ mod tests {
 
         tokio::fs::remove_file(path).await.unwrap();
     }
-}
-
-async fn scoped_probe(
-    State(runtime): State<Arc<ReferenceRuntime>>,
-    Path(organization_id): Path<Uuid>,
-    headers: HeaderMap,
-) -> Response {
-    if verify_authorization(
-        &runtime,
-        &headers,
-        "reference.module-sdk.scope.read",
-        Some(organization_id),
-    )
-    .await
-    .is_err()
-    {
-        return (StatusCode::FORBIDDEN, "module action unavailable").into_response();
-    }
-    Json(json!({
-        "schema_version": 1,
-        "organization_id": organization_id,
-        "status": "authorized"
-    }))
-    .into_response()
-}
-
-async fn verify_authorization(
-    runtime: &ReferenceRuntime,
-    headers: &HeaderMap,
-    action: &str,
-    organization_id: Option<Uuid>,
-) -> Result<(), ()> {
-    let envelope: tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV1> =
-        decode_signed_envelope_header(headers, "x-tessara-authorization").map_err(|_| ())?;
-    runtime
-        .verifiers
-        .authorization
-        .verify(&envelope)
-        .map_err(|_| ())?;
-    let security = runtime.current_security_state().await.map_err(|_| ())?;
-    envelope
-        .payload
-        .validate_for(&AuthorizationValidationContextV1 {
-            installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").map_err(|_| ())?,
-            audience_module_instance_id: security.module_instance_id,
-            dependency_binding: DependencyBindingKey::new("tessara.core.module-document")
-                .map_err(|_| ())?,
-            functional_contract: FunctionalContractId::new(
-                "tessara.reference.module-sdk.conformance",
-            )
-            .map_err(|_| ())?,
-            action: action.into(),
-            operation: AuthorizationGrantOperationV1::Read,
-            authorization_revision: security.authorization_revision,
-            organization_revision: security.organization_revision,
-            now: chrono::Utc::now(),
-        })
-        .map_err(|_| ())?;
-    let capability = SecurityCapabilityId::new(READ_CAPABILITY).map_err(|_| ())?;
-    if !envelope
-        .payload
-        .capability_scope_bindings
-        .iter()
-        .any(|binding| binding.capability == capability)
-    {
-        return Err(());
-    }
-    if let Some(organization_id) = organization_id
-        && !envelope.payload.authorizes(&capability, organization_id)
-    {
-        return Err(());
-    }
-    Ok(())
-}
-
-async fn stylesheet() -> Response {
-    (
-        [
-            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
-            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
-        ],
-        Body::from(MODULE_SHELL_CSS),
-    )
-        .into_response()
-}
-
-async fn hydration_script() -> Response {
-    (
-        [
-            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
-            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
-        ],
-        Body::from(tessara_module_ui::MODULE_SHELL_JS),
-    )
-        .into_response()
 }

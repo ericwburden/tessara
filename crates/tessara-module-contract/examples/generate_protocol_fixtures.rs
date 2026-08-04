@@ -1,11 +1,12 @@
 use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, CONTRACT_SCHEMA_VERSION_V1,
-    CapabilityScopeBindingV1, DependencyBindingKey, ExternalIdentityAssertionV1,
-    FunctionalContractId, ModuleDefinitionId, NavigationContributionId, NavigationProjectionV1,
-    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
-    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AuthorizationGrantOperationV1, AuthorizationGrantV2,
+    CONTRACT_SCHEMA_VERSION_V1, CapabilityScopeBindingV1, DependencyBindingKey,
+    ExternalIdentityAssertionV1, FunctionalContractId, ModuleDefinitionId,
+    NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, SecurityCapabilityId, ShellContextV1,
+    ShellDocumentStateV1, ShellThemeV1,
 };
 use uuid::Uuid;
 
@@ -71,8 +72,8 @@ fn main() {
         .unwrap();
 
     let authorization = authorization_signer
-        .sign(AuthorizationGrantV1 {
-            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+        .sign(AuthorizationGrantV2 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
             installation_id: id(1),
             original_actor_id: id(3),
             presenting_service: ModuleDefinitionId::new("tessara.core.gateway").unwrap(),

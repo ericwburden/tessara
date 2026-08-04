@@ -6,6 +6,7 @@
 //! deterministic demo seeding.
 
 mod analytics;
+mod analytics_authorization;
 mod app_summary;
 mod auth;
 mod components;

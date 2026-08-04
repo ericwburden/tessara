@@ -3,8 +3,6 @@
 //! Dataset row tiers are ordered by sensitivity:
 //! `confidential > restricted > internal > public`.
 
-use crate::auth;
-
 use super::{ValidatedRestrictionPolicy, boolean_expression_sql, quote_identifier};
 
 pub(super) fn restriction_policy_tier_sql(
@@ -73,16 +71,6 @@ pub(super) fn max_restriction_tier_sql(expression: &str) -> String {
     )
 }
 
-pub(super) fn tier_access_predicate(account: &auth::AccountContext) -> &'static str {
-    if account.has_capability("admin:all") || account.has_capability("datasets:read_confidential") {
-        "TRUE"
-    } else if account.has_capability("datasets:read_restricted") {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal', 'restricted')"
-    } else {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal')"
-    }
-}
-
 fn boolean_tier_predicate_sql(field_key: &str) -> String {
     boolean_expression_sql(&quote_identifier(field_key))
 }
@@ -96,32 +84,4 @@ fn restriction_tier_rank_sql(expression: &str) -> String {
                     ELSE 0
                 END"#
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use uuid::Uuid;
-
-    fn account_without_tier_capability() -> auth::AccountContext {
-        auth::AccountContext {
-            account_id: Uuid::nil(),
-            email: "test@example.com".into(),
-            display_name: "Test User".into(),
-            is_active: true,
-            roles: Vec::new(),
-            capabilities: Vec::new(),
-            capability_scopes: Vec::new(),
-            scope_nodes: Vec::new(),
-            delegations: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn tier_access_predicate_defaults_to_public_and_internal_rows() {
-        assert_eq!(
-            tier_access_predicate(&account_without_tier_capability()),
-            "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal')"
-        );
-    }
 }

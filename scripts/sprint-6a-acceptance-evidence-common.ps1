@@ -19,12 +19,29 @@ $script:Sprint6AUatAcceptanceChecks = @(
 $script:Sprint6AUatComponentKinds = @('bar', 'donut', 'line', 'pie', 'stat_card', 'table')
 $script:Sprint6AUatAuthorizationRoles = @('operator', 'respondent')
 
+function ConvertFrom-Sprint6AAcceptanceJson {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Json)
+
+    if (-not $Json.TrimStart().StartsWith('{', [StringComparison]::Ordinal)) {
+        throw 'Sprint 6A acceptance JSON must be one object document.'
+    }
+    $parameters = @{ InputObject = $Json }
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+        $parameters.DateKind = 'String'
+    }
+    ConvertFrom-Json @parameters
+}
+
 function Resolve-Sprint6AAcceptanceEvidencePath {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$Path
     )
 
+    $pathWithoutDrive = if ($Path -match '^[A-Za-z]:') { $Path.Substring(2) } else { $Path }
+    if ($pathWithoutDrive.Contains(':')) {
+        throw "Alternate data streams are not allowed for Sprint 6A evidence paths: '$Path'."
+    }
     if ([IO.Path]::IsPathRooted($Path)) {
         return [IO.Path]::GetFullPath($Path)
     }
@@ -53,6 +70,10 @@ function Get-Sprint6ASecurePathInfo {
 
     if ([string]::IsNullOrWhiteSpace($Path) -or $Path.IndexOf([char]0) -ge 0) {
         throw 'A non-empty filesystem path without NUL characters is required.'
+    }
+    $pathWithoutDrive = if ($Path -match '^[A-Za-z]:') { $Path.Substring(2) } else { $Path }
+    if ($pathWithoutDrive.Contains(':')) {
+        throw "Alternate data streams are not allowed for Sprint 6A evidence paths: '$Path'."
     }
     $fullPath = [IO.Path]::GetFullPath($Path)
     if ($fullPath.StartsWith('\\?\', [StringComparison]::OrdinalIgnoreCase) -or
@@ -139,6 +160,10 @@ function Get-Sprint6AAcceptanceEvidencePathSet {
         [switch]$RequireExisting
     )
 
+    $pathWithoutDrive = if ($EvidencePath -match '^[A-Za-z]:') { $EvidencePath.Substring(2) } else { $EvidencePath }
+    if ($pathWithoutDrive.Contains(':')) {
+        throw "Alternate data streams are not allowed for Sprint 6A evidence paths: '$EvidencePath'."
+    }
     $fullPath = [IO.Path]::GetFullPath($EvidencePath)
     if ($RequireExisting) {
         $evidence = Get-Sprint6ASecurePathInfo -Path $fullPath -RequireLeaf
@@ -197,7 +222,7 @@ function Get-Sprint6ADeploymentEvidenceBinding {
     }
     try {
         $raw = Get-Content -LiteralPath $paths.evidence.lexical_path -Raw
-        $document = $raw | ConvertFrom-Json -DateKind String -NoEnumerate
+        $document = ConvertFrom-Sprint6AAcceptanceJson -Json $raw
     } catch {
         throw "Deployment evidence is not valid JSON: $($_.Exception.Message)"
     }
@@ -241,7 +266,7 @@ function Assert-Sprint6ADemoSeedRefusal {
         throw "$Context failed with HTTP $StatusCode instead of the exact populated-database demo-seed refusal."
     }
     try {
-        $errorDocument = $ResponseBody | ConvertFrom-Json -NoEnumerate
+        $errorDocument = ConvertFrom-Sprint6AAcceptanceJson -Json $ResponseBody
     } catch {
         throw "$Context returned a non-JSON HTTP 400 response: $($_.Exception.Message)"
     }
@@ -465,7 +490,7 @@ function Assert-Sprint6AAcceptanceEvidenceDigest {
     }
     try {
         $raw = Get-Content -LiteralPath $evidenceInfo.lexical_path -Raw
-        $evidence = $raw | ConvertFrom-Json -DateKind String -NoEnumerate
+        $evidence = ConvertFrom-Sprint6AAcceptanceJson -Json $raw
     } catch {
         throw "Acceptance evidence '$($evidenceInfo.lexical_path)' is not valid JSON: $($_.Exception.Message)"
     }
@@ -597,19 +622,19 @@ function Publish-Sprint6AAcceptanceEvidence {
             -DeploymentEvidencePath $target.deployment_evidence_path `
             -Overwrite:$Overwrite
         if (Test-Path -LiteralPath $target.evidence_path) {
-            [IO.File]::Move($target.evidence_path, $backupEvidence, $false)
+            [IO.File]::Move($target.evidence_path, $backupEvidence)
             $backedUpEvidence = $true
         }
         if (Test-Path -LiteralPath $target.digest_path) {
-            [IO.File]::Move($target.digest_path, $backupDigest, $false)
+            [IO.File]::Move($target.digest_path, $backupDigest)
             $backedUpDigest = $true
         }
-        [IO.File]::Move($stagedEvidence, $target.evidence_path, $false)
+        [IO.File]::Move($stagedEvidence, $target.evidence_path)
         $publishedEvidence = $true
         if ($FailurePoint -eq 'AfterEvidencePublish') {
             throw 'Injected acceptance evidence failure after publishing the artifact and before publishing its digest.'
         }
-        [IO.File]::Move($stagedDigest, $target.digest_path, $false)
+        [IO.File]::Move($stagedDigest, $target.digest_path)
         $publishedDigest = $true
         if ($FailurePoint -eq 'FinalValidationFailure') {
             throw 'Injected final acceptance validation failure after publishing both files.'
@@ -642,7 +667,7 @@ function Publish-Sprint6AAcceptanceEvidence {
             @{ BackedUp = $backedUpDigest; Path = $backupDigest; Destination = $target.digest_path }
         )) {
             if ($backup.BackedUp -and (Test-Path -LiteralPath $backup.Path)) {
-                try { [IO.File]::Move($backup.Path, $backup.Destination, $false) }
+                try { [IO.File]::Move($backup.Path, $backup.Destination) }
                 catch { $rollbackErrors.Add("restore '$($backup.Destination)': $($_.Exception.Message)") }
             }
         }
@@ -758,7 +783,7 @@ function Complete-Sprint6ABrowserLoginObservation {
     if ([string]::IsNullOrWhiteSpace($responseText)) {
         throw "$Context login response was empty after committed-cookie inspection."
     }
-    try { $login = $responseText | ConvertFrom-Json -NoEnumerate }
+    try { $login = ConvertFrom-Sprint6AAcceptanceJson -Json $responseText }
     catch { throw "$Context login response was malformed after committed-cookie inspection: $($_.Exception.Message)" }
     if ($null -eq $login.PSObject.Properties['token'] -or $login.token -isnot [string]) {
         throw "$Context login response did not contain an exact string token after committed-cookie inspection."

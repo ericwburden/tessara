@@ -2,9 +2,9 @@
 
 use super::{
     BarConfigDraft, ComponentConfigDraft, ComponentDefinition, ComponentVersionSummary,
-    DatasetSummary, LineConfigDraft, PieDonutConfigDraft, StatCardConfigDraft, VisualSharedDraft,
-    build_table_component_config, dataset_fields_for_major, dataset_picker_majors, toggle_csv_key,
-    toggle_visible_column,
+    DatasetSummary, LineConfigDraft, PieDonutConfigDraft, StatCardConfigDraft, TableConfigDraft,
+    VisualSharedDraft, build_table_component_config, dataset_fields_for_major,
+    dataset_picker_majors, toggle_csv_key, toggle_visible_column,
 };
 use super::{
     component_kind_filter_options, component_matches_filters, component_status_filter_options,
@@ -97,6 +97,16 @@ fn visual_shared_draft() -> VisualSharedDraft {
 
 #[test]
 fn typed_component_drafts_serialize_only_kind_specific_contracts() {
+    let table = ComponentConfigDraft::Table(TableConfigDraft {
+        columns: Vec::new(),
+        filters: Vec::new(),
+        sort_field: String::new(),
+        sort_direction: "asc".into(),
+        page_size: "50".into(),
+    })
+    .into_json();
+    assert_eq!(table["page_size"], 50);
+
     let bar = ComponentConfigDraft::Bar(BarConfigDraft {
         shared: visual_shared_draft(),
         category_field: "program".into(),
@@ -140,6 +150,17 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     .into_json();
     assert_eq!(pie["max_slices"], 12);
     assert!(pie.get("orientation").is_none());
+
+    let donut = ComponentConfigDraft::Donut(PieDonutConfigDraft {
+        shared: visual_shared_draft(),
+        category_field: "program".into(),
+        category_missing_policy: "omit".into(),
+        category_labels: String::new(),
+        category_colors: String::new(),
+        legend_title: String::new(),
+    })
+    .into_json();
+    assert_eq!(donut["max_slices"], 12);
 
     let stat = ComponentConfigDraft::StatCard(StatCardConfigDraft {
         shared: visual_shared_draft(),

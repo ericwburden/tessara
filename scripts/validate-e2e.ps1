@@ -476,9 +476,10 @@ function Assert-ExpectedInventory {
         if ($entry.tests -isnot [array] -or @($entry.tests).Count -lt 1) {
             throw "The Playwright acceptance manifest file '$path' must list at least one full test title."
         }
-        if (-not $expectedCounts.TryAdd($path, @($entry.tests).Count)) {
+        if ($expectedCounts.ContainsKey($path)) {
             throw "The Playwright acceptance manifest repeats '$path'."
         }
+        $expectedCounts.Add($path, @($entry.tests).Count)
         foreach ($titleValue in @($entry.tests)) {
             if ($titleValue -isnot [string]) {
                 throw "The Playwright acceptance manifest file '$path' contains a non-string test title."

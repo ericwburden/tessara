@@ -1,12 +1,20 @@
 {
   "schema_version": 2,
-  "expected_total": 65,
+  "expected_total": 70,
   "files": [
+    {
+      "path": "analytics-sprint-7a.spec.ts",
+      "tests": [
+        "Sprint 7A scoped analytics boundary › source-exact reference inventory exposes the canonical Dataset Components and Dashboard",
+        "Sprint 7A scoped analytics boundary › real Dashboard mediation renders exact stat and table results",
+        "Sprint 7A scoped analytics boundary › private compatibility endpoints reject browser authority without disclosing resources"
+      ]
+    },
     {
       "path": "composition.spec.ts",
       "tests": [
         "Sprint 6F Application Composition › administrator sees desired, approval, observed, drift, and emergency controls",
-        "Sprint 6F Application Composition › composition read-back exposes lockfile, receipt, and explicit drift arrays",
+        "Sprint 6F Application Composition › composition read-back keeps materialization state coherent and exposes explicit drift arrays",
         "Sprint 6F Application Composition › unauthenticated users cannot inspect or mutate composition"
       ]
     },
@@ -34,7 +42,8 @@
         "Sprint 5A Dashboard routes and composition › editor add, direct move, resize, preview, save, and remove preserve dirty-state rules",
         "Sprint 5A Dashboard routes and composition › invalid inspector geometry resets without dirtying or saving the layout",
         "Sprint 5A Dashboard routes and composition › viewer request permits execute twelve visible placements fairly without exceeding six in flight",
-        "Sprint 5A Dashboard routes and composition › saved viewer uses the shared Table toolbar while charts and stat cards use intrinsic presentation",
+        "Sprint 5A Dashboard routes and composition › viewer keeps provider failure contained while bounded retries run",
+        "Sprint 5A Dashboard routes and composition › saved viewer uses the shared Table toolbar while stat cards stay intrinsic and charts stay absent",
         "Sprint 5A Dashboard routes and composition › embedded Table keeps full server-backed paging and page-size controls",
         "Sprint 5A Dashboard routes and composition › mobile Table fullscreen survives returning to a lazily executed viewer",
         "Sprint 5A Dashboard routes and composition › all native routes keep metadata-only surfaces inert and the focused viewer executes exact versions",
@@ -65,7 +74,7 @@
         "Sprint 6A Module Management › scoped module authority, product-only authority, and no access stay hidden and restricted",
         "Sprint 6A Module Management › keyboard group and placement edits retain focus and persist in desktop and mobile shells",
         "Sprint 6A Module Management › native directory and detail remain useful without JavaScript or bridge requests",
-        "Sprint 6A Module Management › canonical SDK reference owns complete SSR hydration and immutable assets"
+        "Sprint 6A Module Management › undeployed SDK reference stays absent from inventory, routes, and assets"
       ]
     },
     {

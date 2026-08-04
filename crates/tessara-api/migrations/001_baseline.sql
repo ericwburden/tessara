@@ -336,6 +336,7 @@ CREATE TABLE datasets (
     name text NOT NULL,
     slug text NOT NULL UNIQUE,
     grain text NOT NULL,
+    authority_revision bigint NOT NULL DEFAULT 1 CHECK (authority_revision > 0),
     created_at timestamptz NOT NULL DEFAULT now(),
     CHECK (grain IN ('submission', 'node'))
 );
@@ -494,6 +495,7 @@ CREATE TABLE component_versions (
     status component_version_status NOT NULL DEFAULT 'draft',
     config jsonb NOT NULL DEFAULT '{}'::jsonb,
     published_at timestamptz,
+    authority_revision bigint NOT NULL DEFAULT 1 CHECK (authority_revision > 0),
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (component_id, version_number),
     CONSTRAINT component_versions_component_type_supported_chk CHECK (
@@ -516,6 +518,43 @@ CREATE UNIQUE INDEX component_versions_one_draft_idx
     WHERE status = 'draft';
 CREATE INDEX component_versions_dataset_major_idx
     ON component_versions (dataset_id, dataset_version_major);
+
+CREATE OR REPLACE FUNCTION advance_dataset_authority_revision()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    target_dataset_id UUID;
+BEGIN
+    target_dataset_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.dataset_id ELSE NEW.dataset_id END;
+    UPDATE datasets SET authority_revision = authority_revision + 1 WHERE id = target_dataset_id;
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+CREATE TRIGGER dataset_scope_nodes_authority_revision
+AFTER INSERT OR UPDATE OR DELETE ON dataset_scope_nodes
+FOR EACH ROW EXECUTE FUNCTION advance_dataset_authority_revision();
+
+CREATE TRIGGER dataset_revisions_authority_revision
+AFTER INSERT OR UPDATE OR DELETE ON dataset_revisions
+FOR EACH ROW EXECUTE FUNCTION advance_dataset_authority_revision();
+
+CREATE OR REPLACE FUNCTION advance_component_version_authority_revision()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF ROW(NEW.dataset_id, NEW.dataset_version_major, NEW.component_type, NEW.status, NEW.config,
+           NEW.version_label, NEW.version_note)
+       IS DISTINCT FROM
+       ROW(OLD.dataset_id, OLD.dataset_version_major, OLD.component_type, OLD.status, OLD.config,
+           OLD.version_label, OLD.version_note) THEN
+        NEW.authority_revision := OLD.authority_revision + 1;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER component_versions_authority_revision
+BEFORE UPDATE ON component_versions
+FOR EACH ROW EXECUTE FUNCTION advance_component_version_authority_revision();
 
 CREATE SCHEMA IF NOT EXISTS analytics;
 
@@ -1309,6 +1348,25 @@ CREATE TABLE module_instances (
     UNIQUE (installation_id, definition_id)
 );
 
+CREATE TABLE module_service_identities (
+    module_instance_id UUID PRIMARY KEY REFERENCES module_instances(id) ON DELETE CASCADE,
+    module_definition_id TEXT NOT NULL REFERENCES module_definition_reservations(definition_id) ON DELETE RESTRICT,
+    key_id TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    public_key_fingerprint TEXT NOT NULL CHECK (public_key_fingerprint ~ '^sha256:[0-9a-f]{64}$'),
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (module_instance_id, key_id)
+);
+
+CREATE TABLE consumed_module_service_nonces (
+    module_instance_id UUID NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+    nonce UUID NOT NULL,
+    correlation_id TEXT NOT NULL,
+    issued_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (module_instance_id, nonce)
+);
+
 CREATE TABLE deployment_receipts (
     installation_id UUID NOT NULL REFERENCES application_installations(id) ON DELETE RESTRICT,
     revision BIGINT NOT NULL CHECK (revision > 0),
@@ -1444,6 +1502,9 @@ VALUES
      'dashboards:manage'),
     ('tessara.dashboards', 'tessara.core.dashboards',
      'tessara.dashboards.dashboard', 'dashboards.get', 'read',
+     'dashboards:read'),
+    ('tessara.dashboards', 'tessara.core.dashboards',
+     'tessara.dashboards.dashboard', 'dashboards.render_placement', 'read',
      'dashboards:read'),
     ('tessara.dashboards', 'tessara.core.dashboards',
      'tessara.dashboards.dashboard', 'dashboards.load_composition', 'read',

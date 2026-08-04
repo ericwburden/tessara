@@ -56,12 +56,22 @@ use materialization::{
 };
 use restriction_tiers::{
     effective_restriction_tier_sql, greatest_restriction_tier_sql, max_restriction_tier_sql,
-    tier_access_predicate,
 };
 use review::{
     DependencyImpactScope, carry_forward_state_for, compatibility_findings, compatibility_summary,
     dependency_summary, load_dependency_impacts,
 };
+
+pub(crate) async fn materialize_composition_bootstrap_dataset(
+    transaction: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    revision_id: Uuid,
+    generated_sql: &str,
+) -> ApiResult<()> {
+    materialization::materialize_dataset_revision_sql(transaction, revision_id, generated_sql)
+        .await?;
+    rebuild_dataset_major_materialization(transaction, dataset_id, 1).await
+}
 pub(crate) use routes::routes;
 
 #[cfg(test)]
@@ -5284,7 +5294,13 @@ async fn load_dataset_major_distinct_values(
          FROM {full_name} \
          WHERE {} AND {field} IS NOT NULL AND BTRIM({field}::text) <> '' \
          ORDER BY value",
-        tier_access_predicate(account)
+        crate::analytics_authorization::tier_access_predicate_for_dataset(
+            pool,
+            account,
+            dataset_id,
+            "datasets:read",
+        )
+        .await?
     ))
     .fetch_all(pool)
     .await?;
@@ -5321,7 +5337,13 @@ async fn load_materialized_dataset_table_rows(
     let full_name = format!("{}.{}", quote_identifier(&schema), quote_identifier(&table));
     let rows = sqlx::query(&format!(
         "SELECT * FROM {full_name} WHERE {} ORDER BY __row_id LIMIT 200",
-        tier_access_predicate(account)
+        crate::analytics_authorization::tier_access_predicate_for_dataset(
+            pool,
+            account,
+            dataset_id,
+            "datasets:read",
+        )
+        .await?
     ))
     .fetch_all(pool)
     .await?;

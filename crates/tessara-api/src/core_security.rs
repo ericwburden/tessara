@@ -15,14 +15,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use tessara_module_contract::{
-    AdministratorEligibilityDecisionV1, AdministratorEnrollmentClaimKindV1,
-    AuthorizationGrantOperationV1, AuthorizationGrantV1, CapabilityScopeBindingV1,
-    DependencyBindingKey, EnrollmentRedemptionResultV1, EnrollmentReservationV1,
-    ExternalIdentityAssertionV1, FunctionalContractId, LocalOperatorAuthorizationV1,
-    ModuleDefinitionId, ModuleManifest, NavigationContributionId, NavigationProjectionV1,
-    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
-    PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV1, SecurityCapabilityId,
-    ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AdministratorEligibilityDecisionV1,
+    AdministratorEnrollmentClaimKindV1, AuthorizationGrantOperationV1, AuthorizationGrantV2,
+    CONTRACT_SCHEMA_VERSION_V1, CapabilityScopeBindingV1, DependencyBindingKey,
+    EnrollmentRedemptionResultV1, EnrollmentReservationV1, ExternalIdentityAssertionV1,
+    FunctionalContractId, LocalOperatorAuthorizationV1, ModuleDefinitionId, ModuleManifest,
+    NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
+    ResourceAuthorizationAssertionV2, SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1,
+    ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -555,14 +556,14 @@ struct AuthorizationExchangeRequest {
     functional_contract: FunctionalContractId,
     action: String,
     operation: AuthorizationGrantOperationV1,
-    resource_assertion: Option<ResourceAuthorizationAssertionV1>,
+    resource_assertion: Option<ResourceAuthorizationAssertionV2>,
 }
 
 async fn exchange_authorization(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
     Json(payload): Json<AuthorizationExchangeRequest>,
-) -> ApiResult<Json<SignedEnvelopeV1<AuthorizationGrantV1>>> {
+) -> ApiResult<Json<SignedEnvelopeV1<AuthorizationGrantV2>>> {
     if payload.schema_version != 1 {
         return Err(restricted_authorization());
     }
@@ -605,9 +606,14 @@ async fn exchange_authorization(
     if let Some(resource) = &payload.resource_assertion {
         let capability = SecurityCapabilityId::new(required_capability.clone())
             .map_err(|error| ApiError::Internal(error.into()))?;
-        if !bindings
+        if !resource
+            .governing_organization_ids
             .iter()
-            .any(|binding| binding.authorizes(&capability, resource.owner_organization_id))
+            .any(|organization_id| {
+                bindings
+                    .iter()
+                    .any(|binding| binding.authorizes(&capability, *organization_id))
+            })
         {
             return Err(restricted_authorization());
         }
@@ -632,8 +638,8 @@ async fn exchange_authorization(
         .await?;
     }
     let now = Utc::now();
-    let grant = AuthorizationGrantV1 {
-        schema_version: 1,
+    let grant = AuthorizationGrantV2 {
+        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
         installation_id: payload.installation_id,
         original_actor_id: request.account.account_id,
         presenting_service: ModuleDefinitionId::new("tessara.core")
@@ -1030,7 +1036,7 @@ async fn proxy_manifest_module_document(
         .collect();
     let shell = protocol_signer(ProtocolSignaturePurposeV1::ShellContext)?
         .sign(ShellContextV1 {
-            schema_version: 1,
+            schema_version: CONTRACT_SCHEMA_VERSION_V1,
             installation_id,
             module_definition_id: manifest.definition_id.clone(),
             module_instance_id: instance_id,
@@ -1055,8 +1061,8 @@ async fn proxy_manifest_module_document(
         })
         .map_err(|error| ApiError::Internal(error.into()))?;
     let grant = protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
-        .sign(AuthorizationGrantV1 {
-            schema_version: 1,
+        .sign(AuthorizationGrantV2 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
             installation_id,
             original_actor_id: request.account.account_id,
             presenting_service: ModuleDefinitionId::new("tessara.core")
@@ -1441,7 +1447,7 @@ async fn scoped_records_shell_context(
         ShellDocumentStateV1::Active
     };
     let context = ShellContextV1 {
-        schema_version: 1,
+        schema_version: CONTRACT_SCHEMA_VERSION_V1,
         installation_id,
         module_definition_id: ModuleDefinitionId::new(
             tessara_reference_scoped_records::MODULE_DEFINITION_ID,
@@ -1516,7 +1522,7 @@ async fn scoped_records_authorization(
     request: &AuthenticatedRequest,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> ApiResult<SignedEnvelopeV1<AuthorizationGrantV1>> {
+) -> ApiResult<SignedEnvelopeV1<AuthorizationGrantV2>> {
     let instance = sqlx::query(
         "SELECT id,installation_id,definition_id,enabled
          FROM module_instances
@@ -1570,8 +1576,8 @@ async fn scoped_records_authorization(
     )
     .await?;
     let now = Utc::now();
-    let grant = AuthorizationGrantV1 {
-        schema_version: 1,
+    let grant = AuthorizationGrantV2 {
+        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
         installation_id,
         original_actor_id: request.account.account_id,
         presenting_service: ModuleDefinitionId::new("tessara.core")

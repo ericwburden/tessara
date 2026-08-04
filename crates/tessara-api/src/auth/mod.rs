@@ -20,6 +20,7 @@ pub use dto::{
 pub use extractor::AuthenticatedRequest;
 pub use handlers::{login, logout, me, session};
 pub use repo::{load_delegations, load_effective_capabilities, load_scope_nodes};
+pub(crate) use service::account_context_for_actor;
 pub use service::{
     authenticate_request, capability_allows_node, capability_boundary, ensure_capability,
     hash_password_for_storage, password_scheme, require_capability,

@@ -18,6 +18,8 @@ pub type ComponentMetadataV1 = DashboardComponentMetadataV1;
 pub type ComponentResolutionRequestV1 = DashboardComponentResolutionRequestV1;
 pub type ComponentResolutionResponseV1 = DashboardComponentResolutionResponseV1;
 pub type ComponentResolutionValidationError = DashboardComponentResolutionValidationError;
+pub type ComponentRenderKindV1 = DashboardComponentRenderKindV1;
+pub type ComponentRenderRequestV1 = DashboardComponentRenderRequestV1;
 pub type ComponentVersionReferenceV1 = DashboardComponentVersionReferenceV1;
 pub type ComponentVersionReferenceValidationError =
     DashboardComponentVersionReferenceValidationError;
@@ -43,6 +45,42 @@ pub enum DashboardComponentTransitionAction {
     ResolveMetadata,
     /// Render or execute the referenced ComponentVersion for a Dashboard view.
     Render,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DashboardComponentRenderKindV1 {
+    Table,
+    Bar,
+    Line,
+    Pie,
+    Donut,
+    StatCard,
+}
+
+impl DashboardComponentRenderKindV1 {
+    pub const fn component_type(self) -> &'static str {
+        match self {
+            Self::Table => "table",
+            Self::Bar => "bar",
+            Self::Line => "line",
+            Self::Pie => "pie",
+            Self::Donut => "donut",
+            Self::StatCard => "stat_card",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DashboardComponentRenderRequestV1 {
+    pub schema_version: u16,
+    pub action: DashboardComponentTransitionAction,
+    pub reference: DashboardComponentVersionReferenceV1,
+    pub kind: DashboardComponentRenderKindV1,
+    pub resource_authority_revision: u64,
+    pub query: String,
+    pub dashboard_scope_node_ids: Vec<Uuid>,
 }
 
 /// Versioned request sent to the first-party Core Components adapter.
@@ -79,6 +117,7 @@ pub struct DashboardComponentMetadataV1 {
     pub version_number: i32,
     pub version_label: String,
     pub version_status: String,
+    pub authority_revision: u64,
     /// Provider-authoritative Organization scope used by Dashboard to prevent
     /// a placement from broadening visibility beyond its Component data.
     pub scope_node_ids: Vec<Uuid>,
@@ -451,6 +490,7 @@ mod tests {
             version_number: 1,
             version_label: "v1".into(),
             version_status: "published".into(),
+            authority_revision: 1,
             scope_node_ids: vec![Uuid::from_u128(3)],
         }
     }

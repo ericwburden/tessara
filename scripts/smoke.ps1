@@ -128,7 +128,7 @@ function Invoke-CurrentRunSessionLogout {
         if ($LASTEXITCODE -ne 0) {
             throw "Browser DELETE /api/auth/logout failed with exit code $LASTEXITCODE."
         }
-        try { $browserLogout = $response | ConvertFrom-Json -NoEnumerate }
+        try { $browserLogout = ConvertFrom-Sprint6AAcceptanceJson -Json $response }
         catch { throw "Browser DELETE /api/auth/logout returned invalid JSON: $($_.Exception.Message)" }
         if ($null -eq $browserLogout.PSObject.Properties['signed_out'] -or
             $browserLogout.signed_out -isnot [bool] -or -not $browserLogout.signed_out) {
@@ -418,7 +418,7 @@ try {
     Assert-ProtectedShell -Content $modulesShell -Needles @(
         "Module inventory",
         "definitions",
-        "Transitional — not independently deployable",
+        "Transitional $([char]0x2014) not independently deployable",
         "No Module Release",
         "No Module Instance",
         "Save navigation"
@@ -438,13 +438,9 @@ try {
     }
     $dashboardsShell = Invoke-Html -Uri "$baseUrl/dashboards" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell" -RootMarker "module-content"
-    $sdkReferenceShell = Invoke-Html -Uri "$baseUrl/reference/module-sdk" -CookieJarPath $adminBrowserSession
-    if (
-        $sdkReferenceShell -notlike "*Module SDK Reference*" `
-        -or $sdkReferenceShell -notmatch 'data-shell-state="active"' `
-        -or $sdkReferenceShell -notmatch '/_tessara/modules/tessara\.reference\.module-sdk/1\.0\.0/sha256:[0-9a-f]{64}/module-shell\.(css|js)'
-    ) {
-        throw "Smoke failure: canonical SDK reference did not return its complete signed document and content-addressed assets"
+    $removedSdkReference = & curl.exe -sS -o NUL -D - -b $adminBrowserSession -w "STATUS:%{http_code}" "$baseUrl/reference/module-sdk"
+    if ($LASTEXITCODE -ne 0 -or $removedSdkReference -notcontains "STATUS:404" -or ($removedSdkReference -match '^Location:')) {
+        throw "Smoke failure: the undeployed Module SDK reference route must be an ordinary 404 without redirect"
     }
     $datasetsShell = Invoke-Html -Uri "$baseUrl/datasets" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $datasetsShell -Needles @("Datasets") -Context "datasets shell"
@@ -515,9 +511,9 @@ try {
         -or @($modulePolicy.destinations).Count -ne 15 `
         -or -not $moduleDestination `
         -or -not $scopedRecordsDestination `
-        -or -not $sdkReferenceDestination
+        -or $sdkReferenceDestination
     ) {
-        throw "Smoke failure: schema-v2 navigation policy did not preserve required groups, exact membership, protected Module Management, and Scoped Records"
+        throw "Smoke failure: schema-v2 navigation policy did not preserve the exact deployed topology, protected Module Management, and Scoped Records"
     }
 
     $shellNavigation = Invoke-Json -Method "Get" -Uri "$baseUrl/api/shell/navigation" -Headers $headers

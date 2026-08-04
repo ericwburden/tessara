@@ -1,0 +1,52 @@
+services:
+  gateway:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=tessara-sprint-7a_tessara-edge
+      - --providers.docker.constraints=Label(`com.docker.compose.project`,`tessara-sprint-7a`)
+      - --entrypoints.web.address=:8080
+      - --api.dashboard=false
+    ports: !override ["127.0.0.1:${TESSARA_GATEWAY_PORT:-8086}:8080"]
+
+  core:
+    image: tessara-sprint-7a-core
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000007a}
+      TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER: ${TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER:-tessara.local.sprint-7a}
+      TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY: ${TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY:-Aj3Yn25zFNp2K7PJZlqC2JapsIt2mdj-HO55ltKYygw}
+      TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID: ${TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID:-dashboard-development-v1}
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"dashboards":"http://dashboards:8091","scoped-records":"http://scoped-records:8090"}'
+
+  core-migrate:
+    image: tessara-sprint-7a-core
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000007a}
+
+  supervisor:
+    image: tessara-sprint-7a-supervisor
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000007a}
+      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-7a-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-7a-scoped-records","tessara.dashboards":"tessara-sprint-7a-dashboards"}'
+      TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-7a}
+    ports: !override ["127.0.0.1:${TESSARA_SUPERVISOR_PORT:-8096}:8090"]
+
+  scoped-records-migrate:
+    image: tessara-sprint-7a-scoped-records
+    profiles: ["reference"]
+
+  scoped-records:
+    image: tessara-sprint-7a-scoped-records
+    profiles: ["reference"]
+
+  dashboards-migrate:
+    image: tessara-sprint-7a-dashboards
+    profiles: ["reference"]
+
+  dashboards:
+    image: tessara-sprint-7a-dashboards
+    profiles: ["reference"]
+    environment:
+      TESSARA_DASHBOARD_SERVICE_SIGNING_KEY: ${TESSARA_DASHBOARD_SERVICE_SIGNING_KEY:-X6khju5Oq0O6033Xg2im7g08sz2bKYBSNyfJVZZS3ic}
+      TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID: ${TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID:-dashboard-development-v1}
