@@ -341,9 +341,6 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(
         page.getByRole("heading", { level: 1, name: fixture.name }),
       ).toBeVisible();
-      await expect(page.getByRole("button", { name: /Dependency health/ })).toBeVisible();
-      await expect(page.getByText("One placement needs review before this Dashboard is healthy.")).toHaveCount(0);
-      await expect(page.getByText("PROTOTYPE CONTROL", { exact: false })).toHaveCount(0);
       const detailVisibility = page.getByRole("button", {
         name: /^Visibility \d+ Nodes?$/,
       });
@@ -368,6 +365,9 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(
         page.getByRole("heading", { level: 1, name: fixture.name }),
       ).toBeVisible();
+      await expect(page.getByRole("button", { name: /Dependency health/ })).toBeVisible();
+      await expect(page.getByText("One placement needs review before this Dashboard is healthy.")).toHaveCount(0);
+      await expect(page.getByText("PROTOTYPE CONTROL", { exact: false })).toHaveCount(0);
       const componentsTrigger = page.getByRole("button", { name: "Components" });
       const placementDetailsTrigger = page.getByRole("button", {
         name: "Placement details",

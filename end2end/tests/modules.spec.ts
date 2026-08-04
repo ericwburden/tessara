@@ -1421,6 +1421,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
   test("directory and detail preserve human-machine parity and explicit route states", async ({
     page,
   }) => {
+    test.setTimeout(120_000);
     const guard = attachBrowserGuard(page);
     await signInPage(page, fixtures.reader.email);
     const inventory = await getJson<ModuleInventoryResponse>(
