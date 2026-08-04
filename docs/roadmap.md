@@ -1073,7 +1073,7 @@ Dashboard release digest changed.
 
 ## Phase 7: Cross-Module Authorization And Resource Correctness
 
-### Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice (Next)
+### Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice (Complete)
 
 **Outcome:** dataset, component, and dashboard execution is scope-safe across the real Dashboard process boundary to the transition-only Core Components compatibility contract and the typed adapters later extractions retain.
 
@@ -1094,7 +1094,7 @@ Dashboard release digest changed.
 
 **User-testable exit condition:** a scoped operator can preview Datasets, execute/view Components, and view Dashboards according to authored visibility and restriction rules across the real Dashboard boundary and transitional typed adapters, while an administrator sees the full seeded analytical set. Each Phase 8 extraction must rerun this proof when its adapter becomes a process boundary.
 
-### Sprint 7B: Cross-Module Resource Lifecycle And Dependency Slice
+### Sprint 7B: Cross-Module Resource Lifecycle And Dependency Slice (Next)
 
 **Outcome:** consumers can observe and respond to provider-owned resource changes through the real Dashboard-to-Core-compatibility boundary and reusable typed adapters, without owning provider product semantics or confusing transition ownership with the eventual module.
 

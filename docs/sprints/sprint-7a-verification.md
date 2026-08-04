@@ -1,13 +1,14 @@
 # Sprint 7A Validation Record
 
 - Sprint: `Sprint 7A: Scoped Analytics And Cross-Module Authorization Slice`
-- Status: Candidate 14 invalidated during SIT; mutable readiness/rehearsal correction cycle executing
-- Candidate: Candidate 14 `8f388886a0d440e5d48c8fabf8168bd59ef4be7a65f578494312aada2f0595b1` (invalidated)
-- Closeout: Not Authorized
+- Status: Complete; Candidate 16 passed Validation Readiness, Candidate Rehearsal, preflight, authoritative SIT, authoritative UAT, and closeout audit
+- Candidate: Candidate 16 `bdbd231fc6e8369485e3fc3455b16d497205e26fbf7f0e5b34c21f25e77800d9`
+- Closeout: Authorized by `artifacts/sprint-7a-closeout/closeout-authorization.json`
 - Evidence root: `artifacts/sprint-7a-closeout/`
 
-This record is the planned acceptance inventory. Kickoff does not execute
-preflight, candidate freeze, SIT, deployed smoke, UAT, or closeout.
+This record began as the planned acceptance inventory and now records the final
+Candidate 16 validation results. Earlier failed and superseded evidence remains
+retained beneath the evidence root.
 
 ## Implementation Verification (2026-08-02)
 
@@ -56,74 +57,74 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 | Roadmap clause | Risk / contract | Automated proof | Deployed smoke proof | Manual UAT proof | Status |
 |---|---|---|---|---|---|
-| Dataset previews enforce authored scoped restriction rules | Blocked rows or tier contributions leak when capability and scope are evaluated separately | Dataset integration fixture asserts source predicates precede count/filter/page/aggregate and tier authority covers the same governing roots | Focused smoke compares exact admin/scoped row values and counts | UAT-02 Dataset tier rows | Not Run |
-| Component execution enforces authored scoped restriction rules | Table/chart/stat output includes blocked rows or aggregates | Component runtime integration tests for all presentation kinds, search, filters, pagination, and aggregation | Execute seeded table/chart/stat as admin and scoped actors | UAT-03 Component execution | Not Run |
-| Dashboard viewing enforces authored scoped restriction rules | Dashboard scope or placement reference becomes implicit Component authority | Dashboard/Core integration proves joint Dashboard and Component decisions | View seeded mixed-placement Dashboard through real module/gateway boundary | UAT-04 Dashboard viewing | Not Run |
-| Dataset and revision metadata is scoped | Names, revisions, fields, policy, counts, links, or scope nodes leak | API known/random and filtered-count tests | Directory/detail/revision requests under admin/scoped/no-access sessions | UAT-01 Scoped Dataset catalog | Not Run |
-| ComponentVersion and linked presentation metadata is scoped | Hidden Dataset/Component identity leaks through linked assets | Provider decision and DTO redaction tests | Direct and Dashboard adapter metadata calls for blocked known/random IDs | UAT-03 and UAT-06 | Not Run |
-| Dashboard composition metadata is scoped | Placement titles, types, references, or available catalog reveal blocked Components | Restricted resolution serialization and SSR/bootstrap/DOM absence tests | Dashboard detail/editor/viewer response and rendered HTML audit | UAT-04 Dashboard viewing | Not Run |
-| Propagate installation and original actor | Cross-installation or actor substitution | Signed fixture and live receipt assertions | Capture exact successful exchange without secret/grant bytes | UAT-05 Cross-boundary recovery | Not Run |
-| Propagate Dashboard presenting-service identity | Confused deputy; Core and Dashboard identities collapse | Wrong-presenter and downstream-exchange integration tests | Real Dashboard-presented render succeeds; forged presenter fails | UAT-05 and UAT-07 | Not Run |
-| Bind declared compatibility dependency, contract, and action | An installed but undeclared service invokes Components | Wrong binding/contract/action/operation matrix | Live forged calls return one stable restricted result | UAT-07 Service misuse | Not Run |
-| Verify scope-bound grants/Core decisions and downstream audience | Capability set and scope set form a cross-product or audience is replayed | Protocol plus mixed-scope provider/consumer tests | Exact grant/decision receipt fields and wrong-audience failure | UAT-05–UAT-07 | Not Run |
-| Verify freshness | Old role, scope, ownership/visibility, Organization, or delegation authority remains usable | Issue-mutate-replay integration matrix | Live mutation invalidates retained grant; fresh request reflects change | UAT-08 Freshness | Not Run |
-| Blocked rows, entities, metadata, and Dashboard content | Partial redaction still leaks values or counts | Negative assertions over response, SQL result, bootstrap, DOM, and network payloads | Scoped actor exact expected inventory and recognizable blocked sentinels absent | UAT-02–UAT-06 | Not Run |
-| Mixed capabilities on disjoint Organization subtrees | `read@A × restricted@B` or `component@A × dashboard@B` is accepted | Dedicated disjoint-role fixture across Dataset, Component, Dashboard, and adapter | Focused conformance smoke with positive controls for A and B | UAT-06 Disjoint negatives | Not Run |
-| Undeclared and wrong-audience/action services fail closed | User authority can be exchanged/replayed by another service | Provider-neutral conformance negative matrix | Live wrong-service/action/audience requests produce no execution or metadata | UAT-07 Service misuse | Not Run |
-| Known versus random identifiers meet 6B non-disclosure profile | Status/body/header/timing reveals resource existence | Optimized balanced known/random runner and schema/publication self-test | Retained JSON and SHA-256 for Dataset, ComponentVersion, Dashboard states | UAT-06 known/random comparison | Not Run |
-| Deprecated analytical endpoints remain adapter-only | Compatibility route becomes new product authority or bypass | Static route/dependency audit and shared-decision integration tests | Baseline smoke inventory unchanged | UAT-09 Compatibility | Not Run |
-| Dataset and Component paths move toward extractable boundaries | New policy remains embedded in large route/runtime files | Boundary check for typed dto/service/repo decision seams | Conformance runner invokes typed provider adapter, not private DB access | UAT-09 Compatibility | Not Run |
-| Empty, unavailable, and forbidden states are clear and non-leaking | Generic failures are confusing or detailed failures disclose metadata | SSR copy, accessibility, redaction, hydration, and console tests | Fault injection plus focused browser smoke | UAT-01–UAT-05 and UAT-10 | Not Run |
-| Existing Dataset, Component, and Dashboard surfaces remain usable | Security fix breaks normal application tasks | Full API/workspace/Playwright regression | General smoke and scripted UAT | UAT-01–UAT-05 and UAT-11 | Not Run |
-| Operators receive understandable cross-module failure states | Provider outage strands user or erases shell context | Dashboard degraded-state and retry tests | Stop/restore provider; shell, route, recovery link, and retry remain useful | UAT-05 and UAT-10 | Not Run |
-| Scoped operator can preview Datasets, execute/view Components, and view Dashboards | End-to-end exit is proved only in isolated layers | Complete scoped analytics integration scenario | Focused deployed acceptance through gateway and real Dashboard process | UAT-01–UAT-05 | Not Run |
-| Administrator sees the full seeded analytical set | Fix accidentally narrows global administrator authority | Exact admin inventory and all-tier results | Admin focused smoke exact assets/rows/placements | UAT-11 Administrator control | Not Run |
-| Phase 8 extractions can rerun the proof | Tests are tied to Core-private implementation | Provider-neutral conformance self-test and documented adapter inputs | Run conformance against current transition provider | UAT-09 Compatibility | Not Run |
+| Dataset previews enforce authored scoped restriction rules | Blocked rows or tier contributions leak when capability and scope are evaluated separately | Dataset integration fixture asserts source predicates precede count/filter/page/aggregate and tier authority covers the same governing roots | Focused smoke compares exact admin/scoped row values and counts | UAT-02 Dataset tier rows | Passed — Candidate 16 |
+| Component execution enforces authored scoped restriction rules | Table/chart/stat output includes blocked rows or aggregates | Component runtime integration tests for all presentation kinds, search, filters, pagination, and aggregation | Execute seeded table/chart/stat as admin and scoped actors | UAT-03 Component execution | Passed — Candidate 16 |
+| Dashboard viewing enforces authored scoped restriction rules | Dashboard scope or placement reference becomes implicit Component authority | Dashboard/Core integration proves joint Dashboard and Component decisions | View seeded mixed-placement Dashboard through real module/gateway boundary | UAT-04 Dashboard viewing | Passed — Candidate 16 |
+| Dataset and revision metadata is scoped | Names, revisions, fields, policy, counts, links, or scope nodes leak | API known/random and filtered-count tests | Directory/detail/revision requests under admin/scoped/no-access sessions | UAT-01 Scoped Dataset catalog | Passed — Candidate 16 |
+| ComponentVersion and linked presentation metadata is scoped | Hidden Dataset/Component identity leaks through linked assets | Provider decision and DTO redaction tests | Direct and Dashboard adapter metadata calls for blocked known/random IDs | UAT-03 and UAT-06 | Passed — Candidate 16 |
+| Dashboard composition metadata is scoped | Placement titles, types, references, or available catalog reveal blocked Components | Restricted resolution serialization and SSR/bootstrap/DOM absence tests | Dashboard detail/editor/viewer response and rendered HTML audit | UAT-04 Dashboard viewing | Passed — Candidate 16 |
+| Propagate installation and original actor | Cross-installation or actor substitution | Signed fixture and live receipt assertions | Capture exact successful exchange without secret/grant bytes | UAT-05 Cross-boundary recovery | Passed — Candidate 16 |
+| Propagate Dashboard presenting-service identity | Confused deputy; Core and Dashboard identities collapse | Wrong-presenter and downstream-exchange integration tests | Real Dashboard-presented render succeeds; forged presenter fails | UAT-05 and UAT-07 | Passed — Candidate 16 |
+| Bind declared compatibility dependency, contract, and action | An installed but undeclared service invokes Components | Wrong binding/contract/action/operation matrix | Live forged calls return one stable restricted result | UAT-07 Service misuse | Passed — Candidate 16 |
+| Verify scope-bound grants/Core decisions and downstream audience | Capability set and scope set form a cross-product or audience is replayed | Protocol plus mixed-scope provider/consumer tests | Exact grant/decision receipt fields and wrong-audience failure | UAT-05–UAT-07 | Passed — Candidate 16 |
+| Verify freshness | Old role, scope, ownership/visibility, Organization, or delegation authority remains usable | Issue-mutate-replay integration matrix | Live mutation invalidates retained grant; fresh request reflects change | UAT-08 Freshness | Passed — Candidate 16 |
+| Blocked rows, entities, metadata, and Dashboard content | Partial redaction still leaks values or counts | Negative assertions over response, SQL result, bootstrap, DOM, and network payloads | Scoped actor exact expected inventory and recognizable blocked sentinels absent | UAT-02–UAT-06 | Passed — Candidate 16 |
+| Mixed capabilities on disjoint Organization subtrees | `read@A × restricted@B` or `component@A × dashboard@B` is accepted | Dedicated disjoint-role fixture across Dataset, Component, Dashboard, and adapter | Focused conformance smoke with positive controls for A and B | UAT-06 Disjoint negatives | Passed — Candidate 16 |
+| Undeclared and wrong-audience/action services fail closed | User authority can be exchanged/replayed by another service | Provider-neutral conformance negative matrix | Live wrong-service/action/audience requests produce no execution or metadata | UAT-07 Service misuse | Passed — Candidate 16 |
+| Known versus random identifiers meet 6B non-disclosure profile | Status/body/header/timing reveals resource existence | Optimized balanced known/random runner and schema/publication self-test | Retained JSON and SHA-256 for Dataset, ComponentVersion, Dashboard states | UAT-06 known/random comparison | Passed — Candidate 16 |
+| Deprecated analytical endpoints remain adapter-only | Compatibility route becomes new product authority or bypass | Static route/dependency audit and shared-decision integration tests | Baseline smoke inventory unchanged | UAT-09 Compatibility | Passed — Candidate 16 |
+| Dataset and Component paths move toward extractable boundaries | New policy remains embedded in large route/runtime files | Boundary check for typed dto/service/repo decision seams | Conformance runner invokes typed provider adapter, not private DB access | UAT-09 Compatibility | Passed — Candidate 16 |
+| Empty, unavailable, and forbidden states are clear and non-leaking | Generic failures are confusing or detailed failures disclose metadata | SSR copy, accessibility, redaction, hydration, and console tests | Fault injection plus focused browser smoke | UAT-01–UAT-05 and UAT-10 | Passed — Candidate 16 |
+| Existing Dataset, Component, and Dashboard surfaces remain usable | Security fix breaks normal application tasks | Full API/workspace/Playwright regression | General smoke and scripted UAT | UAT-01–UAT-05 and UAT-11 | Passed — Candidate 16 |
+| Operators receive understandable cross-module failure states | Provider outage strands user or erases shell context | Dashboard degraded-state and retry tests | Stop/restore provider; shell, route, recovery link, and retry remain useful | UAT-05 and UAT-10 | Passed — Candidate 16 |
+| Scoped operator can preview Datasets, execute/view Components, and view Dashboards | End-to-end exit is proved only in isolated layers | Complete scoped analytics integration scenario | Focused deployed acceptance through gateway and real Dashboard process | UAT-01–UAT-05 | Passed — Candidate 16 |
+| Administrator sees the full seeded analytical set | Fix accidentally narrows global administrator authority | Exact admin inventory and all-tier results | Admin focused smoke exact assets/rows/placements | UAT-11 Administrator control | Passed — Candidate 16 |
+| Phase 8 extractions can rerun the proof | Tests are tied to Core-private implementation | Provider-neutral conformance self-test and documented adapter inputs | Run conformance against current transition provider | UAT-09 Compatibility | Passed — Candidate 16 |
 
 ## Required Evidence Inventory
 
 | Artifact | Producer | Required before | Planned path / rule | Status |
 |---|---|---|---|---|
-| `validation-readiness-result.json` | Validation coordinator | Rehearsal | Complete derived checklist; passing and hashed | Not Run |
-| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Complete non-authoritative validation-shaped pass; passing and hashed | Not Run |
-| `preflight-result.json` | Validation preflight | Candidate freeze | Evidence root; passing and hashed | Not Run |
-| `candidate.json` | Validation preflight | SIT | Exact clean implementation commit/tree and fingerprint | Not Run |
-| Phase attempt receipts | Every phase/lane | Result collection | `attempts/<phase>-<attempt>.json`; authoritative flag explicit | Not Run |
-| Static/boundary logs | SIT | SIT result | Commands, start/end, exit status, raw logs | Not Run |
-| Rust workspace logs/results | SIT | SIT result | Locked workspace plus targeted suites | Not Run |
-| Source-exact build/provenance receipt | SIT | Deployed lanes | Image digests and commit/tree/dirty labels | Not Run |
-| Fresh apply/materialization receipt | SIT | Deployed lanes | Exact catalog/Blueprint/lockfile/plan/authorization/operation identities | Not Run |
-| Idempotent second-run receipt | SIT | Deployed lanes | Stable plan/lockfile and `no_op=true`; exact owner receipt cardinality | Not Run |
-| Authorization exchange evidence | SIT | Deployed smoke | Non-secret installation/actor/service/audience/binding/contract/action/revision identities | Not Run |
-| Analytics conformance report | SIT | Deployed smoke | Positive and full wrong-service/disjoint/stale matrix | Not Run |
-| Nondisclosure JSON and sidecar | SIT | SIT result | Known/random exact shape plus warmed timing profile | Not Run |
-| `smoke.json` and sidecar | SIT | SIT result | General deployed acceptance; smoke belongs to SIT | Not Run |
-| `smoke-sprint-7a.json` and sidecar | SIT | SIT result | Focused analytics acceptance and fault recovery | Not Run |
-| Playwright report/evidence | SIT | SIT result | Exact acceptance inventory, SSR/hydration/console/network assertions | Not Run |
-| `sit-result.json` | SIT | UAT | Passing and bound to candidate/environment fingerprints | Not Run |
-| Scripted UAT evidence | UAT | UAT result | General plus Sprint 7A focused commands | Not Run |
-| Manual scenario evidence | UAT | UAT result | One retained result per UAT-01 through UAT-11 | Not Run |
-| `uat-result.json` | UAT | Authorization | Passing and hashes `sit-result.json` | Not Run |
-| Canonical restoration receipt | SIT/UAT | Authorization | Complete reference composition, Core 200, Supervisor 204, modules healthy | Not Run |
-| `evidence-manifest.json` and SHA-256 sidecar | Coordinator | Authorization | Every retained file parsed/hashed; superseded attempts distinguished | Not Run |
-| `closeout-authorization.json` | Coordinator | Closeout | Hashes prerequisite receipts and exact authorized candidate | Not Run |
+| `validation-readiness-result.json` | Validation coordinator | Rehearsal | Complete derived checklist; passing and hashed | Passed — attempt 11 |
+| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Complete non-authoritative validation-shaped pass; passing and hashed | Passed — attempt 10 |
+| `preflight-result.json` | Validation preflight | Candidate freeze | Evidence root; passing and hashed | Passed — audit 24 |
+| `candidate.json` | Validation preflight | SIT | Exact clean implementation commit/tree and fingerprint | Passed — Candidate 16 |
+| Phase attempt receipts | Every phase/lane | Result collection | `attempts/<phase>-<attempt>.json`; authoritative flag explicit | Passed |
+| Static/boundary logs | SIT | SIT result | Commands, start/end, exit status, raw logs | Passed |
+| Rust workspace logs/results | SIT | SIT result | Locked workspace plus targeted suites | Passed |
+| Source-exact build/provenance receipt | SIT | Deployed lanes | Image digests and commit/tree/dirty labels | Passed |
+| Fresh apply/materialization receipt | SIT | Deployed lanes | Exact catalog/Blueprint/lockfile/plan/authorization/operation identities | Passed |
+| Idempotent second-run receipt | SIT | Deployed lanes | Stable desired/actual identity, `no_op=true`; exact owner receipt cardinality | Passed |
+| Authorization exchange evidence | SIT | Deployed smoke | Non-secret installation/actor/service/audience/binding/contract/action/revision identities | Passed |
+| Analytics conformance report | SIT | Deployed smoke | Positive and full wrong-service/disjoint/stale matrix | Passed |
+| Nondisclosure JSON and sidecar | SIT | SIT result | Known/random exact shape plus warmed timing profile | Passed |
+| `smoke.json` and sidecar | SIT | SIT result | General deployed acceptance; smoke belongs to SIT | Passed |
+| `smoke-sprint-7a.json` and sidecar | SIT | SIT result | Focused analytics acceptance and fault recovery | Passed |
+| Playwright report/evidence | SIT | SIT result | Exact acceptance inventory, SSR/hydration/console/network assertions | Passed — 70/70 |
+| `sit-result.json` | SIT | UAT | Passing and bound to candidate/environment fingerprints | Passed |
+| Scripted UAT evidence | UAT | UAT result | General plus Sprint 7A focused commands | Passed |
+| Manual scenario evidence | UAT | UAT result | One retained result per UAT-01 through UAT-11 | Passed — 11/11 |
+| `uat-result.json` | UAT | Authorization | Passing and hashes `sit-result.json` | Passed |
+| Canonical restoration receipt | SIT/UAT | Authorization | Complete reference composition, Core 200, Supervisor 204, modules healthy | Passed |
+| `evidence-manifest.json` and SHA-256 sidecar | Coordinator | Authorization | Every retained file parsed/hashed; superseded attempts distinguished | Passed — 1,195 retained files |
+| `closeout-authorization.json` | Coordinator | Closeout | Hashes prerequisite receipts and exact authorized candidate | Authorized |
 
 ## Candidate Identity
 
-- Implementation commit: `c14823da7a14a9d21beecc67696a4974c87654ac`
-- Tree: `d225d22dc379a133015d306140a642284160c92e`
+- Implementation commit: `e286e722251d93a1c97dede88a1d8c7638cd74c6`
+- Tree: `eca5a686c7e0ab3501c328bc1b633f39893483aa`
 - Dirty state: `false`
-- Candidate fingerprint: `526f4392c4374faa824ead268a47f920e79857a619f4202102fc43e737d7fe07`
-- Acceptance-inventory identity: `95a57efc05c9344bfb03a208d39020a2a1a031ac52a1506eb5087ab950941943`
-- Deployment profile/configuration digest: `50d6a7dd72d1e469d4ef0dc9ad1bc0790e854cf5b283043ff59c10444dca2f78`
-- Migration/baseline identity: `a701c08eaa53325676016d140fbe5a5b1d225b6c23c00966314f22f75fdd7a23`
+- Candidate fingerprint: `bdbd231fc6e8369485e3fc3455b16d497205e26fbf7f0e5b34c21f25e77800d9`
+- Acceptance-inventory identity: `1dfa8fc1aa6e3f3ca6657d7ec3771e58ff43535bf3fb9f5e01794f04b236b231`
+- Deployment profile/configuration digest: recorded by `candidate.json`
+- Migration/baseline identity: recorded by `candidate.json`
 - Expected provenance labels: repository URL, candidate commit, candidate tree,
   `dirty=false`, build profile, Core/gateway/Dashboard/Scoped Records/Supervisor
   component identity
-- Observed image digest(s): Supervisor `sha256:daabbc369eafbfc0f35b510f13eec665ea17e876916800a2902035d71aa89c41`;
-  Core `sha256:9f59a9063253e06de7c347aa1d669d91defcb70e6e0fd63023ceb253cb213c1a`;
-  Scoped Records `sha256:8e22d9d2494da53c5f4faad4549de8c69ed27eeb07b345609fc2a2c4df8ae86e`;
-  Dashboard `sha256:66fb43b551b9929c9ea3df366eeb47be8090104e92e31df1e60df3b108c18570`
+- Observed image digest(s): Supervisor `sha256:d4cfdbff76248b7349ceb1f37dbc74b8e7a3826508949025400fb5c1827fb6a9`;
+  Core `sha256:2582e646e99a2f78b8fa5e1863c9fd4cfd2cdd5a67a162f2f9942af955c855c9`;
+  Scoped Records `sha256:77e502b96e228217bf78b44e43b1465338ec51e9cccea7c9d2a8c38eac4ca6b3`;
+  Dashboard `sha256:4dd66bd8948e895cc7cbdbba187dc245136e8ce9fb1b7576d9a908740c126ffd`
 - Source rules: product, contract, test, fixture, migration, manifest,
   deployment, bootstrap, smoke, UAT, Playwright, conformance, or acceptance
   inventory changes create a new candidate. Documentation-only corrections may
@@ -132,7 +133,7 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 ## Environment Contract
 
-- Environment fingerprint: `92db7bd283fc3cba14b20e6170316fde54b1c67508bcf6ae24b20346c0b50853`
+- Environment fingerprint: `07083bda08721fa42333e7af211a9f78894cb8b8d818f1605ace4384539d1ec3`
 - Host: Windows PowerShell orchestration with Docker Desktop/Linux containers
 - Tool versions: record `git`, Rust/Cargo, wasm target/tooling, Node/npm,
   Playwright browsers, Docker/Compose, PostgreSQL client where used, and
@@ -178,10 +179,10 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 ## Preflight
 
-- Status: Passed on attempt 3; no SIT or UAT assertions started
+- Status: Candidate 16 preflight passed on audit attempt 24; authoritative SIT and UAT subsequently passed
 - Superseded attempts: `artifacts/sprint-7a-closeout/attempts/preflight-1.json`
   and `artifacts/sprint-7a-closeout/attempts/preflight-2.json`
-- Authoritative attempt: `artifacts/sprint-7a-closeout/attempts/preflight-3.json`
+- Authoritative audit: `artifacts/sprint-7a-closeout/preflight-audit-24.json`
 - Receipt: `artifacts/sprint-7a-closeout/preflight-result.json`
 - Candidate receipt: `artifacts/sprint-7a-closeout/candidate.json`
 - Repository gate: clean `codex/sprint-7a`, intended commit, no untracked
@@ -226,31 +227,32 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
   source-exact build/materialization/no-op, the complete Playwright inventory,
   conformance, nondisclosure, general and focused smoke, recovery/restoration,
   and automated diagnostic equivalents of UAT-01 through UAT-11.
-- Authority: both gates are mutable and non-authoritative. They cannot satisfy
-  SIT or UAT. Candidate 15 may freeze only after both complete passes are clean
-  for the exact source and environment identities.
-- Readiness receipt: attempt 1 failed and remains non-authoritative. The
+- Authority: both gates were mutable and non-authoritative and did not satisfy
+  SIT or UAT. Candidate 16 froze only after both complete passes were clean for
+  the exact source and environment identities.
+- Readiness receipt: earlier failed attempts remain non-authoritative. The
   fail-late shell matrix found PowerShell 5.1 incompatibilities in shared JSON
   parsing, collection insertion, numeric type validation, file publication,
   path rejection, native-command preference handling, and non-ASCII script
   parsing. The consolidated mutable correction passes all 22 focused
-  PowerShell 5.1/7.6 evidence self-tests; the complete gate must restart after
-  the corrected clean commit.
-- Rehearsal receipt: Not Run.
+  PowerShell 5.1/7.6 evidence self-tests. Complete readiness attempt 11 passed
+  for the clean Candidate 16 source identity.
+- Rehearsal receipt: complete non-authoritative attempt 10 passed all lanes and
+  all automated UAT diagnostic equivalents before Candidate 16 freeze.
 
 ## SIT
 
 | Lane | Planned command/evidence | Assertions | Result |
 |---|---|---|---|
-| Static and boundaries | fmt, check, clippy, boundary scripts, contract fixtures, Markdown links, diff, audit | Native SSR ownership, typed seams, no cross-module DB/credentials/URLs, exact protocol tuple | Not Run |
-| Rust workspace | `cargo test --workspace --locked` plus targeted optimized nondisclosure test | All unit/integration/provider/consumer tests | Not Run |
-| Source-exact deployment | Sprint 7A fresh build and reference bootstrap | Exact images/config/migrations/Blueprint/lockfile/plan/provenance; healthy topology | Not Run |
-| Idempotent materialization | unchanged `-SkipBuild` bootstrap | Stable desired/actual identity, `no_op=true`, no duplicate fixtures/receipts | Not Run |
-| Authorization conformance | `.\scripts\run-analytics-authorization-conformance.ps1` | Positive, disjoint, wrong-service/audience/action, stale, replay, recovery cases | Not Run |
-| Nondisclosure | `.\scripts\validate-analytics-nondisclosure.ps1` | Dataset/ComponentVersion/Dashboard known-random shape and timing | Not Run |
-| Playwright | `npm --prefix .\end2end test` or source-exact validation wrapper | Full inventory; route ownership, hydration, console, DOM/network leakage, responsive state | Not Run |
-| Deployed acceptance smoke | general and Sprint 7A smoke scripts | Admin/scoped inventories, all three surfaces, real exchange, outage/restore, final health | Not Run |
-| Recovery/rollback | provider fault restoration and retained Sprint 6F rollback input audit | Containment, canonical restoration, no unrelated image change | Not Run |
+| Static and boundaries | fmt, check, clippy, boundary scripts, contract fixtures, Markdown links, diff, audit | Native SSR ownership, typed seams, no cross-module DB/credentials/URLs, exact protocol tuple | Passed |
+| Rust workspace | `cargo test --workspace --locked` plus targeted optimized nondisclosure test | All unit/integration/provider/consumer tests | Passed |
+| Source-exact deployment | Sprint 7A fresh build and reference bootstrap | Exact images/config/migrations/Blueprint/lockfile/plan/provenance; healthy topology | Passed |
+| Idempotent materialization | unchanged `-SkipBuild` bootstrap | Stable desired/actual identity, `no_op=true`, no duplicate fixtures/receipts | Passed |
+| Authorization conformance | `.\scripts\run-analytics-authorization-conformance.ps1` | Positive, disjoint, wrong-service/audience/action, stale, replay, recovery cases | Passed |
+| Nondisclosure | `.\scripts\validate-analytics-nondisclosure.ps1` | Dataset/ComponentVersion/Dashboard known-random shape and timing | Passed |
+| Playwright | `npm --prefix .\end2end test` or source-exact validation wrapper | Full inventory; route ownership, hydration, console, DOM/network leakage, responsive state | Passed — 70/70 |
+| Deployed acceptance smoke | general and Sprint 7A smoke scripts | Admin/scoped inventories, all three surfaces, real exchange, outage/restore, final health | Passed |
+| Recovery/rollback | provider fault restoration and retained Sprint 6F rollback input audit | Containment, canonical restoration, no unrelated image change | Passed |
 
 - SIT result receipt: `artifacts/sprint-7a-closeout/sit-result.json`
 - Canonical topology restoration: complete Sprint 7A reference composition at
@@ -265,7 +267,7 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 - Commands:
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:8086"`
   - `.\scripts\uat-sprint-7a.ps1 -BaseUrl "http://127.0.0.1:8086" -OutputPath "artifacts/sprint-7a-closeout/uat/scripted-sprint-7a.json"`
-- Result: Not Run
+- Result: Passed for Candidate 16
 - Evidence: structured JSON/sidecars plus append-only logs beneath the evidence
   root, bound to candidate and environment fingerprints
 
@@ -273,17 +275,17 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 
 | Scenario | Role / start state | Actions | Expected | Result | Evidence |
 |---|---|---|---|---|---|
-| UAT-01 Scoped Dataset catalog | Scoped operator; fresh reference fixtures | Browse directory/detail/revision and direct blocked ID | Only scoped metadata; generic blocked state | Not Run | Planned |
-| UAT-02 Dataset tier rows | Scoped operator; four-tier Dataset | Preview/query Dataset | Only same-scope authorized tiers; blocked sentinel/count absent | Not Run | Planned |
-| UAT-03 Component execution | Scoped operator; table/chart/stat fixtures | Open and interact with each Component | Scoped rows/aggregates only; blocked version absent | Not Run | Planned |
-| UAT-04 Dashboard viewing | Scoped operator; mixed-placement Dashboard | Open directory/detail/viewer | Allowed placement renders; blocked placement generic/redacted | Not Run | Planned |
-| UAT-05 Cross-boundary recovery | Scoped operator; healthy provider then controlled outage | View, fault provider, observe, restore, retry | Exact exchange; contained failure; healthy recovery | Not Run | Planned |
-| UAT-06 Disjoint and known/random | Mixed-scope operator | Exercise three surfaces and known/random direct paths | No cross-product; equal restricted public outcomes | Not Run | Planned |
-| UAT-07 Service misuse | Test client identities | Wrong presenter/audience/binding/action/replay calls | Stable denial; no metadata/execution | Not Run | Planned |
-| UAT-08 Freshness | Admin mutator plus scoped operator | Issue, mutate role/scope/visibility/delegation, replay, refresh | Old grant stale; fresh result correct | Not Run | Planned |
-| UAT-09 Compatibility | Admin/operator; canonical topology | Direct Component UI, adapter, boundary audit | Existing UI works; no deprecated product surface; reusable gate named | Not Run | Planned |
-| UAT-10 Responsive safe states | Scoped/no-access roles; desktop and narrow viewport | Exercise empty/forbidden/unavailable/recovery with keyboard | Useful SSR, accessible copy, no hydration/console leak | Not Run | Planned |
-| UAT-11 Administrator control | Administrator; fresh reference fixtures | Browse and execute full analytics set | Exact full assets, rows, tiers, and placements visible | Not Run | Planned |
+| UAT-01 Scoped Dataset catalog | Scoped operator; fresh reference fixtures | Browse directory/detail/revision and direct blocked ID | Only scoped metadata; generic blocked state | Passed | `uat/manual/uat-7a-01.json` |
+| UAT-02 Dataset tier rows | Scoped operator; four-tier Dataset | Preview/query Dataset | Only same-scope authorized tiers; blocked sentinel/count absent | Passed | `uat/manual/uat-7a-02.json` |
+| UAT-03 Component execution | Scoped operator; table/chart/stat fixtures | Open and interact with each Component | Scoped rows/aggregates only; blocked version absent | Passed | `uat/manual/uat-7a-03.json` |
+| UAT-04 Dashboard viewing | Scoped operator; mixed-placement Dashboard | Open directory/detail/viewer | Allowed placement renders; blocked placement generic/redacted | Passed | `uat/manual/uat-7a-04.json` |
+| UAT-05 Cross-boundary recovery | Scoped operator; healthy provider then controlled outage | View, fault provider, observe, restore, retry | Exact exchange; contained failure; healthy recovery | Passed | `uat/manual/uat-7a-05.json` |
+| UAT-06 Disjoint and known/random | Mixed-scope operator | Exercise three surfaces and known/random direct paths | No cross-product; equal restricted public outcomes | Passed | `uat/manual/uat-7a-06.json` |
+| UAT-07 Service misuse | Test client identities | Wrong presenter/audience/binding/action/replay calls | Stable denial; no metadata/execution | Passed | `uat/manual/uat-7a-07.json` |
+| UAT-08 Freshness | Admin mutator plus scoped operator | Issue, mutate role/scope/visibility/delegation, replay, refresh | Old grant stale; fresh result correct | Passed | `uat/manual/uat-7a-08.json` |
+| UAT-09 Compatibility | Admin/operator; canonical topology | Direct Component UI, adapter, boundary audit | Existing UI works; no deprecated product surface; reusable gate named | Passed | `uat/manual/uat-7a-09.json` |
+| UAT-10 Responsive safe states | Scoped/no-access roles; desktop and narrow viewport | Exercise empty/forbidden/unavailable/recovery with keyboard | Useful SSR, accessible copy, no hydration/console leak | Passed | `uat/manual/uat-7a-10.json` |
+| UAT-11 Administrator control | Administrator; fresh reference fixtures | Browse and execute full analytics set | Exact full assets, rows, tiers, and placements visible | Passed | `uat/manual/uat-7a-11.json` |
 
 - UAT result receipt: `artifacts/sprint-7a-closeout/uat-result.json`
 - Final topology restoration: same canonical state required by SIT; no
@@ -306,6 +308,14 @@ candidate or satisfy the formal SIT/UAT/closeout regime below.
 | 2026-08-03T11:25:00-04:00 | Candidate Rehearsal / static evidence finalization / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | evidence-finalization | Two complete static/boundary runs emitted passing results, but their ad hoc collector read an internal native exit value left by a successful PowerShell script. Direct `pwsh -File` execution returned `0`, and the complete rerun receipt was finalized from the retained raw log. | Static lane only; product assertions and the readiness source identity are unchanged. | `artifacts/sprint-7a-closeout/rehearsal/attempt-3-static-boundaries-final.json` |
 | 2026-08-03T11:26:00-04:00 | Candidate Rehearsal / Rust workspace / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | environment | The complete Rust command passed 163 non-database tests, while two database tests failed authentication because the readiness runner verified host, port, and database identity but omitted the exact disposable credential. | Invalidate the prior readiness pass; retain the Rust failure, correct readiness to authenticate every exact URL without retaining the credential, amend the validation record, then repeat the complete readiness gate and rehearsal. | `artifacts/sprint-7a-closeout/rehearsal/attempt-3-rust-workspace.log` |
 | 2026-08-03T11:54:00-04:00 | Candidate Rehearsal / Playwright / executing | Yes, non-authoritative | Mutable, pre-Candidate 15 | environment | Thirty-seven tests passed and thirty serial dependents did not run after the lane supplied a Compose container name where acceptance mode requires the immutable 64-character PostgreSQL container ID; the two failures were cleanup/setup errors reporting a malformed binding. | Invalidate the prior readiness pass; retain the complete Playwright outputs, add active exact Playwright database-binding validation to readiness, amend the validation record, then repeat the complete readiness gate and rehearsal. | `artifacts/sprint-7a-closeout/rehearsal/attempt-4-playwright-results.json` |
+| 2026-08-03T17:30:05Z | Candidate 15 / UAT-06 / executing | Yes | `e5994959...` | product | Known blocked and random Component identifiers produced distinguishable public status/body behavior. UAT-01–05 had run; UAT-07–11 were not started. | Candidate 15 invalidated and restored. The later convergence record leaves UAT-07–11 blocked and does not substitute Candidate 16 evidence. | `artifacts/sprint-7a-closeout/convergence/uat-defect-harvest.json` |
+| 2026-08-03T20:52:44Z | Validation protocol / transition | No | Candidate 15 retired | product-decision | The repository-local post-SIT convergence protocol became active after Candidate 15 invalidation. Reconciliation records the actual chronology rather than inventing a retroactive harvest. | Existing Candidate 15 evidence remains non-authoritative; broader retained correction evidence is classified under the new schema. | `artifacts/sprint-7a-closeout/convergence/final-certification-entry.json` |
+| 2026-08-03T21:16:52Z | Mutable correction / focused proof and fail-late rehearsal | Yes, non-authoritative | Mutable, pre-Candidate 16 | harness / flaky | Product nondisclosure regression passed; rehearsal exposed one stale historical-scope assertion and one isolated hydration timeout. Exact correction/reproducer and safe sibling lanes were retained. | Keep the source mutable; rerun complete readiness and complete rehearsal. | `artifacts/sprint-7a-closeout/convergence/defect-batch.json` |
+| 2026-08-03T21:19:24Z | Validation Readiness / attempt 11 | Yes, non-authoritative | Mutable, pre-Candidate 16 | — | Complete readiness gate passed for clean source `e286e722...` / tree `eca5a686...`. | Candidate rehearsal permitted; no SIT/UAT authority conferred. | `artifacts/sprint-7a-closeout/validation-readiness-result.json` |
+| 2026-08-03T21:58:17Z | Candidate Rehearsal / attempt 10 | Yes, non-authoritative | Mutable, pre-Candidate 16 | — | Complete fail-late rehearsal passed all required lanes, including 70/70 Playwright and automated UAT diagnostic equivalents. | Candidate 16 freeze permitted; formal preflight, SIT, and UAT still required. | `artifacts/sprint-7a-closeout/candidate-rehearsal-result.json` |
+| 2026-08-03T21:59:37Z | Preflight / Candidate 16 freeze | No | `bdbd231f...` | — | Audit 24 froze the exact source and environment fingerprints. | Enter authoritative SIT. | `artifacts/sprint-7a-closeout/preflight-result.json` |
+| 2026-08-03T23:17:41Z | Candidate 16 / authoritative SIT | Yes | `bdbd231f...` | — | Every SIT lane passed against source-exact images and the canonical environment. | Enter UAT only after the passing SIT receipt. | `artifacts/sprint-7a-closeout/sit-result.json` |
+| 2026-08-03T23:23:13Z | Candidate 16 / authoritative UAT | Yes | `bdbd231f...` | — | Scripted UAT and all eleven agent-observed manual scenarios passed; UAT-06 directly confirmed equal known/random nondisclosure behavior. | Validation complete; reconcile records and authorize closeout. | `artifacts/sprint-7a-closeout/uat-result.json` |
 
 Allowed classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, and `product-decision`.
@@ -331,37 +341,37 @@ candidate/environment receipt matches and an explicit non-impact rationale.
 
 ## Evidence Integrity
 
-- Required files complete: Not Run
-- Structured artifacts parse: Not Run
-- Repository Markdown links pass: Not Run
-- Authoritative/superseded attempts distinguished: Not Run
-- Every retained file hashed: Not Run
-- Manifest file count: Not Run
-- Manifest SHA-256: Not Run
-- Secret audit: receipts/manifests/logs must exclude passwords, tokens, signing
-  secrets, private keys, browser cookies, database credentials, and grant bytes
+- Required files complete: Passed
+- Structured artifacts parse: Passed; 485 JSON documents plus one JSONL diagnostic
+- Repository Markdown links pass: Passed in authoritative static/boundary evidence
+- Authoritative/superseded attempts distinguished: Passed
+- Every retained file hashed: Passed
+- Manifest file count: 1,195 retained files, excluding the manifest pair and downstream authorization pair
+- Manifest SHA-256: `sha256:3c9c36f86c8104a18e79a57b37af4c3cd7ef25329990755f2fc2b70a155ab71b`
+- Secret audit: Passed after removing six non-evidence generated helper copies
+  that embedded credentials; receipts, manifests, and retained raw results are clean
 - Long-running work: write start receipts, append logs continuously, retain
   heartbeats/durations/completion sentinels, and inspect retained completion
   state before relaunching after a lost controlling session
 
 ## Closeout Authorization
 
-- Status: Not Authorized
+- Status: Authorized
 - Authorization receipt: `artifacts/sprint-7a-closeout/closeout-authorization.json`
-- Authorized candidate/fingerprint: Not Available
-- Preflight passed before SIT: No
-- SIT passed: No
-- UAT passed after SIT: No
-- Acceptance mapping complete: Planned, not proven
-- Invalidation decisions satisfied: Not Applicable
+- Authorized candidate/fingerprint: Candidate 16 / `bdbd231fc6e8369485e3fc3455b16d497205e26fbf7f0e5b34c21f25e77800d9`
+- Preflight passed before SIT: Yes
+- SIT passed: Yes
+- UAT passed after SIT: Yes
+- Acceptance mapping complete: Yes, 23 clauses
+- Invalidation decisions satisfied: Yes, including schema-valid Candidate 15 convergence reconciliation
 - Unresolved product decisions: None at kickoff; implementation stop conditions
   are recorded in the sprint plan
 - Intended active route/slot: complete Sprint 7A reference composition at
   `http://127.0.0.1:8086`
-- Application health: Not Run
-- Evidence source commit: Not Available
-- Documentation commit: Not Available
-- Authorization timestamp: Not Available
+- Application health: Core readiness 200; Supervisor readiness 204; exact source provenance confirmed
+- Evidence source commit: `e286e722251d93a1c97dede88a1d8c7638cd74c6`
+- Documentation commit: This documentation-only closeout change; its commit is recorded in the closeout handoff and does not redefine Candidate 16
+- Authorization timestamp: `2026-08-04T00:15:32.1953516Z`
 
 Closeout may be authorized only after every receipt parses and hashes, one
 candidate fingerprint covers all authoritative evidence, all SIT lanes and
