@@ -210,6 +210,12 @@ if ($SelfTest) {
             $null = Assert-Uuid ([string]$property.Value) "Fixture identity '$($property.Name)'"
         }
     }
+    $source = Get-Content -LiteralPath $PSCommandPath -Raw
+    if ($source -cnotmatch 'status,lifecycle_state,config,published_at,authority_revision,resource_revision' -or
+        $source -cnotmatch "'published','active'.*now\(\),2,1" -or
+        $source -cnotmatch "component_versions\.lifecycle_state IS DISTINCT FROM 'active'") {
+        throw "Published ComponentVersion fixtures must declare the active lifecycle state and initial resource revision."
+    }
     Write-Host "Sprint 7A UAT fixture preparation self-test passed."
     return
 }
@@ -308,11 +314,11 @@ INSERT INTO components(id,name,slug,description) VALUES
   ('$($script:Sprint7AFixture.chart_component_id)'::uuid,'Sprint 7A Tier Chart','sprint-7a-tier-chart','UAT fixture'),
   ('$($script:Sprint7AFixture.blocked_component_id)'::uuid,'Sprint 7A Blocked Component','sprint-7a-blocked-component','UAT fixture')
 ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description;
-INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,config,published_at,authority_revision) VALUES
-  ('$($contract.component_versions.chart)'::uuid,'$($script:Sprint7AFixture.chart_component_id)'::uuid,'$($contract.datasets.four_tier)'::uuid,1,'major_line','bar',1,'1.0.0','UAT fixture','published','{"mode":"summary","summary_field":"label","summary_type":"count","category_field":"label","sort_field":"summary_value","sort_direction":"desc","number_of_points":20,"value_format":"integer"}'::jsonb,now(),2),
-  ('$($contract.component_versions.blocked)'::uuid,'$($script:Sprint7AFixture.blocked_component_id)'::uuid,'$($contract.datasets.blocked)'::uuid,1,'major_line','table',1,'1.0.0','UAT fixture','published','{"visible_columns":["label"]}'::jsonb,now(),2)
-ON CONFLICT(id) DO UPDATE SET config=EXCLUDED.config,authority_revision=GREATEST(component_versions.authority_revision,2)
-WHERE component_versions.config IS DISTINCT FROM EXCLUDED.config OR component_versions.authority_revision < 2;
+INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,lifecycle_state,config,published_at,authority_revision,resource_revision) VALUES
+  ('$($contract.component_versions.chart)'::uuid,'$($script:Sprint7AFixture.chart_component_id)'::uuid,'$($contract.datasets.four_tier)'::uuid,1,'major_line','bar',1,'1.0.0','UAT fixture','published','active','{"mode":"summary","summary_field":"label","summary_type":"count","category_field":"label","sort_field":"summary_value","sort_direction":"desc","number_of_points":20,"value_format":"integer"}'::jsonb,now(),2,1),
+  ('$($contract.component_versions.blocked)'::uuid,'$($script:Sprint7AFixture.blocked_component_id)'::uuid,'$($contract.datasets.blocked)'::uuid,1,'major_line','table',1,'1.0.0','UAT fixture','published','active','{"visible_columns":["label"]}'::jsonb,now(),2,1)
+ON CONFLICT(id) DO UPDATE SET config=EXCLUDED.config,lifecycle_state='active',authority_revision=GREATEST(component_versions.authority_revision,2)
+WHERE component_versions.config IS DISTINCT FROM EXCLUDED.config OR component_versions.lifecycle_state IS DISTINCT FROM 'active' OR component_versions.authority_revision < 2;
 
 DO ${roleQuote}
 BEGIN
