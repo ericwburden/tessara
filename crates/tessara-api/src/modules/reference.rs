@@ -226,25 +226,23 @@ pub(crate) async fn observe(
             let Some(id) = parse_canonical_uuid(reference.resource_id()) else {
                 return Ok((resolution, None));
             };
-            let revision = sqlx::query_scalar::<_, i64>(
+            sqlx::query_scalar::<_, i64>(
                 "SELECT resource_revision FROM dataset_revisions WHERE id = $1",
             )
             .bind(id)
             .fetch_optional(pool)
-            .await?;
-            revision
+            .await?
         }
         ResourceKind::ComponentVersion => {
             let Some(id) = parse_canonical_uuid(reference.resource_id()) else {
                 return Ok((resolution, None));
             };
-            let revision = sqlx::query_scalar::<_, i64>(
+            sqlx::query_scalar::<_, i64>(
                 "SELECT resource_revision FROM component_versions WHERE id = $1",
             )
             .bind(id)
             .fetch_optional(pool)
-            .await?;
-            revision
+            .await?
         }
         _ => return Ok((resolution, None)),
     };
