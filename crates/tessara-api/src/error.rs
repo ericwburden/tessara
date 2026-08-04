@@ -17,6 +17,9 @@ pub enum ApiError {
     /// The request payload or requested workflow transition is invalid.
     #[error("bad request: {0}")]
     BadRequest(String),
+    /// An optimistic command no longer matches current durable state.
+    #[error("conflict: {0}")]
+    Conflict(String),
     /// A role capability bundle mixes installation-global and scope-aware grants.
     #[error("a role cannot mix scope-aware and installation-global capabilities")]
     MixedCapabilityScopeModes,
@@ -65,6 +68,7 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(message) => {
                 (StatusCode::BAD_REQUEST, "bad_request", message.clone())
             }
+            ApiError::Conflict(message) => (StatusCode::CONFLICT, "conflict", message.clone()),
             ApiError::MixedCapabilityScopeModes => (
                 StatusCode::BAD_REQUEST,
                 "mixed_capability_scope_modes",

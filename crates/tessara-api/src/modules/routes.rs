@@ -76,6 +76,10 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/platform/resource-references/resolve",
             post(resolve_resource_reference),
         )
+        .route(
+            "/api/platform/resource-observations/resolve",
+            post(observe_resource_reference),
+        )
 }
 
 async fn download_deployment_receipt(
@@ -566,6 +570,28 @@ async fn resolve_resource_reference(
     )
     .await?;
     Ok(Json(resolution))
+}
+
+async fn observe_resource_reference(
+    State(state): State<AppState>,
+    auth: AuthenticatedRequest,
+    payload: Result<Json<ResolveResourceReferenceRequestV1>, JsonRejection>,
+) -> ModuleHttpResult<Json<super::dto::ResourceObservationResponseV1>> {
+    let Json(payload) = strict_json(payload)?;
+    ensure_schema_v1(payload.schema_version)?;
+    let installation_id = current_installation_id(&state).await?;
+    let (resolution, observation) = reference::observe(
+        &state.pool,
+        &payload.reference,
+        installation_id,
+        &auth.account,
+    )
+    .await?;
+    Ok(Json(super::dto::ResourceObservationResponseV1 {
+        schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
+        resolution,
+        observation,
+    }))
 }
 
 async fn current_installation_id(state: &AppState) -> ModuleHttpResult<Uuid> {

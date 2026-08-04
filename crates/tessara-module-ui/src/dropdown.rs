@@ -2,7 +2,7 @@
 //!
 //! Keep generic trigger, menu, and item composition here; feature-specific choices and side effects belong in caller modules.
 
-use icons::Ellipsis;
+use icons::EllipsisVertical;
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
@@ -45,7 +45,7 @@ pub fn DropdownMenu(#[prop(into)] label: String, children: Children) -> impl Int
                 on:click=move |_| is_open.update(|open| *open = !*open)
             >
                 <span aria-hidden="true">
-                    <Ellipsis class="icon-button__icon"/>
+                    <EllipsisVertical class="icon-button__icon"/>
                 </span>
             </button>
             <button

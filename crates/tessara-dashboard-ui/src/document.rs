@@ -18,15 +18,15 @@ pub const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 pub const DASHBOARD_BINDINGS_JS: &str = include_str!("../assets/dashboard-bindings.js");
 pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
-    "252c2f8357e49ef744e56316d08ebf67b6e44547ac8536fdf3e666c095ba1b73";
+    "38d4d592914df1654658c7e3072485ef4b11d8db0d1ab109f29ebe1518f8040b";
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99";
 pub const DASHBOARD_JS_SHA256: &str =
-    "84c6078852c6fc1f9145366bb8bfcf2da13c18f4cd0068e72aca14db036e84b2";
+    "4539231667bec9c9e4ca11280e76a8c5151474b405418706513178f89727c629";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "ca2bca20d4495516457f431d82117517b0fb6fe31496d2c9b0f86409c7dc68cb";
+    "14d1cba2346ea25118a4057a785b155957925ea658ef8d723dd9c0cf2cdcb7fa";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "8058f7895f1d72fe03a94bb2224ef8f83b0676a3e0a174a9d0ebb62bac183d28";
+    "d53ff1e5dc08752d95403f911e768e899fba04709aeeb86814edf1d23142d70c";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")
@@ -133,6 +133,11 @@ mod tests {
         assert!(DASHBOARD_CSS.contains("@media (max-width: 780px)"));
         assert!(DASHBOARD_CSS.contains(".dashboard-saved-grid > *"));
         assert!(DASHBOARD_CSS.contains(".dashboard-viewer-placement"));
+        assert!(DASHBOARD_CSS.contains(".app-shell"));
+        assert!(DASHBOARD_CSS.contains(".brand-lockup"));
+        assert!(DASHBOARD_CSS.contains(".mobile-nav__panel"));
+        assert!(DASHBOARD_CSS.contains(".dashboard-composition-tile__symbol svg"));
+        assert!(DASHBOARD_CSS.contains("width: 1.9375rem"));
 
         let digest = format!("{:x}", Sha256::digest(DASHBOARD_CSS.as_bytes()));
         assert_eq!(digest, DASHBOARD_CSS_SHA256);
@@ -184,6 +189,11 @@ mod tests {
         assert!(html.contains("Delivery"));
         assert!(html.contains(r#"name="tessara-module-release" content="2.1.0""#));
         assert!(html.contains(DASHBOARD_BOOTSTRAP_SCRIPT_ID));
+        assert!(html.contains(r#"class="app-shell""#));
+        assert!(html.contains(r#"class="brand-lockup""#));
+        assert!(html.contains(r#"class="top-app-bar""#));
+        assert!(html.contains(r#"placeholder="Search Tessara""#));
+        assert!(!html.contains("PROTOTYPE CONTROL"));
         assert!(!html.contains("tessara-web"));
     }
 }

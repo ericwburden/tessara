@@ -21,15 +21,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_components_contract::{
-    COMPONENT_RESOURCE_TYPE as DASHBOARD_COMPONENT_RESOURCE_TYPE,
-    ComponentAction as DashboardComponentTransitionAction,
-    ComponentCatalogResponseV1 as DashboardComponentCatalogResponseV1,
-    ComponentMetadataV1 as DashboardComponentMetadataV1,
-    ComponentRenderKindV1 as DashboardComponentRenderKindV1,
-    ComponentRenderRequestV1 as DashboardComponentRenderRequestV1,
-    ComponentResolutionRequestV1 as DashboardComponentResolutionRequestV1,
-    ComponentResolutionResponseV1 as DashboardComponentResolutionResponseV1,
-    ComponentVersionReferenceV1 as DashboardComponentVersionReferenceV1,
+    COMPONENT_CONTRACT_SCHEMA_VERSION, COMPONENT_RESOURCE_TYPE, ComponentAction,
+    ComponentCatalogResponse, ComponentMetadata, ComponentPublicationState, ComponentRenderKind,
+    ComponentRenderRequest, ComponentResolutionRequest, ComponentResolutionResponse,
+    ComponentVersionReference,
 };
 use tessara_dashboards::{
     DashboardPlacementConfigInput, DashboardPlacementConfigState, DashboardPlacementConfigV1,
@@ -41,7 +36,7 @@ use tessara_module_contract::{
     AuthorizationGrantV2, ContractCompatibilityState, CoreInstallationOwnerState,
     ModuleInstanceOwnerState, ModuleServiceRequestV1, OwnerDataState, ProviderAvailabilityState,
     ResourceAccessState, ResourceIdentityState, ResourceLifecycleState, ResourceOwner,
-    ResourceOwnerState, ResourceResolutionV1, ResourceTypeId, SignedEnvelopeV1,
+    ResourceOwnerState, ResourceResolutionV1, ResourceRevision, ResourceTypeId, SignedEnvelopeV1,
     TypedResourceReference,
 };
 use uuid::Uuid;
@@ -77,7 +72,7 @@ pub struct DashboardPlacementResponseV1 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub component: Option<DashboardComponentMetadataV1>,
+    pub component: Option<ComponentMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_operations: Option<Vec<DashboardPlacementOperation>>,
 }
@@ -197,7 +192,7 @@ pub struct DashboardPlacementDependencyV1 {
 struct StoredPlacement {
     id: Uuid,
     position: i32,
-    reference: DashboardComponentVersionReferenceV1,
+    reference: ComponentVersionReference,
     config: Value,
 }
 
@@ -257,15 +252,15 @@ async fn render_placement(
         serde_json::from_value(row.try_get("component_reference")?).map_err(|_| {
             DashboardModuleError::Conflict("stored Component reference is invalid".into())
         })?;
-    let reference = DashboardComponentVersionReferenceV1::new(reference)
+    let reference = ComponentVersionReference::new(reference)
         .map_err(|error| DashboardModuleError::Conflict(error.to_string()))?;
     let kind = match kind.as_str() {
-        "table" => DashboardComponentRenderKindV1::Table,
-        "bar" => DashboardComponentRenderKindV1::Bar,
-        "line" => DashboardComponentRenderKindV1::Line,
-        "pie" => DashboardComponentRenderKindV1::Pie,
-        "donut" => DashboardComponentRenderKindV1::Donut,
-        "stat-card" => DashboardComponentRenderKindV1::StatCard,
+        "table" => ComponentRenderKind::Table,
+        "bar" => ComponentRenderKind::Bar,
+        "line" => ComponentRenderKind::Line,
+        "pie" => ComponentRenderKind::Pie,
+        "donut" => ComponentRenderKind::Donut,
+        "stat-card" => ComponentRenderKind::StatCard,
         _ => {
             return Err(DashboardModuleError::NotFound(
                 "render kind not found".into(),
@@ -281,9 +276,9 @@ async fn render_placement(
         ));
     }
     let path = "/api/private/dashboard-components/render";
-    let request = DashboardComponentRenderRequestV1 {
-        schema_version: 1,
-        action: DashboardComponentTransitionAction::Render,
+    let request = ComponentRenderRequest {
+        schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
+        action: ComponentAction::Render,
         reference,
         kind,
         resource_authority_revision: metadata.authority_revision,
@@ -438,7 +433,7 @@ async fn reconcile_composition(
             .map(|placement| {
                 let kind = current_resolutions
                     .get(&placement.id)
-                    .and_then(DashboardComponentResolutionResponseV1::metadata)
+                    .and_then(ComponentResolutionResponse::metadata)
                     .map(|metadata| metadata.component_type.as_str())
                     .unwrap_or("redacted");
                 DashboardPlacementConfigInput::new(
@@ -567,7 +562,7 @@ async fn reconcile_composition(
                 }
                 let reference =
                     component_reference(grant.payload.installation_id, component_version_id)?;
-                let wrapped = DashboardComponentVersionReferenceV1::new(reference.clone())
+                let wrapped = ComponentVersionReference::new(reference.clone())
                     .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
                 let resolution = resolve_component(&state, authorization, wrapped).await?;
                 let metadata = resolution.metadata().ok_or_else(|| {
@@ -575,7 +570,7 @@ async fn reconcile_composition(
                         "ComponentVersion cannot be bound in its current state".into(),
                     )
                 })?;
-                if !matches!(metadata.version_status.as_str(), "published" | "superseded")
+                if !metadata.renderable()
                     || metadata.scope_node_ids.is_empty()
                     || !metadata
                         .scope_node_ids
@@ -788,7 +783,7 @@ async fn load_composition_response(
                 component_type: component.component_type,
                 version_number: component.version_number,
                 version_label: component.version_label,
-                version_status: component.version_status,
+                version_status: publication_state_label(component.publication_state).into(),
                 default_grid_width: recommended.width,
                 default_grid_height: recommended.height,
             }
@@ -866,7 +861,7 @@ pub(super) async fn get_composition(
                 component_type: component.component_type,
                 version_number: component.version_number,
                 version_label: component.version_label,
-                version_status: component.version_status,
+                version_status: publication_state_label(component.publication_state).into(),
                 default_grid_width: recommended.width,
                 default_grid_height: recommended.height,
             }
@@ -959,7 +954,7 @@ async fn load_placements_with_authorization(
         .map(|placement| {
             let kind = resolutions
                 .get(&placement.id)
-                .and_then(DashboardComponentResolutionResponseV1::metadata)
+                .and_then(ComponentResolutionResponse::metadata)
                 .map(|metadata| metadata.component_type.as_str())
                 .unwrap_or("redacted");
             DashboardPlacementConfigInput::new(
@@ -1057,7 +1052,7 @@ async fn load_stored_placements(
                 serde_json::from_value(row.try_get("component_reference")?).map_err(|_| {
                     DashboardModuleError::Conflict("stored Component reference is invalid".into())
                 })?;
-            let reference = DashboardComponentVersionReferenceV1::new(reference)
+            let reference = ComponentVersionReference::new(reference)
                 .map_err(|error| DashboardModuleError::Conflict(error.to_string()))?;
             Ok(StoredPlacement {
                 id: row.try_get("id")?,
@@ -1072,12 +1067,22 @@ async fn load_stored_placements(
 async fn resolve_component(
     state: &DashboardModuleState,
     authorization: &str,
-    reference: DashboardComponentVersionReferenceV1,
-) -> Result<DashboardComponentResolutionResponseV1, DashboardModuleError> {
+    reference: ComponentVersionReference,
+) -> Result<ComponentResolutionResponse, DashboardModuleError> {
+    resolve_component_since(state, authorization, reference, None).await
+}
+
+pub(super) async fn resolve_component_since(
+    state: &DashboardModuleState,
+    authorization: &str,
+    reference: ComponentVersionReference,
+    changes_since_revision: Option<ResourceRevision>,
+) -> Result<ComponentResolutionResponse, DashboardModuleError> {
     let path = "/api/private/dashboard-components/resolve";
-    let request = DashboardComponentResolutionRequestV1::new(
-        DashboardComponentTransitionAction::ResolveMetadata,
+    let request = ComponentResolutionRequest::new(
+        ComponentAction::ResolveMetadata,
         reference,
+        changes_since_revision,
     );
     let body = serde_json::to_vec(&request)
         .map_err(|_| DashboardModuleError::Unavailable("service request encoding failed".into()))?;
@@ -1113,7 +1118,7 @@ async fn resolve_component(
 async fn component_catalog(
     state: &DashboardModuleState,
     authorization: &str,
-) -> Result<DashboardComponentCatalogResponseV1, DashboardModuleError> {
+) -> Result<ComponentCatalogResponse, DashboardModuleError> {
     let path = "/api/private/dashboard-components/catalog";
     let service_request = signed_service_request(state, authorization, "POST", path, &[])?;
     let response = state
@@ -1193,8 +1198,8 @@ fn sha256_hex(value: &[u8]) -> String {
         .collect()
 }
 
-fn provider_unavailable_resolution() -> DashboardComponentResolutionResponseV1 {
-    DashboardComponentResolutionResponseV1::new(
+fn provider_unavailable_resolution() -> ComponentResolutionResponse {
+    ComponentResolutionResponse::new(
         ResourceResolutionV1::authorized(
             ResourceOwnerState::CoreInstallation {
                 state: CoreInstallationOwnerState::Live,
@@ -1206,13 +1211,16 @@ fn provider_unavailable_resolution() -> DashboardComponentResolutionResponseV1 {
         )
         .expect("provider-unavailable resolution is valid"),
         None,
+        None,
+        Vec::new(),
+        None,
     )
     .expect("provider-unavailable Dashboard response is metadata-free")
 }
 
 fn renderable_component_metadata(
-    response: &DashboardComponentResolutionResponseV1,
-) -> Result<&DashboardComponentMetadataV1, DashboardModuleError> {
+    response: &ComponentResolutionResponse,
+) -> Result<&ComponentMetadata, DashboardModuleError> {
     let resolution = response.resolution();
     if resolution.access_state() != ResourceAccessState::Authorized {
         return Err(DashboardModuleError::Forbidden);
@@ -1222,13 +1230,24 @@ fn renderable_component_metadata(
             "Component provider unavailable".into(),
         ));
     }
-    response.metadata().ok_or(DashboardModuleError::Forbidden)
+    response
+        .metadata()
+        .filter(|metadata| metadata.renderable())
+        .ok_or(DashboardModuleError::Forbidden)
 }
 
-fn unavailable_component_catalog() -> DashboardComponentCatalogResponseV1 {
-    DashboardComponentCatalogResponseV1 {
-        schema_version: 1,
+fn unavailable_component_catalog() -> ComponentCatalogResponse {
+    ComponentCatalogResponse {
+        schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
         components: Vec::new(),
+    }
+}
+
+const fn publication_state_label(state: ComponentPublicationState) -> &'static str {
+    match state {
+        ComponentPublicationState::Draft => "draft",
+        ComponentPublicationState::Published => "published",
+        ComponentPublicationState::Superseded => "superseded",
     }
 }
 
@@ -1278,7 +1297,7 @@ async fn get_dashboard_summary_with_grant(
     })
 }
 
-async fn load_dashboard_scope(
+pub(super) async fn load_dashboard_scope(
     state: &DashboardModuleState,
     dashboard_id: Uuid,
 ) -> Result<Vec<Uuid>, DashboardModuleError> {
@@ -1290,7 +1309,7 @@ async fn load_dashboard_scope(
     .await?)
 }
 
-fn authorization_header(headers: &HeaderMap) -> Result<&str, DashboardModuleError> {
+pub(super) fn authorization_header(headers: &HeaderMap) -> Result<&str, DashboardModuleError> {
     headers
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
@@ -1388,7 +1407,7 @@ pub(super) fn component_reference(
     TypedResourceReference::new(
         installation_id,
         ResourceOwner::CoreInstallation { installation_id },
-        ResourceTypeId::new(DASHBOARD_COMPONENT_RESOURCE_TYPE)
+        ResourceTypeId::new(COMPONENT_RESOURCE_TYPE)
             .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?,
         component_version_id.to_string(),
     )
@@ -1400,7 +1419,7 @@ mod tests {
     use tessara_module_contract::{ResourceAccessState, ResourceResolutionV1};
 
     use super::{
-        DashboardComponentResolutionResponseV1, disclosed_title, provider_unavailable_resolution,
+        ComponentResolutionResponse, disclosed_title, provider_unavailable_resolution,
         reconciled_title, renderable_component_metadata, resolution_state,
         unavailable_component_catalog,
     };
@@ -1432,9 +1451,12 @@ mod tests {
             Err(crate::DashboardModuleError::Unavailable(message))
                 if message == "Component provider unavailable"
         ));
-        let restricted = DashboardComponentResolutionResponseV1::new(
+        let restricted = ComponentResolutionResponse::new(
             ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized)
                 .expect("valid restricted resolution"),
+            None,
+            None,
+            Vec::new(),
             None,
         )
         .expect("metadata-free restricted response");

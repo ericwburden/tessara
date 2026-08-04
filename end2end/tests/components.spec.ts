@@ -936,9 +936,19 @@ test.describe.serial("Sprint 4A component workflow", () => {
     await expect(page.getByRole("link", { name: "View" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Publish" })).toHaveCount(0);
     let versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
+    await expect(versionsTable.getByRole("columnheader", { name: "Publication" })).toBeVisible();
+    await expect(versionsTable.getByRole("columnheader", { name: "Lifecycle" })).toBeVisible();
+    await expect(versionsTable.getByRole("columnheader", { name: "Actions" })).toBeVisible();
     await expect(versionsTable).toContainText("Draft");
     await expect(versionsTable).toContainText("Published");
     await expect(versionsTable).toContainText(`v${major}`);
+    const lifecycleMenu = versionsTable.getByRole("button", { name: /Open actions for/ }).first();
+    await expect(lifecycleMenu).toBeVisible();
+    const lifecycleMenuBox = await lifecycleMenu.boundingBox();
+    expect(lifecycleMenuBox?.width).toBeLessThanOrEqual(44);
+    await lifecycleMenu.click();
+    await expect(page.getByRole("menuitem", { name: "Deactivate" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Archive" })).toBeVisible();
 
     await page.goto(`/components/${slug}/edit`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");

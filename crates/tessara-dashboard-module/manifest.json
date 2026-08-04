@@ -365,7 +365,10 @@
     {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.update","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"DELETE","required_capability":"dashboards:manage","authorization_action":"dashboards.delete","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"GET","required_capability":"dashboards:manage","authorization_action":"dashboards.load_composition","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.composition","idempotency":"none"},
-    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.reconcile_composition","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"}
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.reconcile_composition","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/dependencies","method":"GET","required_capability":"dashboards:manage","authorization_action":"dashboards.read_dependencies","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.composition","idempotency":"none"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/dependencies/refresh","method":"POST","required_capability":"dashboards:manage","authorization_action":"dashboards.refresh_dependencies","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/dependencies/{finding_id}/actions","method":"POST","required_capability":"dashboards:manage","authorization_action":"dashboards.act_on_dependency","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"}
   ],
   "control_projections": [
     {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"},
@@ -374,7 +377,7 @@
   "assets": [
     {
       "path": "/dashboard.css",
-      "digest": "sha256:252c2f8357e49ef744e56316d08ebf67b6e44547ac8536fdf3e666c095ba1b73",
+      "digest": "sha256:38d4d592914df1654658c7e3072485ef4b11d8db0d1ab109f29ebe1518f8040b",
       "content_type": "text/css; charset=utf-8"
     },
     {
@@ -384,17 +387,17 @@
     },
     {
       "path": "/dashboard.js",
-      "digest": "sha256:84c6078852c6fc1f9145366bb8bfcf2da13c18f4cd0068e72aca14db036e84b2",
+      "digest": "sha256:4539231667bec9c9e4ca11280e76a8c5151474b405418706513178f89727c629",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dashboard-bindings.js",
-      "digest": "sha256:ca2bca20d4495516457f431d82117517b0fb6fe31496d2c9b0f86409c7dc68cb",
+      "digest": "sha256:14d1cba2346ea25118a4057a785b155957925ea658ef8d723dd9c0cf2cdcb7fa",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dashboard.wasm",
-      "digest": "sha256:8058f7895f1d72fe03a94bb2224ef8f83b0676a3e0a174a9d0ebb62bac183d28",
+      "digest": "sha256:d53ff1e5dc08752d95403f911e768e899fba04709aeeb86814edf1d23142d70c",
       "content_type": "application/wasm"
     }
   ]

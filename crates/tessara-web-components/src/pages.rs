@@ -18,7 +18,7 @@ use leptos::prelude::*;
 use leptos::wasm_bindgen::{JsCast, closure::Closure};
 use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
-    EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter,
+    DropdownMenu, EmptyState, ModalDialog, PageHeader, TableFilterHeader, TablePaginationFooter,
 };
 use tessara_web_data_ops::{
     DataOpsFiltersEditor, DataOpsProjectionEditor, DatasetFieldDraft as DataOpsDatasetFieldDraft,
@@ -78,6 +78,10 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
     let can_manage_component = RwSignal::new(false);
+    let lifecycle_confirmation = RwSignal::new(None::<LifecycleSelection>);
+    let lifecycle_pending = RwSignal::new(false);
+    let lifecycle_error = RwSignal::new(None::<String>);
+    let component_ref_for_dialog = component_ref.clone();
 
     Effect::new({
         let component_ref = component_ref.clone();
@@ -114,12 +118,26 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
                             })}
                             <a class="button" href=view_href>"View"</a>
                         </PageHeader>
-                        <ComponentVersionsSection versions=component.versions/>
+                        <ComponentVersionsSection
+                            versions=component.versions
+                            can_manage=can_manage_component.get()
+                            lifecycle_confirmation
+                        />
                     }.into_any()
                 } else {
                     view! { <EmptyState title="Component unavailable" message="Component detail could not be loaded."/> }.into_any()
                 }
             }}
+            <LifecycleConfirmationDialog
+                component_ref=component_ref_for_dialog
+                component
+                is_loading
+                load_error
+                can_manage_component
+                lifecycle_confirmation
+                lifecycle_pending
+                lifecycle_error
+            />
         </section>
     }
 }
@@ -1322,8 +1340,21 @@ fn component_editor_execution_summary(
     )
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LifecycleSelection {
+    component_id: String,
+    version_id: String,
+    version_label: String,
+    action: String,
+    expected_resource_revision: i64,
+}
+
 #[component]
-fn ComponentVersionsSection(versions: Vec<ComponentVersionSummary>) -> impl IntoView {
+fn ComponentVersionsSection(
+    versions: Vec<ComponentVersionSummary>,
+    can_manage: bool,
+    lifecycle_confirmation: RwSignal<Option<LifecycleSelection>>,
+) -> impl IntoView {
     view! {
         <section class="route-panel__section">
             <h2>"Versions"</h2>
@@ -1331,10 +1362,12 @@ fn ComponentVersionsSection(versions: Vec<ComponentVersionSummary>) -> impl Into
                 <thead>
                     <tr>
                         <th>"Version"</th>
-                        <th>"Status"</th>
+                        <th>"Publication"</th>
+                        <th>"Lifecycle"</th>
                         <th>"Kind"</th>
                         <th>"Dataset Version"</th>
                         <th>"Note"</th>
+                        <th>"Actions"</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1344,19 +1377,188 @@ fn ComponentVersionsSection(versions: Vec<ComponentVersionSummary>) -> impl Into
                         } else {
                             version.version_note.clone()
                         };
+                        let lifecycle = version.lifecycle_state.clone();
+                        let actions = lifecycle
+                            .as_deref()
+                            .map(lifecycle_actions)
+                            .unwrap_or_default();
+                        let action_component_id = version.component_id.clone();
+                        let action_version_id = version.id.clone();
+                        let action_version_label = version.version_label.clone();
+                        let action_revision = version.resource_revision;
                         view! {
                             <tr>
                                 <td>{version.version_label}</td>
                                 <td>{component_status_label(&version.status)}</td>
+                                <td>
+                                    {lifecycle.as_deref().map(lifecycle_label).unwrap_or("—")}
+                                </td>
                                 <td>{component_type_label(&version.component_type)}</td>
                                 <td>{format!("v{}", version.dataset_version_major)}</td>
                                 <td>{version_note}</td>
+                                <td>
+                                    {if can_manage && !actions.is_empty() {
+                                        let component_id = action_component_id.clone();
+                                        let version_id = action_version_id.clone();
+                                        let version_label = action_version_label.clone();
+                                        view! {
+                                            <DropdownMenu label=format!("Open actions for {}", version_label)>
+                                                {actions.into_iter().map(|action| {
+                                                    let component_id = component_id.clone();
+                                                    let version_id = version_id.clone();
+                                                    let version_label = version_label.clone();
+                                                    let action_value = action.to_string();
+                                                    view! {
+                                                        <button
+                                                            class=if action == "tombstone" { "dropdown-menu__item dropdown-menu__item--danger" } else { "dropdown-menu__item" }
+                                                            type="button"
+                                                            role="menuitem"
+                                                            on:click=move |_| lifecycle_confirmation.set(Some(LifecycleSelection {
+                                                                component_id: component_id.clone(),
+                                                                version_id: version_id.clone(),
+                                                                version_label: version_label.clone(),
+                                                                action: action_value.clone(),
+                                                                expected_resource_revision: action_revision,
+                                                            }))
+                                                        >
+                                                            <span>{lifecycle_action_label(action)}</span>
+                                                        </button>
+                                                    }
+                                                }).collect_view()}
+                                            </DropdownMenu>
+                                        }.into_any()
+                                    } else {
+                                        view! { <span aria-label="No lifecycle actions">"—"</span> }.into_any()
+                                    }}
+                                </td>
                             </tr>
                         }
                     }).collect_view()}
                 </tbody>
             </DataTable>
         </section>
+    }
+}
+
+fn lifecycle_actions(state: &str) -> Vec<&'static str> {
+    match state {
+        "active" => vec!["deactivate", "archive"],
+        "inactive" => vec!["activate", "archive"],
+        "archived" => vec!["tombstone"],
+        _ => Vec::new(),
+    }
+}
+
+fn lifecycle_label(state: &str) -> &'static str {
+    match state {
+        "active" => "Active",
+        "inactive" => "Inactive",
+        "archived" => "Archived",
+        "tombstoned" => "Tombstoned",
+        _ => "Unknown",
+    }
+}
+
+fn lifecycle_action_label(action: &str) -> &'static str {
+    match action {
+        "activate" => "Activate",
+        "deactivate" => "Deactivate",
+        "archive" => "Archive",
+        "tombstone" => "Tombstone",
+        _ => "Unknown action",
+    }
+}
+
+#[component]
+#[allow(clippy::too_many_arguments)]
+fn LifecycleConfirmationDialog(
+    component_ref: String,
+    component: RwSignal<Option<ComponentDefinition>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+    can_manage_component: RwSignal<bool>,
+    lifecycle_confirmation: RwSignal<Option<LifecycleSelection>>,
+    lifecycle_pending: RwSignal<bool>,
+    lifecycle_error: RwSignal<Option<String>>,
+) -> impl IntoView {
+    let component_ref_for_submit = StoredValue::new(component_ref);
+    view! {
+        <ModalDialog
+            id="component-lifecycle-confirmation"
+            title="Confirm lifecycle change"
+            description="This changes provider-owned Component lifecycle state."
+            open=Signal::derive(move || lifecycle_confirmation.get().is_some())
+            on_close=Callback::new(move |_| {
+                if !lifecycle_pending.get() {
+                    lifecycle_confirmation.set(None);
+                    lifecycle_error.set(None);
+                }
+            })
+            close_label="Cancel lifecycle change"
+        >
+            {move || lifecycle_confirmation.get().map(|selection| {
+                let irreversible = matches!(selection.action.as_str(), "archive" | "tombstone");
+                let submit_selection = selection.clone();
+                let button_class = if selection.action == "tombstone" {
+                    "button button--danger"
+                } else {
+                    "button"
+                };
+                view! {
+                    <div class="component-lifecycle-confirmation">
+                        <p>
+                            {format!(
+                                "{} Component version {}?",
+                                lifecycle_action_label(&selection.action),
+                                selection.version_label,
+                            )}
+                        </p>
+                        {irreversible.then(|| view! {
+                            <p class="form-help form-help--danger">
+                                {if selection.action == "tombstone" {
+                                    "Tombstoning is terminal and suppresses external metadata and rendering."
+                                } else {
+                                    "Archived versions cannot be reactivated."
+                                }}
+                            </p>
+                        })}
+                        {move || lifecycle_error.get().map(|message| view! {
+                            <p class="form-error" role="alert">{message}</p>
+                        })}
+                        <div class="modal-dialog__footer">
+                            <button
+                                class="button button--secondary"
+                                type="button"
+                                disabled=move || lifecycle_pending.get()
+                                on:click=move |_| lifecycle_confirmation.set(None)
+                            >
+                                "Cancel"
+                            </button>
+                            <button
+                                class=button_class
+                                type="button"
+                                disabled=move || lifecycle_pending.get()
+                                on:click={
+                                    move |_| submit_component_lifecycle(
+                                        submit_selection.clone(),
+                                        component_ref_for_submit.get_value(),
+                                        component,
+                                        is_loading,
+                                        load_error,
+                                        can_manage_component,
+                                        lifecycle_confirmation,
+                                        lifecycle_pending,
+                                        lifecycle_error,
+                                    )
+                                }
+                            >
+                                {move || if lifecycle_pending.get() { "Applying…" } else { lifecycle_action_label(&selection.action) }}
+                            </button>
+                        </div>
+                    </div>
+                }
+            })}
+        </ModalDialog>
     }
 }
 
@@ -2005,6 +2207,46 @@ fn load_component(
 }
 
 #[cfg(feature = "hydrate")]
+#[allow(clippy::too_many_arguments)]
+fn submit_component_lifecycle(
+    selection: LifecycleSelection,
+    component_ref: String,
+    component: RwSignal<Option<ComponentDefinition>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+    can_manage_component: RwSignal<bool>,
+    lifecycle_confirmation: RwSignal<Option<LifecycleSelection>>,
+    lifecycle_pending: RwSignal<bool>,
+    lifecycle_error: RwSignal<Option<String>>,
+) {
+    leptos::task::spawn_local(async move {
+        lifecycle_pending.set(true);
+        lifecycle_error.set(None);
+        match api::change_component_version_lifecycle(
+            &selection.component_id,
+            &selection.version_id,
+            &selection.action,
+            selection.expected_resource_revision,
+        )
+        .await
+        {
+            Ok(_) => {
+                lifecycle_confirmation.set(None);
+                load_component(
+                    component_ref,
+                    component,
+                    is_loading,
+                    load_error,
+                    can_manage_component,
+                );
+            }
+            Err(message) => lifecycle_error.set(Some(message)),
+        }
+        lifecycle_pending.set(false);
+    });
+}
+
+#[cfg(feature = "hydrate")]
 async fn fetch_authoring_or_reader_component(
     component_ref: &str,
 ) -> Result<(Option<ComponentDefinition>, bool), String> {
@@ -2178,6 +2420,21 @@ fn load_component(
     _: RwSignal<bool>,
 ) {
     is_loading.set(false);
+}
+
+#[cfg(not(feature = "hydrate"))]
+#[allow(clippy::too_many_arguments)]
+fn submit_component_lifecycle(
+    _: LifecycleSelection,
+    _: String,
+    _: RwSignal<Option<ComponentDefinition>>,
+    _: RwSignal<bool>,
+    _: RwSignal<Option<String>>,
+    _: RwSignal<bool>,
+    _: RwSignal<Option<LifecycleSelection>>,
+    _: RwSignal<bool>,
+    _: RwSignal<Option<String>>,
+) {
 }
 
 #[cfg(feature = "hydrate")]

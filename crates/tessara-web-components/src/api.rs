@@ -4,9 +4,9 @@
 use super::http::{fetch_json_request, send_json_request};
 #[cfg(feature = "hydrate")]
 use super::types::{
-    ComponentDefinition, ComponentSummary, ComponentValidationResponse,
-    CreateComponentVersionRequest, DatasetDistinctValues, DatasetSummary, IdResponse,
-    SaveComponentEditRequest,
+    ComponentDefinition, ComponentLifecycleRequest, ComponentLifecycleResponse, ComponentSummary,
+    ComponentValidationResponse, CreateComponentVersionRequest, DatasetDistinctValues,
+    DatasetSummary, IdResponse, SaveComponentEditRequest,
 };
 #[cfg(feature = "hydrate")]
 use tessara_web_component_viewer::ComponentVisual;
@@ -100,6 +100,28 @@ pub(crate) async fn delete_component_version(
         )),
         "{}".into(),
         "Delete component draft",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn change_component_version_lifecycle(
+    component_id: &str,
+    version_id: &str,
+    action: &str,
+    expected_resource_revision: i64,
+) -> Result<ComponentLifecycleResponse, String> {
+    let payload = ComponentLifecycleRequest {
+        action: action.into(),
+        expected_resource_revision,
+    };
+    send_json_request(
+        gloo_net::http::Request::post(&format!(
+            "/api/admin/components/{component_id}/versions/{version_id}/lifecycle"
+        )),
+        serde_json::to_string(&payload)
+            .map_err(|_| "Component lifecycle payload is invalid.".to_string())?,
+        "Component lifecycle",
     )
     .await
 }

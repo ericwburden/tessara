@@ -62,6 +62,8 @@ use uuid::Uuid;
 
 /// The first supported module manifest and transition descriptor schema.
 pub const CONTRACT_SCHEMA_VERSION_V1: u16 = 1;
+/// Exact schema version for the policy-neutral resource observation envelope.
+pub const RESOURCE_OBSERVATION_SCHEMA_VERSION_V1: u16 = 1;
 pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 3;
 pub const CURRENT_CORE_RELEASE: &str = "0.1.0";
 pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "1.0.0";
@@ -796,6 +798,161 @@ impl<'de> Deserialize<'de> for TypedResourceReference {
             wire.resource_id,
         )
         .map_err(de::Error::custom)
+    }
+}
+
+/// Exact provider contract identity used to make an observation.
+///
+/// The version is concrete rather than a requirement because an observation
+/// records what was actually resolved, not what a consumer might accept.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderContractIdentity {
+    contract_id: FunctionalContractId,
+    contract_version: Version,
+}
+
+impl ProviderContractIdentity {
+    pub const fn new(contract_id: FunctionalContractId, contract_version: Version) -> Self {
+        Self {
+            contract_id,
+            contract_version,
+        }
+    }
+
+    pub const fn contract_id(&self) -> &FunctionalContractId {
+        &self.contract_id
+    }
+
+    pub const fn contract_version(&self) -> &Version {
+        &self.contract_version
+    }
+}
+
+/// Provider-declared mechanism by which a consumer observes resource change.
+///
+/// Sprint 7B deliberately promises no event delivery or scheduled polling.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResourceObservationStrategy {
+    LiveResolutionWithRevision,
+}
+
+/// Non-zero monotonic marker in one provider resource's revision domain.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
+pub struct ResourceRevision(u64);
+
+impl ResourceRevision {
+    pub fn new(value: u64) -> Result<Self, ResourceRevisionError> {
+        if value == 0 {
+            return Err(ResourceRevisionError::Zero);
+        }
+        Ok(Self(value))
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    pub const fn is_later_than(self, previous: Self) -> bool {
+        self.0 > previous.0
+    }
+}
+
+impl<'de> Deserialize<'de> for ResourceRevision {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::new(u64::deserialize(deserializer)?).map_err(de::Error::custom)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ResourceRevisionError {
+    #[error("resource revision must be greater than zero")]
+    Zero,
+}
+
+/// Policy-neutral record of one exact live resource resolution.
+///
+/// Provider lifecycle meaning and consumer findings/actions intentionally do
+/// not belong in this envelope.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ResourceObservationV1 {
+    schema_version: u16,
+    reference: TypedResourceReference,
+    provider_contract: ProviderContractIdentity,
+    strategy: ResourceObservationStrategy,
+    resource_revision: ResourceRevision,
+}
+
+impl ResourceObservationV1 {
+    pub fn new(
+        reference: TypedResourceReference,
+        provider_contract: ProviderContractIdentity,
+        strategy: ResourceObservationStrategy,
+        resource_revision: ResourceRevision,
+    ) -> Self {
+        Self {
+            schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+            reference,
+            provider_contract,
+            strategy,
+            resource_revision,
+        }
+    }
+
+    pub const fn schema_version(&self) -> u16 {
+        self.schema_version
+    }
+
+    pub const fn reference(&self) -> &TypedResourceReference {
+        &self.reference
+    }
+
+    pub const fn provider_contract(&self) -> &ProviderContractIdentity {
+        &self.provider_contract
+    }
+
+    pub const fn strategy(&self) -> ResourceObservationStrategy {
+        self.strategy
+    }
+
+    pub const fn resource_revision(&self) -> ResourceRevision {
+        self.resource_revision
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResourceObservationV1Wire {
+    schema_version: u16,
+    reference: TypedResourceReference,
+    provider_contract: ProviderContractIdentity,
+    strategy: ResourceObservationStrategy,
+    resource_revision: ResourceRevision,
+}
+
+impl<'de> Deserialize<'de> for ResourceObservationV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = ResourceObservationV1Wire::deserialize(deserializer)?;
+        if wire.schema_version != RESOURCE_OBSERVATION_SCHEMA_VERSION_V1 {
+            return Err(de::Error::custom(format!(
+                "resource observation schema version {} is unsupported; expected {}",
+                wire.schema_version, RESOURCE_OBSERVATION_SCHEMA_VERSION_V1
+            )));
+        }
+        Ok(Self::new(
+            wire.reference,
+            wire.provider_contract,
+            wire.strategy,
+            wire.resource_revision,
+        ))
     }
 }
 

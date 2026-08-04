@@ -1,6 +1,8 @@
 //! Policy-neutral shell presentation and UI primitives for Tessara modules.
 
 #[cfg(feature = "components")]
+mod application_shell;
+#[cfg(feature = "components")]
 mod breadcrumb;
 #[cfg(feature = "components")]
 mod button;
@@ -54,6 +56,8 @@ use tessara_module_contract::{
 };
 use uuid::Uuid;
 
+#[cfg(feature = "components")]
+pub use application_shell::ApplicationShell;
 #[cfg(feature = "components")]
 pub use breadcrumb::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -117,7 +121,7 @@ pub fn empty_view() -> AnyView {
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MODULE_SHELL_CSS: &str = include_str!("../assets/module-shell.css");
 pub const MODULE_SHELL_CSS_SHA256: &str =
-    "fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3";
+    "ca238aca616f242bfa144764a09ae4a76d0b6f075a288604cbb333d90859af46";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
@@ -169,9 +173,17 @@ pub fn render_module_document(
         .navigation
         .iter()
         .map(|item| {
+            let active = if item.href == presentation.current_destination {
+                " sidebar-link is-active"
+            } else {
+                ""
+            };
             format!(
-                r#"<li><a href="{}">{}</a></li>"#,
+                r#"<a class="sidebar-link{}" href="{}" title="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#,
+                active,
                 escape_attribute(&item.href),
+                escape_attribute(&item.label),
+                navigation_icon(),
                 escape_text(&item.label)
             )
         })
@@ -185,7 +197,7 @@ pub fn render_module_document(
         })
         .unwrap_or_default();
     format!(
-        r#"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{} · Tessara</title><script>{}</script><link rel="stylesheet" href="{}"></head><body data-shell-state="{}" data-correlation-id="{}"><aside><a href="{}">Tessara</a><nav aria-label="Main navigation"><ul>{}</ul></nav></aside><header><strong>{}</strong><span>{}</span></header><main id="module-content">{}</main>{}</body></html>"#,
+        r##"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F172A"><title>{} · Tessara</title><script>{}</script><link rel="stylesheet" href="{}"></head><body class="tessara-app" data-shell-state="{}" data-correlation-id="{}"><main class="app-shell"><aside class="sidebar" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside><section class="app-main" aria-label="Application content"><header class="top-app-bar"><div class="top-app-bar__title-row"><button class="icon-button mobile-nav__toggle" type="button" aria-label="Open navigation" aria-expanded="false">{}</button><span class="top-app-bar__title">{}</span></div><div class="top-app-bar__actions"><label class="search-field"><span class="sr-only">Search Tessara</span><input type="search" placeholder="Search Tessara"></label><div class="theme-toggle"><button class="icon-button theme-toggle__trigger" type="button" aria-label="Theme options" aria-haspopup="menu" aria-expanded="false">{}</button><button class="theme-toggle__scrim" type="button" aria-label="Close theme options"></button><div class="theme-toggle__menu blurred-surface" role="menu" aria-label="Theme options"><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="system">System</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="light">Light</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="dark">Dark</button></div></div><button class="icon-button" type="button" aria-label="Notifications" title="Notifications">{}</button><button class="icon-button" type="button" aria-label="Help" title="Help">{}</button></div></header><div class="app-page"><div id="module-content">{}</div></div></section><button class="mobile-nav__scrim" type="button" aria-label="Close navigation"></button><aside class="mobile-nav__panel blurred-surface" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside></main>{}<script>{}</script></body></html>"##,
         escape_attribute(&presentation.locale),
         theme,
         theme,
@@ -194,13 +206,62 @@ pub fn render_module_document(
         escape_attribute(stylesheet_href),
         document_state_name(presentation.document_state),
         presentation.correlation_id,
-        escape_attribute(&presentation.return_destination),
+        brand_markup(&presentation.return_destination),
         navigation,
+        account_markup(&presentation.actor.display_name),
+        menu_icon(),
         escape_text(&presentation.document_title),
-        escape_text(&presentation.actor.display_name),
+        theme_icon(),
+        bell_icon(),
+        help_icon(),
         body_html,
+        brand_markup(&presentation.return_destination),
+        presentation.navigation.iter().map(|item| format!(r#"<a class="sidebar-link" href="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#, escape_attribute(&item.href), navigation_icon(), escape_text(&item.label))).collect::<String>(),
+        account_markup(&presentation.actor.display_name),
         hydration,
+        shell_interaction_script(),
     )
+}
+
+fn brand_markup(href: &str) -> String {
+    format!(
+        r#"<a class="brand-lockup" href="{}"><span class="brand-mark" aria-hidden="true"><img src="/assets/tessara-icon-256.svg" alt=""></span><span class="brand-copy"><strong>Tessara</strong></span></a>"#,
+        escape_attribute(href)
+    )
+}
+
+fn account_markup(display_name: &str) -> String {
+    let initials = display_name
+        .split_whitespace()
+        .filter_map(|part| part.chars().next())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase();
+    format!(
+        r#"<section class="account-card" aria-label="Account context"><span class="account-avatar">{}</span><span class="account-copy"><strong>{}</strong><small>Active session</small></span></section>"#,
+        escape_text(&initials),
+        escape_text(display_name)
+    )
+}
+
+fn navigation_icon() -> &'static str {
+    r#"<svg class="sidebar-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>"#
+}
+fn menu_icon() -> &'static str {
+    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>"#
+}
+fn theme_icon() -> &'static str {
+    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>"#
+}
+fn bell_icon() -> &'static str {
+    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>"#
+}
+fn help_icon() -> &'static str {
+    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 1-1 1.7M12 17h.01"/></svg>"#
+}
+
+fn shell_interaction_script() -> &'static str {
+    r#"(function(){const root=document.documentElement;const shell=document.querySelector('.app-shell');const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{shell?.classList.remove('mobile-nav-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{shell?.classList.add('mobile-nav-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu)})();"#
 }
 
 fn theme_bootstrap_script(fallback: &str) -> String {
@@ -289,7 +350,7 @@ mod tests {
         assert!(html.contains("data-theme-preference=\"dark\""));
         assert!(html.contains("tessara.themePreference"));
         assert!(html.contains("&lt;Operator&gt;"));
-        assert!(html.contains("<main id=\"module-content\"><p>Recovery</p></main>"));
+        assert!(html.contains("<div id=\"module-content\"><p>Recovery</p></div>"));
         assert!(!html.contains("type=\"module\""));
     }
 

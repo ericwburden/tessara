@@ -1,11 +1,13 @@
 //! Transition adapters for installation-bound typed resource references.
 
+use semver::Version;
 use sqlx::PgPool;
 use tessara_module_contract::{
-    ContractCompatibilityState, CoreInstallationOwnerState, ModuleInstanceOwnerState,
-    OwnerDataState, ProviderAvailabilityState, ResourceAccessState, ResourceIdentityState,
-    ResourceLifecycleState, ResourceOwner, ResourceOwnerState, ResourceResolutionV1,
-    TypedResourceReference,
+    ContractCompatibilityState, CoreInstallationOwnerState, FunctionalContractId,
+    ModuleInstanceOwnerState, OwnerDataState, ProviderAvailabilityState, ProviderContractIdentity,
+    ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
+    ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceOwnerState,
+    ResourceResolutionV1, ResourceRevision, TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -200,6 +202,87 @@ pub(crate) async fn resolve(
     }
 }
 
+/// Produces an exact live observation only after the same authorization-first
+/// resolution used by the transition reference adapter. Restricted and unknown
+/// resources never carry an observation envelope.
+pub(crate) async fn observe(
+    pool: &PgPool,
+    reference: &TypedResourceReference,
+    installation_id: Uuid,
+    account: &AccountContext,
+) -> ModuleHttpResult<(ResourceResolutionV1, Option<ResourceObservationV1>)> {
+    let resolution = resolve(pool, reference, installation_id, account).await?;
+    if resolution.access_state() != ResourceAccessState::Authorized {
+        return Ok((resolution, None));
+    }
+    let Some(spec) = resource_spec(reference.resource_type().as_str()) else {
+        return Ok((resolution, None));
+    };
+    let Some((contract_id, contract_version)) = observation_contract(spec.kind) else {
+        return Ok((resolution, None));
+    };
+    let revision = match spec.kind {
+        ResourceKind::DatasetRevision => {
+            let Some(id) = parse_canonical_uuid(reference.resource_id()) else {
+                return Ok((resolution, None));
+            };
+            let revision = sqlx::query_scalar::<_, i64>(
+                "SELECT resource_revision FROM dataset_revisions WHERE id = $1",
+            )
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+            revision
+        }
+        ResourceKind::ComponentVersion => {
+            let Some(id) = parse_canonical_uuid(reference.resource_id()) else {
+                return Ok((resolution, None));
+            };
+            let revision = sqlx::query_scalar::<_, i64>(
+                "SELECT resource_revision FROM component_versions WHERE id = $1",
+            )
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+            revision
+        }
+        _ => return Ok((resolution, None)),
+    };
+    let Some(revision) = revision else {
+        return Ok((resolution, None));
+    };
+    let revision = u64::try_from(revision)
+        .ok()
+        .and_then(|value| ResourceRevision::new(value).ok())
+        .ok_or(ModuleHttpError::Internal(
+            "provider resource revision was invalid",
+        ))?;
+    let contract_id = FunctionalContractId::new(contract_id)
+        .map_err(|_| ModuleHttpError::Internal("provider contract identity was invalid"))?;
+    let contract_version = Version::parse(contract_version)
+        .map_err(|_| ModuleHttpError::Internal("provider contract version was invalid"))?;
+    Ok((
+        resolution,
+        Some(ResourceObservationV1::new(
+            reference.clone(),
+            ProviderContractIdentity::new(contract_id, contract_version),
+            ResourceObservationStrategy::LiveResolutionWithRevision,
+            revision,
+        )),
+    ))
+}
+
+fn observation_contract(kind: ResourceKind) -> Option<(&'static str, &'static str)> {
+    match kind {
+        ResourceKind::DatasetRevision => Some(("tessara.datasets.dataset-revision", "1.0.0")),
+        ResourceKind::ComponentVersion => Some((
+            tessara_components_contract::COMPONENT_CONTRACT_ID,
+            tessara_components_contract::COMPONENT_CONTRACT_VERSION,
+        )),
+        _ => None,
+    }
+}
+
 async fn resolve_ownership_bound_response(
     pool: &PgPool,
     reference: &TypedResourceReference,
@@ -389,15 +472,19 @@ async fn load_lifecycle(
 
 #[cfg(test)]
 mod tests {
+    use semver::Version;
     use tessara_module_contract::{
-        ResourceAccessState, ResourceOwner, ResourceTypeId, TypedResourceReference,
+        FunctionalContractId, ProviderContractIdentity, ResourceAccessState,
+        ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceRevision,
+        ResourceTypeId, TypedResourceReference,
     };
     use uuid::Uuid;
 
     use crate::auth::{AccountContext, CapabilityScope};
 
     use super::{
-        CreateResourceReferenceRequestV1, construct, parse_dataset_major_line, resource_spec,
+        CreateResourceReferenceRequestV1, ResourceKind, construct, observation_contract,
+        parse_dataset_major_line, resource_spec,
     };
 
     #[test]
@@ -499,11 +586,67 @@ mod tests {
                     .await
                     .expect("restricted resolution");
                 wires.push(serde_json::to_value(resolution).expect("serialize"));
+                let (resolution, observation) =
+                    super::observe(&pool, &reference, installation_id, &actor)
+                        .await
+                        .expect("restricted observation");
+                assert!(observation.is_none());
+                assert_eq!(
+                    serde_json::to_value(resolution).expect("serialize"),
+                    *wires.last().expect("resolution wire")
+                );
             }
             assert_eq!(wires[0], wires[1]);
             assert_eq!(wires[0]["owner_state"]["kind"], "undisclosed");
             assert_eq!(wires[0]["resource_identity_state"], "undisclosed");
         }
+    }
+
+    #[test]
+    fn dataset_and_component_adapters_share_observation_semantics_but_not_provider_identity() {
+        let installation_id = Uuid::new_v4();
+        let owner = ResourceOwner::CoreInstallation { installation_id };
+        let resource_id = Uuid::new_v4().to_string();
+        let make = |kind: ResourceKind, resource_type: &str, revision: u64| {
+            let (contract_id, contract_version) =
+                observation_contract(kind).expect("observable transition kind");
+            ResourceObservationV1::new(
+                TypedResourceReference::new(
+                    installation_id,
+                    owner.clone(),
+                    ResourceTypeId::new(resource_type).expect("resource type"),
+                    resource_id.clone(),
+                )
+                .expect("reference"),
+                ProviderContractIdentity::new(
+                    FunctionalContractId::new(contract_id).expect("contract id"),
+                    Version::parse(contract_version).expect("contract version"),
+                ),
+                ResourceObservationStrategy::LiveResolutionWithRevision,
+                ResourceRevision::new(revision).expect("revision"),
+            )
+        };
+        let dataset = make(
+            ResourceKind::DatasetRevision,
+            "tessara.transition.dataset_revision",
+            4,
+        );
+        let component = make(
+            ResourceKind::ComponentVersion,
+            "tessara.transition.component_version",
+            4,
+        );
+        assert_eq!(dataset.strategy(), component.strategy());
+        assert_eq!(dataset.resource_revision(), component.resource_revision());
+        assert_eq!(dataset.reference().owner(), component.reference().owner());
+        assert_eq!(
+            dataset.reference().resource_id(),
+            component.reference().resource_id()
+        );
+        assert_ne!(
+            dataset.provider_contract().contract_id(),
+            component.provider_contract().contract_id()
+        );
     }
 
     fn account(capability: &str, global: bool) -> AccountContext {

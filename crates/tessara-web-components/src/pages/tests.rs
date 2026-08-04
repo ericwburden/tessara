@@ -17,6 +17,7 @@ use super::{
     table_page_size_from_config, table_sort_from_config, table_visible_columns_from_config,
     visual_summary_field_ready,
 };
+use super::{lifecycle_action_label, lifecycle_actions};
 use crate::types::{
     ComponentSummary, DatasetFieldDefinition, DatasetProvenanceItem, DatasetProvenanceSummary,
     DatasetRevisionFieldSummary,
@@ -47,6 +48,17 @@ fn dataset_field(key: &str) -> DatasetFieldDefinition {
         label: key.into(),
         field_type: "text".into(),
     }
+}
+
+#[test]
+fn component_version_lifecycle_menu_matches_the_provider_state_machine() {
+    assert_eq!(lifecycle_actions("active"), vec!["deactivate", "archive"]);
+    assert_eq!(lifecycle_actions("inactive"), vec!["activate", "archive"]);
+    assert_eq!(lifecycle_actions("archived"), vec!["tombstone"]);
+    assert!(lifecycle_actions("tombstoned").is_empty());
+    assert!(lifecycle_actions("draft").is_empty());
+    assert_eq!(lifecycle_action_label("deactivate"), "Deactivate");
+    assert_eq!(lifecycle_action_label("tombstone"), "Tombstone");
 }
 
 #[test]
@@ -476,6 +488,9 @@ fn component_version(status: &str, id: &str) -> ComponentVersionSummary {
         binding_mode: "major_line".into(),
         component_type: "table".into(),
         status: status.into(),
+        lifecycle_state: (status != "draft").then(|| "active".into()),
+        resource_revision: 1,
+        successor_version_id: None,
         version_label: "1".into(),
         version_note: String::new(),
         config: serde_json::json!({ "visible_columns": ["program"] }),

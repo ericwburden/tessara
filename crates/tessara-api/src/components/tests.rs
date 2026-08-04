@@ -7,13 +7,47 @@ use tessara_data_ops::{DataField, FieldType};
 use uuid::Uuid;
 
 use super::{
-    ComponentSummary, ComponentTableQuery, ComponentVersionForTable, CreateComponentRequest,
-    CreateComponentVersionRequest, UpdateComponentRequest, component_config_validation_finding,
-    component_filter_sql, component_pagination_sql, component_visual_source_limit_clause,
-    effective_component_page_size, parse_component_query_filters, parse_component_sort,
-    require_component_version_draft, table_order_by_sql, table_search_fields,
-    validate_component_config, visible_table_fields, visual_from_rows,
+    ComponentLifecycleAction, ComponentSummary, ComponentTableQuery, ComponentVersionForTable,
+    CreateComponentRequest, CreateComponentVersionRequest, UpdateComponentRequest,
+    component_config_validation_finding, component_filter_sql, component_pagination_sql,
+    component_visual_source_limit_clause, effective_component_page_size, lifecycle_transition,
+    parse_component_query_filters, parse_component_sort, require_component_version_draft,
+    table_order_by_sql, table_search_fields, validate_component_config, visible_table_fields,
+    visual_from_rows,
 };
+
+#[test]
+fn lifecycle_state_machine_is_exhaustive_and_terminal() {
+    assert_eq!(
+        lifecycle_transition("active", ComponentLifecycleAction::Deactivate).unwrap(),
+        "inactive"
+    );
+    assert_eq!(
+        lifecycle_transition("inactive", ComponentLifecycleAction::Activate).unwrap(),
+        "active"
+    );
+    assert_eq!(
+        lifecycle_transition("active", ComponentLifecycleAction::Archive).unwrap(),
+        "archived"
+    );
+    assert_eq!(
+        lifecycle_transition("inactive", ComponentLifecycleAction::Archive).unwrap(),
+        "archived"
+    );
+    assert_eq!(
+        lifecycle_transition("archived", ComponentLifecycleAction::Tombstone).unwrap(),
+        "tombstoned"
+    );
+    for action in [
+        ComponentLifecycleAction::Activate,
+        ComponentLifecycleAction::Deactivate,
+        ComponentLifecycleAction::Archive,
+        ComponentLifecycleAction::Tombstone,
+    ] {
+        assert!(lifecycle_transition("tombstoned", action).is_err());
+    }
+    assert!(lifecycle_transition("archived", ComponentLifecycleAction::Activate).is_err());
+}
 
 fn field(key: &str, field_type: FieldType) -> DataField {
     DataField {

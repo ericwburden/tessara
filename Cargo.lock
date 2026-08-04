@@ -4668,6 +4668,7 @@ dependencies = [
  "password-hash",
  "rand_core 0.6.4",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "sha2",
@@ -4699,10 +4700,12 @@ version = "0.1.0"
 
 [[package]]
 name = "tessara-components-contract"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
+ "semver",
  "serde",
  "serde_json",
+ "sha2",
  "tessara-module-contract",
  "thiserror 2.0.18",
  "uuid",

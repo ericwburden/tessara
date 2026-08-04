@@ -341,6 +341,9 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(
         page.getByRole("heading", { level: 1, name: fixture.name }),
       ).toBeVisible();
+      await expect(page.getByRole("button", { name: /Dependency health/ })).toBeVisible();
+      await expect(page.getByText("One placement needs review before this Dashboard is healthy.")).toHaveCount(0);
+      await expect(page.getByText("PROTOTYPE CONTROL", { exact: false })).toHaveCount(0);
       const detailVisibility = page.getByRole("button", {
         name: /^Visibility \d+ Nodes?$/,
       });
@@ -1366,6 +1369,11 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const tile = page.locator(".dashboard-composition-tile");
       await expect(tile).toHaveCount(1);
       await expect(tile).toHaveAttribute("data-placement-selected", "true");
+      const symbolSize = await tile.locator(".dashboard-composition-tile__symbol svg").evaluate((icon) => {
+        const style = getComputedStyle(icon);
+        return { width: style.width, height: style.height };
+      });
+      expect(symbolSize).toEqual({ width: "31px", height: "31px" });
       await expect(page.getByRole("button", { name: "Save layout" })).toBeEnabled();
       await expect(
         page.getByRole("button", { name: "Preview Dashboard" }),

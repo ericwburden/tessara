@@ -37,6 +37,12 @@ pub(crate) struct ComponentVersionSummary {
     pub(crate) binding_mode: String,
     pub(crate) component_type: String,
     pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) lifecycle_state: Option<String>,
+    #[serde(default)]
+    pub(crate) resource_revision: i64,
+    #[serde(default)]
+    pub(crate) successor_version_id: Option<String>,
     pub(crate) version_label: String,
     #[serde(default)]
     pub(crate) version_note: String,
@@ -90,6 +96,19 @@ pub(crate) struct CreateComponentVersionRequest {
 #[derive(Clone, Deserialize, PartialEq, Eq)]
 pub(crate) struct IdResponse {
     pub(crate) id: String,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct ComponentLifecycleRequest {
+    pub(crate) action: String,
+    pub(crate) expected_resource_revision: i64,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+pub(crate) struct ComponentLifecycleResponse {
+    pub(crate) id: String,
+    pub(crate) lifecycle_state: String,
+    pub(crate) resource_revision: i64,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq)]

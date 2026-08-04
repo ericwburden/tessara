@@ -534,12 +534,16 @@ mod tests {
 
     #[test]
     fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0xd6bb_6628_7967_757d);
+        assert_eq!(fnv1a(BASELINE), 0x40b7_f317_ba89_3ea3);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains(
             "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
         ));
         assert!(baseline.contains("component_versions_component_type_supported_chk"));
+        assert!(baseline.contains("CREATE TYPE component_lifecycle_state"));
+        assert!(baseline.contains("CREATE TABLE component_version_change_events"));
+        assert!(baseline.contains("component_version_change_events_immutable"));
+        assert!(baseline.contains("component_versions_resource_revision"));
         for kind in ["table", "bar", "line", "pie", "donut", "stat_card"] {
             assert!(baseline.contains(&format!("'{kind}'::component_type")));
         }
@@ -550,7 +554,7 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "ed660def1f153ccb678d64f93c9ca7cc831ea4ba21bfefdb02458f4cb146487c"
+            "09427738d3cf5496c91904f578a63725bc867a3d0e16f75f9bd92a74a3d305c0"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));
