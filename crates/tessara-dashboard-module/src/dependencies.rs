@@ -638,6 +638,21 @@ async fn refresh_placement(
     let result_code = finding.as_ref().map_or("healthy", |(code, _)| *code);
     if let Some((finding_code, impact)) = finding {
         sqlx::query(
+            "UPDATE dashboard_dependency_findings
+             SET disposition='resolved',resolved_at=now(),updated_at=now(),
+                 finding_revision=finding_revision+1
+             WHERE placement_id=$1 AND reference_digest=$2
+               AND disposition IN ('open','deferred')
+               AND (observed_resource_revision IS DISTINCT FROM $3
+                    OR finding_code IS DISTINCT FROM $4)",
+        )
+        .bind(placement.id)
+        .bind(&reference_digest)
+        .bind(resource_revision.unwrap_or(0))
+        .bind(finding_code)
+        .execute(&state.pool)
+        .await?;
+        sqlx::query(
             "INSERT INTO dashboard_dependency_findings
              (id,dashboard_id,placement_id,observation_id,saved_reference,reference_digest,
               observed_resource_revision,finding_code,impact)
