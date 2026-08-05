@@ -64,6 +64,20 @@ function Test-Sprint8AAcceptanceContract {
         }
     }
 
+    $blueprint = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/blueprints/reference.json") -Raw | ConvertFrom-Json
+    $expectedNavigation = [ordered]@{
+        "tessara.reference.scoped-records.navigation" = 7
+        "tessara.components.navigation" = 8
+        "tessara.dashboards.navigation" = 9
+        "core.admin.composition" = 4
+    }
+    foreach ($destinationId in $expectedNavigation.Keys) {
+        $placement = @($blueprint.navigation | Where-Object destination_id -CEQ $destinationId)
+        if ($placement.Count -ne 1 -or [int]$placement[0].order -ne $expectedNavigation[$destinationId]) {
+            throw "Sprint 8A navigation placement '$destinationId' does not match the recalculated canonical order."
+        }
+    }
+
     foreach ($scenario in 1..8) {
         $scriptPath = Join-Path $repoRoot ("docs/sprints/sprint-8a-uat/uat-8a-{0:d2}.md" -f $scenario)
         if (-not (Test-Path -LiteralPath $scriptPath)) { throw "Missing Sprint 8A UAT script '$scriptPath'." }

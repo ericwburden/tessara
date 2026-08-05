@@ -1,10 +1,10 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 9 completed a fail-late diagnostic harvest
-and was invalidated with Validation Readiness attempt 11. Its consolidated
-two-defect correction is ready for the required complete readiness/rehearsal
-rerun. No candidate has been frozen; SIT, formal UAT, and closeout remain Not
-Run.
+Status: Candidate Rehearsal attempt 10 completed a fail-late diagnostic harvest
+and was invalidated with Validation Readiness attempt 12. Its one-defect
+navigation-order correction is ready for the required complete
+readiness/rehearsal rerun. No candidate has been frozen; SIT, formal UAT, and
+closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -186,6 +186,12 @@ automated UAT diagnostics, failure-containment successor health, and the
 Component upgrade/rollback baseline. Formal deployed acceptance smoke remains
 SIT-owned and is not a rehearsal substitute.
 
+After removing the old Core-owned Component and Dashboard transition entries,
+the fresh default Main placements after Datasets are Scoped Records at 7,
+Components at 8, and Dashboard at 9. The Sprint 8A blueprint and acceptance
+contract pin those exact identities and orders; Dashboard remains a single
+manifest-owned contribution.
+
 Readiness must run `npm ci --prefix end2end` and complete Playwright discovery,
 not merely read the declared package version. It must also parse and self-test
 the harvest guard and verify that `scripts/uat-sprint-8a.ps1` plus all eight
@@ -198,9 +204,9 @@ not reused by another command in the same rehearsal.
 
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
-- Consolidated defects and correction batch: Attempt 9 retained two defects
-  (one product and one preflight/setup) in one batch before tracked correction
-  began. Attempt 8's prior five-defect batch remains retained and superseded.
+- Consolidated defects and correction batch: Attempt 10 retained one product
+  defect in one batch before tracked correction began. Attempts 8 and 9 remain
+  retained and superseded with their five-defect and two-defect batches.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
