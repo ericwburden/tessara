@@ -60,7 +60,8 @@ if (-not (Test-Path -LiteralPath $blueprintPath)) { throw "Blueprint not found: 
 
 Push-Location $repoRoot
 try {
-    $configuredProject = (& docker compose -f $composePath --profile reference config --format json | ConvertFrom-Json).name
+    $composeConfiguration = & docker compose -f $composePath --profile reference config --format json | ConvertFrom-Json
+    $configuredProject = $composeConfiguration.name
     if ($configuredProject -ne $expectedProject) {
         throw "Refusing to operate on unexpected Compose project '$configuredProject'."
     }
@@ -142,6 +143,14 @@ try {
         }
         return $digest
     }
+    function Get-ConfiguredServiceImage([string]$Service) {
+        $serviceConfiguration = $composeConfiguration.services.PSObject.Properties[$Service]
+        if ($null -eq $serviceConfiguration -or
+            [string]::IsNullOrWhiteSpace([string]$serviceConfiguration.Value.image)) {
+            throw "Compose service '$Service' does not declare an image identity."
+        }
+        return [string]$serviceConfiguration.Value.image
+    }
     $env:TESSARA_SIGNING_ISSUER = "tessara.local.$RuntimeLabel"
     $env:TESSARA_SIGNING_KEY_ID = "catalog-dev-v1"
     if ([string]::IsNullOrWhiteSpace($env:TESSARA_SIGNING_SECRET_HEX)) {
@@ -151,13 +160,13 @@ try {
     if ([string]::IsNullOrWhiteSpace($ReleaseCatalogEnvelope)) {
         $catalog = Get-Content -LiteralPath $catalogTemplatePath -Raw | ConvertFrom-Json
         $catalog.issued_at = [DateTimeOffset]::UtcNow.ToString("o")
-        $catalog.core_releases[0].core_image = Get-ImageDigest "$expectedProject-core"
-        $catalog.core_releases[0].gateway_image = Get-ImageDigest "traefik:v3.6"
-        $catalog.core_releases[0].database_image = Get-ImageDigest "postgres:17"
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest "$expectedProject-scoped-records"
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest "$expectedProject-dashboards"
+        $catalog.core_releases[0].core_image = Get-ImageDigest (Get-ConfiguredServiceImage "core")
+        $catalog.core_releases[0].gateway_image = Get-ImageDigest (Get-ConfiguredServiceImage "gateway")
+        $catalog.core_releases[0].database_image = Get-ImageDigest (Get-ConfiguredServiceImage "postgres")
+        ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "scoped-records")
+        ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "dashboards")
         $componentRelease = $catalog.module_releases | Where-Object definition_id -eq "tessara.components"
-        if ($componentRelease) { $componentRelease.runtime_image = Get-ImageDigest "$expectedProject-components" }
+        if ($componentRelease) { $componentRelease.runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "components") }
         [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
         & cargo run -q -p tessara-supervisor --bin tessara-compose -- catalog-sign $catalogPayloadPath $catalogPath
         if ($LASTEXITCODE -ne 0) { throw "Runtime release catalog signing failed." }
