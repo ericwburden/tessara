@@ -1,8 +1,8 @@
 # Sprint 7B Verification Record
 
-Status: implementation, Test Readiness, and complete Candidate Rehearsal have
-passing receipts for the current clean implementation commit; preflight, SIT,
-formal UAT, and closeout remain `Not Run`.
+Status: validated. Complete readiness, rehearsal, preflight, SIT, scripted and
+manual UAT, evidence finalization, and final convergence passed for the one
+clean successor candidate. Closeout is authorized.
 
 Plan authority: `docs/sprints/sprint-7b-plan.md`
 
@@ -10,39 +10,39 @@ Plan authority: `docs/sprints/sprint-7b-plan.md`
 
 | Requirement | Failure condition | Automated/integration evidence | Deployed/manual evidence | Status |
 |---|---|---|---|---|
-| R1 typed resolution and revision/state-change contracts | Ambiguous, malformed, mixed-version, or policy-bearing platform observation | Module/Components contract unit, golden, invalid-fixture, serde, conformance | Exact typed Component/Dataset exchanges; UAT-01/03/06 | Planned |
-| R2 provider-owned lifecycle/versioning | Consumer invents provider state or current published update is rejected/silent | Component state-machine, in-place update, publication, audit, ownership tests | UAT-01/03/04/06 | Planned |
-| R3 declared observation mechanism | Change is missed or event delivery is assumed | Strategy declaration and monotonic revision tests; editor/live-read integration | Real Dashboard refresh; UAT-01/03 | Planned |
-| R4 changelog/stale/carry-forward/rebinding | Silent repoint, lost finding, or partial/stale action | Provider change, Dashboard DB/API/action, Dataset adapter, replay tests | UAT-02–05/08 | Planned |
-| R5 stable owner/type across mutable state | Lifecycle or semantic update changes typed identity | Reference digest and before/after persistence tests | UAT-01/03/06 | Planned |
-| R6 provider-owned guards only | Core publication depends on Dashboard layout policy | Dependency-direction and publication regression tests | Publish/update and observe Dashboard-owned finding; UAT-03/04 | Planned |
-| R7 outcome matrix and nondisclosure | State dimensions collapse or restricted data leaks | Full resolution/render/action matrix; known/random API/UI/log/timing tests | UAT-06/07 | Planned |
-| R8 contract-version regression | V1 runtime fallback survives or V2 mismatch is accepted | Immutable V1 fixtures; exact V2 and invalid-version tests | Captured real contract exchange; UAT-06 | Planned |
-| R9 dependency health and observed-state UI | Dedicated route, missing editor states, viewer writes, or unapproved visual drift | SSR/wasm/accessibility/Playwright/no-write and approved-mockup comparisons | Editor/viewer smoke; UAT-01/02/07/09 | Planned |
-| R10 upgrade/carry-forward/rebinding UI | Wrong target semantics, action bypass, or mismatch from approved action UI | Tagged UI/API actions, authorization, target, conflict, and visual tests | UAT-04/05/08/09 | Planned |
-| R11 resolution/deferral ownership | Manual resolve exists, deferral improves health, or Core owns disposition | API inventory, persistence, health, later-revision, ownership tests | UAT-02/05 | Planned |
-| Exit: Component change crosses real Dashboard boundary | In-process shortcut or stale/automatic mutation | Source-exact process-boundary smoke and Playwright | UAT-01–07 | Planned |
-| Exit: equivalent Dataset/Component adapters | One-off semantics or cross-module DB read | Dataset/Component conformance and dependency audit | UAT-08 | Planned |
+| R1 typed resolution and revision/state-change contracts | Ambiguous, malformed, mixed-version, or policy-bearing platform observation | Module/Components contract unit, golden, invalid-fixture, serde, conformance | Exact typed Component/Dataset exchanges; UAT-01/03/06 | Passed |
+| R2 provider-owned lifecycle/versioning | Consumer invents provider state or current published update is rejected/silent | Component state-machine, in-place update, publication, audit, ownership tests | UAT-01/03/04/06 | Passed |
+| R3 declared observation mechanism | Change is missed or event delivery is assumed | Strategy declaration and monotonic revision tests; editor/live-read integration | Real Dashboard refresh; UAT-01/03 | Passed |
+| R4 changelog/stale/carry-forward/rebinding | Silent repoint, lost finding, or partial/stale action | Provider change, Dashboard DB/API/action, Dataset adapter, replay tests | UAT-02–05/08 | Passed |
+| R5 stable owner/type across mutable state | Lifecycle or semantic update changes typed identity | Reference digest and before/after persistence tests | UAT-01/03/06 | Passed |
+| R6 provider-owned guards only | Core publication depends on Dashboard layout policy | Dependency-direction and publication regression tests | Publish/update and observe Dashboard-owned finding; UAT-03/04 | Passed |
+| R7 outcome matrix and nondisclosure | State dimensions collapse or restricted data leaks | Full resolution/render/action matrix; known/random API/UI/log/timing tests | UAT-06/07 | Passed |
+| R8 contract-version regression | V1 runtime fallback survives or V2 mismatch is accepted | Immutable V1 fixtures; exact V2 and invalid-version tests | Captured real contract exchange; UAT-06 | Passed |
+| R9 dependency health and observed-state UI | Dedicated route, missing editor states, viewer writes, or unapproved visual drift | SSR/wasm/accessibility/Playwright/no-write and approved-mockup comparisons | Editor/viewer smoke; UAT-01/02/07/09 | Passed |
+| R10 upgrade/carry-forward/rebinding UI | Wrong target semantics, action bypass, or mismatch from approved action UI | Tagged UI/API actions, authorization, target, conflict, and visual tests | UAT-04/05/08/09 | Passed |
+| R11 resolution/deferral ownership | Manual resolve exists, deferral improves health, or Core owns disposition | API inventory, persistence, health, later-revision, ownership tests | UAT-02/05 | Passed |
+| Exit: Component change crosses real Dashboard boundary | In-process shortcut or stale/automatic mutation | Source-exact process-boundary smoke and Playwright | UAT-01–07 | Passed |
+| Exit: equivalent Dataset/Component adapters | One-off semantics or cross-module DB read | Dataset/Component conformance and dependency audit | UAT-08 | Passed |
 
 ## Acceptance-Criteria Index
 
 | Criterion | Observable result | Required evidence | Status |
 |---|---|---|---|
-| AC-01 | Exact valid V2 observation round-trip; malformed/mixed versions fail closed | contract fixtures and conformance | Planned |
-| AC-02 | Restricted known/random API, UI, logs, and bounded timing are indistinguishable | nondisclosure matrix and UAT-07 | Planned |
-| AC-03 | Lifecycle/semantic changes advance revision with stable owner/type/ID | provider/consumer integration and UAT-01/03 | Planned |
-| AC-04 | Current published version updates in place and Dashboard observes it without reference change | update audit, exchange, finding, UAT-03 | Planned |
-| AC-05 | Successor leaves old reference pinned; Upgrade is same-Component declared successor only | publication/action tests and UAT-04 | Planned |
-| AC-06 | Replace permits any authorized renderable target; stale/invalid/replay is atomic and safe | API/DB fault and UAT-05 | Planned |
-| AC-07 | Any disclosed finding defers without note, stays degraded, and later revision opens a new finding | persistence/health tests and UAT-02 | Planned |
-| AC-08 | No manual resolve; fresh health or successful action closes atomically | API inventory/transaction tests and UAT-02/04/05 | Planned |
-| AC-09 | Full lifecycle, render/metadata/tombstone/audit/immutability matrix holds; drafts have no actions | provider matrix and UAT-01/06 | Planned |
-| AC-10 | Dashboard owns layout findings and Core publication has no Dashboard-policy dependency | ownership tests and UAT-03/04 | Planned |
-| AC-11 | Editor load/retry is idempotent, viewer is read-only, and no scheduler/event path exists | integration/dependency tests and UAT-01/07 | Planned |
-| AC-12 | Dataset/Component adapters share observation/nondisclosure semantics without cross-DB reads | conformance and UAT-08 | Planned |
-| AC-13 | V2 is sole runtime version; accepted V1 fixture files remain byte-identical | fixture hashes/runtime inventory and UAT-06 | Planned |
-| AC-14 | Fresh and unchanged source-exact runs are warning-free, healthy, deterministic, and evidenced | readiness/rehearsal/SIT/UAT receipts | Planned |
-| AC-15 | Production affected UI matches the approved mockup at matching route/state/theme/viewport/density/content/role; Core and Dashboard use identical SDK-owned chrome and responsive behavior; parallel local shells and prototype controls are absent | SDK-boundary audit, visual regression evidence, and UAT-09 | Planned |
+| AC-01 | Exact valid V2 observation round-trip; malformed/mixed versions fail closed | contract fixtures and conformance | Passed |
+| AC-02 | Restricted known/random API, UI, logs, and bounded timing are indistinguishable | nondisclosure matrix and UAT-07 | Passed |
+| AC-03 | Lifecycle/semantic changes advance revision with stable owner/type/ID | provider/consumer integration and UAT-01/03 | Passed |
+| AC-04 | Current published version updates in place and Dashboard observes it without reference change | update audit, exchange, finding, UAT-03 | Passed |
+| AC-05 | Successor leaves old reference pinned; Upgrade is same-Component declared successor only | publication/action tests and UAT-04 | Passed |
+| AC-06 | Replace permits any authorized renderable target; stale/invalid/replay is atomic and safe | API/DB fault and UAT-05 | Passed |
+| AC-07 | Any disclosed finding defers without note, stays degraded, and later revision opens a new finding | persistence/health tests and UAT-02 | Passed |
+| AC-08 | No manual resolve; fresh health or successful action closes atomically | API inventory/transaction tests and UAT-02/04/05 | Passed |
+| AC-09 | Full lifecycle, render/metadata/tombstone/audit/immutability matrix holds; drafts have no actions | provider matrix and UAT-01/06 | Passed |
+| AC-10 | Dashboard owns layout findings and Core publication has no Dashboard-policy dependency | ownership tests and UAT-03/04 | Passed |
+| AC-11 | Editor load/retry is idempotent, viewer is read-only, and no scheduler/event path exists | integration/dependency tests and UAT-01/07 | Passed |
+| AC-12 | Dataset/Component adapters share observation/nondisclosure semantics without cross-DB reads | conformance and UAT-08 | Passed |
+| AC-13 | V2 is sole runtime version; accepted V1 fixture files remain byte-identical | fixture hashes/runtime inventory and UAT-06 | Passed |
+| AC-14 | Fresh and unchanged source-exact runs are warning-free, healthy, deterministic, and evidenced | readiness/rehearsal/SIT/UAT receipts | Passed |
+| AC-15 | Production affected UI matches the approved mockup at matching route/state/theme/viewport/density/content/role; Core and Dashboard use identical SDK-owned chrome and responsive behavior; parallel local shells and prototype controls are absent | SDK-boundary audit, visual regression evidence, and UAT-09 | Passed |
 
 ## Evidence Inventory And Retention
 
@@ -140,15 +140,15 @@ source-exact materialization evidence.
 
 | Lane | Required proof | Status | Attempt receipt |
 |---|---|---|---|
-| Rust workspace | Full and targeted unit/integration/migration/provider/consumer suites | Not Run | |
-| Browser workspace | Full Playwright plus editor, viewer, Versions, accessibility, approved visual contract, and no-dedicated-route/prototype-control assertions | Not Run | |
-| Contracts | V1 fixture integrity, exact V2, malformed/mixed version, conformance | Not Run | |
-| Fresh deployment | Exact source/schema/image/fixture identity and healthy topology | Not Run | |
-| Idempotent deployment | Unchanged no-op and no duplicate observation/finding/receipt | Not Run | |
-| Deployed acceptance | Real Dashboard-to-Core boundary, actions, adapter equivalence, outage/recovery | Not Run | |
-| Nondisclosure | Known/random API/UI/log/timing equivalence across resolution/action matrix | Not Run | |
-| Recovery/rollback | Same-candidate recovery and prior-composition/snapshot restoration audit | Not Run | |
-| Final convergence | All services healthy; provenance/evidence hashes complete; source clean | Not Run | |
+| Rust workspace | Full and targeted unit/integration/migration/provider/consumer suites | Passed | `sit/rust.json` |
+| Browser workspace | Full Playwright plus editor, viewer, Versions, accessibility, approved visual contract, and no-dedicated-route/prototype-control assertions | Passed — 70/70, zero retries | `sit/playwright.json` |
+| Contracts | V1 fixture integrity, exact V2, malformed/mixed version, conformance | Passed | `sit/static.json`; conformance receipts |
+| Fresh deployment | Exact source/schema/image/fixture identity and healthy topology | Passed | `sit/deployment.json` |
+| Idempotent deployment | Unchanged no-op and no duplicate observation/finding/receipt | Passed | rehearsal and deployed-smoke receipts |
+| Deployed acceptance | Real Dashboard-to-Core boundary, actions, adapter equivalence, outage/recovery | Passed | `sit/deployed-smoke.json` |
+| Nondisclosure | Known/random API/UI/log/timing equivalence across resolution/action matrix | Passed | `sit/nondisclosure.json` |
+| Recovery/rollback | Same-candidate recovery and prior-composition/snapshot restoration audit | Passed | `sit/recovery.json` |
+| Final convergence | All services healthy; provenance/evidence hashes complete; source clean | Passed | `sit-result.json`; `uat/final-convergence.json` |
 
 Every attempt records command, environment, start/end time, exit code, expected
 and actual result, raw artifact paths/hashes, candidate fingerprint, and failure
@@ -158,15 +158,15 @@ classification. A rerun never overwrites a failed receipt.
 
 | Scenario | Roles and preconditions | Actions | Expected result | Status | Evidence |
 |---|---|---|---|---|---|
-| UAT-01 lifecycle observation | Component manager and scoped Dashboard editor; active referenced version | Capture reference/revision, deactivate, load editor, reactivate, reload | Identity stable; revisions/findings advance; inactive is not renderable; audit exists; fresh health closes finding | Not Run | `uat/manual/uat-7b-01.json` plus screenshots |
-| UAT-02 deferral/recovery | Editor; disclosed open finding | Defer without note, reload, restore health, then make later change | Health stays degraded while deferred; fresh health closes; later revision creates new open finding | Not Run | `uat/manual/uat-7b-02.json` plus screenshots |
-| UAT-03 in-place update | Component manager and editor; current published version referenced | Update semantic payload in place and load editor | Same typed reference; revision/audit advance; Dashboard-owned finding appears; Core does not apply Dashboard policy | Not Run | `uat/manual/uat-7b-03.json` |
-| UAT-04 successor Upgrade | Manager/editor; old active version referenced | Publish successor, inspect pinned reference, execute Upgrade | Old reference remains until action; only declared active published same-Component successor is offered; atomic receipt closes finding | Not Run | `uat/manual/uat-7b-04.json` plus screenshots |
-| UAT-05 Replace/Remove/conflict | Editor with two authorized renderable targets | Replace with other ComponentVersion, replay stale request, then exercise Remove fixture | Valid actions atomic; stale replay deterministic no-op; findings and placements converge | Not Run | `uat/manual/uat-7b-05.json` |
-| UAT-06 archive/tombstone | Component manager; published and superseded fixtures | Archive, attempt reactivate, tombstone, resolve as authorized/restricted, attempt mutation | Confirmation and state machine enforced; payload immutable; authorized archived metadata only; tombstone typed result only; restricted generic | Not Run | `uat/manual/uat-7b-06.json` plus screenshots |
-| UAT-07 resolution/outage matrix | Owner/editor/viewer/restricted actors; known/random IDs | Exercise lifecycle, availability, compatibility, outage, retry, and recovery | Dimensions remain distinct internally; viewer writes nothing; restricted projections match; recovery converges | Not Run | `uat/manual/uat-7b-07.json` |
-| UAT-08 Dataset equivalence | Dataset/Component managers | Exercise existing Dataset impact/carry-forward through typed adapter and compare Component observation | Shared typed/nondisclosure semantics; provider-specific actions remain owned; no cross-module DB access/new workspace | Not Run | `uat/manual/uat-7b-08.json` |
-| UAT-09 approved visual contract | Product owner/reviewer; approved UI package; manager/editor/viewer roles | Capture affected routes/states at 1280/768/390, 1×, dark/light; compare the richer deployed Core chrome and approved mockup; inspect identical Core/Dashboard shell anatomy, keyboard/focus, and 200% zoom | Both routes use identical SDK-owned chrome and responsive behavior; unchanged product UI matches deployed baseline; additions match approved deltas; no parallel shell, P0/P1/P2 mismatch, overflow, hidden action, or prototype-only control | Not Run | `uat/manual/uat-7b-09.json`, comparison sheets, screenshots, traces |
+| UAT-01 lifecycle observation | Component manager and scoped Dashboard editor; active referenced version | Capture reference/revision, deactivate, load editor, reactivate, reload | Identity stable; revisions/findings advance; inactive is not renderable; audit exists; fresh health closes finding | Passed | `uat/manual/uat-7b-01.json` plus screenshots |
+| UAT-02 deferral/recovery | Editor; disclosed open finding | Defer without note, reload, restore health, then make later change | Health stays degraded while deferred; fresh health closes; later revision creates new open finding | Passed | `uat/manual/uat-7b-02.json` plus screenshots |
+| UAT-03 in-place update | Component manager and editor; current published version referenced | Update semantic payload in place and load editor | Same typed reference; revision/audit advance; Dashboard-owned finding appears; Core does not apply Dashboard policy | Passed | `uat/manual/uat-7b-03.json` |
+| UAT-04 successor Upgrade | Manager/editor; old active version referenced | Publish successor, inspect pinned reference, execute Upgrade | Old reference remains until action; only declared active published same-Component successor is offered; atomic receipt closes finding | Passed | `uat/manual/uat-7b-04.json` plus screenshots |
+| UAT-05 Replace/Remove/conflict | Editor with two authorized renderable targets | Replace with other ComponentVersion, replay stale request, then exercise Remove fixture | Valid actions atomic; stale replay deterministic no-op; findings and placements converge | Passed | `uat/manual/uat-7b-05.json` |
+| UAT-06 archive/tombstone | Component manager; published and superseded fixtures | Archive, attempt reactivate, tombstone, resolve as authorized/restricted, attempt mutation | Confirmation and state machine enforced; payload immutable; authorized archived metadata only; tombstone typed result only; restricted generic | Passed | `uat/manual/uat-7b-06.json` plus screenshots |
+| UAT-07 resolution/outage matrix | Owner/editor/viewer/restricted actors; known/random IDs | Exercise lifecycle, availability, compatibility, outage, retry, and recovery | Dimensions remain distinct internally; viewer writes nothing; restricted projections match; recovery converges | Passed | `uat/manual/uat-7b-07.json` |
+| UAT-08 Dataset equivalence | Dataset/Component managers | Exercise existing Dataset impact/carry-forward through typed adapter and compare Component observation | Shared typed/nondisclosure semantics; provider-specific actions remain owned; no cross-module DB access/new workspace | Passed | `uat/manual/uat-7b-08.json` |
+| UAT-09 approved visual contract | Product owner/reviewer; approved UI package; manager/editor/viewer roles | Capture affected routes/states at 1280/768/390, 1×, dark/light; compare the richer deployed Core chrome and approved mockup; inspect identical Core/Dashboard shell anatomy, keyboard/focus, and 200% zoom | Both routes use identical SDK-owned chrome and responsive behavior; unchanged product UI matches deployed baseline; additions match approved deltas; no parallel shell, P0/P1/P2 mismatch, overflow, hidden action, or prototype-only control | Passed | `uat/manual/uat-7b-09.json`, screenshots, mockup parity log |
 
 Manual UAT may begin only after scripted UAT passes on the SIT-approved frozen
 candidate. Each manual receipt records actor, timestamp, precondition, exact
@@ -200,15 +200,40 @@ Before closeout:
   and rollback instructions; and
 - obtain explicit closeout authorization through the specialized closeout skill.
 
-Until those conditions are met, Sprint 7B is not validated or complete.
+All conditions are met. The coordinator authorizes Sprint 7B closeout for the
+candidate below.
+
+### Final Validation And Authorization
+
+- Evidence source: commit `fef463756feaf2604b98313a10b0e5dad11d2cfa`,
+  tree `4464d940ef728fb6254fffc8cd5a1ffca125810a`.
+- Candidate fingerprint:
+  `f0ac714ff92a7c7adb31afae2378b6770c679190d5bdffb8ab36a005e6610339`.
+- Readiness and complete rehearsal: Passed.
+- Preflight and freeze: Passed before SIT.
+- SIT: Passed all four authoritative lanes; Playwright passed 70/70 with one
+  worker, zero retries, skips, flakes, or unexpected results.
+- UAT: Passed scripted UAT and UAT-7B-01 through UAT-7B-09. The approved visual
+  contract passed, including identical SDK-owned Core/Dashboard shell anatomy,
+  aligned placement glyphs, the shared vertical action menu, and absence of the
+  rejected redundant note and prototype control.
+- Post-SIT convergence: candidate `79eb5f9a…` was invalidated by the retained
+  UAT-7B-01 product defect. The correction and later harness synchronization
+  were followed by a complete successor readiness, rehearsal, preflight, SIT,
+  and UAT cycle; superseded evidence is retained but excluded from certification.
+- Final state: canonical reference composition restored and healthy at
+  `http://127.0.0.1:8086`; no open defects or product decisions.
+- Authoritative receipts: `validation-readiness-result.json`,
+  `candidate-rehearsal-result.json`, `preflight-result.json`, `candidate.json`,
+  `sit-result.json`, `uat-result.json`, `evidence-manifest.json`, and
+  `closeout-authorization.json` under `artifacts/sprint-7b-closeout/`.
 
 ## Planning Record
 
 The execution contract was revised and approved on 2026-08-03 after settling
-all outstanding product decisions. Implementation and the mutable pre-freeze
-validation cycle passed on 2026-08-04. The canonical readiness and rehearsal
-receipts under `artifacts/sprint-7b-closeout/` bind the current clean commit,
-tree, environment, and evidence hashes. Those receipts are non-authoritative
-and do not claim SIT or formal UAT; their identities are intentionally not
-duplicated in this tracked record because doing so would make the record a
-self-invalidating fingerprint input.
+all outstanding product decisions. Implementation and validation completed on
+2026-08-05. The canonical receipt chain under
+`artifacts/sprint-7b-closeout/` binds the clean evidence-source commit, tree,
+images, environment, and finalized evidence manifest. This tracked closeout
+update is documentation-only and does not replace or mutate the source-exact
+candidate identity.
