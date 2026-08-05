@@ -2525,9 +2525,18 @@ mod tests {
     fn policy_collection_validation_accepts_dense_within_band_reordering() {
         let current = example_policy();
         let mut requested = update_entries(&current);
-        requested[0].order = 1;
-        requested[1].order = 0;
-        requested[3].visible = false;
+        for (contribution_id, order, visible) in [
+            ("tessara.forms.navigation", 1, true),
+            ("tessara.workflows.navigation", 0, true),
+            ("tessara.datasets.navigation", 0, false),
+        ] {
+            let entry = requested
+                .iter_mut()
+                .find(|entry| entry.contribution_id == contribution_id)
+                .unwrap_or_else(|| panic!("{contribution_id} is present"));
+            entry.order = order;
+            entry.visible = visible;
+        }
         let validated = validate_navigation_policy_request(&current, requested)
             .expect("same-band dense reorder is valid");
         assert_eq!(validated["tessara.forms.navigation"].order, 1);
@@ -3057,9 +3066,18 @@ mod tests {
         let denied_policy_audits_before =
             audit_count(&pool, "navigation_policy.update_denied").await;
         let mut changed_policy_request = update_entries(&before_policy);
-        changed_policy_request[0].order = 1;
-        changed_policy_request[1].order = 0;
-        changed_policy_request[4].visible = false;
+        for (contribution_id, order, visible) in [
+            ("tessara.forms.navigation", 1, true),
+            ("tessara.workflows.navigation", 0, true),
+            ("tessara.datasets.navigation", 0, false),
+        ] {
+            let entry = changed_policy_request
+                .iter_mut()
+                .find(|entry| entry.contribution_id == contribution_id)
+                .unwrap_or_else(|| panic!("{contribution_id} is present"));
+            entry.order = order;
+            entry.visible = visible;
+        }
         let original_policy_request = update_entries(&before_policy);
         let policy_exercise: Result<_, String> = async {
             let updated = update_navigation_policy(
