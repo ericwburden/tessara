@@ -123,6 +123,10 @@ try {
     } catch {
         $materializationMessage = $_.Exception.Message
         [IO.Directory]::CreateDirectory($evidenceDirectory) | Out-Null
+        $serviceLogPath = Join-Path $evidenceDirectory "failed-topology-services.log"
+        $serviceLogs = & docker compose -f $composePath --profile reference logs --no-color --timestamps 2>&1
+        $serviceLogExitCode = $LASTEXITCODE
+        [IO.File]::WriteAllLines($serviceLogPath, @($serviceLogs | ForEach-Object { [string]$_ }), [Text.UTF8Encoding]::new($false))
         $teardownCompleted = $false
         $teardownMessage = $null
         try {
@@ -153,6 +157,8 @@ try {
             project = $expectedProject
             failed_at = [DateTimeOffset]::UtcNow.ToString("o")
             message = $materializationMessage
+            failed_topology_service_log = [IO.Path]::GetRelativePath($repoRoot, $serviceLogPath).Replace("\", "/")
+            failed_topology_service_log_exit_code = $serviceLogExitCode
             teardown_completed = $teardownCompleted
             teardown_message = $teardownMessage
             retained_partial_topology = -not $teardownCompleted

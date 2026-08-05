@@ -19,6 +19,7 @@ $script:Sprint8AFixture = [ordered]@{
 }
 
 function Test-Sprint8AAcceptanceContract {
+    $repoRoot = Split-Path -Parent $PSScriptRoot
     foreach ($name in @(
         "installation_id",
         "component_module_instance_id",
@@ -47,5 +48,27 @@ function Test-Sprint8AAcceptanceContract {
     }
     if ($script:Sprint8AFixture.component_resource_type -cne "tessara.components.component_version") {
         throw "Sprint 8A Component resource type drifted."
+    }
+
+    $configuration = & docker compose -f (Join-Path $repoRoot "deploy/sprint-8a/compose.yaml") --profile reference config --format json | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw "Sprint 8A Compose configuration could not be normalized." }
+    $artifactImages = [string]$configuration.services.supervisor.environment.TESSARA_ARTIFACT_IMAGE_REFERENCES | ConvertFrom-Json
+    $moduleImages = [ordered]@{
+        "tessara.reference.scoped-records" = [string]$configuration.services.'scoped-records'.image
+        "tessara.components" = [string]$configuration.services.components.image
+        "tessara.dashboards" = [string]$configuration.services.dashboards.image
+    }
+    foreach ($moduleId in $moduleImages.Keys) {
+        if ([string]$artifactImages.$moduleId -cne $moduleImages[$moduleId]) {
+            throw "Sprint 8A Supervisor image reference for '$moduleId' differs from normalized Compose."
+        }
+    }
+
+    foreach ($scenario in 1..8) {
+        $scriptPath = Join-Path $repoRoot ("docs/sprints/sprint-8a-uat/uat-8a-{0:d2}.md" -f $scenario)
+        if (-not (Test-Path -LiteralPath $scriptPath)) { throw "Missing Sprint 8A UAT script '$scriptPath'." }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "scripts/uat-sprint-8a.ps1"))) {
+        throw "Missing Sprint 8A automated UAT diagnostic runner."
     }
 }

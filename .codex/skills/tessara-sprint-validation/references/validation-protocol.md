@@ -109,6 +109,14 @@ whose controlling tool session disappeared.
 - Run independent checks within a lane or isolated scenario set fail-late.
 - Record every safe sibling result even after one fails.
 - Stop dependent or destructive work when its prerequisite state is invalid.
+- Declare the check dependency graph before assertions start. On first failure,
+  move the attempt to `harvesting`; every declared check must finish as passed,
+  failed, or blocked with an exact prerequisite reason.
+- Forbid tracked correction, invalidation/restart, or a new attempt number until
+  the harvest is complete. Then write one consolidated defect batch for the
+  whole diagnostic pass and invalidate from that batch.
+- Preserve partial results and raw logs append-only. A narrow reproducer adds
+  evidence to the active batch and never closes harvesting by itself.
 - A phase passes only when every required check passes.
 - A narrow reproducer diagnoses; it never replaces the authoritative command.
 

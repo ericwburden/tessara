@@ -1,8 +1,10 @@
 # Sprint 8A Validation Record
 
-Status: Implementation handoff recorded. Source-level readiness checks pass,
-but no validation gate has run, no candidate has been frozen, and SIT, UAT,
-and closeout remain Not Run.
+Status: Candidate Rehearsal attempt 8 completed a fail-late diagnostic harvest
+and was invalidated with Validation Readiness attempt 10. Its consolidated
+five-defect correction is ready for the required complete readiness/rehearsal
+rerun. No candidate has been frozen; SIT, formal UAT, and closeout remain Not
+Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -156,6 +158,15 @@ Additional required evidence namespaces:
 
 ## Candidate Rehearsal
 
+Sprint 8A rehearsal uses the dependency-aware inventory below. The attempt
+receipt declares this graph before assertions. After any failure the attempt is
+`harvesting`: independent siblings continue, dependent checks are recorded as
+blocked with the exact failed prerequisite, and no tracked correction or new
+attempt may begin until one harvest receipt and one consolidated defect batch
+account for every row. `scripts/test-sprint-validation-harvest.ps1` enforces the
+terminal-state and single-batch contract; materialization retains failed apply
+responses and service logs before exact teardown.
+
 | Diagnostic lane | Planned command/evidence | Assertions | Result | Defect batch |
 |---|---|---|---|---|
 | Static and boundaries | fmt/check/Clippy, manifests, links, native/WASM graphs, source/image audits | zero warnings; no forbidden owner/dependency/route/storage/legacy edge | Not Run | |
@@ -167,9 +178,24 @@ Additional required evidence namespaces:
 | Failure teardown/rerun | induced partial materialization failure | evidence retained; exact topology/volumes removed; new empty rerun healthy | Not Run | |
 | Automated UAT diagnostics | automated equivalents of UAT-01 through UAT-08 | every precondition and expected semantic state reproducible | Not Run | |
 
+The first two lanes are independent of a deployed topology. Playwright locked
+installation/discovery, runner self-tests, and acceptance-inventory checks are
+also independent. Healthy materialization/no-op is the prerequisite for live
+Playwright execution, deployed smoke, deployed inventory/navigation audit,
+automated UAT diagnostics, failure-containment successor health, and the
+Component upgrade/rollback baseline. Formal deployed acceptance smoke remains
+SIT-owned and is not a rehearsal substitute.
+
+Readiness must run `npm ci --prefix end2end` and complete Playwright discovery,
+not merely read the declared package version. It must also parse and self-test
+the harvest guard and verify that `scripts/uat-sprint-8a.ps1` plus all eight
+`docs/sprints/sprint-8a-uat/uat-8a-*.md` scripts exist.
+
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
-- Consolidated defects and correction batch: None yet.
+- Consolidated defects and correction batch: Attempt 8 retained five defects
+  (one product, three harness, one preflight/setup) in one batch before tracked
+  correction began.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -207,9 +233,13 @@ cargo test --locked --offline -p tessara-component-module
 cargo test --locked --offline -p tessara-dashboard-module
 docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 .\scripts\smoke-sprint-8a.ps1 -SelfTest
+.\scripts\uat-sprint-8a.ps1 -SelfTest
+.\scripts\test-sprint-validation-harvest.ps1 -SelfTest
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
 .\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm -VerifyNoOp
 .\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
 .\scripts\verify-sprint-8a-component-upgrade.ps1 -BaselineImage "<name>@sha256:<digest>" -CandidateImage "<name>@sha256:<digest>" -CurrentImage "<name>@sha256:<digest>"
+.\scripts\uat-sprint-8a.ps1
 npm --prefix .\end2end test
 ```
 

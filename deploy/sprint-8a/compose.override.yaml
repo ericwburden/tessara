@@ -38,7 +38,7 @@ services:
     image: tessara-sprint-8a-supervisor
     environment:
       TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
-      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8a-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-8a-scoped-records","tessara.components":"tessara-sprint-8a-components","tessara.dashboards":"tessara-sprint-8a-dashboards"}'
+      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8a-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-7a-scoped-records","tessara.components":"tessara-sprint-8a-components","tessara.dashboards":"tessara-sprint-8a-dashboards"}'
       TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-8a}
       TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
     ports: !override ["127.0.0.1:${TESSARA_SUPERVISOR_PORT:-8098}:8090"]

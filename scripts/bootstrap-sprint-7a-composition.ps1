@@ -341,7 +341,11 @@ try {
 
     $response = & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
         apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
-    if ($LASTEXITCODE -ne 0) { throw "Supervisor apply failed." }
+    if ($LASTEXITCODE -ne 0) {
+        $failureResponsePath = Join-Path $runtimeDirectory "apply-failure-response.log"
+        [IO.File]::WriteAllLines($failureResponsePath, @($response), [Text.UTF8Encoding]::new($false))
+        throw "Supervisor apply failed. Raw response: $failureResponsePath"
+    }
     [IO.File]::WriteAllLines($receiptPath, $response, [Text.UTF8Encoding]::new($false))
 
     $navigationReady = $false

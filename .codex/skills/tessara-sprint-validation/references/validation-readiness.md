@@ -69,10 +69,23 @@ not hide other defects. Stop dependent or destructive work whose prerequisite
 state is invalid. Retain raw logs and per-lane diagnostic receipts under a
 rehearsal namespace.
 
+The rehearsal start receipt must declare every lane, whether it is independent
+or dependent, and the prerequisite lane names for dependent work. After the
+first failure, set the attempt to `harvesting`; do not edit tracked candidate
+inputs, invalidate/restart the attempt, or allocate a successor attempt number
+until every declared lane is recorded as passed, failed, or blocked with its
+exact dependency reason. A repository-owned runner or equivalent executable
+guard must reject completion, correction, and restart while any lane remains
+unaccounted for.
+
 After the pass, collect every discovered product, test, harness, fixture,
 acceptance-inventory, deployment, environment-contract, and evidence defect
 into one batch. Correct the batch while the build remains mutable. Do not
 freeze an intermediate correction.
+
+Write exactly one harvest receipt and one consolidated defect-batch receipt per
+diagnostic pass. Narrow reproducers attach evidence to that batch; they do not
+create correction batches or authorize a restart on their own.
 
 Repeat the complete Test Readiness Gate and the complete Candidate Rehearsal
 after every correction batch until both pass cleanly. Focused or narrow
