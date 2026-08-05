@@ -129,10 +129,26 @@ mod tests {
     #[test]
     fn lifecycle_host_route_covers_module_root_and_deep_links() {
         initialize_test_executor();
-        for path in ["/dashboards", "/dashboards/new", "/dashboards/example/edit"] {
-            let html = application_html(path, "Dashboards", "Lifecycle module host.");
-            assert!(html.contains(r#"id="tessara-module-outlet""#), "{path}");
-            assert!(html.contains(r#"data-module-definition="tessara.dashboards""#));
+        for (definition, title, paths) in [
+            (
+                "tessara.dashboards",
+                "Dashboards",
+                ["/dashboards", "/dashboards/new", "/dashboards/example/edit"],
+            ),
+            (
+                "tessara.components",
+                "Components",
+                ["/components", "/components/new", "/components/example/edit"],
+            ),
+        ] {
+            for path in paths {
+                let html = application_html(path, title, "Lifecycle module host.");
+                assert!(html.contains(r#"id="tessara-module-outlet""#), "{path}");
+                assert!(
+                    html.contains(&format!(r#"data-module-definition="{definition}""#)),
+                    "{path}"
+                );
+            }
         }
     }
 }

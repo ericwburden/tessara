@@ -1,0 +1,9 @@
+name: tessara-sprint-8a
+
+# Disposable, fresh-only Sprint 8A topology. The profile extends the retained
+# platform baseline but owns new Core, Component, and Dashboard images and all
+# disposable data volumes under the tessara-sprint-8a Compose project.
+include:
+  - path:
+      - ../sprint-7a/compose.yaml
+      - ./compose.override.yaml

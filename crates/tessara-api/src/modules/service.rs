@@ -2371,7 +2371,7 @@ mod tests {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "09427738d3cf5496c91904f578a63725bc867a3d0e16f75f9bd92a74a3d305c0"
+            "12d7a950cf5d4999db3335c8a928de3be24fa7f237c5a2b43729f3ac09843f2b"
         );
     }
 
@@ -2424,7 +2424,7 @@ mod tests {
             &catalog,
         )
         .expect("manifest and transition destinations form one dense policy");
-        assert_eq!(policy.destinations.len(), 16);
+        assert_eq!(policy.destinations.len(), 15);
     }
 
     #[test]

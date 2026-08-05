@@ -352,9 +352,23 @@ by the Supervisor.
 
 When a first extracted module temporarily consumes an in-process provider, the current Core Release may expose a narrowly versioned, first-party Core Release compatibility contract. That binding is trusted as a Core Release contract, not as a module provider, and is prohibited in new external application Blueprints. Typed references to its records use `core_installation` ownership and a transition-specific resource type; they never pretend the descriptor owns a Module Instance.
 
-Physical extraction creates a real Module Release/Instance and explicitly migrates both data and references. The new provider emits an old-to-new mapping; each consumer rewrites its own stored references through a versioned rebinding/migration contract; receipts prove completeness; and the Core compatibility adapter remains read-only until all consumers have moved. Old Core-owned references retain their original owner/type and resolve with an explicit migrated/retired outcome rather than silently becoming module-owned. This deliberate pre-pilot migration is permitted because no production application depends on the transition layout.
+During pre-production Phase 8, physical extraction creates a real Module
+Release/Instance through one offline, destructive, source-exact
+materialization. Each owner initializes its fresh database and rebuilds the
+disposable reference-application seed through its typed bootstrap contract;
+consumers create new Module Instance references directly from provider
+read-back. The cutover removes the old product storage, adapter, readers, and
+payload shapes together. Old transition references remain owner/type-stable
+historical evidence but are unsupported normal-runtime inputs and are never
+silently reinterpreted or reported through a migration ledger. A failed
+attempt retains evidence, destroys its exact partial disposable topology and
+volumes, and reruns from empty rather than repairing or resuming it. Supported
+legacy import, mapping, rebinding, partial-failure resume, and migration audit
+belong to Phase 9.
 
-Because no production application depends on the current internal database layout, Tessara may restructure data and references directly during this transition. The project should use that freedom to establish clean ownership boundaries instead of preserving accidental coupling.
+Because no production application depends on the current internal database
+layout, Tessara uses this fresh policy to establish clean ownership boundaries
+instead of preserving accidental coupling.
 
 ## Explicit Non-Goals
 

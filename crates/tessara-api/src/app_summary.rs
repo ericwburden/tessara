@@ -16,9 +16,6 @@ pub struct ApplicationSummary {
     submitted_submissions: i64,
     datasets: i64,
     dataset_revisions: i64,
-    components: i64,
-    component_versions: i64,
-    dashboards: i64,
 }
 
 /// Returns app-readiness counters for the current deployment.
@@ -40,19 +37,13 @@ pub async fn get_summary(
                 (SELECT COUNT(*) FROM submissions WHERE status = 'submitted') AS submitted_submissions,
                 (SELECT COUNT(*) FROM datasets) AS datasets,
                 (SELECT COUNT(*) FROM dataset_revisions) AS dataset_revisions,
-                (SELECT COUNT(*) FROM components) AS components,
-                (SELECT COUNT(*) FROM component_versions) AS component_versions,
-                0::bigint AS dashboards
+                0::bigint AS reserved
             "#,
         )
         .fetch_one(&state.pool)
         .await?;
 
-        let mut summary = summary_from_row(row)?;
-        if let Ok(projection) = crate::dashboard_dependencies::load().await {
-            summary.0.dashboards = projection.dashboards.len() as i64;
-        }
-        return Ok(summary);
+        return summary_from_row(row);
     }
 
     if let auth::CapabilityBoundary::Scoped(scope_ids) =
@@ -83,9 +74,7 @@ pub async fn get_summary(
                 ) AS submitted_submissions,
                 0::bigint AS datasets,
                 0::bigint AS dataset_revisions,
-                0::bigint AS components,
-                0::bigint AS component_versions,
-                0::bigint AS dashboards
+                0::bigint AS reserved
             "#,
         )
         .bind(scope_ids)
@@ -125,9 +114,7 @@ pub async fn get_summary(
             ) AS submitted_submissions,
             0::bigint AS datasets,
             0::bigint AS dataset_revisions,
-            0::bigint AS components,
-            0::bigint AS component_versions,
-            0::bigint AS dashboards
+            0::bigint AS reserved
         "#,
     )
     .bind(accessible_account_ids)
@@ -144,8 +131,5 @@ fn summary_from_row(row: sqlx::postgres::PgRow) -> ApiResult<Json<ApplicationSum
         submitted_submissions: row.try_get("submitted_submissions")?,
         datasets: row.try_get("datasets")?,
         dataset_revisions: row.try_get("dataset_revisions")?,
-        components: row.try_get("components")?,
-        component_versions: row.try_get("component_versions")?,
-        dashboards: row.try_get("dashboards")?,
     }))
 }

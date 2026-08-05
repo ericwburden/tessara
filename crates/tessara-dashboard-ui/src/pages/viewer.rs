@@ -9,14 +9,14 @@ use std::{
 
 use leptos::html;
 use leptos::prelude::*;
-use tessara_module_ui::{
-    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
-    EmptyState, PageHeader,
-};
-use tessara_web_component_viewer::{
+use tessara_dashboard_placement_renderer::{
     ComponentRequestActivity, ComponentRequestActivityCallback, ComponentTablePresentation,
     ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
     ComponentViewerMode,
+};
+use tessara_module_ui::{
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
+    EmptyState, PageHeader,
 };
 
 use crate::types::{
@@ -967,6 +967,25 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     fn component_placement(kind: &str, title: &str) -> DashboardPlacement {
+        use tessara_module_contract::{ResourceOwner, TypedResourceReference};
+        use uuid::Uuid;
+
+        let installation_id = Uuid::from_u128(1);
+        let component_reference = tessara_components_contract::ComponentVersionReference::new(
+            TypedResourceReference::new(
+                installation_id,
+                ResourceOwner::ModuleInstance {
+                    installation_id,
+                    module_instance_id: Uuid::from_u128(2),
+                },
+                tessara_components_contract::COMPONENT_RESOURCE_TYPE
+                    .parse()
+                    .expect("resource type"),
+                Uuid::from_u128(3).to_string(),
+            )
+            .expect("typed reference"),
+        )
+        .expect("Component reference");
         DashboardPlacement {
             placement_id: "placement-1".into(),
             position: 0,
@@ -979,6 +998,7 @@ mod tests {
             config_state: None,
             title: Some(title.into()),
             component: Some(DashboardComponentVersion {
+                component_reference,
                 component_version_id: "version-1".into(),
                 component_id: "component-1".into(),
                 component_name: title.into(),

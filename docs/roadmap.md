@@ -906,7 +906,7 @@ reopening Sprint 6C or changing its retained evidence.
 - move Dashboard UI, API, persistence, migrations, configuration, and health/readiness into the Dashboard module
 - provision one Dashboard database per Dashboard module instance and remove Dashboard runtime access to Core or other module databases
 - replace Dashboard database relationships to Components with typed `core_installation`-owned transition `ComponentVersion` references resolved through a versioned, first-party Core Release compatibility contract; do not masquerade the in-process contribution as a Module Instance
-- expose required Component metadata and rendering/execution behavior through that typed adapter, mark the binding transition-only and unavailable to new external Blueprints, and require Sprint 8A to migrate data/references explicitly before retiring it
+- expose required Component metadata and rendering/execution behavior through that typed adapter, mark the binding transition-only and unavailable to new external Blueprints, and require Sprint 8A to replace it through the Phase 8 pre-production fresh-materialization policy before retiring it
 - obtain Core-issued, downstream-audience scope-bound grants or decisions bound to original actor, Dashboard service identity, the resolved Components dependency/contract/action, and installation rather than forwarding Dashboard authority
 - advertise Dashboard routes, navigation, functional contracts, resources, configuration, diagnostics, and security capabilities through its manifest
 - provide one definition-independent Core control-endpoint registry and shared configuration/diagnostics adapter for independently deployed modules; adding the next module must be deployment/manifest registration rather than a new module-ID branch
@@ -1129,32 +1129,38 @@ assets, and conformance coverage. Repeated compiled SDK/runtime code and assets
 are allowed; copied shared source is not.
 
 Cross-module relationships use APIs, events, exports, and typed references
-only. Each extraction must inventory Core-owned transition references, migrate
-data into the new Module Instance, publish a complete old-to-new mapping,
-invoke versioned consumer-owned rebinding, emit completeness receipts,
-preserve explicit migrated/retired resolution for old references, and remove
-the read-only Core compatibility adapter only after all consumers are
-verified. Each extraction reruns the Phase 7 scope, lifecycle, outage,
-compatibility, source-ownership, package-graph, independent-image-upgrade, and
-rollback proofs against the newly physical boundary.
+only. Tessara remains pre-production throughout this phase. Every extraction
+therefore uses one destructive, source-exact fresh materialization of the
+disposable reference application rather than migrating transition product data
+or preserving transition references. The owning Core/module bootstrap
+contracts rebuild canonical seed data in dependency order, consumers create
+new Module Instance references directly, and the old adapter, product storage,
+readers, and payload shapes are removed in the same cutover. Old transition
+references are unsupported after extraction. A failed materialization retains
+evidence, destroys the partial disposable topology and volumes, and restarts
+from empty; it does not resume or repair partial product data. Supported legacy
+import, mapping, rebinding, and resume behavior remains Phase 9 scope. Each
+extraction reruns the Phase 7 scope, lifecycle, outage, compatibility,
+source-ownership, package-graph, independent-image-upgrade, and rollback proofs
+against the newly physical boundary.
 
-### Sprint 8A: Component Module Separation Slice (Next)
+### Sprint 8A: Component Module Separation Slice (Implementation Complete; Validation Pending)
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 
 **Build:**
 
 - move Component UI, API, versions, execution, persistence, configuration, and diagnostics into the Component module
-- create the real Component Module Release/Instance; migrate Component data from Core; publish a complete old-Core-reference to new-Module-reference mapping; and invoke Dashboard-owned versioned rebinding so stored placements are rewritten with migration receipts before the Core adapter becomes read-only and is removed
-- keep old `core_installation` transition references owner/type-stable with explicit migrated/retired resolution rather than silently interpreting them as Component Module references
-- replace Component-to-Dataset database relationships with typed Core-compatibility Dataset references and versioned contracts until Dataset extraction performs the same explicit migration
+- create the real Component Module Release/Instance in a fresh Component database and remove the Core Component product tables, adapter, routes, and readers in the same offline cutover
+- rebuild the full disposable reference-application seed from empty through owning Core/module bootstrap contracts; create Dashboard placements directly with new Component Module Instance references and reject old `core_installation` Component references as unsupported exact-contract inputs
+- replace Component-to-Dataset database relationships with typed Core-compatibility Dataset references and versioned contracts until Dataset extraction rebuilds those references under the same Phase 8 fresh-materialization policy
 - keep Dashboard-to-Component behavior on the public contract introduced in Sprint 6C
-- migrate seed/test data and remove direct access to Dataset, Dashboard, or Core storage
+- move Component and Dashboard seed/test ownership to their modules, rebuild all reference-application seed data in dependency order, and remove direct access to Dataset, Dashboard, or Core storage
 - add dependency outage, scope propagation, capability, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged Component authoring/viewing plus module-owned configuration and diagnostics through the shared shell.
 
-**User-testable exit condition:** a tester can prove every Dashboard placement was explicitly rebound from its Core-owned transition reference to the new Component Module Instance with receipts, then author and execute Components against Dataset compatibility contracts across separate processes/databases while Dashboards continue to consume Components and degrade coherently during outages.
+**User-testable exit condition:** from empty disposable databases, a tester can materialize and seed the reference application so every Dashboard placement is created directly with a new Component Module Instance reference, then author and execute Components against Dataset compatibility contracts across separate processes/databases while Dashboards continue to consume Components and degrade coherently during outages. The same tester can prove old Core Component references and payload shapes are rejected and no Core Component product adapter or storage remains.
 
 ### Sprint 8B: Dataset Module Separation Slice
 
@@ -1163,11 +1169,11 @@ rollback proofs against the newly physical boundary.
 **Build:**
 
 - move Dataset UI, API, revision, execution, materialization, persistence, configuration, and diagnostics into the Dataset module
-- migrate Dataset data and Component-owned Dataset references from the Core compatibility owner to the real Dataset Module Instance through mapping/rebinding receipts before retiring the adapter
+- materialize a fresh Dataset database, rebuild Dataset and downstream Component/Dashboard seed data through owning bootstrap contracts, create new Dataset Module Instance references directly, and remove the Core compatibility adapter without preserving old Dataset references
 - replace reads of Response or other source tables with versioned source APIs, exports, and events
 - preserve Dataset-to-Component contracts and scoped execution
 - keep batch operations and catalog/template semantics owned by Datasets unless a future module provides a declared operation contract
-- migrate seed/test data and remove direct access to Response, Component, or Core storage
+- rebuild canonical seed/test data from empty through owning provider/consumer bootstrap contracts and remove direct access to Response, Component, or Core storage
 - add materialization retry, dependency outage, scope, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged Dataset directory, authoring, preview, status, configuration, and diagnostics surfaces through the shared shell.
@@ -1184,7 +1190,7 @@ rollback proofs against the newly physical boundary.
 - consume typed FormVersion and Workflow context without reading Forms or Workflow tables
 - expose typed response/source contracts and events for Dataset and Workflow consumers
 - preserve assignment-only response starts and scoped review behavior
-- migrate seed/test data and remove direct access to Forms, Workflows, Datasets, or Core storage
+- rebuild canonical seed/test data from empty through owning provider/consumer bootstrap contracts and remove direct access to Forms, Workflows, Datasets, or Core storage
 - add cross-module authorization, idempotency, event, outage, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged response-entry, submission, review, configuration, and diagnostics flows through the shared shell.
@@ -1201,7 +1207,7 @@ rollback proofs against the newly physical boundary.
 - replace Form database relationships with typed FormVersion references and provider contracts
 - invoke Response runtime contracts and consume response events without sharing storage
 - keep publication, assignment, handoff, and version policy owned by Workflows
-- migrate seed/test data and remove direct access to Forms, Responses, or Core storage
+- rebuild canonical seed/test data from empty through owning provider/consumer bootstrap contracts and remove direct access to Forms, Responses, or Core storage
 - add authorization, retry/idempotency, outage, lifecycle, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged Workflow authoring, assignment, execution, configuration, and diagnostics surfaces through the shared shell.
@@ -1284,7 +1290,7 @@ new WorkflowVersion is published.
 - expose typed Form and FormVersion resolution, state observation, and collection/rendering contracts
 - keep decisions about mutations, publication, active/inactive/superseded behavior, and catalogs inside Forms
 - ensure Workflow and Response consumers use provider contracts and never access Forms storage
-- migrate seed/test data, remove Forms access to Core or consumer storage, and remove every other module's access to Forms storage
+- rebuild the complete canonical reference-application seed from empty through owning bootstrap contracts, remove Forms access to Core or consumer storage, and remove every other module's access to Forms storage
 - add lifecycle, authorization, outage, compatibility, and catalog-contract coverage
 
 **Application UI delivered this sprint:** unchanged Form directory, builder, version, publication, catalog, configuration, and diagnostics experiences through the shared shell.

@@ -8,21 +8,28 @@ param(
     [string]$ResolvedCompositionEnvelope,
     [string]$ReleaseCatalogEnvelope,
     [switch]$SkipBuild,
-    [switch]$ReplaceExisting
+    [switch]$ReplaceExisting,
+    [string]$DeploymentDirectory = "sprint-7a",
+    [string]$ExpectedProject = "tessara-sprint-7a",
+    [string]$InstallationId = "01980000-0000-7000-8000-00000000007a",
+    [string]$RuntimeLabel = "sprint-7a",
+    [string[]]$AdditionalBuildServices = @(),
+    [string[]]$AdditionalExpectedNavigationHrefs = @(),
+    [switch]$SkipLegacySeed
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $composePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ComposeFile))
-$expectedProject = "tessara-sprint-7a"
-$installationId = "01980000-0000-7000-8000-00000000007a"
-$runtimeDirectory = Join-Path $repoRoot "target/sprint-7a-bootstrap/$Composition"
-$blueprintPath = Join-Path $repoRoot "deploy/sprint-7a/blueprints/$Composition.json"
-$catalogTemplatePath = Join-Path $repoRoot "deploy/sprint-7a/catalogs/local-release-catalog.json"
+$expectedProject = $ExpectedProject
+$installationId = $InstallationId
+$runtimeDirectory = Join-Path $repoRoot "target/$RuntimeLabel-bootstrap/$Composition"
+$blueprintPath = Join-Path $repoRoot "deploy/$DeploymentDirectory/blueprints/$Composition.json"
+$catalogTemplatePath = Join-Path $repoRoot "deploy/$DeploymentDirectory/catalogs/local-release-catalog.json"
 $catalogPayloadPath = Join-Path $runtimeDirectory "release-catalog.json"
 $catalogPath = Join-Path $runtimeDirectory "release-catalog.signed.json"
-$catalogKeyPath = Join-Path $repoRoot "deploy/sprint-7a/catalogs/catalog-dev-v1.public.hex"
+$catalogKeyPath = Join-Path $repoRoot "deploy/$DeploymentDirectory/catalogs/catalog-dev-v1.public.hex"
 $lockfilePath = Join-Path $runtimeDirectory "lockfile.json"
 $authorizationPath = Join-Path $runtimeDirectory "authorization.json"
 $signedAuthorizationPath = Join-Path $runtimeDirectory "authorization.signed.json"
@@ -36,14 +43,14 @@ function Resolve-RepositoryPath([string]$Path) {
 }
 
 function Prepare-Sprint7AUatFixtures {
-    if ($Composition -ne "reference") { return }
+    if ($Composition -ne "reference" -or $SkipLegacySeed) { return }
     & (Join-Path $PSScriptRoot "prepare-sprint-7a-uat-fixtures.ps1") `
         -BaseUrl $CoreUrl `
         -AdminEmail "admin@tessara.local" `
         -AdminPassword "tessara-dev-admin" `
         -ComposeProject $expectedProject | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw "Sprint 7A semantic UAT fixture preparation failed."
+        throw "$RuntimeLabel semantic UAT fixture preparation failed."
     }
 }
 
@@ -53,7 +60,7 @@ if (-not (Test-Path -LiteralPath $blueprintPath)) { throw "Blueprint not found: 
 
 Push-Location $repoRoot
 try {
-    $configuredProject = (& docker compose -f $composePath config --format json | ConvertFrom-Json).name
+    $configuredProject = (& docker compose -f $composePath --profile reference config --format json | ConvertFrom-Json).name
     if ($configuredProject -ne $expectedProject) {
         throw "Refusing to operate on unexpected Compose project '$configuredProject'."
     }
@@ -61,10 +68,10 @@ try {
     if ($ReplaceExisting) {
         if ($PSCmdlet.ShouldProcess(
             "$expectedProject containers and named volumes",
-            "Remove the fresh Sprint 7A disposable installation state"
+            "Remove the fresh $RuntimeLabel disposable installation state"
         )) {
             & docker compose -f $composePath --profile reference down --volumes --remove-orphans
-            if ($LASTEXITCODE -ne 0) { throw "Sprint 7A Compose teardown failed." }
+            if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel Compose teardown failed." }
         }
     }
 
@@ -78,15 +85,15 @@ try {
 
     $composeArguments = @("compose", "-f", $composePath)
     if ($Composition -eq "reference") { $composeArguments += @("--profile", "reference") }
-    $buildServices = @("supervisor", "core", "scoped-records", "dashboards")
+    $buildServices = @("supervisor", "core", "scoped-records", "dashboards") + $AdditionalBuildServices
     if (-not $SkipBuild) {
         foreach ($service in $buildServices) {
             & docker @composeArguments build $service
-            if ($LASTEXITCODE -ne 0) { throw "Sprint 7A $service image build failed." }
+            if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel $service image build failed." }
         }
     }
     & docker @composeArguments up -d --no-build
-    if ($LASTEXITCODE -ne 0) { throw "Sprint 7A service startup failed." }
+    if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel service startup failed." }
 
     $coreSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
     $coreReady = $false
@@ -108,12 +115,12 @@ try {
             Start-Sleep -Seconds 1
         }
     }
-    if (-not $coreReady) { throw "Sprint 7A Core did not become ready." }
+    if (-not $coreReady) { throw "$RuntimeLabel Core did not become ready." }
 
     # The reference acceptance suite builds on the established UAT demo data.
     # Seed through the installation's canonical same-origin gateway. A no-op
     # rerun skips seeding only when the expected fixture is present.
-    if ($Composition -eq "reference") {
+    if ($Composition -eq "reference" -and -not $SkipLegacySeed) {
         $nodeTypes = Invoke-RestMethod `
             -Uri "$CoreUrl/api/admin/node-types" `
             -Method Get `
@@ -135,7 +142,7 @@ try {
         }
         return $digest
     }
-    $env:TESSARA_SIGNING_ISSUER = "tessara.local.sprint-7a"
+    $env:TESSARA_SIGNING_ISSUER = "tessara.local.$RuntimeLabel"
     $env:TESSARA_SIGNING_KEY_ID = "catalog-dev-v1"
     if ([string]::IsNullOrWhiteSpace($env:TESSARA_SIGNING_SECRET_HEX)) {
         $env:TESSARA_SIGNING_SECRET_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
@@ -144,11 +151,13 @@ try {
     if ([string]::IsNullOrWhiteSpace($ReleaseCatalogEnvelope)) {
         $catalog = Get-Content -LiteralPath $catalogTemplatePath -Raw | ConvertFrom-Json
         $catalog.issued_at = [DateTimeOffset]::UtcNow.ToString("o")
-        $catalog.core_releases[0].core_image = Get-ImageDigest "tessara-sprint-7a-core"
+        $catalog.core_releases[0].core_image = Get-ImageDigest "$expectedProject-core"
         $catalog.core_releases[0].gateway_image = Get-ImageDigest "traefik:v3.6"
         $catalog.core_releases[0].database_image = Get-ImageDigest "postgres:17"
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest "tessara-sprint-7a-scoped-records"
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest "tessara-sprint-7a-dashboards"
+        ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest "$expectedProject-scoped-records"
+        ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest "$expectedProject-dashboards"
+        $componentRelease = $catalog.module_releases | Where-Object definition_id -eq "tessara.components"
+        if ($componentRelease) { $componentRelease.runtime_image = Get-ImageDigest "$expectedProject-components" }
         [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
         & cargo run -q -p tessara-supervisor --bin tessara-compose -- catalog-sign $catalogPayloadPath $catalogPath
         if ($LASTEXITCODE -ne 0) { throw "Runtime release catalog signing failed." }
@@ -200,7 +209,7 @@ try {
     $resolveAndApprove = $false
     if ($projectedPlanDigest -ne $lockfile.materialization_plan_digest) {
         if ($null -ne $compositionSummary.latest_blueprint) {
-            throw "Core already contains a different Blueprint; use -ReplaceExisting for a fresh Sprint 7A installation."
+            throw "Core already contains a different Blueprint; use -ReplaceExisting for a fresh $RuntimeLabel installation."
         }
         $blueprintJson = Get-Content -LiteralPath $blueprintPath -Raw
         Invoke-RestMethod `
@@ -241,7 +250,7 @@ try {
             -ContentType "application/json" `
             -Body (@{
                 approved_effects = $approvedEffects
-                reason = "Sprint 7A $Composition reference materialization"
+                reason = "$RuntimeLabel $Composition reference materialization"
             } | ConvertTo-Json -Depth 20) | Out-Null
     }
 
@@ -255,7 +264,7 @@ try {
             if ($LASTEXITCODE -eq 0) {
                 [IO.File]::WriteAllLines($receiptPath, $recoveredResponse, [Text.UTF8Encoding]::new($false))
                 Prepare-Sprint7AUatFixtures
-                Write-Host "Recovered the accepted Sprint 7A operation with its original signed authorization."
+                Write-Host "Recovered the accepted $RuntimeLabel operation with its original signed authorization."
                 Write-Host "Receipt: $receiptPath"
                 return
             }
@@ -298,20 +307,20 @@ try {
         desired_revision = [uint64]$lockfile.blueprint_revision
         apply_sequence = $applySequence
         nonce = [Guid]::NewGuid().ToString()
-        idempotency_key = "sprint-7a-$Composition-r$($lockfile.blueprint_revision)-a$applySequence"
-        initiator = [ordered]@{ actor_id = "local:sprint-7a-bootstrap"; actor_kind = "operator"; authority = "local-cli" }
-        approver = [ordered]@{ actor_id = "local:sprint-7a-approver"; actor_kind = "operator"; authority = "composition:approve" }
+        idempotency_key = "$RuntimeLabel-$Composition-r$($lockfile.blueprint_revision)-a$applySequence"
+        initiator = [ordered]@{ actor_id = "local:$RuntimeLabel-bootstrap"; actor_kind = "operator"; authority = "local-cli" }
+        approver = [ordered]@{ actor_id = "local:$RuntimeLabel-approver"; actor_kind = "operator"; authority = "composition:approve" }
         issued_at = $now.ToString("o")
         expires_at = $now.AddMinutes(10).ToString("o")
         approved_effects = $approvedEffects
-        reason = "Sprint 7A $Composition reference materialization"
+        reason = "$RuntimeLabel $Composition reference materialization"
         }
         [IO.File]::WriteAllText(
             $authorizationPath,
             ($authorization | ConvertTo-Json -Depth 20) + "`n",
             [Text.UTF8Encoding]::new($false)
         )
-        $env:TESSARA_SIGNING_ISSUER = "tessara.local.sprint-7a"
+        $env:TESSARA_SIGNING_ISSUER = "tessara.local.$RuntimeLabel"
         $env:TESSARA_SIGNING_KEY_ID = "apply-dev-v1"
         if ([string]::IsNullOrWhiteSpace($env:TESSARA_SIGNING_SECRET_HEX)) {
             $env:TESSARA_SIGNING_SECRET_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
@@ -339,7 +348,11 @@ try {
                 ($navigationItems | Where-Object href -eq "/dashboards") -and
                 ($navigationItems | Where-Object href -eq "/forms")
             )
-            if ($navigation.state -eq "available" -and $hasComposition -and $hasReferenceModules) {
+            $hasAdditionalNavigation = @($AdditionalExpectedNavigationHrefs | Where-Object {
+                $expectedHref = $_
+                -not ($navigationItems | Where-Object href -eq $expectedHref)
+            }).Count -eq 0
+            if ($navigation.state -eq "available" -and $hasComposition -and $hasReferenceModules -and $hasAdditionalNavigation) {
                 $navigationReady = $true
                 break
             }
@@ -349,12 +362,12 @@ try {
         Start-Sleep -Seconds 1
     }
     if (-not $navigationReady) {
-        throw "Sprint 7A shell navigation did not reach the expected post-apply state."
+        throw "$RuntimeLabel shell navigation did not reach the expected post-apply state."
     }
 
     Prepare-Sprint7AUatFixtures
 
-    Write-Host "Sprint 7A $Composition composition materialized."
+    Write-Host "$RuntimeLabel $Composition composition materialized."
     Write-Host "Receipt: $receiptPath"
 } finally {
     Pop-Location

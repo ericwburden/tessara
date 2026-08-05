@@ -11,14 +11,6 @@ pub(crate) fn text_matches(query: &str, values: &[&str]) -> bool {
         .any(|value| value.to_lowercase().contains(&query))
 }
 
-pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> String {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| fallback.to_string())
-}
-
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) trait IntoNonemptyString {
     fn into_nonempty(self) -> Option<String>;

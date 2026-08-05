@@ -10,6 +10,11 @@ use icons::{
     SquareActivity, Table2, TriangleAlert,
 };
 use leptos::{ev, prelude::*};
+use tessara_components_contract::ComponentVersionReference;
+use tessara_dashboard_placement_renderer::{
+    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
+    ComponentViewerMode,
+};
 use tessara_dashboards::{
     DASHBOARD_GRID_CONSTRAINTS, DashboardPlacementSizePolicy, GridPlacement, GridRect, GridSize,
     reflow_dashboard_movement, validate_dashboard_layout, validate_dashboard_resize,
@@ -28,10 +33,6 @@ use tessara_module_ui::placement_editor::{
     PlacementResizeSession, placement_grid_metrics_from_element, placement_tile_style,
 };
 use tessara_module_ui::{EmptyState, ModalDialog, SideSheet, SideSheetSide, TableSearch};
-use tessara_web_component_viewer::{
-    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
-    ComponentViewerMode,
-};
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use wasm_bindgen::{JsCast, closure::Closure};
 
@@ -258,7 +259,10 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                         {
                                             return;
                                         }
-                                        match build_reconcile_request(&placements.get_untracked()) {
+                                        match build_reconcile_request(
+                                            &placements.get_untracked(),
+                                            &available_options.get_value(),
+                                        ) {
                                             Ok(payload) => save_layout(
                                                 save_dashboard_id.get_value(),
                                                 payload,
@@ -493,7 +497,7 @@ fn retry_resolution(_: &str) {}
 struct DependencyActionSelection {
     finding: DashboardDependencyFinding,
     action: String,
-    replacement_component_version_id: Option<String>,
+    replacement_component_reference: Option<ComponentVersionReference>,
 }
 
 #[component]
@@ -656,7 +660,7 @@ fn DependencyHealthSheet(
                                         DependencyActionSelection {
                                             finding: defer_finding.clone(),
                                             action: "defer".into(),
-                                            replacement_component_version_id: None,
+                                            replacement_component_reference: None,
                                         },
                                         health,
                                         loading,
@@ -689,7 +693,7 @@ fn DependencyHealthSheet(
                                     <button class="button" type="button" on:click=move |_| confirmation.set(Some(DependencyActionSelection {
                                         finding: upgrade_finding.clone(),
                                         action: "upgrade".into(),
-                                        replacement_component_version_id: None,
+                                        replacement_component_reference: None,
                                     }))>"Upgrade"</button>
                                 })}
                                 <button
@@ -699,13 +703,17 @@ fn DependencyHealthSheet(
                                     on:click=move |_| confirmation.set(Some(DependencyActionSelection {
                                         finding: replace_finding.clone(),
                                         action: "replace".into(),
-                                        replacement_component_version_id: Some(replacement.get_untracked()),
+                                        replacement_component_reference: options
+                                            .get_value()
+                                            .into_iter()
+                                            .find(|option| option.component_version_id == replacement.get_untracked())
+                                            .map(|option| option.component_reference),
                                     }))
                                 >"Replace"</button>
                                 <button class="button button--danger" type="button" on:click=move |_| confirmation.set(Some(DependencyActionSelection {
                                     finding: remove_finding.clone(),
                                     action: "remove".into(),
-                                    replacement_component_version_id: None,
+                                    replacement_component_reference: None,
                                 }))>"Remove"</button>
                             </div>
                         </article>
@@ -826,7 +834,7 @@ fn perform_dependency_action(
         let request = DashboardDependencyActionRequest {
             action: selection.action.clone(),
             expected_finding_revision: selection.finding.finding_revision,
-            replacement_component_version_id: selection.replacement_component_version_id,
+            replacement_component_reference: selection.replacement_component_reference,
         };
         let idempotency_key = format!(
             "dependency-{}-{}-{}-{}",
@@ -2364,6 +2372,7 @@ fn mutate_editor_in(
 
 fn option_to_component(option: &DashboardComponentVersionOption) -> DashboardComponentVersion {
     DashboardComponentVersion {
+        component_reference: option.component_reference.clone(),
         component_version_id: option.component_version_id.clone(),
         component_id: option.component_id.clone(),
         component_name: option.component_name.clone(),
@@ -2385,6 +2394,7 @@ fn component_version_href(component_slug: &str, component_version_id: &str) -> S
 
 fn build_reconcile_request(
     placements: &[EditorPlacement],
+    options: &[DashboardComponentVersionOption],
 ) -> Result<ReconcileDashboardCompositionRequest, String> {
     let mut seen_existing = BTreeSet::new();
     let mut seen_clients = BTreeSet::new();
@@ -2410,10 +2420,12 @@ fn build_reconcile_request(
                 .ok_or_else(|| {
                     "New placements require a readable Component version.".to_string()
                 })?;
+            let component_reference =
+                component_reference_for_version(editor, options, &component_version_id)?;
             commands.push(DashboardCompositionCommand::Bind {
                 placement_id: None,
                 client_key: Some(client_key.clone()),
-                component_version_id,
+                component_reference,
                 geometry: editor.geometry(),
                 title: requested_title(&editor.requested_title),
             });
@@ -2427,10 +2439,12 @@ fn build_reconcile_request(
         if editor.removed {
             commands.push(DashboardCompositionCommand::Remove { placement_id });
         } else if let Some(component_version_id) = &editor.replace_with {
+            let component_reference =
+                component_reference_for_version(editor, options, component_version_id)?;
             commands.push(DashboardCompositionCommand::Bind {
                 placement_id: Some(placement_id),
                 client_key: None,
-                component_version_id: component_version_id.clone(),
+                component_reference,
                 geometry: editor.geometry(),
                 title: requested_title(&editor.requested_title),
             });
@@ -2444,6 +2458,26 @@ fn build_reconcile_request(
         }
     }
     Ok(ReconcileDashboardCompositionRequest { commands })
+}
+
+fn component_reference_for_version(
+    editor: &EditorPlacement,
+    options: &[DashboardComponentVersionOption],
+    component_version_id: &str,
+) -> Result<ComponentVersionReference, String> {
+    options
+        .iter()
+        .find(|option| option.component_version_id == component_version_id)
+        .map(|option| option.component_reference.clone())
+        .or_else(|| {
+            editor
+                .placement
+                .component
+                .as_ref()
+                .filter(|component| component.component_version_id == component_version_id)
+                .map(|component| component.component_reference.clone())
+        })
+        .ok_or_else(|| "The selected Component version has no canonical typed reference.".into())
 }
 
 fn requested_title(request: &Option<Option<String>>) -> Option<String> {
@@ -2484,6 +2518,28 @@ mod tests {
     use leptos::prelude::*;
     use tessara_dashboards::GridSize;
 
+    fn component_reference() -> tessara_components_contract::ComponentVersionReference {
+        use tessara_module_contract::{ResourceOwner, TypedResourceReference};
+        use uuid::Uuid;
+
+        let installation_id = Uuid::from_u128(1);
+        tessara_components_contract::ComponentVersionReference::new(
+            TypedResourceReference::new(
+                installation_id,
+                ResourceOwner::ModuleInstance {
+                    installation_id,
+                    module_instance_id: Uuid::from_u128(2),
+                },
+                tessara_components_contract::COMPONENT_RESOURCE_TYPE
+                    .parse()
+                    .expect("resource type"),
+                Uuid::from_u128(3).to_string(),
+            )
+            .expect("typed reference"),
+        )
+        .expect("Component reference")
+    }
+
     fn placement(id: &str, row: i32, column: i32, width: i32, height: i32) -> EditorPlacement {
         EditorPlacement::existing(DashboardPlacement {
             placement_id: id.into(),
@@ -2497,6 +2553,7 @@ mod tests {
             config_state: Some(DashboardPlacementConfigState::Valid),
             title: None,
             component: Some(DashboardComponentVersion {
+                component_reference: component_reference(),
                 component_version_id: "version".into(),
                 component_id: "component".into(),
                 component_name: "Component".into(),
@@ -2544,7 +2601,7 @@ mod tests {
     #[test]
     fn reconcile_keeps_every_existing_identity_once() {
         let placements = vec![placement("one", 1, 1, 6, 4), placement("two", 1, 7, 6, 4)];
-        let request = build_reconcile_request(&placements).expect("request");
+        let request = build_reconcile_request(&placements, &[]).expect("request");
         assert_eq!(request.commands.len(), 2);
         let json = serde_json::to_value(request).expect("serialize");
         assert_eq!(json["commands"][0]["placement_id"], "one");

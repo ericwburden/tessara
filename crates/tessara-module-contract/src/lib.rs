@@ -40,8 +40,10 @@ pub use inventory::{
     IndependentInstanceV1, IndependentReleaseV1,
 };
 pub use protocol::{
-    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS,
-    AUTHORIZATION_READ_MAX_LIFETIME_SECONDS, AuthorizationGrantOperationV1, AuthorizationGrantV2,
+    AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1, AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+    AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS, AUTHORIZATION_READ_MAX_LIFETIME_SECONDS,
+    AuthorizationExchangeRequestV1, AuthorizationExchangeResponseV1,
+    AuthorizationExchangeValidationError, AuthorizationGrantOperationV1, AuthorizationGrantV2,
     AuthorizationValidationContextV2, AuthorizationValidationError, CapabilityScopeBindingV1,
     DelegationBasisV1, ExternalIdentityAssertionV1, MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
     ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,

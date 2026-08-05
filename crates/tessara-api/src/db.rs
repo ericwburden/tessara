@@ -533,28 +533,20 @@ mod tests {
     }
 
     #[test]
-    fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0x40b7_f317_ba89_3ea3);
+    fn sprint_8a_core_fresh_baseline_excludes_component_product_storage() {
+        assert_eq!(fnv1a(BASELINE), 0x9cd4_a660_f9f4_3acd);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
-        assert!(baseline.contains(
-            "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
-        ));
-        assert!(baseline.contains("component_versions_component_type_supported_chk"));
-        assert!(baseline.contains("CREATE TYPE component_lifecycle_state"));
-        assert!(baseline.contains("CREATE TABLE component_version_change_events"));
-        assert!(baseline.contains("component_version_change_events_immutable"));
-        assert!(baseline.contains("component_versions_resource_revision"));
-        for kind in ["table", "bar", "line", "pie", "donut", "stat_card"] {
-            assert!(baseline.contains(&format!("'{kind}'::component_type")));
-        }
-        assert!(!baseline.contains("component_versions_component_type_table_chk"));
+        assert!(!baseline.contains("CREATE TABLE components ("));
+        assert!(!baseline.contains("CREATE TABLE component_versions ("));
+        assert!(!baseline.contains("CREATE TABLE component_version_change_events ("));
+        assert!(!baseline.contains("CREATE TYPE component_type AS ENUM"));
     }
 
     #[test]
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "09427738d3cf5496c91904f578a63725bc867a3d0e16f75f9bd92a74a3d305c0"
+            "12d7a950cf5d4999db3335c8a928de3be24fa7f237c5a2b43729f3ac09843f2b"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));

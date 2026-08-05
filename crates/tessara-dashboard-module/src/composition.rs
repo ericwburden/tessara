@@ -21,10 +21,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_components_contract::{
-    COMPONENT_CONTRACT_SCHEMA_VERSION, COMPONENT_RESOURCE_TYPE, ComponentAction,
-    ComponentCatalogResponse, ComponentMetadata, ComponentPublicationState, ComponentRenderKind,
-    ComponentRenderRequest, ComponentResolutionRequest, ComponentResolutionResponse,
-    ComponentVersionReference,
+    COMPONENT_CONTRACT_SCHEMA_VERSION, ComponentAction, ComponentCatalogResponse,
+    ComponentMetadata, ComponentPublicationState, ComponentRenderKind, ComponentRenderRequest,
+    ComponentResolutionRequest, ComponentResolutionResponse, ComponentVersionReference,
 };
 use tessara_dashboards::{
     DashboardPlacementConfigInput, DashboardPlacementConfigState, DashboardPlacementConfigV1,
@@ -33,11 +32,10 @@ use tessara_dashboards::{
     validate_dashboard_layout,
 };
 use tessara_module_contract::{
-    AuthorizationGrantV2, ContractCompatibilityState, CoreInstallationOwnerState,
-    ModuleInstanceOwnerState, ModuleServiceRequestV1, OwnerDataState, ProviderAvailabilityState,
-    ResourceAccessState, ResourceIdentityState, ResourceLifecycleState, ResourceOwner,
-    ResourceOwnerState, ResourceResolutionV1, ResourceRevision, ResourceTypeId, SignedEnvelopeV1,
-    TypedResourceReference,
+    AuthorizationGrantV2, ContractCompatibilityState, ModuleInstanceOwnerState,
+    ModuleServiceRequestV1, OwnerDataState, ProviderAvailabilityState, ResourceAccessState,
+    ResourceIdentityState, ResourceLifecycleState, ResourceOwnerState, ResourceResolutionV1,
+    ResourceRevision, SignedEnvelopeV1, TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -86,6 +84,7 @@ pub enum DashboardPlacementAvailabilityV1 {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DashboardComponentVersionOptionV1 {
+    pub component_reference: ComponentVersionReference,
     pub component_version_id: Uuid,
     pub component_id: Uuid,
     pub component_name: String,
@@ -141,7 +140,7 @@ pub enum DashboardCompositionCommandV1 {
         placement_id: Option<Uuid>,
         #[serde(default)]
         client_key: Option<String>,
-        component_version_id: Uuid,
+        component_reference: ComponentVersionReference,
         geometry: DashboardPlacementGeometryV1,
         #[serde(default)]
         title: Option<String>,
@@ -184,6 +183,7 @@ pub struct DashboardDependencyV1 {
 #[derive(Clone, Debug, Serialize)]
 pub struct DashboardPlacementDependencyV1 {
     pub placement_id: Uuid,
+    pub component_reference: ComponentVersionReference,
     pub component_version_id: Uuid,
     pub position: i32,
     pub config: Value,
@@ -290,7 +290,7 @@ async fn render_placement(
     let service_request = signed_service_request(&state, authorization, "POST", path, &body)?;
     let response = state
         .component_provider_client
-        .post(format!("{}{path}", core_url()))
+        .post(format!("{}{path}", component_provider_url()))
         .header("x-tessara-authorization", authorization)
         .header("x-tessara-module-service-request", service_request)
         .header("content-type", "application/json")
@@ -356,6 +356,8 @@ async fn dependency_projection(
                     .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
                 Ok(DashboardPlacementDependencyV1 {
                     placement_id: placement.try_get("id")?,
+                    component_reference: ComponentVersionReference::new(reference)
+                        .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
                     component_version_id,
                     position: placement.try_get("position")?,
                     config: placement.try_get("config")?,
@@ -535,7 +537,7 @@ async fn reconcile_composition(
             DashboardCompositionCommandV1::Bind {
                 placement_id,
                 client_key,
-                component_version_id,
+                component_reference,
                 geometry,
                 title,
             } => {
@@ -560,11 +562,16 @@ async fn reconcile_composition(
                         "client_key is invalid or repeated".into(),
                     ));
                 }
-                let reference =
-                    component_reference(grant.payload.installation_id, component_version_id)?;
-                let wrapped = ComponentVersionReference::new(reference.clone())
-                    .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
-                let resolution = resolve_component(&state, authorization, wrapped).await?;
+                if component_reference.reference().installation_id()
+                    != grant.payload.installation_id
+                {
+                    return Err(DashboardModuleError::BadRequest(
+                        "ComponentVersion belongs to another installation".into(),
+                    ));
+                }
+                let reference = component_reference.reference().clone();
+                let resolution =
+                    resolve_component(&state, authorization, component_reference).await?;
                 let metadata = resolution.metadata().ok_or_else(|| {
                     DashboardModuleError::Conflict(
                         "ComponentVersion cannot be bound in its current state".into(),
@@ -776,6 +783,7 @@ async fn load_composition_response(
         .map(|component| {
             let recommended = policy.recommended_for(&component.component_type);
             DashboardComponentVersionOptionV1 {
+                component_reference: component.reference,
                 component_version_id: component.component_version_id,
                 component_id: component.component_id,
                 component_name: component.component_name,
@@ -854,6 +862,7 @@ pub(super) async fn get_composition(
         .map(|component| {
             let recommended = policy.recommended_for(&component.component_type);
             DashboardComponentVersionOptionV1 {
+                component_reference: component.reference,
                 component_version_id: component.component_version_id,
                 component_id: component.component_id,
                 component_name: component.component_name,
@@ -1089,7 +1098,7 @@ pub(super) async fn resolve_component_since(
     let service_request = signed_service_request(state, authorization, "POST", path, &body)?;
     let response = state
         .component_provider_client
-        .post(format!("{}{path}", core_url()))
+        .post(format!("{}{path}", component_provider_url()))
         .header("x-tessara-authorization", authorization)
         .header("x-tessara-module-service-request", service_request)
         .header("content-type", "application/json")
@@ -1123,7 +1132,7 @@ async fn component_catalog(
     let service_request = signed_service_request(state, authorization, "POST", path, &[])?;
     let response = state
         .component_provider_client
-        .post(format!("{}{path}", core_url()))
+        .post(format!("{}{path}", component_provider_url()))
         .header("x-tessara-authorization", authorization)
         .header("x-tessara-module-service-request", service_request)
         .send()
@@ -1201,8 +1210,9 @@ fn sha256_hex(value: &[u8]) -> String {
 fn provider_unavailable_resolution() -> ComponentResolutionResponse {
     ComponentResolutionResponse::new(
         ResourceResolutionV1::authorized(
-            ResourceOwnerState::CoreInstallation {
-                state: CoreInstallationOwnerState::Live,
+            ResourceOwnerState::ModuleInstance {
+                instance_state: ModuleInstanceOwnerState::Live,
+                data_state: OwnerDataState::Retained,
             },
             ResourceIdentityState::NotEvaluated,
             ResourceLifecycleState::NotEvaluated,
@@ -1346,9 +1356,9 @@ fn reconciled_title(requested: Option<&str>, current: Option<&str>) -> Option<St
     }
 }
 
-fn core_url() -> String {
-    std::env::var("TESSARA_CORE_INTERNAL_URL")
-        .unwrap_or_else(|_| "http://core:8080".into())
+fn component_provider_url() -> String {
+    std::env::var("TESSARA_COMPONENT_INTERNAL_URL")
+        .unwrap_or_else(|_| "http://components:8092".into())
         .trim_end_matches('/')
         .to_string()
 }
@@ -1398,20 +1408,6 @@ fn disclosed_title(
     (resolution.access_state() == ResourceAccessState::Authorized)
         .then(|| title.clone())
         .flatten()
-}
-
-pub(super) fn component_reference(
-    installation_id: Uuid,
-    component_version_id: Uuid,
-) -> Result<TypedResourceReference, DashboardModuleError> {
-    TypedResourceReference::new(
-        installation_id,
-        ResourceOwner::CoreInstallation { installation_id },
-        ResourceTypeId::new(COMPONENT_RESOURCE_TYPE)
-            .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?,
-        component_version_id.to_string(),
-    )
-    .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))
 }
 
 #[cfg(test)]

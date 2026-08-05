@@ -74,7 +74,7 @@ pub(crate) fn is_frozen_destination(id: &str) -> bool {
     DESTINATIONS.iter().any(|destination| destination.id == id)
 }
 
-pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 15] = [
+pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 14] = [
     NavigationCatalogDestination {
         id: "core.home",
         key: "home",
@@ -162,16 +162,6 @@ pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 15] = [
         default_order: 6,
     }),
     contribution(ContributionSpec {
-        id: "tessara.components.navigation",
-        key: "components",
-        label: "Components",
-        route: "/components",
-        semantic_destination: "components.directory",
-        definition_id: "tessara.components",
-        capabilities: &["components:read", "components:manage"],
-        default_order: 7,
-    }),
-    contribution(ContributionSpec {
         id: "tessara.dashboards.navigation",
         key: "dashboards",
         label: "Dashboards",
@@ -179,7 +169,7 @@ pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 15] = [
         semantic_destination: "dashboards.directory",
         definition_id: "tessara.dashboards",
         capabilities: &["dashboards:read"],
-        default_order: 8,
+        default_order: 7,
     }),
     contribution(ContributionSpec {
         id: "tessara.reference.scoped-records.navigation",
@@ -192,7 +182,7 @@ pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 15] = [
             "tessara.reference.scoped-records:read",
             "tessara.reference.scoped-records:manage",
         ],
-        default_order: 9,
+        default_order: 8,
     }),
     core_admin(
         "core.admin.users",

@@ -9,19 +9,19 @@ mod analytics;
 mod analytics_authorization;
 mod app_summary;
 mod auth;
-mod components;
 mod composition;
 pub mod config;
 mod core_security;
-mod dashboard_components_adapter;
-mod dashboard_dependencies;
+mod dataset_components_adapter;
 mod datasets;
 pub mod db;
 pub mod demo;
 pub mod error;
 mod forms;
 mod hierarchy;
+mod module_authorization_exchange;
 mod module_gateway;
+mod module_service_requests;
 mod modules;
 mod operations;
 mod submissions;
@@ -268,66 +268,6 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
-            "/components",
-            get(|| async {
-                native_app(
-                    "/components",
-                    "Tessara Components",
-                    "Browse Tessara components.",
-                )
-            }),
-        )
-        .route(
-            "/components/new",
-            get(|| async {
-                native_app(
-                    "/components/new",
-                    "Create Component",
-                    "Create a Tessara component.",
-                )
-            }),
-        )
-        .route(
-            "/components/{component_ref}/edit",
-            get(|Path(component_ref): Path<String>| async move {
-                native_app(
-                    format!("/components/{component_ref}/edit"),
-                    "Edit Component",
-                    "Edit a Tessara component.",
-                )
-            }),
-        )
-        .route(
-            "/components/{component_ref}/view",
-            get(|Path(component_ref): Path<String>| async move {
-                native_app(
-                    format!("/components/{component_ref}/view"),
-                    "Tessara Component",
-                    "View a Tessara component.",
-                )
-            }),
-        )
-        .route(
-            "/components/{component_ref}/versions",
-            get(|Path(component_ref): Path<String>| async move {
-                native_app(
-                    format!("/components/{component_ref}/versions"),
-                    "Component Versions",
-                    "Review Tessara component version history.",
-                )
-            }),
-        )
-        .route(
-            "/components/{component_ref}",
-            get(|Path(component_ref): Path<String>| async move {
-                native_app(
-                    format!("/components/{component_ref}"),
-                    "Tessara Component",
-                    "View a Tessara component.",
-                )
-            }),
-        )
-        .route(
             "/datasets",
             get(|| async {
                 native_app("/datasets", "Tessara Datasets", "Browse Tessara datasets.")
@@ -498,9 +438,9 @@ fn api_routes() -> Router<AppState> {
         .merge(submissions::routes())
         .merge(analytics::routes())
         .merge(datasets::routes())
-        .merge(components::routes())
+        .merge(dataset_components_adapter::routes())
         .merge(composition::routes())
-        .merge(dashboard_components_adapter::routes())
+        .merge(module_authorization_exchange::routes())
         .merge(modules::routes())
         .merge(demo::routes())
 }

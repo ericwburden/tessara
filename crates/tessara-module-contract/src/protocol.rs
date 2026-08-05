@@ -16,6 +16,7 @@ pub const AUTHORIZATION_READ_MAX_LIFETIME_SECONDS: i64 = 60;
 pub const AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS: i64 = 30;
 pub const AUTHORIZATION_GRANT_SCHEMA_VERSION_V2: u16 = 2;
 pub const MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS: i64 = 30;
+pub const AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1: u16 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -502,6 +503,56 @@ impl AuthorizationGrantV2 {
             .iter()
             .any(|binding| binding.authorizes(capability, organization_id))
     }
+}
+
+/// Exact request for exchanging a verified inbound module grant for a
+/// least-privilege grant addressed to one downstream module instance.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthorizationExchangeRequestV1 {
+    pub schema_version: u16,
+    pub target_module_instance_id: Uuid,
+    pub target_module_definition_id: ModuleDefinitionId,
+    pub dependency_binding: DependencyBindingKey,
+    pub functional_contract: FunctionalContractId,
+    pub action: String,
+    pub operation: AuthorizationGrantOperationV1,
+    pub required_capability: SecurityCapabilityId,
+    pub resource_assertion: Option<ResourceAuthorizationAssertionV2>,
+}
+
+impl AuthorizationExchangeRequestV1 {
+    pub fn validate(&self) -> Result<(), AuthorizationExchangeValidationError> {
+        if self.schema_version != AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1 {
+            return Err(AuthorizationExchangeValidationError::UnsupportedSchemaVersion);
+        }
+        if self.target_module_instance_id.is_nil() || self.action.trim().is_empty() {
+            return Err(AuthorizationExchangeValidationError::InvalidTarget);
+        }
+        if let Some(assertion) = &self.resource_assertion {
+            assertion
+                .validate()
+                .map_err(|_| AuthorizationExchangeValidationError::InvalidResourceAssertion)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthorizationExchangeResponseV1 {
+    pub schema_version: u16,
+    pub authorization: SignedEnvelopeV1<AuthorizationGrantV2>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum AuthorizationExchangeValidationError {
+    #[error("authorization exchange schema version is unsupported")]
+    UnsupportedSchemaVersion,
+    #[error("authorization exchange target or action is invalid")]
+    InvalidTarget,
+    #[error("authorization exchange resource assertion is invalid")]
+    InvalidResourceAssertion,
 }
 
 fn validate_capability_bindings(

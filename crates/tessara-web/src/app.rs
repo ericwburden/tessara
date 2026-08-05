@@ -178,7 +178,8 @@ fn ModuleLifecycleRouteMonitor() -> impl IntoView {
     {
         let location = leptos_router::hooks::use_location();
         Effect::new(move |_| {
-            if !location.pathname.get().starts_with("/dashboards") {
+            let path = location.pathname.get();
+            if !path.starts_with("/dashboards") && !path.starts_with("/components") {
                 crate::features::module_lifecycle::deactivate_current();
             }
         });

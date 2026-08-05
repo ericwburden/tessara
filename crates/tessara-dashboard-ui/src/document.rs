@@ -183,11 +183,11 @@ mod tests {
                     can_manage: false,
                 }],
             ),
-            "2.1.0",
+            "3.0.0",
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("Delivery"));
-        assert!(html.contains(r#"name="tessara-module-release" content="2.1.0""#));
+        assert!(html.contains(r#"name="tessara-module-release" content="3.0.0""#));
         assert!(html.contains(DASHBOARD_BOOTSTRAP_SCRIPT_ID));
         assert!(html.contains(r#"class="app-shell""#));
         assert!(html.contains(r#"class="brand-lockup""#));

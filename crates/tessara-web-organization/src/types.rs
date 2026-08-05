@@ -35,8 +35,6 @@ pub struct OrganizationNodeDetail {
     pub(crate) related_forms: Vec<NodeFormLink>,
     #[serde(default)]
     pub(crate) related_responses: Vec<NodeSubmissionLink>,
-    #[serde(default)]
-    pub(crate) related_dashboards: Vec<NodeDashboardLink>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -57,14 +55,6 @@ pub struct NodeSubmissionLink {
     pub(crate) created_at: String,
     pub(crate) submitted_at: Option<String>,
     pub(crate) submitted_by: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct NodeDashboardLink {
-    pub(crate) dashboard_id: String,
-    pub(crate) dashboard_name: String,
-    pub(crate) component_count: i64,
-    pub(crate) description: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

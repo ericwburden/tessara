@@ -35,7 +35,7 @@ pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
-pub const MODULE_RELEASE_VERSION: &str = "2.1.0";
+pub const MODULE_RELEASE_VERSION: &str = "3.0.0";
 
 const COMPONENT_PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -200,7 +200,7 @@ async fn get_manifest(headers: HeaderMap) -> Result<Json<ModuleManifest>, Dashbo
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct DashboardBootstrapV1 {
+pub struct DashboardBootstrapV2 {
     pub schema_version: String,
     pub dashboard_id: Uuid,
     pub external_key: String,
@@ -208,15 +208,15 @@ pub struct DashboardBootstrapV1 {
     #[serde(default)]
     pub description: Option<String>,
     pub scope_node_id: Uuid,
-    pub placements: Vec<DashboardBootstrapPlacementV1>,
+    pub placements: Vec<DashboardBootstrapPlacementV2>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct DashboardBootstrapPlacementV1 {
+pub struct DashboardBootstrapPlacementV2 {
     pub placement_id: Uuid,
     pub placement_key: String,
-    pub component_version_id: Uuid,
+    pub component_reference: tessara_components_contract::ComponentVersionReference,
     pub column: u16,
     pub row: u16,
     pub width: u16,
@@ -226,10 +226,10 @@ pub struct DashboardBootstrapPlacementV1 {
 async fn apply_bootstrap(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
-    Json(request): Json<tessara_composition::OwnerBootstrapRequestV1<DashboardBootstrapV1>>,
+    Json(request): Json<tessara_composition::OwnerBootstrapRequestV1<DashboardBootstrapV2>>,
 ) -> Result<Json<tessara_composition::OwnerBootstrapResponseV1>, DashboardModuleError> {
     require_private_key(&headers)?;
-    if request.input.schema_version != "tessara.io/dashboard-bootstrap/v1"
+    if request.input.schema_version != "tessara.io/dashboard-bootstrap/v2"
         || request.idempotency_key.trim().is_empty()
         || !request
             .validate_input_digest()
@@ -287,11 +287,12 @@ async fn apply_bootstrap(
         .bind(request.input.dashboard_id).bind(request.input.scope_node_id)
         .execute(&mut *transaction).await?;
     for placement in &request.input.placements {
-        let reference = composition::component_reference(
-            request.installation_id,
-            placement.component_version_id,
-        )
-        .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
+        if placement.component_reference.reference().installation_id() != request.installation_id {
+            return Err(DashboardModuleError::BadRequest(
+                "Dashboard bootstrap Component reference belongs to another installation".into(),
+            ));
+        }
+        let reference = placement.component_reference.reference().clone();
         let position = i32::from(placement.row) * 12 + i32::from(placement.column);
         let config = serde_json::json!({
             "placement_key": placement.placement_key,
@@ -575,11 +576,10 @@ async fn diagnostics(
         "components_dependency": {
             "binding_key": COMPONENT_BINDING_KEY,
             "contract_id": COMPONENT_CONTRACT_ID,
-            "provider": "core_installation",
+            "provider": "selected_component_module_instance",
+            "contract_version": tessara_components_contract::COMPONENT_CONTRACT_VERSION,
             "actions": ["resolve_metadata", "render"],
-            "transition_only": true,
             "external_blueprints_allowed": false,
-            "migration_target": "Sprint 8A",
         },
         "findings": [],
     })))
@@ -718,7 +718,7 @@ mod tests {
         let manifest: ModuleManifest =
             serde_json::from_str(include_str!("../manifest.json")).expect("valid manifest");
         assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
-        assert_eq!(manifest.release_version.to_string(), "2.1.0");
+        assert_eq!(manifest.release_version.to_string(), "3.0.0");
         let lifecycle = manifest
             .browser_lifecycle
             .as_ref()
@@ -770,15 +770,17 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_module_baseline_migration_remains_byte_identical() {
+    fn dashboard_module_v3_fresh_baseline_is_pinned() {
         let baseline = include_bytes!("../migrations/001_dashboard_module.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "14ebbc6cf7d1b24cdc1bf7f6e6ba68066de9de9d5cbac74ff5962da0562f641e"
+            "4740cc72ae3d1e622c0caf80b095c5488931929c4d34fa0fe269ac98339dacdc"
         );
         let baseline = std::str::from_utf8(baseline).expect("baseline is UTF-8");
         assert!(baseline.contains("CREATE TABLE dashboard_dependency_observations"));
         assert!(baseline.contains("CREATE TABLE dashboard_dependency_findings"));
         assert!(baseline.contains("CREATE TABLE dashboard_dependency_action_receipts"));
+        assert!(baseline.contains("tessara.components.component_version"));
+        assert!(baseline.contains("module_instance"));
     }
 }

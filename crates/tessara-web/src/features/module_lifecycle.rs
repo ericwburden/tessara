@@ -28,7 +28,12 @@ enum HostState {
 }
 
 #[component]
-pub fn ModuleLifecyclePage() -> impl IntoView {
+pub fn ModuleLifecyclePage(
+    active_route: &'static str,
+    title: &'static str,
+    product_name: &'static str,
+    definition_id: &'static str,
+) -> impl IntoView {
     let state = RwSignal::new(HostState::Loading);
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     let activation_revision = Arc::new(AtomicU64::new(0));
@@ -65,30 +70,30 @@ pub fn ModuleLifecyclePage() -> impl IntoView {
     }
 
     view! {
-        <AppShell active_route="dashboards" title="Dashboards">
+        <AppShell active_route title=title>
             <section class="module-lifecycle-host">
                 {move || match state.get() {
                     HostState::Loading => view! {
                         <section class="route-panel module-lifecycle-state" role="status">
-                            <p class="eyebrow">"Dashboards"</p>
+                            <p class="eyebrow">{product_name}</p>
                             <h1>"Loading module"</h1>
-                            <p>"Preparing the active Dashboard release."</p>
+                            <p>{format!("Preparing the active {product_name} release.")}</p>
                         </section>
                     }.into_any(),
                     HostState::Active => ().into_any(),
                     HostState::Failed(message) => view! {
                         <section class="route-panel module-lifecycle-state" role="alert">
                             <p class="eyebrow">"Module unavailable"</p>
-                            <h1>"Dashboards could not be opened"</h1>
+                            <h1>{format!("{product_name} could not be opened")}</h1>
                             <p>{message}</p>
-                            <p><a class="button" rel="external" href=browser::document_fallback_href>"Reload Dashboards"</a></p>
+                            <p><a class="button" rel="external" href=browser::document_fallback_href>{format!("Reload {product_name}")}</a></p>
                         </section>
                     }.into_any(),
                 }}
                 <section
                     id=MODULE_OUTLET_ID
                     class="module-lifecycle-outlet"
-                    data-module-definition="tessara.dashboards"
+                    data-module-definition=definition_id
                     aria-busy=move || (state.get() == HostState::Loading).to_string()
                 ></section>
             </section>
@@ -99,7 +104,7 @@ pub fn ModuleLifecyclePage() -> impl IntoView {
 #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
 mod browser {
     pub(super) fn document_fallback_href() -> String {
-        "/dashboards".into()
+        "/".into()
     }
 }
 
@@ -132,7 +137,7 @@ mod browser {
     pub(super) fn document_fallback_href() -> String {
         web_sys::window()
             .and_then(|window| window.location().pathname().ok())
-            .unwrap_or_else(|| "/dashboards".into())
+            .unwrap_or_else(|| "/".into())
     }
 
     pub(super) async fn activate(path: &str) -> Result<(), String> {

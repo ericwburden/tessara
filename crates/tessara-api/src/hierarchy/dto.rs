@@ -106,7 +106,6 @@ pub(crate) struct NodeDetail {
     pub(crate) metadata: Value,
     pub(crate) related_forms: Vec<NodeFormLink>,
     pub(crate) related_responses: Vec<NodeSubmissionLink>,
-    pub(crate) related_dashboards: Vec<NodeDashboardLink>,
 }
 
 #[derive(Serialize)]
@@ -129,14 +128,6 @@ pub(crate) struct NodeSubmissionLink {
     pub(crate) created_at: chrono::DateTime<chrono::Utc>,
     pub(crate) submitted_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(crate) submitted_by: Option<String>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct NodeDashboardLink {
-    pub(crate) dashboard_id: Uuid,
-    pub(crate) dashboard_name: String,
-    pub(crate) component_count: i64,
-    pub(crate) description: Option<String>,
 }
 
 #[derive(Serialize)]

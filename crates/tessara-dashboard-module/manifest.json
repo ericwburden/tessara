@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.dashboards",
-  "release_version": "2.1.0",
+  "release_version": "3.0.0",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -71,8 +71,7 @@
         "A saved Dashboard composition."
       ],
       "constraints": [
-        "Composition retains exact ComponentVersion references.",
-        "The transition Components binding must be migrated explicitly in Sprint 8A."
+        "Composition retains exact ComponentVersion references owned by the selected Component Module Instance."
       ],
       "contracts": [
         "tessara.dashboards.dashboard",
@@ -143,7 +142,7 @@
   "dependencies": [
     {
       "contract_id": "tessara.components.component-version",
-      "version_requirement": "^1.0",
+      "version_requirement": "=3.0.0",
       "binding_key": "tessara.dashboards.component-version",
       "optional": false
     }

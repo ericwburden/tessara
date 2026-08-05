@@ -1,4 +1,4 @@
-//! Exact-current Components V2 compatibility boundary.
+//! Exact-current Components V3 module boundary.
 //!
 //! The provider owns Component publication, lifecycle, revision, change, and
 //! successor meaning. Consumers own their findings and actions. A typed
@@ -13,11 +13,11 @@ use tessara_module_contract::{
 };
 use uuid::Uuid;
 
-pub const COMPONENT_CONTRACT_SCHEMA_VERSION: u16 = 2;
-pub const COMPONENT_CONTRACT_VERSION: &str = "2.0.0";
+pub const COMPONENT_CONTRACT_SCHEMA_VERSION: u16 = 3;
+pub const COMPONENT_CONTRACT_VERSION: &str = "3.0.0";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
-pub const COMPONENT_RESOURCE_TYPE: &str = "tessara.transition.component_version";
+pub const COMPONENT_RESOURCE_TYPE: &str = "tessara.components.component_version";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -112,8 +112,8 @@ impl ComponentVersionReference {
         reference: TypedResourceReference,
     ) -> Result<Self, ComponentVersionReferenceValidationError> {
         reference.validate()?;
-        if !matches!(reference.owner(), ResourceOwner::CoreInstallation { .. }) {
-            return Err(ComponentVersionReferenceValidationError::ExpectedCoreInstallationOwner);
+        if !matches!(reference.owner(), ResourceOwner::ModuleInstance { .. }) {
+            return Err(ComponentVersionReferenceValidationError::ExpectedModuleInstanceOwner);
         }
         if reference.resource_type().as_str() != COMPONENT_RESOURCE_TYPE {
             return Err(
@@ -150,11 +150,11 @@ impl<'de> Deserialize<'de> for ComponentVersionReference {
 pub enum ComponentVersionReferenceValidationError {
     #[error(transparent)]
     InvalidReference(#[from] tessara_module_contract::ReferenceValidationError),
-    #[error("ComponentVersion references must be Core installation owned")]
-    ExpectedCoreInstallationOwner,
+    #[error("ComponentVersion references must be Module Instance owned")]
+    ExpectedModuleInstanceOwner,
     #[error(
         "ComponentVersion reference has resource type '{actual}', expected \
-         'tessara.transition.component_version'"
+         'tessara.components.component_version'"
     )]
     UnexpectedResourceType { actual: String },
 }
@@ -162,7 +162,7 @@ pub enum ComponentVersionReferenceValidationError {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentResolutionRequest {
-    #[serde(deserialize_with = "deserialize_schema_version_v2")]
+    #[serde(deserialize_with = "deserialize_schema_version_v3")]
     pub schema_version: u16,
     pub action: ComponentAction,
     pub reference: ComponentVersionReference,
@@ -188,7 +188,7 @@ impl ComponentResolutionRequest {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentRenderRequest {
-    #[serde(deserialize_with = "deserialize_schema_version_v2")]
+    #[serde(deserialize_with = "deserialize_schema_version_v3")]
     pub schema_version: u16,
     pub action: ComponentAction,
     pub reference: ComponentVersionReference,
@@ -201,6 +201,7 @@ pub struct ComponentRenderRequest {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentMetadata {
+    pub reference: ComponentVersionReference,
     pub component_version_id: Uuid,
     pub component_id: Uuid,
     pub component_name: String,
@@ -232,12 +233,12 @@ pub struct ComponentSuccessor {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentCatalogResponse {
-    #[serde(deserialize_with = "deserialize_schema_version_v2")]
+    #[serde(deserialize_with = "deserialize_schema_version_v3")]
     pub schema_version: u16,
     pub components: Vec<ComponentMetadata>,
 }
 
-/// Authorized Components V2 resolution.
+/// Authorized Components V3 resolution.
 ///
 /// Restricted and unresolved results carry no observation, metadata, change,
 /// or successor detail. An authorized tombstone carries the typed observation
@@ -327,6 +328,14 @@ impl ComponentResolutionResponse {
             return Err(ComponentResolutionValidationError::UnexpectedProviderContract);
         }
 
+        if let Some(metadata) = &self.metadata
+            && (metadata.reference.reference() != observation.reference()
+                || metadata.reference.reference().resource_id()
+                    != metadata.component_version_id.to_string())
+        {
+            return Err(ComponentResolutionValidationError::MetadataReferenceMismatch);
+        }
+
         let tombstoned = matches!(
             self.resolution.resource_lifecycle_state(),
             tessara_module_contract::ResourceLifecycleState::ProviderDefined { state }
@@ -393,7 +402,7 @@ impl<'de> Deserialize<'de> for ComponentResolutionResponse {
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ComponentResolutionValidationError {
-    #[error("Components contract schema version {0} is unsupported; expected 2")]
+    #[error("Components contract schema version {0} is unsupported; expected 3")]
     UnsupportedSchemaVersion(u16),
     #[error("restricted or unresolved Component resolution discloses provider detail")]
     RestrictedOrUnresolvedDisclosure,
@@ -401,6 +410,8 @@ pub enum ComponentResolutionValidationError {
     MissingObservation,
     #[error("resolved Component response names an unexpected provider contract")]
     UnexpectedProviderContract,
+    #[error("resolved Component metadata reference does not match its observation or identifier")]
+    MetadataReferenceMismatch,
     #[error("resolved non-tombstoned Component response is missing metadata")]
     MissingMetadata,
     #[error("tombstoned Component response discloses metadata or successor detail")]
@@ -411,7 +422,7 @@ pub enum ComponentResolutionValidationError {
     InvalidChangeOrder,
 }
 
-fn deserialize_schema_version_v2<'de, D>(deserializer: D) -> Result<u16, D::Error>
+fn deserialize_schema_version_v3<'de, D>(deserializer: D) -> Result<u16, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -429,7 +440,7 @@ mod tests {
     use semver::Version;
     use serde_json::json;
     use tessara_module_contract::{
-        CoreInstallationOwnerState, FunctionalContractId, ProviderContractIdentity,
+        FunctionalContractId, ModuleInstanceOwnerState, OwnerDataState, ProviderContractIdentity,
         ResourceLifecycleState, ResourceObservationStrategy, ResourceOwnerState,
     };
 
@@ -441,8 +452,9 @@ mod tests {
         ComponentVersionReference::new(
             TypedResourceReference::new(
                 INSTALLATION_ID,
-                ResourceOwner::CoreInstallation {
+                ResourceOwner::ModuleInstance {
                     installation_id: INSTALLATION_ID,
+                    module_instance_id: Uuid::from_u128(10),
                 },
                 COMPONENT_RESOURCE_TYPE.parse().expect("resource type"),
                 Uuid::from_u128(2).to_string(),
@@ -466,8 +478,9 @@ mod tests {
 
     fn resolution(lifecycle: &str) -> ResourceResolutionV1 {
         ResourceResolutionV1::authorized(
-            ResourceOwnerState::CoreInstallation {
-                state: CoreInstallationOwnerState::Live,
+            ResourceOwnerState::ModuleInstance {
+                instance_state: ModuleInstanceOwnerState::Live,
+                data_state: OwnerDataState::Retained,
             },
             ResourceIdentityState::Resolved,
             ResourceLifecycleState::ProviderDefined {
@@ -481,6 +494,7 @@ mod tests {
 
     fn metadata(lifecycle_state: ComponentLifecycleState) -> ComponentMetadata {
         ComponentMetadata {
+            reference: reference(),
             component_version_id: Uuid::from_u128(2),
             component_id: Uuid::from_u128(3),
             component_name: "Program Snapshot".into(),
@@ -496,17 +510,17 @@ mod tests {
     }
 
     #[test]
-    fn exact_v2_request_rejects_v1_and_unknown_fields() {
+    fn exact_v3_request_rejects_v2_and_unknown_fields() {
         let request = ComponentResolutionRequest::new(
             ComponentAction::ResolveMetadata,
             reference(),
             Some(ResourceRevision::new(4).expect("revision")),
         );
         let mut wire = serde_json::to_value(request).expect("wire");
-        assert_eq!(wire["schema_version"], 2);
-        wire["schema_version"] = json!(1);
-        assert!(serde_json::from_value::<ComponentResolutionRequest>(wire.clone()).is_err());
+        assert_eq!(wire["schema_version"], 3);
         wire["schema_version"] = json!(2);
+        assert!(serde_json::from_value::<ComponentResolutionRequest>(wire.clone()).is_err());
+        wire["schema_version"] = json!(3);
         wire.as_object_mut()
             .expect("object")
             .insert("fallback_version".into(), json!(1));

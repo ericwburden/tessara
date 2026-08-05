@@ -23,9 +23,7 @@ use accounts::{
     ensure_account_delegation, ensure_account_scope_assignment, ensure_demo_account,
     require_dev_admin_account,
 };
-use analytics::{
-    DatasetFieldBinding, ensure_component, ensure_component_with_config, ensure_dataset,
-};
+use analytics::{DatasetFieldBinding, ensure_dataset};
 use forms::{DemoFormSpec, FormFieldDef, ensure_demo_form, replace_form_scope_nodes};
 use hierarchy::{
     DemoNodeSpec, MetadataFieldDef, ensure_demo_node, ensure_metadata_fields, ensure_node_type,
@@ -56,17 +54,12 @@ pub struct DemoSeedSummary {
     pub submitted_submission_count: i64,
     pub dataset_count: i64,
     pub dataset_revision_count: i64,
-    pub component_count: i64,
-    pub dashboard_count: i64,
     pub organization_node_id: Uuid,
     pub form_id: Uuid,
     pub form_version_id: Uuid,
     pub submission_id: Uuid,
     pub dataset_id: Uuid,
     pub dataset_revision_id: Uuid,
-    pub component_id: Uuid,
-    pub component_version_id: Uuid,
-    pub dashboard_id: Uuid,
     pub partner_node_id: Uuid,
     pub program_node_id: Uuid,
     pub activity_node_id: Uuid,
@@ -1170,7 +1163,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
-    ensure_component_testing_session_responses(
+    ensure_analytics_session_responses(
         pool,
         session_form.form_version_id,
         &[
@@ -1252,7 +1245,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
 
     let analytics_status = crate::analytics::refresh_projection(pool).await?;
 
-    let (_partner_dataset_id, partner_dataset_revision_id) = ensure_dataset(
+    let (_partner_dataset_id, _partner_dataset_revision_id) = ensure_dataset(
         pool,
         partner_form.form_id,
         "Demo Partner Profile Dataset",
@@ -1266,7 +1259,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         }],
     )
     .await?;
-    let (_program_dataset_id, program_dataset_revision_id) = ensure_dataset(
+    let (_program_dataset_id, _program_dataset_revision_id) = ensure_dataset(
         pool,
         program_form.form_id,
         "Demo Program Snapshot Dataset",
@@ -1280,7 +1273,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         }],
     )
     .await?;
-    let (_activity_dataset_id, activity_dataset_revision_id) = ensure_dataset(
+    let (_activity_dataset_id, _activity_dataset_revision_id) = ensure_dataset(
         pool,
         activity_form.form_id,
         "Demo Activity Plan Dataset",
@@ -1335,161 +1328,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     )
     .await?;
 
-    let (_partner_component_id, _partner_component_version_id) = ensure_component(
-        pool,
-        "Demo Partner Profile Table",
-        "demo-partner-profile-table",
-        partner_dataset_revision_id,
-    )
-    .await?;
-    let (_program_component_id, _program_component_version_id) = ensure_component(
-        pool,
-        "Demo Program Snapshot Table",
-        "demo-program-snapshot-table",
-        program_dataset_revision_id,
-    )
-    .await?;
-    let (_activity_component_id, _activity_component_version_id) = ensure_component(
-        pool,
-        "Demo Activity Plan Table",
-        "demo-activity-plan-table",
-        activity_dataset_revision_id,
-    )
-    .await?;
-    let (session_component_id, session_component_version_id) = ensure_component(
-        pool,
-        "Demo Session Log Table",
-        "demo-session-log-table",
-        session_dataset_revision_id,
-    )
-    .await?;
-    let (_session_bar_component_id, _session_bar_component_version_id) =
-        ensure_component_with_config(
-            pool,
-            "Demo Session Participants Bar",
-            "demo-session-log-bar",
-            session_dataset_revision_id,
-            "bar",
-            json!({
-                "mode": "comparison",
-                "summary_field": "session__participants",
-                "summary_type": "sum",
-                "category_field": "session__session_date",
-                "comparison_field": "session__completed_as_planned",
-                "comparison_layout": "stacked",
-                "orientation": "horizontal",
-                "sort_field": "summary_value",
-                "sort_direction": "desc",
-                "number_of_points": 20,
-                "value_format": "integer",
-                "x_axis_label": "Participants",
-                "y_axis_label": "Session Date",
-                "legend_title": "Completion Status",
-                "category_labels": {
-                    "true": "Completed as planned",
-                    "false": "Did not complete as planned"
-                },
-                "category_colors": {
-                    "true": "var(--semantic-primary)",
-                    "false": "var(--semantic-warning)"
-                }
-            }),
-        )
-        .await?;
-    let (_session_line_component_id, _session_line_component_version_id) =
-        ensure_component_with_config(
-            pool,
-            "Demo Session Participants Line",
-            "demo-session-log-line",
-            session_dataset_revision_id,
-            "line",
-            json!({
-                "summary_field": "session__participants",
-                "summary_type": "sum",
-                "x_field": "session__session_date",
-                "sort_field": "x",
-                "sort_direction": "asc",
-                "number_of_points": 20,
-                "value_format": "integer"
-            }),
-        )
-        .await?;
-    let (_session_pie_component_id, _session_pie_component_version_id) =
-        ensure_component_with_config(
-            pool,
-            "Demo Session Completion Pie",
-            "demo-session-completion-pie",
-            session_dataset_revision_id,
-            "pie",
-            json!({
-                "summary_field": "session__participants",
-                "summary_type": "sum",
-                "category_field": "session__completed_as_planned",
-                "sort_field": "summary_value",
-                "sort_direction": "desc",
-                "max_slices": 10,
-                "value_format": "integer",
-                "legend_title": "Completion Status",
-                "category_labels": {
-                    "true": "Completed as planned",
-                    "false": "Did not complete as planned"
-                },
-                "category_colors": {
-                    "true": "var(--semantic-primary)",
-                    "false": "var(--semantic-warning)"
-                }
-            }),
-        )
-        .await?;
-    let (_session_donut_component_id, _session_donut_component_version_id) =
-        ensure_component_with_config(
-            pool,
-            "Demo Session Completion Donut",
-            "demo-session-completion-donut",
-            session_dataset_revision_id,
-            "donut",
-            json!({
-                "summary_field": "session__participants",
-                "summary_type": "sum",
-                "category_field": "session__completed_as_planned",
-                "sort_field": "summary_value",
-                "sort_direction": "desc",
-                "max_slices": 10,
-                "value_format": "integer",
-                "legend_title": "Completion Status",
-                "category_labels": {
-                    "true": "Completed as planned",
-                    "false": "Did not complete as planned"
-                },
-                "category_colors": {
-                    "true": "var(--semantic-primary)",
-                    "false": "var(--semantic-warning)"
-                }
-            }),
-        )
-        .await?;
-    let (_session_stat_component_id, _session_stat_component_version_id) =
-        ensure_component_with_config(
-            pool,
-            "Demo Session Total Participants StatCard",
-            "demo-session-total-participants-stat-card",
-            session_dataset_revision_id,
-            "stat_card",
-            json!({
-                "summary_field": "session__participants",
-                "summary_type": "sum",
-                "label": "Total participants",
-                "supporting_text": "Submitted Demo Session Log entries",
-                "panel_style": "accent",
-                "value_format": "integer"
-            }),
-        )
-        .await?;
-
-    // Dashboard demo composition is seeded through the independently deployed
-    // Dashboard Module after Core has committed its ComponentVersion IDs.
-    let dashboard_id = Uuid::nil();
-
     Ok(DemoSeedSummary {
         seed_version: DEMO_SEED_VERSION,
         node_counts: DemoNodeCounts {
@@ -1503,17 +1341,12 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         submitted_submission_count: 58,
         dataset_count: 4,
         dataset_revision_count: 4,
-        component_count: 9,
-        dashboard_count: 0,
         organization_node_id: session_a,
         form_id: session_form.form_id,
         form_version_id: session_form.form_version_id,
         submission_id: session_submitted_a,
         dataset_id: session_dataset_id,
         dataset_revision_id: session_dataset_revision_id,
-        component_id: session_component_id,
-        component_version_id: session_component_version_id,
-        dashboard_id,
         partner_node_id: partner_a,
         program_node_id: program_a,
         activity_node_id: activity_a,
@@ -1554,8 +1387,6 @@ async fn require_demo_seed_target_empty(
           + (SELECT COUNT(*) FROM workflow_versions)
           + (SELECT COUNT(*) FROM datasets)
           + (SELECT COUNT(*) FROM dataset_revisions)
-          + (SELECT COUNT(*) FROM components)
-          + (SELECT COUNT(*) FROM component_versions)
         "#,
     )
     .bind(dev_admin_account_id)
@@ -1571,7 +1402,7 @@ async fn require_demo_seed_target_empty(
     ))
 }
 
-async fn ensure_component_testing_session_responses(
+async fn ensure_analytics_session_responses(
     pool: &PgPool,
     form_version_id: Uuid,
     session_accounts: &[(Uuid, Uuid)],
@@ -1600,7 +1431,7 @@ async fn ensure_component_testing_session_responses(
         let month = 4 + (index / 17);
         let day = 1 + ((index * 3) % 27);
         let session_date = format!("2026-{month:02}-{day:02}");
-        let seed_key = format!("seed_demo:session-component-test-{index:02}");
+        let seed_key = format!("seed_demo:session-analytics-{index:02}");
         let facilitator_notes = format!(
             "{} Batch response {}.",
             NOTE_PATTERNS[index % NOTE_PATTERNS.len()],

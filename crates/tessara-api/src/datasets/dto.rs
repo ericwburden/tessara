@@ -341,8 +341,6 @@ pub enum DatasetCompatibilityState {
 #[serde(rename_all = "snake_case")]
 pub enum DatasetDependencyKind {
     Dataset,
-    ComponentVersion,
-    Dashboard,
 }
 
 /// Binding mode used by a downstream dependency.
@@ -409,8 +407,6 @@ pub enum DatasetSemanticBump {
 pub struct DatasetDependencySummary {
     pub(crate) dependency_count: usize,
     pub(crate) dataset_count: usize,
-    pub(crate) component_version_count: usize,
-    pub(crate) dashboard_count: usize,
     pub(crate) carry_forward_state: DatasetCarryForwardState,
 }
 

@@ -1,10 +1,8 @@
 //! Related work views for organization nodes.
 //!
-//! Keep tables and pagination for forms, responses, dashboards, and other work linked to organization nodes here.
+//! Keep tables and pagination for Core-owned work linked to organization nodes here.
 
-use super::related_work_tables::{
-    RelatedDashboardsTable, RelatedFormsTable, RelatedResponsesTable,
-};
+use super::related_work_tables::{RelatedFormsTable, RelatedResponsesTable};
 use crate::types::OrganizationNodeDetail;
 use leptos::prelude::*;
 use tessara_module_ui::{Tabs, TabsContent, TabsList, TabsTrigger};
@@ -22,7 +20,6 @@ pub(crate) fn RelatedWorkSummary(
     };
     let forms_count = detail.related_forms.len();
     let responses_count = detail.related_responses.len();
-    let dashboards_count = detail.related_dashboards.len();
 
     view! {
         <div class=summary_class>
@@ -34,18 +31,12 @@ pub(crate) fn RelatedWorkSummary(
                     <TabsTrigger active=active_tab value="responses">
                         {format!("Responses ({responses_count})")}
                     </TabsTrigger>
-                    <TabsTrigger active=active_tab value="dashboards">
-                        {format!("Dashboards ({dashboards_count})")}
-                    </TabsTrigger>
                 </TabsList>
                 <TabsContent active=active_tab value="forms">
                     <RelatedFormsTable forms=detail.related_forms/>
                 </TabsContent>
                 <TabsContent active=active_tab value="responses">
                     <RelatedResponsesTable responses=detail.related_responses/>
-                </TabsContent>
-                <TabsContent active=active_tab value="dashboards">
-                    <RelatedDashboardsTable dashboards=detail.related_dashboards/>
                 </TabsContent>
             </Tabs>
         </div>

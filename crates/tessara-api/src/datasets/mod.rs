@@ -1607,12 +1607,6 @@ async fn load_dataset_revision_summaries(
                         .copied()
                 })
                 .unwrap_or(0),
-            dependency_major
-                .and_then(|major| dependency_counts.component_by_major.get(&major).copied())
-                .unwrap_or(0),
-            dependency_major
-                .and_then(|major| dependency_counts.dashboard_by_major.get(&major).copied())
-                .unwrap_or(0),
             compatibility.state,
             dependency_major == snapshot.version_major,
         );
@@ -1710,8 +1704,6 @@ fn revision_snapshot_from_row(
 struct DependencySummaryCounts {
     exact_dataset_by_revision: BTreeMap<Uuid, usize>,
     major_dataset_by_major: BTreeMap<i32, usize>,
-    component_by_major: BTreeMap<i32, usize>,
-    dashboard_by_major: BTreeMap<i32, usize>,
 }
 
 async fn load_dependency_summary_counts(
@@ -1731,20 +1723,6 @@ async fn load_dependency_summary_counts(
         major_dataset_by_major: load_major_line_dataset_dependency_counts(
             pool,
             &scope.datasets,
-            source_dataset_id,
-            version_majors,
-        )
-        .await?,
-        component_by_major: load_component_dependency_counts(
-            pool,
-            &scope.components,
-            source_dataset_id,
-            version_majors,
-        )
-        .await?,
-        dashboard_by_major: load_dashboard_dependency_counts(
-            pool,
-            &scope.dashboards,
             source_dataset_id,
             version_majors,
         )
@@ -1851,121 +1829,6 @@ async fn load_major_line_dataset_dependency_counts(
     count_map_from_i32_rows(rows)
 }
 
-async fn load_component_dependency_counts(
-    pool: &sqlx::PgPool,
-    boundary: &auth::CapabilityBoundary,
-    source_dataset_id: Uuid,
-    version_majors: &[i32],
-) -> ApiResult<BTreeMap<i32, usize>> {
-    if version_majors.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    let rows = match boundary {
-        auth::CapabilityBoundary::Global => {
-            sqlx::query(
-                r#"
-        SELECT component_versions.dataset_version_major AS dependency_key,
-               COUNT(DISTINCT component_versions.id)::bigint AS dependency_count
-        FROM component_versions
-        WHERE component_versions.dataset_id = $1
-          AND component_versions.dataset_version_major = ANY($2)
-          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
-        GROUP BY component_versions.dataset_version_major
-        "#,
-            )
-            .bind(source_dataset_id)
-            .bind(version_majors)
-            .fetch_all(pool)
-            .await?
-        }
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            sqlx::query(
-                r#"
-        SELECT component_versions.dataset_version_major AS dependency_key,
-               COUNT(DISTINCT component_versions.id)::bigint AS dependency_count
-        FROM component_versions
-        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = component_versions.dataset_id
-        WHERE component_versions.dataset_id = $1
-          AND component_versions.dataset_version_major = ANY($2)
-          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
-          AND dataset_scope_nodes.node_id = ANY($3)
-        GROUP BY component_versions.dataset_version_major
-        "#,
-            )
-            .bind(source_dataset_id)
-            .bind(version_majors)
-            .bind(scope_ids)
-            .fetch_all(pool)
-            .await?
-        }
-        auth::CapabilityBoundary::None => Vec::new(),
-    };
-    count_map_from_i32_rows(rows)
-}
-
-async fn load_dashboard_dependency_counts(
-    pool: &sqlx::PgPool,
-    boundary: &auth::CapabilityBoundary,
-    source_dataset_id: Uuid,
-    version_majors: &[i32],
-) -> ApiResult<BTreeMap<i32, usize>> {
-    if version_majors.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    if matches!(boundary, auth::CapabilityBoundary::None) {
-        return Ok(BTreeMap::new());
-    }
-    let component_rows = sqlx::query(
-        "SELECT id,dataset_version_major
-         FROM component_versions
-         WHERE dataset_id=$1
-           AND dataset_version_major=ANY($2)
-           AND status IN ('published'::component_version_status,'superseded'::component_version_status)",
-    )
-    .bind(source_dataset_id)
-    .bind(version_majors)
-    .fetch_all(pool)
-    .await?;
-    let component_majors = component_rows
-        .into_iter()
-        .map(|row| {
-            Ok((
-                row.try_get::<Uuid, _>("id")?,
-                row.try_get::<i32, _>("dataset_version_major")?,
-            ))
-        })
-        .collect::<Result<BTreeMap<_, _>, sqlx::Error>>()?;
-    let projection = crate::dashboard_dependencies::load().await?;
-    let mut dashboards_by_major = BTreeMap::<i32, BTreeSet<Uuid>>::new();
-    for dashboard in projection.dashboards {
-        let visible = match boundary {
-            auth::CapabilityBoundary::Global => true,
-            auth::CapabilityBoundary::Scoped(scope_ids) => dashboard
-                .scope_node_ids
-                .iter()
-                .any(|node_id| scope_ids.contains(node_id)),
-            auth::CapabilityBoundary::None => false,
-        };
-        if !visible {
-            continue;
-        }
-        for major in dashboard
-            .placements
-            .iter()
-            .filter_map(|placement| component_majors.get(&placement.component_version_id))
-        {
-            dashboards_by_major
-                .entry(*major)
-                .or_default()
-                .insert(dashboard.dashboard_id);
-        }
-    }
-    Ok(dashboards_by_major
-        .into_iter()
-        .map(|(major, dashboards)| (major, dashboards.len()))
-        .collect())
-}
-
 fn count_map_from_uuid_rows(rows: Vec<PgRow>) -> ApiResult<BTreeMap<Uuid, usize>> {
     rows.into_iter()
         .map(|row| {
@@ -1991,13 +1854,11 @@ fn count_map_from_i32_rows(rows: Vec<PgRow>) -> ApiResult<BTreeMap<i32, usize>> 
 fn dependency_summary_from_counts(
     exact_dataset_count: usize,
     major_line_dataset_count: usize,
-    component_version_count: usize,
-    dashboard_count: usize,
     compatibility_state: DatasetCompatibilityState,
     major_line_stays_current: bool,
 ) -> DatasetDependencySummary {
     let dataset_count = exact_dataset_count + major_line_dataset_count;
-    let dependency_count = dataset_count + component_version_count + dashboard_count;
+    let dependency_count = dataset_count;
     let exact_state = carry_forward_state_for(compatibility_state);
     let major_line_state = if major_line_dataset_count > 0 && !major_line_stays_current {
         DatasetCarryForwardState::ManualReview
@@ -2018,8 +1879,6 @@ fn dependency_summary_from_counts(
     DatasetDependencySummary {
         dependency_count,
         dataset_count,
-        component_version_count,
-        dashboard_count,
         carry_forward_state,
     }
 }
@@ -2448,8 +2307,6 @@ async fn dependency_impact_scope(
 ) -> ApiResult<DependencyImpactScope> {
     Ok(DependencyImpactScope {
         datasets: auth::capability_boundary(pool, account, "datasets:read").await?,
-        components: auth::capability_boundary(pool, account, "components:read").await?,
-        dashboards: auth::capability_boundary(pool, account, "dashboards:read").await?,
     })
 }
 
@@ -5244,7 +5101,7 @@ pub(crate) async fn load_dataset_table_rows(
     load_materialized_dataset_table_rows(pool, account, dataset_id).await
 }
 
-async fn load_dataset_major_distinct_values(
+pub(crate) async fn load_dataset_major_distinct_values(
     pool: &sqlx::PgPool,
     account: &auth::AccountContext,
     dataset_id: Uuid,

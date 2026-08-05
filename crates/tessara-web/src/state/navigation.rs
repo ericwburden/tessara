@@ -11,7 +11,7 @@ pub struct NavItem {
     pub capabilities: &'static [&'static str],
 }
 
-pub const NAV_ITEMS: [NavItem; 10] = [
+pub const NAV_ITEMS: [NavItem; 9] = [
     NavItem {
         key: "home",
         href: "/",
@@ -57,13 +57,6 @@ pub const NAV_ITEMS: [NavItem; 10] = [
         label: "Operations",
         section: "Main",
         capabilities: &["operations:view"],
-    },
-    NavItem {
-        key: "components",
-        href: "/components",
-        label: "Components",
-        section: "Main",
-        capabilities: &["components:read", "components:manage"],
     },
     NavItem {
         key: "dashboards",
@@ -266,7 +259,7 @@ const CORE_NAV_ITEMS: [NavItem; 5] = [
     NAV_ITEMS[0],
     NAV_ITEMS[1],
     NAV_ITEMS[5],
-    NAV_ITEMS[8],
+    NAV_ITEMS[7],
     NavItem {
         key: "module_management",
         href: "/administration/modules",
@@ -815,13 +808,6 @@ mod tests {
                     &["operations:view"][..],
                 ),
                 (
-                    "components",
-                    "/components",
-                    "Components",
-                    "Main",
-                    &["components:read", "components:manage"][..],
-                ),
-                (
                     "dashboards",
                     "/dashboards",
                     "Dashboards",
@@ -859,7 +845,6 @@ mod tests {
                     "workflows",
                     "responses",
                     "operations",
-                    "components",
                     "dashboards",
                 ],
                 admin: &["administration", "datasets"],
@@ -885,7 +870,6 @@ mod tests {
                     "workflows",
                     "responses",
                     "operations",
-                    "components",
                     "dashboards",
                 ],
                 admin: &["datasets"],
@@ -917,7 +901,7 @@ mod tests {
             NavigationActorCase {
                 name: "components_manage_only",
                 capabilities: &["components:manage"],
-                main: &["home", "components"],
+                main: &["home"],
                 admin: &[],
             },
             NavigationActorCase {
@@ -984,7 +968,6 @@ mod tests {
             ("forms", "forms:manage", true),
             ("workflows", "workflows:manage", true),
             ("responses", "submissions:manage", true),
-            ("components", "components:manage", true),
             ("dashboards", "dashboards:manage", false),
             ("datasets", "datasets:manage", true),
         ] {

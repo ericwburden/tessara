@@ -178,19 +178,6 @@ struct CoreBootstrapV1 {
     root_node_name: String,
     dataset_id: Uuid,
     dataset_external_key: String,
-    components: Vec<CoreBootstrapComponentV1>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct CoreBootstrapComponentV1 {
-    external_key: String,
-    component_id: Uuid,
-    component_version_id: Uuid,
-    name: String,
-    slug: String,
-    component_type: String,
-    config: Value,
 }
 
 async fn summary(
@@ -778,14 +765,6 @@ async fn apply_core_bootstrap(
     if installation_id != request.installation_id
         || request.input.root_node_type_name.trim().is_empty()
         || request.input.root_node_name.trim().is_empty()
-        || request.input.components.iter().any(|component| {
-            component.external_key.trim().is_empty()
-                || component.name.trim().is_empty()
-                || !matches!(
-                    component.component_type.as_str(),
-                    "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
-                )
-        })
     {
         return Err(ApiError::BadRequest(
             "Core bootstrap input is invalid".into(),
@@ -858,15 +837,7 @@ async fn apply_core_bootstrap(
         generated_sql,
     )
     .await?;
-    for component in &request.input.components {
-        sqlx::query("INSERT INTO components(id,name,slug,description) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description")
-            .bind(component.component_id).bind(component.name.trim()).bind(&component.slug)
-            .bind("Application composition bootstrap fixture").execute(&mut *transaction).await?;
-        sqlx::query("INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,lifecycle_state,config,published_at) VALUES($1,$2,$3,1,'major_line',$4::component_type,1,'1.0.0','Application composition bootstrap','published','active',$5,now()) ON CONFLICT(id) DO UPDATE SET component_id=EXCLUDED.component_id,dataset_id=EXCLUDED.dataset_id,component_type=EXCLUDED.component_type,lifecycle_state='active',config=EXCLUDED.config")
-            .bind(component.component_version_id).bind(component.component_id).bind(request.input.dataset_id)
-            .bind(&component.component_type).bind(&component.config).execute(&mut *transaction).await?;
-    }
-    let mut resource_ids = std::collections::BTreeMap::from([
+    let resource_ids = std::collections::BTreeMap::from([
         (
             request.input.root_node_external_key.clone(),
             request.input.root_node_id.to_string(),
@@ -876,12 +847,6 @@ async fn apply_core_bootstrap(
             request.input.dataset_id.to_string(),
         ),
     ]);
-    resource_ids.extend(request.input.components.iter().map(|component| {
-        (
-            component.external_key.clone(),
-            component.component_version_id.to_string(),
-        )
-    }));
     let result_digest =
         canonical_digest(&resource_ids).map_err(|error| ApiError::Internal(error.into()))?;
     let response = tessara_composition::OwnerBootstrapResponseV1 {
@@ -1307,10 +1272,15 @@ mod tests {
     fn checked_catalog_manifest_digests_match_runtime_manifests() {
         let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../deploy/sprint-7a/catalogs/local-release-catalog.json"
+            "/../../deploy/sprint-8a/catalogs/local-release-catalog.json"
         )))
-        .expect("valid Sprint 7A catalog");
+        .expect("valid Sprint 8A catalog");
         let manifests = [
+            serde_json::from_str::<ModuleManifest>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tessara-component-module/manifest.json"
+            )))
+            .expect("valid Component manifest"),
             serde_json::from_str::<ModuleManifest>(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../tessara-dashboard-module/manifest.json"

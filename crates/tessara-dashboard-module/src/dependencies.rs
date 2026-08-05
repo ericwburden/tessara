@@ -79,7 +79,7 @@ impl DependencyAction {
 pub struct DependencyActionRequest {
     pub action: DependencyAction,
     pub expected_finding_revision: i64,
-    pub replacement_component_version_id: Option<Uuid>,
+    pub replacement_component_reference: Option<ComponentVersionReference>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -393,7 +393,7 @@ fn validate_action_request(request: &DependencyActionRequest) -> Result<(), Dash
     }
     match (
         request.action,
-        request.replacement_component_version_id.is_some(),
+        request.replacement_component_reference.is_some(),
     ) {
         (DependencyAction::Replace, true)
         | (DependencyAction::Defer | DependencyAction::Upgrade | DependencyAction::Remove, false) => {
@@ -448,11 +448,14 @@ async fn proposed_reference(
                 })?
         }
         DependencyAction::Replace => {
-            let version_id = request.replacement_component_version_id.ok_or_else(|| {
-                DashboardModuleError::BadRequest(
-                    "replace requires a replacement Component version".into(),
-                )
-            })?;
+            let replacement = request
+                .replacement_component_reference
+                .as_ref()
+                .ok_or_else(|| {
+                    DashboardModuleError::BadRequest(
+                        "replace requires a replacement Component version".into(),
+                    )
+                })?;
             let saved_reference = sqlx::query_scalar::<_, Value>(
                 "SELECT saved_reference FROM dashboard_dependency_findings
                  WHERE id=$1 AND dashboard_id=$2",
@@ -468,13 +471,16 @@ async fn proposed_reference(
                     "stored dependency finding reference is invalid".into(),
                 )
             })?;
-            TypedResourceReference::new(
-                saved_reference.installation_id(),
-                saved_reference.owner().clone(),
-                saved_reference.resource_type().clone(),
-                version_id.to_string(),
-            )
-            .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?
+            let replacement = replacement.reference();
+            if replacement.installation_id() != saved_reference.installation_id()
+                || replacement.owner() != saved_reference.owner()
+            {
+                return Err(DashboardModuleError::BadRequest(
+                    "replacement Component reference must use the selected provider instance"
+                        .into(),
+                ));
+            }
+            replacement.clone()
         }
         DependencyAction::Defer | DependencyAction::Remove => return Ok(None),
     };
@@ -856,7 +862,7 @@ mod tests {
         let request = DependencyActionRequest {
             action: DependencyAction::Upgrade,
             expected_finding_revision: 1,
-            replacement_component_version_id: None,
+            replacement_component_reference: None,
         };
         assert!(validate_action_request(&request).is_ok());
 

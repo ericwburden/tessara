@@ -1,9 +1,9 @@
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::{PgPool, Row};
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
-use crate::error::{ApiError, ApiResult};
+use crate::error::ApiResult;
 
 use super::forms::current_form_version;
 
@@ -532,133 +532,4 @@ async fn replace_dataset_scope_nodes(
         .await?;
     }
     Ok(())
-}
-
-pub(super) async fn ensure_component(
-    pool: &PgPool,
-    name: &str,
-    slug: &str,
-    dataset_revision_id: Uuid,
-) -> ApiResult<(Uuid, Uuid)> {
-    let output_fields: Value =
-        sqlx::query_scalar("SELECT output_fields FROM dataset_revisions WHERE id = $1")
-            .bind(dataset_revision_id)
-            .fetch_one(pool)
-            .await?;
-    let columns = output_fields
-        .as_array()
-        .unwrap_or(&Vec::new())
-        .iter()
-        .filter_map(|field| field.get("key").and_then(Value::as_str))
-        .map(|key| json!({ "key": key }))
-        .collect::<Vec<_>>();
-    if columns.is_empty() {
-        return Err(ApiError::BadRequest(format!(
-            "demo component '{slug}' requires dataset output fields"
-        )));
-    }
-    ensure_component_with_config(
-        pool,
-        name,
-        slug,
-        dataset_revision_id,
-        "table",
-        json!({ "visible_columns": columns }),
-    )
-    .await
-}
-
-pub(super) async fn ensure_component_with_config(
-    pool: &PgPool,
-    name: &str,
-    slug: &str,
-    dataset_revision_id: Uuid,
-    component_type: &str,
-    config: Value,
-) -> ApiResult<(Uuid, Uuid)> {
-    let binding = sqlx::query(
-        r#"
-        SELECT dataset_id, version_major
-        FROM dataset_revisions
-        WHERE id = $1
-        "#,
-    )
-    .bind(dataset_revision_id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound(format!("dataset revision {dataset_revision_id}")))?;
-    let dataset_id: Uuid = binding.try_get("dataset_id")?;
-    let dataset_version_major: i32 = binding
-        .try_get::<Option<i32>, _>("version_major")?
-        .ok_or_else(|| {
-            ApiError::BadRequest(format!(
-                "dataset revision {dataset_revision_id} has no major version"
-            ))
-        })?;
-
-    let component_id = if let Some(id) =
-        sqlx::query_scalar("SELECT id FROM components WHERE slug = $1")
-            .bind(slug)
-            .fetch_optional(pool)
-            .await?
-    {
-        sqlx::query("UPDATE components SET name = $1 WHERE id = $2")
-            .bind(name)
-            .bind(id)
-            .execute(pool)
-            .await?;
-        id
-    } else {
-        sqlx::query_scalar(
-            "INSERT INTO components (name, slug, description) VALUES ($1, $2, $3) RETURNING id",
-        )
-        .bind(name)
-        .bind(slug)
-        .bind("Seeded demo component")
-        .fetch_one(pool)
-        .await?
-    };
-
-    let version_number: i32 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM component_versions WHERE component_id = $1",
-    )
-    .bind(component_id)
-    .fetch_one(pool)
-    .await?;
-    let component_version_id = Uuid::new_v4();
-    sqlx::query(
-        r#"
-        UPDATE component_versions
-        SET status = 'superseded'::component_version_status,
-            successor_version_id = $2
-        WHERE component_id = $1
-          AND status = 'published'::component_version_status
-        "#,
-    )
-    .bind(component_id)
-    .bind(component_version_id)
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        r#"
-        INSERT INTO component_versions
-            (id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,
-             version_number,version_label,status,lifecycle_state,config,published_at)
-        VALUES ($1,$2,$3,$4,'major_line',$5::component_type,$6,$7,
-                'published'::component_version_status,
-                'active'::component_lifecycle_state,$8,now())
-        "#,
-    )
-    .bind(component_version_id)
-    .bind(component_id)
-    .bind(dataset_id)
-    .bind(dataset_version_major)
-    .bind(component_type)
-    .bind(version_number)
-    .bind(version_number.to_string())
-    .bind(config)
-    .execute(pool)
-    .await?;
-
-    Ok((component_id, component_version_id))
 }

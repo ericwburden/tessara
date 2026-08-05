@@ -8,6 +8,65 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-05 - Sprint 8A Implementation Handoff
+
+- Implemented `tessara.components` 1.0.0 as an independently built, deployed,
+  configured, diagnosed, persisted, and rendered full-stack module with its
+  own database baseline, runtime, migration identity, routes, documents,
+  lifecycle assets, capabilities, seed, and all six Component kinds.
+- Replaced Core/Dashboard transition references with exact Components v3
+  module-instance references and introduced the typed Dataset v1 compatibility
+  boundary. Dashboard rendering is now Dashboard-owned and consumes the
+  Component provider directly.
+- Removed Core Component product routes, storage, seed, navigation fallback,
+  web package, and obsolete payload compatibility. Persistent Component
+  mutations use gateway-provided idempotency keys and durable replay receipts.
+- Added the disposable Sprint 8A Compose topology, canonical release catalog,
+  from-empty owner materialization with second-run no-op proof, semantic seed,
+  verified failed-attempt teardown, acceptance contract, deployed smoke runner,
+  and Component-only immutable-image upgrade/rollback/restoration runner.
+- Source readiness passed formatting, all-target/all-feature Clippy with
+  warnings denied, workspace library/binary tests (apart from two explicitly
+  environment-bound database tests), focused contract/module/UI suites, web
+  boundary audit, PowerShell parser/self-test, Compose rendering, and catalog
+  sign/verify/resolve.
+- Eight UAT scenarios are defined in `docs/sprints/sprint-8a-verification.md`.
+  Validation, deployed SIT, UAT execution, and closeout are Not Run and remain
+  assigned to their specialized lifecycle workflows.
+
+## 2026-08-05 - Sprint 8A Component Module Separation Kickoff
+
+- Status: kickoff and product-decision reconciliation complete; implementation
+  started with the exact Components V3 and Dataset compatibility contracts.
+- Branch: `codex/sprint-8a`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`.
+- Execution contract: `docs/sprints/sprint-8a-plan.md`.
+- Planned validation record: `docs/sprints/sprint-8a-verification.md` with
+  evidence rooted at `artifacts/sprint-8a-closeout/`.
+- Planned verification baseline:
+  - `cargo fmt --all -- --check`
+  - `cargo check --workspace --all-features --locked`
+  - `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  - `cargo test --workspace --locked`
+  - `npm --prefix .\end2end test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Decisions/blockers: no product blocker remains. Phase 8 uses destructive,
+  from-empty materialization while the whole reference app is offline. Owner
+  bootstraps rebuild all seed data in dependency order; Dashboard receives new
+  Component references from owner read-back. Old Core Component references and
+  payloads are unsupported, and no mapping, rebinding, transition ledger, or
+  Component compatibility adapter is in scope. Dataset access remains behind
+  its typed, versioned Core compatibility contract until Sprint 8B. Component
+  configuration adds the constrained navigation/admin label and Dataset
+  timeout. A failed attempt retains evidence, destroys its exact disposable
+  topology and volumes, and reruns from empty.
+- Recommended first implementation slice: lock Components V3 and the Dataset
+  compatibility contract, change first-party consumers directly to the
+  canonical shapes, reject old inputs, and add failing package, route, owner,
+  storage, and exact-contract boundary assertions before moving product code.
+
 ## 2026-08-05 - Sprint 7B Cross-Module Resource Lifecycle And Dependency Closeout
 
 - Completed:

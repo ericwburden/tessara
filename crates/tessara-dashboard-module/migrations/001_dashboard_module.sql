@@ -68,8 +68,9 @@ CREATE TABLE dashboard_placements (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (dashboard_id, position),
     CHECK (jsonb_typeof(component_reference) = 'object'),
-    CHECK (component_reference ->> 'resource_type' = 'tessara.transition.component_version'),
-    CHECK (component_reference #>> '{owner,kind}' = 'core_installation'),
+    CHECK (component_reference ->> 'resource_type' = 'tessara.components.component_version'),
+    CHECK (component_reference #>> '{owner,kind}' = 'module_instance'),
+    CHECK (btrim(component_reference #>> '{owner,module_instance_id}') <> ''),
     CHECK (component_reference ->> 'installation_id' =
            component_reference #>> '{owner,installation_id}')
 );

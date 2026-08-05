@@ -1,6 +1,6 @@
 [package]
 name = "tessara-dashboard-ui"
-version = "2.1.0"
+version = "3.0.0"
 edition = "2024"
 publish = false
 
@@ -11,13 +11,13 @@ crate-type = ["cdylib", "rlib"]
 default = []
 hydrate = [
     "leptos/hydrate",
-    "tessara-web-component-viewer/hydrate",
+    "tessara-dashboard-placement-renderer/hydrate",
     "tessara-web-http/hydrate",
     "tessara-module-ui/hydrate",
 ]
 ssr = [
     "leptos/ssr",
-    "tessara-web-component-viewer/ssr",
+    "tessara-dashboard-placement-renderer/ssr",
     "tessara-module-ui/ssr",
 ]
 
@@ -29,8 +29,9 @@ js-sys = { workspace = true }
 leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tessara-components-contract = { path = "../tessara-components-contract" }
 tessara-dashboards = { path = "../tessara-dashboards" }
-tessara-web-component-viewer = { path = "../tessara-web-component-viewer", default-features = false }
+tessara-dashboard-placement-renderer = { path = "../tessara-dashboard-placement-renderer", default-features = false }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-module-ui = { path = "../tessara-module-ui", default-features = false }
 tessara-module-contract = { path = "../tessara-module-contract" }

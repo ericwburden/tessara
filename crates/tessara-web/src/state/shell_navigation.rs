@@ -239,13 +239,6 @@ fn item_spec(key: &str) -> Option<ItemSpec> {
             owner: core,
             contribution_id: None,
         },
-        "components" => ItemSpec {
-            label: "Components",
-            href: "/components",
-            locked_group: None,
-            owner: contribution,
-            contribution_id: Some("tessara.components.navigation"),
-        },
         "dashboards" => ItemSpec {
             label: "Dashboards",
             href: "/dashboards",

@@ -1,0 +1,100 @@
+services:
+  gateway:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=tessara-sprint-8a_tessara-edge
+      - --providers.docker.constraints=Label(`com.docker.compose.project`,`tessara-sprint-8a`)
+      - --entrypoints.web.address=:8080
+      - --api.dashboard=false
+    ports: !override ["127.0.0.1:${TESSARA_GATEWAY_PORT:-8088}:8080"]
+
+  postgres:
+    environment:
+      TESSARA_COMPONENT_OWNER_PASSWORD: ${TESSARA_COMPONENT_OWNER_PASSWORD:-local-component-owner}
+      TESSARA_COMPONENT_MIGRATION_PASSWORD: ${TESSARA_COMPONENT_MIGRATION_PASSWORD:-local-component-migration}
+      TESSARA_COMPONENT_RUNTIME_PASSWORD: ${TESSARA_COMPONENT_RUNTIME_PASSWORD:-local-component-runtime}
+    volumes:
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
+
+  core:
+    image: tessara-sprint-8a-core
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
+      TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER: ${TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER:-tessara.local.sprint-8a}
+      TESSARA_COMPONENT_SERVICE_PUBLIC_KEY: ${TESSARA_COMPONENT_SERVICE_PUBLIC_KEY:-11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo}
+      TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID: ${TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID:-component-development-v1}
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"components":"http://components:8092","dashboards":"http://dashboards:8091","scoped-records":"http://scoped-records:8090"}'
+    depends_on:
+      components: { condition: service_started }
+
+  core-migrate:
+    image: tessara-sprint-8a-core
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
+
+  supervisor:
+    image: tessara-sprint-8a-supervisor
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
+      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8a-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-8a-scoped-records","tessara.components":"tessara-sprint-8a-components","tessara.dashboards":"tessara-sprint-8a-dashboards"}'
+      TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-8a}
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
+    ports: !override ["127.0.0.1:${TESSARA_SUPERVISOR_PORT:-8098}:8090"]
+
+  components-migrate:
+    image: ${TESSARA_COMPONENT_IMAGE:-tessara-sprint-8a-components}
+    build:
+      context: ../..
+      dockerfile: Dockerfile.component
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://tessara_component_migration:${TESSARA_COMPONENT_MIGRATION_PASSWORD:-local-component-migration}@postgres:5432/tessara_module_components
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+    profiles: ["reference"]
+
+  components:
+    image: ${TESSARA_COMPONENT_IMAGE:-tessara-sprint-8a-components}
+    build:
+      context: ../..
+      dockerfile: Dockerfile.component
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    environment:
+      DATABASE_URL: postgres://tessara_component_runtime:${TESSARA_COMPONENT_RUNTIME_PASSWORD:-local-component-runtime}@postgres:5432/tessara_module_components
+      COMPONENT_MODULE_BIND_ADDR: 0.0.0.0:8092
+      TESSARA_CORE_INTERNAL_URL: http://core:8080
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_COMPONENT_SERVICE_SIGNING_KEY: ${TESSARA_COMPONENT_SERVICE_SIGNING_KEY:-nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A}
+      TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID: ${TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID:-component-development-v1}
+      TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY: ${TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY:-Aj3Yn25zFNp2K7PJZlqC2JapsIt2mdj-HO55ltKYygw}
+      TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID: ${TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID:-dashboard-development-v1}
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+    depends_on:
+      components-migrate: { condition: service_completed_successfully }
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-data, tessara-services]
+    restart: unless-stopped
+    profiles: ["reference"]
+
+  dashboards-migrate:
+    image: tessara-sprint-8a-dashboards
+
+  dashboards:
+    image: tessara-sprint-8a-dashboards
+    environment:
+      TESSARA_COMPONENT_INTERNAL_URL: http://components:8092
+    depends_on:
+      dashboards-migrate: { condition: service_completed_successfully }
+      components: { condition: service_started }

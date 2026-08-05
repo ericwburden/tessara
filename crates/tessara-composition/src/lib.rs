@@ -1224,6 +1224,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn sprint_8a_component_owner_identity_is_source_exact() {
+        let installation_id = Uuid::parse_str("01980000-0000-7000-8000-00000000008a").unwrap();
+        assert_eq!(
+            module_instance_id(installation_id, "tessara.components"),
+            Uuid::parse_str("142a1ece-f74b-85f6-8ca0-92f4a02e9409").unwrap()
+        );
+    }
+
     fn catalog() -> ReleaseCatalogV1 {
         ReleaseCatalogV1 {
             api_version: CATALOG_API_V1.into(),
