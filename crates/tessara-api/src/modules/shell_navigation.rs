@@ -330,8 +330,11 @@ mod tests {
     }
 
     #[test]
-    fn only_frozen_destinations_require_the_transition_route_resolver() {
+    fn extracted_module_destinations_do_not_use_the_transition_route_resolver() {
         assert!(navigation_catalog::is_frozen_destination(
+            "tessara.forms.navigation"
+        ));
+        assert!(!navigation_catalog::is_frozen_destination(
             "tessara.dashboards.navigation"
         ));
         assert!(!navigation_catalog::is_frozen_destination(

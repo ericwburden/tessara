@@ -1723,7 +1723,7 @@ fn navigation_policy_model(
     revision: i64,
     rows: Vec<NavigationPolicyEntryRow>,
 ) -> Result<NavigationPolicyReadModel, ()> {
-    if revision < 0 || rows.len() != 5 {
+    if revision < 0 || rows.len() != 4 {
         return Err(());
     }
     let mut seen = BTreeSet::new();
@@ -2315,11 +2315,21 @@ mod tests {
 
     #[test]
     fn composition_managed_navigation_requires_an_active_module_instance() {
+        let dashboard_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-dashboard-module/manifest.json"
+        ))
+        .expect("Dashboard manifest fixture is valid JSON");
         let managed = BTreeSet::from([
             "tessara.dashboards".to_string(),
             "tessara.reference.scoped-records".to_string(),
         ]);
         let mut reduced = navigation_catalog::resolved_destinations();
+        assert!(
+            reduced
+                .iter()
+                .all(|destination| destination.id != "tessara.dashboards.navigation"),
+            "the Core catalog must not contain the independently deployed Dashboard destination"
+        );
         retain_active_composition_destinations(&mut reduced, &managed, &BTreeSet::new());
         let reduced_ids = reduced
             .iter()
@@ -2329,7 +2339,7 @@ mod tests {
         assert!(!reduced_ids.contains("tessara.reference.scoped-records.navigation"));
         assert!(reduced_ids.contains("tessara.forms.navigation"));
 
-        let mut reference = navigation_catalog::resolved_destinations();
+        let mut reference = resolve_navigation_catalog(&[dashboard_manifest]);
         retain_active_composition_destinations(
             &mut reference,
             &managed,
@@ -2344,6 +2354,24 @@ mod tests {
             .collect::<BTreeSet<_>>();
         assert!(reference_ids.contains("tessara.dashboards.navigation"));
         assert!(reference_ids.contains("tessara.reference.scoped-records.navigation"));
+        let dashboard = reference
+            .iter()
+            .find(|destination| destination.id == "tessara.dashboards.navigation")
+            .expect("the enrolled Dashboard manifest contributes navigation");
+        assert_eq!(dashboard.owner, NavigationCatalogOwner::Contribution);
+        assert_eq!(
+            dashboard.definition_id.as_deref(),
+            Some("tessara.dashboards")
+        );
+        assert_eq!(dashboard.route, "/dashboards");
+        assert_eq!(
+            reference
+                .iter()
+                .filter(|destination| destination.id == "tessara.dashboards.navigation")
+                .count(),
+            1,
+            "Dashboard navigation must be projected exactly once from its real manifest"
+        );
     }
 
     const DISPOSABLE_DATABASE_NAME_TOKENS: &[&str] = &[
@@ -2424,7 +2452,7 @@ mod tests {
             &catalog,
         )
         .expect("manifest and transition destinations form one dense policy");
-        assert_eq!(policy.destinations.len(), 15);
+        assert_eq!(policy.destinations.len(), 14);
     }
 
     #[test]
@@ -2499,12 +2527,12 @@ mod tests {
         let mut requested = update_entries(&current);
         requested[0].order = 1;
         requested[1].order = 0;
-        requested[4].visible = false;
+        requested[3].visible = false;
         let validated = validate_navigation_policy_request(&current, requested)
             .expect("same-band dense reorder is valid");
         assert_eq!(validated["tessara.forms.navigation"].order, 1);
         assert_eq!(validated["tessara.workflows.navigation"].order, 0);
-        assert!(!validated["tessara.dashboards.navigation"].visible);
+        assert!(!validated["tessara.datasets.navigation"].visible);
     }
 
     #[test]
@@ -2716,14 +2744,13 @@ mod tests {
                 .map(|transition| transition.definition_id.as_str())
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([
-                "tessara.dashboards",
                 "tessara.datasets",
                 "tessara.forms",
                 "tessara.migration",
                 "tessara.responses",
                 "tessara.workflows",
             ]),
-            "Core must retain only the six canonical transition entries after Components moves to its independently deployed module"
+            "Core must retain exactly the five canonical transition entries; independently deployed Dashboard and Components modules are excluded"
         );
         let canonical_forms_digest = before
             .transitions
@@ -3143,20 +3170,6 @@ mod tests {
                 "Main",
                 "main_between_organization_and_operations",
                 2,
-            ),
-            (
-                "tessara.components.navigation",
-                "tessara.components",
-                "Main",
-                "main_after_operations",
-                0,
-            ),
-            (
-                "tessara.dashboards.navigation",
-                "tessara.dashboards",
-                "Main",
-                "main_after_operations",
-                1,
             ),
             (
                 "tessara.datasets.navigation",

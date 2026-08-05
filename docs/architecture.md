@@ -51,6 +51,8 @@ No production consumer depends on the current internal database layout. The tran
 
 `transitional_in_process` contribution descriptors reserve discovery metadata and possibly a future Module Definition identity, but create no Module Release or Module Instance. If an extracted first-party module must consume a still-in-process provider, it binds to an explicitly versioned Core Release compatibility contract. Resources returned by that adapter remain `core_installation`-owned with transition-specific types. Tessara is pre-production throughout Phase 8, so provider extraction does not preserve transition product data or references: it materializes fresh owner databases, rebuilds the disposable reference-application seed through owner-controlled bootstrap contracts, creates new Module Instance references directly, and removes the old adapter and readers in the same source-exact cutover. Old transition references are unsupported after their provider is extracted and are never silently reinterpreted. Supported legacy import, mapping, rebinding, partial-failure resume, and audit behavior belongs to Phase 9 rather than the Phase 8 extraction path.
 
+An independently deployed module must not also appear in Core's frozen transition catalog. In the Sprint 8A baseline the exact Core transition identities are Forms, Workflows, Responses, Datasets, and Migration. Dashboard and Components are represented only by their real Module Releases and Module Instances, and their navigation is contributed only by their enrolled manifests.
+
 ## Platform Components
 
 ### Core

@@ -370,7 +370,12 @@ requires a plan amendment and user approval.
 - **AC-15:** At 1280, 768, and 390 px, dark/light themes, keyboard operation,
   200% zoom, JavaScript-disabled SSR, and hydrated navigation, Component UI
   matches the accepted baseline and produces no hydration or console errors.
-- **AC-16:** Format, check, zero-warning Clippy, full workspace tests,
+- **AC-16:** Core's frozen transition catalog contains exactly Forms,
+  Workflows, Responses, Datasets, and Migration. Dashboard is absent from Core
+  transition inputs, inventory, semantic destination resolution, and default
+  navigation; it appears exactly once through its enrolled Module Release,
+  Module Instance, and manifest navigation contribution.
+- **AC-17:** Format, check, zero-warning Clippy, full workspace tests,
   native/WASM/package boundaries, Playwright, source-exact materialization,
   smoke, scripted/manual UAT, failure rerun, upgrade/rollback, provenance, and
   evidence integrity pass on one frozen candidate.
@@ -573,6 +578,12 @@ and materialization runners, Sprint 8A Compose/catalog inputs, smoke contract,
 verified failure teardown, Component-only upgrade/rollback runner, and the
 eight planned UAT scenarios. Source-level readiness results and the remaining
 environment-bound checks are recorded in the validation record.
+
+The final Core ownership cleanup leaves exactly five transition descriptors:
+`tessara.forms`, `tessara.workflows`, `tessara.responses`,
+`tessara.datasets`, and `tessara.migration`. Dashboard inventory and
+navigation are supplied exclusively by the enrolled `tessara.dashboards`
+release/instance and its manifest.
 
 This status authorizes only the next specialized validation workflow. It does
 not assert candidate freeze, deployed acceptance, SIT, UAT, or closeout.

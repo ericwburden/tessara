@@ -210,7 +210,7 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert_eq!(reader_inventory["schema_version"], 1);
     assert_eq!(
         reader_inventory["entries"].as_array().map(Vec::len),
-        Some(6)
+        Some(5)
     );
     assert_eq!(
         reader_inventory["core_runtime"]["provenance"],
@@ -234,7 +234,6 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
             })
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
-            "tessara.dashboards",
             "tessara.datasets",
             "tessara.forms",
             "tessara.migration",
@@ -247,7 +246,7 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
             .iter()
             .filter(|entry| entry["descriptor"]["availability"] == "active_in_process")
             .count(),
-        5
+        4
     );
     let migration = inventory_entry(entries, MIGRATION_DEFINITION);
     assert_eq!(migration["kind"], "transitional_in_process");
@@ -444,8 +443,27 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert_eq!(reader_policy["schema_version"], 2);
     assert_eq!(reader_policy["groups"].as_array().map(Vec::len), Some(2));
     assert_eq!(
-        reader_policy["destinations"].as_array().map(Vec::len),
-        Some(14)
+        reader_policy["destinations"]
+            .as_array()
+            .expect("policy destinations")
+            .iter()
+            .map(|entry| entry["id"].as_str().expect("destination id"))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "core.admin.composition",
+            "core.admin.modules",
+            "core.admin.node_types",
+            "core.admin.roles",
+            "core.admin.users",
+            "core.home",
+            "core.operations",
+            "core.organization",
+            "tessara.datasets.navigation",
+            "tessara.forms.navigation",
+            "tessara.reference.scoped-records.navigation",
+            "tessara.responses.navigation",
+            "tessara.workflows.navigation",
+        ])
     );
     assert!(
         reader_policy["groups"]
@@ -674,7 +692,7 @@ async fn navigation_policy_http_rejections_are_atomic_and_exactly_audited() {
     navigation_mutation_mut(&mut changed_request, "tessara.forms.navigation")["order"] = json!(3);
     navigation_mutation_mut(&mut changed_request, "tessara.workflows.navigation")["order"] =
         json!(2);
-    navigation_mutation_mut(&mut changed_request, "tessara.dashboards.navigation")["visible"] =
+    navigation_mutation_mut(&mut changed_request, "tessara.datasets.navigation")["visible"] =
         json!(false);
     let changed_policy = request_json(
         app.clone(),
@@ -1581,7 +1599,7 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
     assert_eq!(reader_status, StatusCode::OK);
     assert_private_native_headers(&reader_headers);
     assert!(reader_html.contains("<title>Tessara Module Management</title>"));
-    assert!(reader_html.contains("6 definitions"));
+    assert!(reader_html.contains("5 definitions"));
     assert!(reader_html.contains("Transitional — not independently deployable"));
     assert!(reader_html.contains("No Module Release"));
     assert!(reader_html.contains("No Module Instance"));
@@ -1598,7 +1616,7 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
         reader_bootstrap["inventory"]["entries"]
             .as_array()
             .map(Vec::len),
-        Some(6)
+        Some(5)
     );
     assert_eq!(
         reader_bootstrap["navigation_policy"]["policy"]["can_manage_navigation"],
