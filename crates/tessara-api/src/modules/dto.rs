@@ -253,6 +253,14 @@ pub(crate) struct ResolveResourceReferenceRequestV1 {
     pub(crate) reference: TypedResourceReference,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ResourceObservationResponseV1 {
+    pub(crate) schema_version: u16,
+    pub(crate) resolution: tessara_module_contract::ResourceResolutionV1,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) observation: Option<tessara_module_contract::ResourceObservationV1>,
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

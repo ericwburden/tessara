@@ -9,7 +9,8 @@ thread_local! {
 }
 
 use crate::types::{
-    Dashboard, DashboardComposition, DashboardSummary, SessionAccount, VisibilityNodeOption,
+    Dashboard, DashboardComposition, DashboardDependencyHealth, DashboardSummary, SessionAccount,
+    VisibilityNodeOption,
 };
 
 /// Request-scoped, authorization-filtered initial state for one Dashboard route.
@@ -40,6 +41,7 @@ pub enum DashboardRouteBootstrap {
     Editor {
         account: SessionAccount,
         composition: DashboardComposition,
+        dependency_health: DashboardDependencyHealth,
         visibility_nodes: Vec<VisibilityNodeOption>,
     },
     Viewer {
@@ -77,11 +79,13 @@ impl DashboardRouteBootstrap {
     pub fn editor(
         account: SessionAccount,
         composition: DashboardComposition,
+        dependency_health: DashboardDependencyHealth,
         visibility_nodes: Vec<VisibilityNodeOption>,
     ) -> Self {
         Self::Editor {
             account,
             composition,
+            dependency_health,
             visibility_nodes,
         }
     }

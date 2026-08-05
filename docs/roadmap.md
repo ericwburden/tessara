@@ -1094,7 +1094,7 @@ Dashboard release digest changed.
 
 **User-testable exit condition:** a scoped operator can preview Datasets, execute/view Components, and view Dashboards according to authored visibility and restriction rules across the real Dashboard boundary and transitional typed adapters, while an administrator sees the full seeded analytical set. Each Phase 8 extraction must rerun this proof when its adapter becomes a process boundary.
 
-### Sprint 7B: Cross-Module Resource Lifecycle And Dependency Slice (Next)
+### Sprint 7B: Cross-Module Resource Lifecycle And Dependency Slice (Complete)
 
 **Outcome:** consumers can observe and respond to provider-owned resource changes through the real Dashboard-to-Core-compatibility boundary and reusable typed adapters, without owning provider product semantics or confusing transition ownership with the eventual module.
 
@@ -1138,7 +1138,7 @@ verified. Each extraction reruns the Phase 7 scope, lifecycle, outage,
 compatibility, source-ownership, package-graph, independent-image-upgrade, and
 rollback proofs against the newly physical boundary.
 
-### Sprint 8A: Component Module Separation Slice
+### Sprint 8A: Component Module Separation Slice (Next)
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 

@@ -199,6 +199,12 @@ SELECT jsonb_build_object(
         ) ORDER BY name), '[]'::jsonb)
         FROM seed_roles
     ),
+    'composition_roles', COALESCE((
+        SELECT document -> 'roles'
+        FROM composition_blueprints
+        ORDER BY revision DESC
+        LIMIT 1
+    ), '[]'::jsonb),
     'catalog', jsonb_build_object(
         'definition_count', (SELECT count(*) FROM module_definition_reservations),
         'source_count', (SELECT count(*) FROM transition_descriptor_sources),
@@ -331,22 +337,37 @@ function Assert-Sprint6AMigrationLedger {
 }
 
 function Get-Sprint6ASeedContract {
-    param([Parameter(Mandatory)][object[]]$SeedRoles)
+    param(
+        [Parameter(Mandatory)][object[]]$SeedRoles,
+        [object[]]$CompositionRoles = @()
+    )
 
     if ($SeedRoles.Count -ne 3) {
         throw "The live database must contain exactly the three built-in roles admin, operator, and respondent."
     }
     $canonical = [Text.StringBuilder]::new()
+    $compositionOwnedRoles = [Collections.Generic.List[string]]::new()
     foreach ($roleName in $script:Sprint6AExpectedSeed.Keys) {
         $role = @($SeedRoles | Where-Object { [string]$_.name -ceq $roleName })
         if ($role.Count -ne 1) {
             throw "The live database does not contain exactly one built-in '$roleName' role."
         }
         $expectedCapabilities = @($script:Sprint6AExpectedSeed[$roleName])
+        $compositionRole = @($CompositionRoles | Where-Object { [string]$_.name -ceq $roleName })
+        if ($compositionRole.Count -gt 1) {
+            throw "The latest composition declares built-in role '$roleName' more than once."
+        }
+        $effectiveCapabilities = if ($compositionRole.Count -eq 1) {
+            $compositionOwnedRoles.Add($roleName)
+            @($compositionRole[0].capabilities)
+        } else {
+            $expectedCapabilities
+        }
         $actualCapabilities = @($role[0].capabilities | Sort-Object)
-        $expectedSorted = @($expectedCapabilities | Sort-Object)
+        $expectedSorted = @($effectiveCapabilities | Sort-Object)
         if (($actualCapabilities -join "`n") -cne ($expectedSorted -join "`n")) {
-            throw "The live '$roleName' membership differs from the versioned Sprint 6A built-in seed contract."
+            $owner = if ($compositionRole.Count -eq 1) { "latest composition projection" } else { "versioned Sprint 6A built-in seed contract" }
+            throw "The live '$roleName' membership differs from the $owner."
         }
         [void]$canonical.Append("role=$roleName`n")
         foreach ($capability in $expectedCapabilities) {
@@ -361,6 +382,7 @@ function Get-Sprint6ASeedContract {
         version = $script:Sprint6ABuiltInSeedVersion
         canonical_sha256 = $digest
         roles = $SeedRoles
+        composition_owned_roles = @($compositionOwnedRoles)
     }
 }
 
@@ -788,7 +810,9 @@ function Get-Sprint6ADeploymentSnapshot {
 
     $expectedMigrations = @(Get-Sprint6AExpectedMigrationLedger -RepositoryRoot $RepositoryRoot)
     Assert-Sprint6AMigrationLedger -DatabaseMigrations @($database.migrations) -ExpectedMigrations $expectedMigrations
-    $seedContract = Get-Sprint6ASeedContract -SeedRoles @($database.seed_roles)
+    $seedContract = Get-Sprint6ASeedContract `
+        -SeedRoles @($database.seed_roles) `
+        -CompositionRoles @($database.composition_roles)
     $expectedCatalogEntries = @(Get-Sprint6AExpectedCatalogEntries -RepositoryRoot $RepositoryRoot)
     $catalogEntries = @(
         Assert-Sprint6ACatalog `

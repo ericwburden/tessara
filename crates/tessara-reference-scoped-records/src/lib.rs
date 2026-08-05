@@ -27,7 +27,7 @@ use tessara_module_ui::{ShellPresentation, render_module_document};
 use uuid::Uuid;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.reference.scoped-records";
-pub const MODULE_SHELL_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.0/sha256:fd0c34c22951af76b3c18bcb28d3dfa3641765775dc019bbe50b2a7bce26bee3/module-shell.css";
+pub const MODULE_SHELL_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.0/sha256:ca238aca616f242bfa144764a09ae4a76d0b6f075a288604cbb333d90859af46/module-shell.css";
 pub const READ_CAPABILITY: &str = "tessara.reference.scoped-records:read";
 pub const MANAGE_CAPABILITY: &str = "tessara.reference.scoped-records:manage";
 

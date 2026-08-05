@@ -4,8 +4,10 @@
 use crate::http::{fetch_json, send_json, send_without_response};
 #[cfg(feature = "hydrate")]
 use crate::types::{
-    Dashboard, DashboardComposition, DashboardMetadataRequest, DashboardSummary, IdResponse,
-    ReconcileDashboardCompositionRequest, SessionAccount, VisibilityNodeOption,
+    Dashboard, DashboardComposition, DashboardDependencyActionRequest,
+    DashboardDependencyActionResponse, DashboardDependencyHealth, DashboardMetadataRequest,
+    DashboardSummary, IdResponse, ReconcileDashboardCompositionRequest, SessionAccount,
+    VisibilityNodeOption,
 };
 
 #[cfg(feature = "hydrate")]
@@ -88,6 +90,49 @@ pub(crate) async fn save_composition(
         gloo_net::http::Request::put(&format!("/api/admin/dashboards/{dashboard_id}/composition")),
         payload,
         "Dashboard layout save",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn fetch_dependency_health(
+    dashboard_id: &str,
+) -> Result<DashboardDependencyHealth, String> {
+    fetch_json(
+        &format!("/api/admin/dashboards/{dashboard_id}/dependencies"),
+        "Dashboard dependency health",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn refresh_dependency_health(
+    dashboard_id: &str,
+) -> Result<DashboardDependencyHealth, String> {
+    send_json(
+        gloo_net::http::Request::post(&format!(
+            "/api/admin/dashboards/{dashboard_id}/dependencies/refresh"
+        )),
+        &serde_json::json!({}),
+        "Dashboard dependency refresh",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn act_on_dependency(
+    dashboard_id: &str,
+    finding_id: &str,
+    request: &DashboardDependencyActionRequest,
+    idempotency_key: &str,
+) -> Result<DashboardDependencyActionResponse, String> {
+    send_json(
+        gloo_net::http::Request::post(&format!(
+            "/api/admin/dashboards/{dashboard_id}/dependencies/{finding_id}/actions"
+        ))
+        .header("X-Idempotency-Key", idempotency_key),
+        request,
+        "Dashboard dependency action",
     )
     .await
 }

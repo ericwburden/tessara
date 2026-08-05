@@ -49,7 +49,7 @@ CREATE TABLE dashboards (
 );
 
 CREATE TABLE dashboard_scope_nodes (
-    dashboard_id UUID NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
+    dashboard_id UUID NOT NULL,
     node_id UUID NOT NULL REFERENCES dashboard_organization_nodes(node_id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (dashboard_id, node_id)
@@ -60,7 +60,7 @@ CREATE INDEX dashboard_scope_nodes_node_id_idx
 
 CREATE TABLE dashboard_placements (
     id UUID PRIMARY KEY,
-    dashboard_id UUID NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
+    dashboard_id UUID NOT NULL,
     component_reference JSONB NOT NULL,
     position INTEGER NOT NULL CHECK (position >= 0 AND position < 240),
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -147,6 +147,83 @@ CREATE TABLE dashboard_mutation_replays (
     result JSONB NOT NULL,
     consumed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE dashboard_dependency_observations (
+    id UUID PRIMARY KEY,
+    dashboard_id UUID NOT NULL,
+    placement_id UUID NOT NULL,
+    saved_reference JSONB NOT NULL CHECK (jsonb_typeof(saved_reference) = 'object'),
+    reference_digest TEXT NOT NULL CHECK (reference_digest ~ '^sha256:[0-9a-f]{64}$'),
+    provider_contract_id TEXT NOT NULL CHECK (btrim(provider_contract_id) <> ''),
+    provider_contract_version TEXT NOT NULL CHECK (btrim(provider_contract_version) <> ''),
+    resource_revision BIGINT CHECK (resource_revision > 0),
+    observation_fingerprint TEXT NOT NULL CHECK (observation_fingerprint ~ '^sha256:[0-9a-f]{64}$'),
+    resolution JSONB NOT NULL CHECK (jsonb_typeof(resolution) = 'object'),
+    provider_detail JSONB CHECK (provider_detail IS NULL OR jsonb_typeof(provider_detail) = 'object'),
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (placement_id, observation_fingerprint)
+);
+
+CREATE INDEX dashboard_dependency_observations_dashboard_observed_idx
+    ON dashboard_dependency_observations (dashboard_id, observed_at DESC, id);
+
+CREATE TABLE dashboard_dependency_findings (
+    id UUID PRIMARY KEY,
+    dashboard_id UUID NOT NULL,
+    placement_id UUID NOT NULL,
+    observation_id UUID NOT NULL
+        REFERENCES dashboard_dependency_observations(id) ON DELETE RESTRICT,
+    saved_reference JSONB NOT NULL CHECK (jsonb_typeof(saved_reference) = 'object'),
+    reference_digest TEXT NOT NULL CHECK (reference_digest ~ '^sha256:[0-9a-f]{64}$'),
+    observed_resource_revision BIGINT NOT NULL CHECK (observed_resource_revision >= 0),
+    finding_code TEXT NOT NULL CHECK (btrim(finding_code) <> ''),
+    impact JSONB NOT NULL CHECK (jsonb_typeof(impact) = 'object'),
+    disposition TEXT NOT NULL DEFAULT 'open'
+        CHECK (disposition IN ('open', 'deferred', 'resolved')),
+    finding_revision BIGINT NOT NULL DEFAULT 1 CHECK (finding_revision > 0),
+    deferred_by UUID,
+    deferred_at TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (placement_id, reference_digest, observed_resource_revision, finding_code),
+    CHECK (
+        (disposition = 'open' AND deferred_by IS NULL AND deferred_at IS NULL AND resolved_at IS NULL)
+        OR (disposition = 'deferred' AND deferred_by IS NOT NULL AND deferred_at IS NOT NULL AND resolved_at IS NULL)
+        OR (disposition = 'resolved' AND resolved_at IS NOT NULL)
+    )
+);
+
+CREATE INDEX dashboard_dependency_findings_dashboard_disposition_idx
+    ON dashboard_dependency_findings (dashboard_id, disposition, updated_at DESC, id);
+
+CREATE TABLE dashboard_dependency_action_receipts (
+    idempotency_key TEXT PRIMARY KEY CHECK (btrim(idempotency_key) <> ''),
+    request_digest TEXT NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
+    dashboard_id UUID NOT NULL,
+    placement_id UUID NOT NULL,
+    finding_id UUID NOT NULL REFERENCES dashboard_dependency_findings(id) ON DELETE RESTRICT,
+    actor_id UUID NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('defer','upgrade','replace','remove')),
+    expected_finding_revision BIGINT NOT NULL CHECK (expected_finding_revision > 0),
+    result JSONB NOT NULL CHECK (jsonb_typeof(result) = 'object'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION reject_dashboard_dependency_history_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'dashboard dependency history is immutable';
+END;
+$$;
+
+CREATE TRIGGER dashboard_dependency_observations_immutable
+BEFORE UPDATE OR DELETE ON dashboard_dependency_observations
+FOR EACH ROW EXECUTE FUNCTION reject_dashboard_dependency_history_mutation();
+
+CREATE TRIGGER dashboard_dependency_action_receipts_immutable
+BEFORE UPDATE OR DELETE ON dashboard_dependency_action_receipts
+FOR EACH ROW EXECUTE FUNCTION reject_dashboard_dependency_history_mutation();
 
 CREATE TABLE dashboard_bootstrap_receipts (
     idempotency_key TEXT PRIMARY KEY CHECK (btrim(idempotency_key) <> ''),

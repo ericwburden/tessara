@@ -35,12 +35,15 @@ use tessara_web_component_viewer::{
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use wasm_bindgen::{JsCast, closure::Closure};
 
+#[cfg(feature = "hydrate")]
+use crate::types::DashboardDependencyActionRequest;
 use crate::types::{
     DashboardComponentVersion, DashboardComponentVersionOption, DashboardComposition,
-    DashboardCompositionCommand, DashboardMetadataRequest, DashboardPlacement,
-    DashboardPlacementAvailability, DashboardPlacementConfigState, DashboardPlacementGeometry,
-    DashboardPlacementOperation, DashboardPlacementResolutionState, EditorPlacement,
-    ReconcileDashboardCompositionRequest, SessionAccount, VisibilityNodeOption,
+    DashboardCompositionCommand, DashboardDependencyFinding, DashboardDependencyHealth,
+    DashboardMetadataRequest, DashboardPlacement, DashboardPlacementAvailability,
+    DashboardPlacementConfigState, DashboardPlacementGeometry, DashboardPlacementOperation,
+    DashboardPlacementResolutionState, EditorPlacement, ReconcileDashboardCompositionRequest,
+    SessionAccount, VisibilityNodeOption,
 };
 use crate::{DashboardRouteBootstrap, dashboard_route_bootstrap};
 
@@ -67,17 +70,27 @@ thread_local! {
 
 #[component]
 pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
-    let (initial_account, initial_composition, initial_visibility_nodes, bootstrapped) =
-        match dashboard_route_bootstrap() {
-            Some(DashboardRouteBootstrap::Editor {
-                account,
-                composition,
-                visibility_nodes,
-            }) if composition.dashboard.id == dashboard_id => {
-                (Some(account), Some(composition), visibility_nodes, true)
-            }
-            _ => (None, None, Vec::new(), false),
-        };
+    let (
+        initial_account,
+        initial_composition,
+        initial_dependency_health,
+        initial_visibility_nodes,
+        bootstrapped,
+    ) = match dashboard_route_bootstrap() {
+        Some(DashboardRouteBootstrap::Editor {
+            account,
+            composition,
+            dependency_health,
+            visibility_nodes,
+        }) if composition.dashboard.id == dashboard_id => (
+            Some(account),
+            Some(composition),
+            Some(dependency_health),
+            visibility_nodes,
+            true,
+        ),
+        _ => (None, None, None, Vec::new(), false),
+    };
     let initial_placements = initial_composition
         .as_ref()
         .map(|composition| {
@@ -92,6 +105,11 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
         .unwrap_or_default();
     let composition = RwSignal::new(initial_composition);
     let account = RwSignal::new(initial_account);
+    let dependency_health = RwSignal::new(initial_dependency_health);
+    let dependency_error = RwSignal::new(None::<String>);
+    let dependency_loading = RwSignal::new(false);
+    let dependency_open = RwSignal::new(false);
+    let selected_finding = RwSignal::new(None::<String>);
     let placements = RwSignal::new(initial_placements);
     let settings_nodes = RwSignal::new(initial_visibility_nodes);
     let loading = RwSignal::new(cfg!(feature = "hydrate") && !bootstrapped);
@@ -123,6 +141,12 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                         loading,
                         error: load_error,
                     },
+                );
+                refresh_dependency_health(
+                    dashboard_id.clone(),
+                    dependency_health,
+                    dependency_loading,
+                    dependency_error,
                 );
             }
         }
@@ -161,6 +185,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                 });
                 let current_account = account.get();
                 let can_read_dashboard = editor_reader_actions_visible(current_account.as_ref());
+                let available_options = StoredValue::new(loaded.available_component_versions);
                 view! {
                         <div
                             class="dashboard-editor__background"
@@ -168,6 +193,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                 preview_open.get()
                                     || components_open.get()
                                     || inspector_open.get()
+                                    || dependency_open.get()
                                     || issue_placement.get().is_some()
                                     || operation.get().is_busy()
                             }
@@ -300,14 +326,29 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                         }
                                     }
                                 >"Placement details"</button>
+                                <button
+                                    id="dashboard-dependency-health-trigger"
+                                    class="button button--secondary dashboard-dependency-health-trigger"
+                                    type="button"
+                                    aria-haspopup="dialog"
+                                    aria-controls="dashboard-dependency-health-sheet"
+                                    aria-expanded=move || dependency_open.get().to_string()
+                                    on:click=move |_| {
+                                        components_open.set(false);
+                                        inspector_open.set(false);
+                                        dependency_open.set(true);
+                                    }
+                                >
+                                    <span>"Dependency health"</span>
+                                    {move || dependency_health.get().map(|health| view! {
+                                        <span
+                                            class={if health.issue_count() > 0 { "status-badge status-badge--warning" } else { "status-badge status-badge--success" }}
+                                        >
+                                            {if health.issue_count() > 0 { format!("{} issues", health.issue_count()) } else { "Healthy".into() }}
+                                        </span>
+                                    })}
+                                </button>
                             </div>
-                            <p aria-live="polite">
-                                {move || if selected.get().is_some() {
-                                    "A placement is selected. Open Placement details to resize, reposition, replace, or preview it."
-                                } else {
-                                    "Select a placement on the canvas to enable Placement details."
-                                }}
-                            </p>
                         </div>
 
                         <div
@@ -320,6 +361,9 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                 placements
                                 selected
                                 issue_placement
+                                dependency_health
+                                dependency_open
+                                selected_finding
                                 dirty
                                 save_error
                                 announcement
@@ -338,7 +382,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                             class="dashboard-components-sheet"
                         >
                             <ComponentPalette
-                                options=loaded.available_component_versions.clone()
+                                options=available_options.get_value()
                                 placements
                                 selected
                                 dirty
@@ -347,6 +391,18 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                                 next_client_key
                             />
                         </SideSheet>
+
+                        <DependencyHealthSheet
+                            dashboard_id=loaded.dashboard.id.clone()
+                            options=available_options.get_value()
+                            health=dependency_health
+                            error=dependency_error
+                            loading=dependency_loading
+                            open=dependency_open
+                            selected_finding
+                            composition
+                            placements
+                        />
 
                         <SideSheet
                             id="dashboard-placement-issue"
@@ -432,6 +488,406 @@ fn retry_resolution(href: &str) {
 
 #[cfg(not(feature = "hydrate"))]
 fn retry_resolution(_: &str) {}
+
+#[derive(Clone, Debug, PartialEq)]
+struct DependencyActionSelection {
+    finding: DashboardDependencyFinding,
+    action: String,
+    replacement_component_version_id: Option<String>,
+}
+
+#[component]
+#[allow(clippy::too_many_arguments)]
+fn DependencyHealthSheet(
+    dashboard_id: String,
+    options: Vec<DashboardComponentVersionOption>,
+    health: RwSignal<Option<DashboardDependencyHealth>>,
+    error: RwSignal<Option<String>>,
+    loading: RwSignal<bool>,
+    open: RwSignal<bool>,
+    selected_finding: RwSignal<Option<String>>,
+    composition: RwSignal<Option<DashboardComposition>>,
+    placements: RwSignal<Vec<EditorPlacement>>,
+) -> impl IntoView {
+    let filter = RwSignal::new("open".to_string());
+    let replacement = RwSignal::new(String::new());
+    let confirmation = RwSignal::new(None::<DependencyActionSelection>);
+    let action_pending = RwSignal::new(false);
+    let dashboard_id = StoredValue::new(dashboard_id);
+    let options = StoredValue::new(options);
+
+    let filtered = Memo::new(move |_| {
+        let selected_filter = filter.get();
+        health
+            .get()
+            .map(|health| {
+                health
+                    .findings
+                    .into_iter()
+                    .filter(|finding| match selected_filter.as_str() {
+                        "deferred" => finding.disposition == "deferred",
+                        "healthy" => false,
+                        _ => finding.disposition == "open",
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    });
+    let current_finding = Memo::new(move |_| {
+        let findings = filtered.get();
+        selected_finding
+            .get()
+            .and_then(|id| findings.iter().find(|finding| finding.id == id).cloned())
+            .or_else(|| findings.first().cloned())
+    });
+
+    view! {
+        <SideSheet
+            id="dashboard-dependency-health-sheet"
+            title="Dependency health"
+            description="Review Dashboard-owned findings from authorized provider observations."
+            eyebrow="Dashboard editor"
+            side=SideSheetSide::End
+            open=Signal::derive(move || open.get())
+            on_close=Callback::new(move |_| open.set(false))
+            close_label="Close Dependency health"
+            class="dashboard-dependency-sheet"
+        >
+            <section class="dashboard-dependency-sheet__summary" aria-live="polite">
+                {move || health.get().map(|value| view! {
+                    <span class={if value.issue_count() > 0 { "status-badge status-badge--warning" } else { "status-badge status-badge--success" }}>
+                        {if value.issue_count() > 0 { format!("{} issues", value.issue_count()) } else { "Healthy".into() }}
+                    </span>
+                })}
+                <button
+                    class="button button--secondary"
+                    type="button"
+                    disabled=move || loading.get()
+                    on:click=move |_| refresh_dependency_health(
+                        dashboard_id.get_value(),
+                        health,
+                        loading,
+                        error,
+                    )
+                >
+                    {move || if loading.get() { "Refreshing…" } else { "Refresh" }}
+                </button>
+            </section>
+            <div class="dashboard-dependency-sheet__filters" role="group" aria-label="Filter dependency findings">
+                {[("open", "Needs review"), ("deferred", "Deferred"), ("healthy", "Healthy")]
+                    .into_iter()
+                    .map(|(value, label)| view! {
+                        <button
+                            class="button button--secondary"
+                            class:is-active=move || filter.get() == value
+                            type="button"
+                            aria-pressed=move || (filter.get() == value).to_string()
+                            on:click=move |_| {
+                                filter.set(value.into());
+                                selected_finding.set(None);
+                            }
+                        >{label}</button>
+                    })
+                    .collect_view()}
+            </div>
+            {move || error.get().map(|message| view! { <p class="form-error" role="alert">{message}</p> })}
+            <div class="dashboard-dependency-sheet__layout">
+                <div class="dashboard-dependency-sheet__findings" aria-label="Dependency findings">
+                    {move || {
+                        let findings = filtered.get();
+                        if filter.get() == "healthy" {
+                            let healthy = health.get().is_some_and(|health| health.issue_count() == 0);
+                            view! { <p>{if healthy { "All observed dependencies are healthy." } else { "Healthy dependencies have no open finding." }}</p> }.into_any()
+                        } else if findings.is_empty() {
+                            view! { <p>"No findings in this filter."</p> }.into_any()
+                        } else {
+                            findings.into_iter().map(|finding| {
+                                let id = finding.id.clone();
+                                let id_for_selected = id.clone();
+                                view! {
+                                    <button
+                                        class="dashboard-dependency-finding"
+                                        class:is-active=move || selected_finding.get().as_deref() == Some(id_for_selected.as_str())
+                                        type="button"
+                                        on:click=move |_| selected_finding.set(Some(id.clone()))
+                                    >
+                                        <strong>{finding_label(&finding.finding_code)}</strong>
+                                        <span>{format!("Revision {} · {}", finding.observed_resource_revision, finding.disposition)}</span>
+                                    </button>
+                                }
+                            }).collect_view().into_any()
+                        }
+                    }}
+                </div>
+                {move || current_finding.get().map(|finding| {
+                    let defer_finding = finding.clone();
+                    let upgrade_finding = finding.clone();
+                    let remove_finding = finding.clone();
+                    let replace_finding = finding.clone();
+                    let reference = serde_json::to_string_pretty(&finding.saved_reference)
+                        .unwrap_or_else(|_| "Reference unavailable".into());
+                    view! {
+                        <article class="dashboard-dependency-detail">
+                            <header>
+                                <span class="status-badge status-badge--warning">{finding_label(&finding.finding_code)}</span>
+                                <h3>{format!("Placement finding · revision {}", finding.observed_resource_revision)}</h3>
+                            </header>
+                            <dl>
+                                <dt>"Observed"</dt><dd>{finding.observed_at.clone()}</dd>
+                                <dt>"Lifecycle"</dt><dd>{finding.observed_lifecycle.clone().unwrap_or_else(|| "Not disclosed".into())}</dd>
+                                <dt>"Publication"</dt><dd>{finding.publication_state.clone().unwrap_or_else(|| "Not disclosed".into())}</dd>
+                                <dt>"Changes"</dt><dd>{if finding.change_categories.is_empty() { "None declared".into() } else { finding.change_categories.join(", ") }}</dd>
+                            </dl>
+                            <details>
+                                <summary>"Typed reference"</summary>
+                                <pre><code>{reference}</code></pre>
+                            </details>
+                            <details>
+                                <summary>"Dashboard impact"</summary>
+                                <pre><code>{serde_json::to_string_pretty(&finding.impact).unwrap_or_default()}</code></pre>
+                            </details>
+                            {(finding.disposition == "open").then(|| view! {
+                                <button
+                                    class="button button--secondary"
+                                    type="button"
+                                    disabled=move || action_pending.get()
+                                    on:click=move |_| perform_dependency_action(
+                                        dashboard_id.get_value(),
+                                        DependencyActionSelection {
+                                            finding: defer_finding.clone(),
+                                            action: "defer".into(),
+                                            replacement_component_version_id: None,
+                                        },
+                                        health,
+                                        loading,
+                                        action_pending,
+                                        error,
+                                        composition,
+                                        placements,
+                                        confirmation,
+                                    )
+                                >"Defer"</button>
+                            })}
+                            <div class="dashboard-dependency-detail__replacement">
+                                <label>
+                                    <span>"Replacement Component version"</span>
+                                    <select
+                                        prop:value=move || replacement.get()
+                                        on:change=move |event| replacement.set(event_target_value(&event))
+                                    >
+                                        <option value="">"Select a replacement"</option>
+                                        {options.get_value().into_iter().map(|option| view! {
+                                            <option value=option.component_version_id.clone()>
+                                                {format!("{} · {}", option.component_name, option.version_label)}
+                                            </option>
+                                        }).collect_view()}
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="dashboard-dependency-detail__actions">
+                                {finding.successor_available.then(|| view! {
+                                    <button class="button" type="button" on:click=move |_| confirmation.set(Some(DependencyActionSelection {
+                                        finding: upgrade_finding.clone(),
+                                        action: "upgrade".into(),
+                                        replacement_component_version_id: None,
+                                    }))>"Upgrade"</button>
+                                })}
+                                <button
+                                    class="button button--secondary"
+                                    type="button"
+                                    disabled=move || replacement.get().is_empty()
+                                    on:click=move |_| confirmation.set(Some(DependencyActionSelection {
+                                        finding: replace_finding.clone(),
+                                        action: "replace".into(),
+                                        replacement_component_version_id: Some(replacement.get_untracked()),
+                                    }))
+                                >"Replace"</button>
+                                <button class="button button--danger" type="button" on:click=move |_| confirmation.set(Some(DependencyActionSelection {
+                                    finding: remove_finding.clone(),
+                                    action: "remove".into(),
+                                    replacement_component_version_id: None,
+                                }))>"Remove"</button>
+                            </div>
+                        </article>
+                    }
+                })}
+            </div>
+        </SideSheet>
+        <ModalDialog
+            id="dashboard-dependency-action-confirmation"
+            title="Confirm dependency action"
+            description="The placement and finding update atomically."
+            open=Signal::derive(move || confirmation.get().is_some())
+            on_close=Callback::new(move |_| {
+                if !action_pending.get() {
+                    confirmation.set(None);
+                }
+            })
+            close_label="Cancel dependency action"
+        >
+            {move || confirmation.get().map(|selection| {
+                let submit = selection.clone();
+                let action_label = dependency_action_label(&selection.action);
+                let is_remove = selection.action == "remove";
+                view! {
+                    <div>
+                        <p>{format!("{} this Dashboard placement?", dependency_action_label(&selection.action))}</p>
+                        <div class="modal-dialog__footer">
+                            <button class="button button--secondary" type="button" on:click=move |_| confirmation.set(None)>"Cancel"</button>
+                            <button
+                                class=if is_remove { "button button--danger" } else { "button" }
+                                type="button"
+                                disabled=move || action_pending.get()
+                                on:click=move |_| perform_dependency_action(
+                                    dashboard_id.get_value(),
+                                    submit.clone(),
+                                    health,
+                                    loading,
+                                    action_pending,
+                                    error,
+                                    composition,
+                                    placements,
+                                    confirmation,
+                                )
+                            >{move || if action_pending.get() { "Applying…" } else { action_label }}</button>
+                        </div>
+                    </div>
+                }
+            })}
+        </ModalDialog>
+    }
+}
+
+fn finding_label(code: &str) -> &'static str {
+    match code {
+        "provider_unavailable" => "Provider unavailable",
+        "contract_incompatible" => "Provider incompatible",
+        "resource_unresolved" => "Component unavailable",
+        "lifecycle_unrenderable" => "Lifecycle changed",
+        "publication_unrenderable" => "Publication changed",
+        "resource_changed" => "Published version changed",
+        _ => "Dependency needs review",
+    }
+}
+
+fn dependency_action_label(action: &str) -> &'static str {
+    match action {
+        "upgrade" => "Upgrade",
+        "replace" => "Replace",
+        "remove" => "Remove",
+        "defer" => "Defer",
+        _ => "Apply",
+    }
+}
+
+#[cfg(feature = "hydrate")]
+fn refresh_dependency_health(
+    dashboard_id: String,
+    health: RwSignal<Option<DashboardDependencyHealth>>,
+    loading: RwSignal<bool>,
+    error: RwSignal<Option<String>>,
+) {
+    leptos::task::spawn_local(async move {
+        loading.set(true);
+        error.set(None);
+        match crate::api::refresh_dependency_health(&dashboard_id).await {
+            Ok(value) => health.set(Some(value)),
+            Err(message) => error.set(Some(message)),
+        }
+        loading.set(false);
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn refresh_dependency_health(
+    _: String,
+    _: RwSignal<Option<DashboardDependencyHealth>>,
+    _: RwSignal<bool>,
+    _: RwSignal<Option<String>>,
+) {
+}
+
+#[cfg(feature = "hydrate")]
+#[allow(clippy::too_many_arguments)]
+fn perform_dependency_action(
+    dashboard_id: String,
+    selection: DependencyActionSelection,
+    health: RwSignal<Option<DashboardDependencyHealth>>,
+    loading: RwSignal<bool>,
+    action_pending: RwSignal<bool>,
+    error: RwSignal<Option<String>>,
+    composition: RwSignal<Option<DashboardComposition>>,
+    placements: RwSignal<Vec<EditorPlacement>>,
+    confirmation: RwSignal<Option<DependencyActionSelection>>,
+) {
+    leptos::task::spawn_local(async move {
+        action_pending.set(true);
+        error.set(None);
+        let request = DashboardDependencyActionRequest {
+            action: selection.action.clone(),
+            expected_finding_revision: selection.finding.finding_revision,
+            replacement_component_version_id: selection.replacement_component_version_id,
+        };
+        let idempotency_key = format!(
+            "dependency-{}-{}-{}-{}",
+            selection.finding.id,
+            selection.finding.finding_revision,
+            selection.action,
+            js_sys::Date::now() as u64,
+        );
+        match crate::api::act_on_dependency(
+            &dashboard_id,
+            &selection.finding.id,
+            &request,
+            &idempotency_key,
+        )
+        .await
+        {
+            Ok(_) => {
+                confirmation.set(None);
+                match crate::api::fetch_dependency_health(&dashboard_id).await {
+                    Ok(value) => health.set(Some(value)),
+                    Err(message) => error.set(Some(message)),
+                }
+                if selection.action != "defer" {
+                    match crate::api::fetch_composition(&dashboard_id).await {
+                        Ok(value) => {
+                            placements.set(
+                                value
+                                    .dashboard
+                                    .placements
+                                    .iter()
+                                    .cloned()
+                                    .map(EditorPlacement::existing)
+                                    .collect(),
+                            );
+                            composition.set(Some(value));
+                        }
+                        Err(message) => error.set(Some(message)),
+                    }
+                }
+            }
+            Err(message) => error.set(Some(message)),
+        }
+        loading.set(false);
+        action_pending.set(false);
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+#[allow(clippy::too_many_arguments)]
+fn perform_dependency_action(
+    _: String,
+    _: DependencyActionSelection,
+    _: RwSignal<Option<DashboardDependencyHealth>>,
+    _: RwSignal<bool>,
+    _: RwSignal<bool>,
+    _: RwSignal<Option<String>>,
+    _: RwSignal<Option<DashboardComposition>>,
+    _: RwSignal<Vec<EditorPlacement>>,
+    _: RwSignal<Option<DependencyActionSelection>>,
+) {
+}
 
 #[component]
 fn ComponentPalette(
@@ -536,6 +992,9 @@ fn CompositionCanvas(
     placements: RwSignal<Vec<EditorPlacement>>,
     selected: RwSignal<Option<String>>,
     issue_placement: RwSignal<Option<DashboardPlacement>>,
+    dependency_health: RwSignal<Option<DashboardDependencyHealth>>,
+    dependency_open: RwSignal<bool>,
+    selected_finding: RwSignal<Option<String>>,
     dirty: RwSignal<bool>,
     save_error: RwSignal<Option<String>>,
     announcement: RwSignal<String>,
@@ -680,7 +1139,15 @@ fn CompositionCanvas(
                             format!("{} · {}", kind_label(&component.component_type), version_label(component.version_number, &component.version_label))
                         });
                         let resolution_state = placement.effective_resolution_state();
-                        let has_issue = resolution_state != DashboardPlacementResolutionState::Available;
+                        let durable_finding = dependency_health.get().and_then(|health| {
+                            health
+                                .findings
+                                .into_iter()
+                                .find(|finding| finding.placement_id == placement.placement_id)
+                        });
+                        let durable_finding_id = durable_finding.as_ref().map(|finding| finding.id.clone());
+                        let has_issue = durable_finding.is_some()
+                            || resolution_state != DashboardPlacementResolutionState::Available;
                         let rect = GridRect::new(
                             placement.grid_row,
                             placement.grid_column,
@@ -756,7 +1223,10 @@ fn CompositionCanvas(
                                     on:focus=move |_| selected.set(Some(focus_key.clone()))
                                     on:click=move |_| {
                                         selected.set(Some(key.clone()));
-                                        if has_issue {
+                                        if let Some(finding_id) = durable_finding_id.clone() {
+                                            selected_finding.set(Some(finding_id));
+                                            dependency_open.set(true);
+                                        } else if has_issue {
                                             issue_placement.set(Some(issue_target.clone()));
                                         }
                                     }
@@ -1901,7 +2371,7 @@ fn option_to_component(option: &DashboardComponentVersionOption) -> DashboardCom
         component_type: option.component_type.clone(),
         version_number: option.version_number,
         version_label: option.version_label.clone(),
-        version_status: option.version_status.clone(),
+        publication_state: option.version_status.clone(),
     }
 }
 
@@ -2034,7 +2504,7 @@ mod tests {
                 component_type: "table".into(),
                 version_number: 1,
                 version_label: "Published".into(),
-                version_status: "published".into(),
+                publication_state: "published".into(),
             }),
             allowed_operations: Some(vec![
                 DashboardPlacementOperation::Retain,
@@ -2155,6 +2625,9 @@ mod tests {
                         placements=RwSignal::new(vec![degraded])
                         selected=RwSignal::new(None)
                         issue_placement=RwSignal::new(None)
+                        dependency_health=RwSignal::new(None)
+                        dependency_open=RwSignal::new(false)
+                        selected_finding=RwSignal::new(None)
                         dirty=RwSignal::new(false)
                         save_error=RwSignal::new(None)
                         announcement=RwSignal::new(String::new())

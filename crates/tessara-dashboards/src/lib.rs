@@ -20,12 +20,10 @@ pub use placement_config::{
     parse_dashboard_placement_configs,
 };
 pub use tessara_components_contract::{
-    DASHBOARD_COMPONENT_BINDING_KEY, DASHBOARD_COMPONENT_CONTRACT_ID,
-    DASHBOARD_COMPONENT_RESOURCE_TYPE, DashboardComponentCatalogResponseV1,
-    DashboardComponentMetadataV1, DashboardComponentResolutionRequestV1,
-    DashboardComponentResolutionResponseV1, DashboardComponentResolutionValidationError,
-    DashboardComponentTransitionAction, DashboardComponentVersionReferenceV1,
-    DashboardComponentVersionReferenceValidationError,
+    COMPONENT_BINDING_KEY, COMPONENT_CONTRACT_ID, COMPONENT_RESOURCE_TYPE, ComponentAction,
+    ComponentCatalogResponse, ComponentMetadata, ComponentResolutionRequest,
+    ComponentResolutionResponse, ComponentResolutionValidationError, ComponentVersionReference,
+    ComponentVersionReferenceValidationError,
 };
 
 pub use tessara_module_contract::grid_layout::{GridPlacement, GridRect, GridSize};

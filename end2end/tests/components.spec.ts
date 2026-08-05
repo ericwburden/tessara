@@ -1,6 +1,5 @@
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
 import { invokeDemoSeedEndpoint } from "./support/demo-seed";
-import { runPlaywrightSql } from "./support/postgres";
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
@@ -545,30 +544,7 @@ async function publishComponentVersion(
   );
 }
 
-function cleanupPlaywrightComponents() {
-  const sql = `
-CREATE TEMP TABLE pw_cleanup_components AS
-SELECT id FROM components
-WHERE slug LIKE '${COMPONENT_PREFIX}%'
-   OR name LIKE 'Playwright Component Workflow %';
-
-DELETE FROM component_versions
-WHERE component_id IN (SELECT id FROM pw_cleanup_components);
-
-DELETE FROM components
-WHERE id IN (SELECT id FROM pw_cleanup_components);
-`;
-
-  try {
-    runPlaywrightSql(sql);
-  } catch (error) {
-    console.warn(`component cleanup skipped: ${String(error)}`);
-  }
-}
-
 test.describe.serial("Sprint 4A component workflow", () => {
-  test.afterAll(() => cleanupPlaywrightComponents());
-
   test("admin can create, update, publish, and view a major-line table component", async ({
     page,
   }) => {
@@ -576,8 +552,6 @@ test.describe.serial("Sprint 4A component workflow", () => {
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
     await ensureDemoSeed(page);
-    cleanupPlaywrightComponents();
-
     const { dataset, major } = await pickDatasetMajor(page);
     const firstField = textLikeField(dataset.output_fields);
     const slug = `${COMPONENT_PREFIX}${RUN_ID}`;
@@ -666,7 +640,7 @@ test.describe.serial("Sprint 4A component workflow", () => {
     );
     const draftDashboardPlacementBody = JSON.parse(draftDashboardPlacement) as ApiErrorBody;
     expect(draftDashboardPlacementBody).toMatchObject({
-      error: expect.stringContaining("scope or lifecycle is incompatible"),
+      error: expect.stringContaining("cannot be bound in its current state"),
     });
     await expectStatus(
       await page.request.delete(`/api/admin/dashboards/${draftDashboard.id}`),
@@ -936,9 +910,19 @@ test.describe.serial("Sprint 4A component workflow", () => {
     await expect(page.getByRole("link", { name: "View" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Publish" })).toHaveCount(0);
     let versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
+    await expect(versionsTable.getByRole("columnheader", { name: "Publication" })).toBeVisible();
+    await expect(versionsTable.getByRole("columnheader", { name: "Lifecycle" })).toBeVisible();
+    await expect(versionsTable.getByRole("columnheader", { name: "Actions" })).toBeVisible();
     await expect(versionsTable).toContainText("Draft");
     await expect(versionsTable).toContainText("Published");
     await expect(versionsTable).toContainText(`v${major}`);
+    const lifecycleMenu = versionsTable.getByRole("button", { name: /Open actions for/ }).first();
+    await expect(lifecycleMenu).toBeVisible();
+    const lifecycleMenuBox = await lifecycleMenu.boundingBox();
+    expect(lifecycleMenuBox?.width).toBeLessThanOrEqual(44);
+    await lifecycleMenu.click();
+    await expect(page.getByRole("menuitem", { name: "Deactivate" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Archive" })).toBeVisible();
 
     await page.goto(`/components/${slug}/edit`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");

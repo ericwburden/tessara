@@ -220,6 +220,33 @@ if ($SelfTest) {
     if ($seedContract.canonical_sha256 -cne "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600") {
         throw "Self-test failed: built-in seed canonical digest changed."
     }
+    $compositionAdminCapabilities = @("admin:all", "composition:approve", "composition:plan", "composition:read")
+    $compositionRows = @($seedRows | ForEach-Object {
+        if ($_.name -ceq "admin") {
+            [pscustomobject]@{ name = "admin"; capabilities = $compositionAdminCapabilities }
+        } else {
+            $_
+        }
+    })
+    $compositionSeedContract = Get-Sprint6ASeedContract `
+        -SeedRoles $compositionRows `
+        -CompositionRoles @([pscustomobject]@{ name = "admin"; capabilities = $compositionAdminCapabilities })
+    if (($compositionSeedContract.composition_owned_roles -join ",") -cne "admin" -or
+        $compositionSeedContract.canonical_sha256 -cne $seedContract.canonical_sha256) {
+        throw "Self-test failed: composition ownership did not preserve the immutable built-in seed identity."
+    }
+    $compositionRows[0].capabilities = @("admin:all")
+    $projectionMismatchRejected = $false
+    try {
+        [void](Get-Sprint6ASeedContract `
+            -SeedRoles $compositionRows `
+            -CompositionRoles @([pscustomobject]@{ name = "admin"; capabilities = $compositionAdminCapabilities }))
+    } catch {
+        $projectionMismatchRejected = $true
+    }
+    if (-not $projectionMismatchRejected) {
+        throw "Self-test failed: changed composition-owned built-in role membership was accepted."
+    }
 
     $expectedMigrations = @(
         [pscustomobject]@{ version = 1; file = "001_test.sql"; checksum_sha384 = "d" * 96 }

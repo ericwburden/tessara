@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     DashboardModuleError, DashboardModuleState, MANAGE_CAPABILITY, MODULE_RELEASE_VERSION,
-    composition, product, verified_shell_context,
+    composition, dependencies, product, verified_shell_context,
 };
 
 pub(super) fn routes() -> Router<DashboardModuleState> {
@@ -132,6 +132,8 @@ async fn editor(
         composition::get_composition(State(state.clone()), headers.clone(), Path(dashboard_id))
             .await?
             .0;
+    let dependency_health =
+        dependencies::refresh_for_editor(&state, &headers, dashboard_id).await?;
     let nodes = composition::load_visibility_nodes_for_scope(&state, scope).await?;
     let path = format!("/dashboards/{dashboard_id}/edit");
     document(
@@ -142,6 +144,7 @@ async fn editor(
         DashboardRouteBootstrap::editor(
             account,
             json_round_trip(composition)?,
+            json_round_trip(dependency_health)?,
             json_round_trip(nodes)?,
         ),
     )

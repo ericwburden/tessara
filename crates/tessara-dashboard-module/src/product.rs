@@ -30,7 +30,11 @@ const COMPOSITION_CONTRACT: &str = "tessara.dashboards.composition";
 
 fn contract_for_action(action: &str) -> &'static str {
     match action {
-        "dashboards.load_composition" | "dashboards.reconcile_composition" => COMPOSITION_CONTRACT,
+        "dashboards.load_composition"
+        | "dashboards.reconcile_composition"
+        | "dashboards.read_dependencies"
+        | "dashboards.refresh_dependencies"
+        | "dashboards.act_on_dependency" => COMPOSITION_CONTRACT,
         _ => DASHBOARD_CONTRACT,
     }
 }

@@ -6,6 +6,12 @@ Use the generated `sprint-<label>-plan.md` file as the implementation contract f
 
 Out-of-roadmap sprint proposals and migration plans may also live here when they need the same level of delivery detail before they are admitted to the roadmap.
 
+## Active Sprint 7B Artifacts
+
+- [Sprint 7B Execution Plan](./sprint-7b-plan.md)
+- [Sprint 7B Verification Record](./sprint-7b-verification.md)
+- [Sprint 7B Interactive UI Review](./sprint-7b-ui-review/README.md)
+
 ## Current Roadmap Position
 
 Sprint 6C closed on 2026-07-29 with Dashboard operating in an independent

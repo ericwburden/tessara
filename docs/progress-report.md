@@ -8,6 +8,244 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-05 - Sprint 7B Cross-Module Resource Lifecycle And Dependency Closeout
+
+- Completed:
+  - Added policy-neutral typed resource observation and revision contracts and
+    exact-current Components V2 behavior while retaining immutable V1 test
+    fixtures only.
+  - Implemented provider-owned Component publication/lifecycle, revisions,
+    audit, successor declarations, archive, and terminal tombstone behavior.
+  - Implemented Dashboard-owned observations, stale findings, deferral,
+    automatic convergence, and atomic Upgrade, Replace, and Remove actions over
+    durable typed references.
+  - Added the transitional Dataset observation adapter with matching
+    authorization-first nondisclosure semantics.
+  - Delivered the approved Dashboard editor and Component Versions UI. Core and
+    Dashboard use the same SDK-owned shell; placement glyphs share one fixed
+    slot; version actions use the common vertical menu; the redundant health
+    note and prototype control are absent.
+- Validation:
+  - Evidence source: commit `fef463756feaf2604b98313a10b0e5dad11d2cfa`,
+    tree `4464d940ef728fb6254fffc8cd5a1ffca125810a`.
+  - Candidate fingerprint:
+    `f0ac714ff92a7c7adb31afae2378b6770c679190d5bdffb8ab36a005e6610339`.
+  - SIT: Passed all four authoritative lanes. The browser lane passed 70/70
+    with one worker and zero retries, skips, flakes, or unexpected results.
+  - UAT: Passed scripted UAT and all nine manual scenarios, including approved
+    mockup parity and the user-requested shell, alignment, menu, and control
+    checks.
+  - A failed earlier UAT candidate and a later harness-invalidated candidate are
+    retained as superseded history. Neither contributes to certification; the
+    final candidate reran the complete readiness-through-UAT chain.
+- Active release: source-exact reference composition at
+  `http://127.0.0.1:8086`; Core HTTP 200, supervisor ready HTTP 204, canonical
+  fresh seeded state, no open dependency finding or defect.
+- Closeout documentation: this separately committed documentation-only
+  closeout update; no image rebuild was performed.
+- Next Sprint: Sprint 8A — Component Module Separation Slice.
+
+## Sprint Handoff / Demo Instructions
+
+### Component Lifecycle Observation And Automatic Convergence
+
+- Role: administrator / Component manager and scoped Dashboard editor.
+- Paths: `http://127.0.0.1:8086/#versions` and
+  `http://127.0.0.1:8086/#dashboard`.
+- Steps:
+  1. Open Reference Metric Card versions, use the vertical action menu, and
+     deactivate version 1.0.0.
+  2. Open Reference Operations in the Dashboard editor and refresh dependency
+     health.
+  3. Reactivate the same ComponentVersion and refresh again.
+- Expected: the saved reference remains pinned; the inactive revision creates
+  a Dashboard-owned finding; the later healthy revision closes the old finding
+  without a manual resolve action.
+- Acceptance check: Pass only when the Dashboard returns to Healthy with no
+  stale actionable finding and Core never applies Dashboard layout policy.
+- Evidence: `artifacts/sprint-7b-closeout/uat/manual/uat-7b-01.json` and its
+  screenshots.
+
+### Finding Deferral And Later Revision
+
+- Role: scoped Dashboard editor.
+- Path: `http://127.0.0.1:8086/#dashboard`.
+- Steps:
+  1. Open a disclosed finding and defer it without entering a note.
+  2. Reload, restore provider health, and refresh.
+  3. Cause a later provider revision and refresh again.
+- Expected: deferral remains degraded, fresh health resolves that revision, and
+  the later revision creates a distinct finding without reviving the old one.
+- Acceptance check: Pass only when health and dispositions converge by resource
+  revision and no manual resolution control exists.
+- Evidence: `artifacts/sprint-7b-closeout/uat/manual/uat-7b-02.json`.
+
+### Upgrade, Replace, Remove, Archive, And Tombstone
+
+- Role: administrator / Component manager and Dashboard editor.
+- Paths: `http://127.0.0.1:8086/#versions` and
+  `http://127.0.0.1:8086/#dashboard`.
+- Steps:
+  1. Publish a declared same-Component successor and verify the old Dashboard
+     reference stays pinned until Upgrade.
+  2. Exercise Upgrade, authorized Replace, stale replay, and Remove using the
+     seeded scenarios.
+  3. From Component Versions, inspect archive and tombstone confirmations and
+     the terminal `No lifecycle actions` state.
+- Expected: every valid action commits atomically; stale replay is a safe no-op;
+  archived versions cannot reactivate; tombstoned versions expose no lifecycle
+  actions or payload metadata.
+- Acceptance check: Pass only when action eligibility, confirmations, receipts,
+  placement state, and findings agree after each action.
+- Evidence: `artifacts/sprint-7b-closeout/uat/manual/uat-7b-04.json` through
+  `uat-7b-06.json`.
+
+### Restricted Resolution And Dataset Equivalence
+
+- Role: administrator and the seeded restricted non-admin actor.
+- Paths: `http://127.0.0.1:8086/#dashboard` and the existing Dataset surfaces.
+- Steps:
+  1. Compare known restricted and random references through the seeded
+     resolution scenarios.
+  2. Exercise outage/recovery and verify viewer reads do not persist state.
+  3. Compare Component and Dataset observations through their typed adapters.
+- Expected: restricted projections are indistinguishable, recovery converges,
+  and both adapters share policy-neutral observation semantics without
+  cross-module database reads.
+- Acceptance check: Pass only when the restricted actor learns no resource-
+  specific detail and the viewer performs no write.
+- Evidence: `artifacts/sprint-7b-closeout/uat/manual/uat-7b-07.json` and
+  `uat-7b-08.json`.
+
+### Approved UI And SDK Shell
+
+- Role: product reviewer / administrator.
+- Paths: `http://127.0.0.1:8086/#dashboard` and
+  `http://127.0.0.1:8086/#versions`.
+- Steps:
+  1. Compare both routes with the approved Sprint 7B UI package in dark and
+     light themes at desktop, tablet, and mobile widths.
+  2. Inspect placement glyph alignment, the Component Versions vertical action
+     menu, keyboard/focus behavior, 200% zoom, and horizontal overflow.
+  3. Confirm the redundant health note and prototype scenario control are not
+     present.
+- Expected: both complete documents use identical SDK-owned chrome and the
+  approved screen deltas with no P0/P1/P2 mismatch.
+- Acceptance check: Pass only when the shell anatomy is identical, every glyph
+  occupies the same 31×31 slot, actions remain usable, and rejected controls
+  are absent.
+- Evidence: `artifacts/sprint-7b-closeout/uat/manual/uat-7b-09.json`, retained
+  screenshots, and `uat/mockup-parity.log`.
+
+## Acceptance Mapping
+
+| Roadmap exit-condition clause | Manual demonstration | Automated/deployed check | Evidence |
+|---|---|---|---|
+| Typed resolution and revision/state-change contracts | Lifecycle and Dataset-equivalence demos | Contract/golden/conformance and malformed/mixed-version lanes | SIT static/Rust; UAT-01/03/06/08 |
+| Each owning module defines lifecycle and version policy | Lifecycle and archive/tombstone demos | Component state-machine, publication, immutability, and audit tests | SIT Rust; UAT-01/03/04/06 |
+| Provider declares how consumers observe changes | Lifecycle refresh demo | Monotonic revision and editor/live-resolution tests; deployed boundary smoke | SIT deployed smoke; UAT-01/03 |
+| Changelog, stale findings, carry-forward, and rebinding use durable references | Deferral and action demos | Persistence, stale/replay, atomic-action, and adapter suites | SIT Rust/Playwright; UAT-02/04/05/08 |
+| Mutable state preserves reference type and owner | Lifecycle and in-place update demos | Before/after typed-reference digest tests | UAT-01/03/06 |
+| Publication/activation guards remain provider-owned | In-place update and successor demos | Ownership/dependency-direction regression tests | SIT static/Rust; UAT-03/04 |
+| Internal outcomes remain distinct while restricted projections collapse | Restricted-resolution demo | Known/random API/UI/log/timing nondisclosure matrix | SIT nondisclosure; UAT-06/07 |
+| Contract-version compatibility and regression coverage | Archive/tombstone contract readback | Immutable V1 fixture hashes and exact V2 failure tests | SIT static/Rust; UAT-06 |
+| Dependency health, observed state, upgrade, carry-forward, and rebinding UI | Dashboard dependency and action demos | SSR/WASM/accessibility/Playwright and deployed smoke | SIT Playwright/deployed smoke; UAT-01/02/04/05/09 |
+| Resolve or defer without Core inventing provider lifecycle policy | Deferral and action demos | No-manual-resolve inventory, health, ownership, and transaction tests | SIT Rust/Playwright; UAT-02/03/05 |
+| A Component lifecycle/revision change crosses the real Dashboard boundary and can be resolved or deferred | Lifecycle, deferral, and action demos | Source-exact process-boundary smoke and full Playwright suite | SIT deployed smoke; UAT-01–07 |
+| Equivalent Dataset/Component behavior uses the same adapters and is rerunnable after extraction | Dataset-equivalence demo | Dataset/Component conformance and no-cross-database audit | SIT static/Rust; UAT-08 |
+
+## 2026-08-04 - Sprint 7B Implementation Reconciled For Validation Readiness
+
+- The policy-neutral resource observation contract, exact-current Components
+  V2 boundary, full Component publication/lifecycle state machine, monotonic
+  provider revision and immutable change/audit records are implemented.
+- Dashboard now owns durable observations, open/deferred/resolved findings and
+  immutable idempotent action receipts. Editor load and explicit retry refresh;
+  viewer resolution remains read-only; Upgrade, Replace, Remove and Defer use
+  stale-safe transactional commands with no manual resolve action.
+- The approved Component Versions lifecycle menu and Dashboard dependency
+  summary/filter/issue-sheet UI are implemented. The redundant editor note and
+  prototype-only state selector are absent, and placement status glyphs use the
+  approved fixed slot.
+- Core and complete Dashboard documents now obtain their application frame from
+  `tessara-module-ui`; the previous Core-local shell renderers were removed.
+  The release Dashboard WASM, bindings, loader and stylesheet bytes were rebuilt
+  and content-addressed from the Sprint 7B sources.
+- DatasetRevision now has a provider-owned monotonic resource revision and a
+  transition observation adapter. Conformance tests cover stable typed identity,
+  exact provider identity, shared observation semantics and authorization-first
+  known/random nondisclosure for Dataset and Component resources.
+- Focused contract, Core API, SDK UI, Component UI and Dashboard module/UI tests
+  pass, as does the touched-cone all-target/all-feature zero-warning clippy gate.
+  A fresh disposable Core baseline materialized successfully and a Dataset
+  semantic update advanced its resource revision from 1 to 2.
+- Formal readiness, candidate rehearsal, freeze, SIT, scripted/manual UAT and
+  closeout have not yet been claimed. They remain governed by the specialized
+  Sprint validation skills and the source-exact verification record.
+
+## 2026-08-04 - Sprint 7B Interactive UI Approved And Implementation Started
+
+- The product owner approved the retained Sprint 7B interactive mockup after
+  the annotated Dashboard and Component Versions feedback was incorporated.
+- The frozen visual contract combines the deployed Sprint 7A references, the
+  bounded screen delta record, the final interactive prototype, and its passing
+  design QA. The dated approval is retained in
+  `docs/sprints/sprint-7b-ui-review/approval.md`.
+- Production implementation is now active in the ordered execution-plan slices.
+  Formal validation, SIT, UAT, and closeout remain unstarted and will use their
+  specialized lifecycle regimes after implementation and developer verification
+  are complete.
+
+## 2026-08-03 - Sprint 7B Execution Plan Approved
+
+- Sprint: Sprint 7B — Cross-Module Resource Lifecycle And Dependency Slice.
+- Status: kickoff and product-decision review complete. The revised execution
+  plan is approved and recorded; product implementation has not started.
+- Branch/worktree: `codex/sprint-7b` at
+  `C:\Users\eric-dev\Projects\tessara-sprint-7b`.
+- Planning package:
+  - `docs/sprints/sprint-7b-plan.md`
+  - `docs/sprints/sprint-7b-verification.md`
+  - `docs/sprints/sprint-7b-ui-review/README.md`
+- UI review: a runnable interactive mockup now reproduces the deployed
+  Dashboard editor and Component Versions surfaces and adds only the bounded
+  Sprint 7B deltas. Production UI implementation is blocked pending explicit
+  product-owner approval. The approved package will become the visual contract
+  for same-state/theme/viewport UAT comparison.
+- Settled product rules:
+  - the current published ComponentVersion may continue to receive authorized
+    in-place updates, while superseded, archived, and tombstoned payloads are
+    immutable;
+  - Component publication and lifecycle are separate, with active/inactive,
+    archive, and terminal logical-tombstone behavior, immutable audit, existing
+    `components:manage` authority, and no required transition reason;
+  - Dashboard owns observations, findings, deferral, and idempotent action
+    receipts; editor load/retry refreshes, viewer reads never persist, any
+    disclosed finding may be deferred without a note, and there is no manual
+    resolve action;
+  - Upgrade means the provider-declared active published successor of the same
+    Component; Replace means any authorized renderable ComponentVersion;
+  - dependency work is integrated into the Dashboard editor, lifecycle controls
+    stay on Component Versions, and no dedicated dependency route is added;
+  - fresh squashed baselines replace additive migration/backfill work, and Phase
+    8 retains Dataset contract extraction and ownership migration.
+- Planned verification includes zero-warning Rust workspace checks, contract
+  and lifecycle/dependency conformance, full Playwright, source-exact fresh and
+  idempotent Sprint 7B materialization, deployed smoke inside SIT, scripted and
+  eight manual product UAT scenarios plus an explicit approved-mockup visual-
+  conformance scenario, nondisclosure, outage/recovery, provenance,
+  evidence-manifest, and rollback/restoration audits.
+- Decisions/blockers: no semantic product decision remains. The approved plan
+  is the Sprint 7B execution contract; the production UI slice remains blocked
+  only on explicit mockup approval. Any discovery that changes its ownership,
+  lifecycle, action, approved visual, UI, or migration rules requires an
+  explicit plan amendment.
+- Recommended first implementation slice: add only the policy-neutral typed
+  observation and resource-revision primitives to `tessara-module-contract`,
+  then advance the Components compatibility contract to exact current V2 with
+  immutable V1 evidence and new V2 golden, invalid-shape, nondisclosure, and
+  exact-version tests. Product findings and actions remain Dashboard-owned.
+
 ## 2026-08-03 - Sprint 7A Source-Exact Closeout
 
 - Completed:

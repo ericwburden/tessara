@@ -12,14 +12,11 @@ use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_components_contract::{
-    COMPONENT_BINDING_KEY as DASHBOARD_COMPONENT_BINDING_KEY,
-    COMPONENT_CONTRACT_ID as DASHBOARD_COMPONENT_CONTRACT_ID,
-    ComponentAction as DashboardComponentTransitionAction,
-    ComponentCatalogResponseV1 as DashboardComponentCatalogResponseV1,
-    ComponentMetadataV1 as DashboardComponentMetadataV1,
-    ComponentRenderRequestV1 as DashboardComponentRenderRequestV1,
-    ComponentResolutionRequestV1 as DashboardComponentResolutionRequestV1,
-    ComponentResolutionResponseV1 as DashboardComponentResolutionResponseV1,
+    COMPONENT_BINDING_KEY, COMPONENT_CONTRACT_ID, COMPONENT_CONTRACT_SCHEMA_VERSION,
+    COMPONENT_CONTRACT_VERSION, ComponentAction, ComponentCatalogResponse, ComponentChange,
+    ComponentChangeCategory, ComponentLifecycleState, ComponentMetadata, ComponentPublicationState,
+    ComponentRenderRequest, ComponentResolutionRequest, ComponentResolutionResponse,
+    ComponentSuccessor, ComponentVersionReference,
 };
 use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AuthorizationGrantOperationV1, AuthorizationGrantV2,
@@ -27,9 +24,10 @@ use tessara_module_contract::{
     CoreInstallationOwnerState, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
     ModuleInstanceOwnerState, ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,
     OwnerDataState, ProtocolSignaturePurposeV1, ProviderAvailabilityState,
-    PurposeBoundVerifyingKeyV1, ResourceAccessState, ResourceAuthorizationAssertionV2,
-    ResourceIdentityState, ResourceLifecycleState, ResourceOwner, ResourceOwnerState,
-    ResourceTypeId, SecurityCapabilityId, SignedEnvelopeV1,
+    ProviderContractIdentity, PurposeBoundVerifyingKeyV1, ResourceAccessState,
+    ResourceAuthorizationAssertionV2, ResourceIdentityState, ResourceLifecycleState,
+    ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceOwnerState,
+    ResourceRevision, ResourceTypeId, SecurityCapabilityId, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -47,9 +45,11 @@ const COMPONENT_READ_CAPABILITY: &str = "components:read";
 
 fn dashboard_contract_for_action(action: &str) -> &'static str {
     match action {
-        "dashboards.load_composition" | "dashboards.reconcile_composition" => {
-            DASHBOARD_COMPOSITION_CONTRACT
-        }
+        "dashboards.load_composition"
+        | "dashboards.reconcile_composition"
+        | "dashboards.read_dependencies"
+        | "dashboards.refresh_dependencies"
+        | "dashboards.act_on_dependency" => DASHBOARD_COMPOSITION_CONTRACT,
         _ => DASHBOARD_CONTRACT,
     }
 }
@@ -73,7 +73,7 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn render_component(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DashboardComponentRenderRequestV1>,
+    Json(request): Json<ComponentRenderRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let inbound = validate_inbound_dashboard_grant(&state, &headers).await?;
     let request_body =
@@ -87,8 +87,8 @@ async fn render_component(
         &request_body,
     )
     .await?;
-    if request.schema_version != 1
-        || request.action != DashboardComponentTransitionAction::Render
+    if request.schema_version != COMPONENT_CONTRACT_SCHEMA_VERSION
+        || request.action != ComponentAction::Render
         || request.dashboard_scope_node_ids.is_empty()
         || request
             .dashboard_scope_node_ids
@@ -105,7 +105,8 @@ async fn render_component(
         parse_canonical_uuid(reference.resource_id()).ok_or_else(restricted_authorization)?;
     let version = sqlx::query(
         "SELECT dataset_id,authority_revision FROM component_versions
-         WHERE id=$1 AND status IN ('published','superseded')",
+         WHERE id=$1 AND status IN ('published','superseded')
+           AND lifecycle_state='active'::component_lifecycle_state",
     )
     .bind(version_id)
     .fetch_optional(&state.pool)
@@ -134,7 +135,7 @@ async fn render_component(
     let downstream = issue_downstream_grant(
         &state,
         &inbound,
-        DashboardComponentTransitionAction::Render,
+        ComponentAction::Render,
         component_bindings,
         Some(resource_assertion.clone()),
     )
@@ -142,7 +143,7 @@ async fn render_component(
     validate_downstream_grant(
         &state,
         &downstream,
-        DashboardComponentTransitionAction::Render,
+        ComponentAction::Render,
         &inbound,
         Some(resource_assertion),
     )
@@ -176,8 +177,8 @@ async fn render_component(
 async fn resolve_component(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DashboardComponentResolutionRequestV1>,
-) -> ApiResult<Json<DashboardComponentResolutionResponseV1>> {
+    Json(request): Json<ComponentResolutionRequest>,
+) -> ApiResult<Json<ComponentResolutionResponse>> {
     let inbound = validate_inbound_dashboard_grant(&state, &headers).await?;
     let request_body =
         serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
@@ -248,8 +249,9 @@ async fn resolve_component(
     let row = sqlx::query(
         "SELECT cv.id,cv.component_id,c.name AS component_name,c.slug AS component_slug,
                 cv.component_type::text AS component_type,cv.version_number,
-                cv.version_label,cv.status::text AS version_status,cv.dataset_id,
-                cv.authority_revision
+                cv.version_label,cv.status::text AS version_status,
+                cv.lifecycle_state::text AS lifecycle_state,cv.dataset_id,
+                cv.authority_revision,cv.resource_revision,cv.successor_version_id
          FROM component_versions cv
          JOIN components c ON c.id=cv.component_id
          WHERE cv.id=$1",
@@ -314,7 +316,14 @@ async fn resolve_component(
     }
 
     let version_status: String = row.try_get("version_status")?;
-    let metadata = DashboardComponentMetadataV1 {
+    let publication_state = publication_state(&version_status)?;
+    let lifecycle_state_value: String = row.try_get("lifecycle_state")?;
+    let lifecycle_state = lifecycle_state(&lifecycle_state_value)?;
+    let authority_revision = row.try_get::<i64, _>("authority_revision")? as u64;
+    let resource_revision =
+        ResourceRevision::new(row.try_get::<i64, _>("resource_revision")? as u64)
+            .map_err(|error| ApiError::Internal(error.into()))?;
+    let metadata = ComponentMetadata {
         component_version_id: row.try_get("id")?,
         component_id: row.try_get("component_id")?,
         component_name: row.try_get("component_name")?,
@@ -322,8 +331,9 @@ async fn resolve_component(
         component_type: row.try_get("component_type")?,
         version_number: row.try_get("version_number")?,
         version_label: row.try_get("version_label")?,
-        version_status: version_status.clone(),
-        authority_revision: row.try_get::<i64, _>("authority_revision")? as u64,
+        publication_state,
+        lifecycle_state,
+        authority_revision,
         scope_node_ids: dataset_scope,
     };
     let resolution = tessara_module_contract::ResourceResolutionV1::authorized(
@@ -332,22 +342,59 @@ async fn resolve_component(
         },
         ResourceIdentityState::Resolved,
         ResourceLifecycleState::ProviderDefined {
-            state: version_status,
+            state: lifecycle_state_value,
         },
         ContractCompatibilityState::Compatible,
         ProviderAvailabilityState::Available,
     )
     .map_err(|error| ApiError::Internal(error.into()))?;
+    let observation = ResourceObservationV1::new(
+        reference.clone(),
+        ProviderContractIdentity::new(
+            FunctionalContractId::new(COMPONENT_CONTRACT_ID)
+                .map_err(|error| ApiError::Internal(error.into()))?,
+            COMPONENT_CONTRACT_VERSION
+                .parse()
+                .map_err(|error| ApiError::Internal(anyhow::Error::new(error)))?,
+        ),
+        ResourceObservationStrategy::LiveResolutionWithRevision,
+        resource_revision,
+    );
+    let changes = component_changes_since(
+        &state.pool,
+        component_version_id,
+        request.changes_since_revision,
+        resource_revision,
+    )
+    .await?;
+    let successor = if lifecycle_state.metadata_visible() {
+        component_successor(
+            installation_id,
+            &state.pool,
+            row.try_get("component_id")?,
+            row.try_get("successor_version_id")?,
+        )
+        .await?
+    } else {
+        None
+    };
+    let metadata = lifecycle_state.metadata_visible().then_some(metadata);
     Ok(Json(
-        DashboardComponentResolutionResponseV1::new(resolution, Some(metadata))
-            .map_err(|error| ApiError::Internal(error.into()))?,
+        ComponentResolutionResponse::new(
+            resolution,
+            Some(observation),
+            metadata,
+            changes,
+            successor,
+        )
+        .map_err(|error| ApiError::Internal(error.into()))?,
     ))
 }
 
 async fn component_catalog(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> ApiResult<Json<DashboardComponentCatalogResponseV1>> {
+) -> ApiResult<Json<ComponentCatalogResponse>> {
     let inbound = validate_inbound_dashboard_grant(&state, &headers).await?;
     validate_module_service_request(
         &state,
@@ -360,15 +407,15 @@ async fn component_catalog(
     .await?;
     let bindings = component_capability_bindings(&state, inbound.payload.original_actor_id).await?;
     if bindings.is_empty() {
-        return Ok(Json(DashboardComponentCatalogResponseV1 {
-            schema_version: 1,
+        return Ok(Json(ComponentCatalogResponse {
+            schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
             components: Vec::new(),
         }));
     }
     let downstream = issue_downstream_grant(
         &state,
         &inbound,
-        DashboardComponentTransitionAction::ResolveMetadata,
+        ComponentAction::ResolveMetadata,
         bindings,
         None,
     )
@@ -376,25 +423,27 @@ async fn component_catalog(
     validate_downstream_grant(
         &state,
         &downstream,
-        DashboardComponentTransitionAction::ResolveMetadata,
+        ComponentAction::ResolveMetadata,
         &inbound,
         None,
     )
     .await?;
     if std::env::var("TESSARA_COMPONENTS_PROVIDER_STATE").is_ok_and(|state| state != "available") {
-        return Ok(Json(DashboardComponentCatalogResponseV1 {
-            schema_version: 1,
+        return Ok(Json(ComponentCatalogResponse {
+            schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
             components: Vec::new(),
         }));
     }
     let rows = sqlx::query(
         "SELECT cv.id,cv.component_id,c.name AS component_name,c.slug AS component_slug,
                 cv.component_type::text AS component_type,cv.version_number,
-                cv.version_label,cv.status::text AS version_status,cv.dataset_id,
+                cv.version_label,cv.status::text AS version_status,
+                cv.lifecycle_state::text AS lifecycle_state,cv.dataset_id,
                 cv.authority_revision
          FROM component_versions cv
          JOIN components c ON c.id=cv.component_id
          WHERE cv.status IN ('published','superseded')
+           AND cv.lifecycle_state='active'::component_lifecycle_state
          ORDER BY c.name,cv.version_number,cv.id",
     )
     .fetch_all(&state.pool)
@@ -417,7 +466,8 @@ async fn component_catalog(
         {
             continue;
         }
-        components.push(DashboardComponentMetadataV1 {
+        let version_status: String = row.try_get("version_status")?;
+        components.push(ComponentMetadata {
             component_version_id: row.try_get("id")?,
             component_id: row.try_get("component_id")?,
             component_name: row.try_get("component_name")?,
@@ -425,13 +475,14 @@ async fn component_catalog(
             component_type: row.try_get("component_type")?,
             version_number: row.try_get("version_number")?,
             version_label: row.try_get("version_label")?,
-            version_status: row.try_get("version_status")?,
+            publication_state: publication_state(&version_status)?,
+            lifecycle_state: lifecycle_state(&row.try_get::<String, _>("lifecycle_state")?)?,
             authority_revision: row.try_get::<i64, _>("authority_revision")? as u64,
             scope_node_ids: nodes,
         });
     }
-    Ok(Json(DashboardComponentCatalogResponseV1 {
-        schema_version: 1,
+    Ok(Json(ComponentCatalogResponse {
+        schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
         components,
     }))
 }
@@ -602,11 +653,14 @@ async fn validate_inbound_dashboard_grant(
         | "dashboards.list_manageable"
         | "dashboards.get"
         | "dashboards.load_composition"
+        | "dashboards.read_dependencies"
         | "dashboards.render_placement" => AuthorizationGrantOperationV1::Read,
         "dashboards.create"
         | "dashboards.update"
         | "dashboards.delete"
-        | "dashboards.reconcile_composition" => AuthorizationGrantOperationV1::Mutation,
+        | "dashboards.reconcile_composition"
+        | "dashboards.refresh_dependencies"
+        | "dashboards.act_on_dependency" => AuthorizationGrantOperationV1::Mutation,
         _ => return Err(restricted_authorization()),
     };
     envelope
@@ -636,7 +690,7 @@ async fn validate_inbound_dashboard_grant(
 async fn issue_downstream_grant(
     state: &AppState,
     inbound: &SignedEnvelopeV1<AuthorizationGrantV2>,
-    action: DashboardComponentTransitionAction,
+    action: ComponentAction,
     capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
     resource_assertion: Option<ResourceAuthorizationAssertionV2>,
 ) -> ApiResult<SignedEnvelopeV1<AuthorizationGrantV2>> {
@@ -655,9 +709,9 @@ async fn issue_downstream_grant(
             presenting_service: ModuleDefinitionId::new(DASHBOARD_DEFINITION_ID)
                 .map_err(|error| ApiError::Internal(error.into()))?,
             audience_module_instance_id: inbound.payload.audience_module_instance_id,
-            dependency_binding: DependencyBindingKey::new(DASHBOARD_COMPONENT_BINDING_KEY)
+            dependency_binding: DependencyBindingKey::new(COMPONENT_BINDING_KEY)
                 .map_err(|error| ApiError::Internal(error.into()))?,
-            functional_contract: FunctionalContractId::new(DASHBOARD_COMPONENT_CONTRACT_ID)
+            functional_contract: FunctionalContractId::new(COMPONENT_CONTRACT_ID)
                 .map_err(|error| ApiError::Internal(error.into()))?,
             action: action.as_str().into(),
             operation: AuthorizationGrantOperationV1::Read,
@@ -676,7 +730,7 @@ async fn issue_downstream_grant(
 async fn validate_downstream_grant(
     state: &AppState,
     grant: &SignedEnvelopeV1<AuthorizationGrantV2>,
-    action: DashboardComponentTransitionAction,
+    action: ComponentAction,
     inbound: &SignedEnvelopeV1<AuthorizationGrantV2>,
     resource_assertion: Option<ResourceAuthorizationAssertionV2>,
 ) -> ApiResult<()> {
@@ -697,9 +751,9 @@ async fn validate_downstream_grant(
             presenting_service: ModuleDefinitionId::new(DASHBOARD_DEFINITION_ID)
                 .map_err(|error| ApiError::Internal(error.into()))?,
             audience_module_instance_id: inbound.payload.audience_module_instance_id,
-            dependency_binding: DependencyBindingKey::new(DASHBOARD_COMPONENT_BINDING_KEY)
+            dependency_binding: DependencyBindingKey::new(COMPONENT_BINDING_KEY)
                 .map_err(|error| ApiError::Internal(error.into()))?,
-            functional_contract: FunctionalContractId::new(DASHBOARD_COMPONENT_CONTRACT_ID)
+            functional_contract: FunctionalContractId::new(COMPONENT_CONTRACT_ID)
                 .map_err(|error| ApiError::Internal(error.into()))?,
             action: action.as_str().into(),
             operation: AuthorizationGrantOperationV1::Read,
@@ -775,10 +829,10 @@ async fn has_global_component_authority(state: &AppState, actor_id: Uuid) -> Api
     .await?)
 }
 
-fn restricted(access: ResourceAccessState) -> ApiResult<DashboardComponentResolutionResponseV1> {
+fn restricted(access: ResourceAccessState) -> ApiResult<ComponentResolutionResponse> {
     let resolution = tessara_module_contract::ResourceResolutionV1::restricted(access)
         .map_err(|error| ApiError::Internal(error.into()))?;
-    DashboardComponentResolutionResponseV1::new(resolution, None)
+    ComponentResolutionResponse::new(resolution, None, None, Vec::new(), None)
         .map_err(|error| ApiError::Internal(error.into()))
 }
 
@@ -788,7 +842,7 @@ fn authorized_without_metadata(
     lifecycle: ResourceLifecycleState,
     compatibility: ContractCompatibilityState,
     availability: ProviderAvailabilityState,
-) -> ApiResult<DashboardComponentResolutionResponseV1> {
+) -> ApiResult<ComponentResolutionResponse> {
     let resolution = tessara_module_contract::ResourceResolutionV1::authorized(
         owner,
         identity,
@@ -797,11 +851,127 @@ fn authorized_without_metadata(
         availability,
     )
     .map_err(|error| ApiError::Internal(error.into()))?;
-    DashboardComponentResolutionResponseV1::new(resolution, None)
+    ComponentResolutionResponse::new(resolution, None, None, Vec::new(), None)
         .map_err(|error| ApiError::Internal(error.into()))
 }
 
-fn provider_fixture(state: &str) -> Option<ApiResult<DashboardComponentResolutionResponseV1>> {
+fn publication_state(value: &str) -> ApiResult<ComponentPublicationState> {
+    match value {
+        "draft" => Ok(ComponentPublicationState::Draft),
+        "published" => Ok(ComponentPublicationState::Published),
+        "superseded" => Ok(ComponentPublicationState::Superseded),
+        _ => Err(ApiError::Internal(anyhow::anyhow!(
+            "stored Component publication state is invalid"
+        ))),
+    }
+}
+
+fn lifecycle_state(value: &str) -> ApiResult<ComponentLifecycleState> {
+    match value {
+        "active" => Ok(ComponentLifecycleState::Active),
+        "inactive" => Ok(ComponentLifecycleState::Inactive),
+        "archived" => Ok(ComponentLifecycleState::Archived),
+        "tombstoned" => Ok(ComponentLifecycleState::Tombstoned),
+        _ => Err(ApiError::Internal(anyhow::anyhow!(
+            "stored Component lifecycle state is invalid"
+        ))),
+    }
+}
+
+async fn component_changes_since(
+    pool: &sqlx::PgPool,
+    version_id: Uuid,
+    prior: Option<ResourceRevision>,
+    current: ResourceRevision,
+) -> ApiResult<Vec<ComponentChange>> {
+    let Some(prior) = prior else {
+        return Ok(Vec::new());
+    };
+    if prior > current {
+        return Err(ApiError::BadRequest(
+            "changes_since_revision is later than the current resource revision".into(),
+        ));
+    }
+    let rows = sqlx::query(
+        "SELECT resource_revision,
+                array_agg(category::text ORDER BY category::text) AS categories
+         FROM component_version_change_events
+         WHERE component_version_id=$1 AND resource_revision>$2 AND resource_revision<=$3
+         GROUP BY resource_revision
+         ORDER BY resource_revision",
+    )
+    .bind(version_id)
+    .bind(prior.get() as i64)
+    .bind(current.get() as i64)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            let revision =
+                ResourceRevision::new(row.try_get::<i64, _>("resource_revision")? as u64)
+                    .map_err(|error| ApiError::Internal(error.into()))?;
+            let categories = row
+                .try_get::<Vec<String>, _>("categories")?
+                .into_iter()
+                .map(|category| match category.as_str() {
+                    "publication" => Ok(ComponentChangeCategory::Publication),
+                    "lifecycle" => Ok(ComponentChangeCategory::Lifecycle),
+                    "payload" => Ok(ComponentChangeCategory::Payload),
+                    "successor" => Ok(ComponentChangeCategory::Successor),
+                    _ => Err(ApiError::Internal(anyhow::anyhow!(
+                        "stored Component change category is invalid"
+                    ))),
+                })
+                .collect::<ApiResult<Vec<_>>>()?;
+            Ok(ComponentChange {
+                resource_revision: revision,
+                categories,
+            })
+        })
+        .collect()
+}
+
+async fn component_successor(
+    installation_id: Uuid,
+    pool: &sqlx::PgPool,
+    component_id: Uuid,
+    successor_version_id: Option<Uuid>,
+) -> ApiResult<Option<ComponentSuccessor>> {
+    let Some(successor_version_id) = successor_version_id else {
+        return Ok(None);
+    };
+    let valid: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM component_versions
+           WHERE id=$1 AND component_id=$2
+             AND status='published'::component_version_status
+             AND lifecycle_state='active'::component_lifecycle_state
+         )",
+    )
+    .bind(successor_version_id)
+    .bind(component_id)
+    .fetch_one(pool)
+    .await?;
+    if !valid {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "stored Component successor violates provider invariants"
+        )));
+    }
+    let reference = tessara_module_contract::TypedResourceReference::new(
+        installation_id,
+        ResourceOwner::CoreInstallation { installation_id },
+        ResourceTypeId::new(tessara_components_contract::COMPONENT_RESOURCE_TYPE)
+            .map_err(|error| ApiError::Internal(error.into()))?,
+        successor_version_id.to_string(),
+    )
+    .map_err(|error| ApiError::Internal(error.into()))?;
+    Ok(Some(ComponentSuccessor {
+        reference: ComponentVersionReference::new(reference)
+            .map_err(|error| ApiError::Internal(error.into()))?,
+    }))
+}
+
+fn provider_fixture(state: &str) -> Option<ApiResult<ComponentResolutionResponse>> {
     let core_owner = || ResourceOwnerState::CoreInstallation {
         state: CoreInstallationOwnerState::Live,
     };

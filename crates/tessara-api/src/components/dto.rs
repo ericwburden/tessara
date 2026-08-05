@@ -113,9 +113,37 @@ pub struct ComponentVersionSummary {
     pub(crate) binding_mode: String,
     pub(crate) component_type: String,
     pub(crate) status: String,
+    pub(crate) lifecycle_state: Option<String>,
+    pub(crate) resource_revision: i64,
+    pub(crate) successor_version_id: Option<Uuid>,
     pub(crate) version_label: String,
     pub(crate) version_note: String,
     pub(crate) config: Value,
+}
+
+/// Optimistic ComponentVersion lifecycle command.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentLifecycleRequest {
+    pub(crate) action: ComponentLifecycleAction,
+    pub(crate) expected_resource_revision: i64,
+}
+
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentLifecycleAction {
+    Activate,
+    Deactivate,
+    Archive,
+    Tombstone,
+}
+
+/// Authoritative lifecycle state returned after one successful transition.
+#[derive(Serialize)]
+pub struct ComponentLifecycleResponse {
+    pub(crate) id: Uuid,
+    pub(crate) lifecycle_state: String,
+    pub(crate) resource_revision: i64,
 }
 
 /// Executed component table response.

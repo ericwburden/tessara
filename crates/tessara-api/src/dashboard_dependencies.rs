@@ -31,10 +31,13 @@ pub(crate) struct DashboardDependencyV1 {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DashboardPlacementDependencyV1 {
-    pub placement_id: Uuid,
+    #[serde(rename = "placement_id")]
+    pub _placement_id: Uuid,
     pub component_version_id: Uuid,
-    pub position: i32,
-    pub config: Value,
+    #[serde(rename = "position")]
+    pub _position: i32,
+    #[serde(rename = "config")]
+    pub _config: Value,
 }
 
 pub(crate) async fn load() -> ApiResult<DashboardDependencyProjectionV1> {

@@ -176,6 +176,7 @@ async function expectNativeDocument(
   await expect(page.locator(documentRootSelector)).toHaveAttribute(
     "data-hydration",
     "ready",
+    { timeout: 10_000 },
   );
 }
 

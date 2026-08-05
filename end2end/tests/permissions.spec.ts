@@ -831,6 +831,12 @@ WHERE id IN (SELECT id FROM pw_cleanup_workflow_instances);
 DELETE FROM workflow_assignments
 WHERE id IN (SELECT id FROM pw_cleanup_workflow_assignments);
 
+DELETE FROM component_version_change_events
+WHERE component_version_id IN (
+  SELECT id FROM component_versions
+  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
+);
+
 DELETE FROM component_versions
 WHERE component_id IN (SELECT id FROM pw_cleanup_components);
 
@@ -875,7 +881,6 @@ async function cleanupPlaywrightDashboards(admin: APIRequestContext) {
 
 test.describe.serial("capability + scope + ownership permissions", () => {
   test.beforeAll(async () => {
-    cleanupPlaywrightEntities();
     fixtures = await setupFixtures();
   });
 
@@ -884,7 +889,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       if (fixtures) {
         await cleanupPlaywrightDashboards(fixtures.admin);
       }
-      cleanupPlaywrightEntities();
     } finally {
       await Promise.all(contexts.map((context) => context.dispose()));
     }

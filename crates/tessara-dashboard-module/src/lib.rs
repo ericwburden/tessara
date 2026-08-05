@@ -26,6 +26,7 @@ use tessara_module_contract::{
 use uuid::Uuid;
 
 mod composition;
+mod dependencies;
 mod documents;
 mod product;
 
@@ -180,6 +181,7 @@ pub fn router(state: DashboardModuleState) -> Router {
         )
         .merge(product::routes())
         .merge(composition::routes())
+        .merge(dependencies::routes())
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
         .route("/api/diagnostics", get(diagnostics))
@@ -772,7 +774,11 @@ mod tests {
         let baseline = include_bytes!("../migrations/001_dashboard_module.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "2127652718cde7ff7272c5beb80fcd710f8b61a265bc5fcce427ed37b590ab96"
+            "14ebbc6cf7d1b24cdc1bf7f6e6ba68066de9de9d5cbac74ff5962da0562f641e"
         );
+        let baseline = std::str::from_utf8(baseline).expect("baseline is UTF-8");
+        assert!(baseline.contains("CREATE TABLE dashboard_dependency_observations"));
+        assert!(baseline.contains("CREATE TABLE dashboard_dependency_findings"));
+        assert!(baseline.contains("CREATE TABLE dashboard_dependency_action_receipts"));
     }
 }

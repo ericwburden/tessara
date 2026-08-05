@@ -1450,6 +1450,8 @@ async fn reset_database(pool: &PgPool) {
         "dataset_revision_status",
         "component_type",
         "component_version_status",
+        "component_lifecycle_state",
+        "component_change_category",
         "missing_data_policy",
     ] {
         sqlx::query(&format!("DROP TYPE IF EXISTS {type_name} CASCADE"))

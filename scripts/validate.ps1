@@ -310,6 +310,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Sprint 7A smoke self-test failed with exit code $LASTEXITCODE" }
         & .\scripts\uat-sprint-7a.ps1 -SelfTest
         if ($LASTEXITCODE -ne 0) { throw "Sprint 7A UAT self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\smoke-sprint-7b.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "Sprint 7B smoke self-test failed with exit code $LASTEXITCODE" }
+        & .\scripts\uat-sprint-7b.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "Sprint 7B UAT self-test failed with exit code $LASTEXITCODE" }
     }
 
     Invoke-CheckedStep -Label "Formatting check" -Command {

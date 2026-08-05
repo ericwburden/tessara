@@ -625,25 +625,31 @@ pub(super) async fn ensure_component_with_config(
     .bind(component_id)
     .fetch_one(pool)
     .await?;
+    let component_version_id = Uuid::new_v4();
     sqlx::query(
         r#"
         UPDATE component_versions
-        SET status = 'superseded'::component_version_status
+        SET status = 'superseded'::component_version_status,
+            successor_version_id = $2
         WHERE component_id = $1
           AND status = 'published'::component_version_status
         "#,
     )
     .bind(component_id)
+    .bind(component_version_id)
     .execute(pool)
     .await?;
-    let component_version_id = sqlx::query_scalar(
+    sqlx::query(
         r#"
         INSERT INTO component_versions
-            (component_id, dataset_id, dataset_version_major, binding_mode, component_type, version_number, version_label, status, config, published_at)
-        VALUES ($1, $2, $3, 'major_line', $4::component_type, $5, $6, 'published'::component_version_status, $7, now())
-        RETURNING id
+            (id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,
+             version_number,version_label,status,lifecycle_state,config,published_at)
+        VALUES ($1,$2,$3,$4,'major_line',$5::component_type,$6,$7,
+                'published'::component_version_status,
+                'active'::component_lifecycle_state,$8,now())
         "#,
     )
+    .bind(component_version_id)
     .bind(component_id)
     .bind(dataset_id)
     .bind(dataset_version_major)
@@ -651,7 +657,7 @@ pub(super) async fn ensure_component_with_config(
     .bind(version_number)
     .bind(version_number.to_string())
     .bind(config)
-    .fetch_one(pool)
+    .execute(pool)
     .await?;
 
     Ok((component_id, component_version_id))

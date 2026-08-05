@@ -1,6 +1,7 @@
 //! Dashboard-owned HTTP and editor state contracts.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 pub use tessara_dashboards::{DashboardPlacementConfigState, DashboardPlacementOperation};
 
 fn is_false(value: &bool) -> bool {
@@ -241,7 +242,7 @@ pub struct DashboardComponentVersion {
     pub component_type: String,
     pub version_number: i32,
     pub version_label: String,
-    pub version_status: String,
+    pub publication_state: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -271,6 +272,60 @@ pub struct DashboardComposition {
     pub available_component_versions: Vec<DashboardComponentVersionOption>,
     #[serde(default)]
     pub new_placement_ids: Vec<DashboardPlacementIdMapping>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DashboardDependencyHealth {
+    pub dashboard_id: String,
+    pub health: String,
+    pub open_count: i64,
+    pub deferred_count: i64,
+    #[serde(default)]
+    pub findings: Vec<DashboardDependencyFinding>,
+}
+
+impl DashboardDependencyHealth {
+    pub fn issue_count(&self) -> i64 {
+        self.open_count + self.deferred_count
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DashboardDependencyFinding {
+    pub id: String,
+    pub placement_id: String,
+    pub finding_code: String,
+    pub disposition: String,
+    pub finding_revision: i64,
+    pub observed_resource_revision: i64,
+    pub saved_reference: Value,
+    pub observed_lifecycle: Option<String>,
+    pub publication_state: Option<String>,
+    #[serde(default)]
+    pub change_categories: Vec<String>,
+    pub successor_available: bool,
+    pub impact: Value,
+    pub observed_at: String,
+}
+
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct DashboardDependencyActionRequest {
+    pub action: String,
+    pub expected_finding_revision: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_component_version_id: Option<String>,
+}
+
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DashboardDependencyActionResponse {
+    pub dashboard_id: String,
+    pub finding_id: String,
+    pub placement_id: String,
+    pub action: String,
+    pub disposition: String,
+    pub finding_revision: i64,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -383,5 +438,30 @@ impl EditorPlacement {
 
     pub fn geometry(&self) -> DashboardPlacementGeometry {
         DashboardPlacementGeometry::from(&self.placement)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DashboardComponentVersion;
+
+    #[test]
+    fn placement_component_accepts_the_current_components_v2_metadata_shape() {
+        let component: DashboardComponentVersion = serde_json::from_value(serde_json::json!({
+            "component_version_id": "01980000-0001-7000-8000-000000000001",
+            "component_id": "01980000-0001-7000-8000-000000000010",
+            "component_name": "Reference Metric Card",
+            "component_slug": "reference-metric-card",
+            "component_type": "stat_card",
+            "version_number": 1,
+            "version_label": "1.0.0",
+            "publication_state": "published",
+            "lifecycle_state": "active",
+            "authority_revision": 1,
+            "scope_node_ids": ["01980000-0002-7000-8000-000000000002"]
+        }))
+        .expect("current Components V2 metadata should deserialize");
+
+        assert_eq!(component.publication_state, "published");
     }
 }

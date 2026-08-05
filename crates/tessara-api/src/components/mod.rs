@@ -18,7 +18,6 @@ use sqlx::{Postgres, Row, Transaction};
 use tessara_data_ops::{DataField, FieldType};
 use uuid::Uuid;
 
-mod dashboard_compatibility;
 mod dto;
 mod runtime;
 
@@ -35,7 +34,8 @@ use runtime::{
 };
 
 pub use dto::{
-    ComponentDefinition, ComponentStatValue, ComponentSummary, ComponentTable,
+    ComponentDefinition, ComponentLifecycleAction, ComponentLifecycleRequest,
+    ComponentLifecycleResponse, ComponentStatValue, ComponentSummary, ComponentTable,
     ComponentTableColumn, ComponentTablePagination, ComponentTableRow, ComponentValidationFinding,
     ComponentValidationResponse, ComponentVersionSummary, ComponentVisual, ComponentVisualPoint,
     ComponentVisualSlice, CreateComponentRequest, CreateComponentVersionRequest,
@@ -93,6 +93,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route(
             "/api/admin/components/{component_id}/versions/{version_id}/publish",
             post(publish_component_version),
+        )
+        .route(
+            "/api/admin/components/{component_id}/versions/{version_id}/lifecycle",
+            post(change_component_version_lifecycle),
         )
         .route("/api/components", get(list_components))
         .route("/api/components/{component_ref}", get(get_component_by_ref))
@@ -302,9 +306,6 @@ pub async fn save_component_edit(
         None
     };
     let mut tx = state.pool.begin().await?;
-    if let Some(version_id) = published_update_id {
-        dashboard_compatibility::prepare_published_update(&mut tx, version_id).await?;
-    }
     let component_id = if let Some(component_id) = payload.component_id {
         lock_component_in_tx(&mut tx, component_id).await?;
         require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id)
@@ -320,6 +321,7 @@ pub async fn save_component_edit(
                         "draft",
                         &binding,
                         &payload.version,
+                        account.account_id,
                     )
                     .await?;
                 } else {
@@ -346,6 +348,7 @@ pub async fn save_component_edit(
                     "published",
                     &binding,
                     &payload.version,
+                    account.account_id,
                 )
                 .await?;
                 delete_component_drafts_in_tx(&mut tx, component_id).await?;
@@ -359,6 +362,7 @@ pub async fn save_component_edit(
                         "draft",
                         &binding,
                         &payload.version,
+                        account.account_id,
                     )
                     .await?;
                     version_id
@@ -714,7 +718,6 @@ pub async fn update_published_component_version(
     validate_component_config(&payload.component_type, &payload.config, &dataset_fields)?;
 
     let mut tx = state.pool.begin().await?;
-    dashboard_compatibility::prepare_published_update(&mut tx, version_id).await?;
     lock_component_in_tx(&mut tx, component_id).await?;
     require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id).await?;
     update_component_version_row_in_tx(
@@ -724,6 +727,7 @@ pub async fn update_published_component_version(
         "published",
         &binding,
         &payload,
+        account.account_id,
     )
     .await?;
 
@@ -789,6 +793,101 @@ pub async fn publish_component_version(
     Ok(Json(IdResponse { id: version_id }))
 }
 
+/// Applies one provider-owned lifecycle transition with optimistic revision checking.
+pub async fn change_component_version_lifecycle(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_id, version_id)): Path<(Uuid, Uuid)>,
+    body: Bytes,
+) -> ApiResult<Json<ComponentLifecycleResponse>> {
+    let payload = parse_component_payload::<ComponentLifecycleRequest>(&body)?;
+    if payload.expected_resource_revision <= 0 {
+        return Err(ApiError::BadRequest(
+            "expected resource revision must be greater than zero".into(),
+        ));
+    }
+    let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
+    let mut tx = state.pool.begin().await?;
+    lock_component_in_tx(&mut tx, component_id).await?;
+    require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id).await?;
+    let row = sqlx::query(
+        "SELECT status::text AS publication_state,
+                lifecycle_state::text AS lifecycle_state,resource_revision
+         FROM component_versions
+         WHERE component_id=$1 AND id=$2
+         FOR UPDATE",
+    )
+    .bind(component_id)
+    .bind(version_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("component version {version_id}")))?;
+    let publication_state: String = row.try_get("publication_state")?;
+    let current: Option<String> = row.try_get("lifecycle_state")?;
+    let current_revision: i64 = row.try_get("resource_revision")?;
+    if publication_state == "draft" || current.is_none() {
+        return Err(ApiError::BadRequest(
+            "draft Component versions do not have lifecycle actions".into(),
+        ));
+    }
+    if current_revision != payload.expected_resource_revision {
+        return Err(ApiError::Conflict(
+            "Component version changed before the lifecycle action completed".into(),
+        ));
+    }
+    let current = current.expect("non-draft lifecycle checked");
+    let next = lifecycle_transition(&current, payload.action)?;
+    let updated_revision: i64 = sqlx::query_scalar(
+        "UPDATE component_versions
+         SET lifecycle_state=$1::component_lifecycle_state
+         WHERE component_id=$2 AND id=$3 AND resource_revision=$4
+         RETURNING resource_revision",
+    )
+    .bind(next)
+    .bind(component_id)
+    .bind(version_id)
+    .bind(current_revision)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| {
+        ApiError::Conflict("Component version changed during lifecycle transition".into())
+    })?;
+    sqlx::query(
+        "INSERT INTO component_version_change_events
+         (component_version_id,resource_revision,actor_account_id,category,
+          from_lifecycle_state,to_lifecycle_state)
+         VALUES($1,$2,$3,'lifecycle',$4::component_lifecycle_state,$5::component_lifecycle_state)",
+    )
+    .bind(version_id)
+    .bind(updated_revision)
+    .bind(account.account_id)
+    .bind(&current)
+    .bind(next)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Json(ComponentLifecycleResponse {
+        id: version_id,
+        lifecycle_state: next.into(),
+        resource_revision: updated_revision,
+    }))
+}
+
+fn lifecycle_transition(
+    current: &str,
+    action: ComponentLifecycleAction,
+) -> ApiResult<&'static str> {
+    match (current, action) {
+        ("active", ComponentLifecycleAction::Deactivate) => Ok("inactive"),
+        ("inactive", ComponentLifecycleAction::Activate) => Ok("active"),
+        ("active" | "inactive", ComponentLifecycleAction::Archive) => Ok("archived"),
+        ("archived", ComponentLifecycleAction::Tombstone) => Ok("tombstoned"),
+        _ => Err(ApiError::BadRequest(format!(
+            "lifecycle action is not allowed from '{current}'"
+        ))),
+    }
+}
+
 async fn upsert_component_draft_version(
     tx: &mut Transaction<'_, Postgres>,
     component_id: Uuid,
@@ -838,10 +937,26 @@ async fn update_component_version_row_in_tx(
     status: &str,
     binding: &ComponentDatasetBinding,
     payload: &CreateComponentVersionRequest,
+    actor_account_id: Uuid,
 ) -> ApiResult<()> {
     require_component_version_status_row_in_tx(tx, component_id, version_id, status).await?;
+    if status == "published" {
+        let mutable: bool = sqlx::query_scalar(
+            "SELECT lifecycle_state IN ('active','inactive')
+             FROM component_versions WHERE component_id=$1 AND id=$2 FOR UPDATE",
+        )
+        .bind(component_id)
+        .bind(version_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if !mutable {
+            return Err(ApiError::BadRequest(
+                "archived and tombstoned Component payloads are immutable".into(),
+            ));
+        }
+    }
     let version_note = normalized_component_version_note(payload.version_note.as_deref())?;
-    let update_result = sqlx::query(
+    let updated_revision = sqlx::query_scalar::<_, i64>(
         r#"
         UPDATE component_versions
         SET dataset_id = $1,
@@ -853,6 +968,9 @@ async fn update_component_version_row_in_tx(
         WHERE component_id = $5
           AND id = $6
           AND status = $7::component_version_status
+          AND ROW(dataset_id,dataset_version_major,component_type,config,version_note)
+              IS DISTINCT FROM ROW($1,$2,$3::component_type,$4,COALESCE($8,version_note))
+        RETURNING resource_revision
         "#,
     )
     .bind(binding.dataset_id)
@@ -863,15 +981,22 @@ async fn update_component_version_row_in_tx(
     .bind(version_id)
     .bind(status)
     .bind(version_note)
-    .execute(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await?;
-    if update_result.rows_affected() != 1 {
-        return Err(ApiError::BadRequest(format!(
-            "component version {version_id} could not be updated because it is no longer {status}"
-        )));
-    }
+    let Some(updated_revision) = updated_revision else {
+        return Ok(());
+    };
     if status == "published" {
-        dashboard_compatibility::validate_published_update(tx, version_id).await?;
+        sqlx::query(
+            "INSERT INTO component_version_change_events
+             (component_version_id,resource_revision,actor_account_id,category)
+             VALUES($1,$2,$3,'payload')",
+        )
+        .bind(version_id)
+        .bind(updated_revision)
+        .bind(actor_account_id)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }
@@ -933,36 +1058,79 @@ async fn publish_component_version_in_tx(
     validate_component_config(&component_type, &config, &dataset_fields)?;
     require_new_version_note_when_replacing_published(tx, component_id, &version_note).await?;
 
-    sqlx::query(
-        r#"
-        UPDATE component_versions
-        SET status = 'superseded'::component_version_status
-        WHERE component_id = $1
-          AND status = 'published'::component_version_status
-        "#,
+    let previous_published = sqlx::query(
+        "SELECT id FROM component_versions
+         WHERE component_id=$1 AND status='published'::component_version_status
+         FOR UPDATE",
     )
     .bind(component_id)
-    .execute(&mut **tx)
-    .await?;
-    let publish_result = sqlx::query(
+    .fetch_optional(&mut **tx)
+    .await?
+    .map(|row| row.try_get::<Uuid, _>("id"))
+    .transpose()?;
+
+    let superseded_revision = sqlx::query_scalar::<_, i64>(
         r#"
         UPDATE component_versions
-        SET status = 'published'::component_version_status,
-            published_at = now()
+        SET status = 'superseded'::component_version_status,
+            successor_version_id = $2
         WHERE component_id = $1
-          AND id = $2
-          AND status = 'draft'::component_version_status
+          AND status = 'published'::component_version_status
+        RETURNING resource_revision
         "#,
     )
     .bind(component_id)
     .bind(version_id)
-    .execute(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await?;
-    if publish_result.rows_affected() != 1 {
+    if let (Some(previous_id), Some(previous_revision)) = (previous_published, superseded_revision)
+    {
+        sqlx::query(
+            "INSERT INTO component_version_change_events
+             (component_version_id,resource_revision,actor_account_id,category,
+              from_publication_state,to_publication_state)
+             VALUES
+             ($1,$2,$3,'publication','published','superseded'),
+             ($1,$2,$3,'successor',NULL,NULL)",
+        )
+        .bind(previous_id)
+        .bind(previous_revision)
+        .bind(account.account_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    let published_revision = sqlx::query_scalar::<_, i64>(
+        r#"
+        UPDATE component_versions
+        SET status = 'published'::component_version_status,
+            lifecycle_state = 'active'::component_lifecycle_state,
+            published_at = now()
+        WHERE component_id = $1
+          AND id = $2
+          AND status = 'draft'::component_version_status
+        RETURNING resource_revision
+        "#,
+    )
+    .bind(component_id)
+    .bind(version_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(published_revision) = published_revision else {
         return Err(ApiError::BadRequest(format!(
             "component version {version_id} could not be published because it is no longer a draft"
         )));
-    }
+    };
+    sqlx::query(
+        "INSERT INTO component_version_change_events
+         (component_version_id,resource_revision,actor_account_id,category,
+          from_publication_state,to_publication_state)
+         VALUES($1,$2,$3,'publication','draft','published')",
+    )
+    .bind(version_id)
+    .bind(published_revision)
+    .bind(account.account_id)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -1626,6 +1794,7 @@ fn component_config_validation_finding(error: ApiError) -> ComponentValidationFi
 fn validation_error_message(error: ApiError) -> String {
     match error {
         ApiError::BadRequest(message)
+        | ApiError::Conflict(message)
         | ApiError::NotFound(message)
         | ApiError::ServiceUnavailable(message) => message,
         ApiError::MixedCapabilityScopeModes => {
@@ -1654,14 +1823,18 @@ async fn load_component_versions(
     capability: &str,
 ) -> ApiResult<Vec<ComponentVersionSummary>> {
     let rows = match auth::capability_boundary(pool, account, capability).await? {
-        auth::CapabilityBoundary::Scoped(scope_ids) => sqlx::query(
-            r#"
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
         SELECT component_versions.id, component_versions.component_id,
                component_versions.dataset_id, component_versions.dataset_version_major,
                component_versions.binding_mode,
                component_versions.component_type::text AS component_type,
-               component_versions.status::text AS status, component_versions.version_label,
-               component_versions.version_note, component_versions.config
+               component_versions.status::text AS status,
+               component_versions.lifecycle_state::text AS lifecycle_state,
+               component_versions.resource_revision,component_versions.successor_version_id,
+               component_versions.version_label,component_versions.version_note,
+               component_versions.config
         FROM component_versions
         WHERE component_id = $1
           AND ($3 OR component_versions.status = 'published'::component_version_status)
@@ -1673,26 +1846,31 @@ async fn load_component_versions(
           )
         ORDER BY component_versions.version_number DESC, component_versions.created_at DESC
         "#,
-        )
-        .bind(component_id)
-        .bind(scope_ids)
-        .bind(capability != "components:read")
-        .fetch_all(pool)
-        .await?,
-        auth::CapabilityBoundary::Global => sqlx::query(
-            r#"
-        SELECT id, component_id, dataset_id, dataset_version_major, binding_mode, component_type::text AS component_type,
-               status::text AS status, version_label, version_note, config
+            )
+            .bind(component_id)
+            .bind(scope_ids)
+            .bind(capability != "components:read")
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
+        SELECT id, component_id, dataset_id, dataset_version_major, binding_mode,
+               component_type::text AS component_type,status::text AS status,
+               lifecycle_state::text AS lifecycle_state,resource_revision,successor_version_id,
+               version_label,version_note,config
         FROM component_versions
         WHERE component_id = $1
           AND ($2 OR status = 'published'::component_version_status)
         ORDER BY component_versions.version_number DESC, component_versions.created_at DESC
         "#,
-        )
-        .bind(component_id)
-        .bind(capability != "components:read")
-        .fetch_all(pool)
-        .await?,
+            )
+            .bind(component_id)
+            .bind(capability != "components:read")
+            .fetch_all(pool)
+            .await?
+        }
         auth::CapabilityBoundary::None => return Err(ApiError::Forbidden(capability.into())),
     };
     Ok(rows
@@ -1706,6 +1884,9 @@ async fn load_component_versions(
                 binding_mode: row.try_get("binding_mode")?,
                 component_type: row.try_get("component_type")?,
                 status: row.try_get("status")?,
+                lifecycle_state: row.try_get("lifecycle_state")?,
+                resource_revision: row.try_get("resource_revision")?,
+                successor_version_id: row.try_get("successor_version_id")?,
                 version_label: row.try_get("version_label")?,
                 version_note: row.try_get("version_note")?,
                 config: row.try_get("config")?,

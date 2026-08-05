@@ -862,7 +862,7 @@ async fn apply_core_bootstrap(
         sqlx::query("INSERT INTO components(id,name,slug,description) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description")
             .bind(component.component_id).bind(component.name.trim()).bind(&component.slug)
             .bind("Application composition bootstrap fixture").execute(&mut *transaction).await?;
-        sqlx::query("INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,config,published_at) VALUES($1,$2,$3,1,'major_line',$4::component_type,1,'1.0.0','Application composition bootstrap','published',$5,now()) ON CONFLICT(id) DO UPDATE SET component_id=EXCLUDED.component_id,dataset_id=EXCLUDED.dataset_id,component_type=EXCLUDED.component_type,config=EXCLUDED.config")
+        sqlx::query("INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,lifecycle_state,config,published_at) VALUES($1,$2,$3,1,'major_line',$4::component_type,1,'1.0.0','Application composition bootstrap','published','active',$5,now()) ON CONFLICT(id) DO UPDATE SET component_id=EXCLUDED.component_id,dataset_id=EXCLUDED.dataset_id,component_type=EXCLUDED.component_type,lifecycle_state='active',config=EXCLUDED.config")
             .bind(component.component_version_id).bind(component.component_id).bind(request.input.dataset_id)
             .bind(&component.component_type).bind(&component.config).execute(&mut *transaction).await?;
     }

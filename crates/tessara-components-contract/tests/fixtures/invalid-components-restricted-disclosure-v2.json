@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "resolution": {
+    "schema_version": 1,
+    "access_state": "unauthorized",
+    "owner_state": {"kind": "undisclosed"},
+    "resource_identity_state": "undisclosed",
+    "resource_lifecycle_state": {"kind": "undisclosed"},
+    "compatibility_state": "undisclosed",
+    "availability_state": "undisclosed"
+  },
+  "metadata": {
+    "component_version_id": "33333333-3333-4333-8333-333333333333",
+    "component_id": "44444444-4444-4444-8444-444444444444",
+    "component_name": "Restricted",
+    "component_slug": "restricted",
+    "component_type": "table",
+    "version_number": 1,
+    "version_label": "1.0.0",
+    "publication_state": "published",
+    "lifecycle_state": "active",
+    "authority_revision": 1,
+    "scope_node_ids": []
+  }
+}

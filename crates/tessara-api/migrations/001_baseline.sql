@@ -19,6 +19,8 @@ CREATE TYPE submission_status AS ENUM ('draft', 'submitted');
 CREATE TYPE dataset_revision_status AS ENUM ('draft', 'published', 'superseded');
 CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');
 CREATE TYPE component_version_status AS ENUM ('draft', 'published', 'superseded');
+CREATE TYPE component_lifecycle_state AS ENUM ('active', 'inactive', 'archived', 'tombstoned');
+CREATE TYPE component_change_category AS ENUM ('publication', 'lifecycle', 'payload', 'successor');
 
 CREATE TABLE accounts (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -375,6 +377,7 @@ CREATE TABLE dataset_revisions (
     force_new_major_version boolean NOT NULL DEFAULT false,
     revision_notes text NOT NULL DEFAULT '',
     status dataset_revision_status NOT NULL DEFAULT 'draft',
+    resource_revision bigint NOT NULL DEFAULT 1 CHECK (resource_revision > 0),
     initial_source jsonb,
     operations jsonb,
     restriction_policy jsonb,
@@ -390,6 +393,40 @@ CREATE TABLE dataset_revisions (
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (dataset_id, version_number)
 );
+
+CREATE OR REPLACE FUNCTION advance_dataset_resource_revision()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF ROW(
+        NEW.version_label, NEW.version_major, NEW.version_minor, NEW.version_patch,
+        NEW.semantic_bump, NEW.started_new_major_line, NEW.force_new_major_version,
+        NEW.revision_notes, NEW.status, NEW.initial_source, NEW.operations,
+        NEW.restriction_policy, NEW.definition_metadata, NEW.compatibility_findings,
+        NEW.generated_sql, NEW.output_fields, NEW.materialized_schema,
+        NEW.materialized_table, NEW.materialized_row_count, NEW.materialized_at,
+        NEW.published_at
+    ) IS DISTINCT FROM ROW(
+        OLD.version_label, OLD.version_major, OLD.version_minor, OLD.version_patch,
+        OLD.semantic_bump, OLD.started_new_major_line, OLD.force_new_major_version,
+        OLD.revision_notes, OLD.status, OLD.initial_source, OLD.operations,
+        OLD.restriction_policy, OLD.definition_metadata, OLD.compatibility_findings,
+        OLD.generated_sql, OLD.output_fields, OLD.materialized_schema,
+        OLD.materialized_table, OLD.materialized_row_count, OLD.materialized_at,
+        OLD.published_at
+    ) THEN
+        NEW.resource_revision := OLD.resource_revision + 1;
+    ELSE
+        NEW.resource_revision := OLD.resource_revision;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER dataset_revisions_resource_revision
+BEFORE UPDATE ON dataset_revisions
+FOR EACH ROW EXECUTE FUNCTION advance_dataset_resource_revision();
 
 CREATE UNIQUE INDEX dataset_revisions_one_published_idx
     ON dataset_revisions (dataset_id)
@@ -493,11 +530,21 @@ CREATE TABLE component_versions (
     version_label text NOT NULL,
     version_note text NOT NULL DEFAULT '',
     status component_version_status NOT NULL DEFAULT 'draft',
+    lifecycle_state component_lifecycle_state,
     config jsonb NOT NULL DEFAULT '{}'::jsonb,
     published_at timestamptz,
     authority_revision bigint NOT NULL DEFAULT 1 CHECK (authority_revision > 0),
+    resource_revision bigint NOT NULL DEFAULT 1 CHECK (resource_revision > 0),
+    successor_version_id uuid REFERENCES component_versions(id) ON DELETE RESTRICT,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (component_id, version_number),
+    CONSTRAINT component_versions_lifecycle_chk CHECK (
+        (status = 'draft' AND lifecycle_state IS NULL)
+        OR (status IN ('published', 'superseded') AND lifecycle_state IS NOT NULL)
+    ),
+    CONSTRAINT component_versions_successor_chk CHECK (
+        successor_version_id IS NULL OR successor_version_id <> id
+    ),
     CONSTRAINT component_versions_component_type_supported_chk CHECK (
         component_type IN (
             'table'::component_type,
@@ -518,6 +565,42 @@ CREATE UNIQUE INDEX component_versions_one_draft_idx
     WHERE status = 'draft';
 CREATE INDEX component_versions_dataset_major_idx
     ON component_versions (dataset_id, dataset_version_major);
+
+CREATE TABLE component_version_change_events (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    component_version_id uuid NOT NULL REFERENCES component_versions(id) ON DELETE RESTRICT,
+    resource_revision bigint NOT NULL CHECK (resource_revision > 0),
+    actor_account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+    category component_change_category NOT NULL,
+    from_publication_state component_version_status,
+    to_publication_state component_version_status,
+    from_lifecycle_state component_lifecycle_state,
+    to_lifecycle_state component_lifecycle_state,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (component_version_id, resource_revision, category),
+    CONSTRAINT component_version_change_events_publication_chk CHECK (
+        category <> 'publication'
+        OR from_publication_state IS DISTINCT FROM to_publication_state
+    ),
+    CONSTRAINT component_version_change_events_lifecycle_chk CHECK (
+        category <> 'lifecycle'
+        OR from_lifecycle_state IS DISTINCT FROM to_lifecycle_state
+    )
+);
+
+CREATE INDEX component_version_change_events_version_revision_idx
+    ON component_version_change_events (component_version_id, resource_revision, created_at, id);
+
+CREATE OR REPLACE FUNCTION reject_component_version_change_event_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'component version change events are immutable';
+END;
+$$;
+
+CREATE TRIGGER component_version_change_events_immutable
+BEFORE UPDATE OR DELETE ON component_version_change_events
+FOR EACH ROW EXECUTE FUNCTION reject_component_version_change_event_mutation();
 
 CREATE OR REPLACE FUNCTION advance_dataset_authority_revision()
 RETURNS trigger LANGUAGE plpgsql AS $$
@@ -555,6 +638,26 @@ $$;
 CREATE TRIGGER component_versions_authority_revision
 BEFORE UPDATE ON component_versions
 FOR EACH ROW EXECUTE FUNCTION advance_component_version_authority_revision();
+
+CREATE OR REPLACE FUNCTION advance_component_version_resource_revision()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF ROW(NEW.dataset_id, NEW.dataset_version_major, NEW.component_type, NEW.status,
+           NEW.lifecycle_state, NEW.config, NEW.version_label, NEW.version_note,
+           NEW.successor_version_id)
+       IS DISTINCT FROM
+       ROW(OLD.dataset_id, OLD.dataset_version_major, OLD.component_type, OLD.status,
+           OLD.lifecycle_state, OLD.config, OLD.version_label, OLD.version_note,
+           OLD.successor_version_id) THEN
+        NEW.resource_revision := OLD.resource_revision + 1;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER component_versions_resource_revision
+BEFORE UPDATE ON component_versions
+FOR EACH ROW EXECUTE FUNCTION advance_component_version_resource_revision();
 
 CREATE SCHEMA IF NOT EXISTS analytics;
 
@@ -1507,7 +1610,7 @@ VALUES
      'tessara.dashboards.dashboard', 'dashboards.render_placement', 'read',
      'dashboards:read'),
     ('tessara.dashboards', 'tessara.core.dashboards',
-     'tessara.dashboards.dashboard', 'dashboards.load_composition', 'read',
+     'tessara.dashboards.composition', 'dashboards.load_composition', 'read',
      'dashboards:manage'),
     ('tessara.dashboards', 'tessara.core.dashboards',
      'tessara.dashboards.dashboard', 'dashboards.create', 'mutation',
@@ -1519,7 +1622,16 @@ VALUES
      'tessara.dashboards.dashboard', 'dashboards.delete', 'mutation',
      'dashboards:manage'),
     ('tessara.dashboards', 'tessara.core.dashboards',
-     'tessara.dashboards.dashboard', 'dashboards.reconcile_composition', 'mutation',
+     'tessara.dashboards.composition', 'dashboards.reconcile_composition', 'mutation',
+     'dashboards:manage'),
+    ('tessara.dashboards', 'tessara.core.dashboards',
+     'tessara.dashboards.composition', 'dashboards.read_dependencies', 'read',
+     'dashboards:manage'),
+    ('tessara.dashboards', 'tessara.core.dashboards',
+     'tessara.dashboards.composition', 'dashboards.refresh_dependencies', 'mutation',
+     'dashboards:manage'),
+    ('tessara.dashboards', 'tessara.core.dashboards',
+     'tessara.dashboards.composition', 'dashboards.act_on_dependency', 'mutation',
      'dashboards:manage'),
     ('tessara.dashboards', 'tessara.dashboards.component-version',
      'tessara.components.component-version', 'resolve_metadata', 'read',
