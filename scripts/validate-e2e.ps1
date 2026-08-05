@@ -9,6 +9,8 @@ param(
     [string]$EvidencePath,
     [string]$DeploymentEvidencePath,
     [ValidateSet("fresh")][string]$ExpectedDataState,
+    [ValidateSet("sprint-6a", "sprint-8a")]
+    [string]$TransitionCatalogProfile = "sprint-6a",
     [switch]$OverwriteEvidence,
     [switch]$SelfTest
 )
@@ -900,7 +902,8 @@ try {
             -RepositoryRoot $repoRoot `
             -EvidencePath $deploymentEvidenceFullPath `
             -BaseUrl $BaseUrl `
-            -ExpectedDataState $ExpectedDataState
+            -ExpectedDataState $ExpectedDataState `
+            -TransitionCatalogProfile $TransitionCatalogProfile
         $null = Set-PlaywrightPostgresAcceptanceBinding -DeploymentEvidence $deploymentEvidence
         $env:TESSARA_PLAYWRIGHT_DATA_STATE = $ExpectedDataState
         $deploymentEvidenceSha256 = (Get-FileHash -LiteralPath $deploymentEvidenceFullPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -1010,7 +1013,8 @@ try {
         -RepositoryRoot $repoRoot `
         -EvidencePath $deploymentEvidenceFullPath `
         -BaseUrl $BaseUrl `
-        -ExpectedDataState $ExpectedDataState
+        -ExpectedDataState $ExpectedDataState `
+        -TransitionCatalogProfile $TransitionCatalogProfile
     $finalDeploymentEvidenceSha256 = (Get-FileHash -LiteralPath $deploymentEvidenceFullPath -Algorithm SHA256).Hash.ToLowerInvariant()
     Assert-PlaywrightDeploymentEvidenceDigestStable `
         -InitialSha256 $deploymentEvidenceSha256 `

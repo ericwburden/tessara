@@ -8,6 +8,8 @@ param(
     [string]$ApiContainerId,
     [string]$GatewayContainerId,
     [string]$DatabaseContainerId,
+    [ValidateSet("sprint-6a", "sprint-8a")]
+    [string]$TransitionCatalogProfile = "sprint-6a",
     [switch]$Overwrite,
     [switch]$SelfTest
 )
@@ -469,7 +471,8 @@ $snapshot = Get-Sprint6ADeploymentSnapshot `
     -AdminPassword $AdminPassword `
     -ApiContainerId $ApiContainerId `
     -GatewayContainerId $GatewayContainerId `
-    -DatabaseContainerId $DatabaseContainerId
+    -DatabaseContainerId $DatabaseContainerId `
+    -TransitionCatalogProfile $TransitionCatalogProfile
 if ([string]$snapshot.data.state -cne $ExpectedDataState) {
     throw "The database-derived data state is '$($snapshot.data.state)', not requested '$ExpectedDataState'."
 }
@@ -495,7 +498,8 @@ try {
         -BaseUrl $BaseUrl `
         -ExpectedDataState $ExpectedDataState `
         -AdminEmail $AdminEmail `
-        -AdminPassword $AdminPassword | Out-Null
+        -AdminPassword $AdminPassword `
+        -TransitionCatalogProfile $TransitionCatalogProfile | Out-Null
     Publish-Sprint6AEvidencePair `
         -TemporaryEvidencePath $temporaryPath `
         -TemporaryDigestPath $temporaryDigestPath `

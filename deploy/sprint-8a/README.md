@@ -30,11 +30,17 @@ Validation rehearses a Component-only immutable-image upgrade, rollback, and
 current-release restoration with:
 
 ```powershell
+$candidate = "tessara-sprint-8a-components@sha256:<digest>"
+$baseline = .\scripts\build-sprint-8a-component-rehearsal-baseline.ps1 `
+  -CurrentImage $candidate
 .\scripts\verify-sprint-8a-component-upgrade.ps1 `
-  -BaselineImage "registry/components@sha256:<digest>" `
-  -CandidateImage "registry/components@sha256:<digest>" `
-  -CurrentImage "registry/components@sha256:<digest>"
+  -BaselineImage $baseline `
+  -CandidateImage $candidate `
+  -CurrentImage $candidate
 ```
 
-The runner verifies Component resource identity and asserts that unrelated
-service image IDs, container IDs, and restart counts remain unchanged.
+The local baseline is a source-preserving derivative of the current compatible
+Component image with a distinct OCI configuration digest. The runner rejects
+identical baseline/candidate digests, verifies Component resource identity, and
+asserts that unrelated service image IDs, container IDs, and restart counts
+remain unchanged.

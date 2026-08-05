@@ -86,6 +86,12 @@ services:
       traefik.enable: "false"
     networks: [tessara-data, tessara-services]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8092/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
     profiles: ["reference"]
 
   dashboards-migrate:

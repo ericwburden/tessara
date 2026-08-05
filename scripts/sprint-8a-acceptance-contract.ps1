@@ -63,6 +63,17 @@ function Test-Sprint8AAcceptanceContract {
             throw "Sprint 8A Supervisor image reference for '$moduleId' differs from normalized Compose."
         }
     }
+    $componentHealthcheck = @($configuration.services.components.healthcheck.test)
+    if (($componentHealthcheck -join " ") -cne "CMD curl -fsS http://127.0.0.1:8092/health/ready") {
+        throw "Sprint 8A Component runtime must declare the exact readiness healthcheck used by upgrade/rollback."
+    }
+
+    foreach ($runner in @("scripts/capture-sprint-6a-deployment-evidence.ps1", "scripts/validate-e2e.ps1", "scripts/smoke.ps1")) {
+        $runnerText = Get-Content -LiteralPath (Join-Path $repoRoot $runner) -Raw
+        if ($runnerText -notmatch 'TransitionCatalogProfile') {
+            throw "Sprint 8A deployment runner '$runner' cannot bind the exact transition-catalog profile."
+        }
+    }
 
     $blueprint = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/blueprints/reference.json") -Raw | ConvertFrom-Json
     $expectedNavigation = [ordered]@{

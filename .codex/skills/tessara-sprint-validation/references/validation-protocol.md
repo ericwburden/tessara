@@ -107,6 +107,9 @@ whose controlling tool session disappeared.
 ## Result collection
 
 - Run independent checks within a lane or isolated scenario set fail-late.
+- Serialize independent Cargo checks that share a target directory, or assign
+  each a distinct explicit `CARGO_TARGET_DIR`; logical independence alone does
+  not make concurrent artifact cleanup safe.
 - Record every safe sibling result even after one fails.
 - Stop dependent or destructive work when its prerequisite state is invalid.
 - Declare the check dependency graph before assertions start. On first failure,

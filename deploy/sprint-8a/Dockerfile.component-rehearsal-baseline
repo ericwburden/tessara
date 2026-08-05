@@ -1,0 +1,5 @@
+ARG COMPONENT_BASE_IMAGE
+FROM ${COMPONENT_BASE_IMAGE}
+
+ARG BASELINE_ID
+LABEL com.tessara.rehearsal.compatible-baseline="$BASELINE_ID"

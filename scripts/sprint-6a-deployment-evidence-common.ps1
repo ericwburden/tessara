@@ -10,6 +10,13 @@ $script:Sprint6AExpectedDefinitions = @(
     "tessara.responses",
     "tessara.workflows"
 )
+$script:Sprint8AExpectedDefinitions = @(
+    "tessara.datasets",
+    "tessara.forms",
+    "tessara.migration",
+    "tessara.responses",
+    "tessara.workflows"
+)
 $script:Sprint6AExpectedTransitionFixtureDigests = [ordered]@{
     "transition-components-v1.json" = "sha256:344388304b015421ea71b5e303e7b9699264aef51c116b56d7f52e1b92443499"
     "transition-dashboards-v1.json" = "sha256:c82ecc7c3d121d1e1498c130133e487c8a68899b9255951e97955ce0de76bbe5"
@@ -18,6 +25,26 @@ $script:Sprint6AExpectedTransitionFixtureDigests = [ordered]@{
     "transition-migration-v1.json" = "sha256:de48eeb3edb4a432e5060b817ef50c34c5316879b44aef0ad3d6877c5895b42e"
     "transition-responses-v1.json" = "sha256:e491986ed43b0f290f0c2ee763e60afb03e5b7babc7117a11e280e37de7b91bc"
     "transition-workflows-v1.json" = "sha256:e9bdf51896700ffb982a00e4c80ea198bbdb98056705036a1a948347a71c04cf"
+}
+
+function Get-Sprint6ATransitionCatalogContract {
+    param(
+        [ValidateSet("sprint-6a", "sprint-8a")]
+        [string]$Profile = "sprint-6a"
+    )
+
+    if ($Profile -ceq "sprint-8a") {
+        return [pscustomobject][ordered]@{
+            profile = $Profile
+            definitions = $script:Sprint8AExpectedDefinitions
+            navigation_contribution_count = 4
+        }
+    }
+    [pscustomobject][ordered]@{
+        profile = $Profile
+        definitions = $script:Sprint6AExpectedDefinitions
+        navigation_contribution_count = 6
+    }
 }
 $script:Sprint6AExpectedSeed = [ordered]@{
     admin = @("admin:all")
@@ -387,7 +414,11 @@ function Get-Sprint6ASeedContract {
 }
 
 function Get-Sprint6AExpectedCatalogEntries {
-    param([Parameter(Mandatory)][string]$RepositoryRoot)
+    param(
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [ValidateSet("sprint-6a", "sprint-8a")]
+        [string]$TransitionCatalogProfile = "sprint-6a"
+    )
 
     $fixtureDirectory = Join-Path $RepositoryRoot "crates/tessara-module-contract/tests/fixtures"
     $entries = @()
@@ -453,24 +484,31 @@ function Get-Sprint6AExpectedCatalogEntries {
         ($entries.definition_id -join ",") -cne ($script:Sprint6AExpectedDefinitions -join ",")) {
         throw "The repository must contain exactly one immutable schema-v1 source/digest fixture for every Sprint 6A transition definition."
     }
-    $entries
+    $contract = Get-Sprint6ATransitionCatalogContract -Profile $TransitionCatalogProfile
+    @($entries | Where-Object { $contract.definitions -ccontains $_.definition_id })
 }
 
 function Assert-Sprint6ACatalog {
     param(
         [Parameter(Mandatory)][object]$DatabaseCatalog,
         [Parameter(Mandatory)][object]$Inventory,
-        [Parameter(Mandatory)][object[]]$ExpectedEntries
+        [Parameter(Mandatory)][object[]]$ExpectedEntries,
+        [ValidateSet("sprint-6a", "sprint-8a")]
+        [string]$TransitionCatalogProfile = "sprint-6a"
     )
 
+    $contract = Get-Sprint6ATransitionCatalogContract -Profile $TransitionCatalogProfile
+    $expectedDefinitions = @($contract.definitions)
+    $expectedCount = $expectedDefinitions.Count
+    $expectedNavigationCount = [int]$contract.navigation_contribution_count
     if ([int]$DatabaseCatalog.definition_count -ne @($Inventory.entries).Count -or
-        [int]$DatabaseCatalog.source_count -ne 7 -or
-        [int]$DatabaseCatalog.projection_count -ne 7 -or
-        [int]$DatabaseCatalog.current_count -ne 7 -or
-        [int]$DatabaseCatalog.navigation_contribution_count -ne 6 -or
+        [int]$DatabaseCatalog.source_count -ne $expectedCount -or
+        [int]$DatabaseCatalog.projection_count -ne $expectedCount -or
+        [int]$DatabaseCatalog.current_count -ne $expectedCount -or
+        [int]$DatabaseCatalog.navigation_contribution_count -ne $expectedNavigationCount -or
         [int]$DatabaseCatalog.navigation_policy_count -ne 1 -or
-        @($DatabaseCatalog.policy_entries).Count -ne 6) {
-        throw "The live database and API do not expose one exact definition per current module inventory entry plus the frozen Sprint 6A transition catalog shape."
+        @($DatabaseCatalog.policy_entries).Count -ne $expectedNavigationCount) {
+        throw "The live database and API do not expose the exact '$TransitionCatalogProfile' transition catalog alongside the current module inventory."
     }
     if ([int]$Inventory.schema_version -ne 1) {
         throw "The live module inventory API did not expose schema version 1."
@@ -485,10 +523,10 @@ function Assert-Sprint6ACatalog {
                 source_digest = [string]$_.source_digest
             }
         } | Sort-Object definition_id)
-    if (($databaseEntries.definition_id -join ",") -cne ($script:Sprint6AExpectedDefinitions -join ",")) {
-        throw "The live database catalog identities differ from the exact seven Sprint 6A transition definitions."
+    if (($databaseEntries.definition_id -join ",") -cne ($expectedDefinitions -join ",")) {
+        throw "The live database catalog identities differ from the exact '$TransitionCatalogProfile' transition definitions."
     }
-    for ($index = 0; $index -lt 7; $index++) {
+    for ($index = 0; $index -lt $expectedCount; $index++) {
         if ([string]$databaseEntries[$index].source_digest -cne [string]$expectedEntriesSorted[$index].source_digest -or
             [string]$databaseEntries[$index].definition_id -cne [string]$expectedEntriesSorted[$index].definition_id) {
             throw "Catalog source provenance differs from the immutable repository fixture or live database for '$($databaseEntries[$index].definition_id)'."
@@ -504,7 +542,7 @@ function Assert-Sprint6ACatalog {
         }
     }
     $apiTransitionDefinitions = @($apiEntries.definition_id)
-    $replacedDefinitions = @($script:Sprint6AExpectedDefinitions | Where-Object {
+    $replacedDefinitions = @($expectedDefinitions | Where-Object {
         $apiTransitionDefinitions -cnotcontains $_
     })
     foreach ($definitionId in $replacedDefinitions) {
@@ -581,7 +619,9 @@ function Get-Sprint6ADeploymentSnapshot {
         [string]$AdminPassword = "tessara-dev-admin",
         [string]$ApiContainerId,
         [string]$GatewayContainerId,
-        [string]$DatabaseContainerId
+        [string]$DatabaseContainerId,
+        [ValidateSet("sprint-6a", "sprint-8a")]
+        [string]$TransitionCatalogProfile = "sprint-6a"
     )
 
     $baseUri = [Uri]$BaseUrl
@@ -813,12 +853,17 @@ function Get-Sprint6ADeploymentSnapshot {
     $seedContract = Get-Sprint6ASeedContract `
         -SeedRoles @($database.seed_roles) `
         -CompositionRoles @($database.composition_roles)
-    $expectedCatalogEntries = @(Get-Sprint6AExpectedCatalogEntries -RepositoryRoot $RepositoryRoot)
+    $expectedCatalogEntries = @(
+        Get-Sprint6AExpectedCatalogEntries `
+            -RepositoryRoot $RepositoryRoot `
+            -TransitionCatalogProfile $TransitionCatalogProfile
+    )
     $catalogEntries = @(
         Assert-Sprint6ACatalog `
             -DatabaseCatalog $database.catalog `
             -Inventory $inventory `
-            -ExpectedEntries $expectedCatalogEntries
+            -ExpectedEntries $expectedCatalogEntries `
+            -TransitionCatalogProfile $TransitionCatalogProfile
     )
 
     [pscustomobject][ordered]@{
@@ -877,6 +922,7 @@ function Get-Sprint6ADeploymentSnapshot {
         }
         built_in_seed = $seedContract
         catalog = [pscustomobject][ordered]@{
+            transition_catalog_profile = $TransitionCatalogProfile
             definition_count = [int]$database.catalog.definition_count
             source_count = [int]$database.catalog.source_count
             projection_count = [int]$database.catalog.projection_count
@@ -907,10 +953,18 @@ function Assert-Sprint6ADeploymentEvidenceDocument {
     param(
         [Parameter(Mandatory)][object]$Evidence,
         [Parameter(Mandatory)][ValidateSet("fresh")][string]$ExpectedDataState,
-        [Parameter(Mandatory)][string]$BaseUrl
+        [Parameter(Mandatory)][string]$BaseUrl,
+        [ValidateSet("sprint-6a", "sprint-8a")]
+        [string]$TransitionCatalogProfile = "sprint-6a"
     )
 
     $databaseRuntime = $Evidence.snapshot.database_runtime
+    $catalogProperty = $Evidence.snapshot.PSObject.Properties['catalog']
+    $catalogProfileProperty = if ($null -eq $catalogProperty -or $null -eq $catalogProperty.Value) {
+        $null
+    } else {
+        $catalogProperty.Value.PSObject.Properties['transition_catalog_profile']
+    }
     $databaseUserProperty = if ($null -eq $databaseRuntime) {
         $null
     } else {
@@ -930,7 +984,9 @@ function Assert-Sprint6ADeploymentEvidenceDocument {
         [string]$Evidence.snapshot.built_in_seed.canonical_sha256 -cne $script:Sprint6ABuiltInSeedSha256 -or
         [string]$Evidence.snapshot.release_image.image_id -notmatch "^sha256:[0-9a-f]{64}$" -or
         [string]$Evidence.snapshot.source.commit -notmatch "^[0-9a-f]{40}$" -or
-        [string]$Evidence.snapshot.source.tree -notmatch "^[0-9a-f]{40}$") {
+        [string]$Evidence.snapshot.source.tree -notmatch "^[0-9a-f]{40}$" -or
+        ($null -ne $catalogProfileProperty -and
+            [string]$catalogProfileProperty.Value -cne $TransitionCatalogProfile)) {
         throw "The deployment evidence document is not the required Sprint 6A schema-v1 '$ExpectedDataState' record for '$BaseUrl'."
     }
 }
@@ -942,7 +998,9 @@ function Assert-Sprint6ADeploymentEvidence {
         [Parameter(Mandatory)][string]$BaseUrl,
         [Parameter(Mandatory)][ValidateSet("fresh")][string]$ExpectedDataState,
         [string]$AdminEmail = "admin@tessara.local",
-        [string]$AdminPassword = "tessara-dev-admin"
+        [string]$AdminPassword = "tessara-dev-admin",
+        [ValidateSet("sprint-6a", "sprint-8a")]
+        [string]$TransitionCatalogProfile = "sprint-6a"
     )
 
     $fullPath = Resolve-Sprint6ARepositoryPath -RepositoryRoot $RepositoryRoot -Path $EvidencePath
@@ -961,7 +1019,8 @@ function Assert-Sprint6ADeploymentEvidence {
     Assert-Sprint6ADeploymentEvidenceDocument `
         -Evidence $evidence `
         -ExpectedDataState $ExpectedDataState `
-        -BaseUrl $BaseUrl
+        -BaseUrl $BaseUrl `
+        -TransitionCatalogProfile $TransitionCatalogProfile
     $liveSnapshot = Get-Sprint6ADeploymentSnapshot `
         -RepositoryRoot $RepositoryRoot `
         -BaseUrl $BaseUrl `
@@ -969,7 +1028,8 @@ function Assert-Sprint6ADeploymentEvidence {
         -AdminPassword $AdminPassword `
         -ApiContainerId ([string]$evidence.snapshot.release_image.api_container_id) `
         -GatewayContainerId ([string]$evidence.snapshot.release_image.published_base_url_container_id) `
-        -DatabaseContainerId ([string]$evidence.snapshot.database_runtime.container_id)
+        -DatabaseContainerId ([string]$evidence.snapshot.database_runtime.container_id) `
+        -TransitionCatalogProfile $TransitionCatalogProfile
     $retainedJson = $evidence.snapshot | ConvertTo-Json -Depth 30 -Compress
     $liveJson = $liveSnapshot | ConvertTo-Json -Depth 30 -Compress
     if ($retainedJson -cne $liveJson) {

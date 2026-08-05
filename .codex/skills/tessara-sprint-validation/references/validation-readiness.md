@@ -69,6 +69,13 @@ not hide other defects. Stop dependent or destructive work whose prerequisite
 state is invalid. Retain raw logs and per-lane diagnostic receipts under a
 rehearsal namespace.
 
+On Windows, or whenever commands share one Cargo target directory, serialize
+complete Cargo checks that can clean or replace build artifacts. Parallel
+logical siblings must use distinct explicit `CARGO_TARGET_DIR` values. A
+missing executable caused by another check's cleanup is an environment defect,
+not a product failure, and still leaves the originating check failed for that
+diagnostic pass.
+
 The rehearsal start receipt must declare every lane, whether it is independent
 or dependent, and the prerequisite lane names for dependent work. After the
 first failure, set the attempt to `harvesting`; do not edit tracked candidate

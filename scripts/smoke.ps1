@@ -3,9 +3,12 @@ param(
     [switch]$ComposeApi,
     [switch]$UseExistingService,
     [string]$BaseUrl = "http://127.0.0.1:8080",
+    [string]$SupervisorUrl = "http://127.0.0.1:8098",
     [int]$ApiTimeoutSeconds = 600,
     [string]$DeploymentEvidencePath,
     [ValidateSet("fresh")][string]$ExpectedDataState,
+    [ValidateSet("sprint-6a", "sprint-8a")]
+    [string]$TransitionCatalogProfile = "sprint-6a",
     [string]$AcceptanceEvidencePath,
     [switch]$OverwriteAcceptanceEvidence,
     [switch]$DevelopmentMode
@@ -378,7 +381,8 @@ try {
             -RepositoryRoot $repoRoot `
             -EvidencePath $DeploymentEvidencePath `
             -BaseUrl $baseUrl `
-            -ExpectedDataState $ExpectedDataState
+            -ExpectedDataState $ExpectedDataState `
+            -TransitionCatalogProfile $TransitionCatalogProfile
     }
 
     $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
@@ -459,8 +463,24 @@ try {
         $_.definition.id -eq "tessara.dashboards"
     } | Select-Object -First 1
     $transitionEntries = @($moduleInventory.entries | Where-Object { $_.kind -eq "transitional_in_process" })
-    $expectedTransitionCount = if ($independentDashboard) { 6 } else { 7 }
-    if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne $expectedTransitionCount) {
+    $expectedTransitionIdentities = if ($TransitionCatalogProfile -ceq "sprint-8a") {
+        @("tessara.datasets", "tessara.forms", "tessara.migration", "tessara.responses", "tessara.workflows")
+    } else {
+        @(
+            "tessara.components",
+            "tessara.dashboards",
+            "tessara.datasets",
+            "tessara.forms",
+            "tessara.migration",
+            "tessara.responses",
+            "tessara.workflows"
+        ) | Where-Object { -not ($independentDashboard -and $_ -ceq "tessara.dashboards") }
+    }
+    $actualTransitionIdentities = @($transitionEntries | ForEach-Object {
+        [string]$_.descriptor.reserved_definition_id
+    } | Sort-Object)
+    if ($moduleInventory.schema_version -ne 1 -or
+        ($actualTransitionIdentities -join ",") -cne (($expectedTransitionIdentities | Sort-Object) -join ",")) {
         throw "Smoke failure: Module inventory did not expose the expected deduplicated transition contributions alongside real modules"
     }
     $migrationContribution = $moduleInventory.entries | Where-Object {
@@ -548,6 +568,40 @@ try {
         -or $descriptorEtag -cne $expectedDescriptorEtag
     ) {
         throw "Smoke failure: Forms descriptor did not expose a quoted HTTP ETag whose opaque value exactly matched inventory provenance"
+    }
+    if ($TransitionCatalogProfile -ceq "sprint-8a") {
+        if (-not [string]::IsNullOrWhiteSpace($acceptanceEvidenceFullPath)) {
+            throw "Sprint 8A general rehearsal smoke cannot publish the Sprint 6A acceptance-evidence schema; use the Sprint 8A SIT runner for authoritative smoke."
+        }
+        $sprint8AResult = (& (Join-Path $PSScriptRoot "smoke-sprint-8a.ps1") `
+            -BaseUrl $baseUrl `
+            -SupervisorUrl $SupervisorUrl | Out-String) | ConvertFrom-Json
+        if (-not $sprint8AResult.passed) {
+            throw "Sprint 8A profile smoke did not pass."
+        }
+        if (-not $DevelopmentMode) {
+            $deploymentEvidence = Assert-Sprint6ADeploymentEvidence `
+                -RepositoryRoot $repoRoot `
+                -EvidencePath $deploymentEvidenceFullPath `
+                -BaseUrl $baseUrl `
+                -ExpectedDataState $ExpectedDataState `
+                -TransitionCatalogProfile $TransitionCatalogProfile
+        }
+        [pscustomobject]@{
+            status = "passed"
+            transition_catalog_profile = $TransitionCatalogProfile
+            platform_inventory_entries = @($moduleInventory.entries).Count
+            sprint_8a_checks = @($sprint8AResult.checks).Count
+            deployment = if ($null -eq $deploymentEvidence) { $null } else {
+                [pscustomobject]@{
+                    data_state = [string]$deploymentEvidence.snapshot.data.state
+                    image_id = [string]$deploymentEvidence.snapshot.release_image.image_id
+                    source_commit = [string]$deploymentEvidence.snapshot.source.commit
+                    database_name = [string]$deploymentEvidence.snapshot.database_runtime.current_database
+                }
+            }
+        } | ConvertTo-Json -Depth 10
+        return
     }
     $seed = $null
     if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {
@@ -841,7 +895,8 @@ try {
             -RepositoryRoot $repoRoot `
             -EvidencePath $deploymentEvidenceFullPath `
             -BaseUrl $baseUrl `
-            -ExpectedDataState $ExpectedDataState
+            -ExpectedDataState $ExpectedDataState `
+            -TransitionCatalogProfile $TransitionCatalogProfile
     }
 
     $result = [pscustomobject]@{

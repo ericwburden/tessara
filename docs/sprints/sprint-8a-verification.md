@@ -1,9 +1,10 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 11 completed a fail-late diagnostic harvest.
-Its one-defect apply-envelope harness correction is ready for the required
-complete readiness/rehearsal rerun. No candidate has been frozen; SIT, formal
-UAT, and closeout remain Not Run.
+Status: Candidate Rehearsal attempt 12 completed a fail-late diagnostic harvest.
+Its eight findings are retained in one correction batch. Repository harness
+corrections are in progress before the required complete readiness/rehearsal
+rerun. No candidate has been frozen; SIT, formal UAT, and closeout remain Not
+Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -185,6 +186,12 @@ automated UAT diagnostics, failure-containment successor health, and the
 Component upgrade/rollback baseline. Formal deployed acceptance smoke remains
 SIT-owned and is not a rehearsal substitute.
 
+Logical independence does not authorize concurrent Cargo commands to share the
+repository `target` directory. `scripts/validate.ps1` cleans selected build
+artifacts, so complete Rust siblings run serially unless each has a distinct
+explicit `CARGO_TARGET_DIR`. Attempt 12 retained the missing-executable failure
+that demonstrated this enforcement gap.
+
 After removing the old Core-owned Component and Dashboard transition entries,
 the fresh default Main placements after Datasets are Scoped Records at 7,
 Components at 8, and Dashboard at 9. The Sprint 8A blueprint and acceptance
@@ -203,9 +210,11 @@ not reused by another command in the same rehearsal.
 
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
-- Consolidated defects and correction batch: Attempt 10 retained one product
-  defect in one batch before tracked correction began. Attempts 8 and 9 remain
-  retained and superseded with their five-defect and two-defect batches.
+- Consolidated defects and correction batch: Attempt 12 retained eight findings
+  in one batch: four repository harness gaps, one upgrade-evidence identity gap,
+  one shared-target environment collision, one obsolete general-smoke fixture
+  assumption, and one pair of retained ad hoc audit-parser mistakes closed by
+  narrow proof. Earlier batches remain retained and superseded.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -247,10 +256,13 @@ docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 .\scripts\test-sprint-validation-harvest.ps1 -SelfTest
 .\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
 .\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm -VerifyNoOp
+.\scripts\capture-sprint-6a-deployment-evidence.ps1 -BaseUrl "http://127.0.0.1:8088" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json"
+.\scripts\smoke.ps1 -UseExistingService -KeepServices -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a
 .\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
+.\scripts\build-sprint-8a-component-rehearsal-baseline.ps1 -CurrentImage "<candidate-name>@sha256:<digest>"
 .\scripts\verify-sprint-8a-component-upgrade.ps1 -BaselineImage "<name>@sha256:<digest>" -CandidateImage "<name>@sha256:<digest>" -CurrentImage "<name>@sha256:<digest>"
 .\scripts\uat-sprint-8a.ps1
-npm --prefix .\end2end test
+.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a
 ```
 
 The database-backed tests require their validation database URL variables.

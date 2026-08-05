@@ -55,7 +55,7 @@ foreach ($component in $components) {
 
 $navigation = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/shell/navigation" -Token $token
 Assert-Sprint7A ($navigation.status -eq 200 -and $navigation.body.Contains('"href":"/components"') -and $navigation.body.Contains('"label":"Components"')) "manifest_navigation" "Manifest-owned Component navigation is visible" $checks
-$componentDocument = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/components"
+$componentDocument = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/components" -Token $token
 Assert-Sprint7A ($componentDocument.status -eq 200 -and $componentDocument.body.Contains('content="tessara.components"') -and $componentDocument.body.Contains('id="module-content"')) "component_document" "Complete document is Component-owned" $checks
 
 $dashboardResponse = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/dashboards/$($script:Sprint8AFixture.dashboard_id)" -Token $token

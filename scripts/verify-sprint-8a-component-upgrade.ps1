@@ -26,6 +26,14 @@ function Assert-ImmutableImage([string]$Image, [string]$Name) {
     }
 }
 
+function Assert-DistinctUpgradeImages([string]$Baseline, [string]$Candidate) {
+    $baselineDigest = ($Baseline -split "@", 2)[1]
+    $candidateDigest = ($Candidate -split "@", 2)[1]
+    if ($baselineDigest -ceq $candidateDigest) {
+        throw "BaselineImage and CandidateImage must identify distinct immutable image digests."
+    }
+}
+
 function Get-ServiceIdentity([string[]]$Services) {
     $identity = [ordered]@{}
     foreach ($service in $Services) {
@@ -91,6 +99,7 @@ function Set-ComponentImage([string]$Image, [string]$Stage) {
 Assert-ImmutableImage $BaselineImage "BaselineImage"
 Assert-ImmutableImage $CandidateImage "CandidateImage"
 Assert-ImmutableImage $CurrentImage "CurrentImage"
+Assert-DistinctUpgradeImages -Baseline $BaselineImage -Candidate $CandidateImage
 if (-not (Test-Path -LiteralPath $composePath -PathType Leaf)) { throw "Compose file not found: $composePath" }
 
 Push-Location $repoRoot
@@ -103,6 +112,17 @@ try {
     if ($SelfTest) {
         if (-not $configuration.services.components -or -not $configuration.services.'components-migrate') {
             throw "Sprint 8A Compose does not declare both Component runtime and migration services."
+        }
+        $sameDigestRejected = $false
+        try {
+            Assert-DistinctUpgradeImages `
+                -Baseline "local/baseline@sha256:$('a' * 64)" `
+                -Candidate "local/candidate@sha256:$('a' * 64)"
+        } catch {
+            $sameDigestRejected = $true
+        }
+        if (-not $sameDigestRejected) {
+            throw "Sprint 8A upgrade self-test accepted two names for the same image digest."
         }
         Write-Host "Sprint 8A Component upgrade/rollback self-test passed."
         return
