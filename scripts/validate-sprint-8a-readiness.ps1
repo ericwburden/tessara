@@ -60,6 +60,32 @@ try {
         $values=@(& rustc --version; & cargo --version; & docker --version; & docker compose version; & node --version; & npm --version)
         if($LASTEXITCODE -ne 0 -or $values.Count -ne 6){throw "Required toolchain unavailable."}; $values
     }
+    Invoke-ReadinessCheck "database-environment" "five pairwise-distinct disposable database bindings" {
+        $names = @(
+            "TEST_API_DATABASE_URL",
+            "TEST_API_FRESH_DATABASE_URL",
+            "TEST_REFERENCE_MODULE_DATABASE_URL",
+            "TEST_API_ENROLLMENT_DATABASE_URL",
+            "TEST_INSTALLATION_CONTROL_DATABASE_URL"
+        )
+        $identities = @()
+        foreach($name in $names) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if([string]::IsNullOrWhiteSpace($value)){throw "Readiness requires $name for complete non-skipping validation."}
+            $uri = [Uri]$value
+            $database = [Uri]::UnescapeDataString($uri.AbsolutePath.TrimStart("/"))
+            if($uri.Scheme -notin @("postgres","postgresql") -or $database -notmatch "(^|[_-])test([_-]|$)"){
+                throw "$name must identify one explicit token-bounded disposable test database."
+            }
+            $port = if($uri.IsDefaultPort){5432}else{$uri.Port}
+            $identities += "$($uri.Host.ToLowerInvariant()):$port/$($database.ToLowerInvariant())"
+        }
+        if(@($identities | Sort-Object -Unique).Count -ne $names.Count){throw "Validation database identities must be pairwise distinct."}
+        if([Environment]::GetEnvironmentVariable("SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET") -cne "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET"){
+            throw "Readiness requires the exact destructive fresh-reset acknowledgement."
+        }
+        $identities
+    }
     Invoke-ReadinessCheck "playwright-locked-install" "npm ci --prefix end2end" {
         & npm ci --prefix end2end 2>&1; if($LASTEXITCODE -ne 0){throw "Locked Playwright dependency installation failed."}
     }

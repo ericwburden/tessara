@@ -267,13 +267,10 @@ impl OwnerHttpAdapter {
             let receipt = invoke_bootstrap(state, lockfile, "core", input).await?;
             bootstrap_receipts.insert("core".into(), receipt);
         }
-        for module in &lockfile.modules {
-            if let Some(input) = &module.bootstrap {
-                let receipt =
-                    invoke_bootstrap(state, lockfile, &module.definition_id, input).await?;
-                bootstrap_receipts.insert(module.definition_id.clone(), receipt);
-            }
-        }
+        // Project module security state before owner bootstrap. Component and
+        // Dashboard bootstrap validate their installation/instance boundary
+        // against this state, while the public gateway remains offline until
+        // the complete materialization and health gates succeed.
         for action in &lockfile.materialization_plan.actions {
             if let MaterializationActionV1::SetEnablement {
                 definition_id,
@@ -281,6 +278,13 @@ impl OwnerHttpAdapter {
             } = action
             {
                 apply_module_enablement(state, lockfile, definition_id, *enabled).await?;
+            }
+        }
+        for module in &lockfile.modules {
+            if let Some(input) = &module.bootstrap {
+                let receipt =
+                    invoke_bootstrap(state, lockfile, &module.definition_id, input).await?;
+                bootstrap_receipts.insert(module.definition_id.clone(), receipt);
             }
         }
         for owner in lockfile

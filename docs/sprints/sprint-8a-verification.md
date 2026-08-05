@@ -1,8 +1,8 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 8 completed a fail-late diagnostic harvest
-and was invalidated with Validation Readiness attempt 10. Its consolidated
-five-defect correction is ready for the required complete readiness/rehearsal
+Status: Candidate Rehearsal attempt 9 completed a fail-late diagnostic harvest
+and was invalidated with Validation Readiness attempt 11. Its consolidated
+two-defect correction is ready for the required complete readiness/rehearsal
 rerun. No candidate has been frozen; SIT, formal UAT, and closeout remain Not
 Run.
 
@@ -191,11 +191,16 @@ not merely read the declared package version. It must also parse and self-test
 the harvest guard and verify that `scripts/uat-sprint-8a.ps1` plus all eight
 `docs/sprints/sprint-8a-uat/uat-8a-*.md` scripts exist.
 
+Complete validation requires five pairwise-distinct, freshly created disposable
+database bindings: API, fresh-baseline API, reference module, API enrollment,
+and Installation Control. A database identity used by one complete command is
+not reused by another command in the same rehearsal.
+
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
-- Consolidated defects and correction batch: Attempt 8 retained five defects
-  (one product, three harness, one preflight/setup) in one batch before tracked
-  correction began.
+- Consolidated defects and correction batch: Attempt 9 retained two defects
+  (one product and one preflight/setup) in one batch before tracked correction
+  began. Attempt 8's prior five-defect batch remains retained and superseded.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
