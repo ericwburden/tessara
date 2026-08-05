@@ -1401,13 +1401,17 @@ test.describe.serial("Sprint 6A Module Management", () => {
         `/administration/modules/${FORMS_DEFINITION}`,
         `/administration/modules/${UNKNOWN_DEFINITION}`,
       ]) {
-        await page.goto(path);
+        await gotoHydrated(page, path);
         expect(new URL(page.url()).pathname).toBe(path);
         await expect(
           page.getByRole("heading", { name: "Module Management restricted" }),
         ).toBeVisible();
         await expect(page.locator("tr[data-module-definition]")).toHaveCount(0);
         await expect(page.getByText("Source digest", { exact: true })).toHaveCount(0);
+        // Restricted-state HTML can be visible before the hydration-owned
+        // WebAssembly request completes. Let it settle before the next
+        // full-document navigation so the browser does not report an abort.
+        await page.waitForLoadState("networkidle");
       }
     }
 
