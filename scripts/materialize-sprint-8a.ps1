@@ -71,7 +71,9 @@ try {
             -SkipBuild:$SkipBuild
         if ($LASTEXITCODE -ne 0) { throw "Sprint 8A composition materialization failed." }
 
-        $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+        $applyResponse = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+        $receipt = $applyResponse.receipt
+        if (-not $receipt) { throw "Sprint 8A apply response is missing its installation receipt." }
         $componentReceipt = @($receipt.bootstrap_receipts | Where-Object owner -eq "tessara.components") | Select-Object -First 1
         if (-not $componentReceipt) { throw "Component owner bootstrap receipt is missing." }
         if (@($componentReceipt.resource_ids.PSObject.Properties).Count -ne 6) {
@@ -103,7 +105,9 @@ try {
                 -AdditionalExpectedNavigationHrefs @("/components") `
                 -SkipLegacySeed -SkipBuild -Confirm:$false
             if ($LASTEXITCODE -ne 0) { throw "Sprint 8A no-op materialization verification failed." }
-            $secondReceipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+            $secondApplyResponse = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+            $secondReceipt = $secondApplyResponse.receipt
+            if (-not $secondReceipt) { throw "Sprint 8A no-op apply response is missing its installation receipt." }
             if (-not $secondReceipt.no_op) {
                 throw "Sprint 8A unchanged second apply did not report a semantic no-op."
             }

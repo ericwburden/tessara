@@ -1,10 +1,9 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 10 completed a fail-late diagnostic harvest
-and was invalidated with Validation Readiness attempt 12. Its one-defect
-navigation-order correction is ready for the required complete
-readiness/rehearsal rerun. No candidate has been frozen; SIT, formal UAT, and
-closeout remain Not Run.
+Status: Candidate Rehearsal attempt 11 completed a fail-late diagnostic harvest.
+Its one-defect apply-envelope harness correction is ready for the required
+complete readiness/rehearsal rerun. No candidate has been frozen; SIT, formal
+UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
