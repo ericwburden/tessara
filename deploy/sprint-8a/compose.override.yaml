@@ -15,7 +15,7 @@ services:
       TESSARA_COMPONENT_MIGRATION_PASSWORD: ${TESSARA_COMPONENT_MIGRATION_PASSWORD:-local-component-migration}
       TESSARA_COMPONENT_RUNTIME_PASSWORD: ${TESSARA_COMPONENT_RUNTIME_PASSWORD:-local-component-runtime}
     volumes:
-      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
+      - ../sprint-8a/postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
 
   core:
     image: tessara-sprint-8a-core

@@ -30,6 +30,14 @@ try {
     if ($configuration.name -cne $expectedProject) {
         throw "Refusing destructive reset for unexpected Compose project '$($configuration.name)'."
     }
+    $expectedPostgresInit = [IO.Path]::GetFullPath((Join-Path $repoRoot "deploy/sprint-8a/postgres-init.sh"))
+    $postgresInitMounts = @($configuration.services.postgres.volumes | Where-Object {
+        $_.target -ceq "/docker-entrypoint-initdb.d/10-tessara-databases.sh"
+    })
+    if ($postgresInitMounts.Count -ne 1 -or
+        [IO.Path]::GetFullPath([string]$postgresInitMounts[0].source) -cne $expectedPostgresInit) {
+        throw "Refusing Sprint 8A materialization because PostgreSQL is not bound to the exact Sprint 8A initialization contract."
+    }
     $unexpectedVolumes = @($configuration.volumes.PSObject.Properties | Where-Object {
         $name = if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
         -not $name.StartsWith("$expectedProject`_", [StringComparison]::Ordinal)
