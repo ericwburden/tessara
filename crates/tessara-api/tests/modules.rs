@@ -150,9 +150,9 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     for key in ["user_management", "roles_access", "node_types"] {
         assert!(shell_item(&admin_shell, key).is_some(), "missing {key}");
     }
-    assert_eq!(
-        shell_item(&admin_shell, "dashboards").map(|item| &item["navigation_mode"]),
-        Some(&json!("shell"))
+    assert!(
+        shell_item(&admin_shell, "dashboards").is_none(),
+        "Dashboard navigation requires an enrolled live Module Instance and must not come from Core"
     );
     for (name, actor) in [
         ("scoped read", &scoped_reader),
