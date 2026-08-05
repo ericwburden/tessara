@@ -1723,7 +1723,7 @@ fn navigation_policy_model(
     revision: i64,
     rows: Vec<NavigationPolicyEntryRow>,
 ) -> Result<NavigationPolicyReadModel, ()> {
-    if revision < 0 || rows.len() != 6 {
+    if revision < 0 || rows.len() != 5 {
         return Err(());
     }
     let mut seen = BTreeSet::new();
@@ -2709,7 +2709,22 @@ mod tests {
             .expect("disposable database prepares");
 
         let before = load_module_inventory(&pool).await.expect("inventory reads");
-        assert_eq!(before.transitions.len(), 7);
+        assert_eq!(
+            before
+                .transitions
+                .iter()
+                .map(|transition| transition.definition_id.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "tessara.dashboards",
+                "tessara.datasets",
+                "tessara.forms",
+                "tessara.migration",
+                "tessara.responses",
+                "tessara.workflows",
+            ]),
+            "Core must retain only the six canonical transition entries after Components moves to its independently deployed module"
+        );
         let canonical_forms_digest = before
             .transitions
             .iter()

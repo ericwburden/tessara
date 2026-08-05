@@ -33,7 +33,7 @@ const FROZEN_CATALOG: [FrozenCatalogEntry; 6] = [
     FrozenCatalogEntry {
         name: "Dashboards",
         definition_id: "tessara.dashboards",
-        navigation: Some(("main_after_operations", 1)),
+        navigation: Some(("main_after_operations", 0)),
     },
     FrozenCatalogEntry {
         name: "Migration",
@@ -199,7 +199,7 @@ pub(crate) fn canonical_inputs() -> Vec<CatalogInput> {
             include_str!(
                 "../../../tessara-module-contract/tests/fixtures/transition-dashboards-v1.json.sha256"
             ),
-            Some(("main_after_operations", 1)),
+            Some(("main_after_operations", 0)),
         ),
         canonical_input(
             "Migration",
