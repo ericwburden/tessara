@@ -340,6 +340,14 @@ not reused by another command in the same rehearsal.
   with `-Confirm:$false`; the correction makes that automation-safe invocation
   canonical and readiness-enforced without weakening the explicit disposable
   reset authorization or exact-target guards.
+- Validation Readiness attempt 27 completed all 13 sibling checks and retained
+  one harness failure in the new reset dry-run enforcement. The guarded
+  `WhatIf -Confirm:$false` invocation returned successfully, but PowerShell
+  rendered the `WhatIf` message directly through the host rather than into the
+  assigned pipeline, and readiness incorrectly required that host-only text in
+  the capture. The corrected check exercises the same capture boundary and
+  requires successful return without treating host rendering as pipeline
+  evidence. Candidate Rehearsal attempt 24 did not begin.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 

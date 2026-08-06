@@ -29,8 +29,9 @@ The checklist must verify:
   or a safe disposable probe;
 - every non-interactive destructive rehearsal command disables host prompting
   only after its repository-owned explicit authorization and exact-target
-  guards, and readiness executes that command's `WhatIf` path with output
-  captured exactly as rehearsal will capture it;
+  guards, and readiness executes that command's `WhatIf` path under the same
+  output-capture boundary used by rehearsal; host-rendered `WhatIf` text need
+  not become pipeline data, but the invocation must return successfully;
 - every acceptance clause mapped to automated, deployed-smoke, and manual
   evidence, with explicit justified `N/A` entries rather than blanks; and
 - a clean repository plus source-exact build inputs before rehearsal begins.
