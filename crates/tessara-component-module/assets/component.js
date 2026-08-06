@@ -219,10 +219,12 @@ async function renderCompleteDocumentContent(outlet, path, signal) {
 }
 
 if (document.getElementById(COMPLETE_DOCUMENT_ROOT_ID)) {
+  const root = document.getElementById(COMPLETE_DOCUMENT_ROOT_ID);
   const controller = new AbortController();
   installAuthoringHandler(document, controller.signal);
   loadComponentRenderers(document);
   bootstrap();
+  root.setAttribute("data-hydration", "ready");
 }
 
 export async function createModule(host) {

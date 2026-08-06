@@ -38,7 +38,7 @@ pub(crate) const COMPONENT_CSS_SHA256: &str =
 pub(crate) const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
     "dc06a4eee06e98884166baa646bda6064c1a1f88704673c8437bc2962ac7c373";
 pub(crate) const COMPONENT_JS_SHA256: &str =
-    "40cde4dbf5a67ef6e78c3b9610b157e084a5afa0637c412fe542258b7b269586";
+    "1ea3039754aaa23d689e8aa691f8d5cbd4f532d9108a3748dc05fdff4c8e5395";
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "route", rename_all = "snake_case")]
@@ -534,6 +534,7 @@ mod tests {
         }
         assert!(COMPONENT_JS.contains("export async function createModule(host)"));
         assert!(COMPONENT_JS.contains("async canDeactivate()"));
+        assert!(COMPONENT_JS.contains("root.setAttribute(\"data-hydration\", \"ready\")"));
         assert!(COMPONENT_CSS.contains(".app-shell"));
         assert!(COMPONENT_CSS.contains("@media"));
         assert!(
