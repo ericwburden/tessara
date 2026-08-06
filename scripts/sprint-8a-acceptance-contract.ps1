@@ -108,11 +108,17 @@ function Test-Sprint8AAcceptanceContract {
         'tessara_module_components',
         'SplitComponentOwnership',
         "kind='module_instance'",
-        "resource_type='tessara.components.component_version'"
+        "resource_type='tessara.components.component_version'",
+        'generate_series(1,26)',
+        'materialized_row_count=30'
     )) {
         if (-not $semanticFixtureText.Contains($requiredFragment)) {
             throw "Sprint 8A semantic fixtures do not preserve the extracted Component ownership contract ('$requiredFragment')."
         }
+    }
+    $dashboardAcceptanceText = Get-Content -LiteralPath (Join-Path $repoRoot "end2end/tests/dashboards.spec.ts") -Raw
+    if (-not $dashboardAcceptanceText.Contains('option.component_slug === "sprint-8a-record-table"')) {
+        throw "Sprint 8A Dashboard paging acceptance is not bound to the exact module-owned record Table."
     }
     $baselineDockerfile = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/Dockerfile.component-rehearsal-baseline") -Raw
     if ($baselineDockerfile -notmatch '(?m)^ARG COMPONENT_BASE_IMAGE=[^\r\n]+$') {

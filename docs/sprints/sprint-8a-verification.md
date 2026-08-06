@@ -1,9 +1,11 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 23 completed a fail-late diagnostic harvest; its consolidated harness correction requires a complete restarted readiness/rehearsal cycle.
-Its one finding is retained in a batch covering non-interactive destructive
-runner confirmation and evidence capture. No candidate
-has been frozen; SIT, formal UAT, and closeout remain Not Run.
+Status: Candidate Rehearsal attempt 25 completed a fail-late diagnostic harvest;
+its consolidated fixture/product correction requires a complete restarted
+readiness/rehearsal cycle. The attempt retained two first failures, completed
+11 safe sibling checks, and blocked only the aggregate final check on the
+failed Playwright prerequisite. No candidate has been frozen; SIT, formal UAT,
+and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -360,6 +362,33 @@ not reused by another command in the same rehearsal.
   `validate-e2e.ps1` runner canonical for rehearsal and makes readiness parse,
   self-test, and require its exact gateway/deployment/fresh-state/profile/
   evidence bindings.
+- Attempt 25 retained two findings after 11 safe independent/dependency-valid
+  checks passed. Playwright completed 52 tests, retained two first failures,
+  and marked 16 serial dependents not run. The Dashboard paging scenario still
+  named the removed Core demo Table instead of the canonical module-owned
+  `sprint-8a-record-table`; the canonical four-tier Dataset also had only four
+  rows and therefore could not prove paging. Narrow correction diagnosis kept
+  the same batch open and exposed the underlying product contract gap: the
+  Component provider discarded Dashboard cursors while Core rejected Dataset
+  execution cursors and always returned no successor. The Component detail
+  document separately allowed its version table to impose a 558-pixel
+  min-content width in a 390-pixel viewport. The consolidated correction binds
+  paging to the exact module identity, extends the canonical tier fixture with
+  26 deterministic public rows, preserves/validates bounded forward cursors,
+  performs deterministic limit-plus-one Dataset paging, and constrains the
+  module page/panel grid items so the table owns its narrow overflow. The
+  aggregate final check was blocked exactly because Playwright did not pass;
+  all other lanes, including materialization/no-op, inventory/navigation,
+  smoke, upgrade/rollback, all eight UAT diagnostics, complete Rust checks,
+  Clippy, discovery, and containment health, passed.
+- The restart-behavior audit found the protocol and readiness references now
+  state the fail-late rule completely. The earlier enforcement gap was
+  executable orchestration: ad hoc commands could bypass the dependency graph,
+  harvest terminal-state guard, or source-exact Playwright wrapper. The
+  repository-owned harvest guard, its readiness self-test, the declared attempt
+  graph, and the readiness-enforced `validate-e2e.ps1` binding close that gap;
+  no duplicate skill prose is added. Attempt 25 exercised this enforcement by
+  retaining one harvest and one consolidated batch before tracked correction.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 

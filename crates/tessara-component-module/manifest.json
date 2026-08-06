@@ -168,8 +168,8 @@
     {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"}
   ],
   "assets": [
-    {"path":"/component.css","digest":"sha256:39a7a379a1ac2ee1ea1ed491eeb4aad438a14770a4496ba06b2d20aa998e5cb1","content_type":"text/css; charset=utf-8"},
-    {"path":"/component-lifecycle.css","digest":"sha256:dc06a4eee06e98884166baa646bda6064c1a1f88704673c8437bc2962ac7c373","content_type":"text/css; charset=utf-8"},
+    {"path":"/component.css","digest":"sha256:012ccfe76a2013f5185a8471f05b8f7b0d530c3faa9390201185ff8dab4c31e7","content_type":"text/css; charset=utf-8"},
+    {"path":"/component-lifecycle.css","digest":"sha256:b69bab58c14330c016d64dc4b4a0bc4340c75c1a3444005f49164c32df16f4c8","content_type":"text/css; charset=utf-8"},
     {"path":"/component.js","digest":"sha256:1ea3039754aaa23d689e8aa691f8d5cbd4f532d9108a3748dc05fdff4c8e5395","content_type":"text/javascript; charset=utf-8"}
   ]
 }

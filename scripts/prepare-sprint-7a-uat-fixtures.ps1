@@ -305,24 +305,31 @@ UPDATE dataset_revisions SET
     ('uat7a-internal','internal','UAT7A-INTERNAL'),
     ('uat7a-restricted','restricted','UAT7A-RESTRICTED'),
     ('uat7a-confidential','confidential','UAT7A-CONFIDENTIAL-BLOCKED')
-  ) AS fixture(__row_id,__restriction_tier,label)${sqlQuote},
+  ) AS fixture(__row_id,__restriction_tier,label)
+  UNION ALL
+  SELECT 'uat7a-page-' || page_row, 'public', 'UAT7A-PAGE-' || lpad(page_row::text, 2, '0')
+  FROM generate_series(1,26) AS paging_fixture(page_row)${sqlQuote},
   restriction_policy='{"internal_field_key":"tier_internal","restricted_field_key":"tier_restricted","confidential_field_key":"tier_confidential"}'::jsonb,
-  materialized_row_count=4, materialized_at=now()
+  materialized_row_count=30, materialized_at=now()
 WHERE id='$($referenceRevision.id)'::uuid AND (
   generated_sql NOT LIKE '%UAT7A-CONFIDENTIAL-BLOCKED%'
+  OR generated_sql NOT LIKE '%UAT7A-PAGE-%'
   OR restriction_policy IS DISTINCT FROM '{"internal_field_key":"tier_internal","restricted_field_key":"tier_restricted","confidential_field_key":"tier_confidential"}'::jsonb
-  OR materialized_row_count IS DISTINCT FROM 4
+  OR materialized_row_count IS DISTINCT FROM 30
 );
 TRUNCATE dataset_materialized.$referenceTable;
 INSERT INTO dataset_materialized.$referenceTable(__row_id,__restriction_tier,label) VALUES
   ('uat7a-public','public','UAT7A-PUBLIC'),('uat7a-internal','internal','UAT7A-INTERNAL'),
   ('uat7a-restricted','restricted','UAT7A-RESTRICTED'),('uat7a-confidential','confidential','UAT7A-CONFIDENTIAL-BLOCKED');
+INSERT INTO dataset_materialized.$referenceTable(__row_id,__restriction_tier,label)
+SELECT 'uat7a-page-' || page_row, 'public', 'UAT7A-PAGE-' || lpad(page_row::text, 2, '0')
+FROM generate_series(1,26) AS paging_fixture(page_row);
 TRUNCATE dataset_materialized.dataset_major_01980000000270008000000000000003_v1;
 INSERT INTO dataset_materialized.dataset_major_01980000000270008000000000000003_v1
   (__row_id,__restriction_tier,__source_dataset_revision_id,__source_dataset_version_major,__source_dataset_version_minor,__source_dataset_version_patch,__source_dataset_semantic_version,label)
 SELECT '$($referenceRevision.id):'||__row_id,__restriction_tier,'$($referenceRevision.id)'::uuid,1,0,0,'v1.0.0',label
 FROM dataset_materialized.$referenceTable;
-UPDATE dataset_major_materializations SET materialized_row_count=4,materialized_at=now(),rebuild_status='ready'
+UPDATE dataset_major_materializations SET materialized_row_count=30,materialized_at=now(),rebuild_status='ready'
 WHERE dataset_id='$($contract.datasets.four_tier)'::uuid AND version_major=1;
 
 INSERT INTO datasets(id,name,slug,grain,authority_revision) VALUES('$($contract.datasets.blocked)'::uuid,'Sprint 7A Blocked Dataset','sprint-7a-blocked-dataset','node',2)

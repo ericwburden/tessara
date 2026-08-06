@@ -765,11 +765,11 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
 
     try {
       const tableOption = fixture.composition.available_component_versions.find(
-        (option) => option.component_slug === "demo-session-log-table",
+        (option) => option.component_slug === "sprint-8a-record-table",
       );
       expect(
         tableOption,
-        "the demo seed should expose the exact multi-page Session Log Table",
+        "the Sprint 8A seed should expose the exact module-owned multi-page record Table",
       ).toBeTruthy();
       await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {

@@ -32,6 +32,7 @@ const COMPONENT_DEFINITION_ID: &str = "tessara.components";
 const CORE_COMPONENT_BINDING: &str = "tessara.core.components";
 const COMPONENT_RESOURCE_CONTRACT: &str = "tessara.components.component-version";
 const COMPONENT_AUTHORING_CONTRACT: &str = "tessara.components.authoring";
+const MAX_DATASET_EXECUTION_OFFSET: u32 = 1_000_000;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
@@ -284,11 +285,7 @@ async fn execute(
     headers: HeaderMap,
     Json(request): Json<DatasetExecutionRequest>,
 ) -> ApiResult<Json<DatasetExecutionResponse>> {
-    if request.action != DatasetAction::Execute
-        || request.limit == 0
-        || request.limit > 1_000
-        || request.cursor.is_some()
-    {
+    if request.action != DatasetAction::Execute || request.limit == 0 || request.limit > 1_000 {
         return Err(ApiError::BadRequest(
             "Dataset execution request is invalid".into(),
         ));
@@ -438,6 +435,12 @@ async fn execute_materialization(
     request: DatasetExecutionRequest,
     metadata: DatasetMajorLineMetadata,
 ) -> ApiResult<DatasetExecutionResponse> {
+    let offset = execution_offset(request.cursor.as_deref())?;
+    if offset > 0 && !request.aggregates.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Dataset aggregate execution does not accept a cursor".into(),
+        ));
+    }
     let known = metadata
         .fields
         .iter()
@@ -666,10 +669,17 @@ async fn execute_materialization(
                     DatasetSortDirection::Desc => " DESC",
                 });
         }
+    } else if request.aggregates.is_empty() {
+        query.push(" ORDER BY __row_id ASC");
     }
-    query.push(" LIMIT ").push_bind(request.limit as i64);
+    query
+        .push(" LIMIT ")
+        .push_bind(i64::from(request.limit) + 1)
+        .push(" OFFSET ")
+        .push_bind(i64::from(offset));
     let result = query.build().fetch_all(&state.pool).await?;
-    let rows = result
+    let has_more = result.len() > request.limit as usize;
+    let mut rows = result
         .into_iter()
         .map(|row| {
             let row_id = row.try_get("row_id")?;
@@ -683,6 +693,9 @@ async fn execute_materialization(
             Ok(DatasetExecutionRow { row_id, values })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    if has_more {
+        rows.truncate(request.limit as usize);
+    }
     let fields = output_keys
         .iter()
         .map(|key| {
@@ -704,8 +717,19 @@ async fn execute_materialization(
         materialization_state: "ready".into(),
         fields,
         rows,
-        next_cursor: None,
+        next_cursor: has_more.then(|| format!("offset:{}", offset + request.limit)),
     })
+}
+
+fn execution_offset(cursor: Option<&str>) -> ApiResult<u32> {
+    match cursor {
+        None => Ok(0),
+        Some(cursor) => cursor
+            .strip_prefix("offset:")
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|value| (1..=MAX_DATASET_EXECUTION_OFFSET).contains(value))
+            .ok_or_else(|| ApiError::BadRequest("Dataset execution cursor is invalid".into())),
+    }
 }
 
 fn quoted(value: &str) -> String {
@@ -714,4 +738,25 @@ fn quoted(value: &str) -> String {
 
 fn restricted() -> ApiError {
     ApiError::Forbidden("dataset action unavailable".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_DATASET_EXECUTION_OFFSET, execution_offset};
+
+    #[test]
+    fn execution_cursor_is_exact_and_forward_only() {
+        assert_eq!(execution_offset(None).expect("first page"), 0);
+        assert_eq!(execution_offset(Some("offset:25")).expect("next page"), 25);
+        let beyond_limit = format!("offset:{}", MAX_DATASET_EXECUTION_OFFSET + 1);
+        for invalid in [
+            "offset:0",
+            "offset:-1",
+            "offset:25:extra",
+            "unexpected",
+            &beyond_limit,
+        ] {
+            assert!(execution_offset(Some(invalid)).is_err(), "{invalid}");
+        }
+    }
 }

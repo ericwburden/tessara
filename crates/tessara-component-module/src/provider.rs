@@ -366,7 +366,7 @@ pub(super) fn execution_request(
         aggregates,
         order_by,
         limit,
-        cursor: None,
+        cursor: query_cursor(query)?,
     })
 }
 
@@ -844,6 +844,23 @@ fn query_limit(query: &str) -> u32 {
         .unwrap_or(25)
         .clamp(1, 1000)
 }
+fn query_cursor(query: &str) -> Result<Option<String>, ComponentModuleError> {
+    query
+        .split('&')
+        .find_map(|part| part.strip_prefix("cursor="))
+        .map(|value| {
+            let decoded = value.replace("%3A", ":").replace("%3a", ":");
+            let offset = decoded
+                .strip_prefix("offset:")
+                .and_then(|value| value.parse::<u32>().ok())
+                .filter(|value| *value > 0)
+                .ok_or_else(|| {
+                    ComponentModuleError::BadRequest("Component cursor is invalid".into())
+                })?;
+            Ok(format!("offset:{offset}"))
+        })
+        .transpose()
+}
 fn unavailable_security() -> ComponentModuleError {
     ComponentModuleError::Unavailable("Component security state is unavailable".into())
 }
@@ -919,5 +936,21 @@ mod tests {
         assert_eq!(request.limit, 250);
         assert!(request.group_by.is_empty());
         assert!(request.aggregates.is_empty());
+    }
+
+    #[test]
+    fn table_execution_preserves_the_exact_server_cursor() {
+        let config = json!({"visible_columns":["participant"]});
+        let request = execution_request(
+            dataset_reference(),
+            "table",
+            &config,
+            "page_size=25&cursor=offset%3A25",
+        )
+        .expect("table cursor request");
+        assert_eq!(request.cursor.as_deref(), Some("offset:25"));
+        assert!(
+            execution_request(dataset_reference(), "table", &config, "cursor=unexpected",).is_err()
+        );
     }
 }

@@ -34,9 +34,9 @@ pub(crate) const COMPONENT_LIFECYCLE_CSS: &str = concat!(
 );
 pub(crate) const COMPONENT_JS: &str = include_str!("../assets/component.js");
 pub(crate) const COMPONENT_CSS_SHA256: &str =
-    "39a7a379a1ac2ee1ea1ed491eeb4aad438a14770a4496ba06b2d20aa998e5cb1";
+    "012ccfe76a2013f5185a8471f05b8f7b0d530c3faa9390201185ff8dab4c31e7";
 pub(crate) const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
-    "dc06a4eee06e98884166baa646bda6064c1a1f88704673c8437bc2962ac7c373";
+    "b69bab58c14330c016d64dc4b4a0bc4340c75c1a3444005f49164c32df16f4c8";
 pub(crate) const COMPONENT_JS_SHA256: &str =
     "1ea3039754aaa23d689e8aa691f8d5cbd4f532d9108a3748dc05fdff4c8e5395";
 
@@ -537,6 +537,8 @@ mod tests {
         assert!(COMPONENT_JS.contains("root.setAttribute(\"data-hydration\", \"ready\")"));
         assert!(COMPONENT_CSS.contains(".app-shell"));
         assert!(COMPONENT_CSS.contains("@media"));
+        assert!(COMPONENT_CSS.contains(".components-page{display:grid;gap:1rem;min-width:0}"));
+        assert!(COMPONENT_CSS.contains("background:var(--surface-raised,#fff);min-width:0"));
         assert!(
             asset_path(COMPONENT_JS_SHA256, "component.js")
                 .contains("/tessara.components/1.0.0/sha256:")

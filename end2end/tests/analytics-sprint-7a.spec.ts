@@ -57,7 +57,7 @@ test.describe("Sprint 7A scoped analytics boundary", () => {
     expect(statResponse.ok()).toBeTruthy();
     const stat = await statResponse.json();
     expect(stat.materialization_state).toBe("ready");
-    expect(stat.stat.display_value).toBe("4");
+    expect(stat.stat.display_value).toBe("30");
     const tableResponse = await page.request.get(
       `/api/dashboards/${fixture.dashboardId}/placements/${fixture.tablePlacementId}/render/table`,
     );
