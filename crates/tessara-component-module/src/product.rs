@@ -1355,7 +1355,9 @@ pub(super) async fn get_definition_by_id(
                 .ok()
                 .is_some_and(|scope| require_scope(grant, READ_CAPABILITY, &scope).is_ok())
         }) {
-            return Err(ComponentModuleError::Forbidden);
+            // A readable detail route must not disclose whether an inaccessible
+            // Component identity exists.
+            return Err(ComponentModuleError::NotFound("Component not found".into()));
         }
         version_rows.retain(|row| {
             row.try_get::<String, _>("status")

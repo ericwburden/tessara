@@ -33,10 +33,13 @@ test.describe("Sprint 7A scoped analytics boundary", () => {
     const datasets = await (await page.request.get("/api/datasets")).json();
     expect(datasets.some((dataset: { id: string }) => dataset.id === fixture.datasetId)).toBeTruthy();
     const components = await (await page.request.get("/api/components")).json();
-    expect(components.some((component: { id: string }) => component.id === fixture.metricComponentId)).toBeTruthy();
-    expect(components.some((component: { id: string }) => component.id === fixture.tableComponentId)).toBeTruthy();
-    expect(components.some((component: { id: string }) => component.id === fixture.chartComponentId)).toBeTruthy();
-    expect(components.some((component: { id: string }) => component.id === fixture.blockedComponentId)).toBeTruthy();
+    const componentIds = components.map((component: { component_id: string }) => component.component_id);
+    expect(componentIds).toEqual(expect.arrayContaining([
+      fixture.metricComponentId,
+      fixture.tableComponentId,
+      fixture.chartComponentId,
+      fixture.blockedComponentId,
+    ]));
     const dashboard = await (await page.request.get(`/api/dashboards/${fixture.dashboardId}`)).json();
     expect(dashboard.placements.map((placement: { placement_id: string }) => placement.placement_id)).toEqual([
       fixture.metricPlacementId,

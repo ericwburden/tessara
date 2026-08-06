@@ -78,6 +78,7 @@ type DatasetTable = {
     values: Record<string, string | null>;
   }>;
 };
+type ComponentListSummary = { component_id: string; name: string; slug: string };
 type ComponentSummary = { id: string; name: string; slug: string };
 type ComponentDefinition = {
   id: string;
@@ -669,19 +670,29 @@ async function setupFixtures(): Promise<FixtureState> {
     "an out-of-scope dataset should exist",
   );
 
-  const adminComponents = await getJson<ComponentSummary[]>(admin, "/api/components");
-  const scopedComponents = await getJson<ComponentSummary[]>(scopedManager, "/api/components");
-  const scopedComponentIds = new Set(scopedComponents.map((component) => component.id));
-  const inScopeComponent = requireItem(
+  const adminComponents = await getJson<ComponentListSummary[]>(admin, "/api/components");
+  const scopedComponents = await getJson<ComponentListSummary[]>(scopedManager, "/api/components");
+  const scopedComponentIds = new Set(scopedComponents.map((component) => component.component_id));
+  const inScopeComponentListItem = requireItem(
     adminComponents,
-    (component) => scopedComponentIds.has(component.id),
+    (component) => scopedComponentIds.has(component.component_id),
     "an in-scope component should exist",
   );
-  const outOfScopeComponent = requireItem(
+  const outOfScopeComponentListItem = requireItem(
     adminComponents,
-    (component) => !scopedComponentIds.has(component.id),
+    (component) => !scopedComponentIds.has(component.component_id),
     "an out-of-scope component should exist",
   );
+  const inScopeComponent = {
+    id: inScopeComponentListItem.component_id,
+    name: inScopeComponentListItem.name,
+    slug: inScopeComponentListItem.slug,
+  };
+  const outOfScopeComponent = {
+    id: outOfScopeComponentListItem.component_id,
+    name: outOfScopeComponentListItem.name,
+    slug: outOfScopeComponentListItem.slug,
+  };
   const inScopeVisualComponent = await createPublishedVisualComponent(
     admin,
     inScopeDataset,
@@ -1560,11 +1571,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       [403],
     );
 
-    const components = await getJson<ComponentSummary[]>(fixtures.scopedManager, "/api/components");
-    expect(components.some((component) => component.id === fixtures.inScopeComponent.id)).toBe(true);
-    expect(components.some((component) => component.id === fixtures.outOfScopeComponent.id)).toBe(false);
-    expect(components.some((component) => component.id === fixtures.inScopeVisualComponent.id)).toBe(true);
-    expect(components.some((component) => component.id === fixtures.outOfScopeVisualComponent.id)).toBe(false);
+    const components = await getJson<ComponentListSummary[]>(fixtures.scopedManager, "/api/components");
+    expect(components.some((component) => component.component_id === fixtures.inScopeComponent.id)).toBe(true);
+    expect(components.some((component) => component.component_id === fixtures.outOfScopeComponent.id)).toBe(false);
+    expect(components.some((component) => component.component_id === fixtures.inScopeVisualComponent.id)).toBe(true);
+    expect(components.some((component) => component.component_id === fixtures.outOfScopeVisualComponent.id)).toBe(false);
     const inComponent = await getJson<ComponentDefinition>(
       fixtures.scopedManager,
       `/api/components/${fixtures.inScopeComponent.slug}`,
@@ -1710,12 +1721,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         },
       },
     );
-    const manageableComponents = await getJson<ComponentSummary[]>(
+    const manageableComponents = await getJson<ComponentListSummary[]>(
       fixtures.componentManager,
       "/api/admin/components",
     );
     expect(manageableComponents.length).toBeGreaterThan(0);
-    expect(manageableComponents.some((component) => component.id === manageableComponent.id)).toBe(true);
+    expect(manageableComponents.some((component) => component.component_id === manageableComponent.id)).toBe(true);
 
     const bindError = await expectErrorStatus(
       fixtures.componentManager,

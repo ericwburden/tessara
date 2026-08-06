@@ -1,11 +1,9 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 13 completed a fail-late diagnostic harvest.
-Its ten findings are retained in one correction batch. Six repository-owned
-timing, fixture, acceptance-inventory, upgrade, and zero-warning corrections
-are in progress; four operator-only failures remain retained and are closed by
-canonical narrow proofs. No candidate has been frozen; SIT, formal UAT, and
-closeout remain Not Run.
+Status: Candidate Rehearsal attempt 15 completed a fail-late diagnostic harvest; its consolidated correction batch awaits a complete restarted readiness/rehearsal cycle.
+Its six findings are retained in one correction batch spanning acceptance
+inventory, Component nondisclosure, and Dashboard release assets. No candidate
+has been frozen; SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -220,17 +218,25 @@ not reused by another command in the same rehearsal.
 
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
-- Consolidated defects and correction batch: Attempt 14 retained two findings
-  in one batch. The fixture defect showed that the shared Sprint 7A semantic
-  preparer still wrote Component rows to Core after Sprint 8A extracted that
-  product storage; the correction writes and verifies all four semantic
-  Component fixtures in the Component database and emits its real Module
-  Instance references to Dashboard. The operator-harness defect was one omitted
-  destructive-reset acknowledgement shared by the static and workspace
-  invocations; the existing validation preflight already enforced the exact
-  variable, so the correction is to use that canonical environment contract,
-  not duplicate another runner rule. Attempt 13's ten-finding and Attempt 12's
-  eight-finding batches remain retained and superseded.
+- Consolidated defects and correction batch: Attempt 15 retained six
+  Playwright findings in one fail-late batch after 10 independent checks
+  passed. Four acceptance-inventory defects used the former Core Component
+  `id`, the removed searchable Dataset Version picker, or stale generic Dataset
+  dependency copy. One Component product defect disclosed a known unreadable
+  identity as `403` instead of making it indistinguishable from a random `404`.
+  One Dashboard product-asset defect served release `3.0.0` with entry imports
+  pinned to `2.1.0`, preventing module hydration. The remaining 34 serial-suite
+  cases were retained as blocked (2 Components, 8 Dashboards, 24 Permissions),
+  and the all-prerequisite final check was blocked specifically by Playwright.
+  Containment and all eight non-authoritative UAT diagnostic mappings still
+  passed. The correction updates canonical identities/interactions, closes
+  Component nondisclosure, binds Dashboard assets and digests to release
+  `3.0.0`, and requires complete readiness and rehearsal restart. Two narrow
+  dirty-source materialization invocations reached only the release build and
+  were stopped by the external 15-minute command timeout; they are retained as
+  diagnostic build evidence and do not replace either full gate. Attempt 14's
+  two-finding, Attempt 13's ten-finding, and Attempt 12's eight-finding batches
+  remain retained and superseded.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 

@@ -228,23 +228,10 @@ async function selectDatasetVersion(
   dataset: DatasetSummary,
   major: number,
 ) {
-  const picker = page.getByRole("combobox", { name: "Dataset Version" });
-  await expect(async () => {
-    await picker.click();
-    await expect(picker).toHaveAttribute("aria-expanded", "true", {
-      timeout: 1_000,
-    });
-  }).toPass({ timeout: 10_000 });
-  const filter = page.getByRole("searchbox", { name: "Filter dataset versions" });
-  await expect(filter).toBeVisible();
-  await filter.fill(dataset.name);
-  const row = page
-    .getByRole("option")
-    .filter({ hasText: dataset.name })
-    .filter({ hasText: `v${major}` });
-  await expect(row).toHaveCount(1);
-  await row.getByRole("button", { name: dataset.name }).click();
-  await expect(picker).toContainText(`${dataset.name} · v${major}`);
+  const picker = page.getByRole("combobox", { name: "Dataset major line" });
+  const label = `${dataset.name} — major ${major}`;
+  await picker.selectOption({ label });
+  await expect(picker.locator("option:checked")).toHaveText(label);
 }
 
 function isTextLikeField(field: DatasetFieldDefinition) {
