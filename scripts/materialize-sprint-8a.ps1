@@ -75,8 +75,10 @@ try {
         if (-not $receipt) { throw "Sprint 8A apply response is missing its installation receipt." }
         $componentReceipt = @($receipt.bootstrap_receipts | Where-Object owner -eq "tessara.components") | Select-Object -First 1
         if (-not $componentReceipt) { throw "Component owner bootstrap receipt is missing." }
-        if (@($componentReceipt.resource_ids.PSObject.Properties).Count -ne 6) {
-            throw "Component owner bootstrap did not return all six canonical Component kinds."
+        $expectedComponentKeys = @("sprint-8a-record-table","sprint-8a-label-bar","sprint-8a-label-line","sprint-8a-label-pie","sprint-8a-label-donut","sprint-8a-row-count","sprint-8a-blocked-component")
+        $actualComponentKeys = @($componentReceipt.resource_ids.PSObject.Properties.Name | Sort-Object)
+        if (($actualComponentKeys -join "`n") -cne (($expectedComponentKeys | Sort-Object) -join "`n")) {
+            throw "Component owner bootstrap did not return the exact canonical Component identities."
         }
         foreach ($resource in $componentReceipt.resource_ids.PSObject.Properties) {
             $reference = $resource.Value | ConvertFrom-Json

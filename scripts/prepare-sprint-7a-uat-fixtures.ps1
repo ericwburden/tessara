@@ -8,6 +8,7 @@ param(
     [string]$NoAnalyticsPassword = "tessara-sprint-7a-restricted",
     [string]$ComposeProject = "tessara-sprint-7a",
     [string]$OutputPath,
+    [switch]$OwnerControlledSeed,
     [switch]$VerifyOnly,
     [switch]$Overwrite,
     [switch]$SelfTest
@@ -168,10 +169,15 @@ SELECT json_build_object(
 "@
         $core.components = $componentInventory.components
     }
+    $dashboardIds = if ($OwnerControlledSeed) {
+        "'$($contract.dashboards.mixed)'::uuid"
+    } else {
+        "'$($contract.dashboards.mixed)'::uuid,'$($contract.dashboards.blocked)'::uuid"
+    }
     $dashboard = Invoke-Postgres -Container $Container -Database tessara_module_dashboards -Json -Sql @"
 SELECT json_build_object(
   'dashboards', (SELECT json_agg(json_build_object('id',d.id,'authority_revision',d.authority_revision,'scope_nodes',(SELECT json_agg(node_id ORDER BY node_id) FROM dashboard_scope_nodes WHERE dashboard_id=d.id)) ORDER BY d.id)
-    FROM dashboards d WHERE d.id IN ('$($contract.dashboards.mixed)'::uuid,'$($contract.dashboards.blocked)'::uuid)),
+    FROM dashboards d WHERE d.id IN ($dashboardIds)),
   'placements', (SELECT json_agg(json_build_object('id',p.id,'dashboard_id',p.dashboard_id,'component_version_id',p.component_reference->>'resource_id') ORDER BY p.id)
     FROM dashboard_placements p WHERE p.id IN ('$($contract.placements.stat)'::uuid,'$($contract.placements.table)'::uuid,'$($contract.placements.chart)'::uuid,'$($contract.placements.blocked)'::uuid))
 );
@@ -186,7 +192,8 @@ function Assert-LiveInventory([object]$Inventory) {
     }
     if (@($Inventory.core.datasets).Count -ne 2) { throw "UAT Dataset inventory is incomplete." }
     if (@($Inventory.core.components).Count -ne 4) { throw "UAT ComponentVersion inventory is incomplete." }
-    if (@($Inventory.dashboard.dashboards).Count -ne 2) { throw "UAT Dashboard inventory is incomplete." }
+    $expectedDashboardCount = if ($OwnerControlledSeed) { 1 } else { 2 }
+    if (@($Inventory.dashboard.dashboards).Count -ne $expectedDashboardCount) { throw "UAT Dashboard inventory is incomplete." }
     if (@($Inventory.dashboard.placements).Count -ne 4) { throw "Mixed Dashboard placement inventory is incomplete." }
     if (-not $Inventory.core.identifier_specimens.known_blocked_exists -or -not $Inventory.core.identifier_specimens.random_absent) {
         throw "Known-blocked and random identifier specimens are not semantically distinct."
@@ -268,6 +275,7 @@ if (-not $VerifyOnly) {
     }
     foreach ($value in @($scopedId,$mixedId,$restrictedId,$scopedRole,$mixedBaseRole,$mixedTierRole,$noAnalyticsRole)) { $null = Assert-Uuid $value "Prepared identity" }
 
+    if (-not $OwnerControlledSeed) {
     $referenceRevision = Invoke-Postgres -Container $container -Database tessara_core -Json -Sql "SELECT json_build_object('id',id,'table',materialized_table) FROM dataset_revisions WHERE dataset_id='$($contract.datasets.four_tier)'::uuid AND status='published'"
     $referenceTable = [string]$referenceRevision.table
     if ($referenceTable -notmatch '^dataset_[0-9a-f]{32}$') { throw "Reference Dataset materialized table identity is invalid." }
@@ -435,6 +443,7 @@ WHERE dashboard_placements.component_reference IS DISTINCT FROM EXCLUDED.compone
 COMMIT;
 "@
     $null = Invoke-Postgres -Container $container -Database tessara_module_dashboards -Sql $dashboardSql
+    }
     $logout = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/auth/logout" -Method DELETE -Token $token
     if ($logout.status -notin 200,204) { throw "Administrator fixture session cleanup returned HTTP $($logout.status)." }
 }

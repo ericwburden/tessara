@@ -242,12 +242,17 @@ pub enum DatasetFilterOperator {
     Eq,
     NotEq,
     Contains,
+    NotContains,
     StartsWith,
     EndsWith,
     GreaterThan,
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
+    Between,
+    NotBetween,
+    IsEmpty,
+    IsNotEmpty,
     IsNull,
     IsNotNull,
 }
@@ -265,10 +270,29 @@ pub struct DatasetFilter {
 #[serde(rename_all = "snake_case")]
 pub enum DatasetAggregateFunction {
     Count,
+    UniqueCount,
     Sum,
     Average,
+    Median,
     Minimum,
     Maximum,
+    SingleValue,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DatasetMissingPolicy {
+    #[default]
+    Omit,
+    Zero,
+    ExplicitMissing,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetSearch {
+    pub field_keys: Vec<String>,
+    pub query: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -277,6 +301,8 @@ pub struct DatasetAggregate {
     pub field_key: Option<String>,
     pub function: DatasetAggregateFunction,
     pub output_key: String,
+    #[serde(default)]
+    pub missing_policy: DatasetMissingPolicy,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -305,7 +331,11 @@ pub struct DatasetExecutionRequest {
     #[serde(default)]
     pub filters: Vec<DatasetFilter>,
     #[serde(default)]
+    pub search: Option<DatasetSearch>,
+    #[serde(default)]
     pub group_by: Vec<String>,
+    #[serde(default)]
+    pub group_missing_policies: BTreeMap<String, DatasetMissingPolicy>,
     #[serde(default)]
     pub aggregates: Vec<DatasetAggregate>,
     #[serde(default)]

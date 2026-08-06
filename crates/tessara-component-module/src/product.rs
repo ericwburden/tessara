@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 use crate::{
     ComponentModuleError, ComponentModuleState, MANAGE_CAPABILITY, READ_CAPABILITY, dataset_client,
-    load_security_state,
+    load_security_state, validation,
 };
 
 const CORE_COMPONENT_BINDING: &str = "tessara.core.components";
@@ -327,6 +327,16 @@ async fn create_component(
         },
     )
     .await?;
+    let findings = component_input_findings(&request.version, &metadata);
+    if !findings.is_empty() {
+        return Err(ComponentModuleError::BadRequest(
+            findings
+                .into_iter()
+                .map(|finding| finding.message)
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
+    }
     require_scope(&grant.payload, MANAGE_CAPABILITY, &metadata.scope_node_ids)?;
     let mut scope_node_ids = metadata.scope_node_ids;
     scope_node_ids.sort_unstable();
@@ -963,134 +973,23 @@ async fn validate_version_input(
     )
     .await?;
     require_scope(grant, MANAGE_CAPABILITY, &metadata.scope_node_ids)?;
-    let mut findings = Vec::new();
-    if !matches!(
-        input.component_type.as_str(),
-        "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
-    ) {
-        findings.push(finding(
-            "component_type.unsupported",
-            Some("component_type"),
-            "Component kind is unsupported",
-        ));
-    }
-    if !input.config.is_object() {
-        findings.push(finding(
-            "config.object_required",
-            Some("config"),
-            "Component configuration must be an object",
-        ));
-    }
-    let known = metadata
-        .fields
-        .iter()
-        .map(|field| field.key.as_str())
-        .collect::<BTreeSet<_>>();
-    for field in referenced_fields(&input.config) {
-        if !known.contains(field.as_str()) {
-            findings.push(finding(
-                "config.field_unavailable",
-                Some(&format!("config.{field}")),
-                &format!("Dataset field '{field}' is unavailable"),
-            ));
-        }
-    }
-    if input.component_type == "table"
-        && input
-            .config
-            .get("visible_columns")
-            .and_then(Value::as_array)
-            .is_none()
-    {
-        findings.push(finding(
-            "config.visible_columns.required",
-            Some("config.visible_columns"),
-            "Table Components require visible columns",
-        ));
-    }
-    if matches!(input.component_type.as_str(), "bar" | "pie" | "donut")
-        && input
-            .config
-            .get("category_field")
-            .and_then(Value::as_str)
-            .filter(|v| !v.is_empty())
-            .is_none()
-    {
-        findings.push(finding(
-            "config.category_field.required",
-            Some("config.category_field"),
-            "This Component kind requires a category field",
-        ));
-    }
-    if input.component_type == "line"
-        && input
-            .config
-            .get("x_field")
-            .and_then(Value::as_str)
-            .filter(|v| !v.is_empty())
-            .is_none()
-    {
-        findings.push(finding(
-            "config.x_field.required",
-            Some("config.x_field"),
-            "Line Components require an x field",
-        ));
-    }
+    let findings = component_input_findings(input, &metadata);
     Ok((metadata, findings))
 }
 
-fn referenced_fields(config: &Value) -> BTreeSet<String> {
-    let mut fields = BTreeSet::new();
-    for key in [
-        "summary_field",
-        "category_field",
-        "comparison_field",
-        "x_field",
-    ] {
-        if let Some(value) = config
-            .get(key)
-            .and_then(Value::as_str)
-            .filter(|v| !v.is_empty())
-        {
-            fields.insert(value.into());
-        }
-    }
-    for value in config
-        .get("visible_columns")
-        .and_then(Value::as_array)
+fn component_input_findings(
+    input: &ComponentVersionInputV1,
+    metadata: &DatasetMajorLineMetadata,
+) -> Vec<ValidationFindingV1> {
+    validation::validate_component_config(&input.component_type, &input.config, &metadata.fields)
         .into_iter()
-        .flatten()
-    {
-        if let Some(field) = value
-            .as_str()
-            .or_else(|| value.get("key").and_then(Value::as_str))
-            .or_else(|| value.get("field").and_then(Value::as_str))
-        {
-            fields.insert(field.into());
-        }
-    }
-    for value in config
-        .get("filters")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        if let Some(field) = value
-            .get("field")
-            .or_else(|| value.get("field_key"))
-            .and_then(Value::as_str)
-        {
-            fields.insert(field.into());
-        }
-    }
-    fields
-}
-fn finding(code: &str, path: Option<&str>, message: &str) -> ValidationFindingV1 {
-    ValidationFindingV1 {
-        code: code.into(),
-        field_path: path.map(str::to_string),
-        message: message.into(),
-    }
+        .chain(validation::validate_version_note(&input.version_note))
+        .map(|finding| ValidationFindingV1 {
+            code: finding.code.into(),
+            field_path: finding.field_path,
+            message: finding.message,
+        })
+        .collect()
 }
 fn internal(error: impl std::fmt::Display) -> ComponentModuleError {
     ComponentModuleError::Internal(error.to_string())
@@ -1275,12 +1174,6 @@ async fn change_lifecycle(
     )
     .await?;
     revalidate_stored_version(&state, &headers, &grant.payload, component_id, version_id).await?;
-    let next = match request.action {
-        LifecycleActionV1::Activate => "active",
-        LifecycleActionV1::Deactivate => "inactive",
-        LifecycleActionV1::Archive => "archived",
-        LifecycleActionV1::Tombstone => "tombstoned",
-    };
     let idempotency_key = mutation_idempotency_key(&headers)?;
     let digest = mutation_digest(
         "components.change_lifecycle",
@@ -1299,13 +1192,21 @@ async fn change_lifecycle(
     {
         return Ok(Json(response));
     }
-    let previous: String = sqlx::query_scalar("SELECT lifecycle_state::text FROM component_versions WHERE id=$1 AND component_id=$2 FOR UPDATE")
-        .bind(version_id).bind(component_id).fetch_optional(&mut *transaction).await?.ok_or_else(|| ComponentModuleError::NotFound("Component version not found".into()))?;
-    if previous == next {
-        return Err(ComponentModuleError::Conflict(
-            "Component version already has that lifecycle state".into(),
+    let (publication, previous): (String, String) = sqlx::query_as(
+        "SELECT status::text,lifecycle_state::text FROM component_versions \
+         WHERE id=$1 AND component_id=$2 FOR UPDATE",
+    )
+    .bind(version_id)
+    .bind(component_id)
+    .fetch_optional(&mut *transaction)
+    .await?
+    .ok_or_else(|| ComponentModuleError::NotFound("Component version not found".into()))?;
+    if publication == "draft" {
+        return Err(ComponentModuleError::BadRequest(
+            "Draft Component versions do not have lifecycle actions".into(),
         ));
     }
+    let next = lifecycle_transition(&previous, request.action)?;
     let updated = sqlx::query("UPDATE component_versions SET lifecycle_state=$1::component_lifecycle_state,resource_revision=resource_revision+1,updated_at=now() WHERE id=$2 AND resource_revision=$3")
         .bind(next).bind(version_id).bind(request.expected_resource_revision as i64).execute(&mut *transaction).await?;
     if updated.rows_affected() != 1 {
@@ -1332,6 +1233,21 @@ async fn change_lifecycle(
     .await?;
     transaction.commit().await?;
     Ok(Json(response))
+}
+
+fn lifecycle_transition(
+    current: &str,
+    action: LifecycleActionV1,
+) -> Result<&'static str, ComponentModuleError> {
+    match (current, action) {
+        ("active", LifecycleActionV1::Deactivate) => Ok("inactive"),
+        ("inactive", LifecycleActionV1::Activate) => Ok("active"),
+        ("active" | "inactive", LifecycleActionV1::Archive) => Ok("archived"),
+        ("archived", LifecycleActionV1::Tombstone) => Ok("tombstoned"),
+        _ => Err(ComponentModuleError::BadRequest(format!(
+            "Lifecycle action is not allowed from '{current}'"
+        ))),
+    }
 }
 
 pub(super) async fn get_definition_by_id(
@@ -1666,4 +1582,39 @@ async fn record_mutation_replay<T: Serialize>(
     .execute(&mut **transaction)
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LifecycleActionV1, lifecycle_transition};
+
+    #[test]
+    fn lifecycle_state_machine_retains_the_closed_sprint_7b_contract() {
+        assert_eq!(
+            lifecycle_transition("active", LifecycleActionV1::Deactivate).expect("deactivate"),
+            "inactive"
+        );
+        assert_eq!(
+            lifecycle_transition("inactive", LifecycleActionV1::Activate).expect("activate"),
+            "active"
+        );
+        assert_eq!(
+            lifecycle_transition("active", LifecycleActionV1::Archive).expect("archive"),
+            "archived"
+        );
+        assert_eq!(
+            lifecycle_transition("archived", LifecycleActionV1::Tombstone).expect("tombstone"),
+            "tombstoned"
+        );
+        for action in [
+            LifecycleActionV1::Activate,
+            LifecycleActionV1::Deactivate,
+            LifecycleActionV1::Archive,
+            LifecycleActionV1::Tombstone,
+        ] {
+            assert!(lifecycle_transition("tombstoned", action).is_err());
+        }
+        assert!(lifecycle_transition("active", LifecycleActionV1::Tombstone).is_err());
+        assert!(lifecycle_transition("archived", LifecycleActionV1::Activate).is_err());
+    }
 }

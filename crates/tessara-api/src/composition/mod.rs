@@ -12,7 +12,7 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::Row;
+use sqlx::{Postgres, Row, Transaction};
 use tessara_composition::{
     AUTHORIZATION_API_V1, ActorEvidenceV1, ApplicationBlueprintV1, ApplicationLockfileV1,
     ApplyAuthorizationV1, ApplyOperationKindV1, ApprovedEffectV1, CompositionError,
@@ -177,7 +177,44 @@ struct CoreBootstrapV1 {
     root_node_external_key: String,
     root_node_name: String,
     dataset_id: Uuid,
+    #[serde(default)]
+    dataset_revision_id: Option<Uuid>,
     dataset_external_key: String,
+    #[serde(default)]
+    dataset_rows: Vec<CoreBootstrapDatasetRowV1>,
+    #[serde(default)]
+    additional_nodes: Vec<CoreBootstrapNodeV1>,
+    #[serde(default)]
+    additional_datasets: Vec<CoreBootstrapDatasetV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CoreBootstrapNodeV1 {
+    node_id: Uuid,
+    node_type_id: Uuid,
+    parent_node_id: Option<Uuid>,
+    external_key: String,
+    name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CoreBootstrapDatasetV1 {
+    dataset_id: Uuid,
+    dataset_revision_id: Uuid,
+    external_key: String,
+    name: String,
+    scope_node_ids: Vec<Uuid>,
+    rows: Vec<CoreBootstrapDatasetRowV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CoreBootstrapDatasetRowV1 {
+    row_id: String,
+    restriction_tier: String,
+    label: String,
 }
 
 async fn summary(
@@ -778,66 +815,41 @@ async fn apply_core_bootstrap(
     sqlx::query("INSERT INTO nodes(id,node_type_id,parent_node_id,name) VALUES($1,$2,NULL,$3) ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,name=EXCLUDED.name")
         .bind(request.input.root_node_id).bind(request.input.root_node_type_id).bind(request.input.root_node_name.trim())
         .execute(&mut *transaction).await?;
-    sqlx::query("INSERT INTO datasets(id,name,slug,grain) VALUES($1,$2,$3,'node') ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug")
-        .bind(request.input.dataset_id).bind("Composition Bootstrap Dataset").bind(&request.input.dataset_external_key)
-        .execute(&mut *transaction).await?;
-    sqlx::query(
-        "INSERT INTO dataset_scope_nodes(dataset_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
-    )
-    .bind(request.input.dataset_id)
-    .bind(request.input.root_node_id)
-    .execute(&mut *transaction)
-    .await?;
-    let generated_sql = "SELECT 'composition-bootstrap'::text AS __row_id, \
-                         'public'::text AS __restriction_tier, \
-                         'Reference row'::text AS label";
-    let dataset_revision_id: Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, version_major, version_minor,
-             version_patch, semantic_bump, started_new_major_line, status, published_at,
-             initial_source, operations, generated_sql, output_fields, definition_metadata)
-        VALUES ($1, 1, '1.0.0', 1, 0, 0, 'INITIAL', true, 'published', now(),
-                '{"kind":"composition_bootstrap"}'::jsonb, '[]'::jsonb, $2,
-                jsonb_build_array(jsonb_build_object(
-                    'id', '01980000-0002-7000-8000-000000000006'::uuid,
-                    'key', 'label',
-                    'label', 'Label',
-                    'source_alias', 'composition_bootstrap',
-                    'source_field_key', 'label',
-                    'field_type', 'text',
-                    'position', 0)),
-                jsonb_build_object('name', 'Composition Bootstrap Dataset',
-                                   'slug', $3::text,
-                                   'grain', 'node',
-                                   'visibility_node_ids', jsonb_build_array($4::uuid)))
-        ON CONFLICT (dataset_id, version_number)
-        DO UPDATE SET version_label = EXCLUDED.version_label,
-                      version_major = EXCLUDED.version_major,
-                      version_minor = EXCLUDED.version_minor,
-                      version_patch = EXCLUDED.version_patch,
-                      status = EXCLUDED.status,
-                      published_at = EXCLUDED.published_at,
-                      generated_sql = EXCLUDED.generated_sql,
-                      output_fields = EXCLUDED.output_fields,
-                      definition_metadata = EXCLUDED.definition_metadata
-        RETURNING id
-        "#,
-    )
-    .bind(request.input.dataset_id)
-    .bind(generated_sql)
-    .bind(&request.input.dataset_external_key)
-    .bind(request.input.root_node_id)
-    .fetch_one(&mut *transaction)
-    .await?;
-    crate::datasets::materialize_composition_bootstrap_dataset(
-        &mut transaction,
-        request.input.dataset_id,
-        dataset_revision_id,
-        generated_sql,
-    )
-    .await?;
-    let resource_ids = std::collections::BTreeMap::from([
+    for node in &request.input.additional_nodes {
+        if node.external_key.trim().is_empty() || node.name.trim().is_empty() {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap node input is invalid".into(),
+            ));
+        }
+        sqlx::query("INSERT INTO nodes(id,node_type_id,parent_node_id,name) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,parent_node_id=EXCLUDED.parent_node_id,name=EXCLUDED.name")
+            .bind(node.node_id).bind(node.node_type_id).bind(node.parent_node_id).bind(node.name.trim())
+            .execute(&mut *transaction).await?;
+    }
+    let primary_rows = if request.input.dataset_rows.is_empty() {
+        vec![CoreBootstrapDatasetRowV1 {
+            row_id: "composition-bootstrap".into(),
+            restriction_tier: "public".into(),
+            label: "Reference row".into(),
+        }]
+    } else {
+        request.input.dataset_rows.clone()
+    };
+    let primary_dataset = CoreBootstrapDatasetV1 {
+        dataset_id: request.input.dataset_id,
+        dataset_revision_id: request
+            .input
+            .dataset_revision_id
+            .unwrap_or_else(Uuid::new_v4),
+        external_key: request.input.dataset_external_key.clone(),
+        name: "Composition Bootstrap Dataset".into(),
+        scope_node_ids: vec![request.input.root_node_id],
+        rows: primary_rows,
+    };
+    seed_core_bootstrap_dataset(&mut transaction, &primary_dataset).await?;
+    for dataset in &request.input.additional_datasets {
+        seed_core_bootstrap_dataset(&mut transaction, dataset).await?;
+    }
+    let mut resource_ids = std::collections::BTreeMap::from([
         (
             request.input.root_node_external_key.clone(),
             request.input.root_node_id.to_string(),
@@ -847,6 +859,12 @@ async fn apply_core_bootstrap(
             request.input.dataset_id.to_string(),
         ),
     ]);
+    for node in &request.input.additional_nodes {
+        resource_ids.insert(node.external_key.clone(), node.node_id.to_string());
+    }
+    for dataset in &request.input.additional_datasets {
+        resource_ids.insert(dataset.external_key.clone(), dataset.dataset_id.to_string());
+    }
     let result_digest =
         canonical_digest(&resource_ids).map_err(|error| ApiError::Internal(error.into()))?;
     let response = tessara_composition::OwnerBootstrapResponseV1 {
@@ -865,6 +883,101 @@ async fn apply_core_bootstrap(
         .execute(&mut *transaction).await?;
     transaction.commit().await?;
     Ok(Json(response))
+}
+
+async fn seed_core_bootstrap_dataset(
+    transaction: &mut Transaction<'_, Postgres>,
+    dataset: &CoreBootstrapDatasetV1,
+) -> ApiResult<()> {
+    if dataset.external_key.trim().is_empty()
+        || dataset.name.trim().is_empty()
+        || dataset.scope_node_ids.is_empty()
+        || dataset.rows.is_empty()
+        || dataset.rows.len() > 1_000
+    {
+        return Err(ApiError::BadRequest(
+            "Core bootstrap Dataset input is invalid".into(),
+        ));
+    }
+    let mut row_ids = BTreeSet::new();
+    for row in &dataset.rows {
+        if row.row_id.trim().is_empty()
+            || row.label.trim().is_empty()
+            || !row_ids.insert(row.row_id.as_str())
+            || !matches!(
+                row.restriction_tier.as_str(),
+                "public" | "internal" | "restricted" | "confidential"
+            )
+        {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap Dataset row input is invalid".into(),
+            ));
+        }
+    }
+    let generated_sql = format!(
+        "SELECT * FROM (VALUES {}) AS fixture(__row_id,__restriction_tier,label)",
+        dataset
+            .rows
+            .iter()
+            .map(|row| format!(
+                "({}::text,{}::text,{}::text)",
+                sql_text_literal(&row.row_id),
+                sql_text_literal(&row.restriction_tier),
+                sql_text_literal(&row.label)
+            ))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    sqlx::query("INSERT INTO datasets(id,name,slug,grain,authority_revision) VALUES($1,$2,$3,'node',2) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,authority_revision=GREATEST(datasets.authority_revision,2)")
+        .bind(dataset.dataset_id).bind(dataset.name.trim()).bind(dataset.external_key.trim())
+        .execute(&mut **transaction).await?;
+    for node_id in &dataset.scope_node_ids {
+        sqlx::query("INSERT INTO dataset_scope_nodes(dataset_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING")
+            .bind(dataset.dataset_id).bind(node_id).execute(&mut **transaction).await?;
+    }
+    let revision_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO dataset_revisions
+            (id,dataset_id,version_number,version_label,version_major,version_minor,
+             version_patch,semantic_bump,started_new_major_line,status,published_at,
+             initial_source,operations,generated_sql,output_fields,definition_metadata,
+             restriction_policy)
+        VALUES ($1,$2,1,'1.0.0',1,0,0,'INITIAL',true,'published',now(),
+                '{"kind":"composition_bootstrap"}'::jsonb,'[]'::jsonb,$3,
+                jsonb_build_array(jsonb_build_object(
+                    'id','01980000-0002-7000-8000-000000000006'::uuid,
+                    'key','label','label','Label','source_alias','composition_bootstrap',
+                    'source_field_key','label','field_type','text','position',0)),
+                jsonb_build_object('name',$4::text,'slug',$5::text,'grain','node',
+                    'visibility_node_ids',to_jsonb($6::uuid[])),
+                NULL)
+        ON CONFLICT (dataset_id,version_number)
+        DO UPDATE SET status=EXCLUDED.status,published_at=EXCLUDED.published_at,
+                      generated_sql=EXCLUDED.generated_sql,output_fields=EXCLUDED.output_fields,
+                      definition_metadata=EXCLUDED.definition_metadata,
+                      restriction_policy=EXCLUDED.restriction_policy
+        RETURNING id
+        "#,
+    )
+    .bind(dataset.dataset_revision_id)
+    .bind(dataset.dataset_id)
+    .bind(&generated_sql)
+    .bind(dataset.name.trim())
+    .bind(dataset.external_key.trim())
+    .bind(&dataset.scope_node_ids)
+    .fetch_one(&mut **transaction)
+    .await?;
+    crate::datasets::materialize_composition_bootstrap_dataset(
+        transaction,
+        dataset.dataset_id,
+        revision_id,
+        &generated_sql,
+    )
+    .await
+}
+
+fn sql_text_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 async fn adopt_drift(
@@ -1267,6 +1380,34 @@ pub(crate) async fn native_page(State(state): State<AppState>, headers: HeaderMa
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sprint_8a_core_bootstrap_is_typed_and_owns_the_exact_semantic_seed() {
+        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8a/blueprints/reference.json"
+        )))
+        .expect("valid Sprint 8A Blueprint");
+        let tessara_composition::BootstrapInputV1::Inline { value, .. } =
+            blueprint.core.bootstrap.expect("Core bootstrap")
+        else {
+            panic!("Sprint 8A Core bootstrap must be inline");
+        };
+        let bootstrap: CoreBootstrapV1 =
+            serde_json::from_value(value).expect("typed Core bootstrap");
+        assert_eq!(bootstrap.dataset_rows.len(), 30);
+        assert_eq!(
+            bootstrap
+                .dataset_rows
+                .iter()
+                .filter(|row| row.row_id.starts_with("uat7a-page-"))
+                .count(),
+            26
+        );
+        assert_eq!(bootstrap.additional_nodes.len(), 1);
+        assert_eq!(bootstrap.additional_datasets.len(), 1);
+        assert_eq!(bootstrap.additional_datasets[0].rows.len(), 1);
+    }
 
     #[test]
     fn checked_catalog_manifest_digests_match_runtime_manifests() {

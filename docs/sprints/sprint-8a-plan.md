@@ -1,7 +1,11 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Implementation complete and ready for the specialized validation
-workflow. No candidate has been frozen, and SIT, UAT, and closeout have not run.
+Status: Implementation-readiness correction complete after validation was
+explicitly exited during incomplete Candidate Rehearsal attempt 27. Focused
+implementation checks pass, but no current readiness or rehearsal result is
+authorized. A new complete Validation Readiness and Candidate Rehearsal cycle
+must start from the corrected clean commit. No candidate has been frozen, and
+preflight, SIT, UAT, and closeout have not run.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`

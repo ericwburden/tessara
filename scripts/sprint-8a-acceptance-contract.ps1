@@ -9,12 +9,12 @@ $script:Sprint8AFixture = [ordered]@{
     table_placement_id = "01980000-0003-7000-8000-000000000003"
     stat_placement_id = "01980000-0003-7000-8000-000000000002"
     component_versions = [ordered]@{
-        table = "01980000-0001-7000-8000-000000000010"
-        bar = "01980000-0001-7000-8000-000000000011"
+        table = "01980000-0001-7000-8000-000000000002"
+        bar = "01980000-0001-7000-8000-000000000003"
         line = "01980000-0001-7000-8000-000000000012"
         pie = "01980000-0001-7000-8000-000000000013"
         donut = "01980000-0001-7000-8000-000000000014"
-        stat_card = "01980000-0001-7000-8000-000000000015"
+        stat_card = "01980000-0001-7000-8000-000000000001"
     }
 }
 
@@ -109,12 +109,15 @@ function Test-Sprint8AAcceptanceContract {
         'SplitComponentOwnership',
         "kind='module_instance'",
         "resource_type='tessara.components.component_version'",
-        'generate_series(1,26)',
-        'materialized_row_count=30'
+        'if (-not $OwnerControlledSeed)'
     )) {
         if (-not $semanticFixtureText.Contains($requiredFragment)) {
             throw "Sprint 8A semantic fixtures do not preserve the extracted Component ownership contract ('$requiredFragment')."
         }
+    }
+    $compositionBootstrapText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1") -Raw
+    if (-not $compositionBootstrapText.Contains('-OwnerControlledSeed:($RuntimeLabel -ceq "sprint-8a")')) {
+        throw "Sprint 8A composition must keep product seed writes inside each owning bootstrap API."
     }
     $dashboardAcceptanceText = Get-Content -LiteralPath (Join-Path $repoRoot "end2end/tests/dashboards.spec.ts") -Raw
     if (-not $dashboardAcceptanceText.Contains('option.component_slug === "sprint-8a-record-table"')) {
@@ -160,6 +163,41 @@ function Test-Sprint8AAcceptanceContract {
     }
 
     $blueprint = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/blueprints/reference.json") -Raw | ConvertFrom-Json
+    $coreBootstrap = $blueprint.core.bootstrap.value
+    if (@($coreBootstrap.dataset_rows).Count -ne 30 -or
+        @($coreBootstrap.dataset_rows | Where-Object row_id -CLike 'uat7a-page-*').Count -ne 26 -or
+        @($coreBootstrap.additional_datasets).Count -ne 1) {
+        throw "Sprint 8A Core bootstrap must own the exact 30-row primary Dataset and blocked Dataset seed."
+    }
+    $componentBootstrap = @($blueprint.modules | Where-Object definition_id -CEQ 'tessara.components')[0].bootstrap.value
+    $expectedComponentKeys = @(
+        'sprint-8a-blocked-component', 'sprint-8a-label-bar', 'sprint-8a-label-donut',
+        'sprint-8a-label-line', 'sprint-8a-label-pie', 'sprint-8a-record-table', 'sprint-8a-row-count'
+    ) | Sort-Object
+    $actualComponentKeys = @($componentBootstrap.components.external_key | Sort-Object)
+    if (($actualComponentKeys -join ',') -cne ($expectedComponentKeys -join ',')) {
+        throw "Sprint 8A Component bootstrap does not own the exact canonical Component seed inventory."
+    }
+    $expectedVersionByKey = [ordered]@{
+        'sprint-8a-record-table' = $script:Sprint8AFixture.component_versions.table
+        'sprint-8a-label-bar' = $script:Sprint8AFixture.component_versions.bar
+        'sprint-8a-label-line' = $script:Sprint8AFixture.component_versions.line
+        'sprint-8a-label-pie' = $script:Sprint8AFixture.component_versions.pie
+        'sprint-8a-label-donut' = $script:Sprint8AFixture.component_versions.donut
+        'sprint-8a-row-count' = $script:Sprint8AFixture.component_versions.stat_card
+    }
+    foreach ($key in $expectedVersionByKey.Keys) {
+        $item = @($componentBootstrap.components | Where-Object external_key -CEQ $key)
+        if ($item.Count -ne 1 -or [string]$item[0].component_version_id -cne [string]$expectedVersionByKey[$key]) {
+            throw "Sprint 8A acceptance identity '$key' differs from its owner bootstrap identity."
+        }
+    }
+    $dashboardBootstrap = @($blueprint.modules | Where-Object definition_id -CEQ 'tessara.dashboards')[0].bootstrap.value
+    if (@($dashboardBootstrap.placements).Count -ne 4 -or
+        (@($dashboardBootstrap.placements.placement_id | Sort-Object) -join ',') -cne
+        (@('01980000-0003-7000-8000-000000000002','01980000-0003-7000-8000-000000000003','01980000-0003-7000-8000-000000000004','01980000-0003-7000-8000-000000000005') -join ',')) {
+        throw "Sprint 8A Dashboard bootstrap must own the exact four-placement acceptance inventory."
+    }
     $expectedNavigation = [ordered]@{
         "tessara.reference.scoped-records.navigation" = 7
         "tessara.components.navigation" = 8

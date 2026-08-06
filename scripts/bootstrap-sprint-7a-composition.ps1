@@ -48,7 +48,8 @@ function Prepare-Sprint7AUatFixtures {
         -BaseUrl $CoreUrl `
         -AdminEmail "admin@tessara.local" `
         -AdminPassword "tessara-dev-admin" `
-        -ComposeProject $expectedProject | Out-Null
+        -ComposeProject $expectedProject `
+        -OwnerControlledSeed:($RuntimeLabel -ceq "sprint-8a") | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "$RuntimeLabel semantic UAT fixture preparation failed."
     }

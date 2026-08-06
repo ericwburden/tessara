@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use axum::{Json, Router, body::Bytes, extract::State, http::HeaderMap, routing::post};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
@@ -15,7 +17,8 @@ use tessara_components_contract::{
 use tessara_datasets_contract::{
     DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction, DatasetAggregate, DatasetAggregateFunction,
     DatasetExecutionRequest, DatasetExecutionResponse, DatasetFilter, DatasetFilterOperator,
-    DatasetMajorLineReference, DatasetSort, DatasetSortDirection,
+    DatasetMajorLineReference, DatasetMissingPolicy, DatasetSearch, DatasetSort,
+    DatasetSortDirection,
 };
 use tessara_module_contract::{
     AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1, AuthorizationExchangeRequestV1,
@@ -216,12 +219,13 @@ pub(super) fn execution_request(
     config: &Value,
     query: &str,
 ) -> Result<DatasetExecutionRequest, ComponentModuleError> {
-    let filters = config
+    let parameters = query_parameters(query)?;
+    let mut filters = config
         .get("filters")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .map(|filter| {
+        .map(|filter| -> Result<DatasetFilter, ComponentModuleError> {
             let field_key = filter
                 .get("field")
                 .or_else(|| filter.get("field_key"))
@@ -229,28 +233,12 @@ pub(super) fn execution_request(
                 .ok_or_else(|| {
                     ComponentModuleError::BadRequest("Component filter field is invalid".into())
                 })?;
-            let operator = match filter
-                .get("operator")
-                .and_then(Value::as_str)
-                .unwrap_or("eq")
-            {
-                "eq" | "equals" => DatasetFilterOperator::Eq,
-                "not_eq" | "not_equals" => DatasetFilterOperator::NotEq,
-                "contains" => DatasetFilterOperator::Contains,
-                "starts_with" => DatasetFilterOperator::StartsWith,
-                "ends_with" => DatasetFilterOperator::EndsWith,
-                "gt" | "greater_than" => DatasetFilterOperator::GreaterThan,
-                "gte" | "greater_than_or_equal" => DatasetFilterOperator::GreaterThanOrEqual,
-                "lt" | "less_than" => DatasetFilterOperator::LessThan,
-                "lte" | "less_than_or_equal" => DatasetFilterOperator::LessThanOrEqual,
-                "is_null" => DatasetFilterOperator::IsNull,
-                "is_not_null" => DatasetFilterOperator::IsNotNull,
-                _ => {
-                    return Err(ComponentModuleError::BadRequest(
-                        "Component filter operator is invalid".into(),
-                    ));
-                }
-            };
+            let operator = filter_operator(
+                filter
+                    .get("operator")
+                    .and_then(Value::as_str)
+                    .unwrap_or("equals"),
+            )?;
             Ok(DatasetFilter {
                 field_key: field_key.into(),
                 operator,
@@ -258,13 +246,16 @@ pub(super) fn execution_request(
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
+    filters.extend(query_filters(&parameters)?);
     let mut projection = Vec::new();
     let mut group_by = Vec::new();
+    let mut group_missing_policies = BTreeMap::new();
     let mut aggregates = Vec::new();
     let mut order_by = Vec::new();
-    let mut limit = query_limit(query);
+    let mut limit = query_limit(&parameters, config);
+    let mut search = None;
     if component_type == "table" {
-        projection = config
+        let configured_projection: Vec<String> = config
             .get("visible_columns")
             .and_then(Value::as_array)
             .into_iter()
@@ -273,9 +264,57 @@ pub(super) fn execution_request(
                 item.as_str()
                     .or_else(|| item.get("key").and_then(Value::as_str))
                     .or_else(|| item.get("field").and_then(Value::as_str))
+                    .or_else(|| item.get("field_key").and_then(Value::as_str))
             })
             .map(str::to_string)
             .collect();
+        projection = parameters
+            .get("visible_columns")
+            .map(|value| csv_keys(value))
+            .filter(|values| !values.is_empty())
+            .unwrap_or_else(|| configured_projection.clone());
+        if projection
+            .iter()
+            .any(|field| !configured_projection.contains(field))
+        {
+            return Err(ComponentModuleError::BadRequest(
+                "Runtime visible columns cannot expand the Component projection".into(),
+            ));
+        }
+        if let Some(query) = parameters
+            .get("search")
+            .filter(|value| !value.trim().is_empty())
+        {
+            let configured_search = config
+                .get("search_fields")
+                .and_then(Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .filter(|values| !values.is_empty())
+                .unwrap_or_else(|| projection.clone());
+            search = Some(DatasetSearch {
+                field_keys: configured_search,
+                query: query.clone(),
+            });
+        }
+        if let Some(sort) = parameters
+            .get("sort")
+            .map(|value| parse_sort(value))
+            .transpose()?
+            .or_else(|| config.get("default_sort").and_then(parse_stored_sort))
+        {
+            if !projection.contains(&sort.field_key) {
+                return Err(ComponentModuleError::BadRequest(
+                    "Component table sort field is outside the projection".into(),
+                ));
+            }
+            order_by.push(sort);
+        }
     } else {
         let summary_type = config
             .get("summary_type")
@@ -288,8 +327,11 @@ pub(super) fn execution_request(
             .map(str::to_string);
         let function = match summary_type {
             "row_count" | "count" => DatasetAggregateFunction::Count,
+            "unique_count" => DatasetAggregateFunction::UniqueCount,
             "sum" => DatasetAggregateFunction::Sum,
             "average" | "avg" => DatasetAggregateFunction::Average,
+            "median" => DatasetAggregateFunction::Median,
+            "none" => DatasetAggregateFunction::SingleValue,
             "minimum" | "min" => DatasetAggregateFunction::Minimum,
             "maximum" | "max" => DatasetAggregateFunction::Maximum,
             _ => {
@@ -306,6 +348,13 @@ pub(super) fn execution_request(
             },
             function,
             output_key: "summary_value".into(),
+            missing_policy: missing_policy(
+                config
+                    .get("value_missing_policy")
+                    .or_else(|| config.get("missing_policy"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("omit"),
+            )?,
         });
         if component_type != "stat_card" {
             let category = if component_type == "line" {
@@ -319,12 +368,36 @@ pub(super) fn execution_request(
                 ComponentModuleError::BadRequest("Component category field is required".into())
             })?;
             group_by.push(category.into());
+            group_missing_policies.insert(
+                category.into(),
+                missing_policy(
+                    config
+                        .get(if component_type == "line" {
+                            "x_missing_policy"
+                        } else {
+                            "category_missing_policy"
+                        })
+                        .or_else(|| config.get("missing_policy"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("omit"),
+                )?,
+            );
             if let Some(comparison) = config
                 .get("comparison_field")
                 .and_then(Value::as_str)
                 .filter(|v| !v.is_empty())
             {
                 group_by.push(comparison.into());
+                group_missing_policies.insert(
+                    comparison.into(),
+                    missing_policy(
+                        config
+                            .get("comparison_missing_policy")
+                            .or_else(|| config.get("missing_policy"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("omit"),
+                    )?,
+                );
             }
         }
         limit = config
@@ -363,11 +436,24 @@ pub(super) fn execution_request(
         projection,
         filters,
         group_by,
+        group_missing_policies,
         aggregates,
         order_by,
         limit,
-        cursor: query_cursor(query)?,
+        search,
+        cursor: query_cursor(&parameters)?,
     })
+}
+
+fn missing_policy(value: &str) -> Result<DatasetMissingPolicy, ComponentModuleError> {
+    match value {
+        "omit" => Ok(DatasetMissingPolicy::Omit),
+        "zero" => Ok(DatasetMissingPolicy::Zero),
+        "explicit_missing" => Ok(DatasetMissingPolicy::ExplicitMissing),
+        _ => Err(ComponentModuleError::BadRequest(
+            "Component missing-value policy is invalid".into(),
+        )),
+    }
 }
 
 pub(super) fn render_execution(
@@ -388,7 +474,10 @@ pub(super) fn render_execution(
         "dataset_reference": dataset_reference,
         "component_type": component_type,
         "materialization_state": execution.materialization_state,
-        "columns": execution.fields.into_iter().map(|field| json!({"key":field.key,"label":field.label,"field_type":field.field_type})).collect::<Vec<_>>(),
+        "columns": execution.fields.into_iter().map(|field| {
+            let label = config.get("display_labels").and_then(Value::as_object).and_then(|labels| labels.get(&field.key)).and_then(Value::as_str).unwrap_or(&field.label);
+            json!({"key":field.key,"label":label,"field_type":field.field_type})
+        }).collect::<Vec<_>>(),
         "rows": values,
         "pagination": {"page_size":limit,"next_cursor":execution.next_cursor,"has_more":execution.next_cursor.is_some()}
         });
@@ -444,7 +533,7 @@ pub(super) fn render_execution(
     } else {
         Vec::new()
     };
-    json!({"schema_version":1,"component_version_id":version_id,"component_id":component_id,"dataset_reference":dataset_reference,"component_type":component_type,"materialization_state":execution.materialization_state,"value_format":value_format,"legend_title":config.get("legend_title"),"bar_orientation":config.get("orientation"),"bar_comparison_layout":config.get("comparison_layout"),"x_axis_label":config.get("x_axis_label"),"y_axis_label":config.get("y_axis_label"),"line_smoothing":config.get("line_smoothing"),"stat":stat,"points":points,"slices":slices})
+    json!({"schema_version":1,"component_version_id":version_id,"component_id":component_id,"dataset_reference":dataset_reference,"component_type":component_type,"materialization_state":execution.materialization_state,"value_format":value_format,"legend_title":config.get("legend_title"),"bar_orientation":config.get("orientation"),"bar_comparison_layout":config.get("comparison_layout"),"x_axis_label":config.get("x_axis_label"),"y_axis_label":config.get("y_axis_label"),"line_smoothing":config.get("smoothing"),"stat":stat,"points":points,"slices":slices})
 }
 
 fn text_value(value: &Value) -> String {
@@ -837,20 +926,27 @@ fn sha256_hex(value: &[u8]) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect()
 }
-fn query_limit(query: &str) -> u32 {
-    query
-        .split('&')
-        .find_map(|part| part.strip_prefix("page_size=")?.parse::<u32>().ok())
+fn query_limit(parameters: &BTreeMap<String, String>, config: &Value) -> u32 {
+    parameters
+        .get("page_size")
+        .and_then(|value| value.parse::<u32>().ok())
+        .or_else(|| {
+            config
+                .get("page_size")
+                .and_then(Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+        })
         .unwrap_or(25)
-        .clamp(1, 1000)
+        .clamp(1, 200)
 }
-fn query_cursor(query: &str) -> Result<Option<String>, ComponentModuleError> {
-    query
-        .split('&')
-        .find_map(|part| part.strip_prefix("cursor="))
+
+fn query_cursor(
+    parameters: &BTreeMap<String, String>,
+) -> Result<Option<String>, ComponentModuleError> {
+    parameters
+        .get("cursor")
         .map(|value| {
-            let decoded = value.replace("%3A", ":").replace("%3a", ":");
-            let offset = decoded
+            let offset = value
                 .strip_prefix("offset:")
                 .and_then(|value| value.parse::<u32>().ok())
                 .filter(|value| *value > 0)
@@ -860,6 +956,152 @@ fn query_cursor(query: &str) -> Result<Option<String>, ComponentModuleError> {
             Ok(format!("offset:{offset}"))
         })
         .transpose()
+}
+
+fn query_parameters(query: &str) -> Result<BTreeMap<String, String>, ComponentModuleError> {
+    query
+        .split('&')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let (key, value) = part.split_once('=').unwrap_or((part, ""));
+            Ok((percent_decode(key)?, percent_decode(value)?))
+        })
+        .collect()
+}
+
+fn percent_decode(value: &str) -> Result<String, ComponentModuleError> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'+' => decoded.push(b' '),
+            b'%' if index + 2 < bytes.len() => {
+                let pair = std::str::from_utf8(&bytes[index + 1..index + 3]).map_err(|_| {
+                    ComponentModuleError::BadRequest("Component query encoding is invalid".into())
+                })?;
+                decoded.push(u8::from_str_radix(pair, 16).map_err(|_| {
+                    ComponentModuleError::BadRequest("Component query encoding is invalid".into())
+                })?);
+                index += 2;
+            }
+            b'%' => {
+                return Err(ComponentModuleError::BadRequest(
+                    "Component query encoding is invalid".into(),
+                ));
+            }
+            byte => decoded.push(byte),
+        }
+        index += 1;
+    }
+    String::from_utf8(decoded)
+        .map_err(|_| ComponentModuleError::BadRequest("Component query encoding is invalid".into()))
+}
+
+fn query_filters(
+    parameters: &BTreeMap<String, String>,
+) -> Result<Vec<DatasetFilter>, ComponentModuleError> {
+    let mut filters = BTreeMap::<String, (Option<String>, Option<String>)>::new();
+    for (key, value) in parameters {
+        let Some(remainder) = key.strip_prefix("filter[") else {
+            continue;
+        };
+        let Some((field, suffix)) = remainder.split_once("][") else {
+            continue;
+        };
+        let Some(kind) = suffix.strip_suffix(']') else {
+            continue;
+        };
+        let entry = filters.entry(field.into()).or_default();
+        match kind {
+            "operator" => entry.0 = Some(value.clone()),
+            "value" => entry.1 = Some(value.clone()),
+            _ => {}
+        }
+    }
+    filters
+        .into_iter()
+        .map(|(field_key, (operator, value))| {
+            let operator = operator.ok_or_else(|| {
+                ComponentModuleError::BadRequest(format!(
+                    "Component table filter for '{field_key}' is missing an operator"
+                ))
+            })?;
+            Ok(DatasetFilter {
+                field_key,
+                operator: filter_operator(&operator)?,
+                value: value.map(Value::String),
+            })
+        })
+        .collect()
+}
+
+fn filter_operator(value: &str) -> Result<DatasetFilterOperator, ComponentModuleError> {
+    match value {
+        "eq" | "equals" => Ok(DatasetFilterOperator::Eq),
+        "not_eq" | "not_equals" => Ok(DatasetFilterOperator::NotEq),
+        "contains" => Ok(DatasetFilterOperator::Contains),
+        "not_contains" => Ok(DatasetFilterOperator::NotContains),
+        "starts_with" => Ok(DatasetFilterOperator::StartsWith),
+        "ends_with" => Ok(DatasetFilterOperator::EndsWith),
+        "gt" | "greater_than" => Ok(DatasetFilterOperator::GreaterThan),
+        "gte" | "greater_than_or_equal" => Ok(DatasetFilterOperator::GreaterThanOrEqual),
+        "lt" | "less_than" => Ok(DatasetFilterOperator::LessThan),
+        "lte" | "less_than_or_equal" => Ok(DatasetFilterOperator::LessThanOrEqual),
+        "between" => Ok(DatasetFilterOperator::Between),
+        "not_between" => Ok(DatasetFilterOperator::NotBetween),
+        "is_empty" => Ok(DatasetFilterOperator::IsEmpty),
+        "is_not_empty" => Ok(DatasetFilterOperator::IsNotEmpty),
+        "is_null" => Ok(DatasetFilterOperator::IsNull),
+        "is_not_null" => Ok(DatasetFilterOperator::IsNotNull),
+        _ => Err(ComponentModuleError::BadRequest(
+            "Component filter operator is invalid".into(),
+        )),
+    }
+}
+
+fn parse_sort(value: &str) -> Result<DatasetSort, ComponentModuleError> {
+    let (field_key, direction) = value.split_once(':').unwrap_or((value, "asc"));
+    if field_key.trim().is_empty() {
+        return Err(ComponentModuleError::BadRequest(
+            "Component table sort field is required".into(),
+        ));
+    }
+    let direction = match direction.trim().to_ascii_lowercase().as_str() {
+        "" | "asc" => DatasetSortDirection::Asc,
+        "desc" => DatasetSortDirection::Desc,
+        _ => {
+            return Err(ComponentModuleError::BadRequest(
+                "Component table sort direction must be asc or desc".into(),
+            ));
+        }
+    };
+    Ok(DatasetSort {
+        field_key: field_key.trim().into(),
+        direction,
+    })
+}
+
+fn parse_stored_sort(value: &Value) -> Option<DatasetSort> {
+    let field_key = value.get("field_key")?.as_str()?.to_string();
+    let direction = if value.get("direction").and_then(Value::as_str) == Some("desc") {
+        DatasetSortDirection::Desc
+    } else {
+        DatasetSortDirection::Asc
+    };
+    Some(DatasetSort {
+        field_key,
+        direction,
+    })
+}
+
+fn csv_keys(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 fn unavailable_security() -> ComponentModuleError {
     ComponentModuleError::Unavailable("Component security state is unavailable".into())
@@ -874,7 +1116,9 @@ mod tests {
 
     use serde_json::json;
     use tessara_datasets_contract::{
-        DatasetExecutionResponse, DatasetExecutionRow, DatasetMajorLineReference,
+        DatasetAggregateFunction, DatasetExecutionResponse, DatasetExecutionRow,
+        DatasetFilterOperator, DatasetMajorLineReference, DatasetMissingPolicy,
+        DatasetSortDirection,
     };
     use uuid::Uuid;
 
@@ -933,9 +1177,98 @@ mod tests {
         let request = execution_request(dataset_reference(), "table", &config, "page_size=250")
             .expect("table request");
         assert_eq!(request.projection, ["participant", "status"]);
-        assert_eq!(request.limit, 250);
+        assert_eq!(request.limit, 200);
         assert!(request.group_by.is_empty());
         assert!(request.aggregates.is_empty());
+    }
+
+    #[test]
+    fn table_execution_preserves_runtime_search_sort_filter_and_narrowing_semantics() {
+        let config = json!({
+            "visible_columns":["participant", "status", "score"],
+            "search_fields":["participant", "status"],
+            "default_sort":{"field_key":"participant", "direction":"asc"},
+            "page_size":50
+        });
+        let request = execution_request(
+            dataset_reference(),
+            "table",
+            &config,
+            "visible_columns=participant%2Cscore&search=North+Team&sort=score%3Adesc&filter%5Bscore%5D%5Boperator%5D=between&filter%5Bscore%5D%5Bvalue%5D=10..20",
+        )
+        .expect("table controls");
+        assert_eq!(request.projection, ["participant", "score"]);
+        let search = request.search.expect("search contract");
+        assert_eq!(search.field_keys, ["participant", "status"]);
+        assert_eq!(search.query, "North Team");
+        assert_eq!(request.order_by.len(), 1);
+        assert_eq!(request.order_by[0].field_key, "score");
+        assert_eq!(request.order_by[0].direction, DatasetSortDirection::Desc);
+        assert_eq!(request.filters.len(), 1);
+        assert_eq!(request.filters[0].field_key, "score");
+        assert_eq!(request.filters[0].operator, DatasetFilterOperator::Between);
+        assert_eq!(request.filters[0].value, Some(json!("10..20")));
+        assert_eq!(request.limit, 50);
+
+        assert!(
+            execution_request(
+                dataset_reference(),
+                "table",
+                &config,
+                "visible_columns=undeclared"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn visual_execution_uses_each_canonical_aggregate_identity() {
+        for (summary_type, expected) in [
+            ("unique_count", DatasetAggregateFunction::UniqueCount),
+            ("median", DatasetAggregateFunction::Median),
+            ("none", DatasetAggregateFunction::SingleValue),
+        ] {
+            let config = json!({
+                "summary_type":summary_type,
+                "summary_field":"score",
+                "label":"Score"
+            });
+            let request = execution_request(dataset_reference(), "stat_card", &config, "")
+                .expect("aggregate request");
+            assert_eq!(request.aggregates.len(), 1);
+            assert_eq!(request.aggregates[0].function, expected);
+            assert_eq!(request.aggregates[0].field_key.as_deref(), Some("score"));
+        }
+    }
+
+    #[test]
+    fn visual_execution_preserves_value_and_dimension_missing_policies() {
+        let config = json!({
+            "mode":"comparison",
+            "summary_type":"sum",
+            "summary_field":"score",
+            "missing_policy":"omit",
+            "value_missing_policy":"zero",
+            "category_field":"status",
+            "category_missing_policy":"explicit_missing",
+            "comparison_field":"program",
+            "comparison_missing_policy":"omit",
+            "comparison_layout":"stacked"
+        });
+        let request =
+            execution_request(dataset_reference(), "bar", &config, "").expect("missing policies");
+        assert_eq!(
+            request.aggregates[0].missing_policy,
+            DatasetMissingPolicy::Zero
+        );
+        assert_eq!(
+            request.group_missing_policies["status"],
+            DatasetMissingPolicy::ExplicitMissing
+        );
+        assert_eq!(
+            request.group_missing_policies["program"],
+            DatasetMissingPolicy::Omit
+        );
     }
 
     #[test]

@@ -1,11 +1,12 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 26 completed a fail-late diagnostic harvest;
-its consolidated product/acceptance/harness correction requires a complete
-restarted readiness/rehearsal cycle. The attempt retained six findings, passed
-nine checks, failed three check groups, and blocked only the aggregate final
-check. No candidate has been frozen; SIT, formal UAT, and closeout remain Not
-Run.
+Status: Validation was explicitly exited during Candidate Rehearsal attempt 27
+so implementation readiness could be re-established. Attempt 27 remains an
+incomplete, non-authoritative `running` receipt bound to clean commit
+`9a9b351722d1372b14f9652d263c027c7dd7380a`; it must never be completed or used
+as a prerequisite. The source is mutable, and the correction batch below
+invalidates every earlier readiness/rehearsal result. No candidate has been
+frozen; preflight, SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -13,6 +14,62 @@ Run.
 - Execution contract: [Sprint 8A plan](./sprint-8a-plan.md)
 
 ## Implementation Readiness Snapshot
+
+### Post-attempt-27 implementation correction
+
+The 2026-08-06 implementation audit reconstructed the sprint behavior from the
+Sprint 8A acceptance criteria and the closed Sprint 4A/4B/7B Component
+contracts instead of treating repeated harness progress as product readiness.
+It identified one consolidated implementation-readiness batch:
+
+- **Product lifecycle defect:** the extracted Component module permitted
+  transitions outside the closed state machine, including draft lifecycle
+  actions and invalid tombstone/reactivation paths.
+- **Product authoring defect:** extracted validation accepted unknown keys,
+  unavailable fields, invalid type/operator combinations, invalid visual
+  modes and limits, and overlong version notes.
+- **Product execution defect:** the cross-process Dataset execution path had
+  lost table search, runtime projection narrowing, configured/runtime sort,
+  complete filters, typed comparisons, unique count, median, do-not-summarize,
+  display labels, smoothing, and value/dimension missing-policy semantics.
+- **Architecture/fixture defect:** Sprint 8A reused a Sprint 7A fixture helper
+  that directly mutated Core, Component, and Dashboard product tables after
+  owner bootstrap. This crossed database ownership boundaries and could hide
+  incomplete signed bootstrap inputs.
+- **Acceptance/bootstrap defect:** the signed Blueprint did not own the full
+  recognizable 30-row/blocked-scope Dataset seed and exact Dashboard
+  placements, while Sprint 8A acceptance identities still named superseded
+  Component versions. Core bootstrap also attempted to write a nonexistent
+  Dataset-revision authority column.
+
+The consolidated correction restores the lifecycle and authoring contracts,
+extends the typed Dataset execution contract and Core adapter, moves all
+Sprint 8A product seed into the owning signed bootstraps, makes the legacy
+fixture helper account/security-only for Sprint 8A, and binds acceptance to
+exact owner-bootstrap identities. The Dashboard bootstrap now establishes its
+own authority revision, and the materialization audit asserts exact Component
+external keys rather than a copied count. Validation Readiness now parses the
+owner-controlled fixture preparer and Sprint 8A acceptance contract explicitly,
+closing the enforcement gap that let seed-path syntax sit outside its runner
+inventory.
+
+Focused implementation verification for this mutable batch is recorded below.
+These checks do not constitute Validation Readiness or Candidate Rehearsal:
+
+- touched Sprint 8A PowerShell files parse: Passed;
+- `cargo check --locked` for Dataset contract, Component module, Core API, and
+  Dashboard module: Passed with zero warnings;
+- focused Clippy for those four packages across all targets with
+  `-D warnings`: Passed;
+- Component, Dashboard, and Dataset-contract library tests: Passed (18, 13,
+  and 3 tests), and the focused Core Dataset-adapter/bootstrap suites passed
+  (3 and 1 tests);
+- Sprint 7A/Sprint 8A acceptance-contract evaluation and owner-controlled
+  fixture-preparer self-test: Passed.
+
+A fresh complete Validation Readiness run and then a fresh complete Candidate
+Rehearsal run are required against the same new clean source/environment
+identity before preflight may begin.
 
 Observed on the mutable `codex/sprint-8a` implementation tree on 2026-08-05:
 

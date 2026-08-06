@@ -15,7 +15,7 @@ use tessara_datasets_contract::{
     DatasetCompatibilityRequest, DatasetCompatibilityResponse, DatasetDistinctValuesRequest,
     DatasetDistinctValuesResponse, DatasetExecutionRequest, DatasetExecutionResponse,
     DatasetExecutionRow, DatasetFieldContract, DatasetFilterOperator, DatasetMajorLineMetadata,
-    DatasetMajorLineReference, DatasetSchemaRequest, DatasetSortDirection,
+    DatasetMajorLineReference, DatasetMissingPolicy, DatasetSchemaRequest, DatasetSortDirection,
 };
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV2, SignedEnvelopeV1,
@@ -459,10 +459,30 @@ async fn execute_materialization(
         .iter()
         .chain(&request.group_by)
         .chain(request.filters.iter().map(|f| &f.field_key))
+        .chain(
+            request
+                .search
+                .iter()
+                .flat_map(|search| search.field_keys.iter()),
+        )
     {
         if !known.contains(key.as_str()) {
             return Err(ApiError::BadRequest(format!(
                 "Dataset field '{key}' is unavailable"
+            )));
+        }
+    }
+    for filter in &request.filters {
+        let field_type = metadata
+            .fields
+            .iter()
+            .find(|field| field.key == filter.field_key)
+            .map(|field| field.field_type.as_str())
+            .expect("known filter field");
+        if !filter_operator_supported(filter.operator, field_type) {
+            return Err(ApiError::BadRequest(format!(
+                "Dataset filter operator is unavailable for field '{}'",
+                filter.field_key
             )));
         }
     }
@@ -474,12 +494,21 @@ async fn execute_materialization(
     } else {
         let mut keys = request.group_by.clone();
         for aggregate in &request.aggregates {
+            let field_type = aggregate.field_key.as_ref().and_then(|key| {
+                metadata
+                    .fields
+                    .iter()
+                    .find(|field| field.key == *key)
+                    .map(|field| field.field_type.as_str())
+            });
+            let valid_function = aggregate_function_supported(aggregate.function, field_type);
             if aggregate.output_key.trim().is_empty()
                 || aggregate
                     .field_key
                     .as_ref()
                     .is_some_and(|key| !known.contains(key.as_str()))
                 || keys.contains(&aggregate.output_key)
+                || !valid_function
             {
                 return Err(ApiError::BadRequest("Dataset aggregate is invalid".into()));
             }
@@ -487,6 +516,15 @@ async fn execute_materialization(
         }
         keys
     };
+    if request
+        .group_missing_policies
+        .keys()
+        .any(|key| !request.group_by.contains(key))
+    {
+        return Err(ApiError::BadRequest(
+            "Dataset grouping missing-value policy is invalid".into(),
+        ));
+    }
     for sort in &request.order_by {
         if !output_keys.contains(&sort.field_key) {
             return Err(ApiError::BadRequest(
@@ -531,41 +569,99 @@ async fn execute_materialization(
             if index > 0 {
                 query.push(",");
             }
-            query.push(quoted(key)).push("::text");
+            push_group_expression(
+                &mut query,
+                key,
+                request
+                    .group_missing_policies
+                    .get(key)
+                    .copied()
+                    .unwrap_or_default(),
+            );
+            query.push("::text");
         }
         query.push(")) AS row_id");
         for key in &request.group_by {
-            query
-                .push(",to_jsonb(")
-                .push(quoted(key))
-                .push(") AS ")
-                .push(quoted(key));
+            query.push(",to_jsonb(");
+            push_group_expression(
+                &mut query,
+                key,
+                request
+                    .group_missing_policies
+                    .get(key)
+                    .copied()
+                    .unwrap_or_default(),
+            );
+            query.push(") AS ").push(quoted(key));
         }
         for aggregate in &request.aggregates {
             query.push(",to_jsonb(");
             match aggregate.function {
                 DatasetAggregateFunction::Count => {
                     if let Some(key) = &aggregate.field_key {
-                        query.push("COUNT(").push(quoted(key)).push(")");
+                        if aggregate.missing_policy == DatasetMissingPolicy::Omit {
+                            query
+                                .push("COUNT(NULLIF(BTRIM(")
+                                .push(quoted(key))
+                                .push("::text),''))");
+                        } else {
+                            query.push("COUNT(*)");
+                        }
                     } else {
                         query.push("COUNT(*)");
                     }
                 }
+                DatasetAggregateFunction::UniqueCount => {
+                    let field = quoted(aggregate.field_key.as_deref().ok_or_else(|| {
+                        ApiError::BadRequest("unique_count requires a field".into())
+                    })?);
+                    if aggregate.missing_policy == DatasetMissingPolicy::ExplicitMissing {
+                        query
+                            .push("COUNT(DISTINCT CASE WHEN NULLIF(BTRIM(")
+                            .push(field.clone())
+                            .push("::text),'') IS NULL THEN jsonb_build_array('missing') ELSE jsonb_build_array('value',NULLIF(BTRIM(")
+                            .push(field)
+                            .push("::text),'')) END)");
+                    } else {
+                        query
+                            .push("COUNT(DISTINCT NULLIF(BTRIM(")
+                            .push(field)
+                            .push("::text),''))");
+                    }
+                }
                 DatasetAggregateFunction::Sum => {
-                    query
-                        .push("SUM(NULLIF(")
-                        .push(quoted(aggregate.field_key.as_deref().ok_or_else(|| {
-                            ApiError::BadRequest("sum requires a field".into())
-                        })?))
-                        .push("::text,'')::numeric)");
+                    query.push("SUM(");
+                    push_numeric_aggregate_operand(
+                        &mut query,
+                        aggregate
+                            .field_key
+                            .as_deref()
+                            .ok_or_else(|| ApiError::BadRequest("sum requires a field".into()))?,
+                        aggregate.missing_policy,
+                    );
+                    query.push(")");
                 }
                 DatasetAggregateFunction::Average => {
-                    query
-                        .push("AVG(NULLIF(")
-                        .push(quoted(aggregate.field_key.as_deref().ok_or_else(|| {
+                    query.push("AVG(");
+                    push_numeric_aggregate_operand(
+                        &mut query,
+                        aggregate.field_key.as_deref().ok_or_else(|| {
                             ApiError::BadRequest("average requires a field".into())
-                        })?))
-                        .push("::text,'')::numeric)");
+                        })?,
+                        aggregate.missing_policy,
+                    );
+                    query.push(")");
+                }
+                DatasetAggregateFunction::Median => {
+                    query.push("PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ");
+                    push_numeric_aggregate_operand(
+                        &mut query,
+                        aggregate.field_key.as_deref().ok_or_else(|| {
+                            ApiError::BadRequest("median requires a field".into())
+                        })?,
+                        aggregate.missing_policy,
+                    );
+                    query.push(")");
                 }
                 DatasetAggregateFunction::Minimum => {
                     query
@@ -583,6 +679,18 @@ async fn execute_materialization(
                         })?))
                         .push(")");
                 }
+                DatasetAggregateFunction::SingleValue => {
+                    aggregate.field_key.as_deref().ok_or_else(|| {
+                        ApiError::BadRequest("single_value requires a field".into())
+                    })?;
+                    query.push("CASE WHEN COUNT(*)=1 THEN MAX(");
+                    push_numeric_aggregate_operand(
+                        &mut query,
+                        aggregate.field_key.as_deref().expect("field checked above"),
+                        aggregate.missing_policy,
+                    );
+                    query.push(") ELSE NULL END");
+                }
             };
             query.push(") AS ").push(quoted(&aggregate.output_key));
         }
@@ -593,6 +701,20 @@ async fn execute_materialization(
         .push(".")
         .push(quoted(&table));
     query.push(" WHERE ").push(tier_predicate);
+    for key in &request.group_by {
+        if request
+            .group_missing_policies
+            .get(key)
+            .copied()
+            .unwrap_or_default()
+            != DatasetMissingPolicy::ExplicitMissing
+        {
+            query
+                .push(" AND NULLIF(BTRIM(")
+                .push(quoted(key))
+                .push("::text),'') IS NOT NULL");
+        }
+    }
     for filter in &request.filters {
         query.push(" AND ");
         let field = quoted(&filter.field_key);
@@ -603,6 +725,15 @@ async fn execute_materialization(
             DatasetFilterOperator::IsNotNull => {
                 query.push(field).push(" IS NOT NULL");
             }
+            DatasetFilterOperator::IsEmpty => {
+                query.push("NULLIF(").push(field).push("::text,'') IS NULL");
+            }
+            DatasetFilterOperator::IsNotEmpty => {
+                query
+                    .push("NULLIF(")
+                    .push(field)
+                    .push("::text,'') IS NOT NULL");
+            }
             operator => {
                 let value = filter.value.as_ref().ok_or_else(|| {
                     ApiError::BadRequest("Dataset filter value is required".into())
@@ -611,41 +742,111 @@ async fn execute_materialization(
                     Value::String(value) => value.clone(),
                     _ => value.to_string(),
                 };
-                query.push(field).push("::text ");
+                let field_type = metadata
+                    .fields
+                    .iter()
+                    .find(|candidate| candidate.key == filter.field_key)
+                    .map(|candidate| candidate.field_type.as_str())
+                    .unwrap_or("text");
                 match operator {
                     DatasetFilterOperator::Eq => {
-                        query.push("= ").push_bind(text);
+                        push_comparison_operand(&mut query, &field, field_type);
+                        query.push(" = ");
+                        push_comparison_bind(&mut query, text, field_type);
                     }
                     DatasetFilterOperator::NotEq => {
-                        query.push("<> ").push_bind(text);
+                        push_comparison_operand(&mut query, &field, field_type);
+                        query.push(" <> ");
+                        push_comparison_bind(&mut query, text, field_type);
                     }
                     DatasetFilterOperator::Contains => {
-                        query.push("ILIKE ").push_bind(format!("%{text}%"));
+                        query
+                            .push(field)
+                            .push("::text ILIKE ")
+                            .push_bind(format!("%{text}%"));
+                    }
+                    DatasetFilterOperator::NotContains => {
+                        query
+                            .push(field)
+                            .push("::text NOT ILIKE ")
+                            .push_bind(format!("%{text}%"));
                     }
                     DatasetFilterOperator::StartsWith => {
-                        query.push("ILIKE ").push_bind(format!("{text}%"));
+                        query
+                            .push(field)
+                            .push("::text ILIKE ")
+                            .push_bind(format!("{text}%"));
                     }
                     DatasetFilterOperator::EndsWith => {
-                        query.push("ILIKE ").push_bind(format!("%{text}"));
+                        query
+                            .push(field)
+                            .push("::text ILIKE ")
+                            .push_bind(format!("%{text}"));
                     }
                     DatasetFilterOperator::GreaterThan => {
-                        query.push("> ").push_bind(text);
+                        push_comparison_operand(&mut query, &field, field_type);
+                        query.push(" > ");
+                        push_comparison_bind(&mut query, text, field_type);
                     }
                     DatasetFilterOperator::GreaterThanOrEqual => {
-                        query.push(">= ").push_bind(text);
+                        push_comparison_operand(&mut query, &field, field_type);
+                        query.push(" >= ");
+                        push_comparison_bind(&mut query, text, field_type);
                     }
                     DatasetFilterOperator::LessThan => {
-                        query.push("< ").push_bind(text);
+                        push_comparison_operand(&mut query, &field, field_type);
+                        query.push(" < ");
+                        push_comparison_bind(&mut query, text, field_type);
                     }
                     DatasetFilterOperator::LessThanOrEqual => {
-                        query.push("<= ").push_bind(text);
+                        push_comparison_operand(&mut query, &field, field_type);
+                        query.push(" <= ");
+                        push_comparison_bind(&mut query, text, field_type);
                     }
-                    DatasetFilterOperator::IsNull | DatasetFilterOperator::IsNotNull => {
+                    DatasetFilterOperator::Between | DatasetFilterOperator::NotBetween => {
+                        let (lower, upper) = text
+                            .split_once("..")
+                            .or_else(|| text.split_once(','))
+                            .ok_or_else(|| {
+                                ApiError::BadRequest(
+                                    "Dataset between filter requires two bounds".into(),
+                                )
+                            })?;
+                        push_comparison_operand(&mut query, &field, field_type);
+                        if operator == DatasetFilterOperator::NotBetween {
+                            query.push(" NOT BETWEEN ");
+                        } else {
+                            query.push(" BETWEEN ");
+                        }
+                        push_comparison_bind(&mut query, lower.trim().to_string(), field_type);
+                        query.push(" AND ");
+                        push_comparison_bind(&mut query, upper.trim().to_string(), field_type);
+                    }
+                    DatasetFilterOperator::IsEmpty
+                    | DatasetFilterOperator::IsNotEmpty
+                    | DatasetFilterOperator::IsNull
+                    | DatasetFilterOperator::IsNotNull => {
                         unreachable!()
                     }
                 };
             }
         }
+    }
+    if let Some(search) = &request.search {
+        if search.field_keys.is_empty() || search.query.trim().is_empty() {
+            return Err(ApiError::BadRequest("Dataset search is invalid".into()));
+        }
+        query.push(" AND (");
+        for (index, key) in search.field_keys.iter().enumerate() {
+            if index > 0 {
+                query.push(" OR ");
+            }
+            query
+                .push(quoted(key))
+                .push("::text ILIKE ")
+                .push_bind(format!("%{}%", search.query));
+        }
+        query.push(")");
     }
     if !request.aggregates.is_empty() && !request.group_by.is_empty() {
         query.push(" GROUP BY ");
@@ -653,7 +854,15 @@ async fn execute_materialization(
             if index > 0 {
                 query.push(",");
             }
-            query.push(quoted(key));
+            push_group_expression(
+                &mut query,
+                key,
+                request
+                    .group_missing_policies
+                    .get(key)
+                    .copied()
+                    .unwrap_or_default(),
+            );
         }
     }
     if !request.order_by.is_empty() {
@@ -696,6 +905,18 @@ async fn execute_materialization(
     if has_more {
         rows.truncate(request.limit as usize);
     }
+    if request
+        .aggregates
+        .iter()
+        .any(|aggregate| aggregate.function == DatasetAggregateFunction::SingleValue)
+        && rows
+            .iter()
+            .any(|row| row.values.get("summary_value").is_none_or(Option::is_none))
+    {
+        return Err(ApiError::BadRequest(
+            "Dataset single-value execution requires exactly one value per result".into(),
+        ));
+    }
     let fields = output_keys
         .iter()
         .map(|key| {
@@ -721,6 +942,95 @@ async fn execute_materialization(
     })
 }
 
+fn push_comparison_operand<'a>(
+    query: &mut QueryBuilder<'a, Postgres>,
+    field: &str,
+    field_type: &str,
+) {
+    match field_type {
+        "number" | "integer" | "decimal" => {
+            query
+                .push("NULLIF(")
+                .push(field)
+                .push("::text,'')::numeric");
+        }
+        "date" => {
+            query.push("NULLIF(").push(field).push("::text,'')::date");
+        }
+        "datetime" | "timestamp" => {
+            query
+                .push("NULLIF(")
+                .push(field)
+                .push("::text,'')::timestamptz");
+        }
+        _ => {
+            query.push(field).push("::text");
+        }
+    }
+}
+
+fn filter_operator_supported(operator: DatasetFilterOperator, field_type: &str) -> bool {
+    match operator {
+        DatasetFilterOperator::Contains
+        | DatasetFilterOperator::NotContains
+        | DatasetFilterOperator::StartsWith
+        | DatasetFilterOperator::EndsWith
+        | DatasetFilterOperator::IsEmpty
+        | DatasetFilterOperator::IsNotEmpty => matches!(field_type, "text" | "string"),
+        DatasetFilterOperator::GreaterThan
+        | DatasetFilterOperator::GreaterThanOrEqual
+        | DatasetFilterOperator::LessThan
+        | DatasetFilterOperator::LessThanOrEqual
+        | DatasetFilterOperator::Between
+        | DatasetFilterOperator::NotBetween => matches!(
+            field_type,
+            "number" | "integer" | "decimal" | "date" | "datetime" | "timestamp"
+        ),
+        DatasetFilterOperator::Eq
+        | DatasetFilterOperator::NotEq
+        | DatasetFilterOperator::IsNull
+        | DatasetFilterOperator::IsNotNull => true,
+    }
+}
+
+fn aggregate_function_supported(
+    function: DatasetAggregateFunction,
+    field_type: Option<&str>,
+) -> bool {
+    match function {
+        DatasetAggregateFunction::Count => true,
+        DatasetAggregateFunction::UniqueCount
+        | DatasetAggregateFunction::Minimum
+        | DatasetAggregateFunction::Maximum => field_type.is_some(),
+        DatasetAggregateFunction::Sum
+        | DatasetAggregateFunction::Average
+        | DatasetAggregateFunction::Median
+        | DatasetAggregateFunction::SingleValue => {
+            matches!(field_type, Some("number" | "integer" | "decimal"))
+        }
+    }
+}
+
+fn push_comparison_bind<'a>(
+    query: &mut QueryBuilder<'a, Postgres>,
+    value: String,
+    field_type: &str,
+) {
+    query.push_bind(value);
+    match field_type {
+        "number" | "integer" | "decimal" => {
+            query.push("::numeric");
+        }
+        "date" => {
+            query.push("::date");
+        }
+        "datetime" | "timestamp" => {
+            query.push("::timestamptz");
+        }
+        _ => {}
+    }
+}
+
 fn execution_offset(cursor: Option<&str>) -> ApiResult<u32> {
     match cursor {
         None => Ok(0),
@@ -736,13 +1046,56 @@ fn quoted(value: &str) -> String {
     format!("\"{}\"", value.replace('"', "\"\""))
 }
 
+fn push_group_expression(
+    query: &mut QueryBuilder<'_, Postgres>,
+    field_key: &str,
+    policy: DatasetMissingPolicy,
+) {
+    if policy == DatasetMissingPolicy::ExplicitMissing {
+        query
+            .push("COALESCE(NULLIF(BTRIM(")
+            .push(quoted(field_key))
+            .push("::text),''),'(Missing)')");
+    } else {
+        query
+            .push("NULLIF(BTRIM(")
+            .push(quoted(field_key))
+            .push("::text),'')");
+    }
+}
+
+fn push_numeric_aggregate_operand(
+    query: &mut QueryBuilder<'_, Postgres>,
+    field_key: &str,
+    policy: DatasetMissingPolicy,
+) {
+    if policy == DatasetMissingPolicy::Zero {
+        query.push("COALESCE(");
+    }
+    query
+        .push("NULLIF(BTRIM(")
+        .push(quoted(field_key))
+        .push("::text),'')::numeric");
+    if policy == DatasetMissingPolicy::Zero {
+        query.push(",0::numeric)");
+    }
+}
+
 fn restricted() -> ApiError {
     ApiError::Forbidden("dataset action unavailable".into())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_DATASET_EXECUTION_OFFSET, execution_offset};
+    use sqlx::{Execute, Postgres, QueryBuilder};
+    use tessara_datasets_contract::{
+        DatasetAggregateFunction, DatasetFilterOperator, DatasetMissingPolicy,
+    };
+
+    use super::{
+        MAX_DATASET_EXECUTION_OFFSET, aggregate_function_supported, execution_offset,
+        filter_operator_supported, push_group_expression, push_numeric_aggregate_operand,
+    };
 
     #[test]
     fn execution_cursor_is_exact_and_forward_only() {
@@ -758,5 +1111,53 @@ mod tests {
         ] {
             assert!(execution_offset(Some(invalid)).is_err(), "{invalid}");
         }
+    }
+
+    #[test]
+    fn missing_policy_sql_preserves_explicit_groups_and_numeric_zeroes() {
+        let mut query = QueryBuilder::<Postgres>::new("SELECT ");
+        push_group_expression(&mut query, "status", DatasetMissingPolicy::ExplicitMissing);
+        query.push(",");
+        push_numeric_aggregate_operand(&mut query, "score", DatasetMissingPolicy::Zero);
+        assert_eq!(
+            query.build().sql(),
+            "SELECT COALESCE(NULLIF(BTRIM(\"status\"::text),''),'(Missing)'),COALESCE(NULLIF(BTRIM(\"score\"::text),'')::numeric,0::numeric)"
+        );
+    }
+
+    #[test]
+    fn core_rejects_component_execution_type_mismatches_at_the_owner_boundary() {
+        assert!(filter_operator_supported(
+            DatasetFilterOperator::Contains,
+            "text"
+        ));
+        assert!(!filter_operator_supported(
+            DatasetFilterOperator::Contains,
+            "number"
+        ));
+        assert!(filter_operator_supported(
+            DatasetFilterOperator::Between,
+            "date"
+        ));
+        assert!(!filter_operator_supported(
+            DatasetFilterOperator::Between,
+            "text"
+        ));
+        assert!(aggregate_function_supported(
+            DatasetAggregateFunction::Median,
+            Some("number")
+        ));
+        assert!(!aggregate_function_supported(
+            DatasetAggregateFunction::Median,
+            Some("text")
+        ));
+        assert!(!aggregate_function_supported(
+            DatasetAggregateFunction::UniqueCount,
+            None
+        ));
+        assert!(aggregate_function_supported(
+            DatasetAggregateFunction::Count,
+            None
+        ));
     }
 }

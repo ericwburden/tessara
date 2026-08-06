@@ -280,7 +280,7 @@ async fn apply_bootstrap(
         .bind(format!("/{}", request.input.scope_node_id))
         .bind(request.desired_revision as i64)
         .execute(&mut *transaction).await?;
-    sqlx::query("INSERT INTO dashboards(id,name,description) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,updated_at=now()")
+    sqlx::query("INSERT INTO dashboards(id,name,description,authority_revision) VALUES($1,$2,$3,2) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,authority_revision=GREATEST(dashboards.authority_revision,2),updated_at=now()")
         .bind(request.input.dashboard_id).bind(request.input.name.trim()).bind(&request.input.description)
         .execute(&mut *transaction).await?;
     sqlx::query("INSERT INTO dashboard_scope_nodes(dashboard_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING")
@@ -650,11 +650,59 @@ mod tests {
 
     use axum::{Router, routing::get};
     use sha2::{Digest, Sha256};
-    use tessara_module_contract::ModuleManifest;
+    use tessara_module_contract::{ModuleManifest, ResourceOwner};
 
     use super::{
-        DashboardConfigurationV1, component_provider_client_with_timeout, validate_configuration,
+        DashboardBootstrapV2, DashboardConfigurationV1, component_provider_client_with_timeout,
+        validate_configuration,
     };
+
+    #[test]
+    fn sprint_8a_bootstrap_owns_four_exact_module_component_placements() {
+        let blueprint: tessara_composition::ApplicationBlueprintV1 =
+            serde_json::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../deploy/sprint-8a/blueprints/reference.json"
+            )))
+            .expect("valid Sprint 8A Blueprint");
+        let module = blueprint
+            .modules
+            .into_iter()
+            .find(|module| module.definition_id == "tessara.dashboards")
+            .expect("Dashboard selection");
+        let tessara_composition::BootstrapInputV1::Inline { value, .. } =
+            module.bootstrap.expect("Dashboard bootstrap")
+        else {
+            panic!("Sprint 8A Dashboard bootstrap must be inline");
+        };
+        let bootstrap: DashboardBootstrapV2 =
+            serde_json::from_value(value).expect("typed Dashboard bootstrap");
+        assert_eq!(
+            bootstrap
+                .placements
+                .iter()
+                .map(|placement| placement.placement_id)
+                .collect::<Vec<_>>(),
+            [
+                "01980000-0003-7000-8000-000000000002",
+                "01980000-0003-7000-8000-000000000003",
+                "01980000-0003-7000-8000-000000000004",
+                "01980000-0003-7000-8000-000000000005",
+            ]
+            .map(|value| uuid::Uuid::parse_str(value).expect("placement UUID"))
+        );
+        assert!(bootstrap.placements.iter().all(|placement| {
+            matches!(
+                placement.component_reference.reference().owner(),
+                ResourceOwner::ModuleInstance { .. }
+            ) && placement
+                .component_reference
+                .reference()
+                .resource_type()
+                .as_str()
+                == "tessara.components.component_version"
+        }));
+    }
 
     #[tokio::test]
     async fn component_provider_client_enforces_the_complete_request_deadline() {

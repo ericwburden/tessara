@@ -28,6 +28,7 @@ mod dataset_client;
 mod documents;
 mod product;
 mod provider;
+mod validation;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.components";
 pub const MODULE_RELEASE_VERSION: &str = "1.0.0";
@@ -455,6 +456,7 @@ async fn apply_bootstrap(
                 || component.dataset_reference.reference().installation_id()
                     != request.installation_id
                 || !component.config.is_object()
+                || !bootstrap_config_is_valid(&component.component_type, &component.config)
                 || !matches!(
                     component.component_type.as_str(),
                     "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
@@ -479,7 +481,7 @@ async fn apply_bootstrap(
             .bind("Reference application seed")
             .execute(&mut *transaction)
             .await?;
-        sqlx::query("INSERT INTO component_versions(id,component_id,dataset_reference,dataset_scope_node_ids,component_type,status,lifecycle_state,version_number,version_label,version_note,config) VALUES($1,$2,$3,$4,$5::component_type,'published','active',1,'1.0.0','Reference application seed',$6) ON CONFLICT(id) DO UPDATE SET dataset_reference=EXCLUDED.dataset_reference,dataset_scope_node_ids=EXCLUDED.dataset_scope_node_ids,component_type=EXCLUDED.component_type,config=EXCLUDED.config,updated_at=now()")
+        sqlx::query("INSERT INTO component_versions(id,component_id,dataset_reference,dataset_scope_node_ids,component_type,status,lifecycle_state,authority_revision,version_number,version_label,version_note,config) VALUES($1,$2,$3,$4,$5::component_type,'published','active',2,1,'1.0.0','Reference application seed',$6) ON CONFLICT(id) DO UPDATE SET dataset_reference=EXCLUDED.dataset_reference,dataset_scope_node_ids=EXCLUDED.dataset_scope_node_ids,component_type=EXCLUDED.component_type,config=EXCLUDED.config,authority_revision=GREATEST(component_versions.authority_revision,2),updated_at=now()")
             .bind(component.component_version_id)
             .bind(component.component_id)
             .bind(serde_json::to_value(&component.dataset_reference).map_err(|error| ComponentModuleError::Internal(error.to_string()))?)
@@ -518,6 +520,48 @@ async fn apply_bootstrap(
         .await?;
     transaction.commit().await?;
     Ok(Json(response))
+}
+
+fn bootstrap_config_is_valid(component_type: &str, config: &Value) -> bool {
+    let mut keys = std::collections::BTreeSet::new();
+    for key in [
+        "summary_field",
+        "category_field",
+        "comparison_field",
+        "x_field",
+    ] {
+        if let Some(value) = config
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+        {
+            keys.insert(value.to_string());
+        }
+    }
+    for key in config
+        .get("visible_columns")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| {
+            value
+                .as_str()
+                .or_else(|| value.get("key").and_then(Value::as_str))
+                .or_else(|| value.get("field_key").and_then(Value::as_str))
+        })
+    {
+        keys.insert(key.to_string());
+    }
+    let fields = keys
+        .into_iter()
+        .map(|key| tessara_datasets_contract::DatasetFieldContract {
+            label: key.clone(),
+            key,
+            field_type: "text".into(),
+            restriction_tier: "provider_enforced".into(),
+        })
+        .collect::<Vec<_>>();
+    validation::validate_component_config(component_type, config, &fields).is_empty()
 }
 
 fn component_reference(
@@ -723,6 +767,48 @@ mod tests {
     use super::*;
 
     const BASELINE: &[u8] = include_bytes!("../migrations/001_component_module.sql");
+
+    #[test]
+    fn sprint_8a_bootstrap_is_typed_and_owns_exact_valid_component_inputs() {
+        let blueprint: tessara_composition::ApplicationBlueprintV1 =
+            serde_json::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../deploy/sprint-8a/blueprints/reference.json"
+            )))
+            .expect("valid Sprint 8A Blueprint");
+        let module = blueprint
+            .modules
+            .into_iter()
+            .find(|module| module.definition_id == MODULE_DEFINITION_ID)
+            .expect("Component selection");
+        let tessara_composition::BootstrapInputV1::Inline { value, .. } =
+            module.bootstrap.expect("Component bootstrap")
+        else {
+            panic!("Sprint 8A Component bootstrap must be inline");
+        };
+        let bootstrap: ComponentBootstrapV1 =
+            serde_json::from_value(value).expect("typed Component bootstrap");
+        let keys = bootstrap
+            .components
+            .iter()
+            .map(|component| component.external_key.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            keys,
+            std::collections::BTreeSet::from([
+                "sprint-8a-blocked-component",
+                "sprint-8a-label-bar",
+                "sprint-8a-label-donut",
+                "sprint-8a-label-line",
+                "sprint-8a-label-pie",
+                "sprint-8a-record-table",
+                "sprint-8a-row-count",
+            ])
+        );
+        assert!(bootstrap.components.iter().all(|component| {
+            bootstrap_config_is_valid(&component.component_type, &component.config)
+        }));
+    }
 
     #[test]
     fn exact_configuration_defaults_and_boundaries() {

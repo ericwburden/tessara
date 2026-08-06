@@ -337,9 +337,9 @@ fn render_versions_table(component: &Value) -> String {
                 ));
             } else if lifecycle != "tombstoned" {
                 for action in match lifecycle.as_str() {
-                    "active" => &["deactivate", "archive", "tombstone"][..],
-                    "inactive" => &["activate", "archive", "tombstone"][..],
-                    "archived" => &["activate", "tombstone"][..],
+                    "active" => &["deactivate", "archive"][..],
+                    "inactive" => &["activate", "archive"][..],
+                    "archived" => &["tombstone"][..],
                     _ => &[][..],
                 } {
                     actions.push_str(&format!(
