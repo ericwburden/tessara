@@ -5,6 +5,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sqlx::postgres::PgPoolOptions;
 use tessara_component_module::{ComponentModuleState, router};
 use tessara_module_contract::{
+    MODULE_SERVICE_IDENTITIES_ENVIRONMENT, ModuleServiceIdentityRegistryV1,
     ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
 };
 use tower_http::trace::TraceLayer;
@@ -58,20 +59,11 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         service_secret,
     )?);
-    let dashboard_public_key: [u8; 32] = URL_SAFE_NO_PAD
-        .decode(
-            env::var("TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY")
-                .context("TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY is required")?,
-        )?
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Dashboard service public key must contain 32 bytes"))?;
-    let dashboard_service_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
-        "tessara.dashboards",
-        env::var("TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID")
-            .unwrap_or_else(|_| "dashboard-development-v1".into()),
-        ProtocolSignaturePurposeV1::ModuleServiceRequest,
-        dashboard_public_key,
-    )?;
+    let service_identity_registry = ModuleServiceIdentityRegistryV1::from_json(
+        &env::var(MODULE_SERVICE_IDENTITIES_ENVIRONMENT)
+            .with_context(|| format!("{MODULE_SERVICE_IDENTITIES_ENVIRONMENT} is required"))?,
+    )
+    .context("module service identity registry is invalid")?;
 
     let address: SocketAddr = env::var("COMPONENT_MODULE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8092".into())
@@ -80,7 +72,7 @@ async fn main() -> Result<()> {
         pool,
         authorization_verifier,
         shell_verifier,
-        dashboard_service_verifier,
+        service_identity_registry,
         service_request_signer,
         env::var("TESSARA_CORE_INTERNAL_URL").unwrap_or_else(|_| "http://core:8080".into()),
     )?)

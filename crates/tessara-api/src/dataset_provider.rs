@@ -1,7 +1,6 @@
-//! Core-owned Dataset compatibility provider for the independently deployed
-//! Component module. Authorization is evaluated before Dataset identity or
-//! metadata is disclosed, and every query executes against Core-owned
-//! materializations through this exact contract boundary.
+//! Core-owned Dataset compatibility provider. Authorization is evaluated
+//! before Dataset identity or metadata is disclosed, and every query executes
+//! against Core-owned materializations through this module-neutral boundary.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -15,10 +14,12 @@ use tessara_datasets_contract::{
     DatasetCompatibilityRequest, DatasetCompatibilityResponse, DatasetDistinctValuesRequest,
     DatasetDistinctValuesResponse, DatasetExecutionRequest, DatasetExecutionResponse,
     DatasetExecutionRow, DatasetFieldContract, DatasetFilterOperator, DatasetMajorLineMetadata,
-    DatasetMajorLineReference, DatasetMissingPolicy, DatasetSchemaRequest, DatasetSortDirection,
+    DatasetMajorLineReference, DatasetMissingPolicy, DatasetProvenanceSummary,
+    DatasetSchemaRequest, DatasetSortDirection,
 };
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, SignedEnvelopeV1,
+    AuthorizationAudienceV1, AuthorizationGrantV3, AuthorizationValidationContextV3,
+    ModuleServicePrincipalV1, ServiceActionMethod, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -28,80 +29,102 @@ use crate::{
     error::{ApiError, ApiResult},
 };
 
-const COMPONENT_DEFINITION_ID: &str = "tessara.components";
-const CORE_COMPONENT_BINDING: &str = "tessara.core.components";
-const COMPONENT_RESOURCE_CONTRACT: &str = "tessara.components.component-version";
-const COMPONENT_AUTHORING_CONTRACT: &str = "tessara.components.authoring";
 const MAX_DATASET_EXECUTION_OFFSET: u32 = 1_000_000;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/private/component-datasets/catalog", post(catalog))
-        .route("/api/private/component-datasets/schema", post(schema))
+        .route("/api/private/datasets/catalog", post(catalog))
+        .route("/api/private/datasets/schema", post(schema))
         .route(
-            "/api/private/component-datasets/distinct-values",
+            "/api/private/datasets/distinct-values",
             post(distinct_values),
         )
-        .route(
-            "/api/private/component-datasets/compatibility",
-            post(compatibility),
-        )
-        .route("/api/private/component-datasets/execute", post(execute))
-}
-
-fn component_action_contract(
-    action: &str,
-) -> Option<(&'static str, AuthorizationGrantOperationV1)> {
-    let (contract, operation) = match action {
-        "components.list" | "components.get" | "components.resolve" | "components.execute" => (
-            COMPONENT_RESOURCE_CONTRACT,
-            AuthorizationGrantOperationV1::Read,
-        ),
-        "components.list_manageable" | "components.edit" => (
-            COMPONENT_AUTHORING_CONTRACT,
-            AuthorizationGrantOperationV1::Read,
-        ),
-        "components.create"
-        | "components.update"
-        | "components.validate"
-        | "components.preview"
-        | "components.save_version"
-        | "components.publish_version"
-        | "components.change_lifecycle"
-        | "components.delete_version" => (
-            COMPONENT_AUTHORING_CONTRACT,
-            AuthorizationGrantOperationV1::Mutation,
-        ),
-        _ => return None,
-    };
-    Some((contract, operation))
+        .route("/api/private/datasets/compatibility", post(compatibility))
+        .route("/api/private/datasets/execute", post(execute))
 }
 
 async fn authorize(
     state: &AppState,
     headers: &HeaderMap,
+    authorization_action: &'static str,
     method_path: &'static str,
     body: &[u8],
-) -> ApiResult<(SignedEnvelopeV1<AuthorizationGrantV2>, auth::AccountContext)> {
-    let inbound = crate::module_service_requests::validate_inbound_grant(
-        state,
-        headers,
-        COMPONENT_DEFINITION_ID,
-        CORE_COMPONENT_BINDING,
-        component_action_contract,
+) -> ApiResult<(SignedEnvelopeV1<AuthorizationGrantV3>, auth::AccountContext)> {
+    let inbound = crate::module_service_requests::verified_authorization(headers)?;
+    let declaration = crate::core_service_providers::resolve_service_action(
+        crate::core_service_providers::DATASET_MAJOR_LINE_CONTRACT,
+        authorization_action,
     )
+    .filter(|declaration| {
+        declaration.method == ServiceActionMethod::Post && declaration.path == method_path
+    })
+    .ok_or_else(restricted)?;
+    let installation_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM application_installations WHERE id=$1)")
+            .bind(inbound.payload.installation_id)
+            .fetch_one(&state.pool)
+            .await?;
+    if !installation_exists
+        || inbound.payload.audience
+            != (AuthorizationAudienceV1::CoreInstallation {
+                installation_id: inbound.payload.installation_id,
+            })
+        || inbound.payload.functional_contract.as_str() != declaration.functional_contract
+        || inbound.payload.action != declaration.authorization_action
+        || inbound.payload.operation != declaration.operation
+        || !inbound
+            .payload
+            .capability_scope_bindings
+            .iter()
+            .any(|binding| binding.capability.as_str() == declaration.required_capability)
+    {
+        return Err(restricted());
+    }
+    let revisions = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
     .await?;
-    crate::module_service_requests::validate(
+    inbound
+        .payload
+        .validate_for(&AuthorizationValidationContextV3 {
+            installation_id: inbound.payload.installation_id,
+            correlation_id: inbound.payload.correlation_id,
+            presenting_service: inbound.payload.presenting_service.clone(),
+            audience: AuthorizationAudienceV1::CoreInstallation {
+                installation_id: inbound.payload.installation_id,
+            },
+            dependency_binding: inbound.payload.dependency_binding.clone(),
+            functional_contract: inbound.payload.functional_contract.clone(),
+            action: declaration.authorization_action.into(),
+            operation: declaration.operation,
+            resource_assertion: inbound.payload.resource_assertion.clone(),
+            authorization_revision: revisions.0 as u64,
+            organization_revision: revisions.1 as u64,
+            now: chrono::Utc::now(),
+        })
+        .map_err(|_| restricted())?;
+    let presenter = match &inbound.payload.presenting_service {
+        ModuleServicePrincipalV1::ModuleInstance { .. } => {
+            inbound.payload.presenting_service.clone()
+        }
+        ModuleServicePrincipalV1::CoreGateway => return Err(restricted()),
+    };
+    crate::module_service_requests::validate_for_principal(
         state,
         headers,
         &inbound,
-        COMPONENT_DEFINITION_ID,
-        "TESSARA_COMPONENT_SERVICE_PUBLIC_KEY",
-        "TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID",
-        "component-development-v1",
-        "POST",
-        method_path,
-        body,
+        crate::module_service_requests::ModuleServiceRequestExpectation {
+            principal: &presenter,
+            grant_consumption:
+                crate::module_service_requests::AuthorizationGrantConsumption::OneTimeProviderAudience(
+                    inbound.payload.jti,
+                ),
+            method: "POST",
+            path: method_path,
+            body,
+        },
     )
     .await?;
     let account =
@@ -121,14 +144,15 @@ async fn catalog(
     let (inbound, account) = authorize(
         &state,
         &headers,
-        "/api/private/component-datasets/catalog",
+        "datasets.catalog",
+        "/api/private/datasets/catalog",
         &body,
     )
     .await?;
     let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
     let rows = sqlx::query(
         "SELECT DISTINCT ON (d.id,r.version_major)
-                d.id,d.name,d.slug,r.version_major,r.output_fields,
+                d.id,d.name,d.slug,d.grain,r.version_major,r.output_fields,
                 COALESCE(m.rebuild_status,'unavailable') AS materialization_state
          FROM datasets d
          JOIN dataset_revisions r ON r.dataset_id=d.id
@@ -140,6 +164,13 @@ async fn catalog(
     )
     .fetch_all(&state.pool)
     .await?;
+    let dataset_ids = rows
+        .iter()
+        .map(|row| row.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let tags_by_dataset = crate::datasets::load_dataset_tags(&state.pool, &dataset_ids).await?;
+    let provenance_by_dataset =
+        crate::datasets::load_dataset_provenance(&state.pool, &dataset_ids).await?;
     let mut datasets = Vec::new();
     for row in rows {
         let dataset_id: Uuid = row.try_get("id")?;
@@ -153,6 +184,15 @@ async fn catalog(
             dataset_id,
             dataset_name: row.try_get("name")?,
             dataset_slug: row.try_get("slug")?,
+            grain: row.try_get("grain")?,
+            tags: tags_by_dataset
+                .get(&dataset_id)
+                .cloned()
+                .unwrap_or_default(),
+            provenance: provenance_by_dataset
+                .get(&dataset_id)
+                .cloned()
+                .unwrap_or_default(),
             major: row.try_get::<i32, _>("version_major")?,
             output_fields: row.try_get("output_fields")?,
             materialization_state: row.try_get("materialization_state")?,
@@ -177,7 +217,8 @@ async fn schema(
     let (inbound, account) = authorize(
         &state,
         &headers,
-        "/api/private/component-datasets/schema",
+        "datasets.schema",
+        "/api/private/datasets/schema",
         &body,
     )
     .await?;
@@ -203,7 +244,8 @@ async fn distinct_values(
     let (inbound, account) = authorize(
         &state,
         &headers,
-        "/api/private/component-datasets/distinct-values",
+        "datasets.distinct_values",
+        "/api/private/datasets/distinct-values",
         &body,
     )
     .await?;
@@ -219,7 +261,7 @@ async fn distinct_values(
         &state.pool,
         &account,
         request.reference.dataset_id(),
-        request.reference.major() as i32,
+        request.reference.major(),
         &request.field_key,
     )
     .await?;
@@ -242,7 +284,8 @@ async fn compatibility(
     let (inbound, account) = authorize(
         &state,
         &headers,
-        "/api/private/component-datasets/compatibility",
+        "datasets.compatibility",
+        "/api/private/datasets/compatibility",
         &body,
     )
     .await?;
@@ -294,7 +337,8 @@ async fn execute(
     let (inbound, account) = authorize(
         &state,
         &headers,
-        "/api/private/component-datasets/execute",
+        "datasets.execute",
+        "/api/private/datasets/execute",
         &body,
     )
     .await?;
@@ -325,6 +369,9 @@ struct MetadataRow {
     dataset_id: Uuid,
     dataset_name: String,
     dataset_slug: String,
+    grain: String,
+    tags: Vec<String>,
+    provenance: DatasetProvenanceSummary,
     major: i32,
     output_fields: Option<Value>,
     materialization_state: String,
@@ -337,15 +384,19 @@ fn metadata_from_row(row: MetadataRow) -> ApiResult<DatasetMajorLineMetadata> {
         dataset_id,
         dataset_name,
         dataset_slug,
+        grain,
+        tags,
+        provenance,
         major,
         output_fields,
         materialization_state,
         scope_node_ids,
     } = row;
-    let major = u32::try_from(major)
-        .ok()
-        .filter(|major| *major > 0)
-        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("stored Dataset major is invalid")))?;
+    if major <= 0 {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "stored Dataset major is invalid"
+        )));
+    }
     let fields = serde_json::from_value::<Vec<StoredField>>(
         output_fields.unwrap_or_else(|| Value::Array(Vec::new())),
     )
@@ -367,6 +418,9 @@ fn metadata_from_row(row: MetadataRow) -> ApiResult<DatasetMajorLineMetadata> {
             .map_err(|error| ApiError::Internal(error.into()))?,
         dataset_name,
         dataset_slug,
+        grain,
+        tags,
+        provenance,
         materialization_state,
         fields,
         scope_node_ids,
@@ -376,7 +430,7 @@ fn metadata_from_row(row: MetadataRow) -> ApiResult<DatasetMajorLineMetadata> {
 async fn load_authorized_metadata(
     state: &AppState,
     account: &auth::AccountContext,
-    inbound: &SignedEnvelopeV1<AuthorizationGrantV2>,
+    inbound: &SignedEnvelopeV1<AuthorizationGrantV3>,
     reference: &DatasetMajorLineReference,
 ) -> ApiResult<DatasetMajorLineMetadata> {
     if reference.reference().installation_id() != inbound.payload.installation_id {
@@ -391,7 +445,7 @@ async fn load_authorized_metadata(
         return Err(restricted());
     }
     let row = sqlx::query(
-        "SELECT d.name,d.slug,r.output_fields,
+        "SELECT d.name,d.slug,d.grain,r.output_fields,
                 COALESCE(m.rebuild_status,'unavailable') AS materialization_state
          FROM datasets d
          JOIN LATERAL (
@@ -405,16 +459,27 @@ async fn load_authorized_metadata(
          WHERE d.id=$1",
     )
     .bind(dataset_id)
-    .bind(reference.major() as i32)
+    .bind(reference.major())
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(restricted)?;
+    let tags = crate::datasets::load_dataset_tags(&state.pool, &[dataset_id])
+        .await?
+        .remove(&dataset_id)
+        .unwrap_or_default();
+    let provenance = crate::datasets::load_dataset_provenance(&state.pool, &[dataset_id])
+        .await?
+        .remove(&dataset_id)
+        .unwrap_or_default();
     metadata_from_row(MetadataRow {
         installation_id: inbound.payload.installation_id,
         dataset_id,
         dataset_name: row.try_get("name")?,
         dataset_slug: row.try_get("slug")?,
-        major: reference.major() as i32,
+        grain: row.try_get("grain")?,
+        tags,
+        provenance,
+        major: reference.major(),
         output_fields: row.try_get("output_fields")?,
         materialization_state: row.try_get("materialization_state")?,
         scope_node_ids,
@@ -537,7 +602,7 @@ async fn execute_materialization(
          WHERE dataset_id=$1 AND version_major=$2 AND rebuild_status='ready'",
     )
     .bind(request.reference.dataset_id())
-    .bind(request.reference.major() as i32)
+    .bind(request.reference.major())
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(|| ApiError::ServiceUnavailable("dataset_materialization_not_ready".into()))?;
@@ -1090,12 +1155,82 @@ mod tests {
     use sqlx::{Execute, Postgres, QueryBuilder};
     use tessara_datasets_contract::{
         DatasetAggregateFunction, DatasetFilterOperator, DatasetMissingPolicy,
+        DatasetProvenanceItem, DatasetProvenanceSummary,
     };
+    use uuid::Uuid;
 
     use super::{
-        MAX_DATASET_EXECUTION_OFFSET, aggregate_function_supported, execution_offset,
-        filter_operator_supported, push_group_expression, push_numeric_aggregate_operand,
+        MAX_DATASET_EXECUTION_OFFSET, MetadataRow, aggregate_function_supported, execution_offset,
+        filter_operator_supported, metadata_from_row, push_group_expression,
+        push_numeric_aggregate_operand,
     };
+
+    #[test]
+    fn major_line_mapping_exposes_the_complete_picker_metadata() {
+        let installation_id = Uuid::from_u128(1);
+        let dataset_id = Uuid::from_u128(2);
+        let metadata = metadata_from_row(MetadataRow {
+            installation_id,
+            dataset_id,
+            dataset_name: "Enrollment outcomes".into(),
+            dataset_slug: "enrollment-outcomes".into(),
+            grain: "submission".into(),
+            tags: vec!["outcomes".into()],
+            provenance: DatasetProvenanceSummary {
+                forms: vec![DatasetProvenanceItem {
+                    id: Uuid::from_u128(3),
+                    name: "Enrollment intake".into(),
+                    slug: None,
+                }],
+                datasets: vec![DatasetProvenanceItem {
+                    id: Uuid::from_u128(4),
+                    name: "Enrollment activity".into(),
+                    slug: Some("enrollment-activity".into()),
+                }],
+            },
+            major: 3,
+            output_fields: Some(serde_json::json!([{
+                "key": "program",
+                "label": "Program",
+                "field_type": "text"
+            }])),
+            materialization_state: "ready".into(),
+            scope_node_ids: vec![Uuid::from_u128(5)],
+        })
+        .expect("valid stored Dataset metadata");
+
+        assert_eq!(metadata.reference.dataset_id(), dataset_id);
+        assert_eq!(metadata.reference.major(), 3);
+        assert_eq!(metadata.dataset_name, "Enrollment outcomes");
+        assert_eq!(metadata.grain, "submission");
+        assert_eq!(metadata.tags, ["outcomes"]);
+        assert_eq!(metadata.provenance.forms[0].name, "Enrollment intake");
+        assert_eq!(
+            metadata.provenance.datasets[0].slug.as_deref(),
+            Some("enrollment-activity")
+        );
+        assert_eq!(metadata.fields[0].label, "Program");
+    }
+
+    #[test]
+    fn major_line_mapping_rejects_nonpositive_storage_versions() {
+        for major in [i32::MIN, -1, 0] {
+            let result = metadata_from_row(MetadataRow {
+                installation_id: Uuid::from_u128(1),
+                dataset_id: Uuid::from_u128(2),
+                dataset_name: "Invalid".into(),
+                dataset_slug: "invalid".into(),
+                grain: "submission".into(),
+                tags: Vec::new(),
+                provenance: DatasetProvenanceSummary::default(),
+                major,
+                output_fields: None,
+                materialization_state: "ready".into(),
+                scope_node_ids: Vec::new(),
+            });
+            assert!(result.is_err(), "storage major {major} must be rejected");
+        }
+    }
 
     #[test]
     fn execution_cursor_is_exact_and_forward_only() {
@@ -1126,7 +1261,7 @@ mod tests {
     }
 
     #[test]
-    fn core_rejects_component_execution_type_mismatches_at_the_owner_boundary() {
+    fn core_rejects_dataset_execution_type_mismatches_at_the_owner_boundary() {
         assert!(filter_operator_supported(
             DatasetFilterOperator::Contains,
             "text"

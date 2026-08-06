@@ -15,10 +15,10 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleManifest,
-    PurposeBoundVerifyingKeyV1, SecurityCapabilityId, ShellContextV1,
-    ShellContextValidationContextV1, SignedEnvelopeV1,
+    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
+    ModuleDefinitionId, ModuleManifest, ModuleServicePrincipalV1, PurposeBoundVerifyingKeyV1,
+    SecurityCapabilityId, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use tessara_module_runtime::{
     decode_signed_envelope_header, request_correlation_id, verify_shell_context,
@@ -552,7 +552,7 @@ async fn authorize(
     headers: &HeaderMap,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> Result<SignedEnvelopeV1<AuthorizationGrantV2>, ApiError> {
+) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, ApiError> {
     let encoded = headers
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
@@ -560,7 +560,7 @@ async fn authorize(
     let bytes = URL_SAFE_NO_PAD
         .decode(encoded)
         .map_err(|_| ApiError::restricted())?;
-    let envelope: SignedEnvelopeV1<AuthorizationGrantV2> =
+    let envelope: SignedEnvelopeV1<AuthorizationGrantV3> =
         serde_json::from_slice(&bytes).map_err(|_| ApiError::restricted())?;
     state
         .core_authorization_verifier
@@ -570,12 +570,17 @@ async fn authorize(
     if !security.enabled || security.document_state != "enabled" {
         return Err(ApiError::unavailable("module is not enabled"));
     }
+    let correlation_id = request_correlation_id(headers).map_err(|_| ApiError::restricted())?;
     envelope
         .payload
-        .validate_for(&AuthorizationValidationContextV2 {
+        .validate_for(&AuthorizationValidationContextV3 {
             installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").unwrap(),
-            audience_module_instance_id: security.module_instance_id,
+            correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: security.module_instance_id,
+                module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID).unwrap(),
+            },
             dependency_binding: DependencyBindingKey::new("tessara.core.scoped-records").unwrap(),
             functional_contract: FunctionalContractId::new(
                 "tessara.reference.scoped-records.record",
@@ -593,7 +598,7 @@ async fn authorize(
 }
 
 fn authorized_owners(
-    envelope: &SignedEnvelopeV1<AuthorizationGrantV2>,
+    envelope: &SignedEnvelopeV1<AuthorizationGrantV3>,
     capability: &str,
 ) -> Vec<Uuid> {
     let mut owners = BTreeSet::new();
@@ -607,7 +612,7 @@ fn authorized_owners(
 }
 
 fn authorization_allows(
-    envelope: &SignedEnvelopeV1<AuthorizationGrantV2>,
+    envelope: &SignedEnvelopeV1<AuthorizationGrantV3>,
     capability: &str,
     organization_id: Uuid,
 ) -> bool {
@@ -1458,12 +1463,16 @@ mod tests {
         let manage = SecurityCapabilityId::new(MANAGE_CAPABILITY).unwrap();
         let root_a = Uuid::from_u128(1);
         let root_b = Uuid::from_u128(2);
-        let grant = AuthorizationGrantV2 {
-            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+        let grant = AuthorizationGrantV3 {
+            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
             installation_id: Uuid::from_u128(3),
             original_actor_id: Uuid::from_u128(4),
-            presenting_service: ModuleDefinitionId::new("tessara.core").unwrap(),
-            audience_module_instance_id: Uuid::from_u128(5),
+            correlation_id: Uuid::from_u128(7),
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: Uuid::from_u128(5),
+                module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID).unwrap(),
+            },
             dependency_binding: DependencyBindingKey::new("tessara.core.scoped-records").unwrap(),
             functional_contract: FunctionalContractId::new(
                 "tessara.reference.scoped-records.record",

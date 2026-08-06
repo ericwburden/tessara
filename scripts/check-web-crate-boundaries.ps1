@@ -249,7 +249,7 @@ $domainCrates = @(
     "tessara-hierarchy",
     "tessara-submissions"
 )
-$frameworkNeutralContractCrates = @("tessara-module-contract")
+$frameworkNeutralContractCrates = @("tessara-module-contract", "tessara-components-contract")
 $domainTransitiveForbidden = @("leptos", "axum", "sqlx", "gloo-net")
 $domainDirectForbidden = @("web-sys", "js-sys", "wasm-bindgen")
 $domainForbidden = $domainTransitiveForbidden + $domainDirectForbidden
@@ -315,6 +315,16 @@ try {
                 ($name -like "tessara-web-*" -and $name -ne "tessara-web-http")
         }
 
+        Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-component-module" -Description "The extracted Component module must not depend on Core/root, Dashboard implementation, historical Component web implementations, or another product module." -IsForbiddenPackage {
+            param($name)
+            $name -in @(
+                "tessara-web", "tessara-api", "tessara-core",
+                "tessara-dashboard-module", "tessara-dashboard-ui",
+                "tessara-dashboard-placement-renderer", "tessara-reference-scoped-records",
+                "tessara-web-components", "tessara-web-component-viewer"
+            )
+        }
+
         foreach ($crate in $domainCrates) {
             if (-not $graph.workspacePackageNames.ContainsKey($crate)) {
                 continue
@@ -342,6 +352,7 @@ try {
     Assert-SourceDoesNotMatch -Path "crates\tessara-web-organization\src" -Pattern "AppShell|require_route_params|NodeRouteParams|crate::routes|leptos_router|leptos_meta|features::forms|features::workflows|features::responses|features::datasets|features::administration|features::shared|crate::features::organization|pub\(in crate::features::organization\)" -Description "tessara-web-organization must not import root route, shell, router/meta, old organization namespace, or sibling web feature concepts."
     Assert-SourceDoesNotMatch -Path "crates\tessara-dashboard-ui\src" -Pattern "AppShell|ShellSessionBootstrap|ApplicationBootstrap|ApplicationRenderContext|crate::(app|features|routes|state|ui)|types::route_params|require_route_params|leptos_router|leptos_meta|tessara_api|tessara_web_components|tessara_web_data_ops|features::(components|data_ops)|use_(location|navigate|params|query|resolved_path)" -Description "tessara-dashboard-ui must not import root route/shell/state, router/meta, API, Components, or data-ops authoring concepts."
     Assert-SourceDoesNotMatch -Path "crates\tessara-dashboard-placement-renderer\src" -Pattern "AppShell|ShellSessionBootstrap|ApplicationBootstrap|ApplicationRenderContext|DashboardRoute|crate::(app|document|features|routes|state|ui|editor|versions|publishing)|types::route_params|require_route_params|use_(location|navigate|params|query|resolved_path)|redirect_to_login|set_href|leptos_router|leptos_meta|tessara_api|tessara_dashboards|tessara_web_components|tessara_web_dashboards|tessara_web_data_ops|features::(dashboards|components|data_ops)" -Description "The Dashboard placement renderer must not import route/shell/login, provider authoring/version-management, or data-ops concepts."
+    Assert-SourceDoesNotMatch -Path "crates\tessara-component-module\src" -Pattern "tessara_(api|core|web|dashboard_module|dashboard_ui|dashboard_placement_renderer|web_components|web_component_viewer)|tessara-(api|core|web|dashboard-module|dashboard-ui|dashboard-placement-renderer|web-components|web-component-viewer)" -Description "The extracted Component module must consume only canonical platform and public provider contracts."
 
     Write-ReviewAidMatches -Path "crates\tessara-module-ui\src" -Pattern "datasets|forms|workflows|responses|organization|administration|AppShell|ShellSession|require_authenticated_route" -Description "Review-aid matches in tessara-module-ui source:"
 

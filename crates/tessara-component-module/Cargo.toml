@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+default = []
+sprint-8a-rehearsal-baseline = []
+
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
@@ -32,3 +36,4 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 sha2 = { workspace = true }
+tower = { workspace = true }

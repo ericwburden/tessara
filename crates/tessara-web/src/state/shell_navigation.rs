@@ -116,6 +116,8 @@ impl ShellNavigationResponseV1 {
         }
 
         let mut seen_keys = BTreeSet::new();
+        let mut seen_hrefs = BTreeSet::new();
+        let mut seen_contribution_ids = BTreeSet::new();
         let mut seen_group_ids = BTreeSet::new();
         let mut seen_group_names = BTreeSet::new();
         for group in &self.groups {
@@ -132,6 +134,7 @@ impl ShellNavigationResponseV1 {
 
             for item in &group.items {
                 if !seen_keys.insert(item.key.as_str())
+                    || !seen_hrefs.insert(item.href.as_str())
                     || (self.state == ShellNavigationStateV1::Unavailable
                         && item.owner == ShellNavigationItemOwnerV1::Contribution)
                 {
@@ -139,15 +142,26 @@ impl ShellNavigationResponseV1 {
                 }
                 if let Some(spec) = item_spec(&item.key) {
                     if spec.locked_group.is_some_and(|id| id != group.id)
-                        || !item_label_is_supported(&item.key, spec.label, &item.label)
+                        || spec.label != item.label
                         || spec.href != item.href
-                        || spec.owner != item.owner
-                        || spec.contribution_id != item.contribution_id.as_deref()
+                        || item.owner != ShellNavigationItemOwnerV1::Core
+                        || item.contribution_id.is_some()
                     {
                         return false;
                     }
-                } else if !manifest_contribution_is_supported(item) {
-                    return false;
+                } else {
+                    if !manifest_contribution_is_supported(item)
+                        || core_href_is_reserved(&item.href)
+                    {
+                        return false;
+                    }
+                    let contribution_id = item
+                        .contribution_id
+                        .as_deref()
+                        .expect("validated manifest contribution identity");
+                    if !seen_contribution_ids.insert(contribution_id) {
+                        return false;
+                    }
                 }
             }
         }
@@ -156,12 +170,33 @@ impl ShellNavigationResponseV1 {
     }
 }
 
+fn core_href_is_reserved(href: &str) -> bool {
+    matches!(
+        href,
+        "/" | "/organization"
+            | "/operations"
+            | "/administration"
+            | "/administration/users"
+            | "/administration/roles"
+            | "/administration/node-types"
+            | "/administration/modules"
+            | "/administration/composition"
+    )
+}
+
 fn manifest_contribution_is_supported(item: &ShellNavigationItemV1) -> bool {
+    let Some(contribution_id) = item.contribution_id.as_deref() else {
+        return false;
+    };
     item.owner == ShellNavigationItemOwnerV1::Contribution
-        && item.contribution_id.as_deref() == Some(item.key.as_str())
-        && item.key.contains('.')
         && item.key == item.key.trim()
+        && !item.key.is_empty()
         && item.key.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || "_-".contains(character)
+        })
+        && contribution_id == contribution_id.trim()
+        && contribution_id.contains('.')
+        && contribution_id.chars().all(|character| {
             character.is_ascii_lowercase()
                 || character.is_ascii_digit()
                 || ".:_-".contains(character)
@@ -174,126 +209,54 @@ fn manifest_contribution_is_supported(item: &ShellNavigationItemV1) -> bool {
         && !item.href.contains(['\r', '\n'])
 }
 
-fn item_label_is_supported(key: &str, static_label: &str, actual_label: &str) -> bool {
-    if key == "scoped_records" {
-        actual_label == actual_label.trim()
-            && (1..=80).contains(&actual_label.chars().count())
-            && !actual_label.chars().any(char::is_control)
-    } else {
-        actual_label == static_label
-    }
-}
-
 #[derive(Clone, Copy)]
 struct ItemSpec {
     label: &'static str,
     href: &'static str,
     locked_group: Option<&'static str>,
-    owner: ShellNavigationItemOwnerV1,
-    contribution_id: Option<&'static str>,
 }
 
 fn item_spec(key: &str) -> Option<ItemSpec> {
-    let core = ShellNavigationItemOwnerV1::Core;
-    let contribution = ShellNavigationItemOwnerV1::Contribution;
     Some(match key {
         "home" => ItemSpec {
             label: "Home",
             href: "/",
             locked_group: Some("core.main"),
-            owner: core,
-            contribution_id: None,
         },
         "organization" => ItemSpec {
             label: "Organization",
             href: "/organization",
             locked_group: Some("core.main"),
-            owner: core,
-            contribution_id: None,
-        },
-        "forms" => ItemSpec {
-            label: "Forms",
-            href: "/forms",
-            locked_group: None,
-            owner: contribution,
-            contribution_id: Some("tessara.forms.navigation"),
-        },
-        "workflows" => ItemSpec {
-            label: "Workflows",
-            href: "/workflows",
-            locked_group: None,
-            owner: contribution,
-            contribution_id: Some("tessara.workflows.navigation"),
-        },
-        "responses" => ItemSpec {
-            label: "Responses",
-            href: "/responses",
-            locked_group: None,
-            owner: contribution,
-            contribution_id: Some("tessara.responses.navigation"),
         },
         "operations" => ItemSpec {
             label: "Operations",
             href: "/operations",
             locked_group: None,
-            owner: core,
-            contribution_id: None,
-        },
-        "dashboards" => ItemSpec {
-            label: "Dashboards",
-            href: "/dashboards",
-            locked_group: None,
-            owner: contribution,
-            contribution_id: Some("tessara.dashboards.navigation"),
-        },
-        "datasets" => ItemSpec {
-            label: "Datasets",
-            href: "/datasets",
-            locked_group: None,
-            owner: contribution,
-            contribution_id: Some("tessara.datasets.navigation"),
-        },
-        "scoped_records" => ItemSpec {
-            label: "Scoped Records",
-            href: "/reference/scoped-records",
-            locked_group: None,
-            owner: contribution,
-            contribution_id: Some("tessara.reference.scoped-records.navigation"),
         },
         "user_management" => ItemSpec {
             label: "User Management",
             href: "/administration/users",
             locked_group: Some("core.admin"),
-            owner: core,
-            contribution_id: None,
         },
         "roles_access" => ItemSpec {
             label: "Roles & Access",
             href: "/administration/roles",
             locked_group: Some("core.admin"),
-            owner: core,
-            contribution_id: None,
         },
         "node_types" => ItemSpec {
             label: "Node Types",
             href: "/administration/node-types",
             locked_group: Some("core.admin"),
-            owner: core,
-            contribution_id: None,
         },
         "module_management" => ItemSpec {
             label: "Module Management",
             href: "/administration/modules",
             locked_group: Some("core.admin"),
-            owner: core,
-            contribution_id: None,
         },
         "application_composition" => ItemSpec {
             label: "Application Composition",
             href: "/administration/composition",
             locked_group: Some("core.admin"),
-            owner: core,
-            contribution_id: None,
         },
         _ => return None,
     })
@@ -303,21 +266,32 @@ fn item_spec(key: &str) -> Option<ItemSpec> {
 mod tests {
     use super::*;
 
-    fn item(key: &str) -> ShellNavigationItemV1 {
+    fn core_item(key: &str) -> ShellNavigationItemV1 {
         let spec = item_spec(key).expect("known item");
         ShellNavigationItemV1 {
             key: key.to_string(),
             label: spec.label.to_string(),
             href: spec.href.to_string(),
-            owner: spec.owner,
-            contribution_id: spec.contribution_id.map(str::to_string),
-            navigation_mode: if spec.owner == ShellNavigationItemOwnerV1::Core
-                || !matches!(key, "scoped_records")
-            {
-                ShellNavigationModeV1::Shell
-            } else {
-                ShellNavigationModeV1::Document
-            },
+            owner: ShellNavigationItemOwnerV1::Core,
+            contribution_id: None,
+            navigation_mode: ShellNavigationModeV1::Shell,
+        }
+    }
+
+    fn contribution(
+        key: &str,
+        label: &str,
+        href: &str,
+        contribution_id: &str,
+        navigation_mode: ShellNavigationModeV1,
+    ) -> ShellNavigationItemV1 {
+        ShellNavigationItemV1 {
+            key: key.to_string(),
+            label: label.to_string(),
+            href: href.to_string(),
+            owner: ShellNavigationItemOwnerV1::Contribution,
+            contribution_id: Some(contribution_id.to_string()),
+            navigation_mode,
         }
     }
 
@@ -331,25 +305,55 @@ mod tests {
                     id: "core.main".into(),
                     name: "Main".into(),
                     items: vec![
-                        item("home"),
-                        item("organization"),
-                        item("workflows"),
-                        item("forms"),
-                        item("operations"),
-                        item("dashboards"),
-                        item("scoped_records"),
+                        core_item("home"),
+                        core_item("organization"),
+                        contribution(
+                            "workflows",
+                            "Workflows",
+                            "/workflows",
+                            "tessara.workflows.navigation",
+                            ShellNavigationModeV1::Shell,
+                        ),
+                        contribution(
+                            "forms",
+                            "Forms",
+                            "/forms",
+                            "tessara.forms.navigation",
+                            ShellNavigationModeV1::Shell,
+                        ),
+                        core_item("operations"),
+                        contribution(
+                            "dashboards",
+                            "Dashboards",
+                            "/dashboards",
+                            "tessara.dashboards.navigation",
+                            ShellNavigationModeV1::Shell,
+                        ),
+                        contribution(
+                            "scoped_records",
+                            "Scoped Records",
+                            "/reference/scoped-records",
+                            "tessara.reference.scoped-records.navigation",
+                            ShellNavigationModeV1::Document,
+                        ),
                     ],
                 },
                 ShellNavigationGroupV1 {
                     id: "core.admin".into(),
                     name: "Admin".into(),
                     items: vec![
-                        item("datasets"),
-                        item("user_management"),
-                        item("roles_access"),
-                        item("node_types"),
-                        item("module_management"),
-                        item("application_composition"),
+                        contribution(
+                            "datasets",
+                            "Datasets",
+                            "/datasets",
+                            "tessara.datasets.navigation",
+                            ShellNavigationModeV1::Shell,
+                        ),
+                        core_item("user_management"),
+                        core_item("roles_access"),
+                        core_item("node_types"),
+                        core_item("module_management"),
+                        core_item("application_composition"),
                     ],
                 },
             ],
@@ -359,10 +363,23 @@ mod tests {
 
     #[test]
     fn delivery_mode_controls_document_navigation_independently_of_ownership() {
-        assert!(!item("dashboards").requires_document_navigation());
-        assert!(!item("forms").requires_document_navigation());
-        assert!(item("scoped_records").requires_document_navigation());
-        assert!(!item("home").requires_document_navigation());
+        let dashboards = contribution(
+            "dashboards",
+            "Dashboards",
+            "/dashboards",
+            "tessara.dashboards.navigation",
+            ShellNavigationModeV1::Shell,
+        );
+        let scoped_records = contribution(
+            "scoped_records",
+            "Scoped Records",
+            "/reference/scoped-records",
+            "tessara.reference.scoped-records.navigation",
+            ShellNavigationModeV1::Document,
+        );
+        assert!(!dashboards.requires_document_navigation());
+        assert!(scoped_records.requires_document_navigation());
+        assert!(!core_item("home").requires_document_navigation());
     }
 
     #[test]
@@ -399,7 +416,16 @@ mod tests {
             .retain(|item| item.owner == ShellNavigationItemOwnerV1::Core);
         assert!(response.is_supported());
 
-        response.groups[0].items.insert(1, item("forms"));
+        response.groups[0].items.insert(
+            1,
+            contribution(
+                "forms",
+                "Forms",
+                "/forms",
+                "tessara.forms.navigation",
+                ShellNavigationModeV1::Shell,
+            ),
+        );
         assert!(!response.is_supported());
     }
 
@@ -441,14 +467,13 @@ mod tests {
     #[test]
     fn manifest_contributions_are_bounded_without_a_product_specific_key() {
         let mut response = available();
-        response.groups[0].items.push(ShellNavigationItemV1 {
-            key: "example.module.navigation".into(),
-            label: "Example Module".into(),
-            href: "/reference/example".into(),
-            owner: ShellNavigationItemOwnerV1::Contribution,
-            contribution_id: Some("example.module.navigation".into()),
-            navigation_mode: ShellNavigationModeV1::Document,
-        });
+        response.groups[0].items.push(contribution(
+            "example_module",
+            "Example Module",
+            "/reference/example",
+            "example.module.navigation",
+            ShellNavigationModeV1::Document,
+        ));
         assert!(response.is_supported());
 
         response.groups[0]
@@ -457,6 +482,50 @@ mod tests {
             .expect("manifest contribution")
             .href = "https://example.invalid".into();
         assert!(!response.is_supported());
+    }
+
+    #[test]
+    fn manifest_contributions_cannot_claim_a_hidden_core_href() {
+        let mut response = available();
+        response.groups[0]
+            .items
+            .retain(|item| item.key != "operations");
+        response.groups[0].items.push(contribution(
+            "example_module",
+            "Example Module",
+            "/operations",
+            "example.module.navigation",
+            ShellNavigationModeV1::Shell,
+        ));
+
+        assert!(!response.is_supported());
+    }
+
+    #[test]
+    fn dashboard_is_accepted_only_once_as_its_manifest_contribution() {
+        let mut response = available();
+        let dashboard = response.groups[0]
+            .items
+            .iter()
+            .find(|item| item.contribution_id.as_deref() == Some("tessara.dashboards.navigation"))
+            .expect("Dashboard manifest contribution")
+            .clone();
+
+        let mut duplicate_identity = dashboard.clone();
+        duplicate_identity.key = "dashboard_copy".into();
+        duplicate_identity.href = "/dashboard-copy".into();
+        response.groups[0].items.push(duplicate_identity);
+        assert!(!response.is_supported());
+
+        let mut core_owned = available();
+        let dashboard = core_owned.groups[0]
+            .items
+            .iter_mut()
+            .find(|item| item.key == "dashboards")
+            .expect("Dashboard manifest contribution");
+        dashboard.owner = ShellNavigationItemOwnerV1::Core;
+        dashboard.contribution_id = None;
+        assert!(!core_owned.is_supported());
     }
 
     #[test]

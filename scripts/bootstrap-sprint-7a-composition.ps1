@@ -7,6 +7,8 @@ param(
     [string]$SupervisorUrl = "http://127.0.0.1:8096",
     [string]$ResolvedCompositionEnvelope,
     [string]$ReleaseCatalogEnvelope,
+    [string]$BlueprintPath,
+    [string]$RuntimeDirectory,
     [switch]$SkipBuild,
     [switch]$ReplaceExisting,
     [string]$DeploymentDirectory = "sprint-7a",
@@ -15,7 +17,8 @@ param(
     [string]$RuntimeLabel = "sprint-7a",
     [string[]]$AdditionalBuildServices = @(),
     [string[]]$AdditionalExpectedNavigationHrefs = @(),
-    [switch]$SkipLegacySeed
+    [switch]$SkipLegacySeed,
+    [switch]$SemanticNoOp
 )
 
 Set-StrictMode -Version Latest
@@ -24,8 +27,20 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $composePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ComposeFile))
 $expectedProject = $ExpectedProject
 $installationId = $InstallationId
-$runtimeDirectory = Join-Path $repoRoot "target/$RuntimeLabel-bootstrap/$Composition"
-$blueprintPath = Join-Path $repoRoot "deploy/$DeploymentDirectory/blueprints/$Composition.json"
+$runtimeDirectory = if ([string]::IsNullOrWhiteSpace($RuntimeDirectory)) {
+    Join-Path $repoRoot "target/$RuntimeLabel-bootstrap/$Composition"
+} elseif ([IO.Path]::IsPathRooted($RuntimeDirectory)) {
+    [IO.Path]::GetFullPath($RuntimeDirectory)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $repoRoot $RuntimeDirectory))
+}
+$resolvedBlueprintPath = if ([string]::IsNullOrWhiteSpace($BlueprintPath)) {
+    Join-Path $repoRoot "deploy/$DeploymentDirectory/blueprints/$Composition.json"
+} elseif ([IO.Path]::IsPathRooted($BlueprintPath)) {
+    [IO.Path]::GetFullPath($BlueprintPath)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $repoRoot $BlueprintPath))
+}
 $catalogTemplatePath = Join-Path $repoRoot "deploy/$DeploymentDirectory/catalogs/local-release-catalog.json"
 $catalogPayloadPath = Join-Path $runtimeDirectory "release-catalog.json"
 $catalogPath = Join-Path $runtimeDirectory "release-catalog.signed.json"
@@ -56,7 +71,9 @@ function Prepare-Sprint7AUatFixtures {
 }
 
 if (-not (Test-Path -LiteralPath $composePath)) { throw "Compose file not found: $composePath" }
-if (-not (Test-Path -LiteralPath $blueprintPath)) { throw "Blueprint not found: $blueprintPath" }
+if (-not (Test-Path -LiteralPath $resolvedBlueprintPath -PathType Leaf)) {
+    throw "Blueprint not found: $resolvedBlueprintPath"
+}
 [IO.Directory]::CreateDirectory($runtimeDirectory) | Out-Null
 
 Push-Location $repoRoot
@@ -183,9 +200,43 @@ try {
     & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
         catalog-verify $catalogPath $catalogKeyPath
     if ($LASTEXITCODE -ne 0) { throw "Signed release catalog verification failed." }
-    if ([string]::IsNullOrWhiteSpace($ResolvedCompositionEnvelope)) {
+    if ($SemanticNoOp) {
+        if (-not [string]::IsNullOrWhiteSpace($ResolvedCompositionEnvelope)) {
+            throw "Semantic no-op resolution cannot use a detached full-plan envelope."
+        }
+        $currentComposition = Invoke-RestMethod `
+            -Uri "$CoreUrl/api/admin/composition" `
+            -Method Get `
+            -WebSession $coreSession
+        if ($null -eq $currentComposition.latest_blueprint -or $null -eq $currentComposition.latest_receipt) {
+            throw "Semantic no-op resolution requires one successfully applied current composition."
+        }
+        $noOpBlueprint = Get-Content -LiteralPath $resolvedBlueprintPath -Raw | ConvertFrom-Json
+        $noOpBlueprint.revision = [uint64]$currentComposition.latest_blueprint.revision + 1
+        Invoke-RestMethod `
+            -Uri "$CoreUrl/api/admin/composition/blueprints" `
+            -Method Post `
+            -WebSession $coreSession `
+            -ContentType "application/json" `
+            -Body ($noOpBlueprint | ConvertTo-Json -Depth 100) | Out-Null
+        $noOpResolved = Invoke-RestMethod `
+            -Uri "$CoreUrl/api/admin/composition/blueprints/$($noOpBlueprint.revision)/resolve" `
+            -Method Post `
+            -WebSession $coreSession `
+            -ContentType "application/json" `
+            -Body (@{ catalog = $catalog } | ConvertTo-Json -Depth 100)
+        $noOpActions = @($noOpResolved.lockfile.materialization_plan.actions)
+        if ($noOpActions.Count -ne 1 -or [string]$noOpActions[0].action -cne "verify_read_back") {
+            throw "Unchanged desired state did not resolve to the exact semantic no-op read-back plan."
+        }
+        [IO.File]::WriteAllText(
+            $lockfilePath,
+            ($noOpResolved.lockfile | ConvertTo-Json -Depth 100) + "`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+    } elseif ([string]::IsNullOrWhiteSpace($ResolvedCompositionEnvelope)) {
         & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-            resolve $blueprintPath $catalogPath $catalogKeyPath $lockfilePath
+            resolve $resolvedBlueprintPath $catalogPath $catalogKeyPath $lockfilePath
         if ($LASTEXITCODE -ne 0) { throw "Blueprint resolution failed." }
     } else {
         if ([string]::IsNullOrWhiteSpace($ReleaseCatalogEnvelope)) {
@@ -198,12 +249,17 @@ try {
     }
 
     $lockfile = Get-Content -LiteralPath $lockfilePath -Raw | ConvertFrom-Json
-    $approvedEffects = @("install", "upgrade", "configure")
-    if ($null -ne $lockfile.core.bootstrap -or @($lockfile.modules | Where-Object { $null -ne $_.bootstrap }).Count -gt 0) {
-        $approvedEffects += "bootstrap"
-    }
-    if (@($lockfile.modules | Where-Object { $_.enabled }).Count -gt 0) { $approvedEffects += "enable" }
-    if (@($lockfile.modules | Where-Object { -not $_.enabled }).Count -gt 0) { $approvedEffects += "disable" }
+    $approvedEffects = @($lockfile.materialization_plan.actions | ForEach-Object {
+        switch ([string]$_.action) {
+            "acquire_image" { "install" }
+            "provision_database" { "install" }
+            "migrate" { "upgrade" }
+            "switch_traffic" { "upgrade" }
+            "configure" { "configure" }
+            "bootstrap" { "bootstrap" }
+            "set_enablement" { if ([bool]$_.enabled) { "enable" } else { "disable" } }
+        }
+    } | Sort-Object -Unique)
 
     # Persist the same desired state and explicit approval through Core before
     # the operator-authorized Supervisor apply. This keeps Core read-back
@@ -217,11 +273,13 @@ try {
         $projectedPlanDigest = $compositionSummary.latest_lockfile.materialization_plan_digest
     }
     $resolveAndApprove = $false
-    if ($projectedPlanDigest -ne $lockfile.materialization_plan_digest) {
+    if ($SemanticNoOp) {
+        $resolveAndApprove = $true
+    } elseif ($projectedPlanDigest -ne $lockfile.materialization_plan_digest) {
         if ($null -ne $compositionSummary.latest_blueprint) {
             throw "Core already contains a different Blueprint; use -ReplaceExisting for a fresh $RuntimeLabel installation."
         }
-        $blueprintJson = Get-Content -LiteralPath $blueprintPath -Raw
+        $blueprintJson = Get-Content -LiteralPath $resolvedBlueprintPath -Raw
         Invoke-RestMethod `
             -Uri "$CoreUrl/api/admin/composition/blueprints" `
             -Method Post `
@@ -340,11 +398,12 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Apply authorization signing failed." }
     }
 
-    $response = & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-        apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
-    if ($LASTEXITCODE -ne 0) {
+    $response = @(& cargo run -q -p tessara-supervisor --bin tessara-compose -- `
+        apply $SupervisorUrl $lockfilePath $signedAuthorizationPath 2>&1 | ForEach-Object { [string]$_ })
+    $applyExitCode = $LASTEXITCODE
+    if ($applyExitCode -ne 0) {
         $failureResponsePath = Join-Path $runtimeDirectory "apply-failure-response.log"
-        [IO.File]::WriteAllLines($failureResponsePath, @($response), [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllLines($failureResponsePath, $response, [Text.UTF8Encoding]::new($false))
         throw "Supervisor apply failed. Raw response: $failureResponsePath"
     }
     [IO.File]::WriteAllLines($receiptPath, $response, [Text.UTF8Encoding]::new($false))

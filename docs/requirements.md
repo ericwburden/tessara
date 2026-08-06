@@ -139,7 +139,26 @@ A module bootstrap contract, when provided, must define its own schema and seman
 
 During the pre-pilot extraction only, current in-process areas may advertise `transitional_in_process` contribution descriptors. A descriptor may reserve a Module Definition identity but must not be represented as a Module Release or Module Instance. A first-party extracted consumer may bind temporarily to a versioned Core Release compatibility contract; that contract must use `core_installation`-owned transition resource references and must not be selectable by new external application Blueprints.
 
-Extraction of that provider must create a real Module Release/Instance and perform an explicit data/reference migration: publish an old-to-new mapping, let each consumer rewrite its own references through a versioned migration/rebinding contract, emit completeness receipts, retain the Core adapter read-only until migration completes, and preserve an explicit migrated/retired result for old Core-owned references. Owner/type identity must never change merely because the new provider is enabled.
+During pre-production Phase 8, extracting that provider must create a real
+Module Release/Instance and fresh owner database through one offline,
+destructive, source-exact materialization. Owner-controlled bootstrap and
+read-back contracts rebuild disposable seed data in dependency order, and
+consumers create new Module Instance references directly. The same cutover
+must remove the old product storage, compatibility adapter, readers, and
+payload shapes. Old transition references remain owner/type-stable historical
+evidence but are unsupported runtime inputs; the extraction must not publish
+an old-to-new mapping, run a rebinding protocol, emit migration-completeness
+receipts, retain a legacy adapter, or create a migration ledger. Supported
+legacy import, mapping, rebinding, partial-failure resume, and migration audit
+belong to Phase 9.
+
+An independently deployed module must be absent from Core's frozen transition
+catalog. For Sprint 8A that catalog contains exactly `tessara.forms`,
+`tessara.workflows`, `tessara.responses`, `tessara.datasets`, and
+`tessara.migration`. Components and Dashboard must appear only through their
+real Module Releases and Module Instances, with navigation contributed only by
+their enrolled manifests. The reference navigation order is Scoped Records
+`7`, Components `8`, and Dashboard `9`.
 
 ## Module Lifecycle And Administration
 
@@ -352,7 +371,9 @@ Module owners define compatibility and versioning rules for their resources. For
 - Application compositions must have end-to-end tests against their resolved lockfiles.
 - Administrator-enrollment conformance must cover local-user and external-identity paths; capability-floor and designated-role validation; at-most-one claim and generation revocation; reservation, local transactional redemption, signed-result reconciliation, and idempotent retry; one-time secret display; expired/revoked/replayed/reserved/consumed/cross-installation rejection; closure while a Viable Core Administrator exists; audited recovery eligibility; and replay resistance after restoring Core to a pre-redemption backup.
 - Pilot hardening must execute a Supervisor binary/control-contract and ledger-schema upgrade plus rollback and recovery, not merely document its procedure.
-- Current compatibility adapters must remain isolated and removable; new product behavior must not expand them.
+- Compatibility adapters for still-in-process providers must remain isolated
+  and removable; provider extraction removes them, and new product behavior
+  must not expand them.
 - Unsupported behavior must be documented explicitly.
 
 ## Out Of Scope Or Deferred

@@ -124,6 +124,7 @@ CREATE TABLE component_mutation_replays (
 CREATE TABLE component_consumed_service_nonces (
     module_instance_id UUID NOT NULL,
     nonce UUID NOT NULL,
+    authorization_jti UUID NOT NULL UNIQUE,
     correlation_id TEXT NOT NULL CHECK (btrim(correlation_id) <> ''),
     issued_at TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),

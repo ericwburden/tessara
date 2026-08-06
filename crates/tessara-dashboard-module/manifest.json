@@ -369,6 +369,12 @@
     {"path_template":"/api/admin/dashboards/{dashboard_id}/dependencies/refresh","method":"POST","required_capability":"dashboards:manage","authorization_action":"dashboards.refresh_dependencies","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/dashboards/{dashboard_id}/dependencies/{finding_id}/actions","method":"POST","required_capability":"dashboards:manage","authorization_action":"dashboards.act_on_dependency","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"}
   ],
+  "provided_service_actions": [],
+  "consumed_service_actions": [
+    {"dependency_binding":"tessara.dashboards.component-version","functional_contract":"tessara.components.component-version","authorization_action":"components.resolve"},
+    {"dependency_binding":"tessara.dashboards.component-version","functional_contract":"tessara.components.component-version","authorization_action":"components.catalog"},
+    {"dependency_binding":"tessara.dashboards.component-version","functional_contract":"tessara.components.component-version","authorization_action":"components.render"}
+  ],
   "control_projections": [
     {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"},
     {"kind":"organization","path":"/api/private/organization-projection","revision_field":"organization_revision"}
@@ -376,12 +382,12 @@
   "assets": [
     {
       "path": "/dashboard.css",
-      "digest": "sha256:38d4d592914df1654658c7e3072485ef4b11d8db0d1ab109f29ebe1518f8040b",
+      "digest": "sha256:6257b298c6e97f867147e404b7327bff19c665f89bfb42b2903535f0dd888afa",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/dashboard-lifecycle.css",
-      "digest": "sha256:ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99",
+      "digest": "sha256:0844068d079b647efc4527aba90a8831a856d325e89d4b8527871a9c2e34183f",
       "content_type": "text/css; charset=utf-8"
     },
     {

@@ -24,6 +24,10 @@ $expectedNavigation = @(
     "Datasets", "Scoped Records", "Components", "Dashboards", "User Management",
     "Roles & Access", "Node Types", "Module Management", "Application Composition"
 )
+$expectedModules = [ordered]@{
+    "tessara.components" = [ordered]@{ version = "1.0.0"; instance_id = "142a1ece-f74b-85f6-8ca0-92f4a02e9409"; contribution_id = "tessara.components.navigation"; href = "/components" }
+    "tessara.dashboards" = [ordered]@{ version = "3.0.0"; instance_id = "a6339e9f-1131-870e-aac6-18a8a01e4bbd"; contribution_id = "tessara.dashboards.navigation"; href = "/dashboards" }
+}
 
 function Assert-Sprint8ADeployedInventory {
     param(
@@ -40,32 +44,42 @@ function Assert-Sprint8ADeployedInventory {
     if (($transitions -join "`n") -cne ($expectedTransitions -join "`n")) {
         throw "Sprint 8A deployed inventory must contain the exact five Core transition identities."
     }
-    $dashboardInventory = @($Inventory.entries | Where-Object {
-        $_.kind -ceq "independently_deployed" -and $_.definition.id -ceq "tessara.dashboards"
-    })
-    $anyDashboard = @($Inventory.entries | Where-Object {
-        ($_.kind -ceq "independently_deployed" -and $_.definition.id -ceq "tessara.dashboards") -or
-        ($_.kind -ceq "transitional_in_process" -and $_.descriptor.reserved_definition_id -ceq "tessara.dashboards")
-    })
-    if ($dashboardInventory.Count -ne 1 -or $anyDashboard.Count -ne 1 -or
-        [string]$dashboardInventory[0].release.version -cne "3.0.0" -or
-        [string]::IsNullOrWhiteSpace([string]$dashboardInventory[0].instance.id)) {
-        throw "Dashboard must appear exactly once through its real 3.0.0 Module Release and live Module Instance."
+    $moduleInventory = [ordered]@{}
+    foreach ($definitionId in $expectedModules.Keys) {
+        $expected = $expectedModules[$definitionId]
+        $real = @($Inventory.entries | Where-Object {
+            $_.kind -ceq "independently_deployed" -and $_.definition.id -ceq $definitionId
+        })
+        $allRepresentations = @($Inventory.entries | Where-Object {
+            ($_.kind -ceq "independently_deployed" -and $_.definition.id -ceq $definitionId) -or
+            ($_.kind -ceq "transitional_in_process" -and $_.descriptor.reserved_definition_id -ceq $definitionId)
+        })
+        if ($real.Count -ne 1 -or $allRepresentations.Count -ne 1 -or
+            [string]$real[0].release.version -cne [string]$expected.version -or
+            [string]$real[0].instance.id -cne [string]$expected.instance_id) {
+            throw "$definitionId must appear exactly once through its exact Module Release and Module Instance identity."
+        }
+        $moduleInventory[$definitionId] = $real[0]
     }
 
     if ([int]$Navigation.schema_version -ne 3 -or [string]$Navigation.state -cne "available") {
         throw "Sprint 8A shell navigation must be an available schema-v3 document."
     }
     $items = @($Navigation.groups | ForEach-Object { $_.items })
-    $dashboardNavigation = @($items | Where-Object {
-        $_.key -ceq "tessara.dashboards.navigation" -or
-        $_.contribution_id -ceq "tessara.dashboards.navigation" -or
-        $_.href -ceq "/dashboards"
-    })
-    if ($dashboardNavigation.Count -ne 1 -or
-        [string]$dashboardNavigation[0].owner -cne "contribution" -or
-        [string]$dashboardNavigation[0].contribution_id -cne "tessara.dashboards.navigation") {
-        throw "Dashboard navigation must appear exactly once through its manifest contribution."
+    $moduleNavigation = [ordered]@{}
+    foreach ($definitionId in $expectedModules.Keys) {
+        $expected = $expectedModules[$definitionId]
+        $matches = @($items | Where-Object {
+            $_.key -ceq [string]$expected.contribution_id -or
+            $_.contribution_id -ceq [string]$expected.contribution_id -or
+            $_.href -ceq [string]$expected.href
+        })
+        if ($matches.Count -ne 1 -or
+            [string]$matches[0].owner -cne "contribution" -or
+            [string]$matches[0].contribution_id -cne [string]$expected.contribution_id) {
+            throw "$definitionId navigation must appear exactly once through its manifest contribution."
+        }
+        $moduleNavigation[$definitionId] = $matches[0]
     }
     $labels = @($items | ForEach-Object { [string]$_.label })
     if (($labels -join "`n") -cne ($expectedNavigation -join "`n")) {
@@ -77,10 +91,10 @@ function Assert-Sprint8ADeployedInventory {
         evidence_kind = "tessara.sprint-8a.deployed-inventory-navigation"
         generated_at = [DateTimeOffset]::UtcNow.ToString("o")
         transition_identities = $transitions
-        dashboard_inventory = @($dashboardInventory | ForEach-Object {
-            [ordered]@{ definition_id = [string]$_.definition.id; release_version = [string]$_.release.version; instance_id = [string]$_.instance.id }
+        module_inventory = @($moduleInventory.GetEnumerator() | ForEach-Object {
+            [ordered]@{ definition_id = [string]$_.Key; release_version = [string]$_.Value.release.version; instance_id = [string]$_.Value.instance.id }
         })
-        dashboard_navigation = @($dashboardNavigation)
+        module_navigation = @($moduleNavigation.GetEnumerator() | ForEach-Object { $_.Value })
         navigation_order = $labels
         passed = $true
     }
@@ -89,16 +103,20 @@ function Assert-Sprint8ADeployedInventory {
 if ($SelfTest) {
     $entries = @($expectedTransitions | ForEach-Object {
         [pscustomobject]@{ kind = "transitional_in_process"; descriptor = [pscustomobject]@{ reserved_definition_id = $_ }; definition = $null }
-    }) + @([pscustomobject]@{
-        kind = "independently_deployed"
-        descriptor = [pscustomobject]@{ reserved_definition_id = $null }
-        definition = [pscustomobject]@{ id = "tessara.dashboards" }
-        release = [pscustomobject]@{ version = "3.0.0" }
-        instance = [pscustomobject]@{ id = "a6339e9f-1131-870e-aac6-18a8a01e4bbd" }
+    }) + @($expectedModules.GetEnumerator() | ForEach-Object {
+        [pscustomobject]@{
+            kind = "independently_deployed"
+            descriptor = [pscustomobject]@{ reserved_definition_id = $null }
+            definition = [pscustomobject]@{ id = [string]$_.Key }
+            release = [pscustomobject]@{ version = [string]$_.Value.version }
+            instance = [pscustomobject]@{ id = [string]$_.Value.instance_id }
+        }
     })
     $items = @($expectedNavigation | ForEach-Object {
         if ($_ -ceq "Dashboards") {
-            [pscustomobject]@{ key = "tessara.dashboards.navigation"; label = $_; href = "/dashboards"; owner = "contribution"; contribution_id = "tessara.dashboards.navigation" }
+            [pscustomobject]@{ key = "dashboards"; label = $_; href = "/dashboards"; owner = "contribution"; contribution_id = "tessara.dashboards.navigation" }
+        } elseif ($_ -ceq "Components") {
+            [pscustomobject]@{ key = "components"; label = $_; href = "/components"; owner = "contribution"; contribution_id = "tessara.components.navigation" }
         } else {
             [pscustomobject]@{ key = $_.ToLowerInvariant(); label = $_; href = "/fixture"; owner = "core"; contribution_id = $null }
         }

@@ -756,30 +756,6 @@ fn independent_module_sections(
         })
         .unwrap_or_default();
     let has_dependencies = !dependency_rows.is_empty();
-    let transition_binding_notes = manifest
-        .as_ref()
-        .map(|manifest| {
-            manifest
-                .dependencies
-                .iter()
-                .filter(|dependency| {
-                    dependency.contract_id.as_str() == "tessara.components.component-version"
-                })
-                .map(|dependency| {
-                    let binding = dependency.binding_key.to_string();
-                    view! {
-                        <aside class="module-transition-binding-note">
-                            <strong>"First-party transition binding"</strong>
-                            <p>
-                                <code>{binding}</code>
-                                " uses Core's installation-owned Components adapter. External Blueprints cannot select it; explicit migration is required in Sprint 8A."
-                            </p>
-                        </aside>
-                    }
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
     let serving_state = entry.serving_state();
     let manifest_sections = independent_manifest_sections(manifest.as_ref());
     view! {
@@ -858,9 +834,6 @@ fn independent_module_sections(
                         <div><dt>"Validation"</dt><dd><span class=if configuration.valid { "status-badge is-success" } else { "status-badge is-danger" }>{if configuration.valid { "Valid" } else { "Finding" }}</span>" " {format!("Release {} · {}", release.version, if configuration.valid { "no findings" } else { "review findings" })}</dd></div>
                         <div><dt>"Authoritative validator"</dt><dd>"Module-owned configuration contract"</dd></div>
                     </dl>
-                    <div hidden=move || configuration_editing.get()>
-                        {transition_binding_notes}
-                    </div>
                     <form
                         class="module-configuration-form"
                         method="post"
@@ -928,14 +901,14 @@ fn independent_module_sections(
                     </a>
                 </aside>
             </div>
-            <section data-module-section="findings" class="module-dashboard-diagnostics">
-                <div class="module-dashboard-diagnostics__heading">
+            <section data-module-section="findings" class="module-diagnostics">
+                <div class="module-diagnostics__heading">
                     <div>
-                        <p class="module-dashboard-diagnostics__eyebrow">{definition.display_name.clone()}</p>
+                        <p class="module-diagnostics__eyebrow">{definition.display_name.clone()}</p>
                         <h2>"Health and diagnostics"</h2>
                         <p>"Sanitized operational context from the shared independent-module contract."</p>
                     </div>
-                    <div class="module-dashboard-diagnostics__actions">
+                    <div class="module-diagnostics__actions">
                         <a class="button button--secondary" href=health_href>
                             <RefreshCw class="button__icon"/>
                             "Refresh status"
@@ -950,8 +923,8 @@ fn independent_module_sections(
                         </a>
                     </div>
                 </div>
-                <div class="module-dashboard-diagnostics__metrics">
-                    <article class="module-dashboard-diagnostic-metric">
+                <div class="module-diagnostics__metrics">
+                    <article class="module-diagnostic-metric">
                         <HeartPulse/>
                         <div>
                             <span>"Readiness"</span>
@@ -959,7 +932,7 @@ fn independent_module_sections(
                             <small>{if instance.ready { "Configuration, data, and Core authorization exchange are available." } else { "The module readiness probe is not passing." }}</small>
                         </div>
                     </article>
-                    <article class="module-dashboard-diagnostic-metric">
+                    <article class="module-diagnostic-metric">
                         <Activity/>
                         <div>
                             <span>"Liveness"</span>
@@ -967,7 +940,7 @@ fn independent_module_sections(
                             <small>"The module responded during the "<time datetime=instance.observed_at.clone()>"latest health check"</time>"."</small>
                         </div>
                     </article>
-                    <article class="module-dashboard-diagnostic-metric">
+                    <article class="module-diagnostic-metric">
                         <Database/>
                         <div>
                             <span>{if instance.database_name.is_some() { "Module database" } else { "Persistence" }}</span>
@@ -979,7 +952,7 @@ fn independent_module_sections(
                             <small><code>{instance.database_name.unwrap_or_else(|| "module-owned state".into())}</code>" · instance-scoped runtime identity."</small>
                         </div>
                     </article>
-                    <article class="module-dashboard-diagnostic-metric">
+                    <article class="module-diagnostic-metric">
                         <ShieldCheck/>
                         <div>
                             <span>"Core authorization"</span>
@@ -988,7 +961,7 @@ fn independent_module_sections(
                         </div>
                     </article>
                 </div>
-                <section class="organization-detail-card module-dashboard-dependency-card">
+                <section class="organization-detail-card module-dependency-card">
                     <div class="module-detail__heading">
                         <div>
                             <h2>"Dependency assessment"</h2>
@@ -1002,7 +975,7 @@ fn independent_module_sections(
                         view! { <p>"No external functional dependencies were declared."</p> }.into_any()
                     }}
                 </section>
-                <section class="organization-detail-card module-dashboard-dependency-card">
+                <section class="organization-detail-card module-dependency-card">
                     <div class="module-detail__heading">
                         <div>
                             <h2>"Findings"</h2>

@@ -21,14 +21,13 @@ use tessara_datasets_contract::{
     DatasetSortDirection,
 };
 use tessara_module_contract::{
-    AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1, AuthorizationExchangeRequestV1,
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
-    ContractCompatibilityState, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
-    ModuleInstanceOwnerState, ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,
-    OwnerDataState, ProviderAvailabilityState, ProviderContractIdentity, ResourceAccessState,
-    ResourceIdentityState, ResourceLifecycleState, ResourceObservationStrategy,
-    ResourceObservationV1, ResourceOwner, ResourceOwnerState, ResourceResolutionV1,
-    ResourceRevision, ResourceTypeId, SecurityCapabilityId, SignedEnvelopeV1,
+    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    AuthorizationValidationContextV3, ContractCompatibilityState, FunctionalContractId,
+    ModuleDefinitionId, ModuleInstanceOwnerState, ModuleServicePrincipalV1, ModuleServiceRequestV1,
+    ModuleServiceRequestValidationContextV1, OwnerDataState, ProviderAvailabilityState,
+    ProviderContractIdentity, ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
+    ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceOwnerState,
+    ResourceResolutionV1, ResourceRevision, ResourceTypeId, SecurityCapabilityId, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -37,17 +36,11 @@ use crate::{
     load_security_state,
 };
 
-const DASHBOARD_DEFINITION_ID: &str = "tessara.dashboards";
-const CORE_DASHBOARD_BINDING: &str = "tessara.core.dashboards";
-const DASHBOARD_RESOURCE_CONTRACT: &str = "tessara.dashboards.dashboard";
-const DASHBOARD_COMPOSITION_CONTRACT: &str = "tessara.dashboards.composition";
-const CORE_COMPONENT_BINDING: &str = "tessara.core.components";
-
 pub(super) fn routes() -> Router<ComponentModuleState> {
     Router::new()
-        .route("/api/private/dashboard-components/resolve", post(resolve))
-        .route("/api/private/dashboard-components/catalog", post(catalog))
-        .route("/api/private/dashboard-components/render", post(render))
+        .route("/api/private/components/resolve", post(resolve))
+        .route("/api/private/components/catalog", post(catalog))
+        .route("/api/private/components/render", post(render))
 }
 
 async fn resolve(
@@ -56,15 +49,14 @@ async fn resolve(
     Json(request): Json<ComponentResolutionRequest>,
 ) -> Result<Json<ComponentResolutionResponse>, ComponentModuleError> {
     let body = serde_json::to_vec(&request).map_err(internal)?;
-    let dashboard_grant = validate_dashboard_request(
+    let component_grant = validate_provider_request(
         &state,
         &headers,
-        "/api/private/dashboard-components/resolve",
+        "/api/private/components/resolve",
         &body,
+        "components.resolve",
     )
     .await?;
-    let component_grant =
-        exchange(&state, &headers, &dashboard_grant, "components.resolve").await?;
     let reference = request.reference.reference();
     let security = load_security_state(&state.pool)
         .await?
@@ -82,11 +74,11 @@ async fn resolve(
         return restricted(ResourceAccessState::NotEvaluated).map(Json);
     };
     let Some(row) = load_version(&state, version_id).await? else {
-        return restricted(ResourceAccessState::NotEvaluated).map(Json);
+        return undisclosed_reference().map(Json);
     };
     let scope: Vec<Uuid> = row.try_get("dataset_scope_node_ids")?;
     if !scope_authorized(&component_grant.payload, &scope) {
-        return restricted(ResourceAccessState::Unauthorized).map(Json);
+        return undisclosed_reference().map(Json);
     }
     resolved_response(
         &state,
@@ -109,15 +101,14 @@ async fn catalog(
             "Component catalog body must be empty".into(),
         ));
     }
-    let dashboard_grant = validate_dashboard_request(
+    let component_grant = validate_provider_request(
         &state,
         &headers,
-        "/api/private/dashboard-components/catalog",
+        "/api/private/components/catalog",
         &body,
+        "components.catalog",
     )
     .await?;
-    let component_grant =
-        exchange(&state, &headers, &dashboard_grant, "components.resolve").await?;
     let security = load_security_state(&state.pool)
         .await?
         .ok_or_else(unavailable_security)?;
@@ -161,17 +152,29 @@ async fn render(
         return Err(ComponentModuleError::Forbidden);
     }
     let body = serde_json::to_vec(&request).map_err(internal)?;
-    let dashboard_grant = validate_dashboard_request(
+    let component_grant = validate_provider_request(
         &state,
         &headers,
-        "/api/private/dashboard-components/render",
+        "/api/private/components/render",
         &body,
+        "components.render",
     )
     .await?;
-    let component_grant =
-        exchange(&state, &headers, &dashboard_grant, "components.execute").await?;
-    let version_id = Uuid::parse_str(request.reference.reference().resource_id())
-        .map_err(|_| ComponentModuleError::Forbidden)?;
+    let security = load_security_state(&state.pool)
+        .await?
+        .ok_or_else(unavailable_security)?;
+    let reference = request.reference.reference();
+    if reference.installation_id() != security.installation_id
+        || reference.owner()
+            != &(ResourceOwner::ModuleInstance {
+                installation_id: security.installation_id,
+                module_instance_id: security.module_instance_id,
+            })
+    {
+        return Err(ComponentModuleError::Forbidden);
+    }
+    let version_id =
+        Uuid::parse_str(reference.resource_id()).map_err(|_| ComponentModuleError::Forbidden)?;
     let row = load_version(&state, version_id)
         .await?
         .ok_or(ComponentModuleError::Forbidden)?;
@@ -198,7 +201,7 @@ async fn render(
     let execution: DatasetExecutionResponse = dataset_client::post(
         &state,
         &authorization,
-        "/api/private/component-datasets/execute",
+        "/api/private/datasets/execute",
         &execution_request,
     )
     .await?;
@@ -502,7 +505,11 @@ pub(super) fn render_execution(
         config.get("category_field")
     }
     .and_then(Value::as_str);
-    let comparison_key = config.get("comparison_field").and_then(Value::as_str);
+    let comparison_key = config
+        .get("comparison_field")
+        .and_then(Value::as_str)
+        .filter(|key| !key.is_empty());
+    let has_bar_comparison = component_type == "bar" && comparison_key.is_some();
     let dimension = |row: &tessara_datasets_contract::DatasetExecutionRow, key: Option<&str>| {
         key.and_then(|key| row.values.get(key))
             .and_then(Option::as_ref)
@@ -524,7 +531,7 @@ pub(super) fn render_execution(
     };
     let stat=(component_type=="stat_card").then(||{let value=rows.first().map(&numeric);json!({"label":config.get("label").and_then(Value::as_str).unwrap_or("Value"),"value":value,"display_value":value.map(|v|format_value(v,value_format)),"supporting_text":config.get("supporting_text"),"panel_style":config.get("panel_style").and_then(Value::as_str).unwrap_or("default")})});
     let points = if matches!(component_type, "bar" | "line") {
-        rows.iter().map(|row|{let raw=dimension(row,category_key);let comparison=dimension(row,comparison_key);let value=numeric(row);json!({"x":label(raw.clone()),"value":value,"display_value":format_value(value,value_format),"color":color(&raw),"comparison":(!comparison.is_empty()).then_some(comparison)})}).collect::<Vec<_>>()
+        rows.iter().map(|row|{let raw=dimension(row,category_key);let comparison=dimension(row,comparison_key);let value=numeric(row);let x=if has_bar_comparison {raw.clone()} else {label(raw.clone())};let point_color=color(if has_bar_comparison {&comparison} else {&raw});let comparison_label=(!comparison.is_empty()).then(||if has_bar_comparison {label(comparison.clone())} else {comparison.clone()});json!({"x":x,"value":value,"display_value":format_value(value,value_format),"color":point_color,"comparison":comparison_label})}).collect::<Vec<_>>()
     } else {
         Vec::new()
     };
@@ -533,7 +540,7 @@ pub(super) fn render_execution(
     } else {
         Vec::new()
     };
-    json!({"schema_version":1,"component_version_id":version_id,"component_id":component_id,"dataset_reference":dataset_reference,"component_type":component_type,"materialization_state":execution.materialization_state,"value_format":value_format,"legend_title":config.get("legend_title"),"bar_orientation":config.get("orientation"),"bar_comparison_layout":config.get("comparison_layout"),"x_axis_label":config.get("x_axis_label"),"y_axis_label":config.get("y_axis_label"),"line_smoothing":config.get("smoothing"),"stat":stat,"points":points,"slices":slices})
+    json!({"schema_version":1,"component_version_id":version_id,"component_id":component_id,"dataset_reference":dataset_reference,"component_type":component_type,"materialization_state":execution.materialization_state,"value_format":value_format,"legend_title":config.get("legend_title"),"bar_orientation":config.get("orientation"),"bar_comparison_layout":config.get("comparison_layout"),"x_axis_label":config.get("x_axis_label"),"y_axis_label":config.get("y_axis_label"),"line_smoothing":config.get("smoothing").and_then(Value::as_bool).unwrap_or(true),"stat":stat,"points":points,"slices":slices})
 }
 
 fn text_value(value: &Value) -> String {
@@ -559,14 +566,15 @@ fn format_value(value: f64, format: &str) -> String {
     }
 }
 
-async fn validate_dashboard_request(
+async fn validate_provider_request(
     state: &ComponentModuleState,
     headers: &HeaderMap,
     path: &str,
     body: &[u8],
-) -> Result<SignedEnvelopeV1<AuthorizationGrantV2>, ComponentModuleError> {
+    expected_action: &str,
+) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, ComponentModuleError> {
     let authorization = authorization_header(headers)?;
-    let grant: SignedEnvelopeV1<AuthorizationGrantV2> = decode(authorization)?;
+    let grant: SignedEnvelopeV1<AuthorizationGrantV3> = decode(authorization)?;
     state
         .core_authorization_verifier
         .verify(&grant)
@@ -574,19 +582,38 @@ async fn validate_dashboard_request(
     let security = load_security_state(&state.pool)
         .await?
         .ok_or_else(unavailable_security)?;
-    let (contract, operation) =
-        dashboard_contract(&grant.payload.action).ok_or(ComponentModuleError::Forbidden)?;
+    let correlation_id = headers
+        .get("x-tessara-correlation-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(ComponentModuleError::Forbidden)?;
+    let presenting_service = match &grant.payload.presenting_service {
+        ModuleServicePrincipalV1::ModuleInstance {
+            module_instance_id,
+            module_definition_id,
+        } => ModuleServicePrincipalV1::ModuleInstance {
+            module_instance_id: *module_instance_id,
+            module_definition_id: module_definition_id.clone(),
+        },
+        ModuleServicePrincipalV1::CoreGateway => return Err(ComponentModuleError::Forbidden),
+    };
+    let audience = AuthorizationAudienceV1::ModuleInstance {
+        module_instance_id: security.module_instance_id,
+        module_definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
+            .map_err(internal)?,
+    };
     grant
         .payload
-        .validate_for(&AuthorizationValidationContextV2 {
+        .validate_for(&AuthorizationValidationContextV3 {
             installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").map_err(internal)?,
-            audience_module_instance_id: grant.payload.audience_module_instance_id,
-            dependency_binding: DependencyBindingKey::new(CORE_DASHBOARD_BINDING)
+            correlation_id,
+            presenting_service: presenting_service.clone(),
+            audience,
+            dependency_binding: grant.payload.dependency_binding.clone(),
+            functional_contract: FunctionalContractId::new(COMPONENT_CONTRACT_ID)
                 .map_err(internal)?,
-            functional_contract: FunctionalContractId::new(contract).map_err(internal)?,
-            action: grant.payload.action.clone(),
-            operation,
+            action: expected_action.into(),
+            operation: AuthorizationGrantOperationV1::Read,
             resource_assertion: None,
             authorization_revision: security.authorization_revision as u64,
             organization_revision: security.organization_revision as u64,
@@ -598,85 +625,39 @@ async fn validate_dashboard_request(
         .and_then(|value| value.to_str().ok())
         .ok_or(ComponentModuleError::Forbidden)?;
     let service: SignedEnvelopeV1<ModuleServiceRequestV1> = decode(service_encoded)?;
+    let (caller_module_instance_id, caller_module_definition_id) = match presenting_service {
+        ModuleServicePrincipalV1::ModuleInstance {
+            module_instance_id,
+            module_definition_id,
+        } => (module_instance_id, module_definition_id),
+        ModuleServicePrincipalV1::CoreGateway => unreachable!("checked above"),
+    };
     state
-        .dashboard_service_verifier
+        .service_identity_registry
+        .module_service_verifier(&caller_module_definition_id)
+        .map_err(|_| ComponentModuleError::Forbidden)?
         .verify(&service)
         .map_err(|_| ComponentModuleError::Forbidden)?;
     service
         .payload
         .validate_for(&ModuleServiceRequestValidationContextV1 {
             installation_id: security.installation_id,
-            module_instance_id: grant.payload.audience_module_instance_id,
-            module_definition_id: ModuleDefinitionId::new(DASHBOARD_DEFINITION_ID)
-                .map_err(internal)?,
+            module_instance_id: caller_module_instance_id,
+            module_definition_id: caller_module_definition_id,
             method: "POST".into(),
             path: path.into(),
             canonical_body_digest: sha256_hex(body),
             inbound_grant_digest: sha256_hex(authorization.as_bytes()),
+            correlation_id: grant.payload.correlation_id.to_string(),
             now: Utc::now(),
         })
         .map_err(|_| ComponentModuleError::Forbidden)?;
-    let consumed = sqlx::query("INSERT INTO component_consumed_service_nonces(module_instance_id,nonce,correlation_id,issued_at) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING")
-        .bind(service.payload.module_instance_id).bind(service.payload.nonce).bind(&service.payload.correlation_id).bind(service.payload.issued_at).execute(&state.pool).await?;
+    let consumed = sqlx::query("INSERT INTO component_consumed_service_nonces(module_instance_id,nonce,authorization_jti,correlation_id,issued_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING")
+        .bind(service.payload.module_instance_id).bind(service.payload.nonce).bind(grant.payload.jti).bind(&service.payload.correlation_id).bind(service.payload.issued_at).execute(&state.pool).await?;
     if consumed.rows_affected() != 1 {
         return Err(ComponentModuleError::Forbidden);
     }
     Ok(grant)
-}
-
-async fn exchange(
-    state: &ComponentModuleState,
-    headers: &HeaderMap,
-    inbound: &SignedEnvelopeV1<AuthorizationGrantV2>,
-    action: &str,
-) -> Result<SignedEnvelopeV1<AuthorizationGrantV2>, ComponentModuleError> {
-    let security = load_security_state(&state.pool)
-        .await?
-        .ok_or_else(unavailable_security)?;
-    let request = AuthorizationExchangeRequestV1 {
-        schema_version: AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1,
-        target_module_instance_id: security.module_instance_id,
-        target_module_definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
-            .map_err(internal)?,
-        dependency_binding: DependencyBindingKey::new(CORE_COMPONENT_BINDING).map_err(internal)?,
-        functional_contract: FunctionalContractId::new(COMPONENT_CONTRACT_ID).map_err(internal)?,
-        action: action.into(),
-        operation: AuthorizationGrantOperationV1::Read,
-        required_capability: SecurityCapabilityId::new(READ_CAPABILITY).map_err(internal)?,
-        resource_assertion: None,
-    };
-    let response = dataset_client::exchange_authorization(
-        state,
-        authorization_header(headers)?,
-        &request,
-        security.module_instance_id,
-    )
-    .await?;
-    state
-        .core_authorization_verifier
-        .verify(&response.authorization)
-        .map_err(|_| ComponentModuleError::Forbidden)?;
-    response
-        .authorization
-        .payload
-        .validate_for(&AuthorizationValidationContextV2 {
-            installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").map_err(internal)?,
-            audience_module_instance_id: security.module_instance_id,
-            dependency_binding: request.dependency_binding,
-            functional_contract: request.functional_contract,
-            action: action.into(),
-            operation: AuthorizationGrantOperationV1::Read,
-            resource_assertion: None,
-            authorization_revision: security.authorization_revision as u64,
-            organization_revision: security.organization_revision as u64,
-            now: Utc::now(),
-        })
-        .map_err(|_| ComponentModuleError::Forbidden)?;
-    if response.authorization.payload.original_actor_id != inbound.payload.original_actor_id {
-        return Err(ComponentModuleError::Forbidden);
-    }
-    Ok(response.authorization)
 }
 
 async fn load_version(
@@ -873,40 +854,14 @@ fn restricted(
     )
     .map_err(internal)
 }
-fn scope_authorized(grant: &AuthorizationGrantV2, scope: &[Uuid]) -> bool {
+
+fn undisclosed_reference() -> Result<ComponentResolutionResponse, ComponentModuleError> {
+    restricted(ResourceAccessState::Unauthorized)
+}
+fn scope_authorized(grant: &AuthorizationGrantV3, scope: &[Uuid]) -> bool {
     SecurityCapabilityId::new(READ_CAPABILITY)
         .ok()
         .is_some_and(|capability| scope.iter().any(|id| grant.authorizes(&capability, *id)))
-}
-fn dashboard_contract(action: &str) -> Option<(&'static str, AuthorizationGrantOperationV1)> {
-    let operation = match action {
-        "dashboards.list"
-        | "dashboards.list_manageable"
-        | "dashboards.get"
-        | "dashboards.load_composition"
-        | "dashboards.read_dependencies"
-        | "dashboards.render_placement" => AuthorizationGrantOperationV1::Read,
-        "dashboards.create"
-        | "dashboards.update"
-        | "dashboards.delete"
-        | "dashboards.reconcile_composition"
-        | "dashboards.refresh_dependencies"
-        | "dashboards.act_on_dependency" => AuthorizationGrantOperationV1::Mutation,
-        _ => return None,
-    };
-    let contract = if matches!(
-        action,
-        "dashboards.load_composition"
-            | "dashboards.reconcile_composition"
-            | "dashboards.read_dependencies"
-            | "dashboards.refresh_dependencies"
-            | "dashboards.act_on_dependency"
-    ) {
-        DASHBOARD_COMPOSITION_CONTRACT
-    } else {
-        DASHBOARD_RESOURCE_CONTRACT
-    };
-    Some((contract, operation))
 }
 fn authorization_header(headers: &HeaderMap) -> Result<&str, ComponentModuleError> {
     headers
@@ -1122,11 +1077,88 @@ mod tests {
     };
     use uuid::Uuid;
 
-    use super::{execution_request, render_execution};
+    use axum::{Json, body::to_bytes, response::IntoResponse};
+    use tessara_module_contract::{
+        ContractCompatibilityState, ProviderAvailabilityState, ResourceAccessState,
+        ResourceIdentityState, ResourceOwnerState,
+    };
+
+    use super::{execution_request, render_execution, undisclosed_reference};
 
     fn dataset_reference() -> DatasetMajorLineReference {
         DatasetMajorLineReference::from_parts(Uuid::from_u128(1), Uuid::from_u128(2), 1)
             .expect("canonical Dataset reference")
+    }
+
+    #[tokio::test]
+    async fn missing_and_unauthorized_references_share_the_exact_restricted_response() {
+        let missing =
+            Json(undisclosed_reference().expect("missing reference projection")).into_response();
+        let unauthorized =
+            Json(undisclosed_reference().expect("unauthorized reference projection"))
+                .into_response();
+
+        assert_eq!(missing.status(), unauthorized.status());
+        assert_eq!(missing.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            missing.headers().get(axum::http::header::CONTENT_TYPE),
+            unauthorized.headers().get(axum::http::header::CONTENT_TYPE)
+        );
+
+        let missing_body = to_bytes(missing.into_body(), usize::MAX)
+            .await
+            .expect("missing response body");
+        let unauthorized_body = to_bytes(unauthorized.into_body(), usize::MAX)
+            .await
+            .expect("unauthorized response body");
+        assert_eq!(missing_body, unauthorized_body);
+
+        let body: serde_json::Value =
+            serde_json::from_slice(&missing_body).expect("restricted response JSON");
+        assert_eq!(body["resolution"]["access_state"], "unauthorized");
+        assert_eq!(body["resolution"]["owner_state"]["kind"], "undisclosed");
+        assert_eq!(body["resolution"]["resource_identity_state"], "undisclosed");
+        assert_eq!(
+            body["resolution"]["resource_lifecycle_state"]["kind"],
+            "undisclosed"
+        );
+        assert_eq!(body["resolution"]["compatibility_state"], "undisclosed");
+        assert_eq!(body["resolution"]["availability_state"], "undisclosed");
+        assert_eq!(
+            undisclosed_reference()
+                .expect("restricted response")
+                .resolution()
+                .access_state(),
+            ResourceAccessState::Unauthorized
+        );
+        assert_eq!(
+            undisclosed_reference()
+                .expect("restricted response")
+                .resolution()
+                .owner_state(),
+            ResourceOwnerState::Undisclosed
+        );
+        assert_eq!(
+            undisclosed_reference()
+                .expect("restricted response")
+                .resolution()
+                .resource_identity_state(),
+            ResourceIdentityState::Undisclosed
+        );
+        assert_eq!(
+            undisclosed_reference()
+                .expect("restricted response")
+                .resolution()
+                .compatibility_state(),
+            ContractCompatibilityState::Undisclosed
+        );
+        assert_eq!(
+            undisclosed_reference()
+                .expect("restricted response")
+                .resolution()
+                .availability_state(),
+            ProviderAvailabilityState::Undisclosed
+        );
     }
 
     #[test]
@@ -1136,6 +1168,14 @@ mod tests {
             "summary_field": "participant_id",
             "category_field": "status",
             "comparison_field": "program",
+            "category_labels": {
+                "Completed": "Completed work",
+                "North": "North region"
+            },
+            "category_colors": {
+                "Completed": "#111111",
+                "North": "#3568d4"
+            },
             "number_of_points": 20,
             "value_format": "integer"
         });
@@ -1167,8 +1207,79 @@ mod tests {
             request.limit,
         );
         assert_eq!(rendered["points"][0]["x"], "Completed");
-        assert_eq!(rendered["points"][0]["comparison"], "North");
+        assert_eq!(rendered["points"][0]["comparison"], "North region");
+        assert_eq!(rendered["points"][0]["color"], "#3568d4");
         assert_eq!(rendered["points"][0]["display_value"], "7");
+    }
+
+    #[test]
+    fn visual_execution_preserves_category_labels_and_colors_without_comparison() {
+        let config = json!({
+            "summary_type": "count",
+            "summary_field": "participant_id",
+            "category_field": "status",
+            "category_labels": {"Completed": "Completed work"},
+            "category_colors": {"Completed": "#3568d4"},
+            "number_of_points": 20,
+            "value_format": "integer"
+        });
+        let request =
+            execution_request(dataset_reference(), "bar", &config, "").expect("execution request");
+        assert_eq!(request.group_by, ["status"]);
+
+        let response = DatasetExecutionResponse {
+            schema_version: 1,
+            materialization_state: "ready".into(),
+            fields: Vec::new(),
+            rows: vec![DatasetExecutionRow {
+                row_id: "row-1".into(),
+                values: BTreeMap::from([
+                    ("status".into(), Some(json!("Completed"))),
+                    ("summary_value".into(), Some(json!(7))),
+                ]),
+            }],
+            next_cursor: None,
+        };
+        let rendered = render_execution(
+            response,
+            Uuid::from_u128(3),
+            Uuid::from_u128(4),
+            dataset_reference(),
+            "bar",
+            &config,
+            request.limit,
+        );
+        assert_eq!(rendered["points"][0]["x"], "Completed work");
+        assert!(rendered["points"][0]["comparison"].is_null());
+        assert_eq!(rendered["points"][0]["color"], "#3568d4");
+        assert_eq!(rendered["points"][0]["display_value"], "7");
+    }
+
+    #[test]
+    fn line_execution_emits_the_canonical_smoothing_default() {
+        let config = json!({
+            "summary_type": "count",
+            "summary_field": "participant_id",
+            "x_field": "status",
+            "number_of_points": 20
+        });
+        let response = DatasetExecutionResponse {
+            schema_version: 1,
+            materialization_state: "ready".into(),
+            fields: Vec::new(),
+            rows: Vec::new(),
+            next_cursor: None,
+        };
+        let rendered = render_execution(
+            response,
+            Uuid::from_u128(3),
+            Uuid::from_u128(4),
+            dataset_reference(),
+            "line",
+            &config,
+            20,
+        );
+        assert_eq!(rendered["line_smoothing"], true);
     }
 
     #[test]

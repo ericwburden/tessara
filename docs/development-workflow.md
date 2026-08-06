@@ -1,10 +1,11 @@
 # Tessara Development Workflow
 
 This document separates the day-to-day development loops by speed and intent.
-The commands below describe the current single-service transition baseline plus
-the first Sprint 6A module-contract checks. As later Phase 6 runtime tooling
-lands, module-focused and full-composition workflows will be added without
-weakening these baseline gates.
+The commands below retain the fast Core/root loop for Core and still-in-process
+feature areas while also defining the focused module and full-composition work
+required by the current multi-process baseline. Components, Dashboard, and
+Scoped Records are independently built and deployed modules; their work is not
+validated as a root-web-only change.
 
 ## Recommended Loops
 
@@ -130,15 +131,17 @@ full rebuild cost. Changes to test expectations remain subject to the test
 change-control rules below regardless of which development loop is used.
 
 When changing an existing extracted frontend feature area, prefer the focused
-crate loop first, then run root integration checks before closeout. Keep current
-root route, shell, authentication, hydration, document, CSS, and asset behavior
-stable until the module gateway and SDK replace those responsibilities.
+module crate/service loop first, then run root integration checks before
+closeout. Keep current root route, shell, authentication, hydration, document,
+CSS, and asset behavior stable for Core and still-in-process routes.
+Components and Dashboard own their complete documents, hydration entrypoints,
+and versioned assets through the generic module gateway/SDK seam.
 
 Do not assume that every new capability belongs in another root-integrated web
 crate. New feature areas should be designed as full-stack module boundaries
 owning UI, API, configuration, diagnostics, contracts, migrations, and data.
 
-As Phase 6 tooling is implemented, the development workflow must add:
+Current module work must include:
 
 - a focused loop for one Core or module application and its own database
 - manifest, `tessara-oci-v1`, configuration-schema, contract, route, security-capability, and health conformance checks
@@ -148,6 +151,18 @@ As Phase 6 tooling is implemented, the development workflow must add:
 - database-isolation, scope-bound grant, freshness, and downstream-audience authorization-exchange checks
 - module outage and degraded-state validation
 - full-composition validation against an Application Blueprint and lockfile
+
+For a pre-production Phase 8 extraction, build and verify one offline,
+destructive, source-exact materialization from empty owner databases. Rebuild
+disposable seed data through owner-controlled bootstrap/read-back contracts in
+dependency order, create new Module Instance references directly, and remove
+the old storage, adapter, readers, payload shapes, and Core transition
+descriptor in the same cutover. Do not add legacy migration, mapping,
+rebinding, retained-adapter, or partial-resume behavior. For Sprint 8A, verify
+the exact five-entry Core catalog (`tessara.forms`, `tessara.workflows`,
+`tessara.responses`, `tessara.datasets`, and `tessara.migration`) and the
+manifest-only reference order Scoped Records `7`, Components `8`, Dashboard
+`9`, with no duplicate inventory or navigation presentation.
 
 Sprint closeout for a module-affecting change must run both focused module tests
 and the resolved application's integration, browser, and conformance suites.
@@ -183,17 +198,20 @@ itself authorization to change the test.
 ## Canonical Closeout Validation
 
 Run the check-only and reproducible gate from the repository root. The
-full gate uses four freshly provisioned, pairwise-distinct disposable
+complete gate uses six freshly provisioned, pairwise-distinct disposable
 databases: the general API integration target, the destructive API
-fresh-start/seed-lock target, the independent reference-module target, and the
-API enrollment target isolated from concurrently executing API library tests.
-Do not reuse these fixture databases for a second complete suite; recreate
-them first. `scripts/validate.ps1`
-intentionally refuses to run without all four URLs and the exact
-destructive-reset acknowledgement so database-backed assertions cannot
-silently skip or interfere with one another.
+fresh-start/seed-lock target, the independent reference-module target, the
+extracted Component-module target, the API enrollment target isolated from
+concurrently executing API library tests, and the installation-control target.
+Do not reuse these fixture databases for a second complete suite; recreate them
+first. `scripts/validate.ps1` intentionally refuses to run without all six
+URLs and the exact destructive-reset acknowledgement. This includes the
+installation-control target exercised by the workspace-wide suite, so
+database-backed assertions cannot silently skip or interfere with one another.
 Each sprint starts from one squashed baseline migration and a freshly seeded
-database; upgrade and rollback evidence are not current closeout inputs.
+database; historical populated-database/schema-migration upgrade evidence is
+not a current closeout input. Sprint-specific independent module
+upgrade/rollback checks remain required when the governing plan calls for them.
 `scripts/validate.ps1 -Fast` is an inner-loop check. Its API step runs
 the API library suite while explicitly excluding its two database-backed
 catalog-sync and enrollment proofs. The full gate runs those proofs. Fast mode
@@ -210,12 +228,14 @@ npm --prefix .\end2end run install-browsers
 $env:TEST_API_DATABASE_URL = '<disposable-api-test-database-url>'
 $env:TEST_API_FRESH_DATABASE_URL = '<disposable-api-fresh-database-url>'
 $env:TEST_REFERENCE_MODULE_DATABASE_URL = '<disposable-reference-module-database-url>'
+$env:TEST_COMPONENT_MODULE_DATABASE_URL = '<disposable-component-module-database-url>'
 $env:TEST_API_ENROLLMENT_DATABASE_URL = '<disposable-api-enrollment-database-url>'
+$env:TEST_INSTALLATION_CONTROL_DATABASE_URL = '<disposable-installation-control-database-url>'
 $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
 .\scripts\validate.ps1
 
-# The workspace-wide suite additionally exercises installation control.
-$env:TEST_INSTALLATION_CONTROL_DATABASE_URL = '<disposable-installation-control-database-url>'
+# The workspace-wide suite exercises all six database-backed targets,
+# including installation control.
 cargo test --workspace --all-features --locked
 
 .\scripts\check-web-crate-boundaries.ps1

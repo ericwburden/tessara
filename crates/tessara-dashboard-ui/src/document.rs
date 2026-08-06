@@ -13,14 +13,18 @@ pub const DASHBOARD_CSS: &str = concat!(
     "\n",
     include_str!("../assets/dashboard.css")
 );
-pub const DASHBOARD_LIFECYCLE_CSS: &str = include_str!("../assets/dashboard-lifecycle.css");
+pub const DASHBOARD_LIFECYCLE_CSS: &str = concat!(
+    include_str!("../assets/dashboard.css"),
+    "\n",
+    include_str!("../assets/dashboard-lifecycle.css")
+);
 pub const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 pub const DASHBOARD_BINDINGS_JS: &str = include_str!("../assets/dashboard-bindings.js");
 pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
-    "38d4d592914df1654658c7e3072485ef4b11d8db0d1ab109f29ebe1518f8040b";
+    "6257b298c6e97f867147e404b7327bff19c665f89bfb42b2903535f0dd888afa";
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
-    "ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99";
+    "0844068d079b647efc4527aba90a8831a856d325e89d4b8527871a9c2e34183f";
 pub const DASHBOARD_JS_SHA256: &str =
     "99094b3cb74cfb93f977d1fb3cafb2d3361521d8b7c977a2158bb08ddd40eb4f";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
@@ -141,6 +145,19 @@ mod tests {
 
         let digest = format!("{:x}", Sha256::digest(DASHBOARD_CSS.as_bytes()));
         assert_eq!(digest, DASHBOARD_CSS_SHA256);
+    }
+
+    #[test]
+    fn lifecycle_stylesheet_contains_the_dashboard_product_styles_and_outlet_overrides() {
+        assert!(DASHBOARD_LIFECYCLE_CSS.contains(".dashboard-saved-grid"));
+        assert!(DASHBOARD_LIFECYCLE_CSS.contains(".dashboard-viewer-placement"));
+        assert!(
+            DASHBOARD_LIFECYCLE_CSS.contains("#tessara-module-outlet .dashboards-page"),
+            "the lifecycle-only outlet overrides remain appended to the product stylesheet"
+        );
+
+        let digest = format!("{:x}", Sha256::digest(DASHBOARD_LIFECYCLE_CSS.as_bytes()));
+        assert_eq!(digest, DASHBOARD_LIFECYCLE_CSS_SHA256);
     }
 
     #[test]

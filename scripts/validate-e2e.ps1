@@ -11,7 +11,9 @@ param(
     [ValidateSet("fresh")][string]$ExpectedDataState,
     [ValidateSet("sprint-6a", "sprint-8a")]
     [string]$TransitionCatalogProfile = "sprint-6a",
+    [string]$FailureEvidenceDirectory,
     [switch]$OverwriteEvidence,
+    [switch]$InventoryOnly,
     [switch]$SelfTest
 )
 
@@ -535,6 +537,89 @@ function Invoke-CheckedStep {
     }
 }
 
+function Invoke-PlaywrightRetainedStep {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][string]$LogPath,
+        [Parameter(Mandatory)][scriptblock]$Command
+    )
+
+    Write-Host "`n==> $Label" -ForegroundColor Cyan
+    $output = @(& $Command 2>&1 | ForEach-Object { [string]$_ })
+    $exitCode = $LASTEXITCODE
+    [IO.File]::WriteAllLines($LogPath, $output, [Text.UTF8Encoding]::new($false))
+    $output | ForEach-Object { Write-Host $_ }
+    if ($exitCode -ne 0) {
+        throw "$Label failed with exit code $exitCode"
+    }
+}
+
+function Publish-PlaywrightFailureEvidence {
+    param(
+        [Parameter(Mandatory)][string]$TemporaryArtifactDirectory,
+        [Parameter(Mandatory)][string]$FailureDirectory,
+        [Parameter(Mandatory)][string]$FailurePhase,
+        [Parameter(Mandatory)][string]$FailureMessage,
+        [string]$TestResultsDirectory
+    )
+
+    $finalDirectory = [IO.Path]::GetFullPath($FailureDirectory)
+    if (Test-Path -LiteralPath $finalDirectory) {
+        throw "Refusing to overwrite retained Playwright failure evidence '$finalDirectory'."
+    }
+    $parent = Split-Path -Parent $finalDirectory
+    [IO.Directory]::CreateDirectory($parent) | Out-Null
+    $staging = Join-Path $parent ".$([IO.Path]::GetFileName($finalDirectory)).$([guid]::NewGuid().ToString('N')).tmp"
+    try {
+        [IO.Directory]::CreateDirectory($staging) | Out-Null
+        if (Test-Path -LiteralPath $TemporaryArtifactDirectory -PathType Container) {
+            Get-ChildItem -LiteralPath $TemporaryArtifactDirectory -Force | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination $staging -Recurse
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($TestResultsDirectory) -and
+            (Test-Path -LiteralPath $TestResultsDirectory -PathType Container)) {
+            Copy-Item -LiteralPath $TestResultsDirectory -Destination (Join-Path $staging "test-results") -Recurse
+        }
+        $artifacts = @(
+            Get-ChildItem -LiteralPath $staging -File -Recurse | Sort-Object FullName | ForEach-Object {
+                [ordered]@{
+                    path = [IO.Path]::GetRelativePath($staging, $_.FullName).Replace("\", "/")
+                    sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                    bytes = $_.Length
+                }
+            }
+        )
+        $sourceStatus = @(& git -C $repoRoot status --porcelain=v1)
+        $summary = [ordered]@{
+            schema_version = 1
+            phase = "playwright-acceptance-failure"
+            state = "failed"
+            failed_at = [DateTimeOffset]::UtcNow.ToString("o")
+            failure_phase = $FailurePhase
+            message = $FailureMessage
+            source_identity = [ordered]@{
+                commit = (& git -C $repoRoot rev-parse HEAD).Trim()
+                tree = (& git -C $repoRoot rev-parse "HEAD^{tree}").Trim()
+                dirty = $sourceStatus.Count -ne 0
+            }
+            artifacts = $artifacts
+        }
+        [IO.File]::WriteAllText(
+            (Join-Path $staging "failure-summary.json"),
+            ($summary | ConvertTo-Json -Depth 10) + "`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        Move-Item -LiteralPath $staging -Destination $finalDirectory
+        $summaryPath = Join-Path $finalDirectory "failure-summary.json"
+        $summarySha256 = (Get-FileHash -LiteralPath $summaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        [IO.File]::WriteAllText("$summaryPath.sha256", "$summarySha256`n", [Text.UTF8Encoding]::new($false))
+        return $finalDirectory
+    } finally {
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Assert-AppIsReachable {
     param(
         [Parameter(Mandatory)]
@@ -811,6 +896,40 @@ if ($SelfTest) {
         Invoke-CheckedStep -Label "Validating Playwright fresh demo-seed guard and endpoint inventory" -Command {
             & $nodeCommands[0].Source --no-warnings $demoSeedSelfTest
         }
+
+        $failureTemporary = Join-Path $publishTestRoot "failure-temporary"
+        $failureResults = Join-Path $publishTestRoot "failure-test-results"
+        $failureFinal = Join-Path $publishTestRoot "retained-failure"
+        [IO.Directory]::CreateDirectory($failureTemporary) | Out-Null
+        [IO.Directory]::CreateDirectory($failureResults) | Out-Null
+        [IO.File]::WriteAllText((Join-Path $failureTemporary "execution.json"), '{"stats":{"unexpected":1}}')
+        [IO.File]::WriteAllText((Join-Path $failureTemporary "execution.xml"), '<testsuite failures="1" />')
+        [IO.File]::WriteAllText((Join-Path $failureTemporary "execution.log"), 'injected failure')
+        [IO.File]::WriteAllText((Join-Path $failureResults "trace.zip"), 'trace')
+        [IO.File]::WriteAllText((Join-Path $failureResults "error-context.md"), 'context')
+        $publishedFailure = Publish-PlaywrightFailureEvidence `
+            -TemporaryArtifactDirectory $failureTemporary `
+            -FailureDirectory $failureFinal `
+            -FailurePhase "execution" `
+            -FailureMessage "injected failure" `
+            -TestResultsDirectory $failureResults
+        foreach ($relative in @(
+            "execution.json", "execution.xml", "execution.log", "failure-summary.json", "failure-summary.json.sha256",
+            "test-results/trace.zip", "test-results/error-context.md"
+        )) {
+            if (-not (Test-Path -LiteralPath (Join-Path $publishedFailure $relative) -PathType Leaf)) {
+                throw "Self-test failed: Playwright failure retention omitted '$relative'."
+            }
+        }
+        Assert-SelfTestRejects `
+            -Context 'replacement of an attempt-scoped Playwright failure directory' `
+            -Action {
+                Publish-PlaywrightFailureEvidence `
+                    -TemporaryArtifactDirectory $failureTemporary `
+                    -FailureDirectory $failureFinal `
+                    -FailurePhase "execution" `
+                    -FailureMessage "replacement"
+            }
     } finally {
         Restore-PlaywrightEnvironment
         Remove-Item -LiteralPath $publishTestRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -827,6 +946,71 @@ if ($Seed -and -not (Test-Path $seedScript)) {
     throw "Could not find seed helper at $seedScript"
 }
 
+if ($InventoryOnly) {
+    if ($DevelopmentMode -or $Seed -or
+        -not [string]::IsNullOrWhiteSpace($Spec) -or $PlaywrightArgs.Count -gt 0 -or
+        -not [string]::IsNullOrWhiteSpace($DeploymentEvidencePath) -or
+        -not [string]::IsNullOrWhiteSpace($ExpectedDataState) -or
+        -not [string]::IsNullOrWhiteSpace($FailureEvidenceDirectory) -or
+        [string]::IsNullOrWhiteSpace($EvidencePath)) {
+        throw "InventoryOnly requires only one attempt-scoped -EvidencePath and cannot accept deployment, filtering, seed, or execution arguments."
+    }
+    $inventoryManifestPath = Resolve-RepositoryPath $AcceptanceManifestPath
+    $inventoryEvidencePath = Resolve-RepositoryPath $EvidencePath
+    if (-not (Test-Path -LiteralPath $inventoryManifestPath -PathType Leaf)) {
+        throw "Could not find durable Playwright acceptance manifest at $inventoryManifestPath"
+    }
+    if ((Test-Path -LiteralPath $inventoryEvidencePath) -or
+        (Test-Path -LiteralPath "$inventoryEvidencePath.sha256")) {
+        throw "Attempt-scoped Playwright inventory evidence already exists and cannot be overwritten: $inventoryEvidencePath"
+    }
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $inventoryEvidencePath)) | Out-Null
+    $temporaryInventoryPath = "$inventoryEvidencePath.$([guid]::NewGuid().ToString('N')).tmp"
+    $temporaryInventoryLog = "$temporaryInventoryPath.log"
+    Push-Location $repoRoot
+    try {
+        $inventoryManifest = Get-Content -LiteralPath $inventoryManifestPath -Raw | ConvertFrom-Json
+        $inventoryTestPaths = @(Get-ManifestPlaywrightTestPaths `
+            -Manifest $inventoryManifest `
+            -TestsRoot (Join-Path $endToEndDir "tests"))
+        $env:TESSARA_PLAYWRIGHT_ACCEPTANCE = "1"
+        $env:PLAYWRIGHT_JSON_OUTPUT_FILE = $temporaryInventoryPath
+        Remove-ProcessEnvironmentVariable -Name "PLAYWRIGHT_JUNIT_OUTPUT_FILE"
+        Invoke-PlaywrightRetainedStep `
+            -Label "Discovering the exact Playwright acceptance inventory without a deployment" `
+            -LogPath $temporaryInventoryLog `
+            -Command {
+                npm --prefix $endToEndDir test -- @inventoryTestPaths --list --reporter=json
+            }
+        $inventory = Read-PlaywrightReport -Path $temporaryInventoryPath
+        Assert-ExpectedInventory `
+            -Manifest $inventoryManifest `
+            -ActualCounts $inventory.Counts `
+            -ActualIdentities $inventory.Identities `
+            -ActualTotal $inventory.Total `
+            -Label "Independent Playwright discovery"
+        if ([int]$inventory.Report.config.workers -ne 1 -or
+            -not [bool]$inventory.Report.config.forbidOnly -or
+            @($inventory.Report.config.projects | Where-Object { [int]$_.retries -ne 0 }).Count -gt 0) {
+            throw "Independent Playwright discovery requires one worker, forbidOnly, and zero retries."
+        }
+        Move-Item -LiteralPath $temporaryInventoryPath -Destination $inventoryEvidencePath
+        $inventorySha256 = (Get-FileHash -LiteralPath $inventoryEvidencePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        [IO.File]::WriteAllText(
+            "$inventoryEvidencePath.sha256",
+            "$inventorySha256`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        Write-Host "Exact Playwright acceptance inventory passed: $($inventory.Total) tests."
+    } finally {
+        Pop-Location
+        Restore-PlaywrightEnvironment
+        Remove-Item -LiteralPath $temporaryInventoryPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $temporaryInventoryLog -Force -ErrorAction SilentlyContinue
+    }
+    return
+}
+
 if (-not $DevelopmentMode -and (-not [string]::IsNullOrWhiteSpace($Spec) -or $PlaywrightArgs.Count -gt 0)) {
     throw "Acceptance validation always runs the complete unfiltered suite. Use -DevelopmentMode for a targeted Spec or PlaywrightArgs run; that run is not acceptance evidence."
 }
@@ -836,6 +1020,9 @@ if (-not $DevelopmentMode -and $Seed) {
 if (-not $DevelopmentMode) {
     if ([string]::IsNullOrWhiteSpace($DeploymentEvidencePath) -or [string]::IsNullOrWhiteSpace($ExpectedDataState)) {
         throw "Playwright acceptance requires -DeploymentEvidencePath and -ExpectedDataState fresh. Use -DevelopmentMode only for targeted non-acceptance diagnostics."
+    }
+    if ([string]::IsNullOrWhiteSpace($FailureEvidenceDirectory)) {
+        throw "Playwright acceptance requires one attempt-scoped -FailureEvidenceDirectory so a failing run cannot discard raw results."
     }
     if (-not (Test-Path -LiteralPath $deploymentEvidenceCommon -PathType Leaf)) {
         throw "Could not find Sprint 6A deployment evidence validator at $deploymentEvidenceCommon"
@@ -864,6 +1051,11 @@ $deploymentEvidenceFullPath = if ([string]::IsNullOrWhiteSpace($DeploymentEviden
 } else {
     Resolve-RepositoryPath $DeploymentEvidencePath
 }
+$failureEvidenceFullPath = if ([string]::IsNullOrWhiteSpace($FailureEvidenceDirectory)) {
+    $null
+} else {
+    Resolve-RepositoryPath $FailureEvidenceDirectory
+}
 if (-not $DevelopmentMode) {
     $protectedPaths = @(
         $manifestFullPath,
@@ -872,7 +1064,8 @@ if (-not $DevelopmentMode) {
         $junitPath,
         $summaryPath,
         $deploymentEvidenceFullPath,
-        "$deploymentEvidenceFullPath.sha256"
+        "$deploymentEvidenceFullPath.sha256",
+        $failureEvidenceFullPath
     )
     $distinctPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($path in $protectedPaths) {
@@ -888,10 +1081,36 @@ if (-not $DevelopmentMode) {
     if ($existingArtifacts.Count -gt 0 -and -not $OverwriteEvidence) {
         throw "Retained Playwright acceptance evidence already exists. Refusing to replace it without -OverwriteEvidence: $($existingArtifacts -join ', ')"
     }
+    if (Test-Path -LiteralPath $failureEvidenceFullPath) {
+        throw "Attempt-scoped Playwright failure evidence already exists and cannot be reused: $failureEvidenceFullPath"
+    }
 }
 
 $temporaryArtifactPaths = @()
 $temporaryArtifactDirectory = $null
+$failurePhase = "preparation"
+if (-not $DevelopmentMode) {
+    $evidenceDirectory = [IO.Path]::GetDirectoryName($evidenceFullPath)
+    [IO.Directory]::CreateDirectory($evidenceDirectory) | Out-Null
+    $temporaryArtifactDirectory = Join-Path `
+        $evidenceDirectory `
+        ".playwright-acceptance-$ExpectedDataState-$([guid]::NewGuid().ToString('N'))"
+    [IO.Directory]::CreateDirectory($temporaryArtifactDirectory) | Out-Null
+    $temporaryEvidencePath = Join-Path $temporaryArtifactDirectory "execution.json"
+    $temporaryDiscoveryPath = Join-Path $temporaryArtifactDirectory "discovery.json"
+    $temporaryJunitPath = Join-Path $temporaryArtifactDirectory "execution.xml"
+    $temporarySummaryPath = Join-Path $temporaryArtifactDirectory "summary.json"
+    $temporaryDiscoveryLogPath = Join-Path $temporaryArtifactDirectory "discovery.log"
+    $temporaryExecutionLogPath = Join-Path $temporaryArtifactDirectory "execution.log"
+    $temporaryArtifactPaths = @(
+        $temporaryEvidencePath,
+        $temporaryDiscoveryPath,
+        $temporaryJunitPath,
+        $temporarySummaryPath,
+        $temporaryDiscoveryLogPath,
+        $temporaryExecutionLogPath
+    )
+}
 
 Push-Location $repoRoot
 try {
@@ -939,28 +1158,15 @@ try {
     $manifestTestPaths = @(Get-ManifestPlaywrightTestPaths `
         -Manifest $manifest `
         -TestsRoot (Join-Path $endToEndDir "tests"))
-    $evidenceDirectory = [IO.Path]::GetDirectoryName($evidenceFullPath)
-    [IO.Directory]::CreateDirectory($evidenceDirectory) | Out-Null
-    $temporaryArtifactDirectory = Join-Path `
-        $evidenceDirectory `
-        ".playwright-acceptance-$ExpectedDataState-$([guid]::NewGuid().ToString('N'))"
-    [IO.Directory]::CreateDirectory($temporaryArtifactDirectory) | Out-Null
-    $temporaryEvidencePath = Join-Path $temporaryArtifactDirectory "execution.json"
-    $temporaryDiscoveryPath = Join-Path $temporaryArtifactDirectory "discovery.json"
-    $temporaryJunitPath = Join-Path $temporaryArtifactDirectory "execution.xml"
-    $temporarySummaryPath = Join-Path $temporaryArtifactDirectory "summary.json"
-    $temporaryArtifactPaths = @(
-        $temporaryEvidencePath,
-        $temporaryDiscoveryPath,
-        $temporaryJunitPath,
-        $temporarySummaryPath
-    )
-
     $env:TESSARA_PLAYWRIGHT_ACCEPTANCE = "1"
     $env:PLAYWRIGHT_JSON_OUTPUT_FILE = $temporaryDiscoveryPath
     Remove-ProcessEnvironmentVariable -Name "PLAYWRIGHT_JUNIT_OUTPUT_FILE"
-    Invoke-CheckedStep -Label "Discovering the complete Playwright acceptance inventory" -Command {
-        npm --prefix $endToEndDir test -- @manifestTestPaths --list --reporter=json
+    $failurePhase = "discovery"
+    Invoke-PlaywrightRetainedStep `
+        -Label "Discovering the complete Playwright acceptance inventory" `
+        -LogPath $temporaryDiscoveryLogPath `
+        -Command {
+            npm --prefix $endToEndDir test -- @manifestTestPaths --list --reporter=json
     }
     $discovery = Read-PlaywrightReport -Path $temporaryDiscoveryPath
     Assert-ExpectedInventory `
@@ -978,10 +1184,15 @@ try {
 
     $env:PLAYWRIGHT_JSON_OUTPUT_FILE = $temporaryEvidencePath
     $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE = $temporaryJunitPath
-    Invoke-CheckedStep -Label "Running the complete Playwright acceptance suite with one worker and zero retries" -Command {
-        npm --prefix $endToEndDir test -- @manifestTestPaths
+    $failurePhase = "execution"
+    Invoke-PlaywrightRetainedStep `
+        -Label "Running the complete Playwright acceptance suite with one worker and zero retries" `
+        -LogPath $temporaryExecutionLogPath `
+        -Command {
+            npm --prefix $endToEndDir test -- @manifestTestPaths
     }
 
+    $failurePhase = "result-validation"
     $result = Read-PlaywrightReport -Path $temporaryEvidencePath -RequireResults
     Assert-ExpectedInventory `
         -Manifest $manifest `
@@ -1059,6 +1270,7 @@ try {
         }
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $temporarySummaryPath -Encoding utf8
 
+    $failurePhase = "publication"
     Publish-PlaywrightArtifactSet `
         -Artifacts @(
             [pscustomobject]@{ TemporaryPath = $temporaryEvidencePath; FinalPath = $evidenceFullPath },
@@ -1069,6 +1281,22 @@ try {
         -AllowOverwrite:$OverwriteEvidence
     Write-Host "Playwright acceptance evidence passed: $($result.Total) passed; 0 skipped, unexpected, flaky, filtered, or retried." -ForegroundColor Green
     Write-Host "Acceptance summary: $summaryPath"
+} catch {
+    $originalFailure = $_
+    if (-not $DevelopmentMode) {
+        try {
+            $retained = Publish-PlaywrightFailureEvidence `
+                -TemporaryArtifactDirectory $temporaryArtifactDirectory `
+                -FailureDirectory $failureEvidenceFullPath `
+                -FailurePhase $failurePhase `
+                -FailureMessage $originalFailure.Exception.Message `
+                -TestResultsDirectory (Join-Path $endToEndDir "test-results")
+            Write-Host "Playwright failure evidence retained at $retained" -ForegroundColor Yellow
+        } catch {
+            throw "Playwright failed during '$failurePhase': $($originalFailure.Exception.Message) Failure-evidence retention also failed: $($_.Exception.Message)"
+        }
+    }
+    throw $originalFailure
 } finally {
     try {
         foreach ($temporaryPath in $temporaryArtifactPaths) {

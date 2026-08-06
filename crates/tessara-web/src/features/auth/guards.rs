@@ -28,8 +28,6 @@ pub(crate) fn route_is_allowed(active_route: &str, capabilities: &[String]) -> b
             "submissions:manage",
         ],
         "operations" => &["operations:view"],
-        "components" => &["components:read", "components:manage"],
-        "dashboards" => &["dashboards:read", "dashboards:manage"],
         "datasets" => &["datasets:read", "datasets:manage"],
         "administration" => &["admin:all"],
         "module_management" => &["modules:read", "modules:manage_navigation"],
@@ -117,8 +115,6 @@ mod tests {
             ("forms", "forms:manage"),
             ("workflows", "workflows:manage"),
             ("responses", "submissions:manage"),
-            ("components", "components:manage"),
-            ("dashboards", "dashboards:manage"),
             ("datasets", "datasets:manage"),
         ] {
             assert!(

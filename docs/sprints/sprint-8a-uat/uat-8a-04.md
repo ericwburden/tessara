@@ -3,7 +3,7 @@
 ## 1. Test Script Summary
 
 - System / Module: Tessara Components and Dataset compatibility provider
-- Requirement: Sprint 8A AC-06, AC-07, AC-10
+- Requirement: Sprint 8A AC-09 and AC-10
 - Environment: Frozen Sprint 8A UAT candidate
 - User role: Component manager plus scoped and out-of-scope actors
 - Scenario: Author and execute a Component through a typed Dataset reference, then observe restricted and unavailable provider states.
@@ -11,6 +11,8 @@
 
 ## 2. Before You Start
 
+- Coordinator bindings: candidate fingerprint __________; environment fingerprint __________; preflight receipt SHA-256 __________; SIT result receipt SHA-256 __________.
+- Evidence folder and execution start time: ____________________
 - Select an allowed Dataset and an out-of-scope Dataset; record their displayed names: ____________________
 - Open a disposable Component draft with an unsaved visible change.
 
@@ -28,5 +30,6 @@
 - Overall result: Pass / Fail / Blocked
 - Tester / date: ____________________
 - Defect IDs or comments: ____________________
+- Evidence paths and execution end time: ____________________
+- Cleanup/restoration result: ____________________
 - Acceptance decision: Accepted / Not Accepted / Accepted with defects
-

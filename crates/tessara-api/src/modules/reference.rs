@@ -369,14 +369,18 @@ fn parse_canonical_uuid(resource_id: &str) -> Option<Uuid> {
 }
 
 fn parse_dataset_major_line(resource_id: &str) -> Option<(Uuid, i32)> {
-    let (dataset_id, major) = resource_id.split_once(':')?;
-    let dataset_id = parse_canonical_uuid(dataset_id)?;
-    let major = major.parse::<i32>().ok()?;
-    if major < 0 {
+    let (dataset_id, major) = resource_id.split_once('@')?;
+    if major.contains('@') {
         return None;
     }
-    // Reject alternate integer spellings such as +1 and 01.
-    let (_, source_major) = resource_id.split_once(':')?;
+    let dataset_id = parse_canonical_uuid(dataset_id)?;
+    let major = major.parse::<i32>().ok()?;
+    if major <= 0 {
+        return None;
+    }
+    // Match the Dataset compatibility contract and reject alternate integer
+    // spellings such as +1 and 01.
+    let (_, source_major) = resource_id.split_once('@')?;
     (source_major == major.to_string()).then_some((dataset_id, major))
 }
 
@@ -501,12 +505,14 @@ mod tests {
     fn dataset_major_line_identifier_is_canonical_and_unambiguous() {
         let dataset_id = Uuid::new_v4();
         assert_eq!(
-            parse_dataset_major_line(&format!("{dataset_id}:12")),
+            parse_dataset_major_line(&format!("{dataset_id}@12")),
             Some((dataset_id, 12))
         );
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:01")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:-1")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:1:2")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@0")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@01")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@-1")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@1@2")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:1")), None);
     }
 
     #[test]
@@ -516,8 +522,8 @@ mod tests {
             let reference = TypedResourceReference::new(
                 installation_id,
                 ResourceOwner::CoreInstallation { installation_id },
-                ResourceTypeId::new("tessara.transition.dashboard").expect("type"),
-                resource_id,
+                ResourceTypeId::new("tessara.transition.dataset_major_line").expect("type"),
+                format!("{resource_id}@1"),
             )
             .expect("reference");
             assert_eq!(reference.installation_id(), installation_id);

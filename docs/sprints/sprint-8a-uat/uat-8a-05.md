@@ -3,30 +3,39 @@
 ## 1. Test Script Summary
 
 - System / Module: Tessara Dashboards consuming Components
-- Requirement: Sprint 8A AC-11 and AC-12
+- Requirement: Sprint 8A AC-11
 - Environment: Frozen Sprint 8A UAT candidate
 - User role: Component manager, Dashboard manager, and reader
-- Scenario: Change a placed Component revision/lifecycle and exercise Dashboard findings, actions, provider outage, and recovery.
-- Acceptance: Existing Dashboard policy remains intact, degradation is contained, and recovery converges.
+- Scenario: Use the three exact predecessor-bound action placements to exercise Dashboard findings, Defer/Upgrade/Replace/Remove, restricted nondisclosure, Component-provider outage, and recovery.
+- Acceptance: Existing Dashboard policy remains intact; each action has an independent executable fixture; the blocked placement is never disclosed; outage is contained to the exact authorized placements; and recovery converges to zero findings.
 
 ## 2. Before You Start
 
-- Select a seeded Dashboard with a Component placement; record names/status: ____________________
+- Coordinator bindings: candidate fingerprint __________; environment fingerprint __________; preflight receipt SHA-256 __________; SIT result receipt SHA-256 __________.
+- Evidence folder and execution start time: ____________________
+- Select `Reference Operations` and record the `lifecycle-upgrade`,
+  `lifecycle-replace`, `lifecycle-remove`, and blocked-scope placement IDs:
+  ____________________
+- Confirm all three action placements reference the same superseded/inactive
+  Stat Card predecessor and that it declares the published/active successor.
 - Ensure an unrelated route is available for containment checks.
 
 ## 3. Test Steps
 
 | Step | User action | Expected result | Actual result | Pass/Fail | Notes or defect ID |
 |---|---|---|---|---|---|
-| 1 | Publish a successor Component revision and refresh the Dashboard. | A clear finding appears and supported defer/Upgrade/Replace/Remove actions behave as before. | | | |
-| 2 | Stop Components and reload Dashboard plus an unrelated route. | Placement/dependency state degrades coherently; unrelated route remains healthy. | | | |
-| 3 | Restore Components and refresh. | Dashboard converges without duplicate findings or disclosure. | | | |
-| 4 | Repeat the outage/recovery observation for the Dataset provider. | Downstream state is coherent and final health returns. | | | |
+| 1 | Refresh dependency health before any action. | Exactly three `lifecycle_unrenderable` findings appear for the three action placements. The blocked-scope placement is absent, while the authorized upgrade finding discloses the declared successor. | | | |
+| 2 | Defer the upgrade fixture, refresh it at the returned finding revision, then choose Upgrade. | Defer advances the finding revision and remains actionable; Upgrade resolves it by using the declared successor. | | | |
+| 3 | On the independent fixtures, Replace with the authorized current Table reference and Remove the remove placement. | Replace and Remove each resolve only its selected placement; the three action paths do not consume one another's fixture. | | | |
+| 4 | Stop only the Sprint 8A Component provider, refresh the Dashboard, and open the unrelated route. | Exactly five remaining authorized placements report `provider_unavailable`; the blocked placement remains absent and the unrelated route stays healthy. | | | |
+| 5 | Restore Components, wait for readiness, and refresh. | Dashboard health is `healthy`, open/deferred counts are zero, and no visible finding remains. | | | |
+| 6 | Record the structured dependency-semantic receipt and restore the canonical fresh seed as directed by the coordinator. | The receipt contains every exact check/action identity and requires canonical reset; restoration is recorded without converting this manual scenario into rehearsal evidence. | | | |
 
 ## 4. Overall Test Result
 
 - Overall result: Pass / Fail / Blocked
 - Tester / date: ____________________
 - Defect IDs or comments: ____________________
+- Evidence paths and execution end time: ____________________
+- Cleanup/restoration result: ____________________
 - Acceptance decision: Accepted / Not Accepted / Accepted with defects
-

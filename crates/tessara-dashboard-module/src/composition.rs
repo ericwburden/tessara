@@ -21,8 +21,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_components_contract::{
-    COMPONENT_CONTRACT_SCHEMA_VERSION, ComponentAction, ComponentCatalogResponse,
-    ComponentMetadata, ComponentPublicationState, ComponentRenderKind, ComponentRenderRequest,
+    COMPONENT_BINDING_KEY, COMPONENT_CONTRACT_ID, COMPONENT_CONTRACT_SCHEMA_VERSION,
+    COMPONENT_MODULE_DEFINITION_ID, ComponentAction, ComponentCatalogResponse, ComponentMetadata,
+    ComponentPublicationState, ComponentRenderKind, ComponentRenderRequest,
     ComponentResolutionRequest, ComponentResolutionResponse, ComponentVersionReference,
 };
 use tessara_dashboards::{
@@ -32,10 +33,14 @@ use tessara_dashboards::{
     validate_dashboard_layout,
 };
 use tessara_module_contract::{
-    AuthorizationGrantV2, ContractCompatibilityState, ModuleInstanceOwnerState,
-    ModuleServiceRequestV1, OwnerDataState, ProviderAvailabilityState, ResourceAccessState,
-    ResourceIdentityState, ResourceLifecycleState, ResourceOwnerState, ResourceResolutionV1,
-    ResourceRevision, SignedEnvelopeV1, TypedResourceReference,
+    AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2, AuthorizationAudienceV1,
+    AuthorizationExchangeRequestV2, AuthorizationExchangeResponseV2, AuthorizationGrantOperationV1,
+    AuthorizationGrantV3, AuthorizationValidationContextV3, ContractCompatibilityState,
+    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleInstanceOwnerState,
+    ModuleServicePrincipalV1, ModuleServiceRequestV1, OwnerDataState, ProviderAvailabilityState,
+    ResourceAccessState, ResourceIdentityState, ResourceLifecycleState, ResourceOwner,
+    ResourceOwnerState, ResourceResolutionV1, ResourceRevision, SignedEnvelopeV1,
+    TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -275,7 +280,7 @@ async fn render_placement(
             "render kind not found".into(),
         ));
     }
-    let path = "/api/private/dashboard-components/render";
+    let path = "/api/private/components/render";
     let request = ComponentRenderRequest {
         schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
         action: ComponentAction::Render,
@@ -287,12 +292,25 @@ async fn render_placement(
     };
     let body = serde_json::to_vec(&request)
         .map_err(|_| DashboardModuleError::Unavailable("render request encoding failed".into()))?;
-    let service_request = signed_service_request(&state, authorization, "POST", path, &body)?;
+    let target_module_instance_id = component_target_instance(authorization, &request.reference)?;
+    let downstream = exchange_component_authorization(
+        &state,
+        authorization,
+        target_module_instance_id,
+        "components.render",
+    )
+    .await?
+    .ok_or(DashboardModuleError::Forbidden)?;
+    let service_request = signed_service_request(&state, &downstream, "POST", path, &body)?;
     let response = state
-        .component_provider_client
-        .post(format!("{}{path}", component_provider_url()))
-        .header("x-tessara-authorization", authorization)
+        .service_client
+        .post(format!("{}{path}", state.component_provider_url))
+        .header("x-tessara-authorization", &downstream.encoded)
         .header("x-tessara-module-service-request", service_request)
+        .header(
+            "x-tessara-correlation-id",
+            downstream.correlation_id.to_string(),
+        )
         .header("content-type", "application/json")
         .body(body)
         .send()
@@ -1081,13 +1099,21 @@ async fn resolve_component(
     resolve_component_since(state, authorization, reference, None).await
 }
 
+struct DownstreamAuthorization {
+    encoded: String,
+    installation_id: Uuid,
+    caller_module_instance_id: Uuid,
+    correlation_id: Uuid,
+}
+
 pub(super) async fn resolve_component_since(
     state: &DashboardModuleState,
     authorization: &str,
     reference: ComponentVersionReference,
     changes_since_revision: Option<ResourceRevision>,
 ) -> Result<ComponentResolutionResponse, DashboardModuleError> {
-    let path = "/api/private/dashboard-components/resolve";
+    let path = "/api/private/components/resolve";
+    let target_module_instance_id = component_target_instance(authorization, &reference)?;
     let request = ComponentResolutionRequest::new(
         ComponentAction::ResolveMetadata,
         reference,
@@ -1095,12 +1121,26 @@ pub(super) async fn resolve_component_since(
     );
     let body = serde_json::to_vec(&request)
         .map_err(|_| DashboardModuleError::Unavailable("service request encoding failed".into()))?;
-    let service_request = signed_service_request(state, authorization, "POST", path, &body)?;
+    let Some(downstream) = exchange_component_authorization(
+        state,
+        authorization,
+        target_module_instance_id,
+        "components.resolve",
+    )
+    .await?
+    else {
+        return Ok(restricted_component_resolution());
+    };
+    let service_request = signed_service_request(state, &downstream, "POST", path, &body)?;
     let response = state
-        .component_provider_client
-        .post(format!("{}{path}", component_provider_url()))
-        .header("x-tessara-authorization", authorization)
+        .service_client
+        .post(format!("{}{path}", state.component_provider_url))
+        .header("x-tessara-authorization", &downstream.encoded)
         .header("x-tessara-module-service-request", service_request)
+        .header(
+            "x-tessara-correlation-id",
+            downstream.correlation_id.to_string(),
+        )
         .header("content-type", "application/json")
         .body(body)
         .send()
@@ -1109,6 +1149,9 @@ pub(super) async fn resolve_component_since(
         tracing::warn!("Components provider could not be reached; degrading Dashboard placement");
         return Ok(provider_unavailable_resolution());
     };
+    if response.status() == reqwest::StatusCode::FORBIDDEN {
+        return Ok(restricted_component_resolution());
+    }
     let Ok(response) = response.error_for_status() else {
         tracing::warn!("Components provider rejected resolution; degrading Dashboard placement");
         return Ok(provider_unavailable_resolution());
@@ -1128,13 +1171,32 @@ async fn component_catalog(
     state: &DashboardModuleState,
     authorization: &str,
 ) -> Result<ComponentCatalogResponse, DashboardModuleError> {
-    let path = "/api/private/dashboard-components/catalog";
-    let service_request = signed_service_request(state, authorization, "POST", path, &[])?;
+    let path = "/api/private/components/catalog";
+    let inbound: SignedEnvelopeV1<AuthorizationGrantV3> = decode_header_envelope(authorization)?;
+    let target_module_instance_id = tessara_composition::module_instance_id(
+        inbound.payload.installation_id,
+        COMPONENT_MODULE_DEFINITION_ID,
+    );
+    let Some(downstream) = exchange_component_authorization(
+        state,
+        authorization,
+        target_module_instance_id,
+        "components.catalog",
+    )
+    .await?
+    else {
+        return Ok(unavailable_component_catalog());
+    };
+    let service_request = signed_service_request(state, &downstream, "POST", path, &[])?;
     let response = state
-        .component_provider_client
-        .post(format!("{}{path}", component_provider_url()))
-        .header("x-tessara-authorization", authorization)
+        .service_client
+        .post(format!("{}{path}", state.component_provider_url))
+        .header("x-tessara-authorization", &downstream.encoded)
         .header("x-tessara-module-service-request", service_request)
+        .header(
+            "x-tessara-correlation-id",
+            downstream.correlation_id.to_string(),
+        )
         .send()
         .await;
     let Ok(response) = response else {
@@ -1158,17 +1220,39 @@ async fn component_catalog(
 
 fn signed_service_request(
     state: &DashboardModuleState,
-    authorization: &str,
+    authorization: &DownstreamAuthorization,
     method: &str,
     path: &str,
     body: &[u8],
 ) -> Result<String, DashboardModuleError> {
-    let grant: SignedEnvelopeV1<AuthorizationGrantV2> = decode_header_envelope(authorization)?;
+    signed_service_request_for_identity(
+        state,
+        &authorization.encoded,
+        authorization.installation_id,
+        authorization.caller_module_instance_id,
+        authorization.correlation_id,
+        method,
+        path,
+        body,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn signed_service_request_for_identity(
+    state: &DashboardModuleState,
+    authorization: &str,
+    installation_id: Uuid,
+    caller_module_instance_id: Uuid,
+    correlation_id: Uuid,
+    method: &str,
+    path: &str,
+    body: &[u8],
+) -> Result<String, DashboardModuleError> {
     let now = Utc::now();
     let request = ModuleServiceRequestV1 {
         schema_version: 1,
-        installation_id: grant.payload.installation_id,
-        module_instance_id: grant.payload.audience_module_instance_id,
+        installation_id,
+        module_instance_id: caller_module_instance_id,
         module_definition_id: tessara_module_contract::ModuleDefinitionId::new(
             crate::MODULE_DEFINITION_ID,
         )
@@ -1177,7 +1261,7 @@ fn signed_service_request(
         path: path.into(),
         canonical_body_digest: sha256_hex(body),
         inbound_grant_digest: sha256_hex(authorization.as_bytes()),
-        correlation_id: Uuid::new_v4().to_string(),
+        correlation_id: correlation_id.to_string(),
         nonce: Uuid::new_v4(),
         issued_at: now,
         expires_at: now + Duration::seconds(30),
@@ -1189,6 +1273,171 @@ fn signed_service_request(
     let bytes = serde_json::to_vec(&envelope)
         .map_err(|_| DashboardModuleError::Unavailable("service request encoding failed".into()))?;
     Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn component_target_instance(
+    authorization: &str,
+    reference: &ComponentVersionReference,
+) -> Result<Uuid, DashboardModuleError> {
+    let inbound: SignedEnvelopeV1<AuthorizationGrantV3> = decode_header_envelope(authorization)?;
+    let typed = reference.reference();
+    if typed.installation_id() != inbound.payload.installation_id {
+        return Err(DashboardModuleError::Forbidden);
+    }
+    match typed.owner() {
+        ResourceOwner::ModuleInstance {
+            installation_id,
+            module_instance_id,
+        } if *installation_id == inbound.payload.installation_id => Ok(*module_instance_id),
+        _ => Err(DashboardModuleError::Forbidden),
+    }
+}
+
+async fn exchange_component_authorization(
+    state: &DashboardModuleState,
+    inbound_authorization: &str,
+    target_module_instance_id: Uuid,
+    action: &str,
+) -> Result<Option<DownstreamAuthorization>, DashboardModuleError> {
+    let inbound: SignedEnvelopeV1<AuthorizationGrantV3> =
+        decode_header_envelope(inbound_authorization)?;
+    state
+        .core_authorization_verifier
+        .verify(&inbound)
+        .map_err(|_| DashboardModuleError::Forbidden)?;
+    let security = crate::load_security_state(&state.pool)
+        .await?
+        .ok_or_else(|| DashboardModuleError::Unavailable("security state unavailable".into()))?;
+    inbound
+        .payload
+        .validate_for(&AuthorizationValidationContextV3 {
+            installation_id: security.installation_id,
+            correlation_id: inbound.payload.correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: security.module_instance_id,
+                module_definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
+                    .map_err(|_| DashboardModuleError::Forbidden)?,
+            },
+            dependency_binding: inbound.payload.dependency_binding.clone(),
+            functional_contract: inbound.payload.functional_contract.clone(),
+            action: inbound.payload.action.clone(),
+            operation: inbound.payload.operation,
+            resource_assertion: inbound.payload.resource_assertion.clone(),
+            authorization_revision: security.authorization_revision as u64,
+            organization_revision: security.organization_revision as u64,
+            now: Utc::now(),
+        })
+        .map_err(|_| DashboardModuleError::Forbidden)?;
+    let target = AuthorizationAudienceV1::ModuleInstance {
+        module_instance_id: target_module_instance_id,
+        module_definition_id: ModuleDefinitionId::new(COMPONENT_MODULE_DEFINITION_ID)
+            .map_err(|_| DashboardModuleError::Forbidden)?,
+    };
+    let request = AuthorizationExchangeRequestV2 {
+        schema_version: AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2,
+        target: target.clone(),
+        dependency_binding: DependencyBindingKey::new(COMPONENT_BINDING_KEY)
+            .map_err(|_| DashboardModuleError::Forbidden)?,
+        functional_contract: FunctionalContractId::new(COMPONENT_CONTRACT_ID)
+            .map_err(|_| DashboardModuleError::Forbidden)?,
+        action: action.into(),
+        resource_assertion: None,
+    };
+    request
+        .validate()
+        .map_err(|_| DashboardModuleError::Forbidden)?;
+    let path = "/api/private/module-authorization/exchange";
+    let body = serde_json::to_vec(&request).map_err(|_| {
+        DashboardModuleError::Unavailable("authorization exchange encoding failed".into())
+    })?;
+    let service_request = signed_service_request_for_identity(
+        state,
+        inbound_authorization,
+        security.installation_id,
+        security.module_instance_id,
+        inbound.payload.correlation_id,
+        "POST",
+        path,
+        &body,
+    )?;
+    let response = state
+        .service_client
+        .post(format!("{}{path}", state.core_internal_url))
+        .header("content-type", "application/json")
+        .header("x-tessara-authorization", inbound_authorization)
+        .header("x-tessara-module-service-request", service_request)
+        .header(
+            "x-tessara-correlation-id",
+            inbound.payload.correlation_id.to_string(),
+        )
+        .body(body)
+        .send()
+        .await
+        .map_err(|_| {
+            DashboardModuleError::Unavailable("Core authorization exchange unavailable".into())
+        })?;
+    if matches!(
+        response.status(),
+        reqwest::StatusCode::FORBIDDEN | reqwest::StatusCode::NOT_FOUND
+    ) {
+        return Ok(None);
+    }
+    let response = response.error_for_status().map_err(|error| {
+        if error
+            .status()
+            .is_some_and(|status| status.is_server_error())
+        {
+            DashboardModuleError::Unavailable("Core authorization exchange unavailable".into())
+        } else {
+            DashboardModuleError::Forbidden
+        }
+    })?;
+    let response: AuthorizationExchangeResponseV2 = response.json().await.map_err(|_| {
+        DashboardModuleError::Unavailable("Core authorization exchange response is invalid".into())
+    })?;
+    if response.schema_version != AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2 {
+        return Err(DashboardModuleError::Forbidden);
+    }
+    state
+        .core_authorization_verifier
+        .verify(&response.authorization)
+        .map_err(|_| DashboardModuleError::Forbidden)?;
+    let presenting_service = ModuleServicePrincipalV1::ModuleInstance {
+        module_instance_id: security.module_instance_id,
+        module_definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
+            .map_err(|_| DashboardModuleError::Forbidden)?,
+    };
+    response
+        .authorization
+        .payload
+        .validate_for(&AuthorizationValidationContextV3 {
+            installation_id: security.installation_id,
+            correlation_id: inbound.payload.correlation_id,
+            presenting_service,
+            audience: target,
+            dependency_binding: request.dependency_binding,
+            functional_contract: request.functional_contract,
+            action: action.into(),
+            operation: AuthorizationGrantOperationV1::Read,
+            resource_assertion: None,
+            authorization_revision: security.authorization_revision as u64,
+            organization_revision: security.organization_revision as u64,
+            now: Utc::now(),
+        })
+        .map_err(|_| DashboardModuleError::Forbidden)?;
+    if response.authorization.payload.original_actor_id != inbound.payload.original_actor_id {
+        return Err(DashboardModuleError::Forbidden);
+    }
+    let encoded = URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&response.authorization).map_err(|_| DashboardModuleError::Forbidden)?,
+    );
+    Ok(Some(DownstreamAuthorization {
+        encoded,
+        installation_id: security.installation_id,
+        caller_module_instance_id: security.module_instance_id,
+        correlation_id: response.authorization.payload.correlation_id,
+    }))
 }
 
 fn decode_header_envelope<T: serde::de::DeserializeOwned>(
@@ -1226,6 +1475,18 @@ fn provider_unavailable_resolution() -> ComponentResolutionResponse {
         None,
     )
     .expect("provider-unavailable Dashboard response is metadata-free")
+}
+
+fn restricted_component_resolution() -> ComponentResolutionResponse {
+    ComponentResolutionResponse::new(
+        ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized)
+            .expect("restricted Component resolution is valid"),
+        None,
+        None,
+        Vec::new(),
+        None,
+    )
+    .expect("restricted Dashboard response is metadata-free")
 }
 
 fn renderable_component_metadata(
@@ -1354,13 +1615,6 @@ fn reconciled_title(requested: Option<&str>, current: Option<&str>) -> Option<St
         }
         None => current.map(str::to_owned),
     }
-}
-
-fn component_provider_url() -> String {
-    std::env::var("TESSARA_COMPONENT_INTERNAL_URL")
-        .unwrap_or_else(|_| "http://components:8092".into())
-        .trim_end_matches('/')
-        .to_string()
 }
 
 fn resolution_state(resolution: &tessara_module_contract::ResourceResolutionV1) -> &'static str {

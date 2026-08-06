@@ -1,12 +1,12 @@
 # Sprint 8A Validation Record
 
-Status: Validation was explicitly exited during Candidate Rehearsal attempt 27
-so implementation readiness could be re-established. Attempt 27 remains an
-incomplete, non-authoritative `running` receipt bound to clean commit
-`9a9b351722d1372b14f9652d263c027c7dd7380a`; it must never be completed or used
-as a prerequisite. The source is mutable, and the correction batch below
-invalidates every earlier readiness/rehearsal result. No candidate has been
-frozen; preflight, SIT, formal UAT, and closeout remain Not Run.
+Status: Validation was explicitly exited during incomplete Candidate Rehearsal
+attempts 27 and 28 so implementation readiness could be re-established.
+Neither attempt may be completed or used as a prerequisite. The consolidated
+candidate-affecting correction below invalidates every earlier readiness and
+rehearsal result. This record is an implementation handoff: no current
+readiness or rehearsal pass exists, no candidate has been frozen, and
+preflight, SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -15,7 +15,173 @@ frozen; preflight, SIT, formal UAT, and closeout remain Not Run.
 
 ## Implementation Readiness Snapshot
 
-### Post-attempt-27 implementation correction
+### Post-attempt-28 implementation correction
+
+On 2026-08-06 the user explicitly stopped testing after prolonged failure to
+reach preflight and returned Sprint 8A to implementation. The source identity
+at exit was commit `7b326838269c3b4218dd579f649a8011feba4d97`, tree
+`fa78175797fddba7c7a0b14bb141a33cf4d40fd0`, clean. The append-only local
+invalidation receipt is
+`artifacts/sprint-8a-closeout/attempts/implementation-return-2026-08-06-invalidation.json`
+with SHA-256
+`39da96d3672ebd078c551e3179a1b3cf97a4a13671a61627425feed9e894e150`.
+It supersedes readiness 31, marks readiness 32 invalid, and records
+user-directed abandonment of rehearsal 27 and 28. Candidate freeze, preflight,
+SIT, and UAT remain prohibited.
+
+Attempt 28 ended before a protocol-complete harvest because testing was
+explicitly exited. Its partial raw evidence remains non-authoritative in
+`artifacts/sprint-8a-closeout/rehearsal/materialization-attempt-28.log` and
+`artifacts/sprint-8a-closeout/rehearsal/full-validation-attempt-28.log`. Three
+observed harness/evidence failures were retained rather than silently retried:
+
+- Validation Readiness parsed database URLs without authenticated reachability
+  and produced an environment receipt that Candidate Rehearsal could not
+  compare structurally.
+- Automated UAT accepted a stale failure-containment receipt by existence
+  instead of binding it to the current attempt, source, environment, time, and
+  content hash.
+- Attempt startup tried to add undeclared `assertions_started_at` data to its
+  receipt schema.
+
+The Dashboard duplication is retained separately as a product/architecture
+defect, not reclassified as a count-only test failure. Its raw classification
+is preserved in
+`artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-4-defect-batch.json`
+(`overall_classification: product`), with its source-exact invalidation in
+`candidate-rehearsal-4-invalidation.json`. That evidence records why the
+earlier seven-to-six correction was incomplete: Dashboard simultaneously
+appeared as a frozen Core transition and an enrolled Module Release/Instance.
+The corrected contract is the exact five Core transition identities, with
+Dashboard supplied only by its enrolled manifest. Narrow correction evidence
+never discharged the requirement for a new complete Readiness and Candidate
+Rehearsal cycle.
+
+The subsequent sprint-plan/architecture audit confirmed one consolidated
+implementation-readiness correction batch spanning product, fixtures, tests,
+deployment inputs, and validation runners:
+
+- Core's transition catalog is exactly Forms, Workflows, Responses, Datasets,
+  and Migration. Dashboard is removed from every canonical transition input
+  and can appear only once through its real Release/Instance and manifest.
+  Inventory now rejects transition/release identity overlap rather than
+  suppressing the duplicate after composition.
+- Generic signed-bootstrap receipt bindings carry exact Component owner
+  read-back identities into Dashboard seed input before input hashing and
+  idempotency. No copied Dashboard-to-Component seed identity or
+  Dashboard-specific orchestration branch remains.
+- Every module-to-module hop exchanges the verified inbound grant through Core
+  for the exact downstream audience. Enrolled manifests declare both the
+  consumer request and provider service action; Core accepts only the exact
+  lockfile-resolved provider/action/capability tuple and projected live service
+  identities. Component and Dataset provider routes contain no sibling caller
+  names, caller-specific keys, or first-use identity enrollment.
+- Component provider authorization preserves known-versus-random resource
+  nondisclosure, while Dashboard presents Components as an installed module
+  dependency rather than a Core transition.
+- Component-specific lifecycle handling is removed from Core's web host. The
+  host renders generic module lifecycle contracts, and extracted Component
+  integration coverage exercises the durable module database and API boundary.
+- Current navigation and acceptance tests assert exact identities: the five
+  Core transitions plus real Scoped Records, Components, and Dashboard
+  contributions, ordered 7, 8, and 9. The resolved lockfile policy is
+  transactionally projected and is the only mutable navigation source;
+  historical seven-entry fixtures are explicitly historical and never reused
+  as current expectations.
+- Core's startup seed contains no Component or Dashboard capability, role
+  grant, service-action, product-route, product-data, or product-asset
+  declaration. Those capabilities/actions enter through release enrollment,
+  and both products' CSS and JavaScript remain in their owner release images.
+  Component direct-load SSR and hydrated visual identity tests now assert the
+  owner document rather than obsolete Core loading placeholders.
+- Validation Readiness authenticates six pairwise-distinct disposable
+  databases and emits one secret-free source/environment fingerprint.
+  `localhost`, `127.0.0.1`, and `::1` are one canonical loopback server
+  identity for uniqueness, so aliases cannot make one database satisfy two
+  required bindings.
+  Candidate Rehearsal is now a repository-owned dependency graph with safe
+  fail-late siblings, exact blocked reasons, append-only lane evidence, one
+  consolidated batch per harvest, and correction authorization only after the
+  harvest guard passes.
+- Materialization records resolved targets, empty baseline, first apply,
+  unchanged semantic no-op, owner receipt bindings, final health, failure logs,
+  exact teardown, and source/environment identity. Deterministic failure
+  containment proves a clean from-empty successor.
+- Canonical bootstrap now has exactly seven Component shells, eight versions,
+  and seven Dashboard placements. The Stat Card shell carries a
+  superseded/inactive predecessor with a published/active declared successor;
+  three independent Dashboard placements bind that predecessor for
+  Defer/Upgrade, Replace, and Remove, while the blocked-scope placement remains
+  distinct.
+- The Dashboard dependency diagnostic exercises those exact live identities.
+  It requires exactly three initial lifecycle findings, authorized successor
+  disclosure, blocked-scope nondisclosure, Defer followed by Upgrade, Replace,
+  Remove, the exact five remaining authorized placements during a Component
+  provider outage, and healthy zero-finding convergence after recovery. Its
+  structured receipt is a mandatory UAT-8A-05 diagnostic dependency; broad
+  lane labels cannot satisfy the scenario. Its check-by-check JSON and SHA-256
+  sidecar are retained even when the inner diagnostic fails, and the outer
+  fail-late harvest embeds both the partial result and raw artifact identity.
+  The independent broad sibling uses the canonical Sprint 8A ownership smoke,
+  not the removed Core-era demo Component/Dashboard seed.
+- Component calls the versioned Dataset compatibility operation and retains a
+  sanitized observation of the selected binding, Core-installation provider,
+  contract/version, compatibility, health, observation time, and stable
+  result/failure codes. The Component Manifest declares configuration defaults
+  `Components` and `5` and uses the real
+  `/usr/local/bin/component-module` runtime/migration executable path.
+- Component upgrade rehearsal now builds a distinct compatible `0.9.0`
+  release from source. Exact one-owner Blueprint deltas are applied by the
+  Supervisor through its Compose adapter for baseline establishment,
+  `0.9.0` to `1.0.0` upgrade, rollback to `0.9.0`, and intended-`1.0.0`
+  restoration; preservation snapshots precede each transition. Supervisor
+  finalization commits receipt, operation, emergency override, and override
+  reconciliation atomically; Core commits inventory and receipt projection in
+  one transaction. Failed projection/finalization retires the unprojected
+  receipt, terminalizes the operation, and permits an exact-sequence retry.
+  An unchanged desired revision resolves to only `VerifyReadBack`, approves no
+  effects, carries prior state, and marks carried bootstrap receipts unchanged.
+- Playwright failure evidence and all eight automated UAT diagnostics are
+  attempt-, source-, environment-, chronology-, and hash-bound. A failed
+  browser run retains reports, traces, logs, test results, and error context.
+  Component browser fixtures consume the canonical nested Core-owned Dataset
+  major-line reference and derive its positive major from `<uuid>@<major>`;
+  removed flat Dataset fields cannot satisfy the test contract.
+- The Dataset compatibility contract, Core reference resolver, provider, and
+  storage now share one exact major-line identity boundary: canonical
+  `<uuid>@<positive-i32-major>`. Core rejects the obsolete colon spelling,
+  alternate integer spellings, zero/negative versions, extra separators, and
+  values beyond the signed storage range; provider paths contain no unchecked
+  unsigned-to-signed major casts.
+
+Focused implementation checks for this batch passed at handoff:
+
+- `cargo fmt --all -- --check`;
+- zero-warning `cargo check` and Clippy across all targets/features for the
+  Dataset contract, Core API, Supervisor, composition engine, Component
+  module, Dashboard module, and web host;
+- Supervisor transaction/no-op/rollback tests, composition tests, all-feature
+  Component library tests, Dataset-contract tests, and exact Core catalog,
+  navigation, manifest-digest, restricted-reference, and Dataset-major
+  boundary tests;
+- parsing for all 25 changed PowerShell scripts and all seven changed JSON
+  documents, local Markdown-link validation, and Sprint 8A Compose
+  configuration rendering;
+- the acceptance contract plus Dashboard semantic, product diagnostic,
+  readiness graph, candidate graph, harvest guard, and automated-UAT runner
+  self-tests; and
+- exact acceptance-manifest discovery of 71 Playwright scenarios, including
+  the four Sprint 8A Component scenarios. This was inventory discovery only;
+  no browser or deployed-system execution occurred.
+
+These focused checks do not constitute Validation Readiness or Candidate
+Rehearsal. Database-backed integration, live deployment, full Playwright,
+preflight, SIT, and formal UAT remain Not Run. The next phase must run
+`validate-sprint-8a-readiness.ps1` and then the complete repository-owned
+`run-sprint-8a-candidate-rehearsal.ps1` against the same clean source and
+environment identity.
+
+### Earlier post-attempt-27 correction (superseded context)
 
 The 2026-08-06 implementation audit reconstructed the sprint behavior from the
 Sprint 8A acceptance criteria and the closed Sprint 4A/4B/7B Component
@@ -108,13 +274,13 @@ validation and UAT workflows.
 | Failed fresh materialization destroys and reruns | Partial topology reused | induced failure, exact teardown, volume absence and complete rerun assertions | retained failed receipt followed by new from-empty healthy attempt | UAT-8A-07 |
 | Old transition references and payloads unsupported | Hidden legacy compatibility | historical fixture integrity plus old owner/type/version/payload rejection | old inputs rejected; no adapter, ledger, reader or live old reference | UAT-8A-06 |
 | Rerun Phase 7 scope/lifecycle/outage/compatibility | Logical behavior changes at physical boundary | contract, lifecycle, nondisclosure, scope, timeout, compatibility and outage suites | real Component/Dataset/Dashboard process-boundary smoke | UAT-8A-04/05 |
-| Rerun source ownership, package graph, independent upgrade/rollback | Coupled release | boundary audits and upgrade runner assertions | Component-only upgrade/rollback; unrelated digests/restarts unchanged | UAT-8A-06/08 |
+| Rerun source ownership, package graph, independent upgrade/rollback | Coupled or synthetic release | boundary audits; source-built release/binary identity; exact one-owner plan assertions | Supervisor/Compose `0.9.0` to `1.0.0` upgrade, rollback and restoration; unrelated digests/restarts unchanged | UAT-8A-06/08 |
 | Move all Component product and operational ownership | Split ownership or missing surface | module product/API/UI/operations integration suites | same-origin module-owned routes and diagnostics | UAT-8A-01/03 |
 | Real Release/Instance and fresh database | Wrong identity/provenance/storage | release/instance/catalog/schema/database-isolation tests | composition read-back and exact provenance | UAT-8A-02/06 |
 | Dashboard has one canonical inventory/navigation owner | Duplicate transition and deployed-module presentation | exact five-transition identity assertion; Dashboard absent from Core destination resolver; one manifest contribution | inventory exposes Dashboard only as its live 3.0.0 Release/Instance and navigation exposes it exactly once | UAT-8A-02/06 |
-| Dashboard placements created with new module references | Stale transition owner in seed/live data | Dashboard seed/reference schema and semantic inventory assertions | every placement resolves through Components v3; zero old owners/types | UAT-8A-02/05 |
+| Exact Component/Dashboard acceptance seed | Missing or non-executable lifecycle coverage | exact seven-shell/eight-version/seven-placement identity assertions, including predecessor/successor and three action placements | every placement resolves through Components v3; exact action fixtures are live; zero old owners/types | UAT-8A-02/05 |
 | Typed Core Dataset compatibility references/contracts | Direct Dataset relationship retained | typed composite identity, exact version, source/credential audits | Component authors/renders across Core contract only | UAT-8A-04 |
-| Preserve Dashboard public Components behavior | Contract or consumer-policy regression | Sprint 7B observation/finding/action regression suites | lifecycle, findings and actions across real provider | UAT-8A-05 |
+| Preserve Dashboard public Components behavior | Contract or consumer-policy regression | Sprint 7B regression suites plus exact structured dependency diagnostic | Defer/Upgrade/Replace/Remove, nondisclosure, five-placement Component outage and zero-finding recovery across real provider | UAT-8A-05 |
 | Rebuild seed/test data through owners | Stale fixtures or cross-owner writes | semantic owner/read-back/idempotence and negative credential checks | recognizable full reference app from owning APIs | UAT-8A-02/06 |
 | Outage, timeout, scope, capability and compatibility | Leak, corruption or cascading failure | authorization/nondisclosure matrix and failure-containment tests | stop/degrade Dataset or Component; unrelated services healthy; recovery converges | UAT-8A-04/05 |
 | UI unchanged plus module configuration/diagnostics | Visual/interaction or configuration regression | Playwright at 1280/768/390, dark/light, keyboard, 200%, no-JS, hydration and console | direct/shell documents and exact configuration/diagnostics | UAT-8A-01/03 |
@@ -233,8 +399,10 @@ responses and service logs before exact teardown.
 | Playwright | `scripts/validate-e2e.ps1` with exact gateway, deployment receipt, fresh-state, Sprint 8A profile, and evidence bindings | complete inventory; zero unexpected skip/retry/flake; retained outputs | Not Run | |
 | Conformance and nondisclosure | module testkit plus Components/Dataset/Dashboard matrix | owner/version/scope/audience/known-random/timing/lifecycle cases pass | Not Run | |
 | Deployed smoke | general and Sprint 8A smoke in rehearsal namespace | real boundaries, fixtures, old-input rejection, outage/recovery and final health | Not Run | |
+| Live product diagnostics | attempt-bound product receipt plus raw structured Dashboard dependency JSON/SHA sidecar | exact predecessor/successor placements; Defer/Upgrade/Replace/Remove; blocked nondisclosure; five-placement Component outage; zero-finding recovery; partial evidence retained on failure | Not Run | |
+| Component release transition | source-built `0.9.0` metadata plus Supervisor/Compose apply receipts and stage snapshots | exact one-owner `0.9.0`/`1.0.0` upgrade, rollback and restoration; Component preservation; unrelated identity stability | Not Run | |
 | Failure teardown/rerun | induced partial materialization failure | evidence retained; exact topology/volumes removed; new empty rerun healthy | Not Run | |
-| Automated UAT diagnostics | automated equivalents of UAT-01 through UAT-08 | every precondition and expected semantic state reproducible | Not Run | |
+| Automated UAT diagnostics | automated equivalents of UAT-01 through UAT-08, including the structured live-product receipt | every precondition and expected semantic state reproducible; UAT-8A-05 cannot pass from lane labels alone | Not Run | |
 
 The first two lanes are independent of a deployed topology. Playwright locked
 installation/discovery, runner self-tests, and acceptance-inventory checks are
@@ -244,11 +412,14 @@ automated UAT diagnostics, failure-containment successor health, and the
 Component upgrade/rollback baseline. Formal deployed acceptance smoke remains
 SIT-owned and is not a rehearsal substitute.
 
-The Sprint 8A reference materialization rebuilds the established demo and
-Sprint 7A semantic acceptance fixtures through their owning APIs and databases
-before deployment evidence is captured. This is a pre-production rebuild, not
-a compatibility migration. The complete Playwright inventory must never rely
-on one earlier test file to create shared fixtures. Exact deployed
+The Sprint 8A reference materialization rebuilds the canonical seed through
+signed owner bootstrap and receipt read-back before deployment evidence is
+captured: exactly seven Component shells, eight versions, and seven Dashboard
+placements, including the predecessor/successor and independent action
+fixtures. The legacy helper prepares only account/security state. This is a
+pre-production rebuild, not a compatibility migration. The complete Playwright
+inventory must never rely on one earlier test file to create shared fixtures.
+Exact deployed
 inventory/navigation evidence is produced by
 `scripts/audit-sprint-8a-deployed-inventory.ps1`; ad hoc route guesses, envelope
 parsers, and copied counts are not rehearsal evidence.
@@ -270,10 +441,11 @@ not merely read the declared package version. It must also parse and self-test
 the harvest guard and verify that `scripts/uat-sprint-8a.ps1` plus all eight
 `docs/sprints/sprint-8a-uat/uat-8a-*.md` scripts exist.
 
-Complete validation requires five pairwise-distinct, freshly created disposable
-database bindings: API, fresh-baseline API, reference module, API enrollment,
-and Installation Control. A database identity used by one complete command is
-not reused by another command in the same rehearsal.
+Complete validation requires six pairwise-distinct, freshly created disposable
+database bindings: API, fresh-baseline API, reference module, extracted
+Component module, API enrollment, and Installation Control. A database
+identity used by one owner integration target is not reused by another target
+in the same rehearsal.
 
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
@@ -391,7 +563,7 @@ not reused by another command in the same rehearsal.
   source-exact materialization command failed before destructive work when the
   documented interactive `-Confirm` prompt was invoked through the rehearsal
   evidence pipeline. Complete Rust validation, all-feature tests, warning-free
-  Clippy, exact 70-test/9-file Playwright discovery, clean source, and current
+  Clippy, then-current exact Playwright inventory discovery, clean source, and current
   environment containment health passed. Inventory/navigation, deployed
   smoke, Playwright execution, Component upgrade/rollback, UAT diagnostics,
   and the aggregate final check were correctly blocked because no corrected
@@ -472,6 +644,14 @@ not reused by another command in the same rehearsal.
   receipt from another source or from before the current materialization. The
   UAT self-test exercises the stale-receipt rejection. Readiness 30 and
   rehearsal 26 are superseded by this tracked correction.
+- Readiness 31 is superseded. Readiness 32 is invalid because it did not prove
+  authenticated database reachability or issue a structurally shared
+  environment contract. Rehearsals 27 and 28 were explicitly abandoned when
+  the user exited testing; neither reached a complete terminal graph or may be
+  resumed. Attempt 28's three partial harness/evidence findings and raw logs
+  are retained under the invalidation receipt named above. The subsequent
+  implementation audit and consolidated correction replace those attempts;
+  they do not convert their partial evidence into a rehearsal result.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -485,9 +665,15 @@ complete readiness and complete rehearsal to repeat before freeze.
   `http://127.0.0.1:8098`.
 - Compose project/profile: `tessara-sprint-8a`,
   `deploy/sprint-8a/compose.yaml`, required profiles explicitly enabled.
-- Databases: empty disposable installation-scoped Core, Component, Dashboard,
-  Supervisor and selected-module databases with owner-specific runtime and
-  schema-migration roles.
+- Validation database bindings: `TEST_API_DATABASE_URL`,
+  `TEST_API_FRESH_DATABASE_URL`, `TEST_REFERENCE_MODULE_DATABASE_URL`,
+  `TEST_COMPONENT_MODULE_DATABASE_URL`, `TEST_API_ENROLLMENT_DATABASE_URL`, and
+  `TEST_INSTALLATION_CONTROL_DATABASE_URL`. Readiness requires pairwise-
+  distinct loopback, token-bounded test database identities and completes an
+  authenticated transactional temporary-table round trip against each one.
+- Materialized owner databases: empty disposable installation-scoped Core,
+  Component, Dashboard, Supervisor, and selected-module databases with
+  owner-specific runtime and schema-migration roles.
 - Reset authorization: explicit approval bound to resolved absolute Sprint 8A
   project/container/volume/database identities only. Broad targets, unresolved
   variables and neighboring projects fail closed.
@@ -496,41 +682,35 @@ complete readiness and complete rehearsal to repeat before freeze.
   actor and Core/Component/Dashboard service identities; no secrets in receipts.
 - Evidence root/output mode: `artifacts/sprint-8a-closeout/`, repository-relative
   canonical paths, append-only attempts and atomic completion where supported.
+- Identity binding: readiness writes a secret-free environment contract and
+  SHA-256 fingerprint. Every rehearsal lane, raw artifact, UAT diagnostic, and
+  aggregate result must match that fingerprint and the same source identity.
 
 ## Planned Commands
 
+The validation coordinator enters through exactly these two top-level commands.
+The runners own the complete check inventory, dependency graph, evidence paths,
+and all subordinate commands; manually assembling lane commands is not a
+Candidate Rehearsal and cannot authorize preflight.
+
 ```powershell
-cargo fmt --all -- --check
-cargo check --workspace --all-features --locked --offline
-cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings
-cargo test --workspace --locked --offline
-cargo test --locked --offline -p tessara-components-contract
-cargo test --locked --offline -p tessara-component-module
-cargo test --locked --offline -p tessara-dashboard-module
-docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
-.\scripts\smoke-sprint-8a.ps1 -SelfTest
-.\scripts\uat-sprint-8a.ps1 -SelfTest
-.\scripts\test-sprint-validation-harvest.ps1 -SelfTest
 .\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
-.\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm:$false -VerifyNoOp
-.\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployed-inventory-navigation.json"
-.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json"
-.\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
-.\scripts\run-sprint-8a-component-upgrade.ps1 -OutputPath "artifacts/sprint-8a-closeout/rehearsal/component-upgrade-rollback.json"
-.\scripts\uat-sprint-8a.ps1
-.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -EvidencePath "artifacts/sprint-8a-closeout/rehearsal/playwright-acceptance.json" -OverwriteEvidence
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt <n> -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
 
-The database-backed tests require their validation database URL variables.
-Both `scripts/validate.ps1` and direct workspace all-features execution also
-require
-`SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET`;
-an attempt that omits it is retained as an invocation failure and is not
-silently retried during diagnostic harvesting.
-Failure teardown/rerun, nondisclosure, deployed smoke, browser coverage, and
-upgrade/rollback are executed and retained by the specialized validation
-workflow. Deployed acceptance smoke belongs to SIT; manual scenarios belong to
-UAT.
+Readiness requires and authenticates the six declared disposable database
+URLs, proves their identities are pairwise distinct, records the normalized
+Compose/tool/source contract, and issues the environment fingerprint consumed
+by rehearsal. The complete runner serializes Cargo work that shares one target
+directory and owns materialization/no-op, inventory/navigation, smoke,
+Playwright, a non-acceptance live product diagnostic, Component
+upgrade/rollback, deterministic failure containment, successor restoration,
+automated scenario diagnostics, and final identity/health. The live diagnostic
+runs before containment; containment destroys its disposable writes and proves
+a fresh canonical successor. It cannot publish UAT evidence, and formal UAT is
+not started by rehearsal.
+Deployed acceptance smoke remains SIT-owned and manual scenarios remain
+formal-UAT-owned.
 
 ## Preflight
 
@@ -564,8 +744,10 @@ UAT.
 
 ### Scripted UAT
 
-- Command: `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` plus
-  the Sprint 8A source-exact wrapper fixed before readiness.
+- Command: Not authorized in implementation or rehearsal. The specialized UAT
+  workflow must bind the exact `candidate.json`, preflight receipt, passing SIT
+  receipt, environment fingerprint, `http://127.0.0.1:8088` endpoint, and
+  attempt-scoped evidence target before fixing the formal command.
 - Start rule: only after authoritative SIT passes on the same fingerprint.
 - Result: Not Run.
 - Evidence: `artifacts/sprint-8a-closeout/uat/scripted/`.
@@ -574,14 +756,14 @@ UAT.
 
 | Scenario | Role/start state | Actions | Expected | Result | Evidence |
 |---|---|---|---|---|---|
-| UAT-8A-01 unchanged Component experience | Component manager/reader; fresh canonical seed | Browse, create disposable Component, edit/publish/version, exercise lifecycle and view every supported kind through direct/shell routes | Same accepted product behavior and canonical vocabulary; module owns documents/assets; disposal succeeds | Not Run | `uat/manual/uat-8a-01.json` plus screenshots/trace |
-| UAT-8A-02 from-empty seed and new references | Operator; explicitly authorized empty Sprint 8A databases | Run source-exact materialization, inspect owner order/read-back, rerun unchanged, open seeded Dashboard | Full recognizable app; Dashboard placements use selected Component instance/v3; no old owners/types; second run no-op | Not Run | `uat/manual/uat-8a-02.json` |
-| UAT-8A-03 configuration and diagnostics | Global Module Management manager/reader | Set label and valid timeout; try blank/long label, 0/31 timeout, unknown field/version; inspect navigation/admin/product headings/diagnostics | Label affects nav/admin only; default 5 and range 1–30 enforced; authority correct; diagnostics sanitized | Not Run | `uat/manual/uat-8a-03.json` plus screenshots |
+| UAT-8A-01 unchanged Component experience | Component manager/reader; fresh canonical seed | Browse, create/edit/publish/version, exercise lifecycle and every kind; capture light/dark at 1280/768/390, keyboard, 200% zoom, no-JS SSR, hydration and console | Same accepted product behavior and canonical vocabulary; module owns documents/assets; responsive/theme/accessibility evidence complete; disposal succeeds | Not Run | `uat/manual/uat-8a-01.json` plus named screenshots/trace/console record |
+| UAT-8A-02 from-empty seed and new references | Operator; explicitly authorized empty Sprint 8A databases | Run source-exact materialization, inspect exact owner read-back, rerun unchanged, open seeded Dashboard | Exactly 7 Component shells, 8 versions and 7 placements; predecessor/successor/action fixtures correct; only selected Component instance/v3; second run no-op | Not Run | `uat/manual/uat-8a-02.json` |
+| UAT-8A-03 configuration and diagnostics | Global Module Management manager/reader | Set label and valid timeout; try blank/long label, 0/31 timeout, unknown field/version; inspect navigation/admin/product headings/diagnostics | Manifest defaults are Components/5; label/range/authority correct; binding/provider/contract/compatibility/health/result diagnostics are sanitized | Not Run | `uat/manual/uat-8a-03.json` plus screenshots |
 | UAT-8A-04 Dataset contract, scope and outage | Component manager plus scoped/out-of-scope actors; Dataset fixtures | Author/preview/execute; attempt wrong audience/scope; stop/timeout/recover Dataset provider; retry preserved editor | Typed reference only; allowed paths work; restricted cases do not disclose; outage is read-only with no pending write; recovery succeeds | Not Run | `uat/manual/uat-8a-04.json` plus screenshots |
-| UAT-8A-05 Dashboard lifecycle and outages | Component manager, Dashboard manager/reader; v3 placement | Change Component lifecycle/revision, refresh/defer/act; stop/recover Component and Dataset paths | Sprint 7B findings/actions preserved; Dashboard degrades coherently; unrelated routes stay healthy; recovery converges | Not Run | `uat/manual/uat-8a-05.json` plus screenshots |
+| UAT-8A-05 Dashboard lifecycle and outages | Component manager, Dashboard manager/reader; exact predecessor-bound action placements | Refresh exact findings; Defer then Upgrade; independently Replace and Remove; verify blocked nondisclosure; stop/recover Component | Three lifecycle findings and all four actions are exact; blocked placement absent; outage covers exact five authorized remaining placements; recovery has zero findings | Not Run | `uat/manual/uat-8a-05.json` plus structured semantic receipt/screenshots |
 | UAT-8A-06 isolation and unsupported old inputs | Operator plus authorized/restricted actors | Inspect images/graphs/credentials/Core absence; submit V1/V2, old owner/type and old payload requests | No forbidden source/storage edge; old inputs fail exact normal contract with nondisclosure; no adapter/ledger/fallback | Not Run | `uat/manual/uat-8a-06.json` |
 | UAT-8A-07 failed materialization rerun | Operator; disposable authorized topology; induced owner-bootstrap failure | Run failing attempt, inspect evidence, verify exact teardown, remove fault and rerun | Failure retained; partial project/volumes absent; successor begins empty and reaches canonical health | Not Run | `uat/manual/uat-8a-07.json` |
-| UAT-8A-08 Component-only upgrade/rollback | Operator/reviewer; healthy extracted current release | Record identities, upgrade only Component, exercise routes/data/configuration, roll back, restore intended current release | Health-gated switch; Component state retained; unrelated digests/restarts unchanged; final topology healthy | Not Run | `uat/manual/uat-8a-08.json` |
+| UAT-8A-08 Component-only upgrade/rollback | Operator/reviewer; healthy `1.0.0` current release plus source-built `0.9.0` fixture | Establish `0.9.0`, upgrade to `1.0.0`, roll back, restore `1.0.0` through Supervisor/Compose; compare snapshots | Exact one-owner health-gated deltas; distinct release/binary identities; Component state retained; unrelated identities/restarts unchanged; final topology healthy | Not Run | `uat/manual/uat-8a-08.json` plus upgrade receipt |
 
 - UAT result receipt: `artifacts/sprint-8a-closeout/uat-result.json`.
 - Final topology restoration: intended Sprint 8A route/slot and current
@@ -595,9 +777,10 @@ UAT.
 | Component public contract | exact-current `3.0.0`, Module Instance owner and `tessara.components.component_version` | old/mixed/wrong-instance/cross-installation/malformed/unauthorized inputs fail closed |
 | Component product API | canonical module-owned typed-reference bodies on stable same-origin product paths | old Core payloads rejected; no translation reader/facade |
 | Core Dataset compatibility | typed Dataset-major-line reference and versioned catalog/schema/distinct/execution/compatibility operations | no private DTO/SQL/credential; wrong audience/scope/version and outage do not disclose or fall back |
-| Module configuration | schema v1 label and Dataset timeout | unknown schema/field, invalid label, 0/31 timeout and wrong authority rejected |
-| Dashboard dependency | v3 provider binding and directly seeded new references | no old owner/type in storage; no Component implementation dependency |
-| Fresh bootstrap | destructive full reset and owner-ordered idempotent seed | ambiguous target rejected; no cross-owner writes; second run no-op; failed partial topology never reused |
+| Module configuration and diagnostics | Manifest schema v1 defaults `Components`/`5`; real image command paths; selected Dataset binding compatibility/health observation | unknown schema/field, invalid label, 0/31 timeout and wrong authority rejected; no raw references/secrets; command paths exist in image |
+| Dashboard dependency | v3 provider binding; exact predecessor/successor and action placements; structured semantic evidence | no old owner/type or blocked-scope disclosure; Defer/Upgrade/Replace/Remove and Component outage/recovery cannot pass from broad labels |
+| Fresh bootstrap | destructive full reset and owner-ordered exact 7-shell/8-version/7-placement idempotent seed | ambiguous target rejected; no cross-owner writes; exact predecessor/successor/action identities; second run no-op; failed partial topology never reused |
+| Component release transition | source-built compatible `0.9.0` and candidate `1.0.0`; exact Supervisor/Compose one-owner deltas | candidate relabel rejected; release/binary identities distinct; unrelated owners absent from plan and unchanged in snapshots |
 | Core ownership | generic platform integration only | Component product storage/code/routes/adapter/readers absent |
 
 ## Source Provenance, Schema Baseline, And Evidence Rules

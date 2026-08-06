@@ -1,11 +1,11 @@
-//! Transactional synchronization for the Core-owned transition catalog.
+//! Transactional synchronization and integrity projection for module inventory.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
-use tessara_composition::{ApplicationLockfileV1, InstallationReceiptV1};
+use tessara_composition::{ApplicationLockfileV1, InstallationReceiptV1, NavigationPolicyEntryV1};
 use tessara_module_contract::{DeploymentReceiptV1, ModuleManifest};
 use uuid::Uuid;
 
@@ -35,16 +35,67 @@ const MODULE_CAPABILITIES: [(&str, &str); 2] = [
     ),
 ];
 
+pub(crate) async fn clear_projected_module_actions(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM core_module_action_declarations")
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn project_manifest_actions(
+    tx: &mut Transaction<'_, Postgres>,
+    target_definition_id: &str,
+    manifest: &ModuleManifest,
+) -> Result<(), sqlx::Error> {
+    for route in &manifest.browser_routes {
+        sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,'read',$5) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
+            .bind(target_definition_id)
+            .bind(route.dependency_binding.as_str())
+            .bind(route.functional_contract.as_str())
+            .bind(&route.authorization_action)
+            .bind(route.required_capability.as_str())
+            .execute(&mut **tx)
+            .await?;
+    }
+    for route in &manifest.public_api_routes {
+        let operation = match route.operation {
+            tessara_module_contract::AuthorizationGrantOperationV1::Read => "read",
+            tessara_module_contract::AuthorizationGrantOperationV1::Mutation => "mutation",
+        };
+        sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
+            .bind(target_definition_id)
+            .bind(route.dependency_binding.as_str())
+            .bind(route.functional_contract.as_str())
+            .bind(&route.authorization_action)
+            .bind(operation)
+            .bind(route.required_capability.as_str())
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+pub(crate) struct CompositionProjectionDocuments<'a> {
+    pub(crate) digest: &'a str,
+    pub(crate) lockfile: &'a Value,
+    pub(crate) receipt: &'a Value,
+}
+
 pub(crate) async fn project_composition_modules(
     pool: &PgPool,
     lockfile: &ApplicationLockfileV1,
     receipt: &InstallationReceiptV1,
     manifests: &BTreeMap<String, ModuleManifest>,
+    previous_lockfile: Option<&ApplicationLockfileV1>,
+    projection: CompositionProjectionDocuments<'_>,
 ) -> anyhow::Result<()> {
     if lockfile.installation_id != receipt.installation_id {
         anyhow::bail!("composition lockfile and receipt installation identities differ");
     }
 
+    let service_identities = crate::module_service_requests::configured_registry()?;
     let mut tx = pool.begin().await?;
     let previous_instances = sqlx::query_as::<_, (String, Uuid)>(
         "SELECT definition_id,id FROM module_instances WHERE installation_id=$1",
@@ -56,18 +107,79 @@ pub(crate) async fn project_composition_modules(
         .iter()
         .cloned()
         .collect::<BTreeMap<_, _>>();
-    for (definition_id, _) in previous_instances {
+    let previous_modules = previous_lockfile
+        .map(|previous| {
+            previous
+                .modules
+                .iter()
+                .map(|module| (module.definition_id.as_str(), module))
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
+    let action_owners = lockfile
+        .materialization_plan
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            tessara_composition::MaterializationActionV1::AcquireImage { component, .. }
+                if component != "core" && component != "database" && component != "gateway" =>
+            {
+                Some(component.as_str())
+            }
+            tessara_composition::MaterializationActionV1::ProvisionDatabase { owner }
+            | tessara_composition::MaterializationActionV1::Migrate { owner, .. }
+            | tessara_composition::MaterializationActionV1::Configure { owner, .. }
+            | tessara_composition::MaterializationActionV1::Bootstrap { owner, .. }
+            | tessara_composition::MaterializationActionV1::HealthGate { owner }
+            | tessara_composition::MaterializationActionV1::SwitchTraffic { owner }
+                if owner != "core" =>
+            {
+                Some(owner.as_str())
+            }
+            tessara_composition::MaterializationActionV1::SetEnablement {
+                definition_id, ..
+            } => Some(definition_id.as_str()),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    let changed_definitions = lockfile
+        .modules
+        .iter()
+        .filter(|module| {
+            previous_lockfile.is_none()
+                || previous_modules.get(module.definition_id.as_str()).copied() != Some(*module)
+                || action_owners.contains(module.definition_id.as_str())
+        })
+        .map(|module| module.definition_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let desired_definitions = lockfile
+        .modules
+        .iter()
+        .map(|module| module.definition_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let removed_definitions = previous_modules
+        .keys()
+        .copied()
+        .filter(|definition| !desired_definitions.contains(definition))
+        .collect::<BTreeSet<_>>();
+
+    for definition in &removed_definitions {
         sqlx::query("DELETE FROM core_module_action_declarations WHERE target_definition_id=$1")
-            .bind(definition_id)
+            .bind(definition)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM module_instances WHERE installation_id=$1 AND definition_id=$2")
+            .bind(lockfile.installation_id)
+            .bind(definition)
             .execute(&mut *tx)
             .await?;
     }
-    sqlx::query("DELETE FROM module_instances WHERE installation_id=$1")
-        .bind(lockfile.installation_id)
-        .execute(&mut *tx)
-        .await?;
 
-    for module in &lockfile.modules {
+    for module in lockfile
+        .modules
+        .iter()
+        .filter(|module| changed_definitions.contains(module.definition_id.as_str()))
+    {
         let manifest = manifests.get(&module.definition_id).ok_or_else(|| {
             anyhow::anyhow!(
                 "composition manifest is absent for '{}'",
@@ -119,31 +231,11 @@ pub(crate) async fn project_composition_modules(
             )
             .await?;
         }
-        for route in &manifest.browser_routes {
-            sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,'read',$5) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
-                .bind(&module.definition_id)
-                .bind(route.dependency_binding.as_str())
-                .bind(route.functional_contract.as_str())
-                .bind(&route.authorization_action)
-                .bind(route.required_capability.as_str())
-                .execute(&mut *tx)
-                .await?;
-        }
-        for route in &manifest.public_api_routes {
-            let operation = match route.operation {
-                tessara_module_contract::AuthorizationGrantOperationV1::Read => "read",
-                tessara_module_contract::AuthorizationGrantOperationV1::Mutation => "mutation",
-            };
-            sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
-                .bind(&module.definition_id)
-                .bind(route.dependency_binding.as_str())
-                .bind(route.functional_contract.as_str())
-                .bind(&route.authorization_action)
-                .bind(operation)
-                .bind(route.required_capability.as_str())
-                .execute(&mut *tx)
-                .await?;
-        }
+        sqlx::query("DELETE FROM core_module_action_declarations WHERE target_definition_id=$1")
+            .bind(&module.definition_id)
+            .execute(&mut *tx)
+            .await?;
+        project_manifest_actions(&mut tx, &module.definition_id, manifest).await?;
         let route_prefix = manifest
             .browser_routes
             .iter()
@@ -165,7 +257,7 @@ pub(crate) async fn project_composition_modules(
             .get(&module.definition_id)
             .copied()
             .unwrap_or(module.enabled);
-        sqlx::query("INSERT INTO module_instances(id,installation_id,definition_id,release_id,identity_state,data_state,database_name,configuration,route_prefix,installed,deployed,configured,ready,enabled,healthy,last_observed_at) VALUES($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,$8,$8,$8,$9)")
+        sqlx::query("INSERT INTO module_instances(id,installation_id,definition_id,release_id,identity_state,data_state,database_name,configuration,route_prefix,installed,deployed,configured,ready,enabled,healthy,last_observed_at) VALUES($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,$8,$8,$8,$9) ON CONFLICT(installation_id,definition_id) DO UPDATE SET release_id=EXCLUDED.release_id,identity_state='live',data_state='retained',database_name=EXCLUDED.database_name,configuration=EXCLUDED.configuration,route_prefix=EXCLUDED.route_prefix,installed=true,deployed=true,configured=true,ready=EXCLUDED.ready,enabled=EXCLUDED.enabled,healthy=EXCLUDED.healthy,last_observed_at=EXCLUDED.last_observed_at")
             .bind(instance_id)
             .bind(lockfile.installation_id)
             .bind(&module.definition_id)
@@ -177,71 +269,87 @@ pub(crate) async fn project_composition_modules(
             .bind(receipt.applied_at)
             .execute(&mut *tx)
             .await?;
+        crate::module_service_requests::project_service_identity(
+            &mut tx,
+            service_identities.as_ref(),
+            instance_id,
+            manifest,
+        )
+        .await?;
     }
 
-    for role in &lockfile.roles {
-        let role_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO roles(id,name) VALUES($1,$2)
-             ON CONFLICT(name) DO UPDATE SET name=EXCLUDED.name
-             RETURNING id",
-        )
-        .bind(Uuid::new_v4())
-        .bind(&role.name)
-        .fetch_one(&mut *tx)
-        .await?;
-        sqlx::query("DELETE FROM role_capabilities WHERE role_id=$1")
-            .bind(role_id)
-            .execute(&mut *tx)
-            .await?;
-        for capability in &role.capabilities {
-            let inserted = sqlx::query(
-                "INSERT INTO role_capabilities(role_id,capability_id)
-                 SELECT $1,id FROM capabilities WHERE key=$2",
+    let role_policy_changed = previous_lockfile
+        .is_none_or(|previous| previous.role_policy_digest != lockfile.role_policy_digest);
+    if role_policy_changed {
+        for role in &lockfile.roles {
+            let role_id = sqlx::query_scalar::<_, Uuid>(
+                "INSERT INTO roles(id,name) VALUES($1,$2)
+                 ON CONFLICT(name) DO UPDATE SET name=EXCLUDED.name
+                 RETURNING id",
             )
-            .bind(role_id)
-            .bind(capability)
-            .execute(&mut *tx)
+            .bind(Uuid::new_v4())
+            .bind(&role.name)
+            .fetch_one(&mut *tx)
             .await?;
-            if inserted.rows_affected() != 1 {
-                anyhow::bail!(
-                    "composition role '{}' references undeclared capability '{}'",
-                    role.name,
-                    capability
-                );
+            sqlx::query("DELETE FROM role_capabilities WHERE role_id=$1")
+                .bind(role_id)
+                .execute(&mut *tx)
+                .await?;
+            for capability in &role.capabilities {
+                let inserted = sqlx::query(
+                    "INSERT INTO role_capabilities(role_id,capability_id)
+                     SELECT $1,id FROM capabilities WHERE key=$2",
+                )
+                .bind(role_id)
+                .bind(capability)
+                .execute(&mut *tx)
+                .await?;
+                if inserted.rows_affected() != 1 {
+                    anyhow::bail!(
+                        "composition role '{}' references undeclared capability '{}'",
+                        role.name,
+                        capability
+                    );
+                }
             }
         }
-    }
-    if !lockfile
-        .roles
-        .iter()
-        .any(|role| role.name == lockfile.administrator_enrollment_role)
-    {
-        anyhow::bail!("composition administrator enrollment role is absent");
-    }
-
-    ensure_navigation_composition_v2(&mut tx, lockfile.installation_id, Uuid::new_v4()).await?;
-    let placements = repository::load_navigation_placements(&mut tx, lockfile.installation_id)
-        .await?
-        .into_iter()
-        .map(|placement| (placement.destination_id.clone(), placement))
-        .collect::<BTreeMap<_, _>>();
-    for desired in &lockfile.navigation {
-        let observed = placements.get(&desired.destination_id).ok_or_else(|| {
-            anyhow::anyhow!(
-                "composition navigation destination '{}' is absent",
-                desired.destination_id
-            )
-        })?;
-        if observed.group_id != desired.group_id
-            || observed.display_order != desired.order as i32
-            || observed.visible != desired.visible
+        if !lockfile
+            .roles
+            .iter()
+            .any(|role| role.name == lockfile.administrator_enrollment_role)
         {
-            anyhow::bail!(
-                "composition navigation destination '{}' differs from the resolved policy",
-                desired.destination_id
-            );
+            anyhow::bail!("composition administrator enrollment role is absent");
         }
     }
+
+    let navigation_changed = previous_lockfile
+        .is_none_or(|previous| previous.navigation_digest != lockfile.navigation_digest);
+    if navigation_changed || !changed_definitions.is_empty() || !removed_definitions.is_empty() {
+        let navigation_correlation_id = Uuid::new_v4();
+        ensure_navigation_composition_v2(
+            &mut tx,
+            lockfile.installation_id,
+            navigation_correlation_id,
+        )
+        .await?;
+        if navigation_changed {
+            apply_lockfile_navigation(
+                &mut tx,
+                lockfile.installation_id,
+                &lockfile.navigation,
+                navigation_correlation_id,
+            )
+            .await?;
+        }
+    }
+    sqlx::query("INSERT INTO composition_receipt_projections(installation_id,revision,digest,lockfile,receipt) VALUES($1,$2,$3,$4,$5) ON CONFLICT(installation_id,revision) DO UPDATE SET digest=EXCLUDED.digest,lockfile=EXCLUDED.lockfile,receipt=EXCLUDED.receipt,observed_at=now()")
+        .bind(receipt.installation_id)
+        .bind(receipt.revision as i64)
+        .bind(projection.digest)
+        .bind(projection.lockfile)
+        .bind(projection.receipt)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -539,7 +647,7 @@ pub(crate) enum CatalogSyncError {
     StoredNavigationMismatch { contribution_id: String },
     #[error("stored navigation groups or placements do not match the Core catalog")]
     StoredNavigationCompositionMismatch,
-    #[error("stored transition catalog does not contain exactly the seven frozen definitions")]
+    #[error("stored transition catalog does not match the exact current Core identities")]
     StoredCatalogShapeMismatch,
     #[error("Core capability '{key}' required by '{definition_id}' is not registered")]
     CapabilityNotRegistered { definition_id: String, key: String },
@@ -1413,6 +1521,154 @@ pub(crate) async fn ensure_navigation_composition_v2(
     Ok(())
 }
 
+async fn apply_lockfile_navigation(
+    tx: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+    desired_navigation: &[NavigationPolicyEntryV1],
+    correlation_id: Uuid,
+) -> anyhow::Result<()> {
+    let catalog = load_navigation_catalog(tx, installation_id).await?;
+    let groups = repository::load_navigation_groups(tx, installation_id).await?;
+    let current = repository::load_navigation_placements(tx, installation_id).await?;
+    let desired = reconcile_lockfile_navigation_placements(
+        installation_id,
+        &groups,
+        &current,
+        &catalog,
+        desired_navigation,
+    )?;
+    if desired == current {
+        return Ok(());
+    }
+
+    repository::replace_navigation_composition(tx, installation_id, &groups, &desired).await?;
+    let previous_revision =
+        repository::load_navigation_policy_revision(tx, installation_id).await?;
+    let revision =
+        repository::increment_navigation_policy_revision(tx, installation_id, previous_revision)
+            .await?;
+    repository::insert_audit_event(
+        tx,
+        Some(installation_id),
+        "navigation_policy.composition_reconciled",
+        correlation_id,
+        &json!({
+            "schema_version": 2,
+            "before_revision": previous_revision,
+            "after_revision": revision,
+            "locked_destinations": desired_navigation.iter().map(|destination| json!({
+                "id": destination.destination_id,
+                "group_id": destination.group_id,
+                "visible": destination.visible,
+                "order": destination.order,
+            })).collect::<Vec<_>>(),
+        }),
+    )
+    .await?;
+    Ok(())
+}
+
+fn reconcile_lockfile_navigation_placements(
+    installation_id: Uuid,
+    groups: &[NavigationGroupRow],
+    current: &[NavigationPlacementRow],
+    catalog: &[ResolvedNavigationDestination],
+    desired_navigation: &[NavigationPolicyEntryV1],
+) -> anyhow::Result<Vec<NavigationPlacementRow>> {
+    navigation_policy_v2_model_with_catalog(
+        installation_id,
+        0,
+        groups.to_vec(),
+        current.to_vec(),
+        catalog,
+    )
+    .map_err(|()| anyhow::anyhow!("current navigation composition is invalid"))?;
+
+    let known_group_ids = groups
+        .iter()
+        .map(|group| group.group_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let catalog_by_id = catalog
+        .iter()
+        .map(|destination| (destination.id.as_str(), destination))
+        .collect::<BTreeMap<_, _>>();
+    let mut placements = current
+        .iter()
+        .cloned()
+        .map(|placement| (placement.destination_id.clone(), placement))
+        .collect::<BTreeMap<_, _>>();
+    let mut seen_destination_ids = BTreeSet::new();
+    for desired in desired_navigation {
+        if !seen_destination_ids.insert(desired.destination_id.as_str()) {
+            anyhow::bail!(
+                "composition navigation contains duplicate destination '{}'",
+                desired.destination_id
+            );
+        }
+        let destination = catalog_by_id
+            .get(desired.destination_id.as_str())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "composition navigation destination '{}' is absent from the active catalog",
+                    desired.destination_id
+                )
+            })?;
+        if !known_group_ids.contains(desired.group_id.as_str()) {
+            anyhow::bail!(
+                "composition navigation destination '{}' references unknown group '{}'",
+                desired.destination_id,
+                desired.group_id
+            );
+        }
+        if !destination.can_hide && !desired.visible {
+            anyhow::bail!(
+                "composition navigation destination '{}' cannot be hidden",
+                desired.destination_id
+            );
+        }
+        if !destination.can_move_between_groups && desired.group_id != destination.default_group_id
+        {
+            anyhow::bail!(
+                "composition navigation destination '{}' cannot move between groups",
+                desired.destination_id
+            );
+        }
+        let desired_order = i32::try_from(desired.order).map_err(|_| {
+            anyhow::anyhow!(
+                "composition navigation destination '{}' order exceeds the supported range",
+                desired.destination_id
+            )
+        })?;
+        let placement = placements
+            .get_mut(&desired.destination_id)
+            .expect("the active catalog and complete placement model have identical identities");
+        placement.group_id.clone_from(&desired.group_id);
+        placement.visible = desired.visible;
+        placement.display_order = desired_order;
+    }
+
+    let mut reconciled = placements.into_values().collect::<Vec<_>>();
+    reconciled.sort_by(|left, right| {
+        left.group_id
+            .cmp(&right.group_id)
+            .then_with(|| left.display_order.cmp(&right.display_order))
+            .then_with(|| left.destination_id.cmp(&right.destination_id))
+    });
+    navigation_policy_v2_model_with_catalog(
+        installation_id,
+        0,
+        groups.to_vec(),
+        reconciled.clone(),
+        catalog,
+    )
+    .map_err(|()| {
+        anyhow::anyhow!(
+            "composition navigation does not produce one dense, complete placement per active catalog destination"
+        )
+    })?;
+    Ok(reconciled)
+}
+
 fn default_navigation_placements(
     catalog: &[ResolvedNavigationDestination],
 ) -> Vec<NavigationPlacementRow> {
@@ -1583,6 +1839,13 @@ async fn load_module_inventory_in_transaction(
     .fetch_all(&mut **tx)
     .await?;
 
+    ensure_no_inventory_definition_overlap(
+        transitions
+            .iter()
+            .map(|transition| transition.definition_id.as_str()),
+        modules.iter().map(|module| module.definition_id.as_str()),
+    )?;
+
     let deployment = sqlx::query_scalar::<_, sqlx::types::Json<DeploymentReceiptV1>>(
         "SELECT receipt FROM deployment_receipts WHERE installation_id = $1 ORDER BY revision DESC LIMIT 1",
     )
@@ -1615,6 +1878,24 @@ async fn load_module_inventory_in_transaction(
         deployment,
         deployment_history,
     })
+}
+
+fn ensure_no_inventory_definition_overlap<'a, 'b>(
+    transition_definition_ids: impl IntoIterator<Item = &'a str>,
+    module_definition_ids: impl IntoIterator<Item = &'b str>,
+) -> Result<(), CatalogReadError> {
+    let transition_definition_ids = transition_definition_ids
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if module_definition_ids
+        .into_iter()
+        .any(|definition_id| transition_definition_ids.contains(definition_id))
+    {
+        return Err(CatalogReadError::Integrity {
+            code: "module_inventory_definition_overlap",
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2314,6 +2595,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn inventory_rejects_an_exact_dashboard_release_transition_overlap() {
+        let current_transitions = [
+            "tessara.forms",
+            "tessara.workflows",
+            "tessara.responses",
+            "tessara.datasets",
+            "tessara.migration",
+        ];
+        ensure_no_inventory_definition_overlap(
+            current_transitions,
+            ["tessara.components", "tessara.dashboards"],
+        )
+        .expect("current real modules do not overlap the Core transition catalog");
+
+        let error = ensure_no_inventory_definition_overlap(
+            current_transitions
+                .into_iter()
+                .chain(["tessara.dashboards"]),
+            ["tessara.dashboards"],
+        )
+        .expect_err("a real Dashboard release must never hide a Dashboard transition entry");
+        assert_eq!(error.stable_code(), "module_inventory_definition_overlap");
+    }
+
+    #[test]
     fn composition_managed_navigation_requires_an_active_module_instance() {
         let dashboard_manifest: ModuleManifest = serde_json::from_str(include_str!(
             "../../../tessara-dashboard-module/manifest.json"
@@ -2374,6 +2680,183 @@ mod tests {
         );
     }
 
+    #[test]
+    fn lockfile_navigation_materializes_a_non_default_blueprint_policy_with_exact_identities() {
+        let mut blueprint: tessara_composition::ApplicationBlueprintV1 = serde_json::from_str(
+            include_str!("../../../../deploy/sprint-8a/blueprints/reference.json"),
+        )
+        .expect("the Sprint 8A reference Blueprint is valid JSON");
+        let release_catalog: tessara_composition::ReleaseCatalogV1 = serde_json::from_str(
+            include_str!("../../../../deploy/sprint-8a/catalogs/local-release-catalog.json"),
+        )
+        .expect("the Sprint 8A release catalog is valid JSON");
+        for (destination_id, order, visible) in [
+            ("tessara.components.navigation", 9, true),
+            ("tessara.dashboards.navigation", 8, false),
+        ] {
+            let destination = blueprint
+                .navigation
+                .iter_mut()
+                .find(|destination| destination.destination_id == destination_id)
+                .unwrap_or_else(|| panic!("{destination_id} is declared by the Blueprint"));
+            destination.order = order;
+            destination.visible = visible;
+        }
+        let lockfile = tessara_composition::resolve(&blueprint, &release_catalog)
+            .expect("the non-default Blueprint navigation policy resolves");
+
+        let component_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-component-module/manifest.json"
+        ))
+        .expect("Component manifest fixture is valid JSON");
+        let dashboard_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-dashboard-module/manifest.json"
+        ))
+        .expect("Dashboard manifest fixture is valid JSON");
+        let catalog = resolve_navigation_catalog(&[component_manifest, dashboard_manifest]);
+        let groups = vec![
+            NavigationGroupRow {
+                group_id: "core.main".to_string(),
+                label: "Main".to_string(),
+                display_order: 0,
+                owner: "core".to_string(),
+            },
+            NavigationGroupRow {
+                group_id: "core.admin".to_string(),
+                label: "Admin".to_string(),
+                display_order: 1,
+                owner: "core".to_string(),
+            },
+        ];
+        let reconciled = reconcile_lockfile_navigation_placements(
+            blueprint.installation_id,
+            &groups,
+            &default_navigation_placements(&catalog),
+            &catalog,
+            &lockfile.navigation,
+        )
+        .expect("the resolved lockfile policy materializes over catalog defaults");
+
+        assert_eq!(
+            reconciled
+                .iter()
+                .map(|placement| placement.destination_id.as_str())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            catalog.len(),
+            "every active catalog identity has exactly one materialized placement"
+        );
+        let extracted = reconciled
+            .iter()
+            .filter_map(|placement| {
+                let destination = catalog
+                    .iter()
+                    .find(|destination| destination.id == placement.destination_id)?;
+                matches!(
+                    destination.definition_id.as_deref(),
+                    Some(
+                        "tessara.reference.scoped-records"
+                            | "tessara.components"
+                            | "tessara.dashboards"
+                    )
+                )
+                .then(|| {
+                    (
+                        placement.destination_id.as_str(),
+                        destination.definition_id.as_deref(),
+                        placement.display_order,
+                        placement.visible,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            extracted,
+            vec![
+                (
+                    "tessara.reference.scoped-records.navigation",
+                    Some("tessara.reference.scoped-records"),
+                    7,
+                    true,
+                ),
+                (
+                    "tessara.dashboards.navigation",
+                    Some("tessara.dashboards"),
+                    8,
+                    false,
+                ),
+                (
+                    "tessara.components.navigation",
+                    Some("tessara.components"),
+                    9,
+                    true,
+                ),
+            ],
+            "the lockfile controls the exact non-default module order and visibility"
+        );
+        assert_eq!(
+            extracted
+                .iter()
+                .filter(|(identity, ..)| *identity == "tessara.dashboards.navigation")
+                .count(),
+            1,
+            "Dashboard remains a single manifest-owned navigation identity"
+        );
+        navigation_policy_v2_model_with_catalog(
+            blueprint.installation_id,
+            0,
+            groups,
+            reconciled,
+            &catalog,
+        )
+        .expect("the materialized policy remains complete and densely ordered");
+    }
+
+    #[test]
+    fn lockfile_navigation_rejects_duplicate_identities_and_order_collisions() {
+        let catalog = navigation_catalog::resolved_destinations();
+        let groups = vec![
+            NavigationGroupRow {
+                group_id: "core.main".to_string(),
+                label: "Main".to_string(),
+                display_order: 0,
+                owner: "core".to_string(),
+            },
+            NavigationGroupRow {
+                group_id: "core.admin".to_string(),
+                label: "Admin".to_string(),
+                display_order: 1,
+                owner: "core".to_string(),
+            },
+        ];
+        let current = default_navigation_placements(&catalog);
+        let forms = NavigationPolicyEntryV1 {
+            destination_id: "tessara.forms.navigation".to_string(),
+            group_id: "core.main".to_string(),
+            order: 2,
+            visible: true,
+        };
+        let duplicate = reconcile_lockfile_navigation_placements(
+            Uuid::nil(),
+            &groups,
+            &current,
+            &catalog,
+            &[forms.clone(), forms.clone()],
+        )
+        .expect_err("one lockfile destination identity may be declared only once");
+        assert!(duplicate.to_string().contains("duplicate destination"));
+
+        let collision = reconcile_lockfile_navigation_placements(
+            Uuid::nil(),
+            &groups,
+            &current,
+            &catalog,
+            &[NavigationPolicyEntryV1 { order: 3, ..forms }],
+        )
+        .expect_err("a lockfile cannot create duplicate or sparse group order");
+        assert!(collision.to_string().contains("dense, complete placement"));
+    }
+
     const DISPOSABLE_DATABASE_NAME_TOKENS: &[&str] = &[
         "test", "tests", "testing", "upgrade", "clone", "rollback", "sprint6a",
     ];
@@ -2399,7 +2882,7 @@ mod tests {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "12d7a950cf5d4999db3335c8a928de3be24fa7f237c5a2b43729f3ac09843f2b"
+            "ef38ef307cf6fe44185b558522ad68e5a34841dec3e8d3442245ba5441ede26a"
         );
     }
 
@@ -2744,6 +3227,70 @@ mod tests {
         let pool = crate::db::connect_and_prepare(&config)
             .await
             .expect("disposable database prepares");
+
+        let previous_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-dashboard-module/manifest.json"
+        ))
+        .expect("Dashboard manifest fixture is valid JSON");
+        let mut current_manifest = previous_manifest.clone();
+        let previous_route_count = current_manifest.public_api_routes.len();
+        current_manifest
+            .public_api_routes
+            .retain(|route| route.authorization_action != "dashboards.render_placement");
+        assert_eq!(
+            current_manifest.public_api_routes.len(),
+            previous_route_count - 1,
+            "the stale-action regression fixture removes exactly one manifest action"
+        );
+        let mut projection_tx = pool.begin().await.expect("projection transaction begins");
+        clear_projected_module_actions(&mut projection_tx)
+            .await
+            .expect("prior action projection clears");
+        project_manifest_actions(
+            &mut projection_tx,
+            previous_manifest.definition_id.as_str(),
+            &previous_manifest,
+        )
+        .await
+        .expect("prior manifest actions project");
+        let prior_action_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM core_module_action_declarations
+             WHERE target_definition_id=$1 AND action=$2)",
+        )
+        .bind(previous_manifest.definition_id.as_str())
+        .bind("dashboards.render_placement")
+        .fetch_one(&mut *projection_tx)
+        .await
+        .expect("prior action projection reads");
+        assert!(prior_action_exists);
+
+        clear_projected_module_actions(&mut projection_tx)
+            .await
+            .expect("replacement action projection clears");
+        project_manifest_actions(
+            &mut projection_tx,
+            current_manifest.definition_id.as_str(),
+            &current_manifest,
+        )
+        .await
+        .expect("current manifest actions project");
+        let removed_action_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM core_module_action_declarations
+             WHERE target_definition_id=$1 AND action=$2)",
+        )
+        .bind(current_manifest.definition_id.as_str())
+        .bind("dashboards.render_placement")
+        .fetch_one(&mut *projection_tx)
+        .await
+        .expect("replacement action projection reads");
+        assert!(
+            !removed_action_exists,
+            "an action absent from the replacement manifest must not remain grant-eligible"
+        );
+        projection_tx
+            .rollback()
+            .await
+            .expect("projection regression rolls back");
 
         let before = load_module_inventory(&pool).await.expect("inventory reads");
         assert_eq!(

@@ -5363,7 +5363,7 @@ async fn replace_dataset_tags_tx(
     Ok(())
 }
 
-async fn load_dataset_tags(
+pub(crate) async fn load_dataset_tags(
     pool: &sqlx::PgPool,
     dataset_ids: &[Uuid],
 ) -> ApiResult<BTreeMap<Uuid, Vec<String>>> {
@@ -5390,7 +5390,7 @@ async fn load_dataset_tags(
     Ok(tags)
 }
 
-async fn load_dataset_provenance(
+pub(crate) async fn load_dataset_provenance(
     pool: &sqlx::PgPool,
     dataset_ids: &[Uuid],
 ) -> ApiResult<BTreeMap<Uuid, DatasetProvenanceSummary>> {

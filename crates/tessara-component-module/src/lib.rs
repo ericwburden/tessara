@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool};
 use tessara_module_contract::{
-    ModuleDefinitionId, ModuleManifest, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
-    ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
+    ModuleDefinitionId, ModuleManifest, ModuleServiceIdentityRegistryV1, PurposeBoundSigningKeyV1,
+    PurposeBoundVerifyingKeyV1, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -30,7 +30,10 @@ mod product;
 mod provider;
 mod validation;
 
-pub const MODULE_DEFINITION_ID: &str = "tessara.components";
+pub const MODULE_DEFINITION_ID: &str = tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID;
+#[cfg(feature = "sprint-8a-rehearsal-baseline")]
+pub const MODULE_RELEASE_VERSION: &str = "0.9.0";
+#[cfg(not(feature = "sprint-8a-rehearsal-baseline"))]
 pub const MODULE_RELEASE_VERSION: &str = "1.0.0";
 pub const READ_CAPABILITY: &str = "components:read";
 pub const MANAGE_CAPABILITY: &str = "components:manage";
@@ -40,7 +43,7 @@ pub struct ComponentModuleState {
     pub pool: PgPool,
     pub core_authorization_verifier: PurposeBoundVerifyingKeyV1,
     pub core_shell_verifier: PurposeBoundVerifyingKeyV1,
-    pub dashboard_service_verifier: PurposeBoundVerifyingKeyV1,
+    pub service_identity_registry: ModuleServiceIdentityRegistryV1,
     pub service_request_signer: Arc<PurposeBoundSigningKeyV1>,
     pub core_internal_url: String,
     pub dataset_client: reqwest::Client,
@@ -51,6 +54,16 @@ pub struct ComponentModuleState {
 pub(crate) struct DatasetHealthObservation {
     status: &'static str,
     failure_code: Option<&'static str>,
+    result_code: &'static str,
+    observed_at: Option<DateTime<Utc>>,
+    compatibility: DatasetCompatibilityObservation,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct DatasetCompatibilityObservation {
+    status: &'static str,
+    failure_code: Option<&'static str>,
+    compatible: Option<bool>,
     observed_at: Option<DateTime<Utc>>,
 }
 
@@ -59,6 +72,19 @@ impl Default for DatasetHealthObservation {
         Self {
             status: "not_evaluated",
             failure_code: None,
+            result_code: "dataset.not_evaluated",
+            observed_at: None,
+            compatibility: DatasetCompatibilityObservation::default(),
+        }
+    }
+}
+
+impl Default for DatasetCompatibilityObservation {
+    fn default() -> Self {
+        Self {
+            status: "not_evaluated",
+            failure_code: None,
+            compatible: None,
             observed_at: None,
         }
     }
@@ -69,7 +95,7 @@ impl ComponentModuleState {
         pool: PgPool,
         core_authorization_verifier: PurposeBoundVerifyingKeyV1,
         core_shell_verifier: PurposeBoundVerifyingKeyV1,
-        dashboard_service_verifier: PurposeBoundVerifyingKeyV1,
+        service_identity_registry: ModuleServiceIdentityRegistryV1,
         service_request_signer: Arc<PurposeBoundSigningKeyV1>,
         core_internal_url: String,
     ) -> Result<Self, reqwest::Error> {
@@ -77,7 +103,7 @@ impl ComponentModuleState {
             pool,
             core_authorization_verifier,
             core_shell_verifier,
-            dashboard_service_verifier,
+            service_identity_registry,
             service_request_signer,
             core_internal_url: core_internal_url.trim_end_matches('/').to_string(),
             dataset_client: reqwest::Client::builder()
@@ -291,8 +317,12 @@ async fn component_asset(
 }
 
 pub fn manifest() -> ModuleManifest {
-    serde_json::from_str(include_str!("../manifest.json"))
-        .expect("Component manifest must remain valid")
+    let mut manifest: ModuleManifest = serde_json::from_str(include_str!("../manifest.json"))
+        .expect("Component manifest must remain valid");
+    manifest.release_version = MODULE_RELEASE_VERSION
+        .parse()
+        .expect("Component release version must remain valid");
+    manifest
 }
 
 async fn get_manifest(headers: HeaderMap) -> Result<Json<ModuleManifest>, ComponentModuleError> {
@@ -400,13 +430,105 @@ struct ComponentBootstrapV1 {
 struct ComponentBootstrapItemV1 {
     external_key: String,
     component_id: Uuid,
-    component_version_id: Uuid,
     name: String,
     slug: String,
+    description: String,
+    versions: Vec<ComponentBootstrapVersionV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ComponentBootstrapVersionV1 {
+    resource_key: String,
+    component_version_id: Uuid,
     component_type: String,
     dataset_reference: tessara_datasets_contract::DatasetMajorLineReference,
     dataset_scope_node_ids: Vec<Uuid>,
+    status: String,
+    lifecycle_state: String,
+    resource_revision: u64,
+    authority_revision: u64,
+    successor_version_id: Option<Uuid>,
+    version_number: i32,
+    version_label: String,
+    version_note: String,
     config: Value,
+}
+
+fn component_bootstrap_is_valid(bootstrap: &ComponentBootstrapV1, installation_id: Uuid) -> bool {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    if bootstrap.components.is_empty() {
+        return false;
+    }
+    let mut external_keys = BTreeSet::new();
+    let mut component_ids = BTreeSet::new();
+    let mut slugs = BTreeSet::new();
+    let mut resource_keys = BTreeSet::new();
+    let mut version_owners = BTreeMap::new();
+    for component in &bootstrap.components {
+        if component.external_key.trim().is_empty()
+            || component.name.trim().is_empty()
+            || component.slug.trim().is_empty()
+            || component.description.trim().is_empty()
+            || component.versions.is_empty()
+            || !external_keys.insert(component.external_key.as_str())
+            || !component_ids.insert(component.component_id)
+            || !slugs.insert(component.slug.as_str())
+        {
+            return false;
+        }
+        let mut version_numbers = BTreeSet::new();
+        let mut active_published_versions = 0;
+        for version in &component.versions {
+            let mut scope = BTreeSet::new();
+            if version.resource_key.trim().is_empty()
+                || !resource_keys.insert(version.resource_key.as_str())
+                || version_owners
+                    .insert(version.component_version_id, component.component_id)
+                    .is_some()
+                || !version_numbers.insert(version.version_number)
+                || version.dataset_scope_node_ids.is_empty()
+                || version
+                    .dataset_scope_node_ids
+                    .iter()
+                    .any(|node_id| !scope.insert(*node_id))
+                || version.dataset_reference.reference().installation_id() != installation_id
+                || !version.config.is_object()
+                || !bootstrap_config_is_valid(&version.component_type, &version.config)
+                || !matches!(
+                    version.component_type.as_str(),
+                    "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
+                )
+                || !matches!(version.status.as_str(), "published" | "superseded")
+                || !matches!(
+                    version.lifecycle_state.as_str(),
+                    "active" | "inactive" | "archived" | "tombstoned"
+                )
+                || version.resource_revision == 0
+                || version.authority_revision == 0
+                || version.version_number <= 0
+                || version.version_label.trim().is_empty()
+                || version.version_note.trim().chars().count() > 2_000
+                || version.successor_version_id == Some(version.component_version_id)
+            {
+                return false;
+            }
+            if version.status == "published" && version.lifecycle_state == "active" {
+                active_published_versions += 1;
+            }
+        }
+        if active_published_versions != 1 {
+            return false;
+        }
+    }
+    bootstrap.components.iter().all(|component| {
+        component.versions.iter().all(|version| {
+            version.successor_version_id.is_none_or(|successor_id| {
+                version_owners.get(&successor_id) == Some(&component.component_id)
+            })
+        })
+    })
 }
 
 async fn apply_bootstrap(
@@ -423,6 +545,14 @@ async fn apply_bootstrap(
     {
         return Err(ComponentModuleError::BadRequest(
             "Component bootstrap contract or digest is invalid".into(),
+        ));
+    }
+    let security = load_security_state(&state.pool).await?.ok_or_else(|| {
+        ComponentModuleError::Unavailable("Component security state is unavailable".into())
+    })?;
+    if security.installation_id != request.installation_id {
+        return Err(ComponentModuleError::BadRequest(
+            "Component bootstrap belongs to another installation".into(),
         ));
     }
     if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
@@ -443,26 +573,7 @@ async fn apply_bootstrap(
         response.receipt.changed = false;
         return Ok(Json(response));
     }
-    let security = load_security_state(&state.pool).await?.ok_or_else(|| {
-        ComponentModuleError::Unavailable("Component security state is unavailable".into())
-    })?;
-    if security.installation_id != request.installation_id
-        || request.input.components.is_empty()
-        || request.input.components.iter().any(|component| {
-            component.external_key.trim().is_empty()
-                || component.name.trim().is_empty()
-                || component.slug.trim().is_empty()
-                || component.dataset_scope_node_ids.is_empty()
-                || component.dataset_reference.reference().installation_id()
-                    != request.installation_id
-                || !component.config.is_object()
-                || !bootstrap_config_is_valid(&component.component_type, &component.config)
-                || !matches!(
-                    component.component_type.as_str(),
-                    "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
-                )
-        })
-    {
+    if !component_bootstrap_is_valid(&request.input, request.installation_id) {
         return Err(ComponentModuleError::BadRequest(
             "Component bootstrap input is invalid".into(),
         ));
@@ -470,34 +581,73 @@ async fn apply_bootstrap(
     let mut transaction = state.pool.begin().await?;
     let mut resource_ids = std::collections::BTreeMap::new();
     for component in &request.input.components {
-        let mut scope = component.dataset_scope_node_ids.clone();
-        scope.sort_unstable();
-        scope.dedup();
         sqlx::query("INSERT INTO components(id,external_key,name,slug,description) VALUES($1,$2,$3,$4,$5) ON CONFLICT(external_key) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description,updated_at=now()")
             .bind(component.component_id)
             .bind(&component.external_key)
             .bind(component.name.trim())
             .bind(component.slug.trim())
-            .bind("Reference application seed")
+            .bind(component.description.trim())
             .execute(&mut *transaction)
             .await?;
-        sqlx::query("INSERT INTO component_versions(id,component_id,dataset_reference,dataset_scope_node_ids,component_type,status,lifecycle_state,authority_revision,version_number,version_label,version_note,config) VALUES($1,$2,$3,$4,$5::component_type,'published','active',2,1,'1.0.0','Reference application seed',$6) ON CONFLICT(id) DO UPDATE SET dataset_reference=EXCLUDED.dataset_reference,dataset_scope_node_ids=EXCLUDED.dataset_scope_node_ids,component_type=EXCLUDED.component_type,config=EXCLUDED.config,authority_revision=GREATEST(component_versions.authority_revision,2),updated_at=now()")
-            .bind(component.component_version_id)
-            .bind(component.component_id)
-            .bind(serde_json::to_value(&component.dataset_reference).map_err(|error| ComponentModuleError::Internal(error.to_string()))?)
-            .bind(scope)
-            .bind(&component.component_type)
-            .bind(&component.config)
-            .execute(&mut *transaction)
-            .await?;
-        resource_ids.insert(
-            component.external_key.clone(),
-            serde_json::to_string(&component_reference(
-                &security,
-                component.component_version_id,
-            )?)
-            .map_err(|error| ComponentModuleError::Internal(error.to_string()))?,
-        );
+        for version in &component.versions {
+            let mut scope = version.dataset_scope_node_ids.clone();
+            scope.sort_unstable();
+            sqlx::query("INSERT INTO component_versions(id,component_id,dataset_reference,dataset_scope_node_ids,component_type,status,lifecycle_state,resource_revision,authority_revision,successor_version_id,version_number,version_label,version_note,config) VALUES($1,$2,$3,$4,$5::component_type,$6::component_version_status,$7::component_lifecycle_state,$8,$9,NULL,$10,$11,$12,$13) ON CONFLICT(id) DO UPDATE SET dataset_reference=EXCLUDED.dataset_reference,dataset_scope_node_ids=EXCLUDED.dataset_scope_node_ids,component_type=EXCLUDED.component_type,status=EXCLUDED.status,lifecycle_state=EXCLUDED.lifecycle_state,resource_revision=EXCLUDED.resource_revision,authority_revision=EXCLUDED.authority_revision,successor_version_id=NULL,version_number=EXCLUDED.version_number,version_label=EXCLUDED.version_label,version_note=EXCLUDED.version_note,config=EXCLUDED.config,updated_at=now()")
+                .bind(version.component_version_id)
+                .bind(component.component_id)
+                .bind(serde_json::to_value(&version.dataset_reference).map_err(|error| ComponentModuleError::Internal(error.to_string()))?)
+                .bind(scope)
+                .bind(&version.component_type)
+                .bind(&version.status)
+                .bind(&version.lifecycle_state)
+                .bind(version.resource_revision as i64)
+                .bind(version.authority_revision as i64)
+                .bind(version.version_number)
+                .bind(version.version_label.trim())
+                .bind(version.version_note.trim())
+                .bind(&version.config)
+                .execute(&mut *transaction)
+                .await?;
+            resource_ids.insert(
+                version.resource_key.clone(),
+                serde_json::to_string(&component_reference(
+                    &security,
+                    version.component_version_id,
+                )?)
+                .map_err(|error| ComponentModuleError::Internal(error.to_string()))?,
+            );
+        }
+    }
+    for component in &request.input.components {
+        for version in &component.versions {
+            sqlx::query("UPDATE component_versions SET successor_version_id=$2,updated_at=now() WHERE id=$1")
+                .bind(version.component_version_id)
+                .bind(version.successor_version_id)
+                .execute(&mut *transaction)
+                .await?;
+            if version.status == "superseded" {
+                sqlx::query("INSERT INTO component_version_change_events(component_version_id,resource_revision,category,from_publication_state,to_publication_state) VALUES($1,$2,'publication','published','superseded') ON CONFLICT(component_version_id,resource_revision,category) DO NOTHING")
+                    .bind(version.component_version_id)
+                    .bind(version.resource_revision as i64)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+            if version.lifecycle_state != "active" {
+                sqlx::query("INSERT INTO component_version_change_events(component_version_id,resource_revision,category,from_lifecycle_state,to_lifecycle_state) VALUES($1,$2,'lifecycle','active',$3::component_lifecycle_state) ON CONFLICT(component_version_id,resource_revision,category) DO NOTHING")
+                    .bind(version.component_version_id)
+                    .bind(version.resource_revision as i64)
+                    .bind(&version.lifecycle_state)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+            if version.successor_version_id.is_some() {
+                sqlx::query("INSERT INTO component_version_change_events(component_version_id,resource_revision,category) VALUES($1,$2,'successor') ON CONFLICT(component_version_id,resource_revision,category) DO NOTHING")
+                    .bind(version.component_version_id)
+                    .bind(version.resource_revision as i64)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+        }
     }
     let result_digest = tessara_composition::canonical_digest(&resource_ids)
         .map_err(|error| ComponentModuleError::Internal(error.to_string()))?;
@@ -634,6 +784,7 @@ async fn diagnostics(
             ComponentModuleError::Internal("Dataset health observation lock is poisoned".into())
         })?
         .clone();
+    let provider_installation_id = security.as_ref().map(|value| value.installation_id);
     Ok(Json(json!({
         "schema_version": 1,
         "module": MODULE_DEFINITION_ID,
@@ -647,10 +798,18 @@ async fn diagnostics(
         "database": {"status":"connected","binding":"component_module_instance"},
         "authorization": security,
         "dataset_dependency": {
-            "binding_key": tessara_datasets_contract::DATASET_BINDING_KEY,
-            "contract_id": tessara_datasets_contract::DATASET_CONTRACT_ID,
-            "provider_owner": "core_installation",
-            "last_health": dataset_health
+            "selected_binding": {
+                "binding_key": tessara_datasets_contract::DATASET_BINDING_KEY,
+                "provider_owner": {
+                    "kind": "core_installation",
+                    "installation_id": provider_installation_id
+                },
+                "functional_contract": {
+                    "id": tessara_datasets_contract::DATASET_CONTRACT_ID,
+                    "version": tessara_datasets_contract::DATASET_CONTRACT_VERSION
+                }
+            },
+            "health": dataset_health
         },
         "probes": {"liveness":"live","readiness":"see_health_ready"},
         "failures": []
@@ -805,9 +964,59 @@ mod tests {
                 "sprint-8a-row-count",
             ])
         );
-        assert!(bootstrap.components.iter().all(|component| {
-            bootstrap_config_is_valid(&component.component_type, &component.config)
+        let versions = bootstrap
+            .components
+            .iter()
+            .flat_map(|component| component.versions.iter())
+            .collect::<Vec<_>>();
+        assert_eq!(versions.len(), 8);
+        assert_eq!(
+            versions
+                .iter()
+                .map(|version| version.resource_key.as_str())
+                .collect::<std::collections::BTreeSet<_>>(),
+            std::collections::BTreeSet::from([
+                "sprint-8a-blocked-component",
+                "sprint-8a-label-bar",
+                "sprint-8a-label-donut",
+                "sprint-8a-label-line",
+                "sprint-8a-label-pie",
+                "sprint-8a-record-table",
+                "sprint-8a-row-count",
+                "sprint-8a-row-count-inactive",
+            ])
+        );
+        assert!(versions.iter().all(|version| {
+            bootstrap_config_is_valid(&version.component_type, &version.config)
         }));
+        let predecessor = versions
+            .iter()
+            .find(|version| version.resource_key == "sprint-8a-row-count-inactive")
+            .expect("inactive predecessor fixture");
+        assert_eq!(predecessor.status, "superseded");
+        assert_eq!(predecessor.lifecycle_state, "inactive");
+        assert_eq!(predecessor.resource_revision, 3);
+        assert_eq!(
+            predecessor.successor_version_id,
+            Some(Uuid::parse_str("01980000-0001-7000-8000-000000000011").unwrap())
+        );
+        assert!(component_bootstrap_is_valid(
+            &bootstrap,
+            Uuid::parse_str("01980000-0000-7000-8000-00000000008a").unwrap()
+        ));
+        let mut cross_component_successor = bootstrap.clone();
+        let predecessor = cross_component_successor
+            .components
+            .iter_mut()
+            .flat_map(|component| component.versions.iter_mut())
+            .find(|version| version.resource_key == "sprint-8a-row-count-inactive")
+            .unwrap();
+        predecessor.successor_version_id =
+            Some(Uuid::parse_str("01980000-0001-7000-8000-000000000002").unwrap());
+        assert!(!component_bootstrap_is_valid(
+            &cross_component_successor,
+            Uuid::parse_str("01980000-0000-7000-8000-00000000008a").unwrap()
+        ));
     }
 
     #[test]
@@ -873,6 +1082,22 @@ mod tests {
             wire["configuration_schema"]["required"],
             json!(["display_label", "dataset_request_timeout_seconds"])
         );
+        assert_eq!(
+            wire["configuration_schema"]["properties"]["display_label"]["default"],
+            "Components"
+        );
+        assert_eq!(
+            wire["configuration_schema"]["properties"]["dataset_request_timeout_seconds"]["default"],
+            5
+        );
+        assert_eq!(
+            wire["deployment"]["declaration"]["runtime_image"]["command"],
+            json!(["/usr/local/bin/component-module", "serve"])
+        );
+        assert_eq!(
+            wire["deployment"]["declaration"]["migration_image"]["command"],
+            json!(["/usr/local/bin/component-module", "migrate"])
+        );
         let authority = tessara_module_contract::ManifestNamespaceAuthority::new(
             tessara_module_contract::ModuleDefinitionId::new(MODULE_DEFINITION_ID).unwrap(),
             tessara_module_contract::PublisherId::new("tessara.first_party").unwrap(),
@@ -886,7 +1111,7 @@ mod tests {
     fn fresh_baseline_is_component_owned_and_source_exact() {
         assert_eq!(
             format!("{:x}", Sha256::digest(BASELINE)),
-            "1b6174fa52d648d924fe7fa58423dc5a35b897d88a2d6b9992a291749ce96238"
+            "112a2dbc43efc14d8ea440bd335946452820d413e06a2bb5f3b9aab3f86497f0"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         for required in [

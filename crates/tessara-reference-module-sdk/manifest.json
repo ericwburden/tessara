@@ -163,6 +163,8 @@
       "content_type": "text/javascript; charset=utf-8"
     }
   ],
+  "provided_service_actions": [],
+  "consumed_service_actions": [],
   "navigation": [
     {
       "id": "tessara.reference.module-sdk.navigation",

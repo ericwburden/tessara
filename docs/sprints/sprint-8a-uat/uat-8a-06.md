@@ -3,7 +3,7 @@
 ## 1. Test Script Summary
 
 - System / Module: Tessara Components platform boundary
-- Requirement: Sprint 8A AC-01, AC-02, AC-06, AC-14
+- Requirement: Sprint 8A AC-01, AC-02, AC-06, AC-12, and AC-16
 - Environment: Frozen Sprint 8A UAT candidate
 - User role: Operator plus authorized and restricted users
 - Scenario: Confirm Component ownership/isolation and submit unsupported historical references and payloads.
@@ -11,6 +11,8 @@
 
 ## 2. Before You Start
 
+- Coordinator bindings: candidate fingerprint __________; environment fingerprint __________; preflight receipt SHA-256 __________; SIT result receipt SHA-256 __________.
+- Evidence folder and execution start time: ____________________
 - Obtain the retained approved negative-input set for v1, v2, Core owner/type, and old payload shape.
 - Record the selected Component Release/Instance shown in Module Management: ____________________
 
@@ -27,5 +29,6 @@
 - Overall result: Pass / Fail / Blocked
 - Tester / date: ____________________
 - Defect IDs or comments: ____________________
+- Evidence paths and execution end time: ____________________
+- Cleanup/restoration result: ____________________
 - Acceptance decision: Accepted / Not Accepted / Accepted with defects
-

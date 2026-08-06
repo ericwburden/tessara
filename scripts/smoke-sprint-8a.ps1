@@ -61,6 +61,19 @@ Assert-Sprint7A ($componentDocument.status -eq 200 -and $componentDocument.body.
 $dashboardResponse = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/dashboards/$($script:Sprint8AFixture.dashboard_id)" -Token $token
 Assert-Sprint7A ($dashboardResponse.status -eq 200) "dashboard_status" "HTTP $($dashboardResponse.status)" $checks
 $dashboard = $dashboardResponse.body | ConvertFrom-Json
+$expectedPlacementIds = @(
+    "01980000-0003-7000-8000-000000000002",
+    "01980000-0003-7000-8000-000000000003",
+    "01980000-0003-7000-8000-000000000004",
+    "01980000-0003-7000-8000-000000000005",
+    "01980000-0003-7000-8000-000000000006",
+    "01980000-0003-7000-8000-000000000007",
+    "01980000-0003-7000-8000-000000000008"
+) | Sort-Object
+$actualPlacementIds = @($dashboard.placements | ForEach-Object { [string]$_.placement_id } | Sort-Object)
+Assert-Sprint7A (
+    ($actualPlacementIds -join ",") -ceq ($expectedPlacementIds -join ",")
+) "dashboard_placement_inventory" "Dashboard owner returned the exact seven receipt-bound placements" $checks
 foreach ($placement in @($dashboard.placements)) {
     $reference = $placement.component.reference.reference
     Assert-Sprint7A (

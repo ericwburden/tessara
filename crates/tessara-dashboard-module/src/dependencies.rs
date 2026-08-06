@@ -16,7 +16,7 @@ use tessara_components_contract::{
     ComponentVersionReference,
 };
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, ContractCompatibilityState,
+    AuthorizationGrantOperationV1, AuthorizationGrantV3, ContractCompatibilityState,
     ProviderAvailabilityState, ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
     ResourceRevision, SignedEnvelopeV1, TypedResourceReference,
 };
@@ -528,7 +528,7 @@ async fn require_manager_scope(
     dashboard_id: Uuid,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> Result<SignedEnvelopeV1<AuthorizationGrantV2>, DashboardModuleError> {
+) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, DashboardModuleError> {
     let grant = authorize(state, headers, action, operation).await?;
     let manage_scope = authorized_organizations(&grant.payload, MANAGE_CAPABILITY);
     let dashboard_scope = load_dashboard_scope(state, dashboard_id).await?;

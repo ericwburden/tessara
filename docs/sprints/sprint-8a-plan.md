@@ -1,15 +1,19 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Implementation-readiness correction complete after validation was
-explicitly exited during incomplete Candidate Rehearsal attempt 27. Focused
-implementation checks pass, but no current readiness or rehearsal result is
-authorized. A new complete Validation Readiness and Candidate Rehearsal cycle
-must start from the corrected clean commit. No candidate has been frozen, and
-preflight, SIT, UAT, and closeout have not run.
+Status: Implementation handoff after validation was explicitly exited during
+incomplete Candidate Rehearsal attempts 27 and 28. The candidate-affecting
+source, test, fixture, deployment, and validation-runner correction invalidates
+every earlier readiness and rehearsal result. Focused implementation checks do
+not constitute either formal gate. A new complete Validation Readiness and
+Candidate Rehearsal cycle must start from the corrected clean commit and use
+one shared environment identity. No candidate has been frozen, and preflight,
+SIT, formal UAT, and closeout have not run.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
+- Implementation-readiness correction input:
+  `7b326838269c3b4218dd579f649a8011feba4d97`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Next)` and the reconciled
   Phase 8 fresh-materialization rules in `docs/roadmap.md`
@@ -129,6 +133,11 @@ Sprint 8A deployment/bootstrap path, end-to-end tests, and acceptance runners.
   Feature Declarations, capabilities `components:read` and
   `components:manage`, configuration schema v1, database, probes, assets,
   contracts, dependencies, and provenance.
+- Enrolled Component and Dashboard Manifests are the sole startup owners of
+  their capability rows, and composition Blueprint roles are the sole owner of
+  module-specific grants and action declarations. Core startup and its fresh
+  baseline contain no static Component, Dashboard, or Scoped Records action,
+  capability, or built-in grant rows.
 - The Component release is the sole production owner of `/components`,
   `/components/new`, `/components/{component_ref}`,
   `/components/{component_ref}/edit`,
@@ -169,6 +178,13 @@ effective redacted configuration, Dataset dependency binding and compatibility,
 last provider health observation, readiness/liveness, and stable sanitized
 failure codes. They expose no product rows, counts, secrets, credentials,
 resource identifiers, obsolete migration receipts, or old-reference details.
+The Component Manifest carries the actual schema defaults (`Components` and
+`5`) and its runtime and migration commands name the executable that exists in
+the image, `/usr/local/bin/component-module`. Dataset diagnostics identify the
+selected `tessara.components.dataset-major-line` binding, Core-installation
+provider, contract ID/version, most recent compatibility result, health state,
+stable result/failure code, and observation time without exposing a raw
+Dataset reference.
 
 ### 3. Component persistence and Dataset compatibility
 
@@ -243,6 +259,17 @@ resource identifiers, obsolete migration receipts, or old-reference details.
 - A successful seed exposes recognizable fixtures for every Component kind,
   lifecycle/authorization/outage case, and Dashboard dependency action. Exact
   counts, where contractual, come from one shared acceptance source of truth.
+- The Sprint 8A reference seed is exactly seven Component shells and eight
+  ComponentVersions: one shell for each of Table, Bar, Line, Pie, Donut, and
+  Stat Card plus one blocked-scope Table shell. The Stat Card shell has a
+  superseded/inactive `1.0.0` predecessor whose declared successor is the
+  published/active `2.0.0` version; every other shell has one published/active
+  version.
+- The one reference Dashboard has exactly seven placements. Four retain the
+  normal row-count, table, bar, and blocked-scope coverage. Three independent
+  lifecycle-action placements bind the inactive predecessor and are named
+  `lifecycle-upgrade`, `lifecycle-replace`, and `lifecycle-remove`; they make
+  Defer followed by Upgrade, Replace, and Remove independently executable.
 - Repeating bootstrap without reset is an exact semantic no-op: no duplicate
   product rows, revisions, references, roles, configuration, or receipts.
 - Any failure retains the failed attempt and raw evidence, destroys the partial
@@ -266,10 +293,14 @@ resource identifiers, obsolete migration receipts, or old-reference details.
 - OCI labels and evidence bind commit, tree, dirty state, release, manifest,
   assets, schemas, fixtures, contracts, bootstrap, and acceptance inventory.
 - After fresh extraction, prove a compatible Component-only health-gated
-  upgrade and rollback. Component data, instance identity, configuration,
-  routes, and behavior persist while Core, gateway, Supervisor, Dashboard,
-  Dataset compatibility, and unrelated module image digests, container
-  identities, restart counts, data, and availability remain unchanged.
+  upgrade and rollback with a distinct source-built compatible Component
+  release `0.9.0` and the intended current release `1.0.0`. Each transition is
+  a resolved one-owner Blueprint delta applied by the out-of-process
+  Supervisor through its Compose deployment adapter. Component data, instance
+  identity, configuration, routes, and behavior persist while Core, gateway,
+  Supervisor, Dashboard, Dataset compatibility, and unrelated module image
+  digests, container identities, restart counts, data, and availability remain
+  unchanged.
 - Final handoff restores the intended current Component release in the healthy
   freshly seeded Sprint 8A topology. Rollback evidence is not the handoff state.
 
@@ -336,15 +367,22 @@ requires a plan amendment and user approval.
   and every Component product route, with no root Core/web/API or sibling
   implementation dependency.
 - **AC-02:** Final Core has no Component product storage, code, routes, seed
-  writes, adapter, legacy reader, or module-specific integration branch.
+  writes, static module action declarations, capability rows or built-in
+  grants, adapter, legacy reader, or module-specific integration branch.
+  Dashboard declarations, capability rows, and grants likewise enter only
+  through its real enrolled release/instance, Manifest, and Blueprint.
 - **AC-03:** From explicitly authorized empty disposable databases, one
   source-exact materialization produces a healthy complete reference
-  application and owner-controlled canonical seed in the declared order.
+  application and owner-controlled canonical seed in the declared order:
+  exactly seven Component shells, eight ComponentVersions, and seven Dashboard
+  placements.
 - **AC-04:** An unchanged second bootstrap is a semantic no-op with no duplicate
   data, references, revisions, roles, configuration, or receipts.
 - **AC-05:** Dashboard seed creates every placement directly with a Component
   v3 Module Instance reference returned by Component read-back; no old owner or
-  transition resource type exists in live state.
+  transition resource type exists in live state. Its exact seven placements
+  include three independent lifecycle-action fixtures bound to the one
+  superseded/inactive predecessor with a published/active successor.
 - **AC-06:** Old Core Component references, V1/V2 runtime envelopes, and old
   Core payload shapes fail exact normal-contract validation; no translation,
   migrated/retired result, or fallback exists.
@@ -360,16 +398,22 @@ requires a plan amendment and user approval.
   incompatible, timeout, outage, not-ready, and recovery cases pass without
   direct database access or validation-pending writes.
 - **AC-11:** Dashboard preserves Sprint 7B lifecycle/revision observation,
-  findings, deferral, Upgrade/Replace/Remove, restricted disclosure, outage,
-  and recovery against Components v3.
+  findings, restricted disclosure, and recovery against Components v3. One
+  executable semantic diagnostic proves three exact lifecycle findings,
+  Defer followed by Upgrade through the declared successor, independent
+  Replace and Remove actions, blocked-scope nondisclosure, exact contained
+  Component-provider outage findings, and convergence to zero findings after
+  recovery.
 - **AC-12:** Runtime/migration credentials cannot cross Core, Component,
   Dataset, or Dashboard database ownership; no cross-database SQL, FDW, shared
   writable schema, or foreign key exists.
 - **AC-13:** A failed fresh materialization retains evidence, removes the exact
   partial disposable topology and volumes, and succeeds only after a complete
   from-empty rerun.
-- **AC-14:** Component-only upgrade and rollback preserve Component data,
-  identity, configuration, routes, and behavior while unrelated digests,
+- **AC-14:** A real source-built compatible Component `0.9.0` release upgrades
+  to `1.0.0`, rolls back to `0.9.0`, and restores `1.0.0` through exact
+  one-owner Supervisor/Compose applies. Component data, identity,
+  configuration, routes, and behavior persist while unrelated digests,
   identities, restart counts, data, and availability remain unchanged.
 - **AC-15:** At 1280, 768, and 390 px, dark/light themes, keyboard operation,
   200% zoom, JavaScript-disabled SSR, and hydrated navigation, Component UI
@@ -500,9 +544,8 @@ cargo test --locked -p tessara-components-contract
 cargo test --locked -p tessara-component-module
 cargo test --locked -p tessara-dashboard-module
 npm --prefix .\end2end test
-.\scripts\smoke.ps1
-.\scripts\local-launch.ps1
-.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"
+# Deployed smoke and formal UAT remain lifecycle-owned. Their exact commands
+# are authorized only after rehearsal/preflight and SIT bind a frozen candidate.
 ```
 
 Sprint-specific contract, boundary, old-input rejection, fresh bootstrap,
@@ -510,7 +553,9 @@ failure teardown/rerun, nondisclosure, smoke, and upgrade/rollback commands are
 fixed with Slice 1/5 implementation and recorded before readiness.
 `local-launch.ps1` remains a root-profile regression check and cannot replace
 source-exact Sprint 8A materialization evidence. Deployed acceptance smoke runs
-inside SIT.
+inside SIT. Formal UAT is run only by the specialized UAT workflow after the
+same frozen candidate and environment have an authoritative passing SIT
+receipt; this implementation plan does not invent or authorize that command.
 
 Manual UAT covers eight scenarios: unchanged Component product experience;
 from-empty owner-controlled seed and new Dashboard references; configuration
@@ -575,19 +620,108 @@ materialization teardown plus full rerun; and Component-only upgrade/rollback.
 
 ## Implementation Handoff
 
-All six slices are implemented on `codex/sprint-8a`. The handoff includes the
-Components v3 and Dataset v1 contracts, independent Component owner and store,
-direct Dashboard consumption, forward-only Core cleanup, from-empty owner seed
-and materialization runners, Sprint 8A Compose/catalog inputs, smoke contract,
-verified failure teardown, Component-only upgrade/rollback runner, and the
-eight planned UAT scenarios. Source-level readiness results and the remaining
-environment-bound checks are recorded in the validation record.
+All six slices and the post-attempt-28 implementation-readiness correction are
+implemented on `codex/sprint-8a`. The handoff includes the Components v3 and
+Dataset v1 contracts, independent Component owner and store, direct Dashboard
+consumption, forward-only Core cleanup, from-empty owner seed and
+materialization runners, Sprint 8A Compose/catalog inputs, smoke contract,
+failure containment, Component-only upgrade/rollback, and the eight planned
+UAT scenarios.
 
-The final Core ownership cleanup leaves exactly five transition descriptors:
-`tessara.forms`, `tessara.workflows`, `tessara.responses`,
-`tessara.datasets`, and `tessara.migration`. Dashboard inventory and
-navigation are supplied exclusively by the enrolled `tessara.dashboards`
-release/instance and its manifest.
+The correction closes the source defects that repeated partial validation had
+exposed or failed to enforce:
 
-This status authorizes only the next specialized validation workflow. It does
-not assert candidate freeze, deployed acceptance, SIT, UAT, or closeout.
+- Core's canonical transition inputs contain exactly `tessara.forms`,
+  `tessara.workflows`, `tessara.responses`, `tessara.datasets`, and
+  `tessara.migration`. Dashboard and Components each appear exactly once from
+  a real enrolled Release/Instance and manifest; transition/release overlap is
+  rejected instead of hidden.
+- Generic signed-bootstrap receipt bindings resolve Component-owned read-back
+  identities into Dashboard-owned seed input before its digest and idempotency
+  key are calculated. Dashboard no longer embeds copied Component seed IDs or
+  depends on an owner-specific orchestration branch.
+- Dashboard exchanges its verified route grant through Core for the selected
+  Component audience, and Component performs a second exchange for the
+  Core-hosted Dataset provider audience. Provider and consumer service actions
+  are Manifest declarations resolved through the exact applied lockfile;
+  service identities are projected during enrollment/materialization and are
+  never registered opportunistically on a first request.
+- The non-nil V3 correlation identity is created or accepted once at the Core
+  boundary, preserved unchanged through both audience exchanges, forwarded on
+  each service request, and validated against the inbound grant; Dashboard and
+  Component never mint replacement per-hop correlation identities.
+- The Component provider preserves known-versus-random nondisclosure, and
+  Dashboard dependency state presents Components as a real module dependency,
+  never as a Core transition.
+- Dataset catalog and schema responses preserve the accepted Component picker
+  context through the canonical Dataset v1 metadata shape: Dataset name and
+  major, grain, ordered tags, compact direct Form/upstream-Dataset provenance,
+  and field preview. The exact required fields reject copied legacy shapes and
+  remain discoverability data rather than authorization inputs.
+- Core's Component-specific lifecycle adapter is removed. The shared web host
+  handles module lifecycle behavior through policy-neutral module contracts,
+  while extracted Component database/API integration tests exercise durable
+  ownership across the real store boundary.
+- Navigation is computed from Core's five exact transitions plus enrolled
+  manifest contributions, with Scoped Records, Components, and Dashboard at
+  orders 7, 8, and 9. Applied lockfile navigation is transactionally
+  materialized before it is served. Current tests assert exact identities
+  instead of copied six/seven-item counts; immutable historical fixtures
+  remain explicitly historical.
+- Core no longer seeds Component or Dashboard capabilities, role grants,
+  service actions, product routes, product data, or product CSS. Release
+  enrollment and Blueprint role projection own those inputs. Component's
+  complete-document SSR, lifecycle asset, and visual-preview identity are
+  module-owned, and JavaScript-disabled acceptance asserts the owner-rendered
+  content rather than obsolete Core-era loading placeholders.
+- Validation Readiness now proves six pairwise-distinct authenticated
+  database bindings and issues one secret-free environment fingerprint. The
+  repository-owned Candidate Rehearsal runner declares dependencies, runs safe
+  siblings fail-late, retains failure artifacts and blocked reasons, produces
+  one consolidated defect batch per diagnostic pass, and refuses correction
+  authorization before harvest completion.
+- Materialization records empty baseline, first apply, semantic no-op, owner
+  receipts, health, teardown, and source/environment identity in append-only
+  attempt directories. Failure containment uses a deterministic owner-input
+  fault, proves exact teardown, and starts its successor from empty.
+- The owner seed now provides exactly seven Component shells and eight
+  ComponentVersions. The Stat Card predecessor is superseded/inactive and
+  names its published/active successor. Dashboard owns exactly seven
+  placements, including three independent predecessor-bound placements for
+  Defer/Upgrade, Replace, and Remove; the blocked-scope placement remains a
+  separate nondisclosure fixture.
+- The non-acceptance product diagnostic performs the lifecycle actions against
+  those exact identities, proves restricted nondisclosure, stops only the
+  Component provider, observes the exact five remaining authorized placements
+  as unavailable, restores the provider, and requires healthy zero-finding
+  convergence. UAT-8A-05 can pass only from that structured semantic evidence,
+  not from broad lane labels or copied counts.
+- Component dependency diagnostics now report the selected binding, provider,
+  contract/version, compatibility, health, observation time, and stable
+  result/failure codes without raw references. Manifest schema defaults are
+  explicit and its runtime/migration commands point to the executable actually
+  installed in the image.
+- Upgrade evidence uses a separately compiled `0.9.0` Component binary and
+  release manifest, not a relabeled `1.0.0` candidate. The runner resolves and
+  applies exact Component-only deltas through the Supervisor and Compose
+  adapter for baseline establishment, `0.9.0` to `1.0.0` upgrade, rollback,
+  and intended-`1.0.0` restoration while comparing pre-transition snapshots.
+- Playwright and UAT diagnostics use attempt-, source-, environment-, and
+  evidence-hash-bound receipts. Failed browser runs retain raw reports, traces,
+  logs, and error context; stale prior-source UAT evidence cannot pass by file
+  existence.
+
+The repository-local validation protocol already stated the fail-late and
+single-batch rules completely. The actual enforcement gap was the absence of a
+complete repository-owned rehearsal graph plus executable readiness checks, so
+the correction strengthens runners and acceptance-contract self-tests without
+duplicating the protocol prose.
+
+The corrected deployable and source dependency boundaries are shown in the
+two current Sprint 8A diagrams in [Tessara Architecture](../architecture.md):
+one container view and one Rust module/crate view.
+
+This status authorizes only a new complete Validation Readiness run followed by
+a complete Candidate Rehearsal run against the same corrected clean source and
+environment identity. It does not assert candidate freeze, deployed
+acceptance, preflight, SIT, formal UAT, or closeout.

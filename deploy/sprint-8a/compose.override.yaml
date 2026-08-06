@@ -22,10 +22,9 @@ services:
     environment:
       TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
       TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER: ${TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER:-tessara.local.sprint-8a}
-      TESSARA_COMPONENT_SERVICE_PUBLIC_KEY: ${TESSARA_COMPONENT_SERVICE_PUBLIC_KEY:-11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo}
-      TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID: ${TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID:-component-development-v1}
+      TESSARA_MODULE_SERVICE_IDENTITIES: '{"schema_version":1,"identities":{"tessara.components":{"key_id":"component-development-v1","public_key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"},"tessara.dashboards":{"key_id":"dashboard-development-v1","public_key":"Aj3Yn25zFNp2K7PJZlqC2JapsIt2mdj-HO55ltKYygw"}}}'
       TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
-      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"components":"http://components:8092","dashboards":"http://dashboards:8091","scoped-records":"http://scoped-records:8090"}'
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091","tessara.reference.scoped-records":"http://scoped-records:8090"}'
     depends_on:
       components: { condition: service_started }
 
@@ -38,10 +37,16 @@ services:
     image: tessara-sprint-8a-supervisor
     environment:
       TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
-      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8a-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-7a-scoped-records","tessara.components":"tessara-sprint-8a-components","tessara.dashboards":"tessara-sprint-8a-dashboards"}'
+      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8a-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-7a-scoped-records","tessara.components":["tessara-sprint-8a-components","tessara-sprint-8a-components-rehearsal-baseline:latest"],"tessara.dashboards":"tessara-sprint-8a-dashboards"}'
       TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-8a}
       TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_DEPLOYMENT_COMPOSE_FILE: /workspace/deploy/sprint-8a/compose.yaml
+      TESSARA_DEPLOYMENT_COMPOSE_PROJECT: tessara-sprint-8a
+      TESSARA_DEPLOYMENT_TARGETS: '{"tessara.components":{"image_environment":"TESSARA_COMPONENT_IMAGE","migration_service":"components-migrate","runtime_service":"components"}}'
     ports: !override ["127.0.0.1:${TESSARA_SUPERVISOR_PORT:-8098}:8090"]
+    volumes:
+      - ../..:/workspace:ro
+      - /var/run/docker.sock:/var/run/docker.sock
 
   components-migrate:
     image: ${TESSARA_COMPONENT_IMAGE:-tessara-sprint-8a-components}
@@ -77,8 +82,7 @@ services:
       TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
       TESSARA_COMPONENT_SERVICE_SIGNING_KEY: ${TESSARA_COMPONENT_SERVICE_SIGNING_KEY:-nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A}
       TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID: ${TESSARA_COMPONENT_SERVICE_SIGNING_KEY_ID:-component-development-v1}
-      TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY: ${TESSARA_DASHBOARD_SERVICE_PUBLIC_KEY:-Aj3Yn25zFNp2K7PJZlqC2JapsIt2mdj-HO55ltKYygw}
-      TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID: ${TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID:-dashboard-development-v1}
+      TESSARA_MODULE_SERVICE_IDENTITIES: '{"schema_version":1,"identities":{"tessara.components":{"key_id":"component-development-v1","public_key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"},"tessara.dashboards":{"key_id":"dashboard-development-v1","public_key":"Aj3Yn25zFNp2K7PJZlqC2JapsIt2mdj-HO55ltKYygw"}}}'
       TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
     depends_on:
       components-migrate: { condition: service_completed_successfully }
@@ -100,7 +104,7 @@ services:
   dashboards:
     image: tessara-sprint-8a-dashboards
     environment:
-      TESSARA_COMPONENT_INTERNAL_URL: http://components:8092
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091","tessara.reference.scoped-records":"http://scoped-records:8090"}'
     depends_on:
       dashboards-migrate: { condition: service_completed_successfully }
       components: { condition: service_started }

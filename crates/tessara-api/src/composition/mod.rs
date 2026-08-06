@@ -17,7 +17,7 @@ use tessara_composition::{
     AUTHORIZATION_API_V1, ActorEvidenceV1, ApplicationBlueprintV1, ApplicationLockfileV1,
     ApplyAuthorizationV1, ApplyOperationKindV1, ApprovedEffectV1, CompositionError,
     CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1,
-    ReleaseCatalogV1, canonical_digest, required_effects, resolve,
+    ReleaseCatalogV1, canonical_digest, required_effects, resolve_against,
 };
 use tessara_module_contract::{
     ModuleManifest, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
@@ -369,6 +369,45 @@ async fn create_blueprint(
     Ok((StatusCode::CREATED, Json(blueprint)))
 }
 
+async fn current_applied_lockfile(
+    state: &AppState,
+    installation_id: Uuid,
+) -> ApiResult<Option<ApplicationLockfileV1>> {
+    let projected = sqlx::query(
+        "SELECT lockfile,receipt
+         FROM composition_receipt_projections
+         WHERE installation_id=$1
+         ORDER BY revision DESC
+         LIMIT 1",
+    )
+    .bind(installation_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    let Some(projected) = projected else {
+        return Ok(None);
+    };
+    let mut lockfile: ApplicationLockfileV1 =
+        serde_json::from_value(projected.try_get("lockfile")?)
+            .map_err(|error| ApiError::Internal(error.into()))?;
+    let receipt: InstallationReceiptV1 = serde_json::from_value(projected.try_get("receipt")?)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    if lockfile.installation_id != installation_id || receipt.installation_id != installation_id {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "current composition projection belongs to another installation"
+        )));
+    }
+    // Emergency enablement is an observed override rather than a mutation of
+    // the desired Module selection. Feed the observed state into delta
+    // planning so the next ordinary revision explicitly reconciles it instead
+    // of silently leaving the owner disabled.
+    for module in &mut lockfile.modules {
+        if let Some(enabled) = receipt.observed_enablement.get(&module.definition_id) {
+            module.enabled = *enabled;
+        }
+    }
+    Ok(Some(lockfile))
+}
+
 async fn resolve_blueprint(
     State(state): State<AppState>,
     auth: AuthenticatedRequest,
@@ -387,7 +426,9 @@ async fn resolve_blueprint(
     .ok_or_else(|| ApiError::NotFound("Blueprint revision was not found".into()))?;
     let blueprint: ApplicationBlueprintV1 =
         serde_json::from_value(document).map_err(|error| ApiError::Internal(error.into()))?;
-    let lockfile = resolve(&blueprint, &request.catalog).map_err(findings_error)?;
+    let current = current_applied_lockfile(&state, installation_id).await?;
+    let lockfile =
+        resolve_against(&blueprint, &request.catalog, current.as_ref()).map_err(findings_error)?;
     let lockfile_digest = canonical_digest(&lockfile)
         .map_err(|error| ApiError::Internal(error.into()))?
         .to_string();
@@ -672,6 +713,16 @@ async fn project_receipt(
                 .into(),
         ));
     }
+    let previous_lockfile: Option<ApplicationLockfileV1> = sqlx::query_scalar::<_, Value>(
+        "SELECT lockfile FROM composition_receipt_projections
+         WHERE installation_id=$1 ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(request.receipt.installation_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .map(serde_json::from_value)
+    .transpose()
+    .map_err(|error| ApiError::Internal(error.into()))?;
     let lockfile = request.lockfile;
     let endpoints = module_control_endpoints()?;
     let client = reqwest::Client::new();
@@ -708,22 +759,27 @@ async fn project_receipt(
         }
         manifests.insert(module.definition_id.clone(), manifest);
     }
+    let receipt_digest = canonical_digest(&request.receipt)
+        .map_err(|error| ApiError::Internal(error.into()))?
+        .to_string();
+    let receipt_value =
+        serde_json::to_value(&request.receipt).map_err(|error| ApiError::Internal(error.into()))?;
+    let lockfile_value =
+        serde_json::to_value(&lockfile).map_err(|error| ApiError::Internal(error.into()))?;
     crate::modules::project_composition_modules(
         &state.pool,
         &lockfile,
         &request.receipt,
         &manifests,
+        previous_lockfile.as_ref(),
+        crate::modules::CompositionProjectionDocuments {
+            digest: &receipt_digest,
+            lockfile: &lockfile_value,
+            receipt: &receipt_value,
+        },
     )
     .await
     .map_err(ApiError::Internal)?;
-    let digest = canonical_digest(&request.receipt)
-        .map_err(|error| ApiError::Internal(error.into()))?
-        .to_string();
-    let value =
-        serde_json::to_value(&request.receipt).map_err(|error| ApiError::Internal(error.into()))?;
-    sqlx::query("INSERT INTO composition_receipt_projections(installation_id,revision,digest,receipt) VALUES($1,$2,$3,$4) ON CONFLICT(installation_id,revision) DO UPDATE SET digest=EXCLUDED.digest,receipt=EXCLUDED.receipt,observed_at=now()")
-        .bind(request.receipt.installation_id).bind(request.receipt.revision as i64).bind(digest).bind(value)
-        .execute(&state.pool).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1460,7 +1516,8 @@ mod tests {
             "/../../deploy/sprint-6f/catalogs/local-release-catalog.json"
         )))
         .expect("valid Sprint 6F catalog");
-        let resolved = resolve(&blueprint, &catalog).expect("reference composition resolves");
+        let resolved = tessara_composition::resolve(&blueprint, &catalog)
+            .expect("reference composition resolves");
         let definition_id = "tessara.reference.scoped-records".to_string();
         let mut emergency = resolved.clone();
         emergency.materialization_plan = tessara_composition::MaterializationPlanV1 {

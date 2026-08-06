@@ -127,26 +127,34 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_host_route_covers_module_root_and_deep_links() {
+    fn lifecycle_host_route_is_policy_neutral_and_covers_unowned_paths() {
         initialize_test_executor();
-        for (definition, title, paths) in [
-            (
-                "tessara.dashboards",
-                "Dashboards",
-                ["/dashboards", "/dashboards/new", "/dashboards/example/edit"],
-            ),
-            (
-                "tessara.components",
-                "Components",
-                ["/components", "/components/new", "/components/example/edit"],
-            ),
+        for path in ["/example", "/example/new", "/example/item/edit"] {
+            let html = application_html(path, "Module", "Lifecycle module host.");
+            assert!(html.contains(r#"id="tessara-module-outlet""#), "{path}");
+            assert!(!html.contains("data-module-definition"), "{path}");
+        }
+
+        let core_html = application_html("/datasets", "Datasets", "Core-owned route.");
+        assert!(!core_html.contains(r#"id="tessara-module-outlet""#));
+    }
+
+    #[test]
+    fn lifecycle_host_source_contains_no_product_specific_policy() {
+        for source in [
+            include_str!("routes/module_lifecycle.rs"),
+            include_str!("features/module_lifecycle.rs"),
+            include_str!("app.rs"),
         ] {
-            for path in paths {
-                let html = application_html(path, title, "Lifecycle module host.");
-                assert!(html.contains(r#"id="tessara-module-outlet""#), "{path}");
+            for forbidden in [
+                "tessara.components",
+                "tessara.dashboards",
+                "\"/components",
+                "\"/dashboards",
+            ] {
                 assert!(
-                    html.contains(&format!(r#"data-module-definition="{definition}""#)),
-                    "{path}"
+                    !source.contains(forbidden),
+                    "lifecycle host source must not contain product policy {forbidden}"
                 );
             }
         }

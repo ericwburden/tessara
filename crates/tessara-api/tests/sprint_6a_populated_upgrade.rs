@@ -262,9 +262,9 @@ const SPRINT_5A_SEED_VERSION: &str = "sprint-5a-role-capabilities-v1+sha256.7725
 const SPRINT_5A_SEED_SHA256: &str =
     "7725e889996a73a5655c57106aca6e12d9a5f95e9103f14d7b0fd50fbac96988";
 
-const CURRENT_SEED_VERSION: &str = "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68";
+const CURRENT_SEED_VERSION: &str = "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c";
 const CURRENT_SEED_SHA256: &str =
-    "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600";
+    "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609";
 
 const FIXTURE_ACCOUNT_ID: &str = "60000000-0000-0000-0000-000000000002";
 const FIXTURE_SESSION_TOKEN: &str = "60000000-0000-0000-0000-000000000301";
@@ -454,7 +454,7 @@ async fn historical_populated_sprint_5a_upgrade_preserves_invariants_and_replace
         WHERE role_capabilities.role_id = roles.id
           AND role_capabilities.capability_id = capabilities.id
           AND roles.name = 'operator'
-          AND capabilities.key = 'dashboards:read'
+          AND capabilities.key = 'datasets:read'
         "#,
     )
     .execute(&drifted)

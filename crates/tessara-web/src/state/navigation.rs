@@ -1,6 +1,5 @@
-//! Shell navigation model and capability filtering.
-//!
-//! Keep route labels, navigation sections, icon selection, and permission checks here; feature modules should not duplicate sidebar metadata.
+//! Shell navigation composition for permanent Core destinations and enrolled
+//! manifest contributions.
 
 #[derive(Clone, Copy)]
 pub struct NavItem {
@@ -9,116 +8,6 @@ pub struct NavItem {
     pub label: &'static str,
     pub section: &'static str,
     pub capabilities: &'static [&'static str],
-}
-
-pub const NAV_ITEMS: [NavItem; 9] = [
-    NavItem {
-        key: "home",
-        href: "/",
-        label: "Home",
-        section: "Main",
-        capabilities: &[],
-    },
-    NavItem {
-        key: "organization",
-        href: "/organization",
-        label: "Organization",
-        section: "Main",
-        capabilities: &["hierarchy:read", "hierarchy:manage"],
-    },
-    NavItem {
-        key: "forms",
-        href: "/forms",
-        label: "Forms",
-        section: "Main",
-        capabilities: &["forms:read", "forms:manage"],
-    },
-    NavItem {
-        key: "workflows",
-        href: "/workflows",
-        label: "Workflows",
-        section: "Main",
-        capabilities: &["workflows:read", "workflows:manage"],
-    },
-    NavItem {
-        key: "responses",
-        href: "/responses",
-        label: "Responses",
-        section: "Main",
-        capabilities: &[
-            "submissions:read_own",
-            "submissions:respond",
-            "submissions:manage",
-        ],
-    },
-    NavItem {
-        key: "operations",
-        href: "/operations",
-        label: "Operations",
-        section: "Main",
-        capabilities: &["operations:view"],
-    },
-    NavItem {
-        key: "dashboards",
-        href: "/dashboards",
-        label: "Dashboards",
-        section: "Main",
-        capabilities: &["dashboards:read", "dashboards:manage"],
-    },
-    NavItem {
-        key: "administration",
-        href: "/administration",
-        label: "Administration",
-        section: "Admin",
-        capabilities: &["admin:all"],
-    },
-    NavItem {
-        key: "datasets",
-        href: "/datasets",
-        label: "Datasets",
-        section: "Admin",
-        capabilities: &["datasets:read", "datasets:manage"],
-    },
-];
-
-pub fn nav_item_for_route(route_key: &str) -> Option<&'static NavItem> {
-    NAV_ITEMS.iter().find(|item| item.key == route_key)
-}
-
-pub fn nav_item_is_allowed(item: &NavItem, capabilities: &[String]) -> bool {
-    item.capabilities.is_empty()
-        || capabilities
-            .iter()
-            .any(|capability| capability == "admin:all")
-        || item
-            .capabilities
-            .iter()
-            .any(|required| capabilities.iter().any(|capability| capability == required))
-}
-
-/// Whether a permitted route also has a useful directory entrypoint.
-///
-/// Object-scoped Dashboard managers can open an editor URL issued for a
-/// Dashboard they manage, but `/dashboards` itself is a reader directory. Do
-/// not advertise that reader link when the account only has manage access.
-pub fn nav_item_is_visible(item: &NavItem, capabilities: &[String]) -> bool {
-    if item.key == "dashboards" {
-        return capabilities
-            .iter()
-            .any(|capability| capability == "dashboards:read" || capability == "admin:all");
-    }
-    nav_item_is_allowed(item, capabilities)
-}
-
-pub fn nav_items_for_section(
-    section: &'static str,
-    capabilities: &[String],
-) -> Vec<&'static NavItem> {
-    NAV_ITEMS
-        .iter()
-        .filter(move |item| item.section == section)
-        .filter(|item| nav_item_is_visible(item, capabilities))
-        .collect::<Vec<_>>()
 }
 
 /// A shell navigation group supported by the Sprint 6A composition contract.
@@ -256,10 +145,34 @@ pub struct ResolvedNavigation {
 }
 
 const CORE_NAV_ITEMS: [NavItem; 5] = [
-    NAV_ITEMS[0],
-    NAV_ITEMS[1],
-    NAV_ITEMS[5],
-    NAV_ITEMS[7],
+    NavItem {
+        key: "home",
+        href: "/",
+        label: "Home",
+        section: "Main",
+        capabilities: &[],
+    },
+    NavItem {
+        key: "organization",
+        href: "/organization",
+        label: "Organization",
+        section: "Main",
+        capabilities: &["hierarchy:read", "hierarchy:manage"],
+    },
+    NavItem {
+        key: "operations",
+        href: "/operations",
+        label: "Operations",
+        section: "Main",
+        capabilities: &["operations:view"],
+    },
+    NavItem {
+        key: "administration",
+        href: "/administration",
+        label: "Administration",
+        section: "Admin",
+        capabilities: &["admin:all"],
+    },
     NavItem {
         key: "module_management",
         href: "/administration/modules",
@@ -609,10 +522,9 @@ fn actor_has_effective_capability(capabilities: &[String], required: &str) -> bo
 #[cfg(test)]
 mod tests {
     use super::{
-        ContributedNavigationItem, ModuleNavigationAvailability, NAV_ITEMS, NavigationBand,
+        ContributedNavigationItem, ModuleNavigationAvailability, NavigationBand,
         NavigationCompositionError, NavigationItemOwner, NavigationPolicy, NavigationPolicyEntry,
-        NavigationSection, ResolvedNavigation, nav_item_for_route, nav_item_is_allowed,
-        nav_item_is_visible, nav_items_for_section, resolve_navigation,
+        NavigationSection, ResolvedNavigation, resolve_navigation,
     };
 
     struct NavigationActorCase {
@@ -624,13 +536,6 @@ mod tests {
 
     fn owned_capabilities(keys: &[&str]) -> Vec<String> {
         keys.iter().map(|key| (*key).to_string()).collect()
-    }
-
-    fn visible_keys(section: &'static str, capabilities: &[String]) -> Vec<&'static str> {
-        nav_items_for_section(section, capabilities)
-            .into_iter()
-            .map(|item| item.key)
-            .collect()
     }
 
     fn contributed_item(
@@ -747,252 +652,6 @@ mod tests {
     ) -> ResolvedNavigation {
         let policy = default_policy(contributions);
         resolve_navigation(contributions, Some(&policy), capabilities)
-    }
-
-    #[test]
-    fn static_navigation_contract_freezes_labels_routes_groups_order_and_capabilities() {
-        let actual = NAV_ITEMS
-            .iter()
-            .map(|item| {
-                (
-                    item.key,
-                    item.href,
-                    item.label,
-                    item.section,
-                    item.capabilities,
-                )
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            actual,
-            vec![
-                ("home", "/", "Home", "Main", &[][..]),
-                (
-                    "organization",
-                    "/organization",
-                    "Organization",
-                    "Main",
-                    &["hierarchy:read", "hierarchy:manage"][..],
-                ),
-                (
-                    "forms",
-                    "/forms",
-                    "Forms",
-                    "Main",
-                    &["forms:read", "forms:manage"][..],
-                ),
-                (
-                    "workflows",
-                    "/workflows",
-                    "Workflows",
-                    "Main",
-                    &["workflows:read", "workflows:manage"][..],
-                ),
-                (
-                    "responses",
-                    "/responses",
-                    "Responses",
-                    "Main",
-                    &[
-                        "submissions:read_own",
-                        "submissions:respond",
-                        "submissions:manage",
-                    ][..],
-                ),
-                (
-                    "operations",
-                    "/operations",
-                    "Operations",
-                    "Main",
-                    &["operations:view"][..],
-                ),
-                (
-                    "dashboards",
-                    "/dashboards",
-                    "Dashboards",
-                    "Main",
-                    &["dashboards:read", "dashboards:manage"][..],
-                ),
-                (
-                    "administration",
-                    "/administration",
-                    "Administration",
-                    "Admin",
-                    &["admin:all"][..],
-                ),
-                (
-                    "datasets",
-                    "/datasets",
-                    "Datasets",
-                    "Admin",
-                    &["datasets:read", "datasets:manage"][..],
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn named_actor_navigation_sequences_are_frozen_before_dynamic_navigation() {
-        let cases = [
-            NavigationActorCase {
-                name: "admin_all",
-                capabilities: &["admin:all"],
-                main: &[
-                    "home",
-                    "organization",
-                    "forms",
-                    "workflows",
-                    "responses",
-                    "operations",
-                    "dashboards",
-                ],
-                admin: &["administration", "datasets"],
-            },
-            NavigationActorCase {
-                name: "operator",
-                capabilities: &[
-                    "hierarchy:read",
-                    "forms:read",
-                    "workflows:read",
-                    "workflows:manage",
-                    "submissions:respond",
-                    "submissions:manage",
-                    "operations:view",
-                    "datasets:read",
-                    "components:read",
-                    "dashboards:read",
-                ],
-                main: &[
-                    "home",
-                    "organization",
-                    "forms",
-                    "workflows",
-                    "responses",
-                    "operations",
-                    "dashboards",
-                ],
-                admin: &["datasets"],
-            },
-            NavigationActorCase {
-                name: "respondent",
-                capabilities: &["submissions:read_own", "submissions:respond"],
-                main: &["home", "responses"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "forms_manage_only",
-                capabilities: &["forms:manage"],
-                main: &["home", "forms"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "workflows_manage_only",
-                capabilities: &["workflows:manage"],
-                main: &["home", "workflows"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "submissions_manage_only",
-                capabilities: &["submissions:manage"],
-                main: &["home", "responses"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "components_manage_only",
-                capabilities: &["components:manage"],
-                main: &["home"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "dashboards_manage_only",
-                capabilities: &["dashboards:manage"],
-                main: &["home"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "datasets_manage_only",
-                capabilities: &["datasets:manage"],
-                main: &["home"],
-                admin: &["datasets"],
-            },
-            NavigationActorCase {
-                name: "no_access",
-                capabilities: &[],
-                main: &["home"],
-                admin: &[],
-            },
-        ];
-
-        for case in cases {
-            let capabilities = owned_capabilities(case.capabilities);
-            assert_eq!(
-                visible_keys("Main", &capabilities),
-                case.main,
-                "{} Main navigation changed",
-                case.name
-            );
-            assert_eq!(
-                visible_keys("Admin", &capabilities),
-                case.admin,
-                "{} Admin navigation changed",
-                case.name
-            );
-        }
-    }
-
-    #[test]
-    fn manage_only_dashboard_access_keeps_route_permission_without_reader_link() {
-        let dashboards = nav_item_for_route("dashboards").expect("Dashboard nav item");
-        let capabilities = vec!["dashboards:manage".to_string()];
-
-        assert!(nav_item_is_allowed(dashboards, &capabilities));
-        assert!(!nav_item_is_visible(dashboards, &capabilities));
-    }
-
-    #[test]
-    fn dashboard_readers_and_admins_receive_the_directory_link() {
-        let dashboards = nav_item_for_route("dashboards").expect("Dashboard nav item");
-
-        assert!(nav_item_is_visible(
-            dashboards,
-            &["dashboards:read".to_string()]
-        ));
-        assert!(nav_item_is_visible(dashboards, &["admin:all".to_string()]));
-    }
-
-    #[test]
-    fn product_manage_capabilities_allow_routes_and_keep_current_link_rules() {
-        for (route_key, capability, expected_visible) in [
-            ("organization", "hierarchy:manage", true),
-            ("forms", "forms:manage", true),
-            ("workflows", "workflows:manage", true),
-            ("responses", "submissions:manage", true),
-            ("dashboards", "dashboards:manage", false),
-            ("datasets", "datasets:manage", true),
-        ] {
-            let item = nav_item_for_route(route_key).expect("characterized route item");
-            let capabilities = vec![capability.to_string()];
-
-            assert!(
-                nav_item_is_allowed(item, &capabilities),
-                "{capability} should continue allowing the {route_key} route family"
-            );
-            assert_eq!(
-                nav_item_is_visible(item, &capabilities),
-                expected_visible,
-                "{capability} visibility changed for {route_key}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_visible_product_link_does_not_authorize_an_unrelated_actor() {
-        let forms = nav_item_for_route("forms").expect("Forms nav item");
-        let unrelated_capabilities = vec!["datasets:read".to_string()];
-
-        assert!(!nav_item_is_allowed(forms, &unrelated_capabilities));
-        assert!(!nav_item_is_visible(forms, &unrelated_capabilities));
     }
 
     #[test]

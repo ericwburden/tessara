@@ -10,14 +10,14 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tessara_composition::{
-    ApplicationLockfileV1, ApplyAuthorizationV1, ApplyOperationKindV1, BootstrapInputV1,
-    BootstrapReceiptV1, CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1,
-    MaterializationPlanV1, OwnerBootstrapRequestV1, OwnerBootstrapResponseV1,
+    ApplicationLockfileV1, ApplyAuthorizationV1, BootstrapInputV1, BootstrapReceiptV1,
+    CompositionFindingV1, CompositionOperationV1, FindingSeverityV1, InstallationReceiptV1,
+    MaterializationActionV1, MaterializationPlanV1, OwnerBootstrapRequestV1,
+    OwnerBootstrapResponseV1,
 };
 use tessara_module_contract::{ArtifactDigest, ProtocolSignaturePurposeV1, SignedEnvelopeV1};
 use tessara_supervisor::{
-    EmergencyOverrideV1, MaterializationAdapter, RecordingAdapter, SupervisorError,
-    SupervisorLedger,
+    MaterializationAdapter, RecordingAdapter, SupervisorError, SupervisorLedger,
 };
 use uuid::Uuid;
 
@@ -27,10 +27,33 @@ struct AppState {
     client: reqwest::Client,
     core_url: String,
     module_urls: BTreeMap<String, String>,
-    artifact_images: BTreeMap<String, String>,
+    artifact_images: BTreeMap<String, Vec<String>>,
+    deployment: Option<ComposeDeploymentV1>,
     projection_token: String,
     module_control_key: String,
     local_cas_root: PathBuf,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+enum ArtifactImageReferencesV1 {
+    One(String),
+    Many(Vec<String>),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ComposeDeploymentTargetV1 {
+    image_environment: String,
+    migration_service: String,
+    runtime_service: String,
+}
+
+#[derive(Clone, Debug)]
+struct ComposeDeploymentV1 {
+    compose_file: PathBuf,
+    project: String,
+    targets: BTreeMap<String, ComposeDeploymentTargetV1>,
 }
 
 #[tokio::main]
@@ -70,11 +93,8 @@ async fn main() -> anyhow::Result<()> {
                 .map(|value| serde_json::from_str(&value))
                 .transpose()?
                 .unwrap_or_default(),
-            artifact_images: env::var("TESSARA_ARTIFACT_IMAGE_REFERENCES")
-                .ok()
-                .map(|value| serde_json::from_str(&value))
-                .transpose()?
-                .unwrap_or_default(),
+            artifact_images: parse_artifact_image_references()?,
+            deployment: compose_deployment_from_environment()?,
             projection_token: env::var("TESSARA_SUPERVISOR_PROJECTION_TOKEN")
                 .unwrap_or_else(|_| "local-supervisor-projection-token".into()),
             module_control_key: env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
@@ -84,6 +104,54 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|| PathBuf::from("/var/lib/tessara-supervisor/cas")),
         });
     axum::serve(listener, app).await.context("serve Supervisor")
+}
+
+fn parse_artifact_image_references() -> anyhow::Result<BTreeMap<String, Vec<String>>> {
+    let Some(value) = env::var("TESSARA_ARTIFACT_IMAGE_REFERENCES")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(BTreeMap::new());
+    };
+    let configured: BTreeMap<String, ArtifactImageReferencesV1> = serde_json::from_str(&value)?;
+    configured
+        .into_iter()
+        .map(|(component, references)| {
+            let references = match references {
+                ArtifactImageReferencesV1::One(reference) => vec![reference],
+                ArtifactImageReferencesV1::Many(references) => references,
+            };
+            anyhow::ensure!(
+                !references.is_empty()
+                    && references
+                        .iter()
+                        .all(|reference| !reference.trim().is_empty()),
+                "artifact image references for {component} must be non-empty"
+            );
+            Ok((component, references))
+        })
+        .collect()
+}
+
+fn compose_deployment_from_environment() -> anyhow::Result<Option<ComposeDeploymentV1>> {
+    let Some(compose_file) = env::var_os("TESSARA_DEPLOYMENT_COMPOSE_FILE") else {
+        return Ok(None);
+    };
+    let project = env::var("TESSARA_DEPLOYMENT_COMPOSE_PROJECT")
+        .context("TESSARA_DEPLOYMENT_COMPOSE_PROJECT is required with deployment Compose")?;
+    let targets = env::var("TESSARA_DEPLOYMENT_TARGETS")
+        .context("TESSARA_DEPLOYMENT_TARGETS is required with deployment Compose")?;
+    let targets: BTreeMap<String, ComposeDeploymentTargetV1> = serde_json::from_str(&targets)?;
+    anyhow::ensure!(
+        !project.trim().is_empty(),
+        "deployment Compose project is empty"
+    );
+    anyhow::ensure!(!targets.is_empty(), "deployment Compose targets are empty");
+    Ok(Some(ComposeDeploymentV1 {
+        compose_file: PathBuf::from(compose_file),
+        project,
+        targets,
+    }))
 }
 
 fn register_environment_trust_anchors(ledger: &SupervisorLedger) -> anyhow::Result<()> {
@@ -175,58 +243,57 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     }
     let lockfile_digest: ArtifactDigest = tessara_composition::canonical_digest(&request.lockfile)?;
-    let mut adapter = OwnerHttpAdapter::prepare(state, &request.lockfile).await?;
+    let mut adapter = match OwnerHttpAdapter::prepare(state, &request.lockfile).await {
+        Ok(adapter) => adapter,
+        Err(error) => {
+            state.ledger.fail_operation(
+                accepted.operation_id,
+                CompositionFindingV1 {
+                    code: "owner_adapter_prepare_failed".into(),
+                    severity: FindingSeverityV1::Error,
+                    path: "/materialization".into(),
+                    message: error.to_string(),
+                },
+                chrono::Utc::now(),
+            )?;
+            return Err(error);
+        }
+    };
     let receipt = state.ledger.execute(
         accepted.operation_id,
         lockfile_digest,
         &mut adapter,
         chrono::Utc::now(),
     )?;
-    if request.authorization.payload.operation == ApplyOperationKindV1::EmergencyDisable {
-        let definition_id = plan
-            .actions
-            .iter()
-            .find_map(|action| match action {
-                MaterializationActionV1::SetEnablement {
-                    definition_id,
-                    enabled: false,
-                } => Some(definition_id.clone()),
-                _ => None,
-            })
-            .ok_or_else(|| anyhow::anyhow!("emergency authorization has no disable target"))?;
-        state
-            .ledger
-            .record_emergency_override(&EmergencyOverrideV1 {
-                override_id: Uuid::new_v4(),
-                definition_id,
-                reason: request
-                    .authorization
-                    .payload
-                    .reason
-                    .clone()
-                    .unwrap_or_else(|| "Emergency disable".into()),
-                actor: serde_json::to_value(&request.authorization.payload.initiator)?,
-                issued_at: request.authorization.payload.issued_at,
-                expires_at: Some(request.authorization.payload.expires_at),
-                authorization_digest: tessara_composition::canonical_digest(
-                    &request.authorization,
-                )?,
-                reconciled_at: None,
-                expired: false,
-            })?;
-    }
     let operation = state
         .ledger
         .operation(accepted.operation_id)?
         .ok_or_else(|| anyhow::anyhow!("completed operation is missing"))?;
-    project_result(
+    if let Err(error) = project_result(
         state,
         request.lockfile.blueprint_revision,
         &request.lockfile,
         &operation,
         &receipt,
     )
-    .await?;
+    .await
+    {
+        let finding = CompositionFindingV1 {
+            code: "core_projection_failed".into(),
+            severity: FindingSeverityV1::Error,
+            path: "/projection".into(),
+            message: error.to_string(),
+        };
+        state.ledger.rollback_projection_failure(
+            accepted.operation_id,
+            finding,
+            chrono::Utc::now(),
+        )?;
+        if let Some(failed) = state.ledger.operation(accepted.operation_id)? {
+            let _ = project_operation(state, request.lockfile.blueprint_revision, &failed).await;
+        }
+        return Err(error);
+    }
     Ok(ApplyResponseV1 { operation, receipt })
 }
 
@@ -238,34 +305,49 @@ struct OwnerHttpAdapter {
 
 impl OwnerHttpAdapter {
     async fn prepare(state: &AppState, lockfile: &ApplicationLockfileV1) -> anyhow::Result<Self> {
+        let mut available_bootstrap_receipts = state
+            .ledger
+            .current_receipt()?
+            .map(|receipt| {
+                receipt
+                    .bootstrap_receipts
+                    .into_iter()
+                    .map(|receipt| (receipt.owner.clone(), receipt))
+                    .collect::<BTreeMap<_, _>>()
+            })
+            .unwrap_or_default();
         let mut bootstrap_receipts = BTreeMap::new();
         let mut observed_artifacts = BTreeMap::new();
+        let mut deployment_images = BTreeMap::new();
         for action in &lockfile.materialization_plan.actions {
             if let MaterializationActionV1::AcquireImage { component, digest } = action {
-                let image = state.artifact_images.get(component).ok_or_else(|| {
+                let images = state.artifact_images.get(component).ok_or_else(|| {
                     anyhow::anyhow!("no runtime image reference is configured for {component}")
                 })?;
-                let output = std::process::Command::new("docker")
-                    .args(["image", "inspect", "--format={{.Id}}", image])
-                    .output()
-                    .context("inspect runtime image through the Docker owner adapter")?;
-                anyhow::ensure!(
-                    output.status.success(),
-                    "Docker could not inspect runtime image {image}: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let observed =
-                    ArtifactDigest::new(String::from_utf8(output.stdout)?.trim().to_string())?;
-                anyhow::ensure!(
-                    &observed == digest,
-                    "observed runtime image for {component} is {observed}, not locked digest {digest}"
-                );
+                let mut matched = None;
+                for image in images {
+                    let output = std::process::Command::new("docker")
+                        .args(["image", "inspect", "--format={{.Id}}", image])
+                        .output()
+                        .context("inspect runtime image through the Docker owner adapter")?;
+                    if !output.status.success() {
+                        continue;
+                    }
+                    let observed =
+                        ArtifactDigest::new(String::from_utf8(output.stdout)?.trim().to_string())?;
+                    if &observed == digest {
+                        matched = Some((image.clone(), observed));
+                        break;
+                    }
+                }
+                let (image, observed) = matched.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "no configured runtime image for {component} matches locked digest {digest}"
+                    )
+                })?;
+                deployment_images.insert(component.clone(), image);
                 observed_artifacts.insert(component.clone(), observed);
             }
-        }
-        if let Some(input) = &lockfile.core.bootstrap {
-            let receipt = invoke_bootstrap(state, lockfile, "core", input).await?;
-            bootstrap_receipts.insert("core".into(), receipt);
         }
         // Project module security state before owner bootstrap. Component and
         // Dashboard bootstrap validate their installation/instance boundary
@@ -280,26 +362,39 @@ impl OwnerHttpAdapter {
                 apply_module_enablement(state, lockfile, definition_id, *enabled).await?;
             }
         }
-        for module in &lockfile.modules {
-            if let Some(input) = &module.bootstrap {
-                let receipt =
-                    invoke_bootstrap(state, lockfile, &module.definition_id, input).await?;
-                bootstrap_receipts.insert(module.definition_id.clone(), receipt);
-            }
-        }
-        for owner in lockfile
-            .materialization_plan
-            .actions
-            .iter()
-            .filter_map(|action| {
-                if let MaterializationActionV1::HealthGate { owner } = action {
-                    Some(owner.as_str())
-                } else {
-                    None
+
+        for action in &lockfile.materialization_plan.actions {
+            match action {
+                MaterializationActionV1::Migrate { owner, .. } => {
+                    if let Some(image) = deployment_images.get(owner) {
+                        run_compose_migration(state, owner, image)?;
+                    }
                 }
-            })
-        {
-            verify_owner_health(state, owner).await?;
+                MaterializationActionV1::Bootstrap { owner, .. } => {
+                    let input = bootstrap_input(lockfile, owner).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "materialization plan bootstraps {owner} without locked input"
+                        )
+                    })?;
+                    let receipt = invoke_bootstrap(
+                        state,
+                        lockfile,
+                        owner,
+                        input,
+                        &available_bootstrap_receipts,
+                    )
+                    .await?;
+                    available_bootstrap_receipts.insert(owner.clone(), receipt.clone());
+                    bootstrap_receipts.insert(owner.clone(), receipt);
+                }
+                MaterializationActionV1::HealthGate { owner } => {
+                    if let Some(image) = deployment_images.get(owner) {
+                        run_compose_runtime_switch(state, owner, image)?;
+                    }
+                    verify_owner_health(state, owner).await?;
+                }
+                _ => {}
+            }
         }
         Ok(Self {
             recording: RecordingAdapter::default(),
@@ -307,6 +402,102 @@ impl OwnerHttpAdapter {
             observed_artifacts,
         })
     }
+}
+
+fn bootstrap_input<'a>(
+    lockfile: &'a ApplicationLockfileV1,
+    owner: &str,
+) -> Option<&'a BootstrapInputV1> {
+    if owner == "core" {
+        return lockfile.core.bootstrap.as_ref();
+    }
+    lockfile
+        .modules
+        .iter()
+        .find(|module| module.definition_id == owner)
+        .and_then(|module| module.bootstrap.as_ref())
+}
+
+fn compose_target<'a>(
+    state: &'a AppState,
+    owner: &str,
+) -> anyhow::Result<(&'a ComposeDeploymentV1, &'a ComposeDeploymentTargetV1)> {
+    let deployment = state.deployment.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("no deployment adapter is configured for changed owner {owner}")
+    })?;
+    let target = deployment.targets.get(owner).ok_or_else(|| {
+        anyhow::anyhow!("no Compose deployment target is configured for changed owner {owner}")
+    })?;
+    Ok((deployment, target))
+}
+
+fn run_compose_migration(state: &AppState, owner: &str, image: &str) -> anyhow::Result<()> {
+    let (deployment, target) = compose_target(state, owner)?;
+    run_compose(
+        deployment,
+        target,
+        image,
+        &[
+            "run",
+            "--rm",
+            "--no-deps",
+            target.migration_service.as_str(),
+        ],
+        "migration",
+    )
+}
+
+fn run_compose_runtime_switch(state: &AppState, owner: &str, image: &str) -> anyhow::Result<()> {
+    let (deployment, target) = compose_target(state, owner)?;
+    run_compose(
+        deployment,
+        target,
+        image,
+        &[
+            "up",
+            "-d",
+            "--no-deps",
+            "--no-build",
+            target.runtime_service.as_str(),
+        ],
+        "runtime switch",
+    )
+}
+
+fn run_compose(
+    deployment: &ComposeDeploymentV1,
+    target: &ComposeDeploymentTargetV1,
+    image: &str,
+    action: &[&str],
+    description: &str,
+) -> anyhow::Result<()> {
+    let compose_file = deployment
+        .compose_file
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("deployment Compose path is not UTF-8"))?;
+    let mut command = std::process::Command::new("docker");
+    command.args([
+        "compose",
+        "--ansi",
+        "never",
+        "--project-name",
+        deployment.project.as_str(),
+        "--file",
+        compose_file,
+        "--profile",
+        "reference",
+    ]);
+    command.args(action);
+    command.env(&target.image_environment, image);
+    let output = command
+        .output()
+        .with_context(|| format!("run Compose {description}"))?;
+    anyhow::ensure!(
+        output.status.success(),
+        "Compose {description} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    Ok(())
 }
 
 async fn apply_module_enablement(
@@ -374,28 +565,16 @@ async fn invoke_bootstrap(
     lockfile: &ApplicationLockfileV1,
     owner: &str,
     input: &BootstrapInputV1,
+    prior_receipts: &BTreeMap<String, BootstrapReceiptV1>,
 ) -> anyhow::Result<BootstrapReceiptV1> {
-    let input_bytes = tessara_composition::acquire_bootstrap_input(input, &state.local_cas_root)?;
-    let input_value: serde_json::Value = serde_json::from_slice(&input_bytes)?;
-    let input_digest = tessara_composition::canonical_digest(&input_value)?;
-    let expected_digest = match input {
-        BootstrapInputV1::Inline { .. } => input_digest.clone(),
-        BootstrapInputV1::LocalCas { digest, .. } => digest.clone(),
-    };
-    anyhow::ensure!(
-        input_digest == expected_digest,
-        "bootstrap input digest does not match its locked identity"
-    );
-    let request = OwnerBootstrapRequestV1 {
-        installation_id: lockfile.installation_id,
-        desired_revision: lockfile.blueprint_revision,
-        idempotency_key: format!(
-            "composition:{owner}:r{}:{input_digest}",
-            lockfile.blueprint_revision
-        ),
-        input_digest,
-        input: input_value,
-    };
+    let request = prepare_bootstrap_request(
+        lockfile.installation_id,
+        lockfile.blueprint_revision,
+        owner,
+        input,
+        prior_receipts,
+        &state.local_cas_root,
+    )?;
     let (url, header_name, header_value) = if owner == "core" {
         (
             format!(
@@ -442,6 +621,41 @@ async fn invoke_bootstrap(
     Ok(response.receipt)
 }
 
+fn prepare_bootstrap_request(
+    installation_id: Uuid,
+    desired_revision: u64,
+    owner: &str,
+    input: &BootstrapInputV1,
+    prior_receipts: &BTreeMap<String, BootstrapReceiptV1>,
+    local_cas_root: &std::path::Path,
+) -> anyhow::Result<OwnerBootstrapRequestV1<serde_json::Value>> {
+    let input_bytes = tessara_composition::acquire_bootstrap_input(input, local_cas_root)?;
+    let acquired_value: serde_json::Value = serde_json::from_slice(&input_bytes)?;
+    if let BootstrapInputV1::LocalCas { digest, .. } = input {
+        let acquired_digest = tessara_composition::canonical_digest(&acquired_value)?;
+        anyhow::ensure!(
+            &acquired_digest == digest,
+            "bootstrap input digest does not match its locked identity"
+        );
+    }
+    let input_value = tessara_composition::resolve_bootstrap_receipt_bindings(
+        acquired_value,
+        input.receipt_bindings(),
+        prior_receipts,
+    )?;
+    let input_digest = tessara_composition::canonical_digest(&input_value)?;
+    Ok(OwnerBootstrapRequestV1 {
+        installation_id,
+        desired_revision,
+        idempotency_key: format!(
+            "composition:{installation_id}:{owner}:r{}:{input_digest}",
+            desired_revision
+        ),
+        input_digest,
+        input: input_value,
+    })
+}
+
 async fn verify_owner_health(state: &AppState, owner: &str) -> anyhow::Result<()> {
     let base = if owner == "core" {
         state.core_url.as_str()
@@ -451,17 +665,22 @@ async fn verify_owner_health(state: &AppState, owner: &str) -> anyhow::Result<()
             .get(owner)
             .ok_or_else(|| anyhow::anyhow!("no health endpoint is configured for {owner}"))?
     };
-    let status = state
-        .client
-        .get(format!("{}/health/ready", base.trim_end_matches('/')))
-        .send()
-        .await?
-        .status();
-    anyhow::ensure!(
-        status.is_success(),
-        "{owner} health gate failed with HTTP {status}"
-    );
-    Ok(())
+    let url = format!("{}/health/ready", base.trim_end_matches('/'));
+    let mut last_status = None;
+    for attempt in 1..=60 {
+        match state.client.get(&url).send().await {
+            Ok(response) if response.status().is_success() => return Ok(()),
+            Ok(response) => last_status = Some(response.status().to_string()),
+            Err(error) => last_status = Some(error.to_string()),
+        }
+        if attempt < 60 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    }
+    anyhow::bail!(
+        "{owner} health gate did not pass within 60 seconds ({})",
+        last_status.unwrap_or_else(|| "no response".into())
+    )
 }
 
 async fn project_result(
@@ -471,29 +690,48 @@ async fn project_result(
     operation: &CompositionOperationV1,
     receipt: &InstallationReceiptV1,
 ) -> anyhow::Result<()> {
-    for (path, body) in [
-        (
-            "/api/internal/composition/operations",
-            serde_json::json!({"blueprint_revision": blueprint_revision, "operation": operation}),
-        ),
-        (
-            "/api/internal/composition/receipts",
-            serde_json::json!({"lockfile": lockfile, "receipt": receipt}),
-        ),
-    ] {
-        let status = state
-            .client
-            .post(format!("{}{}", state.core_url.trim_end_matches('/'), path))
-            .header("x-tessara-supervisor-token", &state.projection_token)
-            .json(&body)
-            .send()
-            .await?
-            .status();
-        anyhow::ensure!(
-            status.is_success(),
-            "Core composition projection failed with HTTP {status}"
-        );
-    }
+    project_operation(state, blueprint_revision, operation).await?;
+    let status = state
+        .client
+        .post(format!(
+            "{}/api/internal/composition/receipts",
+            state.core_url.trim_end_matches('/')
+        ))
+        .header("x-tessara-supervisor-token", &state.projection_token)
+        .json(&serde_json::json!({"lockfile": lockfile, "receipt": receipt}))
+        .send()
+        .await?
+        .status();
+    anyhow::ensure!(
+        status.is_success(),
+        "Core composition receipt projection failed with HTTP {status}"
+    );
+    Ok(())
+}
+
+async fn project_operation(
+    state: &AppState,
+    blueprint_revision: u64,
+    operation: &CompositionOperationV1,
+) -> anyhow::Result<()> {
+    let status = state
+        .client
+        .post(format!(
+            "{}/api/internal/composition/operations",
+            state.core_url.trim_end_matches('/')
+        ))
+        .header("x-tessara-supervisor-token", &state.projection_token)
+        .json(&serde_json::json!({
+            "blueprint_revision": blueprint_revision,
+            "operation": operation
+        }))
+        .send()
+        .await?
+        .status();
+    anyhow::ensure!(
+        status.is_success(),
+        "Core composition operation projection failed with HTTP {status}"
+    );
     Ok(())
 }
 
@@ -537,4 +775,93 @@ fn error_response(message: String) -> axum::response::Response {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn digest(byte: char) -> ArtifactDigest {
+        ArtifactDigest::new(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
+    }
+
+    fn component_receipt(changed: bool) -> BootstrapReceiptV1 {
+        BootstrapReceiptV1 {
+            owner: "tessara.components".into(),
+            schema_version: "tessara.io/component-bootstrap/v1".into(),
+            input_digest: digest('1'),
+            result_digest: digest('2'),
+            changed,
+            resource_ids: BTreeMap::from([(
+                "row-count".into(),
+                serde_json::json!({
+                    "reference": {
+                        "installation_id": "01980000-0000-7000-8000-00000000008a",
+                        "owner": {
+                            "kind": "module_instance",
+                            "installation_id": "01980000-0000-7000-8000-00000000008a",
+                            "module_instance_id": "142a1ece-f74b-85f6-8ca0-92f4a02e9409"
+                        },
+                        "resource_type": "tessara.components.component_version",
+                        "resource_id": "01980000-0001-7000-8000-000000000001"
+                    }
+                })
+                .to_string(),
+            )]),
+        }
+    }
+
+    #[test]
+    fn unchanged_provider_receipt_produces_the_same_bound_consumer_request() {
+        let input = BootstrapInputV1::Inline {
+            schema_version: "tessara.io/dashboard-bootstrap/v2".into(),
+            value: serde_json::json!({"placements":[{"component_reference":null}]}),
+            receipt_bindings: vec![tessara_composition::BootstrapReceiptBindingV1 {
+                target_pointer: "/placements/0/component_reference".into(),
+                source_owner: "tessara.components".into(),
+                resource_key: "row-count".into(),
+                value_encoding: tessara_composition::BootstrapReceiptValueEncodingV1::Json,
+            }],
+        };
+        let installation_id = Uuid::parse_str("01980000-0000-7000-8000-00000000008a").unwrap();
+        let first = prepare_bootstrap_request(
+            installation_id,
+            1,
+            "tessara.dashboards",
+            &input,
+            &BTreeMap::from([("tessara.components".into(), component_receipt(true))]),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+        let replay = prepare_bootstrap_request(
+            installation_id,
+            1,
+            "tessara.dashboards",
+            &input,
+            &BTreeMap::from([("tessara.components".into(), component_receipt(false))]),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+
+        assert_eq!(first.input, replay.input);
+        assert_eq!(first.input_digest, replay.input_digest);
+        assert_eq!(first.idempotency_key, replay.idempotency_key);
+        let other_installation = prepare_bootstrap_request(
+            Uuid::new_v4(),
+            1,
+            "tessara.dashboards",
+            &input,
+            &BTreeMap::from([("tessara.components".into(), component_receipt(false))]),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+        assert_ne!(first.idempotency_key, other_installation.idempotency_key);
+        assert!(first.idempotency_key.contains(&installation_id.to_string()));
+        assert_eq!(
+            first
+                .input
+                .pointer("/placements/0/component_reference/reference/resource_type"),
+            Some(&serde_json::json!("tessara.components.component_version"))
+        );
+    }
 }

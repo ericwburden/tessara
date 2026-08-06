@@ -1,9 +1,6 @@
 //! Axum routes for Sprint 6A Core module discovery and platform adapters.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Duration,
-};
+use std::{collections::BTreeMap, time::Duration};
 
 use axum::{
     Json, Router,
@@ -182,6 +179,8 @@ async fn import_deployment_receipt(
             )
         })?;
 
+    let service_identities = crate::module_service_requests::configured_registry()
+        .map_err(|_| ModuleHttpError::Internal("module service identity registry is invalid"))?;
     let mut tx = state.pool.begin().await?;
     let accepted = sqlx::query("INSERT INTO deployment_receipts (installation_id, revision, plan_digest, applied_at, operator_name, idempotency_key, previous_revision, receipt) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (installation_id, revision) DO NOTHING")
         .bind(receipt.installation_id)
@@ -213,8 +212,9 @@ async fn import_deployment_receipt(
     }
 
     // The accepted receipt is the complete current deployment projection.
-    // Rebuild instances from that evidence so modules omitted by a later
-    // receipt cannot remain visible as if they were still deployed.
+    // Rebuild instances and action declarations from that evidence so modules
+    // or actions omitted by a later receipt cannot remain grant-eligible.
+    service::clear_projected_module_actions(&mut tx).await?;
     sqlx::query("DELETE FROM module_instances WHERE installation_id = $1")
         .bind(receipt.installation_id)
         .execute(&mut *tx)
@@ -246,45 +246,17 @@ async fn import_deployment_receipt(
             )
             .await?;
         }
-        for route in &manifest.browser_routes {
-            sqlx::query(
-                "INSERT INTO core_module_action_declarations
-                 (target_definition_id,dependency_binding,functional_contract,action,operation,required_capability)
-                 VALUES ($1,$2,$3,$4,'read',$5)
-                 ON CONFLICT (target_definition_id,dependency_binding,functional_contract,action)
-                 DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability",
-            )
-            .bind(module.definition_id.as_str())
-            .bind(route.dependency_binding.as_str())
-            .bind(route.functional_contract.as_str())
-            .bind(&route.authorization_action)
-            .bind(route.required_capability.as_str())
-            .execute(&mut *tx)
-            .await?;
-        }
-        for route in &manifest.public_api_routes {
-            let operation = match route.operation {
-                tessara_module_contract::AuthorizationGrantOperationV1::Read => "read",
-                tessara_module_contract::AuthorizationGrantOperationV1::Mutation => "mutation",
-            };
-            sqlx::query(
-                "INSERT INTO core_module_action_declarations
-                 (target_definition_id,dependency_binding,functional_contract,action,operation,required_capability)
-                 VALUES ($1,$2,$3,$4,$5,$6)
-                 ON CONFLICT (target_definition_id,dependency_binding,functional_contract,action)
-                 DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability",
-            )
-            .bind(module.definition_id.as_str())
-            .bind(route.dependency_binding.as_str())
-            .bind(route.functional_contract.as_str())
-            .bind(&route.authorization_action)
-            .bind(operation)
-            .bind(route.required_capability.as_str())
-            .execute(&mut *tx)
-            .await?;
-        }
+        service::project_manifest_actions(&mut tx, module.definition_id.as_str(), manifest).await?;
         sqlx::query("INSERT INTO module_instances (id, installation_id, definition_id, release_id, identity_state, data_state, database_name, configuration, route_prefix, installed, deployed, configured, ready, enabled, healthy, last_observed_at) VALUES ($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,true,true,true,$8) ON CONFLICT (installation_id, definition_id) DO UPDATE SET release_id=EXCLUDED.release_id, identity_state='live', data_state='retained', database_name=EXCLUDED.database_name, configuration=EXCLUDED.configuration, route_prefix=EXCLUDED.route_prefix, installed=true, deployed=true, configured=true, ready=true, enabled=true, healthy=true, last_observed_at=EXCLUDED.last_observed_at")
             .bind(module.instance_id).bind(receipt.installation_id).bind(module.definition_id.as_str()).bind(module.release_id).bind(&module.database_name).bind(sqlx::types::Json(&module.configuration)).bind(&module.route_prefix).bind(applied_at).execute(&mut *tx).await?;
+        crate::module_service_requests::project_service_identity(
+            &mut tx,
+            service_identities.as_ref(),
+            module.instance_id,
+            manifest,
+        )
+        .await
+        .map_err(|_| ModuleHttpError::Internal("module service identity projection failed"))?;
     }
     service::ensure_navigation_composition_v2(&mut tx, receipt.installation_id, Uuid::new_v4())
         .await
@@ -725,11 +697,6 @@ fn navigation_policy_rejection_message(error: &NavigationPolicyUpdateError) -> &
 pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleInventoryResponseV1 {
     let deployment = inventory.deployment;
     let deployment_history = inventory.deployment_history;
-    let independent_definition_ids = inventory
-        .modules
-        .iter()
-        .map(|module| module.definition_id.clone())
-        .collect::<BTreeSet<_>>();
     ModuleInventoryResponseV1 {
         schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
         installation: ApplicationInstallationV1 {
@@ -745,7 +712,6 @@ pub(super) fn inventory_response(inventory: ModuleInventoryReadModel) -> ModuleI
         entries: inventory
             .transitions
             .into_iter()
-            .filter(|entry| !independent_definition_ids.contains(&entry.definition_id))
             .map(|entry| entry.normalized_projection)
             .chain(inventory.modules.into_iter().map(independent_entry_value))
             .collect(),

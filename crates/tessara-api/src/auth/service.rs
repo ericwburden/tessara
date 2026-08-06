@@ -253,14 +253,15 @@ fn capability_keys(scopes: &[CapabilityScope]) -> Vec<String> {
 }
 
 fn implied_read_capability(granted: &str) -> Option<String> {
-    if granted == "modules:manage_navigation" {
-        return Some("modules:read".to_string());
+    match granted {
+        "modules:manage_navigation" => Some("modules:read"),
+        "hierarchy:manage" => Some("hierarchy:read"),
+        "forms:manage" => Some("forms:read"),
+        "workflows:manage" => Some("workflows:read"),
+        "datasets:manage" => Some("datasets:read"),
+        _ => None,
     }
-
-    granted
-        .strip_suffix(":manage")
-        .filter(|domain| *domain != "dashboards")
-        .map(|domain| format!("{domain}:read"))
+    .map(str::to_string)
 }
 
 fn implied_capabilities(granted: &str) -> Vec<String> {
@@ -379,6 +380,8 @@ mod tests {
             Some("modules:read")
         );
         assert_eq!(implied_read_capability("dashboards:manage"), None);
+        assert_eq!(implied_read_capability("components:manage"), None);
+        assert_eq!(implied_read_capability("example:manage"), None);
 
         let capabilities = capability_keys(&[CapabilityScope {
             capability: "modules:manage_navigation".to_string(),

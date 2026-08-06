@@ -2366,12 +2366,27 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   test("JavaScript-disabled Component and Dashboard routes preserve native SSR ownership", async ({
     browser,
   }) => {
+    const manageableComponents = await expectJson<Array<{
+      component_id: string;
+      name: string;
+      slug: string;
+      versions: Array<{ publication_state: string }>;
+    }>>(
+      await fixtures.admin.get("/api/admin/components"),
+    );
+    const draftOnly = requireItem(
+      manageableComponents,
+      (component) =>
+        component.versions.some((version) => version.publication_state === "draft") &&
+        !component.versions.some((version) => version.publication_state === "published"),
+      "the canonical Component inventory should contain a manager-visible draft-only definition",
+    );
     await withNoJavaScriptPage(browser, async (page) => {
       await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
       await expectNoJavaScriptRoutes(page, [
         {
           path: "/components",
-          expectedText: "Loading components",
+          expectedText: "Components",
           documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
@@ -2381,7 +2396,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         },
         {
           path: `/components/${fixtures.inScopeComponent.slug}`,
-          expectedText: "Loading configuration",
+          expectedText: fixtures.inScopeComponent.name,
           documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
@@ -2391,12 +2406,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         },
         {
           path: `/components/${fixtures.inScopeComponent.slug}/versions`,
-          expectedText: "Loading component",
+          expectedText: `${fixtures.inScopeComponent.name} versions`,
           documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
           path: `/components/${fixtures.inScopeComponent.slug}/view`,
-          expectedText: "Loading configuration",
+          expectedText: fixtures.inScopeComponent.name,
           documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
@@ -2425,6 +2440,28 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
         },
       ]);
+
+      await page.goto("/components");
+      await expect(page.getByRole("link", { name: "Create Component" })).toBeVisible();
+      await expect(page.getByText(draftOnly.name, { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("link", { name: "Edit" }).first()).toBeVisible();
+      await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
+      await expect(page.getByRole("link", { name: "Versions" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
+    });
+
+    await withNoJavaScriptPage(browser, async (page) => {
+      await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+      await page.goto("/components");
+      await expect(page.getByRole("heading", { level: 1, name: "Components" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Create Component" })).toHaveCount(0);
+      await expect(page.getByText(draftOnly.name, { exact: true })).toHaveCount(0);
+      await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
+      ).toBeVisible();
+      await expect(page.getByRole("link", { name: "Versions" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
     });
   });
 });

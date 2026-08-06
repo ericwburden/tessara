@@ -17,18 +17,18 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::Row;
 use tessara_module_contract::{
-    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AuthorizationGrantOperationV1, AuthorizationGrantV2,
-    BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1, DependencyBindingKey, DeploymentProfile,
-    FunctionalContractId, ModuleDefinitionId, ModuleManifest, NavigationContributionId,
-    NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
-    PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId, ShellContextV1,
-    ShellDocumentStateV1, ShellThemeV1,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
+    AuthorizationGrantV3, BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1,
+    DependencyBindingKey, DeploymentProfile, FunctionalContractId, ModuleManifest,
+    ModuleServicePrincipalV1, NavigationProjectionV1, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId,
+    ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
 };
 use uuid::Uuid;
 
 use crate::{
     auth::AuthenticatedRequest,
-    core_security::{capability_bindings, protocol_signer},
+    core_security::{capability_bindings, protocol_signer, request_correlation_id_or_new},
     db::AppState,
     error::{ApiError, ApiResult},
 };
@@ -61,6 +61,7 @@ async fn dispatch_result(
 ) -> ApiResult<Response> {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
+    let correlation_id = request_correlation_id_or_new(request.headers());
     let installed = installed_modules(&state.pool).await?;
 
     for module in installed {
@@ -87,6 +88,7 @@ async fn dispatch_result(
                 state,
                 actor,
                 &module,
+                correlation_id,
                 AuthorizationRequest {
                     action: &route.authorization_action,
                     dependency_binding: &route.dependency_binding,
@@ -96,7 +98,13 @@ async fn dispatch_result(
                 },
             )
             .await?;
-            let shell = shell_context(actor, &module, &path)?;
+            let navigation = crate::modules::load_context_navigation(
+                state,
+                &actor.account,
+                module.installation_id,
+            )
+            .await?;
+            let shell = shell_context(actor, &module, &path, correlation_id, navigation)?;
             return forward(
                 &module,
                 ForwardRequest {
@@ -123,6 +131,7 @@ async fn dispatch_result(
                 state,
                 actor,
                 &module,
+                correlation_id,
                 AuthorizationRequest {
                     action: &route.authorization_action,
                     dependency_binding: &route.dependency_binding,
@@ -192,6 +201,8 @@ async fn installed_modules(pool: &sqlx::PgPool) -> ApiResult<Vec<InstalledModule
                 instances.ready,instances.healthy
          FROM module_instances instances
          JOIN module_releases releases ON releases.id=instances.release_id
+         JOIN application_installations installations
+           ON installations.id=instances.installation_id AND installations.singleton=true
          WHERE instances.identity_state='live' AND instances.installed
            AND releases.manifest IS NOT NULL
          ORDER BY instances.definition_id",
@@ -229,8 +240,9 @@ async fn module_authorization(
     state: &AppState,
     actor: &AuthenticatedRequest,
     module: &InstalledModule,
+    correlation_id: Uuid,
     request: AuthorizationRequest<'_>,
-) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2>> {
+) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>> {
     let revisions = sqlx::query(
         "SELECT authorization_revision,organization_revision
          FROM core_security_revisions WHERE singleton=true",
@@ -279,13 +291,16 @@ async fn module_authorization(
     }
 
     let now = Utc::now();
-    let grant = AuthorizationGrantV2 {
-        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+    let grant = AuthorizationGrantV3 {
+        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
         installation_id: module.installation_id,
         original_actor_id: actor.account.account_id,
-        presenting_service: ModuleDefinitionId::new("tessara.core")
-            .map_err(|error| ApiError::Internal(error.into()))?,
-        audience_module_instance_id: module.instance_id,
+        correlation_id,
+        presenting_service: ModuleServicePrincipalV1::CoreGateway,
+        audience: AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: module.instance_id,
+            module_definition_id: module.manifest.definition_id.clone(),
+        },
         dependency_binding: request.dependency_binding.clone(),
         functional_contract: request.contract.clone(),
         action: request.action.into(),
@@ -315,28 +330,10 @@ fn shell_context(
     actor: &AuthenticatedRequest,
     module: &InstalledModule,
     path: &str,
+    correlation_id: Uuid,
+    navigation: Vec<NavigationProjectionV1>,
 ) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<ShellContextV1>> {
     let now = Utc::now();
-    let mut navigation = vec![NavigationProjectionV1 {
-        contribution_id: NavigationContributionId::new("tessara.core.home")
-            .map_err(|error| ApiError::Internal(error.into()))?,
-        label: "Home".into(),
-        href: "/".into(),
-    }];
-    for contribution in &module.manifest.navigation {
-        if let Some(route) = module
-            .manifest
-            .browser_routes
-            .iter()
-            .find(|route| route.destination == contribution.destination)
-        {
-            navigation.push(NavigationProjectionV1 {
-                contribution_id: contribution.id.clone(),
-                label: contribution.label.clone(),
-                href: route.path_template.clone(),
-            });
-        }
-    }
     let context = ShellContextV1 {
         schema_version: 1,
         installation_id: module.installation_id,
@@ -352,7 +349,7 @@ fn shell_context(
         return_destination: "/".into(),
         locale: "en-US".into(),
         time_zone: "UTC".into(),
-        correlation_id: Uuid::new_v4(),
+        correlation_id,
         document_state: ShellDocumentStateV1::Active,
         issued_at: now,
         expires_at: now + Duration::seconds(60),
@@ -442,7 +439,7 @@ struct ForwardRequest<'a> {
     query: Option<&'a str>,
     inbound_headers: &'a HeaderMap,
     body: Bytes,
-    grant: Option<&'a tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2>>,
+    grant: Option<&'a tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>>,
     shell: Option<&'a tessara_module_contract::SignedEnvelopeV1<ShellContextV1>>,
     idempotent: bool,
 }
@@ -462,6 +459,10 @@ async fn forward(module: &InstalledModule, request: ForwardRequest<'_>) -> ApiRe
             URL_SAFE_NO_PAD.encode(
                 serde_json::to_vec(grant).map_err(|error| ApiError::Internal(error.into()))?,
             ),
+        );
+        outbound = outbound.header(
+            "x-tessara-correlation-id",
+            grant.payload.correlation_id.to_string(),
         );
     }
     if let Some(shell) = request.shell {
@@ -605,8 +606,22 @@ fn service_endpoint(manifest: &ModuleManifest) -> ApiResult<String> {
     let DeploymentProfile::TessaraOciV1(deployment) = &manifest.deployment;
     let configured = std::env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
         .ok()
-        .and_then(|value| serde_json::from_str::<BTreeMap<String, String>>(&value).ok())
-        .and_then(|map| map.get(&deployment.listen.registration_name).cloned());
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            serde_json::from_str::<BTreeMap<String, String>>(&value)
+                .map_err(|error| ApiError::Internal(error.into()))
+                .and_then(|map| {
+                    map.get(manifest.definition_id.as_str())
+                        .filter(|endpoint| !endpoint.trim().is_empty())
+                        .cloned()
+                        .ok_or_else(|| {
+                            ApiError::ServiceUnavailable(
+                                "module service endpoint is unavailable".into(),
+                            )
+                        })
+                })
+        })
+        .transpose()?;
     Ok(configured
         .unwrap_or_else(|| {
             format!(
@@ -710,6 +725,27 @@ mod tests {
         );
         assert_eq!(idempotency_key(&headers), "dashboard-save-42");
         assert!(!idempotency_key(&HeaderMap::new()).is_empty());
+    }
+
+    #[test]
+    fn request_correlation_preserves_valid_identity_and_replaces_invalid_values() {
+        let expected = Uuid::new_v4();
+        let mut valid = HeaderMap::new();
+        valid.insert(
+            "x-tessara-correlation-id",
+            HeaderValue::from_str(&expected.to_string()).unwrap(),
+        );
+        assert_eq!(request_correlation_id_or_new(&valid), expected);
+
+        for value in [Uuid::nil().to_string(), "not-a-uuid".to_string()] {
+            let mut invalid = HeaderMap::new();
+            invalid.insert(
+                "x-tessara-correlation-id",
+                HeaderValue::from_str(&value).unwrap(),
+            );
+            assert!(!request_correlation_id_or_new(&invalid).is_nil());
+        }
+        assert!(!request_correlation_id_or_new(&HeaderMap::new()).is_nil());
     }
 
     #[test]

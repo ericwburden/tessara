@@ -16,14 +16,14 @@
         "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "platform": "linux",
         "architecture": "amd64",
-        "command": ["/app/component-module", "serve"]
+        "command": ["/usr/local/bin/component-module", "serve"]
       },
       "migration_image": {
         "image_reference": "registry.example/tessara/components@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "platform": "linux",
         "architecture": "amd64",
-        "command": ["/app/component-module", "migrate"]
+        "command": ["/usr/local/bin/component-module", "migrate"]
       },
       "listen": {"protocol":"http","port":8092,"registration_name":"components"},
       "configuration_keys": ["DISPLAY_LABEL", "DATASET_REQUEST_TIMEOUT_SECONDS"],
@@ -106,8 +106,8 @@
   "configuration_schema": {
     "type":"object",
     "properties": {
-      "display_label":{"type":"string","minLength":1,"maxLength":80},
-      "dataset_request_timeout_seconds":{"type":"integer","minimum":1,"maximum":30}
+      "display_label":{"type":"string","minLength":1,"maxLength":80,"default":"Components"},
+      "dataset_request_timeout_seconds":{"type":"integer","minimum":1,"maximum":30,"default":5}
     },
     "required":["display_label","dataset_request_timeout_seconds"],
     "additionalProperties":false
@@ -152,6 +152,7 @@
     {"path_template":"/api/components/{component_ref}/versions/{version_id}/{kind}","method":"GET","required_capability":"components:read","authorization_action":"components.execute","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.component-version","idempotency":"none"},
     {"path_template":"/api/admin/components","method":"POST","required_capability":"components:manage","authorization_action":"components.create","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/components","method":"GET","required_capability":"components:manage","authorization_action":"components.list_manageable","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.authoring","idempotency":"none"},
+    {"path_template":"/api/admin/components/save","method":"POST","required_capability":"components:manage","authorization_action":"components.save","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/components/{component_id}","method":"GET","required_capability":"components:manage","authorization_action":"components.edit","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.authoring","idempotency":"none"},
     {"path_template":"/api/admin/components/{component_id}","method":"PUT","required_capability":"components:manage","authorization_action":"components.update","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/components/{component_id}/versions","method":"POST","required_capability":"components:manage","authorization_action":"components.save_version","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
@@ -164,12 +165,24 @@
     {"path_template":"/api/admin/components/{component_id}/versions/{version_id}/publish","method":"POST","required_capability":"components:manage","authorization_action":"components.publish_version","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
     {"path_template":"/api/admin/components/{component_id}/versions/{version_id}/lifecycle","method":"POST","required_capability":"components:manage","authorization_action":"components.change_lifecycle","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"}
   ],
+  "provided_service_actions": [
+    {"path":"/api/private/components/resolve","method":"POST","authorization_action":"components.resolve","operation":"read","required_capability":"components:read","functional_contract":"tessara.components.component-version"},
+    {"path":"/api/private/components/catalog","method":"POST","authorization_action":"components.catalog","operation":"read","required_capability":"components:read","functional_contract":"tessara.components.component-version"},
+    {"path":"/api/private/components/render","method":"POST","authorization_action":"components.render","operation":"read","required_capability":"components:read","functional_contract":"tessara.components.component-version"}
+  ],
+  "consumed_service_actions": [
+    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.catalog"},
+    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.schema"},
+    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.distinct_values"},
+    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.compatibility"},
+    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.execute"}
+  ],
   "control_projections": [
     {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"}
   ],
   "assets": [
-    {"path":"/component.css","digest":"sha256:012ccfe76a2013f5185a8471f05b8f7b0d530c3faa9390201185ff8dab4c31e7","content_type":"text/css; charset=utf-8"},
-    {"path":"/component-lifecycle.css","digest":"sha256:b69bab58c14330c016d64dc4b4a0bc4340c75c1a3444005f49164c32df16f4c8","content_type":"text/css; charset=utf-8"},
-    {"path":"/component.js","digest":"sha256:1ea3039754aaa23d689e8aa691f8d5cbd4f532d9108a3748dc05fdff4c8e5395","content_type":"text/javascript; charset=utf-8"}
+    {"path":"/component.css","digest":"sha256:389ba2d13693f99119be3ecf455f595a9e7def0918372edbacc1948859e2fbb0","content_type":"text/css; charset=utf-8"},
+    {"path":"/component-lifecycle.css","digest":"sha256:f84262d3386f58d17b9ce5d005bb450aa3e78ee7ece5a4fcca6375571cdbb944","content_type":"text/css; charset=utf-8"},
+    {"path":"/component.js","digest":"sha256:bb248357c4dd36fa141b0eb8c2a7662cd728e8a36f8fd4196f0e14de3413a4a6","content_type":"text/javascript; charset=utf-8"}
   ]
 }

@@ -153,6 +153,10 @@ struct LineComponentConfig {
     smoothing: bool,
     #[serde(default = "default_visual_limit")]
     number_of_points: usize,
+    #[serde(default)]
+    x_axis_label: Option<String>,
+    #[serde(default)]
+    y_axis_label: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -255,6 +259,54 @@ pub(super) fn validate_component_config(
             "Component kind is unsupported",
         )],
     }
+}
+
+pub(super) fn required_field_keys(component_type: &str, config: &Value) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    match component_type {
+        "table" => {
+            let Ok(config) = serde_json::from_value::<TableComponentConfig>(config.clone()) else {
+                return keys;
+            };
+            keys.extend(
+                config
+                    .visible_columns
+                    .iter()
+                    .map(|field| field.field_key().to_string()),
+            );
+            keys.extend(config.filters.iter().map(|filter| filter.field_key.clone()));
+            keys.extend(config.search_fields);
+            if let Some(sort) = config.default_sort {
+                keys.insert(sort.field_key);
+            }
+        }
+        "bar" | "line" | "pie" | "donut" | "stat_card" => {
+            let Ok(config) = VisualComponentConfig::parse(component_type, config) else {
+                return keys;
+            };
+            let shared = config.shared();
+            if shared.summary_type != "row_count" {
+                keys.insert(shared.summary_field.clone());
+            }
+            keys.extend(shared.filters.iter().map(|filter| filter.field_key.clone()));
+            match config {
+                VisualComponentConfig::Bar(config) => {
+                    keys.insert(config.category_field);
+                    keys.extend(config.comparison_field);
+                }
+                VisualComponentConfig::Line(config) => {
+                    keys.insert(config.x_field);
+                }
+                VisualComponentConfig::Pie(config) | VisualComponentConfig::Donut(config) => {
+                    keys.insert(config.category_field);
+                }
+                VisualComponentConfig::StatCard(_) => {}
+            }
+        }
+        _ => {}
+    }
+    keys.retain(|key| !key.trim().is_empty());
+    keys
 }
 
 pub(super) fn validate_version_note(note: &str) -> Vec<ConfigFinding> {
@@ -521,7 +573,7 @@ fn validate_visual(
             );
         }
         VisualComponentConfig::Line(config) => {
-            let _ = config.smoothing;
+            let _ = (config.smoothing, &config.x_axis_label, &config.y_axis_label);
             require_field(&known, &config.x_field, "config.x_field", &mut findings);
             optional_missing_policy(
                 config.x_missing_policy.as_deref(),
@@ -777,6 +829,22 @@ mod tests {
                 .iter()
                 .any(|finding| finding.code == "config.limit.out_of_range")
         );
+    }
+
+    #[test]
+    fn line_contract_retains_axis_titles_and_smoothing() {
+        let config = json!({
+            "summary_field":"label",
+            "summary_type":"count",
+            "x_field":"label",
+            "sort_field":"x",
+            "sort_direction":"asc",
+            "number_of_points":20,
+            "smoothing":true,
+            "x_axis_label":"Program",
+            "y_axis_label":"Responses"
+        });
+        assert!(validate_component_config("line", &config, &fields()).is_empty());
     }
 
     #[test]

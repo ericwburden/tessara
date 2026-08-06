@@ -171,7 +171,7 @@ try {
     Write-Evidence -Path $WasmEvidencePath -Value $wasmResult
     $result | ConvertTo-Json -Depth 20
     if (-not $result.passed) {
-        exit 1
+        throw "Module SDK boundary verification failed; detailed evidence was retained."
     }
 } finally {
     Pop-Location

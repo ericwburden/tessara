@@ -1,4 +1,4 @@
-//! Canonical Sprint 6A transition sources and deterministic normalization.
+//! Exact current Core transition catalog sourced from immutable historical fixtures.
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -103,7 +103,7 @@ pub(crate) enum CatalogContractError {
     },
     #[error("catalog source '{name}' does not match its frozen navigation shape")]
     NavigationShape { name: String },
-    #[error("catalog inputs do not match the seven frozen Sprint 6A sources")]
+    #[error("catalog inputs do not match the exact current Core transition identities")]
     CatalogShape,
     #[error(
         "catalog source '{name}' display name '{actual}' does not match frozen name '{expected}'"
@@ -514,7 +514,6 @@ mod tests {
     #[test]
     fn canonical_catalog_prepares_exact_sources_and_projection_findings() {
         let prepared = prepare_catalog(&canonical_inputs()).expect("canonical catalog prepares");
-        assert_eq!(prepared.len(), 5);
         assert_eq!(
             prepared
                 .iter()

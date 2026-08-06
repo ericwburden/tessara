@@ -12,6 +12,7 @@ mod enrollment;
 pub mod grid_layout;
 mod inventory;
 mod protocol;
+mod service_identity;
 
 pub use dependency::{
     DependencyEvaluationFindingCode, DependencyEvaluationInput, DependencyRelationshipKind,
@@ -40,19 +41,27 @@ pub use inventory::{
     IndependentInstanceV1, IndependentReleaseV1,
 };
 pub use protocol::{
-    AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1, AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+    AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1, AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
     AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS, AUTHORIZATION_READ_MAX_LIFETIME_SECONDS,
-    AuthorizationExchangeRequestV1, AuthorizationExchangeResponseV1,
+    AuthorizationAudienceV1, AuthorizationExchangeRequestV1, AuthorizationExchangeRequestV2,
+    AuthorizationExchangeResponseV1, AuthorizationExchangeResponseV2,
     AuthorizationExchangeValidationError, AuthorizationGrantOperationV1, AuthorizationGrantV2,
-    AuthorizationValidationContextV2, AuthorizationValidationError, CapabilityScopeBindingV1,
-    DelegationBasisV1, ExternalIdentityAssertionV1, MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
-    ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,
+    AuthorizationGrantV3, AuthorizationValidationContextV2, AuthorizationValidationContextV3,
+    AuthorizationValidationError, CapabilityScopeBindingV1, DelegationBasisV1,
+    ExternalIdentityAssertionV1, MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
+    ModuleServicePrincipalV1, ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,
     ModuleServiceRequestValidationError, NavigationProjectionV1, OriginalActorProjectionV1,
     ProtocolEnvelopeError, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
     PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV2,
     SHELL_CONTEXT_MAX_LIFETIME_SECONDS, ShellContextV1, ShellContextValidationContextV1,
     ShellContextValidationError, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
     SignedWindowError, canonical_protocol_signing_bytes,
+};
+pub use service_identity::{
+    MODULE_SERVICE_IDENTITIES_ENVIRONMENT, MODULE_SERVICE_IDENTITY_REGISTRY_SCHEMA_VERSION_V1,
+    ModuleServiceIdentityRegistrationV1, ModuleServiceIdentityRegistryError,
+    ModuleServiceIdentityRegistryV1,
 };
 
 use std::{collections::BTreeSet, fmt, str::FromStr};
@@ -1702,6 +1711,40 @@ pub struct PublicApiRouteDeclaration {
     pub idempotency: PublicApiIdempotency,
 }
 
+/// HTTP method used by a module's private, authenticated service boundary.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum ServiceActionMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+}
+
+/// One private action a provider explicitly exposes to resolved module
+/// consumers. The provider owns the operation and actor capability semantics;
+/// an exchange caller cannot choose either value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProvidedServiceActionDeclaration {
+    pub path: String,
+    pub method: ServiceActionMethod,
+    pub authorization_action: String,
+    pub operation: AuthorizationGrantOperationV1,
+    pub required_capability: SecurityCapabilityId,
+    pub functional_contract: FunctionalContractId,
+}
+
+/// One action a consumer may request through a declared and lockfile-resolved
+/// dependency binding.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConsumedServiceActionDeclaration {
+    pub dependency_binding: DependencyBindingKey,
+    pub functional_contract: FunctionalContractId,
+    pub authorization_action: String,
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PublicApiIdempotency {
@@ -1769,6 +1812,10 @@ pub struct ModuleManifest {
     pub browser_lifecycle: Option<BrowserLifecycleDeclaration>,
     #[serde(default)]
     pub public_api_routes: Vec<PublicApiRouteDeclaration>,
+    #[serde(default)]
+    pub provided_service_actions: Vec<ProvidedServiceActionDeclaration>,
+    #[serde(default)]
+    pub consumed_service_actions: Vec<ConsumedServiceActionDeclaration>,
     #[serde(default)]
     pub control_projections: Vec<ControlProjectionDeclaration>,
     #[serde(default)]
@@ -2701,6 +2748,16 @@ fn validate_manifest_links(manifest: &ModuleManifest, findings: &mut Vec<Validat
         .iter()
         .map(|contract| contract.id.as_str())
         .collect::<BTreeSet<_>>();
+    let dependencies = manifest
+        .dependencies
+        .iter()
+        .map(|dependency| {
+            (
+                dependency.binding_key.as_str(),
+                dependency.contract_id.as_str(),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
     let mut browser_paths: Vec<&str> = Vec::new();
     for (index, browser_route) in manifest.browser_routes.iter().enumerate() {
         let base = format!("browser_routes[{index}]");
@@ -2827,6 +2884,91 @@ fn validate_manifest_links(manifest: &ModuleManifest, findings: &mut Vec<Validat
                 message: "idempotency headers are declared only for mutation routes".into(),
             });
         }
+    }
+    let mut provided_service_routes = BTreeSet::new();
+    let mut provided_service_actions = BTreeSet::new();
+    for (index, action) in manifest.provided_service_actions.iter().enumerate() {
+        let base = format!("provided_service_actions[{index}]");
+        if !provided_service_routes.insert((action.method, action.path.as_str())) {
+            findings.push(ValidationFinding {
+                code: "duplicate_provided_service_route".into(),
+                path: base.clone(),
+                message: "provided service method and path must be unique".into(),
+            });
+        }
+        if !provided_service_actions.insert((
+            action.functional_contract.as_str(),
+            action.authorization_action.as_str(),
+        )) {
+            findings.push(ValidationFinding {
+                code: "duplicate_provided_service_action".into(),
+                path: base.clone(),
+                message: "provided service contract and authorization action must be unique".into(),
+            });
+        }
+        if !action.path.starts_with("/api/private/") || action.path.contains("..") {
+            findings.push(ValidationFinding {
+                code: "invalid_provided_service_path".into(),
+                path: format!("{base}.path"),
+                message: "provided service actions require local /api/private paths".into(),
+            });
+        }
+        if !capability_ids.contains(action.required_capability.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_provided_service_capability".into(),
+                path: format!("{base}.required_capability"),
+                message: "provided service capability must be declared by the manifest".into(),
+            });
+        }
+        if !contract_ids.contains(action.functional_contract.as_str()) {
+            findings.push(ValidationFinding {
+                code: "unresolved_provided_service_contract".into(),
+                path: format!("{base}.functional_contract"),
+                message: "provided service contract must be provided by the manifest".into(),
+            });
+        }
+        require_text(
+            &format!("{base}.authorization_action"),
+            &action.authorization_action,
+            findings,
+        );
+    }
+    let mut consumed_service_actions = BTreeSet::new();
+    for (index, action) in manifest.consumed_service_actions.iter().enumerate() {
+        let base = format!("consumed_service_actions[{index}]");
+        if !consumed_service_actions.insert((
+            action.dependency_binding.as_str(),
+            action.functional_contract.as_str(),
+            action.authorization_action.as_str(),
+        )) {
+            findings.push(ValidationFinding {
+                code: "duplicate_consumed_service_action".into(),
+                path: base.clone(),
+                message:
+                    "consumed service binding, contract, and authorization action must be unique"
+                        .into(),
+            });
+        }
+        match dependencies.get(action.dependency_binding.as_str()) {
+            None => findings.push(ValidationFinding {
+                code: "unresolved_consumed_service_dependency".into(),
+                path: format!("{base}.dependency_binding"),
+                message: "consumed service action must name a declared dependency binding".into(),
+            }),
+            Some(contract_id) if *contract_id != action.functional_contract.as_str() => {
+                findings.push(ValidationFinding {
+                    code: "mismatched_consumed_service_contract".into(),
+                    path: format!("{base}.functional_contract"),
+                    message: "consumed service contract must match the declared dependency".into(),
+                });
+            }
+            Some(_) => {}
+        }
+        require_text(
+            &format!("{base}.authorization_action"),
+            &action.authorization_action,
+            findings,
+        );
     }
     let mut projection_kinds = BTreeSet::new();
     for (index, projection) in manifest.control_projections.iter().enumerate() {
@@ -3401,6 +3543,8 @@ mod tests {
             browser_routes: Vec::new(),
             browser_lifecycle: None,
             public_api_routes: Vec::new(),
+            provided_service_actions: Vec::new(),
+            consumed_service_actions: Vec::new(),
             control_projections: Vec::new(),
             assets: Vec::new(),
             navigation: transition.navigation,
@@ -3562,6 +3706,56 @@ mod tests {
         assert_eq!(json["deployment"]["profile"], "tessara-oci-v1");
         let decoded: ModuleManifest = serde_json::from_value(json).expect("deserialize manifest");
         assert_eq!(decoded, manifest);
+    }
+
+    #[test]
+    fn service_actions_are_provider_declared_and_dependency_bound() {
+        let mut manifest = forms_manifest();
+        manifest.dependencies.push(FunctionalDependency {
+            contract_id: id("tessara.datasets.dataset-major-line"),
+            version_requirement: VersionReq::parse("=1.0.0").unwrap(),
+            binding_key: id("tessara.forms.dataset-major-line"),
+            optional: false,
+        });
+        manifest
+            .provided_service_actions
+            .push(ProvidedServiceActionDeclaration {
+                path: "/api/private/forms/resolve".into(),
+                method: ServiceActionMethod::Post,
+                authorization_action: "forms.resolve".into(),
+                operation: AuthorizationGrantOperationV1::Read,
+                required_capability: id("forms:read"),
+                functional_contract: id("tessara.forms.form-version"),
+            });
+        manifest
+            .consumed_service_actions
+            .push(ConsumedServiceActionDeclaration {
+                dependency_binding: id("tessara.forms.dataset-major-line"),
+                functional_contract: id("tessara.datasets.dataset-major-line"),
+                authorization_action: "datasets.schema".into(),
+            });
+        manifest
+            .validate(&forms_authority())
+            .expect("exact service declarations are valid");
+        let wire = serde_json::to_value(&manifest).unwrap();
+        assert_eq!(
+            wire["provided_service_actions"][0]["authorization_action"],
+            "forms.resolve"
+        );
+        assert_eq!(
+            wire["consumed_service_actions"][0]["dependency_binding"],
+            "tessara.forms.dataset-major-line"
+        );
+
+        manifest.consumed_service_actions[0].functional_contract =
+            id("tessara.datasets.other-contract");
+        let error = manifest
+            .validate(&forms_authority())
+            .expect_err("consumer contract cannot differ from its dependency");
+        assert!(error.findings.iter().any(|finding| {
+            finding.code == "mismatched_consumed_service_contract"
+                && finding.path == "consumed_service_actions[0].functional_contract"
+        }));
     }
 
     #[test]

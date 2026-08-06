@@ -11,11 +11,6 @@ use crate::ui::AppShell;
 
 pub const MODULE_OUTLET_ID: &str = "tessara-module-outlet";
 
-#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-pub fn deactivate_current() {
-    leptos::task::spawn_local(browser::deactivate());
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(
     not(all(feature = "hydrate", target_arch = "wasm32")),
@@ -28,12 +23,7 @@ enum HostState {
 }
 
 #[component]
-pub fn ModuleLifecyclePage(
-    active_route: &'static str,
-    title: &'static str,
-    product_name: &'static str,
-    definition_id: &'static str,
-) -> impl IntoView {
+pub fn ModuleLifecyclePage() -> impl IntoView {
     let state = RwSignal::new(HostState::Loading);
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     let activation_revision = Arc::new(AtomicU64::new(0));
@@ -66,34 +56,36 @@ pub fn ModuleLifecyclePage(
                 }
             });
         });
-        on_cleanup(move || cleanup_page_active.store(false, Ordering::Relaxed));
+        on_cleanup(move || {
+            cleanup_page_active.store(false, Ordering::Relaxed);
+            leptos::task::spawn_local(browser::deactivate());
+        });
     }
 
     view! {
-        <AppShell active_route title=title>
+        <AppShell active_route="module" title="Module">
             <section class="module-lifecycle-host">
                 {move || match state.get() {
                     HostState::Loading => view! {
                         <section class="route-panel module-lifecycle-state" role="status">
-                            <p class="eyebrow">{product_name}</p>
+                            <p class="eyebrow">"Module"</p>
                             <h1>"Loading module"</h1>
-                            <p>{format!("Preparing the active {product_name} release.")}</p>
+                            <p>"Preparing the enrolled module release."</p>
                         </section>
                     }.into_any(),
                     HostState::Active => ().into_any(),
                     HostState::Failed(message) => view! {
                         <section class="route-panel module-lifecycle-state" role="alert">
                             <p class="eyebrow">"Module unavailable"</p>
-                            <h1>{format!("{product_name} could not be opened")}</h1>
+                            <h1>"Module could not be opened"</h1>
                             <p>{message}</p>
-                            <p><a class="button" rel="external" href=browser::document_fallback_href>{format!("Reload {product_name}")}</a></p>
+                            <p><a class="button" rel="external" href=browser::document_fallback_href>"Reload module"</a></p>
                         </section>
                     }.into_any(),
                 }}
                 <section
                     id=MODULE_OUTLET_ID
                     class="module-lifecycle-outlet"
-                    data-module-definition=definition_id
                     aria-busy=move || (state.get() == HostState::Loading).to_string()
                 ></section>
             </section>
@@ -532,6 +524,8 @@ mod browser {
             document.set_title(&format!("{} · Tessara", bootstrap.title));
             if let Some(outlet) = document.get_element_by_id(MODULE_OUTLET_ID) {
                 let _ = outlet.set_attribute("aria-busy", "false");
+                let _ = outlet
+                    .set_attribute("data-module-definition", bootstrap.definition_id.as_str());
                 let _ = outlet.set_attribute(
                     "data-module-release",
                     &bootstrap.release_version.to_string(),

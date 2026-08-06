@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+pub use tessara_datasets_contract::{DatasetProvenanceItem, DatasetProvenanceSummary};
 use uuid::Uuid;
 
 /// Payload for creating or replacing a dataset definition and revision.
@@ -273,21 +274,6 @@ pub struct DatasetDefinition {
     pub(crate) sources: Vec<DatasetSourceDefinition>,
     pub(crate) fields: Vec<DatasetFieldDefinition>,
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
-}
-
-/// Searchable direct-source provenance for Dataset catalog surfaces.
-#[derive(Clone, Default, Serialize)]
-pub struct DatasetProvenanceSummary {
-    pub(crate) forms: Vec<DatasetProvenanceItem>,
-    pub(crate) datasets: Vec<DatasetProvenanceItem>,
-}
-
-/// One compact upstream source reference for Dataset provenance.
-#[derive(Clone, Serialize)]
-pub struct DatasetProvenanceItem {
-    pub(crate) id: Uuid,
-    pub(crate) name: String,
-    pub(crate) slug: Option<String>,
 }
 
 /// Recursive upstream lineage for a dataset detail provenance tree.

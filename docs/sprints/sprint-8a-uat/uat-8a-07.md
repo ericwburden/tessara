@@ -3,14 +3,16 @@
 ## 1. Test Script Summary
 
 - System / Module: Sprint 8A deployment workflow
-- Requirement: Sprint 8A AC-15
-- Environment: Disposable Sprint 8A validation topology
+- Requirement: Sprint 8A AC-13
+- Environment: Frozen Sprint 8A UAT candidate on the coordinator-authorized disposable topology
 - User role: Operator
 - Scenario: Induce a bounded owner-bootstrap failure, review retained evidence, and create a new healthy attempt from empty.
 - Acceptance: Raw failure evidence is retained before exact teardown; no partial topology remains; the successor starts empty and becomes healthy.
 
 ## 2. Before You Start
 
+- Coordinator bindings: candidate fingerprint __________; environment fingerprint __________; preflight receipt SHA-256 __________; SIT result receipt SHA-256 __________.
+- Evidence folder and execution start time: ____________________
 - Confirm the approved bounded fault and exact disposable project authorization.
 - Record the fault and expected failing prerequisite: ____________________
 
@@ -28,5 +30,6 @@
 - Overall result: Pass / Fail / Blocked
 - Tester / date: ____________________
 - Defect IDs or comments: ____________________
+- Evidence paths and execution end time: ____________________
+- Cleanup/restoration result: ____________________
 - Acceptance decision: Accepted / Not Accepted / Accepted with defects
-

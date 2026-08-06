@@ -16,6 +16,7 @@ use uuid::Uuid;
 pub const COMPONENT_CONTRACT_SCHEMA_VERSION: u16 = 3;
 pub const COMPONENT_CONTRACT_VERSION: &str = "3.0.0";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
+pub const COMPONENT_MODULE_DEFINITION_ID: &str = "tessara.components";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
 pub const COMPONENT_RESOURCE_TYPE: &str = "tessara.components.component_version";
 

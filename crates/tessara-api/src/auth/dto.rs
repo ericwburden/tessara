@@ -176,16 +176,15 @@ impl From<AccountContext> for SessionAccountResponse {
 }
 
 pub fn implied_manage_capability(required: &str) -> Option<String> {
-    if required == "modules:read" {
-        return Some("modules:manage_navigation".to_string());
+    match required {
+        "modules:read" => Some("modules:manage_navigation"),
+        "hierarchy:read" => Some("hierarchy:manage"),
+        "forms:read" => Some("forms:manage"),
+        "workflows:read" => Some("workflows:manage"),
+        "datasets:read" => Some("datasets:manage"),
+        _ => None,
     }
-
-    let domain = required.strip_suffix(":read")?;
-    // Dashboard composition intentionally supports internal managers who do
-    // not also receive the product-facing reader directory/viewer surface.
-    // Other established feature areas retain the historical manage=>read
-    // implication.
-    (domain != "dashboards").then(|| format!("{domain}:manage"))
+    .map(str::to_string)
 }
 
 pub fn capability_implies(granted: &str, required: &str) -> bool {
@@ -203,11 +202,13 @@ mod tests {
     use super::{AccountContext, CapabilityScope, implied_manage_capability};
 
     #[test]
-    fn dashboard_manage_does_not_imply_product_reader_access() {
+    fn independently_enrolled_module_capabilities_have_no_core_invented_implications() {
         assert_eq!(implied_manage_capability("dashboards:read"), None);
+        assert_eq!(implied_manage_capability("components:read"), None);
+        assert_eq!(implied_manage_capability("example:read"), None);
         assert_eq!(
-            implied_manage_capability("components:read").as_deref(),
-            Some("components:manage")
+            implied_manage_capability("datasets:read").as_deref(),
+            Some("datasets:manage")
         );
     }
 

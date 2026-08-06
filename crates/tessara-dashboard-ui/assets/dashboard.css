@@ -1000,23 +1000,6 @@
   margin-top: auto;
 }
 
-.module-transition-binding-note {
-  display: grid;
-  gap: 0.35rem;
-  margin: 1rem;
-  border: 1px solid var(--semantic-warning-border);
-  border-radius: var(--radius);
-  background: var(--semantic-warning-soft);
-  padding: 0.75rem;
-}
-
-.module-transition-binding-note p {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: 0.78rem;
-  line-height: 1.5;
-}
-
 .dashboard-module-unavailable {
   min-height: calc(100vh - 8rem);
 }

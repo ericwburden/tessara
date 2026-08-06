@@ -74,11 +74,44 @@ pub enum BootstrapInputV1 {
     Inline {
         schema_version: String,
         value: Value,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        receipt_bindings: Vec<BootstrapReceiptBindingV1>,
     },
     LocalCas {
         schema_version: String,
         digest: ArtifactDigest,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        receipt_bindings: Vec<BootstrapReceiptBindingV1>,
     },
+}
+
+impl BootstrapInputV1 {
+    pub fn receipt_bindings(&self) -> &[BootstrapReceiptBindingV1] {
+        match self {
+            Self::Inline {
+                receipt_bindings, ..
+            }
+            | Self::LocalCas {
+                receipt_bindings, ..
+            } => receipt_bindings,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BootstrapReceiptBindingV1 {
+    pub target_pointer: String,
+    pub source_owner: String,
+    pub resource_key: String,
+    pub value_encoding: BootstrapReceiptValueEncodingV1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BootstrapReceiptValueEncodingV1 {
+    String,
+    Json,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -650,6 +683,67 @@ pub fn acquire_bootstrap_input(
     }
 }
 
+pub fn resolve_bootstrap_receipt_bindings(
+    mut input: Value,
+    bindings: &[BootstrapReceiptBindingV1],
+    receipts: &BTreeMap<String, BootstrapReceiptV1>,
+) -> Result<Value, BootstrapBindingError> {
+    let mut targets = BTreeSet::new();
+    for binding in bindings {
+        if !binding.target_pointer.starts_with('/') {
+            return Err(BootstrapBindingError::InvalidTargetPointer {
+                target_pointer: binding.target_pointer.clone(),
+            });
+        }
+        if !targets.insert(binding.target_pointer.as_str()) {
+            return Err(BootstrapBindingError::DuplicateTargetPointer {
+                target_pointer: binding.target_pointer.clone(),
+            });
+        }
+        let receipt = receipts.get(&binding.source_owner).ok_or_else(|| {
+            BootstrapBindingError::ReceiptMissing {
+                source_owner: binding.source_owner.clone(),
+            }
+        })?;
+        if receipt.owner != binding.source_owner {
+            return Err(BootstrapBindingError::ReceiptOwnerMismatch {
+                source_owner: binding.source_owner.clone(),
+                receipt_owner: receipt.owner.clone(),
+            });
+        }
+        let resource = receipt
+            .resource_ids
+            .get(&binding.resource_key)
+            .ok_or_else(|| BootstrapBindingError::ResourceMissing {
+                source_owner: binding.source_owner.clone(),
+                resource_key: binding.resource_key.clone(),
+            })?;
+        let resolved = match binding.value_encoding {
+            BootstrapReceiptValueEncodingV1::String => Value::String(resource.clone()),
+            BootstrapReceiptValueEncodingV1::Json => {
+                serde_json::from_str(resource).map_err(|_| {
+                    BootstrapBindingError::ResourceJsonInvalid {
+                        source_owner: binding.source_owner.clone(),
+                        resource_key: binding.resource_key.clone(),
+                    }
+                })?
+            }
+        };
+        let target = input.pointer_mut(&binding.target_pointer).ok_or_else(|| {
+            BootstrapBindingError::TargetMissing {
+                target_pointer: binding.target_pointer.clone(),
+            }
+        })?;
+        if !target.is_null() {
+            return Err(BootstrapBindingError::TargetOccupied {
+                target_pointer: binding.target_pointer.clone(),
+            });
+        }
+        *target = resolved;
+    }
+    Ok(input)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum BootstrapAcquisitionError {
     #[error("inline bootstrap canonicalization failed: {0}")]
@@ -665,11 +759,69 @@ pub enum BootstrapAcquisitionError {
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum BootstrapBindingError {
+    #[error("bootstrap receipt binding target '{target_pointer}' is not an RFC 6901 JSON pointer")]
+    InvalidTargetPointer { target_pointer: String },
+    #[error("bootstrap receipt binding target '{target_pointer}' is declared more than once")]
+    DuplicateTargetPointer { target_pointer: String },
+    #[error("bootstrap receipt for prior owner '{source_owner}' is unavailable")]
+    ReceiptMissing { source_owner: String },
+    #[error(
+        "bootstrap receipt indexed for owner '{source_owner}' declares owner '{receipt_owner}'"
+    )]
+    ReceiptOwnerMismatch {
+        source_owner: String,
+        receipt_owner: String,
+    },
+    #[error("bootstrap receipt for owner '{source_owner}' has no resource '{resource_key}'")]
+    ResourceMissing {
+        source_owner: String,
+        resource_key: String,
+    },
+    #[error(
+        "bootstrap receipt resource '{source_owner}/{resource_key}' is not valid JSON as declared"
+    )]
+    ResourceJsonInvalid {
+        source_owner: String,
+        resource_key: String,
+    },
+    #[error("bootstrap receipt binding target '{target_pointer}' does not exist")]
+    TargetMissing { target_pointer: String },
+    #[error("bootstrap receipt binding target '{target_pointer}' must be null before resolution")]
+    TargetOccupied { target_pointer: String },
+}
+
 pub fn resolve(
     blueprint: &ApplicationBlueprintV1,
     catalog: &ReleaseCatalogV1,
 ) -> Result<ApplicationLockfileV1, CompositionError> {
+    resolve_against(blueprint, catalog, None)
+}
+
+/// Resolves a Blueprint against the exact currently applied lockfile.
+///
+/// The first materialization intentionally emits the complete installation
+/// plan. Later revisions emit only the semantic delta plus read-back. This is
+/// what keeps a one-module upgrade from reconfiguring, bootstrapping, or
+/// reprojecting unrelated owners merely because the Blueprint remains a
+/// complete desired-state document.
+pub fn resolve_against(
+    blueprint: &ApplicationBlueprintV1,
+    catalog: &ReleaseCatalogV1,
+    current: Option<&ApplicationLockfileV1>,
+) -> Result<ApplicationLockfileV1, CompositionError> {
     let mut findings = validate_blueprint(blueprint, catalog);
+    if let Some(current) = current
+        && current.installation_id != blueprint.installation_id
+    {
+        push_error(
+            &mut findings,
+            "current_lockfile_installation_mismatch",
+            "/installation_id",
+            "the current lockfile belongs to another installation",
+        );
+    }
     if !findings.is_empty() {
         findings.sort_by(|a, b| (&a.path, &a.code).cmp(&(&b.path, &b.code)));
         return Err(CompositionError { findings });
@@ -689,7 +841,7 @@ pub fn resolve(
     debug_assert!(core.capability_floor.is_subset(&role.capabilities));
 
     let mut modules = Vec::new();
-    for selection in sorted_module_selections(&blueprint.modules) {
+    for selection in ordered_module_selections(blueprint, catalog) {
         let release = select_module(selection, catalog).expect("validated module selection");
         let mut bindings = BTreeMap::new();
         for dependency in &release.dependencies {
@@ -740,7 +892,10 @@ pub fn resolve(
         bootstrap: blueprint.core.bootstrap.clone(),
         bootstrap_digest: core_bootstrap_digest,
     };
-    let actions = materialization_actions(&resolved_core, &modules);
+    let actions = current.map_or_else(
+        || materialization_actions(&resolved_core, &modules),
+        |current| delta_materialization_actions(current, &resolved_core, &modules),
+    );
     let plan = MaterializationPlanV1 {
         api_version: PLAN_API_V1.into(),
         installation_id: blueprint.installation_id,
@@ -800,6 +955,9 @@ pub fn semantic_diff(
             current.core.version, desired.core.version
         ));
     }
+    if current.core.bootstrap_digest != desired.core.bootstrap_digest {
+        changes.push("core:bootstrap".into());
+    }
     let current_modules = current
         .modules
         .iter()
@@ -823,6 +981,9 @@ pub fn semantic_diff(
             )),
             Some(old) if old.configuration_digest != module.configuration_digest => {
                 changes.push(format!("module:configure:{definition}"))
+            }
+            Some(old) if old.bootstrap_digest != module.bootstrap_digest => {
+                changes.push(format!("module:bootstrap:{definition}"))
             }
             _ => {}
         }
@@ -871,6 +1032,13 @@ fn validate_blueprint(
             "revision must be greater than zero",
         );
     }
+    validate_bootstrap_bindings(
+        blueprint.core.bootstrap.as_ref(),
+        "/core/bootstrap",
+        None,
+        &BTreeMap::new(),
+        &mut findings,
+    );
     let core = catalog
         .core_releases
         .iter()
@@ -906,6 +1074,17 @@ fn validate_blueprint(
         _ => {}
     }
     let mut definitions = BTreeSet::new();
+    let mut selected_bootstrap_owners = blueprint
+        .modules
+        .iter()
+        .map(|selection| {
+            (
+                selection.definition_id.as_str(),
+                selection.bootstrap.is_some(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    selected_bootstrap_owners.insert("core", blueprint.core.bootstrap.is_some());
     for (index, selection) in blueprint.modules.iter().enumerate() {
         let base = format!("/modules/{index}");
         if !definitions.insert(&selection.definition_id) {
@@ -973,6 +1152,13 @@ fn validate_blueprint(
                 "the selected release does not declare a bootstrap contract",
             );
         }
+        validate_bootstrap_bindings(
+            selection.bootstrap.as_ref(),
+            &format!("{base}/bootstrap"),
+            Some(selection.definition_id.as_str()),
+            &selected_bootstrap_owners,
+            &mut findings,
+        );
     }
     validate_module_cycles(blueprint, catalog, &mut findings);
     let mut secret_names = BTreeSet::new();
@@ -991,6 +1177,84 @@ fn validate_blueprint(
         }
     }
     findings
+}
+
+fn validate_bootstrap_bindings(
+    input: Option<&BootstrapInputV1>,
+    path: &str,
+    consumer_owner: Option<&str>,
+    selected_bootstrap_owners: &BTreeMap<&str, bool>,
+    findings: &mut Vec<CompositionFindingV1>,
+) {
+    let Some(input) = input else {
+        return;
+    };
+    let mut targets = BTreeSet::new();
+    for (index, binding) in input.receipt_bindings().iter().enumerate() {
+        let binding_path = format!("{path}/receipt_bindings/{index}");
+        if !binding.target_pointer.starts_with('/') {
+            push_error(
+                findings,
+                "bootstrap_binding_target_invalid",
+                format!("{binding_path}/target_pointer"),
+                "receipt binding targets must be RFC 6901 JSON pointers below the input root",
+            );
+        } else if !targets.insert(binding.target_pointer.as_str()) {
+            push_error(
+                findings,
+                "bootstrap_binding_target_duplicate",
+                format!("{binding_path}/target_pointer"),
+                "each bootstrap input target may be bound only once",
+            );
+        }
+        if let BootstrapInputV1::Inline { value, .. } = input
+            && binding.target_pointer.starts_with('/')
+        {
+            match value.pointer(&binding.target_pointer) {
+                None => push_error(
+                    findings,
+                    "bootstrap_binding_target_missing",
+                    format!("{binding_path}/target_pointer"),
+                    "receipt binding targets must exist in the locked bootstrap input",
+                ),
+                Some(target) if !target.is_null() => push_error(
+                    findings,
+                    "bootstrap_binding_target_occupied",
+                    format!("{binding_path}/target_pointer"),
+                    "receipt binding targets must be null before resolution",
+                ),
+                Some(_) => {}
+            }
+        }
+        if binding.resource_key.trim().is_empty() {
+            push_error(
+                findings,
+                "bootstrap_binding_resource_key_invalid",
+                format!("{binding_path}/resource_key"),
+                "receipt resource keys must be non-empty",
+            );
+        }
+        let source_is_available = consumer_owner.is_some()
+            && selected_bootstrap_owners
+                .get(binding.source_owner.as_str())
+                .copied()
+                == Some(true);
+        if !source_is_available {
+            push_error(
+                findings,
+                "bootstrap_binding_source_unavailable",
+                format!("{binding_path}/source_owner"),
+                "receipt binding sources must identify Core or a selected module with bootstrap input",
+            );
+        } else if consumer_owner == Some(binding.source_owner.as_str()) {
+            push_error(
+                findings,
+                "bootstrap_binding_self_reference",
+                format!("{binding_path}/source_owner"),
+                "an owner cannot bind its input from its own bootstrap receipt",
+            );
+        }
+    }
 }
 
 fn validate_module_cycles(
@@ -1016,6 +1280,16 @@ fn validate_module_cycles(
                     .entry(&selection.definition_id)
                     .or_default()
                     .push(provider);
+            }
+        }
+        if let Some(bootstrap) = &selection.bootstrap {
+            for binding in bootstrap.receipt_bindings() {
+                if selected.contains_key(binding.source_owner.as_str()) {
+                    edges
+                        .entry(&selection.definition_id)
+                        .or_default()
+                        .push(binding.source_owner.as_str());
+                }
             }
         }
     }
@@ -1046,17 +1320,78 @@ fn validate_module_cycles(
                 findings,
                 "dependency_cycle",
                 "/modules",
-                "selected module dependency bindings contain a cycle",
+                "selected module dependency or bootstrap receipt bindings contain a cycle",
             );
             break;
         }
     }
 }
 
-fn sorted_module_selections(modules: &[ModuleSelectionV1]) -> Vec<&ModuleSelectionV1> {
-    let mut modules = modules.iter().collect::<Vec<_>>();
-    modules.sort_by(|a, b| a.definition_id.cmp(&b.definition_id));
-    modules
+fn ordered_module_selections<'a>(
+    blueprint: &'a ApplicationBlueprintV1,
+    catalog: &ReleaseCatalogV1,
+) -> Vec<&'a ModuleSelectionV1> {
+    let selected = blueprint
+        .modules
+        .iter()
+        .map(|selection| (selection.definition_id.as_str(), selection))
+        .collect::<BTreeMap<_, _>>();
+    let mut dependents = BTreeMap::<&str, BTreeSet<&str>>::new();
+    let mut prerequisites = selected
+        .keys()
+        .map(|definition| (*definition, BTreeSet::new()))
+        .collect::<BTreeMap<_, _>>();
+    for (consumer, selection) in &selected {
+        let mut providers = BTreeSet::new();
+        if let Some(release) = select_module(selection, catalog) {
+            for dependency in &release.dependencies {
+                if let Some(provider) = selection.dependency_bindings.get(&dependency.binding_key)
+                    && selected.contains_key(provider.as_str())
+                {
+                    providers.insert(provider.as_str());
+                }
+            }
+        }
+        if let Some(bootstrap) = &selection.bootstrap {
+            providers.extend(
+                bootstrap
+                    .receipt_bindings()
+                    .iter()
+                    .map(|binding| binding.source_owner.as_str())
+                    .filter(|provider| selected.contains_key(provider)),
+            );
+        }
+        for provider in providers {
+            prerequisites
+                .get_mut(consumer)
+                .expect("selected consumer")
+                .insert(provider);
+            dependents.entry(provider).or_default().insert(consumer);
+        }
+    }
+    let mut ready = prerequisites
+        .iter()
+        .filter_map(|(definition, providers)| providers.is_empty().then_some(*definition))
+        .collect::<BTreeSet<_>>();
+    let mut ordered = Vec::with_capacity(selected.len());
+    while let Some(definition) = ready.pop_first() {
+        ordered.push(selected[definition]);
+        if let Some(consumers) = dependents.get(definition) {
+            for consumer in consumers {
+                let providers = prerequisites.get_mut(consumer).expect("selected consumer");
+                providers.remove(definition);
+                if providers.is_empty() {
+                    ready.insert(consumer);
+                }
+            }
+        }
+    }
+    debug_assert_eq!(
+        ordered.len(),
+        selected.len(),
+        "validated module graph is acyclic"
+    );
+    ordered
 }
 
 fn select_module<'a>(
@@ -1166,6 +1501,158 @@ fn materialization_actions(
     actions.push(MaterializationActionV1::SwitchTraffic {
         owner: "core".into(),
     });
+    actions.push(MaterializationActionV1::VerifyReadBack);
+    actions
+}
+
+fn delta_materialization_actions(
+    current: &ApplicationLockfileV1,
+    desired_core: &ResolvedCoreReleaseV1,
+    desired_modules: &[ResolvedModuleReleaseV1],
+) -> Vec<MaterializationActionV1> {
+    let mut actions = Vec::new();
+
+    let core_release_changed = current.core.version != desired_core.version
+        || current.core.core_image != desired_core.core_image
+        || current.core.gateway_image != desired_core.gateway_image
+        || current.core.database_image != desired_core.database_image
+        || current.core.deployment_profile != desired_core.deployment_profile
+        || current.core.configuration_schema_version != desired_core.configuration_schema_version;
+    if current.core.database_image != desired_core.database_image {
+        actions.push(MaterializationActionV1::AcquireImage {
+            component: "database".into(),
+            digest: desired_core.database_image.clone(),
+        });
+    }
+    if current.core.core_image != desired_core.core_image {
+        actions.push(MaterializationActionV1::AcquireImage {
+            component: "core".into(),
+            digest: desired_core.core_image.clone(),
+        });
+    }
+    if current.core.gateway_image != desired_core.gateway_image {
+        actions.push(MaterializationActionV1::AcquireImage {
+            component: "gateway".into(),
+            digest: desired_core.gateway_image.clone(),
+        });
+    }
+    if core_release_changed {
+        actions.push(MaterializationActionV1::Migrate {
+            owner: "core".into(),
+            image: desired_core.core_image.clone(),
+        });
+    }
+    let core_configuration_changed =
+        current.core.configuration_digest != desired_core.configuration_digest;
+    if core_configuration_changed {
+        actions.push(MaterializationActionV1::Configure {
+            owner: "core".into(),
+            digest: desired_core.configuration_digest.clone(),
+        });
+    }
+    let core_bootstrap_changed = current.core.bootstrap_digest != desired_core.bootstrap_digest;
+    if core_bootstrap_changed && let Some(input_digest) = &desired_core.bootstrap_digest {
+        actions.push(MaterializationActionV1::Bootstrap {
+            owner: "core".into(),
+            input_digest: input_digest.clone(),
+        });
+    }
+    if core_release_changed || core_configuration_changed || core_bootstrap_changed {
+        actions.push(MaterializationActionV1::HealthGate {
+            owner: "core".into(),
+        });
+    }
+    if core_release_changed || core_configuration_changed {
+        actions.push(MaterializationActionV1::SwitchTraffic {
+            owner: "core".into(),
+        });
+    }
+
+    let current_modules = current
+        .modules
+        .iter()
+        .map(|module| (module.definition_id.as_str(), module))
+        .collect::<BTreeMap<_, _>>();
+    let desired_definitions = desired_modules
+        .iter()
+        .map(|module| module.definition_id.as_str())
+        .collect::<BTreeSet<_>>();
+
+    for removed in current.modules.iter().filter(|module| {
+        !desired_definitions.contains(module.definition_id.as_str()) && module.enabled
+    }) {
+        actions.push(MaterializationActionV1::SetEnablement {
+            definition_id: removed.definition_id.clone(),
+            enabled: false,
+        });
+    }
+
+    for module in desired_modules {
+        let current_module = current_modules.get(module.definition_id.as_str()).copied();
+        let is_new = current_module.is_none();
+        let release_changed = current_module.is_none_or(|old| {
+            old.version != module.version
+                || old.manifest_digest != module.manifest_digest
+                || old.runtime_image != module.runtime_image
+                || old.deployment_profile != module.deployment_profile
+                || old.configuration_schema_version != module.configuration_schema_version
+                || old.dependency_bindings != module.dependency_bindings
+        });
+        let runtime_changed = current_module
+            .is_none_or(|old| old.runtime_image != module.runtime_image || release_changed);
+        let configuration_changed = current_module
+            .is_none_or(|old| old.configuration_digest != module.configuration_digest);
+        let bootstrap_changed =
+            current_module.is_none_or(|old| old.bootstrap_digest != module.bootstrap_digest);
+        let enablement_changed = current_module.is_none_or(|old| old.enabled != module.enabled);
+
+        if runtime_changed {
+            actions.push(MaterializationActionV1::AcquireImage {
+                component: module.definition_id.clone(),
+                digest: module.runtime_image.clone(),
+            });
+        }
+        if is_new {
+            actions.push(MaterializationActionV1::ProvisionDatabase {
+                owner: module.definition_id.clone(),
+            });
+        }
+        if release_changed {
+            actions.push(MaterializationActionV1::Migrate {
+                owner: module.definition_id.clone(),
+                image: module.runtime_image.clone(),
+            });
+        }
+        if configuration_changed {
+            actions.push(MaterializationActionV1::Configure {
+                owner: module.definition_id.clone(),
+                digest: module.configuration_digest.clone(),
+            });
+        }
+        if bootstrap_changed && let Some(input_digest) = &module.bootstrap_digest {
+            actions.push(MaterializationActionV1::Bootstrap {
+                owner: module.definition_id.clone(),
+                input_digest: input_digest.clone(),
+            });
+        }
+        if enablement_changed {
+            actions.push(MaterializationActionV1::SetEnablement {
+                definition_id: module.definition_id.clone(),
+                enabled: module.enabled,
+            });
+        }
+        if release_changed || configuration_changed || bootstrap_changed || enablement_changed {
+            actions.push(MaterializationActionV1::HealthGate {
+                owner: module.definition_id.clone(),
+            });
+        }
+        if module.enabled && (release_changed || enablement_changed) {
+            actions.push(MaterializationActionV1::SwitchTraffic {
+                owner: module.definition_id.clone(),
+            });
+        }
+    }
+
     actions.push(MaterializationActionV1::VerifyReadBack);
     actions
 }
@@ -1300,6 +1787,7 @@ mod tests {
                 bootstrap: Some(BootstrapInputV1::Inline {
                     schema_version: "1.0.0".into(),
                     value: json!({"dashboards":[]}),
+                    receipt_bindings: Vec::new(),
                 }),
             }],
             navigation: vec![],
@@ -1325,6 +1813,94 @@ mod tests {
             second.materialization_plan_digest
         );
         assert!(semantic_diff(Some(&first), &second).is_empty());
+    }
+
+    #[test]
+    fn release_update_materializes_only_the_changed_module() {
+        let current = resolve(&blueprint(), &catalog()).unwrap();
+        let mut desired_blueprint = blueprint();
+        desired_blueprint.revision = 2;
+        desired_blueprint.modules[0].version_requirement = VersionReq::parse("=2.1.0").unwrap();
+        let mut desired_catalog = catalog();
+        let mut release = desired_catalog.module_releases[0].clone();
+        release.version = Version::new(2, 1, 0);
+        release.manifest_digest = digest('f');
+        release.runtime_image = digest('9');
+        desired_catalog.module_releases.push(release);
+
+        let desired =
+            resolve_against(&desired_blueprint, &desired_catalog, Some(&current)).unwrap();
+
+        assert_eq!(
+            desired.materialization_plan.actions,
+            vec![
+                MaterializationActionV1::AcquireImage {
+                    component: "tessara.dashboards".into(),
+                    digest: digest('9'),
+                },
+                MaterializationActionV1::Migrate {
+                    owner: "tessara.dashboards".into(),
+                    image: digest('9'),
+                },
+                MaterializationActionV1::HealthGate {
+                    owner: "tessara.dashboards".into(),
+                },
+                MaterializationActionV1::SwitchTraffic {
+                    owner: "tessara.dashboards".into(),
+                },
+                MaterializationActionV1::VerifyReadBack,
+            ]
+        );
+        assert_eq!(desired.core, current.core);
+    }
+
+    #[test]
+    fn unchanged_owner_state_is_not_reconfigured_or_bootstrapped() {
+        let current = resolve(&blueprint(), &catalog()).unwrap();
+        let mut desired_blueprint = blueprint();
+        desired_blueprint.revision = 2;
+        let desired = resolve_against(&desired_blueprint, &catalog(), Some(&current)).unwrap();
+
+        assert_eq!(
+            desired.materialization_plan.actions,
+            vec![MaterializationActionV1::VerifyReadBack]
+        );
+    }
+
+    #[test]
+    fn current_lockfile_from_another_installation_is_rejected() {
+        let mut current = resolve(&blueprint(), &catalog()).unwrap();
+        current.installation_id = Uuid::new_v4();
+        let mut desired_blueprint = blueprint();
+        desired_blueprint.revision = 2;
+
+        let error = resolve_against(&desired_blueprint, &catalog(), Some(&current)).unwrap_err();
+
+        assert_eq!(
+            error
+                .findings
+                .iter()
+                .map(|finding| finding.code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["current_lockfile_installation_mismatch"]
+        );
+    }
+
+    #[test]
+    fn bootstrap_input_change_is_visible_in_the_semantic_diff() {
+        let current = resolve(&blueprint(), &catalog()).unwrap();
+        let mut changed = blueprint();
+        let Some(BootstrapInputV1::Inline { value, .. }) = changed.modules[0].bootstrap.as_mut()
+        else {
+            panic!("test Dashboard bootstrap is inline");
+        };
+        *value = json!({"dashboards":[{"external_key":"new-dashboard"}]});
+        let desired = resolve(&changed, &catalog()).unwrap();
+
+        assert_eq!(
+            semantic_diff(Some(&current), &desired),
+            vec!["module:bootstrap:tessara.dashboards"]
+        );
     }
 
     #[test]
@@ -1359,6 +1935,211 @@ mod tests {
         assert!(serde_json::from_value::<ApplicationBlueprintV1>(value).is_err());
     }
 
+    fn bootstrap_receipt(owner: &str, changed: bool) -> BootstrapReceiptV1 {
+        let reference = json!({
+            "reference": {
+                "installation_id": "01980000-0000-7000-8000-00000000008a",
+                "owner": {
+                    "kind": "module_instance",
+                    "installation_id": "01980000-0000-7000-8000-00000000008a",
+                    "module_instance_id": "142a1ece-f74b-85f6-8ca0-92f4a02e9409"
+                },
+                "resource_type": "tessara.components.component_version",
+                "resource_id": "01980000-0001-7000-8000-000000000001"
+            }
+        });
+        BootstrapReceiptV1 {
+            owner: owner.into(),
+            schema_version: "tessara.io/component-bootstrap/v1".into(),
+            input_digest: digest('1'),
+            result_digest: digest('2'),
+            changed,
+            resource_ids: BTreeMap::from([(
+                "sprint-8a-row-count".into(),
+                serde_json::to_string(&reference).unwrap(),
+            )]),
+        }
+    }
+
+    fn component_receipt_binding() -> BootstrapReceiptBindingV1 {
+        BootstrapReceiptBindingV1 {
+            target_pointer: "/placements/0/component_reference".into(),
+            source_owner: "tessara.components".into(),
+            resource_key: "sprint-8a-row-count".into(),
+            value_encoding: BootstrapReceiptValueEncodingV1::Json,
+        }
+    }
+
+    #[test]
+    fn receipt_binding_resolves_exact_typed_json_and_is_stable_for_unchanged_replay() {
+        let input = json!({"placements":[{"component_reference":null}]});
+        let binding = component_receipt_binding();
+        let first = resolve_bootstrap_receipt_bindings(
+            input.clone(),
+            std::slice::from_ref(&binding),
+            &BTreeMap::from([(
+                "tessara.components".into(),
+                bootstrap_receipt("tessara.components", true),
+            )]),
+        )
+        .unwrap();
+        let replay = resolve_bootstrap_receipt_bindings(
+            input,
+            &[binding],
+            &BTreeMap::from([(
+                "tessara.components".into(),
+                bootstrap_receipt("tessara.components", false),
+            )]),
+        )
+        .unwrap();
+
+        assert_eq!(first, replay);
+        assert_eq!(
+            canonical_digest(&first).unwrap(),
+            canonical_digest(&replay).unwrap()
+        );
+        assert_eq!(
+            first.pointer("/placements/0/component_reference/reference/resource_type"),
+            Some(&json!("tessara.components.component_version"))
+        );
+    }
+
+    #[test]
+    fn receipt_binding_rejects_unknown_key_and_receipt_owner_mismatch() {
+        let input = json!({"placements":[{"component_reference":null}]});
+        let mut binding = component_receipt_binding();
+        binding.resource_key = "unknown-component".into();
+        assert_eq!(
+            resolve_bootstrap_receipt_bindings(
+                input.clone(),
+                std::slice::from_ref(&binding),
+                &BTreeMap::from([(
+                    "tessara.components".into(),
+                    bootstrap_receipt("tessara.components", true),
+                )]),
+            ),
+            Err(BootstrapBindingError::ResourceMissing {
+                source_owner: "tessara.components".into(),
+                resource_key: "unknown-component".into(),
+            })
+        );
+
+        binding.resource_key = "sprint-8a-row-count".into();
+        assert_eq!(
+            resolve_bootstrap_receipt_bindings(
+                input,
+                &[binding],
+                &BTreeMap::from([(
+                    "tessara.components".into(),
+                    bootstrap_receipt("another.owner", true),
+                )]),
+            ),
+            Err(BootstrapBindingError::ReceiptOwnerMismatch {
+                source_owner: "tessara.components".into(),
+                receipt_owner: "another.owner".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn receipt_binding_will_not_overwrite_a_hardcoded_input_value() {
+        let input = json!({"placements":[{"component_reference":{"legacy":true}}]});
+        let binding = component_receipt_binding();
+        assert_eq!(
+            resolve_bootstrap_receipt_bindings(
+                input,
+                &[binding],
+                &BTreeMap::from([(
+                    "tessara.components".into(),
+                    bootstrap_receipt("tessara.components", true),
+                )]),
+            ),
+            Err(BootstrapBindingError::TargetOccupied {
+                target_pointer: "/placements/0/component_reference".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn sprint_8a_lockfile_orders_receipt_provider_before_consumer() {
+        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8a/blueprints/reference.json"
+        )))
+        .unwrap();
+        let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8a/catalogs/local-release-catalog.json"
+        )))
+        .unwrap();
+        let lockfile = resolve(&blueprint, &catalog).unwrap();
+        let components = lockfile
+            .modules
+            .iter()
+            .position(|module| module.definition_id == "tessara.components")
+            .unwrap();
+        let dashboards = lockfile
+            .modules
+            .iter()
+            .position(|module| module.definition_id == "tessara.dashboards")
+            .unwrap();
+
+        assert!(components < dashboards);
+        assert_eq!(
+            lockfile.modules[dashboards]
+                .bootstrap
+                .as_ref()
+                .unwrap()
+                .receipt_bindings()
+                .iter()
+                .map(|binding| {
+                    (
+                        binding.target_pointer.as_str(),
+                        binding.source_owner.as_str(),
+                        binding.resource_key.as_str(),
+                    )
+                })
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                (
+                    "/placements/0/component_reference",
+                    "tessara.components",
+                    "sprint-8a-row-count",
+                ),
+                (
+                    "/placements/1/component_reference",
+                    "tessara.components",
+                    "sprint-8a-record-table",
+                ),
+                (
+                    "/placements/2/component_reference",
+                    "tessara.components",
+                    "sprint-8a-label-bar",
+                ),
+                (
+                    "/placements/3/component_reference",
+                    "tessara.components",
+                    "sprint-8a-blocked-component",
+                ),
+                (
+                    "/placements/4/component_reference",
+                    "tessara.components",
+                    "sprint-8a-row-count-inactive",
+                ),
+                (
+                    "/placements/5/component_reference",
+                    "tessara.components",
+                    "sprint-8a-row-count-inactive",
+                ),
+                (
+                    "/placements/6/component_reference",
+                    "tessara.components",
+                    "sprint-8a-row-count-inactive",
+                ),
+            ])
+        );
+    }
+
     #[test]
     fn local_cas_acquisition_rejects_tampered_content() {
         let root = std::env::temp_dir().join(format!("tessara-cas-{}", Uuid::new_v4()));
@@ -1371,6 +2152,7 @@ mod tests {
         let input = BootstrapInputV1::LocalCas {
             schema_version: "test/v1".into(),
             digest: digest.clone(),
+            receipt_bindings: Vec::new(),
         };
         assert_eq!(acquire_bootstrap_input(&input, &root).unwrap(), bytes);
         std::fs::write(&path, b"tampered").unwrap();

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 70,
+  "expected_total": 71,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
@@ -32,9 +32,10 @@
     {
       "path": "components.spec.ts",
       "tests": [
-        "Sprint 4A component workflow › admin can create, update, publish, and view a major-line table component",
-        "Sprint 4A component workflow › admin can author, publish, and view visual components",
-        "Sprint 4A component workflow › component editor exposes canonical configuration on mobile direct loads"
+        "Sprint 8A extracted Component UI parity › admin can create, update, publish, and view a major-line table component",
+        "Sprint 8A extracted Component UI parity › admin can author, publish, and view visual components",
+        "Sprint 8A extracted Component UI parity › component editor remains contained and uses an accessible mobile preview dialog",
+        "Sprint 8A extracted Component UI parity › Component and Dashboard visuals stay contained at 200% zoom in light and dark themes"
       ]
     },
     {

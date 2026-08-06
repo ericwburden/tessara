@@ -11,17 +11,19 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::{PgConnection, Postgres, Row, Transaction};
 use tessara_components_contract::{COMPONENT_RESOURCE_TYPE, ComponentVersionReference};
 use tessara_datasets_contract::{
     DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction, DatasetCatalogRequest, DatasetCatalogResponse,
-    DatasetDistinctValuesRequest, DatasetDistinctValuesResponse, DatasetExecutionResponse,
+    DatasetCompatibilityRequest, DatasetCompatibilityResponse, DatasetDistinctValuesRequest,
+    DatasetDistinctValuesResponse, DatasetExecutionResponse, DatasetFieldRequirement,
     DatasetMajorLineMetadata, DatasetMajorLineReference, DatasetSchemaRequest,
 };
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ResourceOwner,
-    SecurityCapabilityId, SignedEnvelopeV1, TypedResourceReference,
+    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
+    ModuleDefinitionId, ModuleServicePrincipalV1, ResourceOwner, SecurityCapabilityId,
+    SignedEnvelopeV1, TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -50,6 +52,7 @@ pub(super) fn routes() -> Router<ComponentModuleState> {
             "/api/admin/components",
             get(list_manageable_components).post(create_component),
         )
+        .route("/api/admin/components/save", post(save_component_edit))
         .route(
             "/api/admin/components/{component_id}",
             get(get_manageable_component).put(update_component),
@@ -113,6 +116,29 @@ struct UpdateComponentV1 {
 struct CreateComponentVersionV1 {
     schema_version: u16,
     version: ComponentVersionInputV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SaveComponentEditV1 {
+    schema_version: u16,
+    #[serde(default)]
+    component_id: Option<Uuid>,
+    #[serde(default)]
+    draft_version_id: Option<Uuid>,
+    #[serde(default)]
+    published_version_id: Option<Uuid>,
+    action: SaveComponentEditActionV1,
+    component: UpdateComponentV1,
+    version: ComponentVersionInputV1,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum SaveComponentEditActionV1 {
+    SaveDraft,
+    UpdateExistingVersion,
+    CreateNewVersion,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -196,6 +222,13 @@ async fn execute_current_component(
     Path((component_ref, kind)): Path<(String, String)>,
     query: RawQuery,
 ) -> Result<Json<Value>, ComponentModuleError> {
+    let grant = authorize(
+        &state,
+        &headers,
+        "components.execute",
+        AuthorizationGrantOperationV1::Read,
+    )
+    .await?;
     let component_id = resolve_component_id(&state, &component_ref).await?;
     let version_id: Uuid = sqlx::query_scalar(
         "SELECT id FROM component_versions
@@ -205,8 +238,17 @@ async fn execute_current_component(
     .bind(component_id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ComponentModuleError::NotFound("Published Component not found".into()))?;
-    execute_component(state, headers, component_id, version_id, kind, query.0).await
+    .ok_or_else(undisclosed_component_resource)?;
+    execute_component(
+        state,
+        headers,
+        grant.payload,
+        component_id,
+        version_id,
+        kind,
+        query.0,
+    )
+    .await
 }
 
 async fn execute_component_version(
@@ -215,18 +257,6 @@ async fn execute_component_version(
     Path((component_ref, version_id, kind)): Path<(String, Uuid, String)>,
     query: RawQuery,
 ) -> Result<Json<Value>, ComponentModuleError> {
-    let component_id = resolve_component_id(&state, &component_ref).await?;
-    execute_component(state, headers, component_id, version_id, kind, query.0).await
-}
-
-async fn execute_component(
-    state: ComponentModuleState,
-    headers: HeaderMap,
-    component_id: Uuid,
-    version_id: Uuid,
-    kind: String,
-    query: Option<String>,
-) -> Result<Json<Value>, ComponentModuleError> {
     let grant = authorize(
         &state,
         &headers,
@@ -234,6 +264,28 @@ async fn execute_component(
         AuthorizationGrantOperationV1::Read,
     )
     .await?;
+    let component_id = resolve_component_id(&state, &component_ref).await?;
+    execute_component(
+        state,
+        headers,
+        grant.payload,
+        component_id,
+        version_id,
+        kind,
+        query.0,
+    )
+    .await
+}
+
+async fn execute_component(
+    state: ComponentModuleState,
+    headers: HeaderMap,
+    grant: AuthorizationGrantV3,
+    component_id: Uuid,
+    version_id: Uuid,
+    kind: String,
+    query: Option<String>,
+) -> Result<Json<Value>, ComponentModuleError> {
     let row = sqlx::query(
         "SELECT dataset_reference,dataset_scope_node_ids,component_type::text AS component_type,
                 config,status::text AS status,lifecycle_state::text AS lifecycle_state
@@ -243,11 +295,9 @@ async fn execute_component(
     .bind(component_id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ComponentModuleError::NotFound("Component version not found".into()))?;
+    .ok_or_else(undisclosed_component_resource)?;
     let scope: Vec<Uuid> = row.try_get("dataset_scope_node_ids")?;
-    require_scope(&grant.payload, READ_CAPABILITY, &scope).map_err(|_| {
-        ComponentModuleError::NotFound("Renderable Component version not found".into())
-    })?;
+    require_scope(&grant, READ_CAPABILITY, &scope).map_err(|_| undisclosed_component_resource())?;
     let stored_kind: String = row.try_get("component_type")?;
     let requested_kind = kind.replace('-', "_");
     if stored_kind != requested_kind
@@ -257,9 +307,7 @@ async fn execute_component(
         )
         || row.try_get::<String, _>("lifecycle_state")? != "active"
     {
-        return Err(ComponentModuleError::NotFound(
-            "Renderable Component version not found".into(),
-        ));
+        return Err(undisclosed_component_resource());
     }
     let dataset_reference: DatasetMajorLineReference =
         serde_json::from_value(row.try_get("dataset_reference")?).map_err(internal)?;
@@ -274,7 +322,7 @@ async fn execute_component(
     let execution: DatasetExecutionResponse = dataset_client::post(
         &state,
         authorization_header(&headers)?,
-        "/api/private/component-datasets/execute",
+        "/api/private/datasets/execute",
         &execution_request,
     )
     .await?;
@@ -319,7 +367,7 @@ async fn create_component(
     let metadata: DatasetMajorLineMetadata = dataset_client::post(
         &state,
         authorization,
-        "/api/private/component-datasets/schema",
+        "/api/private/datasets/schema",
         &DatasetSchemaRequest {
             schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
             action: DatasetAction::ResolveSchema,
@@ -453,6 +501,481 @@ async fn create_component(
     Ok(Json(response))
 }
 
+async fn save_component_edit(
+    State(state): State<ComponentModuleState>,
+    headers: HeaderMap,
+    Json(request): Json<SaveComponentEditV1>,
+) -> Result<Json<ComponentMutationResponseV1>, ComponentModuleError> {
+    let grant = authorize(
+        &state,
+        &headers,
+        "components.save",
+        AuthorizationGrantOperationV1::Mutation,
+    )
+    .await?;
+    validate_save_component_edit(&request)?;
+
+    let idempotency_key = mutation_idempotency_key(&headers)?;
+    let resource_ids = request.component_id.into_iter().collect::<Vec<_>>();
+    let digest = mutation_digest("components.save", &resource_ids, &request)?;
+
+    // A successful replay is authoritative even if the Dataset provider is
+    // unavailable by the time the client retries. Acquire the same advisory
+    // lock used by the write transaction so a concurrent original request can
+    // finish, then release this read-only transaction before provider I/O.
+    let mut replay_transaction = state.pool.begin().await?;
+    if let Some(response) = load_mutation_replay(
+        &mut replay_transaction,
+        &grant.payload,
+        "components.save",
+        idempotency_key,
+        &digest,
+    )
+    .await?
+    {
+        replay_transaction.rollback().await?;
+        return Ok(Json(response));
+    }
+    replay_transaction.rollback().await?;
+
+    // Dataset validation and scope evaluation intentionally complete before the
+    // Component transaction starts. An unavailable or invalid provider result
+    // therefore cannot partially persist shell metadata or a version payload.
+    let (metadata, findings) = validate_version_input(
+        &state,
+        authorization_header(&headers)?,
+        &grant.payload,
+        &request.version,
+    )
+    .await?;
+    if !findings.is_empty() {
+        return Err(ComponentModuleError::BadRequest(
+            findings
+                .into_iter()
+                .map(|finding| finding.message)
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
+    }
+    let mut scope_node_ids = metadata.scope_node_ids;
+    scope_node_ids.sort_unstable();
+    scope_node_ids.dedup();
+
+    let mut transaction = state.pool.begin().await?;
+    // Recheck after provider I/O while holding the advisory lock. Another
+    // request using this identity may have committed while validation ran.
+    if let Some(response) = load_mutation_replay(
+        &mut transaction,
+        &grant.payload,
+        "components.save",
+        idempotency_key,
+        &digest,
+    )
+    .await?
+    {
+        return Ok(Json(response));
+    }
+
+    let component_id = if let Some(component_id) = request.component_id {
+        require_component_fully_manageable_in_transaction(
+            &mut transaction,
+            &grant.payload,
+            component_id,
+        )
+        .await?;
+        let ownership = match (
+            request.action,
+            request.draft_version_id,
+            request.published_version_id,
+        ) {
+            (SaveComponentEditActionV1::UpdateExistingVersion, None, Some(version_id)) => {
+                sqlx::query(
+                    "SELECT dataset_scope_node_ids FROM component_versions
+                     WHERE component_id=$1 AND id=$2 AND status='published' FOR UPDATE",
+                )
+                .bind(component_id)
+                .bind(version_id)
+                .fetch_optional(&mut *transaction)
+                .await?
+            }
+            (
+                SaveComponentEditActionV1::SaveDraft | SaveComponentEditActionV1::CreateNewVersion,
+                Some(version_id),
+                None,
+            ) => {
+                sqlx::query(
+                    "SELECT dataset_scope_node_ids FROM component_versions
+                     WHERE component_id=$1 AND id=$2 AND status='draft' FOR UPDATE",
+                )
+                .bind(component_id)
+                .bind(version_id)
+                .fetch_optional(&mut *transaction)
+                .await?
+            }
+            (
+                SaveComponentEditActionV1::SaveDraft | SaveComponentEditActionV1::CreateNewVersion,
+                None,
+                None,
+            ) => {
+                // A caller omitting a draft identity will update the existing
+                // draft if one exists, so authorization must bind to that exact
+                // version before shell metadata changes. Otherwise the current
+                // published version owns creation of the next draft.
+                sqlx::query(
+                    "SELECT dataset_scope_node_ids FROM component_versions
+                     WHERE component_id=$1
+                     ORDER BY (status='draft') DESC,version_number DESC
+                     LIMIT 1 FOR UPDATE",
+                )
+                .bind(component_id)
+                .fetch_optional(&mut *transaction)
+                .await?
+            }
+            _ => None,
+        }
+        .ok_or_else(undisclosed_component_resource)?;
+        let existing_scope: Vec<Uuid> = ownership.try_get("dataset_scope_node_ids")?;
+        require_scope(&grant.payload, MANAGE_CAPABILITY, &existing_scope)
+            .map_err(|_| undisclosed_component_resource())?;
+        let updated = sqlx::query(
+            "UPDATE components SET name=$1,slug=$2,description=$3,updated_at=now() WHERE id=$4",
+        )
+        .bind(request.component.name.trim())
+        .bind(request.component.slug.trim())
+        .bind(normalized_optional_text(
+            request.component.description.as_deref(),
+        ))
+        .bind(component_id)
+        .execute(&mut *transaction)
+        .await?;
+        if updated.rows_affected() != 1 {
+            return Err(undisclosed_component_resource());
+        }
+        component_id
+    } else {
+        let component_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO components(id,name,slug,description) VALUES($1,$2,$3,$4)")
+            .bind(component_id)
+            .bind(request.component.name.trim())
+            .bind(request.component.slug.trim())
+            .bind(normalized_optional_text(
+                request.component.description.as_deref(),
+            ))
+            .execute(&mut *transaction)
+            .await?;
+        component_id
+    };
+
+    let (component_version_id, outcome) = match request.action {
+        SaveComponentEditActionV1::SaveDraft => {
+            let version_id = save_component_draft_in_transaction(
+                &mut transaction,
+                component_id,
+                request.draft_version_id,
+                &scope_node_ids,
+                &request.version,
+            )
+            .await?;
+            (version_id, "draft_saved")
+        }
+        SaveComponentEditActionV1::CreateNewVersion => {
+            let version_id = save_component_draft_in_transaction(
+                &mut transaction,
+                component_id,
+                request.draft_version_id,
+                &scope_node_ids,
+                &request.version,
+            )
+            .await?;
+            publish_component_version_in_transaction(
+                &mut transaction,
+                &grant.payload,
+                component_id,
+                version_id,
+            )
+            .await?;
+            (version_id, "published_new_version")
+        }
+        SaveComponentEditActionV1::UpdateExistingVersion => {
+            let version_id = request.published_version_id.ok_or_else(|| {
+                ComponentModuleError::BadRequest(
+                    "Updating an existing Component version requires its identity".into(),
+                )
+            })?;
+            update_published_component_in_transaction(
+                &mut transaction,
+                component_id,
+                version_id,
+                &scope_node_ids,
+                &request.version,
+            )
+            .await?;
+            (version_id, "published_version_updated")
+        }
+    };
+    let response = ComponentMutationResponseV1 {
+        schema_version: 1,
+        component_id,
+        component_version_id: Some(component_version_id),
+        outcome: outcome.into(),
+    };
+    record_mutation_replay(
+        &mut transaction,
+        &grant.payload,
+        "components.save",
+        idempotency_key,
+        &digest,
+        &response,
+    )
+    .await?;
+    transaction.commit().await?;
+    Ok(Json(response))
+}
+
+fn validate_save_component_edit(request: &SaveComponentEditV1) -> Result<(), ComponentModuleError> {
+    let identity_is_consistent = matches!(
+        (
+            request.component_id,
+            request.draft_version_id,
+            request.published_version_id,
+            request.action,
+        ),
+        (None, None, None, SaveComponentEditActionV1::SaveDraft)
+            | (
+                None,
+                None,
+                None,
+                SaveComponentEditActionV1::CreateNewVersion
+            )
+            | (Some(_), None, None, SaveComponentEditActionV1::SaveDraft)
+            | (Some(_), Some(_), None, SaveComponentEditActionV1::SaveDraft)
+            | (
+                Some(_),
+                None,
+                None,
+                SaveComponentEditActionV1::CreateNewVersion
+            )
+            | (
+                Some(_),
+                Some(_),
+                None,
+                SaveComponentEditActionV1::CreateNewVersion
+            )
+            | (
+                Some(_),
+                None,
+                Some(_),
+                SaveComponentEditActionV1::UpdateExistingVersion
+            )
+    );
+    if request.schema_version != 1
+        || request.component.schema_version != 1
+        || request.component.name.trim().is_empty()
+        || request.component.slug.trim().is_empty()
+        || !request.version.config.is_object()
+        || !matches!(
+            request.version.component_type.as_str(),
+            "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
+        )
+        || !identity_is_consistent
+        || (request.action == SaveComponentEditActionV1::CreateNewVersion
+            && request.version.version_note.trim().is_empty())
+    {
+        return Err(ComponentModuleError::BadRequest(
+            "Component save request is invalid".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn save_component_draft_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+    requested_version_id: Option<Uuid>,
+    scope_node_ids: &[Uuid],
+    version: &ComponentVersionInputV1,
+) -> Result<Uuid, ComponentModuleError> {
+    let existing_version_id = if let Some(version_id) = requested_version_id {
+        Some(version_id)
+    } else {
+        sqlx::query_scalar(
+            "SELECT id FROM component_versions WHERE component_id=$1 AND status='draft' FOR UPDATE",
+        )
+        .bind(component_id)
+        .fetch_optional(&mut **transaction)
+        .await?
+    };
+    if let Some(version_id) = existing_version_id {
+        let updated = sqlx::query(
+            "UPDATE component_versions
+             SET dataset_reference=$1,dataset_scope_node_ids=$2,component_type=$3::component_type,
+                 version_note=$4,config=$5,resource_revision=resource_revision+1,
+                 authority_revision=authority_revision+1,updated_at=now()
+             WHERE id=$6 AND component_id=$7 AND status='draft'",
+        )
+        .bind(serde_json::to_value(&version.dataset_reference).map_err(internal)?)
+        .bind(scope_node_ids)
+        .bind(&version.component_type)
+        .bind(version.version_note.trim())
+        .bind(&version.config)
+        .bind(version_id)
+        .bind(component_id)
+        .execute(&mut **transaction)
+        .await?;
+        if updated.rows_affected() != 1 {
+            return Err(ComponentModuleError::Conflict(
+                "The Component draft changed or no longer exists".into(),
+            ));
+        }
+        sqlx::query(
+            "INSERT INTO component_version_change_events(component_version_id,resource_revision,category)
+             SELECT id,resource_revision,'payload' FROM component_versions WHERE id=$1",
+        )
+        .bind(version_id)
+        .execute(&mut **transaction)
+        .await?;
+        return Ok(version_id);
+    }
+
+    let version_number: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(version_number),0)+1 FROM component_versions WHERE component_id=$1",
+    )
+    .bind(component_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    let version_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO component_versions
+         (id,component_id,dataset_reference,dataset_scope_node_ids,component_type,status,
+          lifecycle_state,version_number,version_label,version_note,config)
+         VALUES($1,$2,$3,$4,$5::component_type,'draft','active',$6,$7,$8,$9)",
+    )
+    .bind(version_id)
+    .bind(component_id)
+    .bind(serde_json::to_value(&version.dataset_reference).map_err(internal)?)
+    .bind(scope_node_ids)
+    .bind(&version.component_type)
+    .bind(version_number)
+    .bind(format!("{version_number}.0.0"))
+    .bind(version.version_note.trim())
+    .bind(&version.config)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(version_id)
+}
+
+async fn publish_component_version_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    grant: &AuthorizationGrantV3,
+    component_id: Uuid,
+    version_id: Uuid,
+) -> Result<(), ComponentModuleError> {
+    // Publishing changes both the requested draft and every current
+    // publication. Hold the Component parent lock and prove containment over
+    // the complete history before superseding anything.
+    require_component_fully_manageable_in_transaction(transaction, grant, component_id).await?;
+    sqlx::query(
+        "UPDATE component_versions
+         SET status='superseded',successor_version_id=$2,
+             resource_revision=resource_revision+1,updated_at=now()
+         WHERE component_id=$1 AND status='published' AND id<>$2",
+    )
+    .bind(component_id)
+    .bind(version_id)
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query(
+        "INSERT INTO component_version_change_events
+         (component_version_id,resource_revision,category,from_publication_state,to_publication_state)
+         SELECT id,resource_revision,'publication','published','superseded'
+         FROM component_versions
+         WHERE component_id=$1 AND successor_version_id=$2 AND status='superseded'",
+    )
+    .bind(component_id)
+    .bind(version_id)
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query(
+        "INSERT INTO component_version_change_events(component_version_id,resource_revision,category)
+         SELECT id,resource_revision,'successor' FROM component_versions
+         WHERE component_id=$1 AND successor_version_id=$2 AND status='superseded'",
+    )
+    .bind(component_id)
+    .bind(version_id)
+    .execute(&mut **transaction)
+    .await?;
+    let updated = sqlx::query(
+        "UPDATE component_versions
+         SET status='published',resource_revision=resource_revision+1,updated_at=now()
+         WHERE id=$1 AND component_id=$2 AND status='draft'",
+    )
+    .bind(version_id)
+    .bind(component_id)
+    .execute(&mut **transaction)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(ComponentModuleError::Conflict(
+            "Only a draft Component version can be published".into(),
+        ));
+    }
+    sqlx::query(
+        "INSERT INTO component_version_change_events
+         (component_version_id,resource_revision,category,from_publication_state,to_publication_state)
+         SELECT id,resource_revision,'publication','draft','published'
+         FROM component_versions WHERE id=$1",
+    )
+    .bind(version_id)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn update_published_component_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+    version_id: Uuid,
+    scope_node_ids: &[Uuid],
+    version: &ComponentVersionInputV1,
+) -> Result<(), ComponentModuleError> {
+    let updated = sqlx::query(
+        "UPDATE component_versions
+         SET dataset_reference=$1,dataset_scope_node_ids=$2,component_type=$3::component_type,
+             version_note=$4,config=$5,resource_revision=resource_revision+1,
+             authority_revision=authority_revision+1,updated_at=now()
+         WHERE id=$6 AND component_id=$7 AND status='published'",
+    )
+    .bind(serde_json::to_value(&version.dataset_reference).map_err(internal)?)
+    .bind(scope_node_ids)
+    .bind(&version.component_type)
+    .bind(version.version_note.trim())
+    .bind(&version.config)
+    .bind(version_id)
+    .bind(component_id)
+    .execute(&mut **transaction)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(ComponentModuleError::Conflict(
+            "Only the current published Component version can be updated".into(),
+        ));
+    }
+    sqlx::query(
+        "INSERT INTO component_version_change_events(component_version_id,resource_revision,category)
+         SELECT id,resource_revision,'payload' FROM component_versions WHERE id=$1",
+    )
+    .bind(version_id)
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query("DELETE FROM component_versions WHERE component_id=$1 AND status='draft'")
+        .bind(component_id)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
+fn normalized_optional_text(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
 async fn list_manageable_components(
     State(state): State<ComponentModuleState>,
     headers: HeaderMap,
@@ -464,6 +987,18 @@ async fn list_manageable_components(
         AuthorizationGrantOperationV1::Read,
     )
     .await?;
+    list_manageable_definitions(&state, &grant.payload)
+        .await
+        .map(Json)
+}
+
+pub(super) async fn list_manageable_definitions(
+    state: &ComponentModuleState,
+    grant: &AuthorizationGrantV3,
+) -> Result<Vec<ComponentDefinitionV1>, ComponentModuleError> {
+    if !has_component_manage_scope(grant) {
+        return Ok(Vec::new());
+    }
     let ids = sqlx::query_scalar::<_, Uuid>(
         "SELECT DISTINCT component_id FROM component_versions ORDER BY component_id",
     )
@@ -471,11 +1006,27 @@ async fn list_manageable_components(
     .await?;
     let mut components = Vec::new();
     for id in ids {
-        if let Ok(component) = get_definition_by_id(&state, &grant.payload, id).await {
+        if let Some(component) =
+            classify_manageable_lookup(get_manageable_definition_by_id(state, grant, id).await)?
+        {
             components.push(component);
         }
     }
-    Ok(Json(components))
+    Ok(components)
+}
+
+pub(super) fn has_component_manage_scope(grant: &AuthorizationGrantV3) -> bool {
+    !authorized_organizations(grant, MANAGE_CAPABILITY).is_empty()
+}
+
+fn classify_manageable_lookup(
+    result: Result<ComponentDefinitionV1, ComponentModuleError>,
+) -> Result<Option<ComponentDefinitionV1>, ComponentModuleError> {
+    match result {
+        Ok(component) => Ok(Some(component)),
+        Err(ComponentModuleError::NotFound(_)) => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 async fn get_manageable_component(
@@ -491,7 +1042,7 @@ async fn get_manageable_component(
     )
     .await?;
     let id = resolve_component_id(&state, &component_ref).await?;
-    get_definition_by_id(&state, &grant.payload, id)
+    get_manageable_definition_by_id(&state, &grant.payload, id)
         .await
         .map(Json)
 }
@@ -540,6 +1091,12 @@ async fn update_component(
     {
         return Ok(Json(response));
     }
+    require_component_fully_manageable_in_transaction(
+        &mut transaction,
+        &grant.payload,
+        component_id,
+    )
+    .await?;
     sqlx::query(
         "UPDATE components SET name=$1,slug=$2,description=$3,updated_at=now() WHERE id=$4",
     )
@@ -633,6 +1190,12 @@ async fn create_version(
     {
         return Ok(Json(response));
     }
+    require_component_fully_manageable_in_transaction(
+        &mut transaction,
+        &grant.payload,
+        component_id,
+    )
+    .await?;
     let existing: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM component_versions WHERE component_id=$1 AND status='draft'",
     )
@@ -719,6 +1282,12 @@ async fn delete_version(
     {
         return Ok(Json(response));
     }
+    require_component_fully_manageable_in_transaction(
+        &mut transaction,
+        &grant.payload,
+        component_id,
+    )
+    .await?;
     let deleted = sqlx::query(
         "DELETE FROM component_versions WHERE id=$1 AND component_id=$2 AND status='draft'",
     )
@@ -813,6 +1382,12 @@ async fn update_version(
     {
         return Ok(Json(response));
     }
+    require_component_fully_manageable_in_transaction(
+        &mut transaction,
+        &grant.payload,
+        component_id,
+    )
+    .await?;
     let updated=sqlx::query("UPDATE component_versions SET dataset_reference=$1,dataset_scope_node_ids=$2,component_type=$3::component_type,version_note=$4,config=$5,resource_revision=resource_revision+1,authority_revision=authority_revision+1,updated_at=now() WHERE id=$6 AND component_id=$7 AND status='draft'").bind(serde_json::to_value(&request.version.dataset_reference).map_err(internal)?).bind(scope).bind(&request.version.component_type).bind(request.version.version_note.trim()).bind(&request.version.config).bind(version_id).bind(component_id).execute(&mut *transaction).await?;
     if updated.rows_affected() != 1 {
         return Err(ComponentModuleError::Conflict(
@@ -894,7 +1469,7 @@ async fn preview_version(
     let execution: DatasetExecutionResponse = dataset_client::post(
         &state,
         authorization,
-        "/api/private/component-datasets/execute",
+        "/api/private/datasets/execute",
         &execution_request,
     )
     .await?;
@@ -923,7 +1498,7 @@ async fn dataset_catalog(
     dataset_client::post(
         &state,
         authorization_header(&headers)?,
-        "/api/private/component-datasets/catalog",
+        "/api/private/datasets/catalog",
         &DatasetCatalogRequest {
             schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
             action: DatasetAction::Catalog,
@@ -948,7 +1523,7 @@ async fn dataset_distinct_values(
     dataset_client::post(
         &state,
         authorization_header(&headers)?,
-        "/api/private/component-datasets/distinct-values",
+        "/api/private/datasets/distinct-values",
         &request,
     )
     .await
@@ -958,13 +1533,13 @@ async fn dataset_distinct_values(
 async fn validate_version_input(
     state: &ComponentModuleState,
     authorization: &str,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     input: &ComponentVersionInputV1,
 ) -> Result<(DatasetMajorLineMetadata, Vec<ValidationFindingV1>), ComponentModuleError> {
     let metadata: DatasetMajorLineMetadata = dataset_client::post(
         state,
         authorization,
-        "/api/private/component-datasets/schema",
+        "/api/private/datasets/schema",
         &DatasetSchemaRequest {
             schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
             action: DatasetAction::ResolveSchema,
@@ -973,7 +1548,71 @@ async fn validate_version_input(
     )
     .await?;
     require_scope(grant, MANAGE_CAPABILITY, &metadata.scope_node_ids)?;
-    let findings = component_input_findings(input, &metadata);
+    let field_types = metadata
+        .fields
+        .iter()
+        .map(|field| (field.key.as_str(), field.field_type.as_str()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let required_fields = validation::required_field_keys(&input.component_type, &input.config)
+        .into_iter()
+        .map(|field_key| DatasetFieldRequirement {
+            accepted_types: field_types.get(field_key.as_str()).map_or_else(
+                || {
+                    [
+                        "boolean",
+                        "date",
+                        "multi_choice",
+                        "number",
+                        "single_choice",
+                        "text",
+                    ]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect()
+                },
+                |field_type| vec![(*field_type).to_string()],
+            ),
+            field_key,
+        })
+        .collect();
+    let compatibility: DatasetCompatibilityResponse = dataset_client::post(
+        state,
+        authorization,
+        "/api/private/datasets/compatibility",
+        &DatasetCompatibilityRequest {
+            schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+            action: DatasetAction::CheckCompatibility,
+            reference: input.dataset_reference.clone(),
+            required_fields,
+        },
+    )
+    .await?;
+    if compatibility.schema_version != DATASET_CONTRACT_SCHEMA_VERSION {
+        return Err(ComponentModuleError::Unavailable(
+            "Dataset compatibility response uses an unsupported schema".into(),
+        ));
+    }
+    let mut findings = component_input_findings(input, &metadata);
+    findings.extend(
+        compatibility
+            .findings
+            .into_iter()
+            .map(|finding| ValidationFindingV1 {
+                code: format!("dataset.compatibility.{}", finding.code),
+                field_path: Some(format!("config.fields.{}", finding.field_key)),
+                message: format!(
+                    "Dataset field '{}' does not satisfy the Component compatibility contract",
+                    finding.field_key
+                ),
+            }),
+    );
+    if !compatibility.compatible && findings.is_empty() {
+        findings.push(ValidationFindingV1 {
+            code: "dataset.compatibility.rejected".into(),
+            field_path: Some("dataset_reference".into()),
+            message: "Dataset rejected the Component compatibility requirements".into(),
+        });
+    }
     Ok((metadata, findings))
 }
 
@@ -1006,7 +1645,16 @@ pub(super) async fn list_components(
         AuthorizationGrantOperationV1::Read,
     )
     .await?;
-    let scopes = authorized_organizations(&grant.payload, READ_CAPABILITY);
+    list_component_summaries(&state, &grant.payload)
+        .await
+        .map(Json)
+}
+
+pub(super) async fn list_component_summaries(
+    state: &ComponentModuleState,
+    grant: &AuthorizationGrantV3,
+) -> Result<Vec<ComponentSummaryV1>, ComponentModuleError> {
+    let scopes = authorized_organizations(grant, READ_CAPABILITY);
     if scopes.is_empty() {
         return Err(ComponentModuleError::Forbidden);
     }
@@ -1016,7 +1664,7 @@ pub(super) async fn list_components(
                 v.status::text AS status,v.lifecycle_state::text AS lifecycle_state,
                 v.resource_revision,v.authority_revision,v.version_number,v.version_label,v.version_note,v.config
          FROM components c JOIN component_versions v ON v.component_id=c.id
-         WHERE v.status IN ('published','superseded') AND v.lifecycle_state <> 'tombstoned'
+         WHERE v.status = 'published' AND v.lifecycle_state <> 'tombstoned'
            AND v.dataset_scope_node_ids && $1
          ORDER BY c.id,(v.status='published') DESC,v.version_number DESC",
     )
@@ -1044,7 +1692,6 @@ pub(super) async fn list_components(
             })
         })
         .collect::<Result<Vec<_>, ComponentModuleError>>()
-        .map(Json)
 }
 
 pub(super) async fn get_component(
@@ -1059,16 +1706,7 @@ pub(super) async fn get_component(
         AuthorizationGrantOperationV1::Read,
     )
     .await?;
-    let component_id = Uuid::parse_str(&component_ref).ok();
-    let component_id = if let Some(id) = component_id {
-        id
-    } else {
-        sqlx::query_scalar("SELECT id FROM components WHERE slug=$1")
-            .bind(&component_ref)
-            .fetch_optional(&state.pool)
-            .await?
-            .ok_or_else(|| ComponentModuleError::NotFound("Component not found".into()))?
-    };
+    let component_id = resolve_component_id(&state, &component_ref).await?;
     get_definition_by_id(&state, &grant.payload, component_id)
         .await
         .map(Json)
@@ -1113,21 +1751,13 @@ async fn publish_version(
     {
         return Ok(Json(response));
     }
-    sqlx::query("UPDATE component_versions SET status='superseded',successor_version_id=$2,resource_revision=resource_revision+1,updated_at=now() WHERE component_id=$1 AND status='published' AND id<>$2")
-        .bind(component_id).bind(version_id).execute(&mut *transaction).await?;
-    sqlx::query("INSERT INTO component_version_change_events(component_version_id,resource_revision,category,from_publication_state,to_publication_state) SELECT id,resource_revision,'publication','published','superseded' FROM component_versions WHERE component_id=$1 AND successor_version_id=$2 AND status='superseded'")
-        .bind(component_id).bind(version_id).execute(&mut *transaction).await?;
-    sqlx::query("INSERT INTO component_version_change_events(component_version_id,resource_revision,category) SELECT id,resource_revision,'successor' FROM component_versions WHERE component_id=$1 AND successor_version_id=$2 AND status='superseded'")
-        .bind(component_id).bind(version_id).execute(&mut *transaction).await?;
-    let updated = sqlx::query("UPDATE component_versions SET status='published',resource_revision=resource_revision+1,updated_at=now() WHERE id=$1 AND component_id=$2 AND status='draft'")
-        .bind(version_id).bind(component_id).execute(&mut *transaction).await?;
-    if updated.rows_affected() != 1 {
-        return Err(ComponentModuleError::Conflict(
-            "Only a draft Component version can be published".into(),
-        ));
-    }
-    sqlx::query("INSERT INTO component_version_change_events(component_version_id,resource_revision,category,from_publication_state,to_publication_state) SELECT id,resource_revision,'publication','draft','published' FROM component_versions WHERE id=$1")
-        .bind(version_id).execute(&mut *transaction).await?;
+    publish_component_version_in_transaction(
+        &mut transaction,
+        &grant.payload,
+        component_id,
+        version_id,
+    )
+    .await?;
     let response = ComponentMutationResponseV1 {
         schema_version: 1,
         component_id,
@@ -1192,6 +1822,12 @@ async fn change_lifecycle(
     {
         return Ok(Json(response));
     }
+    require_component_fully_manageable_in_transaction(
+        &mut transaction,
+        &grant.payload,
+        component_id,
+    )
+    .await?;
     let (publication, previous): (String, String) = sqlx::query_as(
         "SELECT status::text,lifecycle_state::text FROM component_versions \
          WHERE id=$1 AND component_id=$2 FOR UPDATE",
@@ -1252,53 +1888,92 @@ fn lifecycle_transition(
 
 pub(super) async fn get_definition_by_id(
     state: &ComponentModuleState,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     component_id: Uuid,
 ) -> Result<ComponentDefinitionV1, ComponentModuleError> {
-    let component = sqlx::query("SELECT name,slug,description FROM components WHERE id=$1")
-        .bind(component_id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ComponentModuleError::NotFound("Component not found".into()))?;
-    let mut version_rows = sqlx::query("SELECT id AS version_id,dataset_reference,component_type::text AS component_type,status::text AS status,lifecycle_state::text AS lifecycle_state,resource_revision,authority_revision,version_number,version_label,version_note,config,dataset_scope_node_ids FROM component_versions WHERE component_id=$1 ORDER BY version_number DESC")
-        .bind(component_id).fetch_all(&state.pool).await?;
-    let manages = version_rows.iter().any(|row| {
-        row.try_get::<Vec<Uuid>, _>("dataset_scope_node_ids")
-            .ok()
-            .is_some_and(|scope| require_scope(grant, MANAGE_CAPABILITY, &scope).is_ok())
-    });
-    if !manages {
-        if !version_rows.iter().any(|row| {
-            row.try_get::<Vec<Uuid>, _>("dataset_scope_node_ids")
-                .ok()
-                .is_some_and(|scope| require_scope(grant, READ_CAPABILITY, &scope).is_ok())
-        }) {
-            // A readable detail route must not disclose whether an inaccessible
-            // Component identity exists.
-            return Err(ComponentModuleError::NotFound("Component not found".into()));
-        }
-        version_rows.retain(|row| {
-            row.try_get::<String, _>("status")
-                .ok()
-                .is_some_and(|status| status != "draft")
-        });
-        if version_rows.is_empty() {
-            return Err(ComponentModuleError::NotFound("Component not found".into()));
-        }
-    }
+    load_component_definition(state, grant, component_id, false).await
+}
+
+pub(super) async fn get_manageable_definition_by_id(
+    state: &ComponentModuleState,
+    grant: &AuthorizationGrantV3,
+    component_id: Uuid,
+) -> Result<ComponentDefinitionV1, ComponentModuleError> {
     let security = load_security_state(&state.pool).await?.ok_or_else(|| {
         ComponentModuleError::Unavailable("Component security state is unavailable".into())
     })?;
+    let mut transaction = state.pool.begin().await?;
+    require_component_fully_manageable_in_transaction(&mut transaction, grant, component_id)
+        .await?;
+    let definition = load_component_definition_from_connection(
+        &mut transaction,
+        grant,
+        component_id,
+        true,
+        security.installation_id,
+        security.module_instance_id,
+    )
+    .await?;
+    transaction.commit().await?;
+    Ok(definition)
+}
+
+async fn load_component_definition(
+    state: &ComponentModuleState,
+    grant: &AuthorizationGrantV3,
+    component_id: Uuid,
+    manageable: bool,
+) -> Result<ComponentDefinitionV1, ComponentModuleError> {
+    let security = load_security_state(&state.pool).await?.ok_or_else(|| {
+        ComponentModuleError::Unavailable("Component security state is unavailable".into())
+    })?;
+    let mut connection = state.pool.acquire().await?;
+    load_component_definition_from_connection(
+        &mut connection,
+        grant,
+        component_id,
+        manageable,
+        security.installation_id,
+        security.module_instance_id,
+    )
+    .await
+}
+
+async fn load_component_definition_from_connection(
+    connection: &mut PgConnection,
+    grant: &AuthorizationGrantV3,
+    component_id: Uuid,
+    manageable: bool,
+    installation_id: Uuid,
+    module_instance_id: Uuid,
+) -> Result<ComponentDefinitionV1, ComponentModuleError> {
+    let component = sqlx::query("SELECT name,slug,description FROM components WHERE id=$1")
+        .bind(component_id)
+        .fetch_optional(&mut *connection)
+        .await?
+        .ok_or_else(undisclosed_component_resource)?;
+    let mut version_rows = sqlx::query("SELECT id AS version_id,dataset_reference,component_type::text AS component_type,status::text AS status,lifecycle_state::text AS lifecycle_state,resource_revision,authority_revision,version_number,version_label,version_note,config,dataset_scope_node_ids FROM component_versions WHERE component_id=$1 ORDER BY version_number DESC")
+        .bind(component_id).fetch_all(&mut *connection).await?;
+    if !manageable {
+        version_rows.retain(|row| {
+            let Ok(scope) = row.try_get::<Vec<Uuid>, _>("dataset_scope_node_ids") else {
+                return false;
+            };
+            let readable = require_scope(grant, READ_CAPABILITY, &scope).is_ok();
+            let published = row
+                .try_get::<String, _>("status")
+                .is_ok_and(|status| status == "published");
+            readable && published
+        });
+    }
+    if version_rows.is_empty() {
+        // Each version owns its Dataset scope. Access to one version must not
+        // disclose sibling drafts or history bound to another scope.
+        return Err(undisclosed_component_resource());
+    }
     let versions = version_rows
         .iter()
-        .map(|row| {
-            version_from_row(
-                row,
-                security.installation_id,
-                security.module_instance_id,
-                component_id,
-            )
-        })
+        .map(|row| version_from_row(row, installation_id, module_instance_id, component_id))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ComponentDefinitionV1 {
         schema_version: 1,
@@ -1314,14 +1989,20 @@ pub(super) async fn resolve_component_id(
     state: &ComponentModuleState,
     component_ref: &str,
 ) -> Result<Uuid, ComponentModuleError> {
-    if let Ok(id) = Uuid::parse_str(component_ref) {
-        return Ok(id);
-    }
-    sqlx::query_scalar("SELECT id FROM components WHERE slug=$1")
-        .bind(component_ref)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ComponentModuleError::NotFound("Component not found".into()))
+    sqlx::query_scalar(
+        "SELECT id FROM components
+         WHERE id::text=$1 OR slug=$1
+         ORDER BY (id::text=$1) DESC
+         LIMIT 1",
+    )
+    .bind(component_ref)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(undisclosed_component_resource)
+}
+
+fn undisclosed_component_resource() -> ComponentModuleError {
+    ComponentModuleError::NotFound("Component resource was not found".into())
 }
 
 fn version_from_row(
@@ -1367,11 +2048,17 @@ fn version_from_row(
 
 async fn require_version_scope(
     state: &ComponentModuleState,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     component_id: Uuid,
     version_id: Uuid,
     capability: &str,
 ) -> Result<(), ComponentModuleError> {
+    if capability == MANAGE_CAPABILITY {
+        // Establish complete-history authority before looking up the requested
+        // target so mixed-scope history and target-scope differences remain
+        // nondisclosing.
+        require_component_fully_manageable(state, grant, component_id).await?;
+    }
     let scope: Vec<Uuid> = sqlx::query_scalar(
         "SELECT dataset_scope_node_ids FROM component_versions WHERE id=$1 AND component_id=$2",
     )
@@ -1380,13 +2067,66 @@ async fn require_version_scope(
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(|| ComponentModuleError::NotFound("Component version not found".into()))?;
-    require_scope(grant, capability, &scope)
+    require_scope(grant, capability, &scope).map_err(|_| undisclosed_component_resource())?;
+    Ok(())
+}
+
+async fn require_component_fully_manageable(
+    state: &ComponentModuleState,
+    grant: &AuthorizationGrantV3,
+    component_id: Uuid,
+) -> Result<(), ComponentModuleError> {
+    let scopes = sqlx::query_scalar::<_, Vec<Uuid>>(
+        "SELECT dataset_scope_node_ids FROM component_versions
+         WHERE component_id=$1 ORDER BY id",
+    )
+    .bind(component_id)
+    .fetch_all(&state.pool)
+    .await?;
+    if scopes.is_empty()
+        || scopes
+            .iter()
+            .any(|scope| require_scope(grant, MANAGE_CAPABILITY, scope).is_err())
+    {
+        return Err(undisclosed_component_resource());
+    }
+    Ok(())
+}
+
+async fn require_component_fully_manageable_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    grant: &AuthorizationGrantV3,
+    component_id: Uuid,
+) -> Result<(), ComponentModuleError> {
+    // Lock the Component parent as the serialization point for every existing
+    // Component mutation. This also prevents a sibling version from being
+    // inserted between the complete-history check and the protected write.
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM components WHERE id=$1 FOR UPDATE")
+        .bind(component_id)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or_else(undisclosed_component_resource)?;
+    let scopes = sqlx::query_scalar::<_, Vec<Uuid>>(
+        "SELECT dataset_scope_node_ids FROM component_versions
+         WHERE component_id=$1 ORDER BY id FOR UPDATE",
+    )
+    .bind(component_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    if scopes.is_empty()
+        || scopes
+            .iter()
+            .any(|scope| require_scope(grant, MANAGE_CAPABILITY, scope).is_err())
+    {
+        return Err(undisclosed_component_resource());
+    }
+    Ok(())
 }
 
 async fn revalidate_stored_version(
     state: &ComponentModuleState,
     headers: &HeaderMap,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     component_id: Uuid,
     version_id: Uuid,
 ) -> Result<(), ComponentModuleError> {
@@ -1410,23 +2150,30 @@ async fn revalidate_stored_version(
 }
 
 fn require_scope(
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     capability: &str,
     scope: &[Uuid],
 ) -> Result<(), ComponentModuleError> {
     let capability = SecurityCapabilityId::new(capability)
         .map_err(|error| ComponentModuleError::Internal(error.to_string()))?;
-    if scope
-        .iter()
-        .any(|node_id| grant.authorizes(&capability, *node_id))
-    {
+    let authorized = if capability.as_str() == MANAGE_CAPABILITY {
+        !scope.is_empty()
+            && scope
+                .iter()
+                .all(|node_id| grant.authorizes(&capability, *node_id))
+    } else {
+        scope
+            .iter()
+            .any(|node_id| grant.authorizes(&capability, *node_id))
+    };
+    if authorized {
         Ok(())
     } else {
         Err(ComponentModuleError::Forbidden)
     }
 }
 
-fn authorized_organizations(grant: &AuthorizationGrantV2, capability: &str) -> BTreeSet<Uuid> {
+fn authorized_organizations(grant: &AuthorizationGrantV3, capability: &str) -> BTreeSet<Uuid> {
     grant
         .capability_scope_bindings
         .iter()
@@ -1443,12 +2190,12 @@ pub(super) async fn authorize(
     headers: &HeaderMap,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> Result<SignedEnvelopeV1<AuthorizationGrantV2>, ComponentModuleError> {
+) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, ComponentModuleError> {
     let encoded = authorization_header(headers)?;
     let bytes = URL_SAFE_NO_PAD
         .decode(encoded)
         .map_err(|_| ComponentModuleError::Forbidden)?;
-    let envelope: SignedEnvelopeV1<AuthorizationGrantV2> =
+    let envelope: SignedEnvelopeV1<AuthorizationGrantV3> =
         serde_json::from_slice(&bytes).map_err(|_| ComponentModuleError::Forbidden)?;
     state
         .core_authorization_verifier
@@ -1470,13 +2217,22 @@ pub(super) async fn authorize(
     } else {
         COMPONENT_AUTHORING_CONTRACT
     };
+    let correlation_id = headers
+        .get("x-tessara-correlation-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(ComponentModuleError::Forbidden)?;
     envelope
         .payload
-        .validate_for(&AuthorizationValidationContextV2 {
+        .validate_for(&AuthorizationValidationContextV3 {
             installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core")
-                .map_err(|error| ComponentModuleError::Internal(error.to_string()))?,
-            audience_module_instance_id: security.module_instance_id,
+            correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: security.module_instance_id,
+                module_definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
+                    .map_err(|error| ComponentModuleError::Internal(error.to_string()))?,
+            },
             dependency_binding: DependencyBindingKey::new(CORE_COMPONENT_BINDING)
                 .map_err(|error| ComponentModuleError::Internal(error.to_string()))?,
             functional_contract: FunctionalContractId::new(contract)
@@ -1526,7 +2282,7 @@ fn mutation_digest<T: Serialize>(
 
 async fn load_mutation_replay<T: DeserializeOwned>(
     transaction: &mut Transaction<'_, Postgres>,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     action: &str,
     idempotency_key: &str,
     payload_digest: &str,
@@ -1562,7 +2318,7 @@ async fn load_mutation_replay<T: DeserializeOwned>(
 
 async fn record_mutation_replay<T: Serialize>(
     transaction: &mut Transaction<'_, Postgres>,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     action: &str,
     idempotency_key: &str,
     payload_digest: &str,
@@ -1586,7 +2342,49 @@ async fn record_mutation_replay<T: Serialize>(
 
 #[cfg(test)]
 mod tests {
-    use super::{LifecycleActionV1, lifecycle_transition};
+    use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
+    use serde_json::json;
+    use tessara_datasets_contract::DatasetMajorLineReference;
+    use uuid::Uuid;
+
+    use super::{
+        ComponentVersionInputV1, LifecycleActionV1, SaveComponentEditActionV1, SaveComponentEditV1,
+        UpdateComponentV1, classify_manageable_lookup, lifecycle_transition,
+        undisclosed_component_resource, validate_save_component_edit,
+    };
+    use crate::ComponentModuleError;
+
+    fn save_request(
+        component_id: Option<Uuid>,
+        draft_version_id: Option<Uuid>,
+        published_version_id: Option<Uuid>,
+        action: SaveComponentEditActionV1,
+    ) -> SaveComponentEditV1 {
+        SaveComponentEditV1 {
+            schema_version: 1,
+            component_id,
+            draft_version_id,
+            published_version_id,
+            action,
+            component: UpdateComponentV1 {
+                schema_version: 1,
+                name: "Orders".into(),
+                slug: "orders".into(),
+                description: None,
+            },
+            version: ComponentVersionInputV1 {
+                dataset_reference: DatasetMajorLineReference::from_parts(
+                    Uuid::from_u128(1),
+                    Uuid::from_u128(2),
+                    1,
+                )
+                .expect("valid Dataset reference"),
+                component_type: "table".into(),
+                config: json!({}),
+                version_note: "Validated save".into(),
+            },
+        }
+    }
 
     #[test]
     fn lifecycle_state_machine_retains_the_closed_sprint_7b_contract() {
@@ -1616,5 +2414,152 @@ mod tests {
         }
         assert!(lifecycle_transition("active", LifecycleActionV1::Tombstone).is_err());
         assert!(lifecycle_transition("archived", LifecycleActionV1::Activate).is_err());
+    }
+
+    #[test]
+    fn component_save_accepts_only_action_specific_identity_shapes() {
+        let component_id = Uuid::from_u128(10);
+        let draft_id = Uuid::from_u128(11);
+        let published_id = Uuid::from_u128(12);
+        let valid = [
+            save_request(None, None, None, SaveComponentEditActionV1::SaveDraft),
+            save_request(
+                None,
+                None,
+                None,
+                SaveComponentEditActionV1::CreateNewVersion,
+            ),
+            save_request(
+                Some(component_id),
+                None,
+                None,
+                SaveComponentEditActionV1::SaveDraft,
+            ),
+            save_request(
+                Some(component_id),
+                Some(draft_id),
+                None,
+                SaveComponentEditActionV1::SaveDraft,
+            ),
+            save_request(
+                Some(component_id),
+                None,
+                None,
+                SaveComponentEditActionV1::CreateNewVersion,
+            ),
+            save_request(
+                Some(component_id),
+                Some(draft_id),
+                None,
+                SaveComponentEditActionV1::CreateNewVersion,
+            ),
+            save_request(
+                Some(component_id),
+                None,
+                Some(published_id),
+                SaveComponentEditActionV1::UpdateExistingVersion,
+            ),
+        ];
+        for request in valid {
+            assert!(validate_save_component_edit(&request).is_ok());
+        }
+
+        let invalid = [
+            // A new Component cannot reference an existing version identity.
+            save_request(
+                None,
+                Some(draft_id),
+                None,
+                SaveComponentEditActionV1::SaveDraft,
+            ),
+            save_request(
+                None,
+                None,
+                Some(published_id),
+                SaveComponentEditActionV1::CreateNewVersion,
+            ),
+            // Draft/new-version actions cannot silently ignore a published id.
+            save_request(
+                Some(component_id),
+                None,
+                Some(published_id),
+                SaveComponentEditActionV1::SaveDraft,
+            ),
+            save_request(
+                Some(component_id),
+                Some(draft_id),
+                Some(published_id),
+                SaveComponentEditActionV1::CreateNewVersion,
+            ),
+            // Updating a published version requires exactly that identity.
+            save_request(
+                Some(component_id),
+                None,
+                None,
+                SaveComponentEditActionV1::UpdateExistingVersion,
+            ),
+            save_request(
+                Some(component_id),
+                Some(draft_id),
+                Some(published_id),
+                SaveComponentEditActionV1::UpdateExistingVersion,
+            ),
+            save_request(
+                None,
+                None,
+                Some(published_id),
+                SaveComponentEditActionV1::UpdateExistingVersion,
+            ),
+        ];
+        for request in invalid {
+            assert!(validate_save_component_edit(&request).is_err());
+        }
+    }
+
+    #[test]
+    fn manageable_catalog_skips_only_nondisclosing_not_found_results() {
+        assert!(matches!(
+            classify_manageable_lookup(Err(ComponentModuleError::NotFound("hidden".into()))),
+            Ok(None)
+        ));
+        assert!(matches!(
+            classify_manageable_lookup(Err(ComponentModuleError::Unavailable("provider".into()))),
+            Err(ComponentModuleError::Unavailable(_))
+        ));
+        assert!(matches!(
+            classify_manageable_lookup(Err(ComponentModuleError::Internal("database".into()))),
+            Err(ComponentModuleError::Internal(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn missing_and_unauthorized_product_references_share_the_exact_not_found_response() {
+        let missing = undisclosed_component_resource().into_response();
+        let unauthorized = undisclosed_component_resource().into_response();
+
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        assert_eq!(missing.status(), unauthorized.status());
+        assert_eq!(
+            missing.headers().get(axum::http::header::CONTENT_TYPE),
+            unauthorized.headers().get(axum::http::header::CONTENT_TYPE)
+        );
+        let missing_body = to_bytes(missing.into_body(), usize::MAX)
+            .await
+            .expect("missing response body");
+        let unauthorized_body = to_bytes(unauthorized.into_body(), usize::MAX)
+            .await
+            .expect("unauthorized response body");
+        assert_eq!(missing_body, unauthorized_body);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&missing_body)
+                .expect("not-found response JSON"),
+            serde_json::json!({
+                "schema_version": 1,
+                "code": "component.not_found",
+                "message": "Component resource was not found",
+                "retryable": false,
+                "findings": null
+            })
+        );
     }
 }

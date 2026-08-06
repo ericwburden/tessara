@@ -12,7 +12,8 @@ mod auth;
 mod composition;
 pub mod config;
 mod core_security;
-mod dataset_components_adapter;
+mod core_service_providers;
+mod dataset_provider;
 mod datasets;
 pub mod db;
 pub mod demo;
@@ -438,7 +439,7 @@ fn api_routes() -> Router<AppState> {
         .merge(submissions::routes())
         .merge(analytics::routes())
         .merge(datasets::routes())
-        .merge(dataset_components_adapter::routes())
+        .merge(dataset_provider::routes())
         .merge(composition::routes())
         .merge(module_authorization_exchange::routes())
         .merge(modules::routes())

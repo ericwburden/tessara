@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{collections::BTreeMap, env, net::SocketAddr, sync::Arc};
 
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -58,6 +58,16 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         service_secret,
     )?);
+    let module_service_endpoints: BTreeMap<String, String> = serde_json::from_str(
+        &env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
+            .context("TESSARA_MODULE_SERVICE_ENDPOINTS is required")?,
+    )
+    .context("TESSARA_MODULE_SERVICE_ENDPOINTS must be a definition-keyed JSON object")?;
+    let component_provider_url = module_service_endpoints
+        .get(tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID)
+        .filter(|endpoint| !endpoint.trim().is_empty())
+        .cloned()
+        .context("the selected Component provider endpoint is required")?;
 
     let address: SocketAddr = env::var("DASHBOARD_MODULE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8091".into())
@@ -67,6 +77,8 @@ async fn main() -> Result<()> {
         authorization_verifier,
         shell_verifier,
         service_request_signer,
+        env::var("TESSARA_CORE_INTERNAL_URL").unwrap_or_else(|_| "http://core:8080".into()),
+        component_provider_url,
     )?)
     .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(address).await?;

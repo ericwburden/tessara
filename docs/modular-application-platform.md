@@ -336,13 +336,24 @@ Forms/Workflows -> Responses -> Datasets -> Components -> Dashboards
 
 That diagram describes product capability and data flow, not deployment topology. Forms, Workflows, Responses, Datasets, Components, and Dashboards become separate full-stack modules. Organization, users, sessions, RBAC, the shell, and the module control plane remain in Core.
 
-The original Rust crates, single Axum service, shared database, and root-owned
-feature routes remain the transition baseline for areas not yet extracted.
-Sprint 6C moved Dashboard runtime and data into a real Module Release/Instance,
-but Dashboard remains in a source/build transition until it adopts the
-canonical module SDK/runtime and no longer links the root web application or
-Core-private bootstrap types. Existing feature-crate boundaries are useful
-extraction seams, but compile-time separation inside Core is not the target.
+The original Rust crates, Core Axum service, Core database, and root-owned
+feature routes remain the transition baseline only for areas not yet
+extracted. Sprint 6C established Dashboard's process and database boundary,
+and Sprint 6E completed its canonical SDK/runtime adoption and source/build
+independence. Sprint 8A applies that completed pathway to Components, which now
+has its own independently built and deployed Module Release/Instance,
+database, product routes, and assets. Existing in-process feature-crate
+boundaries remain useful extraction seams, but compile-time separation inside
+Core is not the target.
+
+Neither Components nor Dashboard appears in Core's frozen transition catalog.
+That catalog contains exactly `tessara.forms`, `tessara.workflows`,
+`tessara.responses`, `tessara.datasets`, and `tessara.migration`. Components
+and Dashboard appear only through their enrolled Module Releases/Instances and
+manifest contributions. The reference navigation order is Scoped Records `7`,
+Components `8`, and Dashboard `9`; Core must not add duplicate inventory or
+navigation entries for either extracted product module.
+
 During Sprint 6A, current areas could publish explicitly non-installable
 `transitional_in_process` contribution descriptors for discovery, contracts,
 security capabilities, and navigation. A descriptor may reserve a future

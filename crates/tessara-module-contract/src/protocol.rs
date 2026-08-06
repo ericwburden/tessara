@@ -15,8 +15,10 @@ pub const SHELL_CONTEXT_MAX_LIFETIME_SECONDS: i64 = 60;
 pub const AUTHORIZATION_READ_MAX_LIFETIME_SECONDS: i64 = 60;
 pub const AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS: i64 = 30;
 pub const AUTHORIZATION_GRANT_SCHEMA_VERSION_V2: u16 = 2;
+pub const AUTHORIZATION_GRANT_SCHEMA_VERSION_V3: u16 = 3;
 pub const MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS: i64 = 30;
 pub const AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1: u16 = 1;
+pub const AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2: u16 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -505,6 +507,151 @@ impl AuthorizationGrantV2 {
     }
 }
 
+/// Exact service principal presenting an authorization grant to its audience.
+/// A module principal always carries both its stable definition and its
+/// installation-scoped instance identity; callers never derive one from the
+/// other at the authorization boundary.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ModuleServicePrincipalV1 {
+    CoreGateway,
+    ModuleInstance {
+        module_instance_id: Uuid,
+        module_definition_id: ModuleDefinitionId,
+    },
+}
+
+/// Authoritative provider audience for a current authorization grant.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AuthorizationAudienceV1 {
+    CoreInstallation {
+        installation_id: Uuid,
+    },
+    ModuleInstance {
+        module_instance_id: Uuid,
+        module_definition_id: ModuleDefinitionId,
+    },
+}
+
+impl AuthorizationAudienceV1 {
+    fn is_valid_for_installation(&self, installation_id: Uuid) -> bool {
+        match self {
+            Self::CoreInstallation {
+                installation_id: audience_installation_id,
+            } => !audience_installation_id.is_nil() && *audience_installation_id == installation_id,
+            Self::ModuleInstance {
+                module_instance_id, ..
+            } => !module_instance_id.is_nil(),
+        }
+    }
+}
+
+/// Current authorization grant. V3 binds the correlation, audience, and
+/// presenting-service identities without changing the immutable historical V2
+/// wire fixture.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthorizationGrantV3 {
+    pub schema_version: u16,
+    pub installation_id: Uuid,
+    pub original_actor_id: Uuid,
+    pub correlation_id: Uuid,
+    pub presenting_service: ModuleServicePrincipalV1,
+    pub audience: AuthorizationAudienceV1,
+    pub dependency_binding: DependencyBindingKey,
+    pub functional_contract: FunctionalContractId,
+    pub action: String,
+    pub operation: AuthorizationGrantOperationV1,
+    pub capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
+    pub resource_assertion: Option<ResourceAuthorizationAssertionV2>,
+    pub delegation_basis: Vec<DelegationBasisV1>,
+    pub authorization_revision: u64,
+    pub organization_revision: u64,
+    pub jti: Uuid,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthorizationValidationContextV3 {
+    pub installation_id: Uuid,
+    pub correlation_id: Uuid,
+    pub presenting_service: ModuleServicePrincipalV1,
+    pub audience: AuthorizationAudienceV1,
+    pub dependency_binding: DependencyBindingKey,
+    pub functional_contract: FunctionalContractId,
+    pub action: String,
+    pub operation: AuthorizationGrantOperationV1,
+    pub resource_assertion: Option<ResourceAuthorizationAssertionV2>,
+    pub authorization_revision: u64,
+    pub organization_revision: u64,
+    pub now: DateTime<Utc>,
+}
+
+impl AuthorizationGrantV3 {
+    pub fn validate_for(
+        &self,
+        expected: &AuthorizationValidationContextV3,
+    ) -> Result<(), AuthorizationValidationError> {
+        if self.schema_version != AUTHORIZATION_GRANT_SCHEMA_VERSION_V3 {
+            return Err(AuthorizationValidationError::UnsupportedSchemaVersion);
+        }
+        if self.installation_id != expected.installation_id {
+            return Err(AuthorizationValidationError::WrongInstallation);
+        }
+        if self.correlation_id.is_nil() || self.correlation_id != expected.correlation_id {
+            return Err(AuthorizationValidationError::WrongCorrelation);
+        }
+        if self.presenting_service != expected.presenting_service {
+            return Err(AuthorizationValidationError::WrongPresentingService);
+        }
+        if self.audience != expected.audience
+            || !self
+                .audience
+                .is_valid_for_installation(self.installation_id)
+        {
+            return Err(AuthorizationValidationError::WrongAudience);
+        }
+        if self.dependency_binding != expected.dependency_binding
+            || self.functional_contract != expected.functional_contract
+        {
+            return Err(AuthorizationValidationError::WrongDeclaredContract);
+        }
+        if self.action != expected.action || self.operation != expected.operation {
+            return Err(AuthorizationValidationError::WrongAction);
+        }
+        if self.resource_assertion != expected.resource_assertion {
+            return Err(AuthorizationValidationError::StaleResourceAssertion);
+        }
+        if let Some(assertion) = &self.resource_assertion {
+            assertion.validate()?;
+        }
+        if self.authorization_revision != expected.authorization_revision {
+            return Err(AuthorizationValidationError::StaleAuthorizationRevision);
+        }
+        if self.organization_revision != expected.organization_revision {
+            return Err(AuthorizationValidationError::StaleOrganizationRevision);
+        }
+        if self.jti.is_nil() {
+            return Err(AuthorizationValidationError::MissingReplayIdentifier);
+        }
+        validate_capability_bindings(&self.capability_scope_bindings)?;
+        let max_lifetime = match self.operation {
+            AuthorizationGrantOperationV1::Read => AUTHORIZATION_READ_MAX_LIFETIME_SECONDS,
+            AuthorizationGrantOperationV1::Mutation => AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS,
+        };
+        validate_window(self.issued_at, self.expires_at, expected.now, max_lifetime)
+            .map_err(AuthorizationValidationError::Window)
+    }
+
+    pub fn authorizes(&self, capability: &SecurityCapabilityId, organization_id: Uuid) -> bool {
+        self.capability_scope_bindings
+            .iter()
+            .any(|binding| binding.authorizes(capability, organization_id))
+    }
+}
+
 /// Exact request for exchanging a verified inbound module grant for a
 /// least-privilege grant addressed to one downstream module instance.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -543,6 +690,52 @@ impl AuthorizationExchangeRequestV1 {
 pub struct AuthorizationExchangeResponseV1 {
     pub schema_version: u16,
     pub authorization: SignedEnvelopeV1<AuthorizationGrantV2>,
+}
+
+/// Current exchange request. Operation and required capability are resolved
+/// from the target provider's enrolled service-action declaration rather than
+/// accepted from the caller.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthorizationExchangeRequestV2 {
+    pub schema_version: u16,
+    pub target: AuthorizationAudienceV1,
+    pub dependency_binding: DependencyBindingKey,
+    pub functional_contract: FunctionalContractId,
+    pub action: String,
+    pub resource_assertion: Option<ResourceAuthorizationAssertionV2>,
+}
+
+impl AuthorizationExchangeRequestV2 {
+    pub fn validate(&self) -> Result<(), AuthorizationExchangeValidationError> {
+        if self.schema_version != AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2 {
+            return Err(AuthorizationExchangeValidationError::UnsupportedSchemaVersion);
+        }
+        let target_valid = match &self.target {
+            AuthorizationAudienceV1::CoreInstallation { installation_id } => {
+                !installation_id.is_nil()
+            }
+            AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id, ..
+            } => !module_instance_id.is_nil(),
+        };
+        if !target_valid || self.action.trim().is_empty() {
+            return Err(AuthorizationExchangeValidationError::InvalidTarget);
+        }
+        if let Some(assertion) = &self.resource_assertion {
+            assertion
+                .validate()
+                .map_err(|_| AuthorizationExchangeValidationError::InvalidResourceAssertion)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthorizationExchangeResponseV2 {
+    pub schema_version: u16,
+    pub authorization: SignedEnvelopeV1<AuthorizationGrantV3>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -601,6 +794,7 @@ pub struct ModuleServiceRequestValidationContextV1 {
     pub path: String,
     pub canonical_body_digest: String,
     pub inbound_grant_digest: String,
+    pub correlation_id: String,
     pub now: DateTime<Utc>,
 }
 
@@ -636,6 +830,9 @@ impl ModuleServiceRequestV1 {
         if self.correlation_id.trim().is_empty() || self.nonce.is_nil() {
             return Err(ModuleServiceRequestValidationError::MissingReplayIdentity);
         }
+        if self.correlation_id != expected.correlation_id {
+            return Err(ModuleServiceRequestValidationError::WrongCorrelation);
+        }
         validate_window(
             self.issued_at,
             self.expires_at,
@@ -656,6 +853,8 @@ pub enum AuthorizationValidationError {
     UnsupportedSchemaVersion,
     #[error("authorization grant is bound to another installation")]
     WrongInstallation,
+    #[error("authorization grant correlation identity does not match")]
+    WrongCorrelation,
     #[error("authorization grant presenting service does not match")]
     WrongPresentingService,
     #[error("authorization grant audience does not match")]
@@ -696,6 +895,8 @@ pub enum ModuleServiceRequestValidationError {
     WrongDigest,
     #[error("module service request digest is not a SHA-256 hex digest")]
     InvalidDigest,
+    #[error("module service request correlation identity does not match its grant")]
+    WrongCorrelation,
     #[error("module service request is missing correlation or nonce identity")]
     MissingReplayIdentity,
     #[error(transparent)]
@@ -894,7 +1095,7 @@ mod tests {
             path: "/api/private/dashboard-components/render".into(),
             canonical_body_digest: "a".repeat(64),
             inbound_grant_digest: "b".repeat(64),
-            correlation_id: "corr-7a-1".into(),
+            correlation_id: id(4).to_string(),
             nonce: id(50),
             issued_at: now,
             expires_at: now + Duration::seconds(30),
@@ -911,6 +1112,7 @@ mod tests {
             path: request.path,
             canonical_body_digest: request.canonical_body_digest,
             inbound_grant_digest: request.inbound_grant_digest,
+            correlation_id: request.correlation_id,
             now: now() + Duration::seconds(1),
         }
     }
@@ -1051,6 +1253,99 @@ mod tests {
     }
 
     #[test]
+    fn v3_binds_exact_presenting_instance_and_core_or_module_audience() {
+        let now = now();
+        let presenter = ModuleServicePrincipalV1::ModuleInstance {
+            module_instance_id: id(70),
+            module_definition_id: module("tessara.components"),
+        };
+        let audience = AuthorizationAudienceV1::CoreInstallation {
+            installation_id: id(1),
+        };
+        let current = AuthorizationGrantV3 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
+            installation_id: id(1),
+            original_actor_id: id(3),
+            correlation_id: id(4),
+            presenting_service: presenter.clone(),
+            audience: audience.clone(),
+            dependency_binding: dependency("tessara.components.dataset-major-line"),
+            functional_contract: contract("tessara.datasets.dataset-major-line"),
+            action: "datasets.execute".into(),
+            operation: AuthorizationGrantOperationV1::Read,
+            capability_scope_bindings: vec![CapabilityScopeBindingV1 {
+                capability: capability("datasets:read"),
+                organization_root_id: id(10),
+                authorized_organization_ids: vec![],
+            }],
+            resource_assertion: None,
+            delegation_basis: vec![],
+            authorization_revision: 42,
+            organization_revision: 17,
+            jti: id(71),
+            issued_at: now,
+            expires_at: now + Duration::seconds(60),
+        };
+        let mut context = AuthorizationValidationContextV3 {
+            installation_id: id(1),
+            correlation_id: id(4),
+            presenting_service: presenter,
+            audience,
+            dependency_binding: dependency("tessara.components.dataset-major-line"),
+            functional_contract: contract("tessara.datasets.dataset-major-line"),
+            action: "datasets.execute".into(),
+            operation: AuthorizationGrantOperationV1::Read,
+            resource_assertion: None,
+            authorization_revision: 42,
+            organization_revision: 17,
+            now: now + Duration::seconds(1),
+        };
+        current.validate_for(&context).unwrap();
+
+        context.correlation_id = id(99);
+        assert_eq!(
+            current.validate_for(&context),
+            Err(AuthorizationValidationError::WrongCorrelation)
+        );
+        context.correlation_id = id(4);
+
+        context.presenting_service = ModuleServicePrincipalV1::ModuleInstance {
+            module_instance_id: id(72),
+            module_definition_id: module("tessara.components"),
+        };
+        assert_eq!(
+            current.validate_for(&context),
+            Err(AuthorizationValidationError::WrongPresentingService)
+        );
+
+        let historical = serde_json::to_value(grant(AuthorizationGrantOperationV1::Read)).unwrap();
+        assert!(
+            serde_json::from_value::<AuthorizationGrantV3>(historical).is_err(),
+            "normal V3 readers must reject the immutable historical V2 shape"
+        );
+    }
+
+    #[test]
+    fn exchange_v2_target_is_tagged_and_provider_policy_is_not_caller_selected() {
+        let request = AuthorizationExchangeRequestV2 {
+            schema_version: AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2,
+            target: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: id(80),
+                module_definition_id: module("tessara.components"),
+            },
+            dependency_binding: dependency("tessara.dashboards.component-version"),
+            functional_contract: contract("tessara.components.component-version"),
+            action: "components.render".into(),
+            resource_assertion: None,
+        };
+        request.validate().unwrap();
+        let wire = serde_json::to_value(request).unwrap();
+        assert_eq!(wire["target"]["kind"], "module_instance");
+        assert!(wire.get("operation").is_none());
+        assert!(wire.get("required_capability").is_none());
+    }
+
+    #[test]
     fn read_and_mutation_lifetimes_are_enforced_independently() {
         grant(AuthorizationGrantOperationV1::Read)
             .validate_for(&grant_validation(AuthorizationGrantOperationV1::Read))
@@ -1114,6 +1409,12 @@ mod tests {
         assert_eq!(
             request.validate_for(&expected),
             Err(ModuleServiceRequestValidationError::WrongDigest)
+        );
+        expected = service_request_validation();
+        expected.correlation_id = id(99).to_string();
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(ModuleServiceRequestValidationError::WrongCorrelation)
         );
     }
 

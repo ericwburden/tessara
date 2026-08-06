@@ -7,11 +7,11 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPoolOptions;
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, CapabilityScopeBindingV1,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, NavigationContributionId,
-    NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
-    PurposeBoundSigningKeyV1, SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1,
-    ShellThemeV1,
+    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    CapabilityScopeBindingV1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
+    ModuleServicePrincipalV1, NavigationContributionId, NavigationProjectionV1,
+    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
+    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
 };
 use tessara_reference_scoped_records::{
     MANAGE_CAPABILITY, ModuleState, OrganizationAccessProjectionV1, READ_CAPABILITY, router,
@@ -63,12 +63,13 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
         core_shell_verifier: shell_signer.verifier(),
     });
     let actor_id = Uuid::new_v4();
+    let correlation_id = Uuid::new_v4();
     let grant_context = GrantContext {
         installation_id,
         module_instance_id,
         actor_id,
+        correlation_id,
     };
-    let correlation_id = Uuid::new_v4();
     let now = Utc::now();
     let shell = shell_signer
         .sign(ShellContextV1 {
@@ -217,6 +218,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
             "POST",
             "/api/records",
             &create_grant,
+            grant_context.correlation_id,
             create_body.clone(),
         ))
         .await
@@ -228,6 +230,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
             "POST",
             "/api/records",
             &create_grant,
+            grant_context.correlation_id,
             create_body,
         ))
         .await
@@ -239,6 +242,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
             "POST",
             "/api/records",
             &create_grant,
+            grant_context.correlation_id,
             json!({
                 "label": "Changed payload",
                 "organization_owner_id": allowed_owner,
@@ -273,6 +277,7 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
             "GET",
             "/api/records",
             &read_grant,
+            grant_context.correlation_id,
             json!(null),
         ))
         .await
@@ -293,6 +298,7 @@ struct GrantContext {
     installation_id: Uuid,
     module_instance_id: Uuid,
     actor_id: Uuid,
+    correlation_id: Uuid,
 }
 
 fn signed_grant(
@@ -306,12 +312,19 @@ fn signed_grant(
 ) -> String {
     let now = Utc::now();
     let envelope = signer
-        .sign(AuthorizationGrantV2 {
-            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+        .sign(AuthorizationGrantV3 {
+            schema_version: tessara_module_contract::AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
             installation_id: context.installation_id,
             original_actor_id: context.actor_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").unwrap(),
-            audience_module_instance_id: context.module_instance_id,
+            correlation_id: context.correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: context.module_instance_id,
+                module_definition_id: ModuleDefinitionId::new(
+                    tessara_reference_scoped_records::MODULE_DEFINITION_ID,
+                )
+                .unwrap(),
+            },
             dependency_binding: DependencyBindingKey::new("tessara.core.scoped-records").unwrap(),
             functional_contract: FunctionalContractId::new(
                 "tessara.reference.scoped-records.record",
@@ -340,12 +353,19 @@ fn signed_grant(
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(&envelope).unwrap())
 }
 
-fn module_request(method: &str, path: &str, authorization: &str, body: Value) -> Request<Body> {
+fn module_request(
+    method: &str,
+    path: &str,
+    authorization: &str,
+    correlation_id: Uuid,
+    body: Value,
+) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(path)
         .header("content-type", "application/json")
         .header("x-tessara-authorization", authorization)
+        .header("x-tessara-correlation-id", correlation_id.to_string())
         .body(Body::from(if method == "GET" {
             Vec::new()
         } else {

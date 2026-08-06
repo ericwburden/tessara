@@ -234,5 +234,7 @@
       "idempotency": "forward_or_generate_header"
     }
   ],
+  "provided_service_actions": [],
+  "consumed_service_actions": [],
   "control_projections": []
 }

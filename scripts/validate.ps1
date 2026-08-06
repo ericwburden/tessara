@@ -12,7 +12,9 @@ $fullValidationDatabaseEnvironmentNames = @(
     "TEST_API_DATABASE_URL",
     "TEST_API_FRESH_DATABASE_URL",
     "TEST_REFERENCE_MODULE_DATABASE_URL",
-    "TEST_API_ENROLLMENT_DATABASE_URL"
+    "TEST_COMPONENT_MODULE_DATABASE_URL",
+    "TEST_API_ENROLLMENT_DATABASE_URL",
+    "TEST_INSTALLATION_CONTROL_DATABASE_URL"
 )
 $destructiveFreshResetAcknowledgement =
     "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET"
@@ -164,7 +166,9 @@ function Invoke-TessaraValidationPreflightSelfTest {
         TEST_API_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_api"
         TEST_API_FRESH_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_api_fresh"
         TEST_REFERENCE_MODULE_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_reference_module"
+        TEST_COMPONENT_MODULE_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_component_module"
         TEST_API_ENROLLMENT_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_api_enrollment"
+        TEST_INSTALLATION_CONTROL_DATABASE_URL = "postgres://tester@127.0.0.1:55432/tessara_test_installation_control"
         SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = $destructiveFreshResetAcknowledgement
     }
     $endpoints = @(
@@ -348,6 +352,10 @@ try {
         cargo check -p tessara-api --locked
     }
 
+    Invoke-CheckedStep -Label "Extracted Component module check" -Command {
+        cargo check -p tessara-components-contract -p tessara-component-module --locked
+    }
+
     if (-not $Fast) {
         Invoke-CheckedStep -Label "API SSR check" -Command {
             cargo check -p tessara-api --features ssr --locked
@@ -391,6 +399,14 @@ try {
 
     Invoke-CheckedStep -Label "Web tests" -Command {
         cargo test -p tessara-web -j 1 --locked
+    }
+
+    Invoke-CheckedStep -Label "Extracted Component module tests" -Command {
+        if ($Fast) {
+            cargo test -p tessara-components-contract -p tessara-component-module --lib --locked
+        } else {
+            cargo test -p tessara-components-contract -p tessara-component-module --locked
+        }
     }
 
     Invoke-CheckedStep -Label "API tests" -Command {

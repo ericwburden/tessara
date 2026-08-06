@@ -43,9 +43,9 @@ impl DatasetMajorLineReference {
     pub fn from_parts(
         installation_id: Uuid,
         dataset_id: Uuid,
-        major: u32,
+        major: i32,
     ) -> Result<Self, DatasetMajorLineReferenceValidationError> {
-        if major == 0 {
+        if major <= 0 {
             return Err(DatasetMajorLineReferenceValidationError::InvalidMajor);
         }
         Self::new(TypedResourceReference::new(
@@ -68,7 +68,7 @@ impl DatasetMajorLineReference {
             .0
     }
 
-    pub fn major(&self) -> u32 {
+    pub fn major(&self) -> i32 {
         parse_resource_id(self.reference.resource_id())
             .expect("validated Dataset major-line reference")
             .1
@@ -108,7 +108,7 @@ pub enum DatasetMajorLineReferenceValidationError {
     InvalidMajor,
 }
 
-fn parse_resource_id(value: &str) -> Result<(Uuid, u32), DatasetMajorLineReferenceValidationError> {
+fn parse_resource_id(value: &str) -> Result<(Uuid, i32), DatasetMajorLineReferenceValidationError> {
     let Some((dataset, major_text)) = value.split_once('@') else {
         return Err(DatasetMajorLineReferenceValidationError::InvalidResourceId);
     };
@@ -121,9 +121,9 @@ fn parse_resource_id(value: &str) -> Result<(Uuid, u32), DatasetMajorLineReferen
         return Err(DatasetMajorLineReferenceValidationError::InvalidResourceId);
     }
     let major = major_text
-        .parse::<u32>()
+        .parse::<i32>()
         .map_err(|_| DatasetMajorLineReferenceValidationError::InvalidResourceId)?;
-    if major == 0 || major.to_string() != major_text {
+    if major <= 0 || major.to_string() != major_text {
         return Err(DatasetMajorLineReferenceValidationError::InvalidMajor);
     }
     Ok((dataset_id, major))
@@ -148,12 +148,33 @@ pub struct DatasetFieldContract {
     pub restriction_tier: String,
 }
 
+/// Compact source metadata carried with Dataset catalog and major-line schema
+/// results. These are discoverability fields only; they never participate in
+/// authorization or compatibility decisions.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetProvenanceSummary {
+    pub forms: Vec<DatasetProvenanceItem>,
+    pub datasets: Vec<DatasetProvenanceItem>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetProvenanceItem {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: Option<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DatasetMajorLineMetadata {
     pub reference: DatasetMajorLineReference,
     pub dataset_name: String,
     pub dataset_slug: String,
+    pub grain: String,
+    pub tags: Vec<String>,
+    pub provenance: DatasetProvenanceSummary,
     pub materialization_state: String,
     pub fields: Vec<DatasetFieldContract>,
     pub scope_node_ids: Vec<Uuid>,
@@ -401,6 +422,10 @@ mod tests {
             serde_json::from_value::<DatasetMajorLineReference>(wire).unwrap(),
             reference
         );
+
+        let maximum =
+            DatasetMajorLineReference::from_parts(INSTALLATION_ID, DATASET_ID, i32::MAX).unwrap();
+        assert_eq!(maximum.major(), i32::MAX);
     }
 
     #[test]
@@ -437,6 +462,16 @@ mod tests {
             }
         });
         assert!(serde_json::from_value::<DatasetMajorLineReference>(invalid).is_err());
+
+        let out_of_storage_range = json!({
+            "reference": {
+                "installation_id": INSTALLATION_ID,
+                "owner": {"kind": "core_installation", "installation_id": INSTALLATION_ID},
+                "resource_type": DATASET_RESOURCE_TYPE,
+                "resource_id": format!("{DATASET_ID}@2147483648")
+            }
+        });
+        assert!(serde_json::from_value::<DatasetMajorLineReference>(out_of_storage_range).is_err());
     }
 
     #[test]
@@ -456,5 +491,63 @@ mod tests {
             .unwrap()
             .insert("fallback".into(), json!(true));
         assert!(serde_json::from_value::<DatasetSchemaRequest>(wire).is_err());
+    }
+
+    #[test]
+    fn major_line_metadata_preserves_picker_discovery_context_exactly() {
+        let form_id = Uuid::from_u128(3);
+        let upstream_dataset_id = Uuid::from_u128(4);
+        let metadata = DatasetMajorLineMetadata {
+            reference: DatasetMajorLineReference::from_parts(INSTALLATION_ID, DATASET_ID, 3)
+                .unwrap(),
+            dataset_name: "Enrollment outcomes".into(),
+            dataset_slug: "enrollment-outcomes".into(),
+            grain: "submission".into(),
+            tags: vec!["outcomes".into(), "enrollment".into()],
+            provenance: DatasetProvenanceSummary {
+                forms: vec![DatasetProvenanceItem {
+                    id: form_id,
+                    name: "Enrollment intake".into(),
+                    slug: None,
+                }],
+                datasets: vec![DatasetProvenanceItem {
+                    id: upstream_dataset_id,
+                    name: "Enrollment activity".into(),
+                    slug: Some("enrollment-activity".into()),
+                }],
+            },
+            materialization_state: "ready".into(),
+            fields: vec![DatasetFieldContract {
+                key: "program".into(),
+                label: "Program".into(),
+                field_type: "text".into(),
+                restriction_tier: "provider_enforced".into(),
+            }],
+            scope_node_ids: vec![Uuid::from_u128(5)],
+        };
+
+        let mut wire = serde_json::to_value(&metadata).unwrap();
+        assert_eq!(wire["dataset_name"], "Enrollment outcomes");
+        assert_eq!(
+            wire["reference"]["reference"]["resource_id"],
+            format!("{DATASET_ID}@3")
+        );
+        assert_eq!(wire["grain"], "submission");
+        assert_eq!(wire["tags"], json!(["outcomes", "enrollment"]));
+        assert_eq!(wire["provenance"]["forms"][0]["name"], "Enrollment intake");
+        assert_eq!(
+            wire["provenance"]["datasets"][0]["slug"],
+            "enrollment-activity"
+        );
+        assert_eq!(wire["fields"][0]["label"], "Program");
+        assert_eq!(
+            serde_json::from_value::<DatasetMajorLineMetadata>(wire.clone()).unwrap(),
+            metadata
+        );
+
+        wire.as_object_mut()
+            .unwrap()
+            .insert("legacy_picker_label".into(), json!("unsupported"));
+        assert!(serde_json::from_value::<DatasetMajorLineMetadata>(wire).is_err());
     }
 }

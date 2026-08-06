@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
     ModuleDefinitionId, ModuleManifest, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
-    ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
+    ResourceOwner, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -45,7 +45,9 @@ pub struct DashboardModuleState {
     pub core_authorization_verifier: PurposeBoundVerifyingKeyV1,
     pub core_shell_verifier: PurposeBoundVerifyingKeyV1,
     pub service_request_signer: Arc<PurposeBoundSigningKeyV1>,
-    pub(crate) component_provider_client: reqwest::Client,
+    pub(crate) service_client: reqwest::Client,
+    pub(crate) core_internal_url: String,
+    pub(crate) component_provider_url: String,
 }
 
 impl DashboardModuleState {
@@ -54,20 +56,22 @@ impl DashboardModuleState {
         core_authorization_verifier: PurposeBoundVerifyingKeyV1,
         core_shell_verifier: PurposeBoundVerifyingKeyV1,
         service_request_signer: Arc<PurposeBoundSigningKeyV1>,
+        core_internal_url: String,
+        component_provider_url: String,
     ) -> Result<Self, reqwest::Error> {
         Ok(Self {
             pool,
             core_authorization_verifier,
             core_shell_verifier,
             service_request_signer,
-            component_provider_client: component_provider_client_with_timeout(
-                COMPONENT_PROVIDER_REQUEST_TIMEOUT,
-            )?,
+            service_client: module_service_client_with_timeout(COMPONENT_PROVIDER_REQUEST_TIMEOUT)?,
+            core_internal_url: core_internal_url.trim_end_matches('/').to_string(),
+            component_provider_url: component_provider_url.trim_end_matches('/').to_string(),
         })
     }
 }
 
-fn component_provider_client_with_timeout(
+fn module_service_client_with_timeout(
     timeout: Duration,
 ) -> Result<reqwest::Client, reqwest::Error> {
     reqwest::Client::builder().timeout(timeout).build()
@@ -239,6 +243,15 @@ async fn apply_bootstrap(
             "Dashboard bootstrap contract or digest is invalid".into(),
         ));
     }
+    let security = load_security_state(&state.pool)
+        .await?
+        .ok_or_else(|| DashboardModuleError::Unavailable("security state unavailable".into()))?;
+    if security.installation_id != request.installation_id {
+        return Err(DashboardModuleError::BadRequest(
+            "Dashboard bootstrap belongs to another installation".into(),
+        ));
+    }
+    validate_dashboard_bootstrap_input(request.installation_id, &request.input)?;
     if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
         "SELECT input_digest,receipt FROM dashboard_bootstrap_receipts WHERE idempotency_key=$1",
     )
@@ -257,19 +270,6 @@ async fn apply_bootstrap(
         response.receipt.changed = false;
         return Ok(Json(response));
     }
-    if request.input.name.trim().is_empty()
-        || request.input.placements.len() > 240
-        || request.input.placements.iter().any(|placement| {
-            placement.column >= 12
-                || placement.width == 0
-                || placement.column + placement.width > 12
-                || placement.height == 0
-        })
-    {
-        return Err(DashboardModuleError::BadRequest(
-            "Dashboard bootstrap layout is invalid".into(),
-        ));
-    }
     let mut transaction = state.pool.begin().await?;
     // The composition bootstrap may introduce the Core scope node in the same
     // apply operation. Seed the module-owned projection before linking the
@@ -287,11 +287,6 @@ async fn apply_bootstrap(
         .bind(request.input.dashboard_id).bind(request.input.scope_node_id)
         .execute(&mut *transaction).await?;
     for placement in &request.input.placements {
-        if placement.component_reference.reference().installation_id() != request.installation_id {
-            return Err(DashboardModuleError::BadRequest(
-                "Dashboard bootstrap Component reference belongs to another installation".into(),
-            ));
-        }
         let reference = placement.component_reference.reference().clone();
         let position = i32::from(placement.row) * 12 + i32::from(placement.column);
         let config = serde_json::json!({
@@ -331,6 +326,47 @@ async fn apply_bootstrap(
         .bind(request.desired_revision as i64).bind(receipt).execute(&mut *transaction).await?;
     transaction.commit().await?;
     Ok(Json(response))
+}
+
+fn validate_dashboard_bootstrap_input(
+    installation_id: Uuid,
+    input: &DashboardBootstrapV2,
+) -> Result<(), DashboardModuleError> {
+    if input.name.trim().is_empty()
+        || input.placements.len() > 240
+        || input.placements.iter().any(|placement| {
+            placement.column >= 12
+                || placement.width == 0
+                || placement.column + placement.width > 12
+                || placement.height == 0
+        })
+    {
+        return Err(DashboardModuleError::BadRequest(
+            "Dashboard bootstrap layout is invalid".into(),
+        ));
+    }
+    let expected_component_instance = tessara_composition::module_instance_id(
+        installation_id,
+        tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID,
+    );
+    if input.placements.iter().any(|placement| {
+        let reference = placement.component_reference.reference();
+        reference.installation_id() != installation_id
+            || !matches!(
+                reference.owner(),
+                ResourceOwner::ModuleInstance {
+                    installation_id: owner_installation_id,
+                    module_instance_id,
+                } if *owner_installation_id == installation_id
+                    && *module_instance_id == expected_component_instance
+            )
+    }) {
+        return Err(DashboardModuleError::BadRequest(
+            "Dashboard bootstrap Component references must belong to the selected Component Module Instance"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) async fn verified_shell_context(
@@ -650,11 +686,12 @@ mod tests {
 
     use axum::{Router, routing::get};
     use sha2::{Digest, Sha256};
-    use tessara_module_contract::{ModuleManifest, ResourceOwner};
+    use tessara_module_contract::{ModuleManifest, ResourceOwner, TypedResourceReference};
 
     use super::{
-        DashboardBootstrapV2, DashboardConfigurationV1, component_provider_client_with_timeout,
-        validate_configuration,
+        DashboardBootstrapPlacementV2, DashboardBootstrapV2, DashboardConfigurationV1,
+        module_service_client_with_timeout, validate_configuration,
+        validate_dashboard_bootstrap_input,
     };
 
     #[test]
@@ -665,18 +702,110 @@ mod tests {
                 "/../../deploy/sprint-8a/blueprints/reference.json"
             )))
             .expect("valid Sprint 8A Blueprint");
+        let component_module = blueprint
+            .modules
+            .iter()
+            .find(|module| {
+                module.definition_id == tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID
+            })
+            .expect("Component selection");
+        let tessara_composition::BootstrapInputV1::Inline {
+            value: component_input,
+            ..
+        } = component_module
+            .bootstrap
+            .as_ref()
+            .expect("Component bootstrap")
+        else {
+            panic!("Sprint 8A Component bootstrap must be inline");
+        };
+        let component_instance_id = tessara_composition::module_instance_id(
+            blueprint.installation_id,
+            tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID,
+        );
+        let resource_ids = component_input["components"]
+            .as_array()
+            .expect("Component bootstrap inventory")
+            .iter()
+            .flat_map(|component| {
+                component["versions"]
+                    .as_array()
+                    .expect("Component bootstrap versions")
+                    .iter()
+            })
+            .map(|version| {
+                let resource_key = version["resource_key"]
+                    .as_str()
+                    .expect("Component receipt resource key");
+                let version_id = version["component_version_id"]
+                    .as_str()
+                    .expect("Component version identity");
+                let reference = tessara_components_contract::ComponentVersionReference::new(
+                    TypedResourceReference::new(
+                        blueprint.installation_id,
+                        ResourceOwner::ModuleInstance {
+                            installation_id: blueprint.installation_id,
+                            module_instance_id: component_instance_id,
+                        },
+                        tessara_components_contract::COMPONENT_RESOURCE_TYPE
+                            .parse()
+                            .expect("Component resource type"),
+                        version_id,
+                    )
+                    .expect("typed resource reference"),
+                )
+                .expect("Component version reference");
+                (
+                    resource_key.to_string(),
+                    serde_json::to_string(&reference).expect("serialized Component reference"),
+                )
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let receipt = tessara_composition::BootstrapReceiptV1 {
+            owner: tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID.into(),
+            schema_version: "tessara.io/component-bootstrap/v1".into(),
+            input_digest: tessara_composition::canonical_digest(component_input)
+                .expect("Component input digest"),
+            result_digest: tessara_composition::canonical_digest(&resource_ids)
+                .expect("Component result digest"),
+            changed: true,
+            resource_ids,
+        };
         let module = blueprint
             .modules
-            .into_iter()
+            .iter()
             .find(|module| module.definition_id == "tessara.dashboards")
             .expect("Dashboard selection");
-        let tessara_composition::BootstrapInputV1::Inline { value, .. } =
-            module.bootstrap.expect("Dashboard bootstrap")
+        let tessara_composition::BootstrapInputV1::Inline {
+            value,
+            receipt_bindings,
+            ..
+        } = module.bootstrap.as_ref().expect("Dashboard bootstrap")
         else {
             panic!("Sprint 8A Dashboard bootstrap must be inline");
         };
+        assert!(
+            value["placements"]
+                .as_array()
+                .expect("Dashboard placements")
+                .iter()
+                .all(|placement| placement["component_reference"].is_null()),
+            "the locked Dashboard seed must not contain hardcoded Component references"
+        );
+        assert_eq!(receipt_bindings.len(), 7);
+        let resolved = tessara_composition::resolve_bootstrap_receipt_bindings(
+            value.clone(),
+            receipt_bindings,
+            &std::collections::BTreeMap::from([(
+                tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID.into(),
+                receipt,
+            )]),
+        )
+        .expect("Dashboard receipt bindings resolve");
         let bootstrap: DashboardBootstrapV2 =
-            serde_json::from_value(value).expect("typed Dashboard bootstrap");
+            serde_json::from_value(resolved).expect("typed Dashboard bootstrap");
+        validate_dashboard_bootstrap_input(blueprint.installation_id, &bootstrap)
+            .expect("resolved Dashboard bootstrap identity");
         assert_eq!(
             bootstrap
                 .placements
@@ -688,6 +817,9 @@ mod tests {
                 "01980000-0003-7000-8000-000000000003",
                 "01980000-0003-7000-8000-000000000004",
                 "01980000-0003-7000-8000-000000000005",
+                "01980000-0003-7000-8000-000000000006",
+                "01980000-0003-7000-8000-000000000007",
+                "01980000-0003-7000-8000-000000000008",
             ]
             .map(|value| uuid::Uuid::parse_str(value).expect("placement UUID"))
         );
@@ -704,8 +836,88 @@ mod tests {
         }));
     }
 
+    fn bootstrap_placement_wire(
+        installation_id: uuid::Uuid,
+        owner: serde_json::Value,
+        resource_type: &str,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "placement_id": "01980000-0003-7000-8000-000000000002",
+            "placement_key": "row-count",
+            "component_reference": {
+                "reference": {
+                    "installation_id": installation_id,
+                    "owner": owner,
+                    "resource_type": resource_type,
+                    "resource_id": "01980000-0001-7000-8000-000000000001"
+                }
+            },
+            "column": 0,
+            "row": 0,
+            "width": 4,
+            "height": 2
+        })
+    }
+
+    #[test]
+    fn dashboard_bootstrap_rejects_wrong_component_owner_instance_and_type() {
+        let installation_id =
+            uuid::Uuid::parse_str("01980000-0000-7000-8000-00000000008a").unwrap();
+        let core_owned = bootstrap_placement_wire(
+            installation_id,
+            serde_json::json!({
+                "kind": "core_installation",
+                "installation_id": installation_id
+            }),
+            tessara_components_contract::COMPONENT_RESOURCE_TYPE,
+        );
+        assert!(
+            serde_json::from_value::<DashboardBootstrapPlacementV2>(core_owned).is_err(),
+            "Component v3 references reject a Core owner"
+        );
+
+        let wrong_type = bootstrap_placement_wire(
+            installation_id,
+            serde_json::json!({
+                "kind": "module_instance",
+                "installation_id": installation_id,
+                "module_instance_id": tessara_composition::module_instance_id(
+                    installation_id,
+                    tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID,
+                )
+            }),
+            "tessara.transition.component_version",
+        );
+        assert!(
+            serde_json::from_value::<DashboardBootstrapPlacementV2>(wrong_type).is_err(),
+            "Component v3 references reject an old transition resource type"
+        );
+
+        let wrong_instance = bootstrap_placement_wire(
+            installation_id,
+            serde_json::json!({
+                "kind": "module_instance",
+                "installation_id": installation_id,
+                "module_instance_id": "01980000-0000-7000-8000-000000000099"
+            }),
+            tessara_components_contract::COMPONENT_RESOURCE_TYPE,
+        );
+        let placement: DashboardBootstrapPlacementV2 =
+            serde_json::from_value(wrong_instance).expect("well-typed but wrong provider instance");
+        let bootstrap = DashboardBootstrapV2 {
+            schema_version: "tessara.io/dashboard-bootstrap/v2".into(),
+            dashboard_id: uuid::Uuid::new_v4(),
+            external_key: "wrong-instance".into(),
+            name: "Wrong instance".into(),
+            description: None,
+            scope_node_id: uuid::Uuid::new_v4(),
+            placements: vec![placement],
+        };
+        assert!(validate_dashboard_bootstrap_input(installation_id, &bootstrap).is_err());
+    }
+
     #[tokio::test]
-    async fn component_provider_client_enforces_the_complete_request_deadline() {
+    async fn module_service_client_enforces_the_complete_request_deadline() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind delayed provider");
@@ -724,7 +936,7 @@ mod tests {
             .await
             .expect("serve delayed provider");
         });
-        let client = component_provider_client_with_timeout(Duration::from_millis(50))
+        let client = module_service_client_with_timeout(Duration::from_millis(50))
             .expect("bounded provider client");
         let started = Instant::now();
 

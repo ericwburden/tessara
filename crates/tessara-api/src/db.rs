@@ -28,8 +28,6 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
             "submissions:manage",
             "operations:view",
             "datasets:read",
-            "components:read",
-            "dashboards:read",
         ],
     ),
     (
@@ -44,11 +42,11 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
 /// [`BUILT_IN_ROLE_CAPABILITY_SEED_SHA256`]. This coupling makes a membership
 /// change require both a new digest and an intentional version change.
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_VERSION: &str =
-    "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68";
+    "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c";
 
 /// SHA-256 of [`built_in_role_capability_seed_canonical_bytes`].
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_SHA256: &str =
-    "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600";
+    "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609";
 
 /// Returns the canonical bytes covered by the built-in membership digest.
 ///
@@ -310,10 +308,6 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
             "datasets:read_confidential",
             "Read confidential and restricted dataset rows when dataset visibility allows access",
         ),
-        ("components:manage", "Manage component definitions"),
-        ("components:read", "Inspect component definitions"),
-        ("dashboards:manage", "Manage dashboard definitions"),
-        ("dashboards:read", "Inspect dashboard definitions"),
         (
             "composition:read",
             "Inspect application composition and receipts",
@@ -502,11 +496,11 @@ mod tests {
     fn built_in_role_capability_seed_contract_is_exact_and_review_versioned() {
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_VERSION,
-            "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68"
+            "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c"
         );
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_SHA256,
-            "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600"
+            "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609"
         );
         assert_eq!(
             super::sha256_hex(&built_in_role_capability_seed_canonical_bytes()),
@@ -534,7 +528,7 @@ mod tests {
 
     #[test]
     fn sprint_8a_core_fresh_baseline_excludes_component_product_storage() {
-        assert_eq!(fnv1a(BASELINE), 0x9cd4_a660_f9f4_3acd);
+        assert_eq!(fnv1a(BASELINE), 0xc1fc_2418_69d6_9950);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(!baseline.contains("CREATE TABLE components ("));
         assert!(!baseline.contains("CREATE TABLE component_versions ("));
@@ -546,7 +540,7 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "12d7a950cf5d4999db3335c8a928de3be24fa7f237c5a2b43729f3ac09843f2b"
+            "ef38ef307cf6fe44185b558522ad68e5a34841dec3e8d3442245ba5441ede26a"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));
@@ -561,6 +555,18 @@ mod tests {
         assert!(baseline.contains("CREATE TABLE administrator_enrollment_handoffs"));
         assert!(baseline.contains("CREATE TABLE core_module_action_declarations"));
         assert!(baseline.contains("manifest JSONB"));
+    }
+
+    #[test]
+    fn independent_module_action_declarations_are_manifest_driven() {
+        let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
+        assert!(baseline.contains("CREATE TABLE core_module_action_declarations"));
+        assert!(!baseline.contains("INSERT INTO core_module_action_declarations"));
+        assert!(
+            !baseline.contains("'tessara.reference.scoped-records', 'tessara.core.scoped-records'")
+        );
+        assert!(!baseline.contains("'tessara.dashboards', 'tessara.core.dashboards'"));
+        assert!(!baseline.contains("'tessara.dashboards', 'tessara.dashboards.component-version'"));
     }
 
     #[test]

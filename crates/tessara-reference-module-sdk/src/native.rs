@@ -15,8 +15,9 @@ use axum::{
 };
 use serde_json::{Value, json};
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, SecurityCapabilityId,
+    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
+    ModuleDefinitionId, ModuleServicePrincipalV1, SecurityCapabilityId,
     ShellContextValidationContextV1,
 };
 use tessara_module_runtime::{
@@ -377,7 +378,7 @@ async fn verify_authorization(
     action: &str,
     organization_id: Option<Uuid>,
 ) -> Result<(), ()> {
-    let envelope: tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2> =
+    let envelope: tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3> =
         decode_signed_envelope_header(headers, "x-tessara-authorization").map_err(|_| ())?;
     runtime
         .verifiers
@@ -385,12 +386,18 @@ async fn verify_authorization(
         .verify(&envelope)
         .map_err(|_| ())?;
     let security = runtime.current_security_state().await.map_err(|_| ())?;
+    let correlation_id = request_correlation_id(headers).map_err(|_| ())?;
     envelope
         .payload
-        .validate_for(&AuthorizationValidationContextV2 {
+        .validate_for(&AuthorizationValidationContextV3 {
             installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").map_err(|_| ())?,
-            audience_module_instance_id: security.module_instance_id,
+            correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: security.module_instance_id,
+                module_definition_id: ModuleDefinitionId::new("tessara.reference.module-sdk")
+                    .map_err(|_| ())?,
+            },
             dependency_binding: DependencyBindingKey::new("tessara.core.module-document")
                 .map_err(|_| ())?,
             functional_contract: FunctionalContractId::new(
