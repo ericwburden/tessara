@@ -21,7 +21,10 @@ Add `-VerifyNoOp` to repeat the resolved composition after the first healthy
 apply. The command refuses any Compose project or named-volume namespace other
 than `tessara-sprint-8a`, retains failure evidence under
 `target/sprint-8a-bootstrap/reference`, and verifies Component owner read-back
-before accepting the Dashboard seed.
+before accepting the Dashboard seed. Because this is a pre-production rebuild,
+the reference profile also recreates the established demo data and Sprint 7A
+semantic acceptance fixtures through their owning APIs/databases before
+deployment evidence and the complete Playwright inventory run.
 
 The checked-in signing keys are disposable local acceptance fixtures only.
 Deployments must supply distinct keys through their secret store.

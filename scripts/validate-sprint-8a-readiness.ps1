@@ -98,13 +98,14 @@ try {
         Test-Sprint7AAcceptanceContract; Test-Sprint8AAcceptanceContract; "Compose images, fixtures, and UAT inventory agree."
     }
     Invoke-ReadinessCheck "runner-parsing" "PowerShell parser for Sprint 8A validation runners" {
-        foreach($file in @("scripts/materialize-sprint-8a.ps1","scripts/bootstrap-sprint-7a-composition.ps1","scripts/smoke-sprint-8a.ps1","scripts/uat-sprint-8a.ps1","scripts/test-sprint-validation-harvest.ps1","scripts/verify-sprint-8a-component-upgrade.ps1","scripts/build-sprint-8a-component-rehearsal-baseline.ps1")){
+        foreach($file in @("scripts/materialize-sprint-8a.ps1","scripts/bootstrap-sprint-7a-composition.ps1","scripts/smoke-sprint-8a.ps1","scripts/audit-sprint-8a-deployed-inventory.ps1","scripts/uat-sprint-8a.ps1","scripts/test-sprint-validation-harvest.ps1","scripts/verify-sprint-8a-component-upgrade.ps1","scripts/build-sprint-8a-component-rehearsal-baseline.ps1")){
             $tokens=$null;$errors=$null;[void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)
             if($errors.Count){throw "$file parse failed: $($errors.Message -join '; ')"}
         }; "runner parsing passed"
     }
     Invoke-ReadinessCheck "runner-self-tests" "Sprint 8A smoke/UAT/harvest/upgrade self-tests" {
         & ./scripts/smoke-sprint-8a.ps1 -SelfTest; if($LASTEXITCODE -ne 0){throw "Smoke self-test failed."}
+        & ./scripts/audit-sprint-8a-deployed-inventory.ps1 -SelfTest; if($LASTEXITCODE -ne 0){throw "Deployed inventory audit self-test failed."}
         & ./scripts/uat-sprint-8a.ps1 -SelfTest; if($LASTEXITCODE -ne 0){throw "UAT diagnostic self-test failed."}
         & ./scripts/test-sprint-validation-harvest.ps1 -SelfTest; if($LASTEXITCODE -ne 0){throw "Harvest self-test failed."}
         $a="a"*64;$b="b"*64

@@ -59,9 +59,9 @@ function Get-ComponentInventory {
         if ($response.status -ne 200) { throw "Component inventory returned HTTP $($response.status)." }
         return @($response.body | ConvertFrom-Json | Sort-Object slug | ForEach-Object {
             [ordered]@{
-                id = [string]$_.id
+                id = [string]$_.component_id
                 slug = [string]$_.slug
-                current_version_id = [string]$_.current_version.id
+                current_version_id = [string]$_.current_version.component_version_id
                 reference = $_.current_version.reference
             }
         })
@@ -86,11 +86,20 @@ function Wait-ComponentHealthy {
 }
 
 function Set-ComponentImage([string]$Image, [string]$Stage) {
-    $env:TESSARA_COMPONENT_IMAGE = $Image
-    & docker compose -f $composePath --profile reference run --rm components-migrate
-    if ($LASTEXITCODE -ne 0) { throw "$Stage Component migration failed." }
-    & docker compose -f $composePath --profile reference up -d --no-deps components
-    if ($LASTEXITCODE -ne 0) { throw "$Stage Component switch failed." }
+    $stagePreviousImage = $env:TESSARA_COMPONENT_IMAGE
+    try {
+        $env:TESSARA_COMPONENT_IMAGE = $Image
+        & docker compose -f $composePath --profile reference run --rm components-migrate
+        if ($LASTEXITCODE -ne 0) { throw "$Stage Component migration failed." }
+        & docker compose -f $composePath --profile reference up -d --no-deps components
+        if ($LASTEXITCODE -ne 0) { throw "$Stage Component switch failed." }
+    } finally {
+        if ($null -eq $stagePreviousImage) {
+            Remove-Item Env:TESSARA_COMPONENT_IMAGE -ErrorAction SilentlyContinue
+        } else {
+            $env:TESSARA_COMPONENT_IMAGE = $stagePreviousImage
+        }
+    }
     Wait-ComponentHealthy
     & (Join-Path $PSScriptRoot "smoke-sprint-8a.ps1") -BaseUrl $BaseUrl | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "$Stage Sprint 8A smoke failed." }
@@ -123,6 +132,15 @@ try {
         }
         if (-not $sameDigestRejected) {
             throw "Sprint 8A upgrade self-test accepted two names for the same image digest."
+        }
+        $env:TESSARA_COMPONENT_IMAGE = "temporary-component-image@sha256:$('b' * 64)"
+        try {
+            $defaultConfiguration = & docker compose -f $composePath --profile reference config --format json | ConvertFrom-Json
+            if ([string]$defaultConfiguration.services.components.image -cne [string]$env:TESSARA_COMPONENT_IMAGE) {
+                throw "Sprint 8A upgrade self-test could not establish the transient Compose image override."
+            }
+        } finally {
+            Remove-Item Env:TESSARA_COMPONENT_IMAGE -ErrorAction SilentlyContinue
         }
         Write-Host "Sprint 8A Component upgrade/rollback self-test passed."
         return

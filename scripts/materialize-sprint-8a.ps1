@@ -67,7 +67,6 @@ try {
             -RuntimeLabel "sprint-8a" `
             -AdditionalBuildServices @("components") `
             -AdditionalExpectedNavigationHrefs @("/components") `
-            -SkipLegacySeed `
             -SkipBuild:$SkipBuild
         if ($LASTEXITCODE -ne 0) { throw "Sprint 8A composition materialization failed." }
 
@@ -103,7 +102,7 @@ try {
                 -DeploymentDirectory "sprint-8a" -ExpectedProject $expectedProject -InstallationId $installationId `
                 -RuntimeLabel "sprint-8a" -AdditionalBuildServices @("components") `
                 -AdditionalExpectedNavigationHrefs @("/components") `
-                -SkipLegacySeed -SkipBuild -Confirm:$false
+                -SkipBuild -Confirm:$false
             if ($LASTEXITCODE -ne 0) { throw "Sprint 8A no-op materialization verification failed." }
             $secondApplyResponse = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
             $secondReceipt = $secondApplyResponse.receipt

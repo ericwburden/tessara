@@ -74,6 +74,18 @@ function Test-Sprint8AAcceptanceContract {
             throw "Sprint 8A deployment runner '$runner' cannot bind the exact transition-catalog profile."
         }
     }
+    $materializationText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/materialize-sprint-8a.ps1") -Raw
+    if ($materializationText -match '(?m)^\s*-SkipLegacySeed(?:\s|`|$)') {
+        throw "Sprint 8A reference materialization must rebuild the established acceptance fixtures."
+    }
+    $baselineDockerfile = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/Dockerfile.component-rehearsal-baseline") -Raw
+    if ($baselineDockerfile -notmatch '(?m)^ARG COMPONENT_BASE_IMAGE=[^\r\n]+$') {
+        throw "Sprint 8A Component rehearsal baseline must declare a valid default base image without Docker warnings."
+    }
+    $inventoryAudit = Join-Path $repoRoot "scripts/audit-sprint-8a-deployed-inventory.ps1"
+    if (-not (Test-Path -LiteralPath $inventoryAudit -PathType Leaf)) {
+        throw "Sprint 8A exact deployed inventory/navigation audit runner is missing."
+    }
 
     $blueprint = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/blueprints/reference.json") -Raw | ConvertFrom-Json
     $expectedNavigation = [ordered]@{

@@ -325,14 +325,12 @@ async fn put_configuration(
     State(state): State<ComponentModuleState>,
     headers: HeaderMap,
     Json(input): Json<ComponentConfigurationV1>,
-) -> Result<Json<ComponentConfigurationV1>, ComponentModuleError> {
+) -> Result<Json<ConfigurationValidationV1>, ComponentModuleError> {
     require_control_key(&headers)?;
     let validation = validate_configuration(&input);
-    let normalized = validation
-        .normalized
-        .ok_or(ComponentModuleError::InvalidConfiguration(
-            validation.findings,
-        ))?;
+    let Some(normalized) = &validation.normalized else {
+        return Ok(Json(validation));
+    };
     sqlx::query(
         "UPDATE component_configuration SET schema_version=$1,display_label=$2,\
          dataset_request_timeout_seconds=$3,updated_at=now() WHERE singleton=true",
@@ -342,7 +340,7 @@ async fn put_configuration(
     .bind(i32::from(normalized.dataset_request_timeout_seconds))
     .execute(&state.pool)
     .await?;
-    Ok(Json(normalized))
+    Ok(Json(validation))
 }
 
 async fn update_security_state(

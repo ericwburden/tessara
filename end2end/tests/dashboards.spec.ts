@@ -29,6 +29,17 @@ type DashboardSummary = {
 };
 
 type ComponentVersionOption = {
+  component_reference: {
+    reference: {
+      installation_id: string;
+      owner: {
+        kind: "module_instance";
+        module_instance_id: string;
+      };
+      resource_type: string;
+      resource_id: string;
+    };
+  };
   component_version_id: string;
   component_slug: string;
   component_type: string;
@@ -265,7 +276,7 @@ function bindGeometryCommand(
   return {
     operation: "bind",
     client_key: clientKey,
-    component_version_id: option.component_version_id,
+    component_reference: option.component_reference,
     geometry,
   };
 }

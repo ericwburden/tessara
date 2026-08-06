@@ -1,10 +1,11 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 12 completed a fail-late diagnostic harvest.
-Its eight findings are retained in one correction batch. Repository harness
-corrections are in progress before the required complete readiness/rehearsal
-rerun. No candidate has been frozen; SIT, formal UAT, and closeout remain Not
-Run.
+Status: Candidate Rehearsal attempt 13 completed a fail-late diagnostic harvest.
+Its ten findings are retained in one correction batch. Six repository-owned
+timing, fixture, acceptance-inventory, upgrade, and zero-warning corrections
+are in progress; four operator-only failures remain retained and are closed by
+canonical narrow proofs. No candidate has been frozen; SIT, formal UAT, and
+closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -186,6 +187,15 @@ automated UAT diagnostics, failure-containment successor health, and the
 Component upgrade/rollback baseline. Formal deployed acceptance smoke remains
 SIT-owned and is not a rehearsal substitute.
 
+The Sprint 8A reference materialization rebuilds the established demo and
+Sprint 7A semantic acceptance fixtures through their owning APIs and databases
+before deployment evidence is captured. This is a pre-production rebuild, not
+a compatibility migration. The complete Playwright inventory must never rely
+on one earlier test file to create shared fixtures. Exact deployed
+inventory/navigation evidence is produced by
+`scripts/audit-sprint-8a-deployed-inventory.ps1`; ad hoc route guesses, envelope
+parsers, and copied counts are not rehearsal evidence.
+
 Logical independence does not authorize concurrent Cargo commands to share the
 repository `target` directory. `scripts/validate.ps1` cleans selected build
 artifacts, so complete Rust siblings run serially unless each has a distinct
@@ -210,11 +220,12 @@ not reused by another command in the same rehearsal.
 
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
-- Consolidated defects and correction batch: Attempt 12 retained eight findings
-  in one batch: four repository harness gaps, one upgrade-evidence identity gap,
-  one shared-target environment collision, one obsolete general-smoke fixture
-  assumption, and one pair of retained ad hoc audit-parser mistakes closed by
-  narrow proof. Earlier batches remain retained and superseded.
+- Consolidated defects and correction batch: Attempt 13 retained ten findings
+  in one batch: one timing-harness instability, one missing acceptance-fixture
+  rebuild, two acceptance/product contract mismatches, one transient-image
+  upgrade assertion defect, one Docker warning, and four retained operator
+  mistakes. Attempt 12's earlier eight-finding batch remains retained and
+  superseded.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -256,6 +267,7 @@ docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 .\scripts\test-sprint-validation-harvest.ps1 -SelfTest
 .\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
 .\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm -VerifyNoOp
+.\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployed-inventory-navigation.json"
 .\scripts\capture-sprint-6a-deployment-evidence.ps1 -BaseUrl "http://127.0.0.1:8088" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json"
 .\scripts\smoke.ps1 -UseExistingService -KeepServices -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a
 .\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
