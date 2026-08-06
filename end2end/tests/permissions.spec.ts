@@ -205,6 +205,75 @@ async function expectJson<T>(response: APIResponse): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+function canonicalComponentVersionInput(data: Record<string, unknown>) {
+  if (data.dataset_reference) return data;
+  const datasetId = String(data.dataset_id);
+  const major = Number(data.dataset_version_major);
+  const installationId = "01980000-0000-7000-8000-00000000008a";
+  const { dataset_id: _datasetId, dataset_version_major: _major, ...rest } = data;
+  return {
+    ...rest,
+    dataset_reference: {
+      reference: {
+        installation_id: installationId,
+        owner: { kind: "core_installation", installation_id: installationId },
+        resource_type: "tessara.transition.dataset_major_line",
+        resource_id: `${datasetId}@${major}`,
+      },
+    },
+  };
+}
+
+function canonicalComponentRequest(url: string, data?: Record<string, unknown>) {
+  if (!data || !url.startsWith("/api/admin/components")) return data;
+  if (url === "/api/admin/components") {
+    return {
+      ...data,
+      schema_version: 1,
+      version: canonicalComponentVersionInput(data.version as Record<string, unknown>),
+    };
+  }
+  if (url.endsWith("/validate") || url.endsWith("/preview")) {
+    return canonicalComponentVersionInput(data);
+  }
+  if (/\/versions(?:\/[^/]+)?$/.test(url)) {
+    return { schema_version: 1, version: canonicalComponentVersionInput(data) };
+  }
+  if (/^\/api\/admin\/components\/[^/]+$/.test(url)) {
+    return { ...data, schema_version: 1 };
+  }
+  return data;
+}
+
+function componentResponseAliases(url: string, value: unknown): unknown {
+  if (!url.startsWith("/api/admin/components") || !value || Array.isArray(value)) return value;
+  const response = value as Record<string, unknown>;
+  if (response.schema_version !== 1) return value;
+  const versions = Array.isArray(response.versions)
+    ? response.versions.map((raw) => {
+        const version = raw as Record<string, unknown>;
+        const resourceId = String(
+          ((version.dataset_reference as Record<string, unknown>)?.reference as Record<string, unknown>)
+            ?.resource_id ?? "",
+        );
+        const [datasetId, major] = resourceId.split("@");
+        return {
+          ...version,
+          id: version.component_version_id,
+          status: version.publication_state,
+          dataset_id: datasetId,
+          dataset_version_major: Number(major),
+        };
+      })
+    : response.versions;
+  const versionMutation = /\/versions(?:\/[^/]+)?$/.test(url);
+  return {
+    ...response,
+    id: versionMutation ? response.component_version_id : response.component_id,
+    versions,
+  };
+}
+
 async function ensureDemoSeed(admin: APIRequestContext) {
   const response = await invokeDemoSeedEndpoint(admin);
   if (response === null) {
@@ -221,15 +290,22 @@ async function ensureDemoSeed(admin: APIRequestContext) {
 }
 
 async function getJson<T>(context: APIRequestContext, url: string) {
-  return expectJson<T>(await context.get(url));
+  const value = await expectJson<unknown>(await context.get(url));
+  return componentResponseAliases(url, value) as T;
 }
 
 async function postJson<T>(context: APIRequestContext, url: string, data?: Record<string, unknown>) {
-  return expectJson<T>(await context.post(url, { data }));
+  const value = await expectJson<unknown>(
+    await context.post(url, { data: canonicalComponentRequest(url, data) }),
+  );
+  return componentResponseAliases(url, value) as T;
 }
 
 async function putJson<T>(context: APIRequestContext, url: string, data?: Record<string, unknown>) {
-  return expectJson<T>(await context.put(url, { data }));
+  const value = await expectJson<unknown>(
+    await context.put(url, { data: canonicalComponentRequest(url, data) }),
+  );
+  return componentResponseAliases(url, value) as T;
 }
 
 async function expectStatus(
@@ -239,7 +315,8 @@ async function expectStatus(
   statuses: number[],
   data?: Record<string, unknown>,
 ) {
-  const response = await context[method](url, data ? { data } : undefined);
+  const canonicalData = canonicalComponentRequest(url, data);
+  const response = await context[method](url, canonicalData ? { data: canonicalData } : undefined);
   expect(statuses, `${method.toUpperCase()} ${url} returned ${response.status()}: ${await response.text()}`).toContain(
     response.status(),
   );
@@ -399,7 +476,7 @@ function datasetMajor(dataset: DatasetSummary) {
 }
 
 function tableConfig(dataset: DatasetSummary) {
-  const firstField = dataset.output_fields[0]?.key;
+  const firstField = dataset.output_fields.find((field) => !field.key.startsWith("__"))?.key;
   expect(firstField, `dataset ${dataset.name} should expose output fields`).toBeTruthy();
   return {
     visible_columns: [firstField],
@@ -407,7 +484,7 @@ function tableConfig(dataset: DatasetSummary) {
 }
 
 function visualConfig(dataset: DatasetSummary) {
-  const firstField = dataset.output_fields[0]?.key;
+  const firstField = dataset.output_fields.find((field) => !field.key.startsWith("__"))?.key;
   expect(firstField, `dataset ${dataset.name} should expose output fields`).toBeTruthy();
   return {
     mode: "summary",
@@ -441,6 +518,33 @@ async function createPublishedVisualComponent(
   const detail = await getJson<ComponentDefinition>(admin, `/api/admin/components/${slug}`);
   const version = detail.versions[0];
   expect(version.component_type).toBe("bar");
+  await postJson<IdResponse>(
+    admin,
+    `/api/admin/components/${component.id}/versions/${version.id}/publish`,
+  );
+  return { id: component.id, name, slug };
+}
+
+async function createPublishedTableComponent(
+  admin: APIRequestContext,
+  dataset: DatasetSummary,
+  slug: string,
+  name: string,
+) {
+  const component = await postJson<IdResponse>(admin, "/api/admin/components", {
+    name,
+    slug,
+    description: "Table component permission fixture.",
+    version: {
+      dataset_id: dataset.id,
+      dataset_version_major: datasetMajor(dataset),
+      component_type: "table",
+      config: tableConfig(dataset),
+    },
+  });
+  const detail = await getJson<ComponentDefinition>(admin, `/api/admin/components/${slug}`);
+  const version = detail.versions[0];
+  expect(version.component_type).toBe("table");
   await postJson<IdResponse>(
     admin,
     `/api/admin/components/${component.id}/versions/${version.id}/publish`,
@@ -669,30 +773,24 @@ async function setupFixtures(): Promise<FixtureState> {
       disjointFrom(dataset.visibility_nodes, componentManagerNodeIds),
     "an out-of-scope dataset should exist",
   );
-
+  const inScopeComponent = await createPublishedTableComponent(
+    admin,
+    inScopeDataset,
+    `${RUN_ID}-visible-table-component`,
+    `${RUN_ID} Visible Table Component`,
+  );
+  const outOfScopeComponent = await createPublishedTableComponent(
+    admin,
+    outOfScopeDataset,
+    `${RUN_ID}-hidden-table-component`,
+    `${RUN_ID} Hidden Table Component`,
+  );
   const adminComponents = await getJson<ComponentListSummary[]>(admin, "/api/components");
   const scopedComponents = await getJson<ComponentListSummary[]>(scopedManager, "/api/components");
-  const scopedComponentIds = new Set(scopedComponents.map((component) => component.component_id));
-  const inScopeComponentListItem = requireItem(
-    adminComponents,
-    (component) => scopedComponentIds.has(component.component_id),
-    "an in-scope component should exist",
-  );
-  const outOfScopeComponentListItem = requireItem(
-    adminComponents,
-    (component) => !scopedComponentIds.has(component.component_id),
-    "an out-of-scope component should exist",
-  );
-  const inScopeComponent = {
-    id: inScopeComponentListItem.component_id,
-    name: inScopeComponentListItem.name,
-    slug: inScopeComponentListItem.slug,
-  };
-  const outOfScopeComponent = {
-    id: outOfScopeComponentListItem.component_id,
-    name: outOfScopeComponentListItem.name,
-    slug: outOfScopeComponentListItem.slug,
-  };
+  expect(adminComponents.some((component) => component.component_id === inScopeComponent.id)).toBe(true);
+  expect(adminComponents.some((component) => component.component_id === outOfScopeComponent.id)).toBe(true);
+  expect(scopedComponents.some((component) => component.component_id === inScopeComponent.id)).toBe(true);
+  expect(scopedComponents.some((component) => component.component_id === outOfScopeComponent.id)).toBe(false);
   const inScopeVisualComponent = await createPublishedVisualComponent(
     admin,
     inScopeDataset,
@@ -1358,7 +1456,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await assertNativeRouteGuard();
   });
 
-  test("dashboard viewer preserves a redacted footprint without executing the hidden Component", async ({
+  test("dashboard composition excludes hidden Components before viewer execution", async ({
     page,
   }) => {
     const dashboard = await postJson<IdResponse>(fixtures.admin, "/api/admin/dashboards", {
@@ -1379,26 +1477,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           default_grid_height: number;
         }>;
       }>(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`);
-      const hiddenVersion = requireItem(
-        composition.available_component_versions,
-        (option) => option.component_slug === fixtures.outOfScopeVisualComponent.slug,
-        "the hybrid-scope Dashboard should allow the hidden visual Component version",
-      );
-      await putJson(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`, {
-        commands: [
-          {
-            operation: "bind",
-            client_key: `${RUN_ID}-redacted-placement`,
-            component_version_id: hiddenVersion.component_version_id,
-            geometry: {
-              grid_row: 1,
-              grid_column: 1,
-              grid_width: hiddenVersion.default_grid_width,
-              grid_height: hiddenVersion.default_grid_height,
-            },
-          },
-        ],
-      });
+      expect(
+        composition.available_component_versions.some(
+          (option) => option.component_slug === fixtures.outOfScopeVisualComponent.slug,
+        ),
+        "Dashboard authoring must exclude a Component that is hidden from part of the Dashboard audience",
+      ).toBe(false);
 
       const scopedDashboard = await getJson<{
         placements: Array<{
@@ -1406,9 +1490,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           component?: { component_slug: string };
         }>;
       }>(fixtures.scopedManager, `/api/dashboards/${dashboard.id}`);
-      expect(scopedDashboard.placements).toHaveLength(1);
-      expect(scopedDashboard.placements[0].availability).toBe("unavailable");
-      expect(scopedDashboard.placements[0].component).toBeUndefined();
+      expect(scopedDashboard.placements).toHaveLength(0);
 
       const hiddenExecutionRequests: string[] = [];
       page.on("request", (request) => {
@@ -1422,9 +1504,9 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       });
       await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
       await page.goto(`/dashboards/${dashboard.id}`);
-      await expect(page.locator(".dashboard-placement-card.is-unavailable")).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: `${RUN_ID} Redacted Dashboard` })).toBeVisible();
       await page.goto(`/dashboards/${dashboard.id}/view`);
-      await expect(page.locator(".dashboard-redacted-placeholder")).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: `${RUN_ID} Redacted Dashboard` })).toBeVisible();
       await page.waitForLoadState("networkidle");
       expect(hiddenExecutionRequests).toEqual([]);
     } finally {

@@ -236,6 +236,7 @@ impl DashboardPlacement {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DashboardComponentVersion {
+    #[serde(rename = "reference")]
     pub component_reference: ComponentVersionReference,
     pub component_version_id: String,
     pub component_id: String,
@@ -451,7 +452,7 @@ mod tests {
     #[test]
     fn placement_component_accepts_only_the_current_components_v3_reference_shape() {
         let component: DashboardComponentVersion = serde_json::from_value(serde_json::json!({
-            "component_reference": {
+            "reference": {
                 "reference": {
                     "installation_id": "11111111-1111-4111-8111-111111111111",
                     "owner": {

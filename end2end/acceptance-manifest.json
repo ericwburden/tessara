@@ -34,7 +34,7 @@
       "tests": [
         "Sprint 4A component workflow › admin can create, update, publish, and view a major-line table component",
         "Sprint 4A component workflow › admin can author, publish, and view visual components",
-        "Sprint 4A component workflow › component editor remains contained and uses an accessible mobile preview drawer"
+        "Sprint 4A component workflow › component editor exposes canonical configuration on mobile direct loads"
       ]
     },
     {
@@ -101,7 +101,7 @@
         "capability + scope + ownership permissions › scoped component manager cannot bind or publish out-of-scope dataset major lines",
         "capability + scope + ownership permissions › explicit historical component table checks selected version dataset scope",
         "capability + scope + ownership permissions › dashboard native routes and APIs exercise scoped manage permission",
-        "capability + scope + ownership permissions › dashboard viewer preserves a redacted footprint without executing the hidden Component",
+        "capability + scope + ownership permissions › dashboard composition excludes hidden Components before viewer execution",
         "capability + scope + ownership permissions › JavaScript-disabled Core, Organization, and direct Admin routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Form and Workflow routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Response and Dataset routes preserve native SSR ownership",

@@ -101,7 +101,7 @@ function Test-Sprint8AAcceptanceContract {
         "scripts/run-sprint-8a-deployed-smoke.ps1" = @(
             "ApiContainerId", "GatewayContainerId", "DatabaseContainerId",
             "ExpectedDataState fresh", "TransitionCatalogProfile sprint-8a",
-            "DeploymentEvidencePath", "AcceptanceEvidencePath"
+            "DeploymentEvidencePath"
         )
         "scripts/run-sprint-8a-component-upgrade.ps1" = @(
             "build-sprint-8a-component-rehearsal-baseline.ps1", "OutputTag",
@@ -119,6 +119,11 @@ function Test-Sprint8AAcceptanceContract {
                 throw "Sprint 8A rehearsal runner '$runner' omits canonical orchestration fragment '$fragment'."
             }
         }
+    }
+    $deployedSmokeRunner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/run-sprint-8a-deployed-smoke.ps1") -Raw
+    if ($deployedSmokeRunner.Contains("AcceptanceEvidencePath") -or
+        $deployedSmokeRunner.Contains("OverwriteAcceptanceEvidence")) {
+        throw "Sprint 8A rehearsal smoke must not publish the Sprint 6A authoritative acceptance-evidence schema."
     }
 
     $blueprint = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/blueprints/reference.json") -Raw | ConvertFrom-Json

@@ -113,7 +113,7 @@ try {
         if($LASTEXITCODE -ne 0){throw "Upgrade self-test failed."}
         & ./scripts/build-sprint-8a-component-rehearsal-baseline.ps1 -CurrentImage "local/components@sha256:$b" -SelfTest
         if($LASTEXITCODE -ne 0){throw "Upgrade baseline-builder self-test failed."}
-        & ./scripts/run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "target/self-test-deployment.json" -AcceptanceEvidencePath "target/self-test-smoke.json" -SelfTest
+        & ./scripts/run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "target/self-test-deployment.json" -SelfTest
         if($LASTEXITCODE -ne 0){throw "Deployed-smoke orchestration self-test failed."}
         & ./scripts/run-sprint-8a-component-upgrade.ps1 -SelfTest
         if($LASTEXITCODE -ne 0){throw "Component upgrade orchestration self-test failed."}

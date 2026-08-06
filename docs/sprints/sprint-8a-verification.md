@@ -1,6 +1,6 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 17 completed a fail-late diagnostic harvest; its consolidated runner correction batch requires a complete restarted readiness/rehearsal cycle.
+Status: Candidate Rehearsal attempt 19 completed a fail-late diagnostic harvest; its consolidated harness, acceptance-inventory, product, and fixture correction batch requires a complete restarted readiness/rehearsal cycle.
 Its six findings are retained in one correction batch spanning acceptance
 inventory, Component nondisclosure, and Dashboard release assets. No candidate
 has been frozen; SIT, formal UAT, and closeout remain Not Run.
@@ -258,6 +258,29 @@ not reused by another command in the same rehearsal.
   wrappers now resolve these identities and arguments, and readiness parses and
   self-tests both wrappers so the commands cannot drift back to ad hoc manual
   assembly.
+- Attempt 18 retained one operator-harness defect after four independent lanes
+  passed: a 60-second client observation timeout terminated the active
+  materialization build. No tracked input changed; the corrected execution used
+  a non-terminating command boundary with short observation waits, and the
+  complete readiness/rehearsal cycle restarted.
+- Attempt 19 retained four first-failure findings after eight checks passed: the new general
+  smoke wrapper incorrectly requested the forbidden Sprint 6A acceptance
+  schema; one Component test still expected the removed projection-builder UI;
+  Dashboard document deserialization expected `component_reference` where the
+  canonical Components V3 metadata envelope exposes `reference`; and the
+  permission suite inferred scoped Component fixtures from seed coincidence.
+  Narrow correction verification then exposed one underlying product/seed
+  finding in that same consolidated batch: demo seeding used a duplicate
+  Dataset-major materializer that omitted the canonical restriction-tier and
+  semantic-version columns, making freshly rebuilt seeded Components fail at
+  execution. The batch therefore contains five defects, not a restarted
+  rehearsal or a second micro-batch.
+  The consolidated correction removes authoritative evidence publication from
+  rehearsal smoke, tests the simplicity-first Configuration JSON form, aligns
+  Dashboard document types with the V3 contract, and creates exact named scoped
+  Component fixtures, and makes demo seed major lines conform to the canonical
+  Dataset materialization schema. Playwright retained 33 passes, three first failures, and
+  34 serial dependents; UAT diagnostics and final health were dependency-blocked.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -300,7 +323,7 @@ docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 .\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
 .\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm -VerifyNoOp
 .\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployed-inventory-navigation.json"
-.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -AcceptanceEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployed-smoke.json"
+.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json"
 .\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
 .\scripts\run-sprint-8a-component-upgrade.ps1 -OutputPath "artifacts/sprint-8a-closeout/rehearsal/component-upgrade-rollback.json"
 .\scripts\uat-sprint-8a.ps1

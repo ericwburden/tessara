@@ -420,7 +420,8 @@ async fn rebuild_dataset_major_materialization(
 
     let revision_rows = sqlx::query(
         r#"
-        SELECT id, materialized_schema, materialized_table
+        SELECT id, version_major, version_minor, version_patch,
+               materialized_schema, materialized_table
         FROM dataset_revisions
         WHERE dataset_id = $1
           AND version_major = $2
@@ -444,13 +445,21 @@ async fn rebuild_dataset_major_materialization(
         .iter()
         .map(|row| -> Result<String, sqlx::Error> {
             let revision_id: Uuid = row.try_get("id")?;
+            let source_major: Option<i32> = row.try_get("version_major")?;
+            let source_minor: Option<i32> = row.try_get("version_minor")?;
+            let source_patch: Option<i32> = row.try_get("version_patch")?;
             let schema: String = row.try_get("materialized_schema")?;
             let table: String = row.try_get("materialized_table")?;
             Ok(format!(
-                "SELECT '{}:' || __row_id AS __row_id, '{}'::uuid AS __source_dataset_revision_id, {}::integer AS __source_dataset_version_major, {field_select} FROM {}.{}",
+                "SELECT '{}:' || __row_id AS __row_id, __restriction_tier, '{}'::uuid AS __source_dataset_revision_id, {}::integer AS __source_dataset_version_major, {}::integer AS __source_dataset_version_minor, {}::integer AS __source_dataset_version_patch, 'v{}.{}.{}'::text AS __source_dataset_semantic_version, {field_select} FROM {}.{}",
                 revision_id,
                 revision_id,
-                version_major,
+                source_major.unwrap_or(version_major),
+                source_minor.unwrap_or(0),
+                source_patch.unwrap_or(0),
+                source_major.unwrap_or(version_major),
+                source_minor.unwrap_or(0),
+                source_patch.unwrap_or(0),
                 quote_identifier(&schema),
                 quote_identifier(&table)
             ))
@@ -463,7 +472,7 @@ async fn rebuild_dataset_major_materialization(
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "SELECT NULL::text AS __row_id, NULL::uuid AS __source_dataset_revision_id, NULL::integer AS __source_dataset_version_major, {empty_fields} WHERE false"
+            "SELECT NULL::text AS __row_id, NULL::text AS __restriction_tier, NULL::uuid AS __source_dataset_revision_id, NULL::integer AS __source_dataset_version_major, NULL::integer AS __source_dataset_version_minor, NULL::integer AS __source_dataset_version_patch, NULL::text AS __source_dataset_semantic_version, {empty_fields} WHERE false"
         )
     } else {
         selects.join("\nUNION ALL\n")

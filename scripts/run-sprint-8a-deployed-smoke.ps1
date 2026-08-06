@@ -3,7 +3,6 @@ param(
     [string]$ComposeFile = "deploy/sprint-8a/compose.yaml",
     [string]$BaseUrl = "http://127.0.0.1:8088",
     [Parameter(Mandatory = $true)][string]$DeploymentEvidencePath,
-    [Parameter(Mandatory = $true)][string]$AcceptanceEvidencePath,
     [switch]$Overwrite,
     [switch]$SelfTest
 )
@@ -42,7 +41,7 @@ if ($SelfTest) {
         }
     }
     $smoke = Get-Command (Join-Path $PSScriptRoot 'smoke.ps1')
-    foreach ($parameter in @('DeploymentEvidencePath', 'ExpectedDataState', 'TransitionCatalogProfile', 'AcceptanceEvidencePath')) {
+    foreach ($parameter in @('DeploymentEvidencePath', 'ExpectedDataState', 'TransitionCatalogProfile')) {
         if (-not $smoke.Parameters.ContainsKey($parameter)) {
             throw "General smoke runner no longer declares -$parameter."
         }
@@ -71,6 +70,4 @@ $databaseContainer = Get-ExactRunningServiceContainer 'postgres'
     -BaseUrl $BaseUrl `
     -DeploymentEvidencePath $DeploymentEvidencePath `
     -ExpectedDataState fresh `
-    -TransitionCatalogProfile sprint-8a `
-    -AcceptanceEvidencePath $AcceptanceEvidencePath `
-    -OverwriteAcceptanceEvidence:$Overwrite
+    -TransitionCatalogProfile sprint-8a
