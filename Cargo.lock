@@ -4805,6 +4805,7 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-datasets-contract",
  "tessara-module-ui",
  "tessara-web-http",
 ]

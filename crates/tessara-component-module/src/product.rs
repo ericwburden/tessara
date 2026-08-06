@@ -245,7 +245,9 @@ async fn execute_component(
     .await?
     .ok_or_else(|| ComponentModuleError::NotFound("Component version not found".into()))?;
     let scope: Vec<Uuid> = row.try_get("dataset_scope_node_ids")?;
-    require_scope(&grant.payload, READ_CAPABILITY, &scope)?;
+    require_scope(&grant.payload, READ_CAPABILITY, &scope).map_err(|_| {
+        ComponentModuleError::NotFound("Renderable Component version not found".into())
+    })?;
     let stored_kind: String = row.try_get("component_type")?;
     let requested_kind = kind.replace('-', "_");
     if stored_kind != requested_kind

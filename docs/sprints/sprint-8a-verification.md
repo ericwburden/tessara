@@ -281,6 +281,20 @@ not reused by another command in the same rehearsal.
   Component fixtures, and makes demo seed major lines conform to the canonical
   Dataset materialization schema. Playwright retained 33 passes, three first failures, and
   34 serial dependents; UAT diagnostics and final health were dependency-blocked.
+- Attempt 20 retained three findings after nine checks passed. Playwright
+  completed 48 tests, retained two first failures, and marked 20 serial
+  dependents blocked: the Dashboard placement renderer still decoded the
+  removed `dataset_id`/`dataset_version_major` response fields instead of the
+  canonical Components V3 `dataset_reference`, and scoped Component execution
+  disclosed a known hidden identity as `403` instead of the required
+  nondisclosing `404`. The independently passing upgrade/rollback wrapper then
+  exposed a harness handoff defect: a caller-selected evidence path was not
+  accompanied by the canonical receipt consumed by UAT diagnostics. Live UAT
+  smoke still passed, but scenario mapping failed on that exact missing
+  prerequisite; the aggregate final check was blocked by Playwright and UAT.
+  The consolidated correction aligns Dashboard render DTOs, makes scoped
+  execution nondisclosing, and makes the upgrade wrapper atomically retain the
+  canonical receipt plus any requested evidence copy.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 

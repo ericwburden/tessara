@@ -4,13 +4,14 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use tessara_datasets_contract::DatasetMajorLineReference;
 
 #[derive(Clone, Deserialize, PartialEq)]
 pub(crate) struct ComponentTable {
+    pub(crate) schema_version: u16,
     pub(crate) component_id: String,
     pub(crate) component_version_id: String,
-    pub(crate) dataset_id: String,
-    pub(crate) dataset_version_major: i32,
+    pub(crate) dataset_reference: DatasetMajorLineReference,
     pub(crate) component_type: String,
     pub(crate) materialization_state: String,
     pub(crate) columns: Vec<ComponentTableColumn>,
@@ -40,10 +41,10 @@ pub(crate) struct ComponentTableRow {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ComponentVisual {
+    pub schema_version: u16,
     pub component_id: String,
     pub component_version_id: String,
-    pub dataset_id: String,
-    pub dataset_version_major: i32,
+    pub dataset_reference: DatasetMajorLineReference,
     pub component_type: String,
     pub materialization_state: String,
     pub value_format: String,

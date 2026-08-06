@@ -105,7 +105,9 @@ function Test-Sprint8AAcceptanceContract {
         )
         "scripts/run-sprint-8a-component-upgrade.ps1" = @(
             "build-sprint-8a-component-rehearsal-baseline.ps1", "OutputTag",
-            "verify-sprint-8a-component-upgrade.ps1", "CandidateImage", "CurrentImage"
+            "verify-sprint-8a-component-upgrade.ps1", "CandidateImage", "CurrentImage",
+            "target/sprint-8a-upgrade/component-upgrade-rollback.json",
+            "Publish-Sprint7AEvidence"
         )
     }
     foreach ($runner in $rehearsalRunners.Keys) {

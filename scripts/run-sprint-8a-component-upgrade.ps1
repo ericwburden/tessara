@@ -13,6 +13,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $composePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ComposeFile))
 $expectedProject = "tessara-sprint-8a"
 $immutableImagePattern = '^[^\s@]+@sha256:[0-9a-f]{64}$'
+$canonicalOutputPath = "target/sprint-8a-upgrade/component-upgrade-rollback.json"
+. (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
 
 $configuration = & docker compose -f $composePath --profile reference config --format json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or [string]$configuration.name -cne $expectedProject) {
@@ -68,4 +70,11 @@ if ($baselineImage -cnotmatch $immutableImagePattern) {
     -BaselineImage $baselineImage `
     -CandidateImage $candidateImage `
     -CurrentImage $candidateImage `
-    -OutputPath $OutputPath
+    -OutputPath $canonicalOutputPath
+
+$canonicalFullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $canonicalOutputPath))
+$requestedFullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutputPath))
+if ($requestedFullPath -cne $canonicalFullPath) {
+    $document = Get-Content -LiteralPath $canonicalFullPath -Raw | ConvertFrom-Json
+    Publish-Sprint7AEvidence -Document $document -OutputPath $OutputPath -Overwrite | Out-Null
+}

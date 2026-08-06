@@ -1411,6 +1411,22 @@ mod tests {
     #[cfg(feature = "ssr")]
     use std::collections::BTreeMap;
 
+    #[cfg(feature = "ssr")]
+    fn dataset_reference() -> tessara_datasets_contract::DatasetMajorLineReference {
+        serde_json::from_value(serde_json::json!({
+            "reference": {
+                "installation_id": "11111111-1111-4111-8111-111111111111",
+                "owner": {
+                    "kind": "core_installation",
+                    "installation_id": "11111111-1111-4111-8111-111111111111"
+                },
+                "resource_type": "tessara.transition.dataset_major_line",
+                "resource_id": "22222222-2222-4222-8222-222222222222@1"
+            }
+        }))
+        .expect("canonical Dataset major-line reference")
+    }
+
     #[test]
     fn persisted_table_state_restores_page_controls_and_stays_bounded() {
         let mut cache = PersistedTableStateCache::default();
@@ -1576,10 +1592,10 @@ mod tests {
         let mut values = BTreeMap::new();
         values.insert("program".into(), Some("Outreach".into()));
         let table = ComponentTable {
+            schema_version: 1,
             component_id: "component-1".into(),
             component_version_id: "version-1".into(),
-            dataset_id: "dataset-1".into(),
-            dataset_version_major: 1,
+            dataset_reference: dataset_reference(),
             component_type: "table".into(),
             materialization_state: "ready".into(),
             columns: vec![ComponentTableColumn {
@@ -1707,10 +1723,10 @@ mod tests {
         let is_stat = kind == "stat_card";
         let is_round = matches!(kind, "pie" | "donut");
         ComponentVisual {
+            schema_version: 1,
             component_id: "component-1".into(),
             component_version_id: "version-1".into(),
-            dataset_id: "dataset-1".into(),
-            dataset_version_major: 1,
+            dataset_reference: dataset_reference(),
             component_type: kind.into(),
             materialization_state: "ready".into(),
             value_format: "number".into(),
