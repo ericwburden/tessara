@@ -237,6 +237,15 @@ not reused by another command in the same rehearsal.
   diagnostic build evidence and do not replace either full gate. Attempt 14's
   two-finding, Attempt 13's ten-finding, and Attempt 12's eight-finding batches
   remain retained and superseded.
+- Attempt 16 retained one deployment-input defect through three independent
+  observations: Supervisor apply failed closed and both complete Rust suites
+  reported the same Dashboard manifest/catalog mismatch. Tessara's manifest
+  identity is the SHA-256 of RFC 8785/JCS canonical JSON produced by
+  `tessara_composition::canonical_digest`, not a hash of platform-dependent
+  working-tree bytes. The catalog now uses the canonical `cec6af45...` digest;
+  the existing `checked_catalog_manifest_digests_match_runtime_manifests` test
+  is the governing derived assertion and deliberately remains the single
+  enforcement point.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
