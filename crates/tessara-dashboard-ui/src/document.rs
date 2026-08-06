@@ -22,11 +22,11 @@ pub const DASHBOARD_CSS_SHA256: &str =
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "ee0e3730df679d40e0987f003564063e00d97ae24d4bdf236535bfce691fbe99";
 pub const DASHBOARD_JS_SHA256: &str =
-    "c3956281e283bd7530097f536634a024f0817f4c5bf480e070d59db24db24833";
+    "99094b3cb74cfb93f977d1fb3cafb2d3361521d8b7c977a2158bb08ddd40eb4f";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "3a4323b337c6e37844508c40b7d75ac7d4e4ecc43f446421eba2f8839f57113d";
+    "08e29a86c3413c884d7d538478a023e4ad1e8d311cc4b08f46f464ee9d78b189";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "bc19cafa11d94e9a4ff2752c14e4009e9f2e235f92d9ea0b791d41d5f92950e2";
+    "b44786d8b4a6fca95b8b1d7f10c2e07704363033a396282347097de0f683c804";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")
@@ -149,6 +149,19 @@ mod tests {
         assert!(!DASHBOARD_JS.contains("/tessara.dashboards/2.1.0/"));
         let digest = format!("{:x}", Sha256::digest(DASHBOARD_JS.as_bytes()));
         assert_eq!(digest, DASHBOARD_JS_SHA256);
+        assert!(DASHBOARD_JS.contains(DASHBOARD_BINDINGS_JS_SHA256));
+        assert!(DASHBOARD_JS.contains(DASHBOARD_WASM_SHA256));
+        assert_eq!(
+            format!("{:x}", Sha256::digest(DASHBOARD_BINDINGS_JS.as_bytes())),
+            DASHBOARD_BINDINGS_JS_SHA256
+        );
+        assert_eq!(
+            format!("{:x}", Sha256::digest(DASHBOARD_WASM)),
+            DASHBOARD_WASM_SHA256
+        );
+        let wasm_text = String::from_utf8_lossy(DASHBOARD_WASM);
+        assert!(wasm_text.contains("dataset_reference"));
+        assert!(!wasm_text.contains("dataset_version_major"));
     }
 
     #[test]

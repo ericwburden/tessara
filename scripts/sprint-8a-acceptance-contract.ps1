@@ -68,6 +68,31 @@ function Test-Sprint8AAcceptanceContract {
         throw "Sprint 8A Component runtime must declare the exact readiness healthcheck used by upgrade/rollback."
     }
 
+    $dashboardManifest = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-dashboard-module/manifest.json") -Raw | ConvertFrom-Json
+    $dashboardAssets = [ordered]@{
+        "/dashboard.js" = "crates/tessara-dashboard-ui/assets/dashboard.js"
+        "/dashboard-bindings.js" = "crates/tessara-dashboard-ui/assets/dashboard-bindings.js"
+        "/dashboard.wasm" = "crates/tessara-dashboard-ui/assets/dashboard.wasm"
+    }
+    foreach ($assetPath in $dashboardAssets.Keys) {
+        $declaration = @($dashboardManifest.assets | Where-Object path -CEQ $assetPath)
+        if ($declaration.Count -ne 1) {
+            throw "Dashboard manifest must declare '$assetPath' exactly once."
+        }
+        $assetFile = Join-Path $repoRoot $dashboardAssets[$assetPath]
+        $actualDigest = "sha256:$((Get-FileHash -Algorithm SHA256 -LiteralPath $assetFile).Hash.ToLowerInvariant())"
+        if ([string]$declaration[0].digest -cne $actualDigest) {
+            throw "Dashboard asset '$assetPath' differs from its manifest digest."
+        }
+    }
+    $dashboardWasmText = [Text.Encoding]::ASCII.GetString(
+        [IO.File]::ReadAllBytes((Join-Path $repoRoot $dashboardAssets["/dashboard.wasm"]))
+    )
+    if (-not $dashboardWasmText.Contains("dataset_reference") -or
+        $dashboardWasmText.Contains("dataset_version_major")) {
+        throw "Dashboard embedded WASM does not implement the canonical Components V3 Dataset reference wire contract."
+    }
+
     foreach ($runner in @("scripts/capture-sprint-6a-deployment-evidence.ps1", "scripts/validate-e2e.ps1", "scripts/smoke.ps1")) {
         $runnerText = Get-Content -LiteralPath (Join-Path $repoRoot $runner) -Raw
         if ($runnerText -notmatch 'TransitionCatalogProfile') {

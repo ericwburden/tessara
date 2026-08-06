@@ -19,6 +19,7 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-permissions-${Date.now()}`;
 const PLAYWRIGHT_ENTITY_PREFIX = "pw-permissions-";
 const PASSWORD = "tessara-dev-permissions";
+const COMPONENT_DOCUMENT_ROOT = "#module-content";
 const DASHBOARD_DOCUMENT_ROOT = "#module-content";
 
 type IdResponse = { id: string };
@@ -1712,6 +1713,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expectHydratedRoute(page, {
         path: `/components/${fixtures.inScopeComponent.slug}`,
         expectedText: fixtures.inScopeComponent.name,
+        documentRootSelector: COMPONENT_DOCUMENT_ROOT,
       });
       await expect(
         page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
@@ -1723,6 +1725,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expectHydratedRoute(page, {
         path: `/components/${fixtures.inScopeComponent.slug}/view`,
         expectedText: fixtures.inScopeComponent.name,
+        documentRootSelector: COMPONENT_DOCUMENT_ROOT,
       });
       await expect(
         page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
@@ -1735,6 +1738,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expectHydratedRoute(page, {
         path: `/components/${fixtures.inScopeVisualComponent.slug}/view`,
         expectedText: fixtures.inScopeVisualComponent.name,
+        documentRootSelector: COMPONENT_DOCUMENT_ROOT,
       });
       await expect(
         page.getByRole("heading", { level: 1, name: fixtures.inScopeVisualComponent.name }),
@@ -2377,23 +2381,35 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await withNoJavaScriptPage(browser, async (page) => {
       await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
       await expectNoJavaScriptRoutes(page, [
-        { path: "/components", expectedText: "Loading components" },
-        { path: "/components/new", expectedText: "Create Component" },
+        {
+          path: "/components",
+          expectedText: "Loading components",
+          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+        },
+        {
+          path: "/components/new",
+          expectedText: "Create Component",
+          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+        },
         {
           path: `/components/${fixtures.inScopeComponent.slug}`,
           expectedText: "Loading configuration",
+          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
           path: `/components/${fixtures.inScopeComponent.slug}/edit`,
           expectedText: "Edit Component",
+          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
           path: `/components/${fixtures.inScopeComponent.slug}/versions`,
           expectedText: "Loading component",
+          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
           path: `/components/${fixtures.inScopeComponent.slug}/view`,
           expectedText: "Loading configuration",
+          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
         },
         {
           path: "/dashboards",

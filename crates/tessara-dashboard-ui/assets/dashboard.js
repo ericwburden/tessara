@@ -7,9 +7,9 @@ import init, {
   resume_dashboard,
   suspend_dashboard,
   unmount_dashboard,
-} from "/_tessara/modules/tessara.dashboards/3.0.0/sha256:3a4323b337c6e37844508c40b7d75ac7d4e4ecc43f446421eba2f8839f57113d/dashboard-bindings.js";
+} from "/_tessara/modules/tessara.dashboards/3.0.0/sha256:08e29a86c3413c884d7d538478a023e4ad1e8d311cc4b08f46f464ee9d78b189/dashboard-bindings.js";
 
-await init("/_tessara/modules/tessara.dashboards/3.0.0/sha256:bc19cafa11d94e9a4ff2752c14e4009e9f2e235f92d9ea0b791d41d5f92950e2/dashboard.wasm");
+await init("/_tessara/modules/tessara.dashboards/3.0.0/sha256:b44786d8b4a6fca95b8b1d7f10c2e07704363033a396282347097de0f683c804/dashboard.wasm");
 
 if (document.getElementById("module-content")) {
   hydrate_dashboard();

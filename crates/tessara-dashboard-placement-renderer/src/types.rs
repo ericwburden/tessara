@@ -85,3 +85,37 @@ pub struct ComponentVisualSlice {
     pub display_value: String,
     pub color: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ComponentVisual;
+
+    #[test]
+    fn canonical_component_visual_response_deserializes() {
+        let response = r#"{
+            "bar_comparison_layout":null,
+            "bar_orientation":null,
+            "component_id":"01980000-0002-7000-8000-000000000011",
+            "component_type":"bar",
+            "component_version_id":"01980000-0001-7000-8000-000000000011",
+            "dataset_reference":{"reference":{"installation_id":"01980000-0000-7000-8000-00000000008a","owner":{"installation_id":"01980000-0000-7000-8000-00000000008a","kind":"core_installation"},"resource_id":"01980000-0002-7000-8000-000000000003@1","resource_type":"tessara.transition.dataset_major_line"}},
+            "legend_title":null,
+            "line_smoothing":null,
+            "materialization_state":"ready",
+            "points":[{"color":null,"comparison":null,"display_value":"1","value":1.0,"x":"PUBLIC"}],
+            "schema_version":1,
+            "slices":[],
+            "stat":null,
+            "value_format":"integer",
+            "x_axis_label":null,
+            "y_axis_label":null
+        }"#;
+
+        let visual: ComponentVisual =
+            serde_json::from_str(response).expect("canonical Component visual response");
+        assert_eq!(visual.schema_version, 1);
+        assert_eq!(visual.component_type, "bar");
+        assert_eq!(visual.dataset_reference.major(), 1);
+        assert_eq!(visual.points.len(), 1);
+    }
+}

@@ -1,8 +1,8 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 19 completed a fail-late diagnostic harvest; its consolidated harness, acceptance-inventory, product, and fixture correction batch requires a complete restarted readiness/rehearsal cycle.
-Its six findings are retained in one correction batch spanning acceptance
-inventory, Component nondisclosure, and Dashboard release assets. No candidate
+Status: Candidate Rehearsal attempt 21 completed a fail-late diagnostic harvest; its consolidated product/acceptance-inventory correction batch requires a complete restarted readiness/rehearsal cycle.
+Its two findings are retained in one correction batch spanning Dashboard
+release assets and exact independently deployed Component document roots. No candidate
 has been frozen; SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
@@ -295,6 +295,23 @@ not reused by another command in the same rehearsal.
   The consolidated correction aligns Dashboard render DTOs, makes scoped
   execution nondisclosing, and makes the upgrade wrapper atomically retain the
   canonical receipt plus any requested evidence copy.
+- Attempt 21 retained two findings after ten checks passed. Playwright
+  completed 48 tests, retained two first failures, and marked 20 serial
+  dependents blocked. The deployed Dashboard image embedded the tracked
+  `dashboard.wasm` generated before the Components V3 response change, so its
+  decoder still required removed `dataset_id`/`dataset_version_major` fields
+  even though the current Rust DTO and provider response used the canonical
+  typed `dataset_reference`. The permission inventory also assumed Core's
+  `#app-root` for independently deployed Component documents whose exact owned
+  root is `#module-content`; the sibling JavaScript-disabled Component routes
+  carried the same copied assumption. All other rehearsal lanes, including
+  source-exact materialization, inventory/navigation, deployed smoke,
+  upgrade/rollback, all eight UAT diagnostics, complete Rust validation,
+  all-feature tests, Clippy, and containment health passed. The aggregate final
+  check was blocked only by Playwright. The consolidated correction rebuilds
+  and re-pins Dashboard bindings/WASM, tests the actual embedded asset hashes
+  and V3 wire identity during readiness, and binds every Component route
+  assertion to its exact module document root.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
