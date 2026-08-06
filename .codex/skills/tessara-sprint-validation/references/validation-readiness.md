@@ -69,6 +69,13 @@ not hide other defects. Stop dependent or destructive work whose prerequisite
 state is invalid. Retain raw logs and per-lane diagnostic receipts under a
 rehearsal namespace.
 
+When a sprint-specific rehearsal lane must resolve deployed service identities
+or compose several generic helpers, use a repository-owned orchestration runner
+whose exact argument contract is parsed and self-tested by readiness. Do not
+assemble those bindings ad hoc at the operator prompt: a helper invocation that
+omits an environment identity, evidence binding, or declared parameter is a
+harness defect and blocks its dependent lanes even if sibling diagnostics pass.
+
 On Windows, or whenever commands share one Cargo target directory, serialize
 complete Cargo checks that can clean or replace build artifacts. Parallel
 logical siblings must use distinct explicit `CARGO_TARGET_DIR` values. A

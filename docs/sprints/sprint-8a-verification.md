@@ -1,6 +1,6 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 15 completed a fail-late diagnostic harvest; its consolidated correction batch awaits a complete restarted readiness/rehearsal cycle.
+Status: Candidate Rehearsal attempt 17 completed a fail-late diagnostic harvest; its consolidated runner correction batch requires a complete restarted readiness/rehearsal cycle.
 Its six findings are retained in one correction batch spanning acceptance
 inventory, Component nondisclosure, and Dashboard release assets. No candidate
 has been frozen; SIT, formal UAT, and closeout remain Not Run.
@@ -246,6 +246,18 @@ not reused by another command in the same rehearsal.
   the existing `checked_catalog_manifest_digests_match_runtime_manifests` test
   is the governing derived assertion and deliberately remains the single
   enforcement point.
+- Attempt 17 retained two operator-harness defects as one batch after seven
+  independent checks passed. Manual orchestration omitted the exact Core,
+  gateway, and database container identities required by deployment-evidence
+  capture, then invoked general smoke without its evidence/data-state bindings;
+  the independent Sprint 8A semantic smoke still passed all 26 checks. The
+  manual Component exercise also supplied the invented `-OutputImage`
+  parameter instead of the baseline builder's declared `-OutputTag`. Playwright
+  execution was blocked on deployment evidence; UAT diagnostics and final
+  health were blocked on their declared failed prerequisites. Repository-owned
+  wrappers now resolve these identities and arguments, and readiness parses and
+  self-tests both wrappers so the commands cannot drift back to ad hoc manual
+  assembly.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -288,11 +300,9 @@ docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 .\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
 .\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm -VerifyNoOp
 .\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployed-inventory-navigation.json"
-.\scripts\capture-sprint-6a-deployment-evidence.ps1 -BaseUrl "http://127.0.0.1:8088" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json"
-.\scripts\smoke.ps1 -UseExistingService -KeepServices -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a
+.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -AcceptanceEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployed-smoke.json"
 .\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
-.\scripts\build-sprint-8a-component-rehearsal-baseline.ps1 -CurrentImage "<candidate-name>@sha256:<digest>"
-.\scripts\verify-sprint-8a-component-upgrade.ps1 -BaselineImage "<name>@sha256:<digest>" -CandidateImage "<name>@sha256:<digest>" -CurrentImage "<name>@sha256:<digest>"
+.\scripts\run-sprint-8a-component-upgrade.ps1 -OutputPath "artifacts/sprint-8a-closeout/rehearsal/component-upgrade-rollback.json"
 .\scripts\uat-sprint-8a.ps1
 .\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a
 ```

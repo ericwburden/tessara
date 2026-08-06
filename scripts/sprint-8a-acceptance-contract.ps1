@@ -97,6 +97,29 @@ function Test-Sprint8AAcceptanceContract {
     if (-not (Test-Path -LiteralPath $inventoryAudit -PathType Leaf)) {
         throw "Sprint 8A exact deployed inventory/navigation audit runner is missing."
     }
+    $rehearsalRunners = [ordered]@{
+        "scripts/run-sprint-8a-deployed-smoke.ps1" = @(
+            "ApiContainerId", "GatewayContainerId", "DatabaseContainerId",
+            "ExpectedDataState fresh", "TransitionCatalogProfile sprint-8a",
+            "DeploymentEvidencePath", "AcceptanceEvidencePath"
+        )
+        "scripts/run-sprint-8a-component-upgrade.ps1" = @(
+            "build-sprint-8a-component-rehearsal-baseline.ps1", "OutputTag",
+            "verify-sprint-8a-component-upgrade.ps1", "CandidateImage", "CurrentImage"
+        )
+    }
+    foreach ($runner in $rehearsalRunners.Keys) {
+        $runnerPath = Join-Path $repoRoot $runner
+        if (-not (Test-Path -LiteralPath $runnerPath -PathType Leaf)) {
+            throw "Sprint 8A repository-owned rehearsal runner '$runner' is missing."
+        }
+        $runnerText = Get-Content -LiteralPath $runnerPath -Raw
+        foreach ($fragment in $rehearsalRunners[$runner]) {
+            if (-not $runnerText.Contains($fragment)) {
+                throw "Sprint 8A rehearsal runner '$runner' omits canonical orchestration fragment '$fragment'."
+            }
+        }
+    }
 
     $blueprint = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/blueprints/reference.json") -Raw | ConvertFrom-Json
     $expectedNavigation = [ordered]@{
