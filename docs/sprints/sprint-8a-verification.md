@@ -171,7 +171,7 @@ responses and service logs before exact teardown.
 | Static and boundaries | fmt/check/Clippy, manifests, links, native/WASM graphs, source/image audits | zero warnings; no forbidden owner/dependency/route/storage/legacy edge | Not Run | |
 | Full Rust | `cargo test --workspace --locked` plus targeted contract/schema/authorization tests | all pass | Not Run | |
 | Source-exact materialization | authorized reset, empty schemas, first/no-op owner bootstrap | exact provenance, healthy topology, semantic seed, exact no-op | Not Run | |
-| Playwright | `npm --prefix .\end2end test` with final worker/retry contract | complete inventory; zero unexpected skip/retry/flake; retained outputs | Not Run | |
+| Playwright | `scripts/validate-e2e.ps1` with exact gateway, deployment receipt, fresh-state, Sprint 8A profile, and evidence bindings | complete inventory; zero unexpected skip/retry/flake; retained outputs | Not Run | |
 | Conformance and nondisclosure | module testkit plus Components/Dataset/Dashboard matrix | owner/version/scope/audience/known-random/timing/lifecycle cases pass | Not Run | |
 | Deployed smoke | general and Sprint 8A smoke in rehearsal namespace | real boundaries, fixtures, old-input rejection, outage/recovery and final health | Not Run | |
 | Failure teardown/rerun | induced partial materialization failure | evidence retained; exact topology/volumes removed; new empty rerun healthy | Not Run | |
@@ -348,6 +348,18 @@ not reused by another command in the same rehearsal.
   the capture. The corrected check exercises the same capture boundary and
   requires successful return without treating host rendering as pipeline
   evidence. Candidate Rehearsal attempt 24 did not begin.
+- Attempt 24 retained one shared harness/environment-contract finding after 11
+  independent checks passed. Bare `npm test` used the Playwright development
+  default at `127.0.0.1:8080`, so 30 tests failed with `ECONNREFUSED` and 40
+  serial dependents did not run even though the source-exact Sprint 8A gateway
+  was healthy at `127.0.0.1:8088`. Materialization/no-op,
+  inventory/navigation, deployed smoke, Component upgrade/rollback, all eight
+  UAT diagnostics, complete Rust validation, all-feature tests, warning-free
+  Clippy, discovery, and containment health passed; only the aggregate final
+  check was blocked. The correction makes the existing repository-owned
+  `validate-e2e.ps1` runner canonical for rehearsal and makes readiness parse,
+  self-test, and require its exact gateway/deployment/fresh-state/profile/
+  evidence bindings.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -394,7 +406,7 @@ docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 .\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
 .\scripts\run-sprint-8a-component-upgrade.ps1 -OutputPath "artifacts/sprint-8a-closeout/rehearsal/component-upgrade-rollback.json"
 .\scripts\uat-sprint-8a.ps1
-.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a
+.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -EvidencePath "artifacts/sprint-8a-closeout/rehearsal/playwright-acceptance.json" -OverwriteEvidence
 ```
 
 The database-backed tests require their validation database URL variables.

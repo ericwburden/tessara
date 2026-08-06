@@ -90,6 +90,19 @@ try {
         & npm ci --prefix end2end 2>&1; if($LASTEXITCODE -ne 0){throw "Locked Playwright dependency installation failed."}
     }
     Invoke-ReadinessCheck "playwright-discovery" "npm --prefix end2end test -- --list" {
+        $verification = Get-Content -LiteralPath ./docs/sprints/sprint-8a-verification.md -Raw
+        foreach ($binding in @(
+            '.\scripts\validate-e2e.ps1',
+            '-BaseUrl "http://127.0.0.1:8088"',
+            '-DeploymentEvidencePath',
+            '-ExpectedDataState fresh',
+            '-TransitionCatalogProfile sprint-8a',
+            '-EvidencePath'
+        )) {
+            if (-not $verification.Contains($binding)) {
+                throw "The canonical Playwright rehearsal command omits required binding '$binding'."
+            }
+        }
         $list=& npm --prefix end2end test -- --list 2>&1
         if($LASTEXITCODE -ne 0){throw "Playwright discovery failed."}
         if(-not ($list -match "Total: 70 tests in 9 files")){throw "Playwright discovery did not return the exact 70-test/9-file inventory."}; $list
@@ -98,7 +111,7 @@ try {
         Test-Sprint7AAcceptanceContract; Test-Sprint8AAcceptanceContract; "Compose images, fixtures, and UAT inventory agree."
     }
     Invoke-ReadinessCheck "runner-parsing" "PowerShell parser for Sprint 8A validation runners" {
-        foreach($file in @("scripts/materialize-sprint-8a.ps1","scripts/bootstrap-sprint-7a-composition.ps1","scripts/smoke-sprint-8a.ps1","scripts/audit-sprint-8a-deployed-inventory.ps1","scripts/uat-sprint-8a.ps1","scripts/test-sprint-validation-harvest.ps1","scripts/verify-sprint-8a-component-upgrade.ps1","scripts/build-sprint-8a-component-rehearsal-baseline.ps1","scripts/run-sprint-8a-deployed-smoke.ps1","scripts/run-sprint-8a-component-upgrade.ps1")){
+        foreach($file in @("scripts/materialize-sprint-8a.ps1","scripts/bootstrap-sprint-7a-composition.ps1","scripts/smoke-sprint-8a.ps1","scripts/audit-sprint-8a-deployed-inventory.ps1","scripts/uat-sprint-8a.ps1","scripts/test-sprint-validation-harvest.ps1","scripts/verify-sprint-8a-component-upgrade.ps1","scripts/build-sprint-8a-component-rehearsal-baseline.ps1","scripts/run-sprint-8a-deployed-smoke.ps1","scripts/run-sprint-8a-component-upgrade.ps1","scripts/validate-e2e.ps1")){
             $tokens=$null;$errors=$null;[void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)
             if($errors.Count){throw "$file parse failed: $($errors.Message -join '; ')"}
         }; "runner parsing passed"
@@ -117,6 +130,8 @@ try {
         if($LASTEXITCODE -ne 0){throw "Deployed-smoke orchestration self-test failed."}
         & ./scripts/run-sprint-8a-component-upgrade.ps1 -SelfTest
         if($LASTEXITCODE -ne 0){throw "Component upgrade orchestration self-test failed."}
+        & ./scripts/validate-e2e.ps1 -SelfTest
+        if($LASTEXITCODE -ne 0){throw "Playwright acceptance orchestration self-test failed."}
     }
     Invoke-ReadinessCheck "reset-dry-run" "materialize-sprint-8a.ps1 -AuthorizeDisposableReset -WhatIf -Confirm:`$false with captured output" {
         $verification = Get-Content -LiteralPath ./docs/sprints/sprint-8a-verification.md -Raw
