@@ -27,6 +27,24 @@ $scenarios = [ordered]@{
     "UAT-8A-08" = @("upgrade-rollback", "live-smoke")
 }
 
+function Assert-UpgradeReceiptFresh {
+    param(
+        [Parameter(Mandatory)]$Upgrade,
+        [Parameter(Mandatory)]$Materialization,
+        [Parameter(Mandatory)][string]$ExpectedCommit,
+        [Parameter(Mandatory)][string]$ExpectedTree
+    )
+    if ([string]$Upgrade.source_identity.commit -cne $ExpectedCommit -or
+        [string]$Upgrade.source_identity.tree -cne $ExpectedTree -or
+        [bool]$Upgrade.source_identity.dirty) {
+        throw "Component upgrade evidence is not bound to the current clean source identity."
+    }
+    if ([DateTimeOffset]::Parse([string]$Upgrade.generated_at) -lt
+        [DateTimeOffset]::Parse([string]$Materialization.operation.updated_at)) {
+        throw "Component upgrade evidence predates the current materialization receipt."
+    }
+}
+
 function Assert-DiagnosticInventory {
     Test-Sprint8AAcceptanceContract
     if ($scenarios.Count -ne 8) { throw "Sprint 8A must define exactly eight UAT diagnostic scenarios." }
@@ -43,6 +61,19 @@ function Assert-DiagnosticInventory {
 
 Assert-DiagnosticInventory
 if ($SelfTest) {
+    $materialization = [pscustomobject]@{ operation = [pscustomobject]@{ updated_at = "2026-01-02T00:00:00Z" } }
+    $upgrade = [pscustomobject]@{
+        generated_at = "2026-01-02T00:00:01Z"
+        source_identity = [pscustomobject]@{ commit = "a"; tree = "b"; dirty = $false }
+    }
+    Assert-UpgradeReceiptFresh -Upgrade $upgrade -Materialization $materialization -ExpectedCommit "a" -ExpectedTree "b"
+    $upgrade.generated_at = "2026-01-01T23:59:59Z"
+    try {
+        Assert-UpgradeReceiptFresh -Upgrade $upgrade -Materialization $materialization -ExpectedCommit "a" -ExpectedTree "b"
+        throw "Stale upgrade evidence was accepted."
+    } catch {
+        if ($_.Exception.Message -ceq "Stale upgrade evidence was accepted.") { throw }
+    }
     Write-Host "Sprint 8A automated UAT diagnostic inventory self-test passed."
     return
 }
@@ -54,6 +85,11 @@ try {
     foreach ($path in @($SmokeOutputPath, $MaterializationReceipt, $FailureReceipt, $UpgradeReceipt)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required UAT diagnostic evidence is missing: $path" }
     }
+    $materialization = Get-Content -LiteralPath $MaterializationReceipt -Raw | ConvertFrom-Json
+    $upgrade = Get-Content -LiteralPath $UpgradeReceipt -Raw | ConvertFrom-Json
+    $expectedCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
+    $expectedTree = (& git -C $repoRoot rev-parse "HEAD^{tree}").Trim()
+    Assert-UpgradeReceiptFresh -Upgrade $upgrade -Materialization $materialization -ExpectedCommit $expectedCommit -ExpectedTree $expectedTree
     $checks = @($scenarios.GetEnumerator() | ForEach-Object {
         [ordered]@{ scenario = $_.Key; state = "passed"; diagnostic_dependencies = @($_.Value) }
     })

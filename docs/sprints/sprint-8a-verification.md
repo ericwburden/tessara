@@ -1,11 +1,11 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 25 completed a fail-late diagnostic harvest;
-its consolidated fixture/product correction requires a complete restarted
-readiness/rehearsal cycle. The attempt retained two first failures, completed
-11 safe sibling checks, and blocked only the aggregate final check on the
-failed Playwright prerequisite. No candidate has been frozen; SIT, formal UAT,
-and closeout remain Not Run.
+Status: Candidate Rehearsal attempt 26 completed a fail-late diagnostic harvest;
+its consolidated product/acceptance/harness correction requires a complete
+restarted readiness/rehearsal cycle. The attempt retained six findings, passed
+nine checks, failed three check groups, and blocked only the aggregate final
+check. No candidate has been frozen; SIT, formal UAT, and closeout remain Not
+Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -389,6 +389,32 @@ not reused by another command in the same rehearsal.
   graph, and the readiness-enforced `validate-e2e.ps1` binding close that gap;
   no duplicate skill prose is added. Attempt 25 exercised this enforcement by
   retaining one harvest and one consolidated batch before tracked correction.
+- Attempt 26 retained six findings after nine checks passed. Playwright
+  completed 51 tests, retained three failures, and marked 16 serial dependents
+  not run: the four named tier identities were incorrectly required on the
+  first deterministic 25-row page; Core's generic module gateway dropped the
+  browser query before the Dashboard module, so the embedded 10-row request
+  became the Component provider's 25-row default; and the scoped Component
+  route still expected two Core-era admin fetches even though module-owned SSR
+  now hydrates without them. Materialization/no-op, exact inventory/navigation,
+  deployed smoke, complete Rust validation, workspace all-features, warning-free
+  Clippy, exact discovery, and containment health passed. The Component upgrade
+  sibling failed before assertions because the operator supplied undeclared
+  `-Overwrite` and was not retried. UAT live smoke passed, but its UAT-8A-08
+  mapping incorrectly accepted a stale prior-source upgrade receipt. The first
+  harvest-finalization call similarly used undeclared `-BatchPath`; immutable
+  results were complete, so only finalization was rerun with the declared
+  `-DefectBatchPath`. Those two operator findings require no tracked command
+  change because the scripts already expose the exact parameters and the
+  canonical command omits `-Overwrite`.
+- The consolidated correction preserves exact query strings through the
+  manifest-driven module gateway and tests that boundary, explicitly requests
+  all 30 semantic rows for the tier identity assertion, removes stale admin-GET
+  expectations from module-owned Component documents, stamps upgrade evidence
+  with the clean source identity, and makes UAT diagnostics reject an upgrade
+  receipt from another source or from before the current materialization. The
+  UAT self-test exercises the stale-receipt rejection. Readiness 30 and
+  rehearsal 26 are superseded by this tracked correction.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 

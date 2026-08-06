@@ -1707,44 +1707,32 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       [404],
     );
     await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
-    await assertNativeRouteGuard.whileExpectedForbiddenGets([
-      { path: `/api/admin/components/${fixtures.inScopeComponent.slug}`, count: 2 },
-    ], async () => {
-      await expectHydratedRoute(page, {
-        path: `/components/${fixtures.inScopeComponent.slug}`,
-        expectedText: fixtures.inScopeComponent.name,
-        documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-      });
-      await expect(
-        page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
-      ).toBeVisible();
+    await expectHydratedRoute(page, {
+      path: `/components/${fixtures.inScopeComponent.slug}`,
+      expectedText: fixtures.inScopeComponent.name,
+      documentRootSelector: COMPONENT_DOCUMENT_ROOT,
     });
-    await assertNativeRouteGuard.whileExpectedForbiddenGets([
-      { path: `/api/admin/components/${fixtures.inScopeComponent.slug}`, count: 2 },
-    ], async () => {
-      await expectHydratedRoute(page, {
-        path: `/components/${fixtures.inScopeComponent.slug}/view`,
-        expectedText: fixtures.inScopeComponent.name,
-        documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-      });
-      await expect(
-        page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
-      ).toBeVisible();
-      await expect(page.getByRole("table")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
+    ).toBeVisible();
+    await expectHydratedRoute(page, {
+      path: `/components/${fixtures.inScopeComponent.slug}/view`,
+      expectedText: fixtures.inScopeComponent.name,
+      documentRootSelector: COMPONENT_DOCUMENT_ROOT,
     });
-    await assertNativeRouteGuard.whileExpectedForbiddenGets([
-      { path: `/api/admin/components/${fixtures.inScopeVisualComponent.slug}`, count: 2 },
-    ], async () => {
-      await expectHydratedRoute(page, {
-        path: `/components/${fixtures.inScopeVisualComponent.slug}/view`,
-        expectedText: fixtures.inScopeVisualComponent.name,
-        documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-      });
-      await expect(
-        page.getByRole("heading", { level: 1, name: fixtures.inScopeVisualComponent.name }),
-      ).toBeVisible();
-      await expect(page.locator(".component-visual-preview")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
+    ).toBeVisible();
+    await expect(page.getByRole("table")).toBeVisible();
+    await expectHydratedRoute(page, {
+      path: `/components/${fixtures.inScopeVisualComponent.slug}/view`,
+      expectedText: fixtures.inScopeVisualComponent.name,
+      documentRootSelector: COMPONENT_DOCUMENT_ROOT,
     });
+    await expect(
+      page.getByRole("heading", { level: 1, name: fixtures.inScopeVisualComponent.name }),
+    ).toBeVisible();
+    await expect(page.locator(".component-visual-preview")).toBeVisible();
 
     const dashboards = await getJson<DashboardSummary[]>(fixtures.scopedManager, "/api/dashboards");
     expect(dashboards.some((dashboard) => dashboard.id === fixtures.inScopeDashboard.id)).toBe(true);

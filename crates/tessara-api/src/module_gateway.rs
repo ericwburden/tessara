@@ -102,6 +102,7 @@ async fn dispatch_result(
                 ForwardRequest {
                     method,
                     path: &path,
+                    query: request.uri().query(),
                     inbound_headers: request.headers(),
                     body: Bytes::new(),
                     grant: Some(&grant),
@@ -131,6 +132,7 @@ async fn dispatch_result(
                 },
             )
             .await?;
+            let query = request.uri().query().map(str::to_owned);
             let (parts, body) = request.into_parts();
             let bytes = to_bytes(body, 2 * 1024 * 1024)
                 .await
@@ -140,6 +142,7 @@ async fn dispatch_result(
                 ForwardRequest {
                     method,
                     path: &path,
+                    query: query.as_deref(),
                     inbound_headers: &parts.headers,
                     body: bytes,
                     grant: Some(&grant),
@@ -164,6 +167,7 @@ pub(crate) async fn asset(State(state): State<AppState>, request: Request) -> Re
                         ForwardRequest {
                             method: Method::GET,
                             path: &path,
+                            query: request.uri().query(),
                             inbound_headers: request.headers(),
                             body: Bytes::new(),
                             grant: None,
@@ -435,6 +439,7 @@ async fn organization_projection(pool: &sqlx::PgPool) -> ApiResult<Vec<Value>> {
 struct ForwardRequest<'a> {
     method: Method,
     path: &'a str,
+    query: Option<&'a str>,
     inbound_headers: &'a HeaderMap,
     body: Bytes,
     grant: Option<&'a tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2>>,
@@ -445,10 +450,11 @@ struct ForwardRequest<'a> {
 async fn forward(module: &InstalledModule, request: ForwardRequest<'_>) -> ApiResult<Response> {
     let endpoint = service_endpoint(&module.manifest)?;
     let client = reqwest::Client::new();
+    let target = forwarded_target(&endpoint, request.path, request.query);
     let mut outbound = client.request(
         reqwest::Method::from_bytes(request.method.as_str().as_bytes())
             .map_err(|error| ApiError::Internal(error.into()))?,
-        format!("{endpoint}{}", request.path),
+        target,
     );
     if let Some(grant) = request.grant {
         outbound = outbound.header(
@@ -496,6 +502,13 @@ async fn forward(module: &InstalledModule, request: ForwardRequest<'_>) -> ApiRe
     }
     let response = outbound.send().await.map_err(|_| module_unavailable())?;
     module_response(response, &module.manifest, request.path).await
+}
+
+fn forwarded_target(endpoint: &str, path: &str, query: Option<&str>) -> String {
+    match query {
+        Some(query) if !query.is_empty() => format!("{endpoint}{path}?{query}"),
+        _ => format!("{endpoint}{path}"),
+    }
 }
 
 async fn module_response(
@@ -697,6 +710,22 @@ mod tests {
         );
         assert_eq!(idempotency_key(&headers), "dashboard-save-42");
         assert!(!idempotency_key(&HeaderMap::new()).is_empty());
+    }
+
+    #[test]
+    fn module_gateway_preserves_the_exact_browser_query() {
+        assert_eq!(
+            forwarded_target(
+                "http://dashboards:8091",
+                "/api/dashboards/1/placements/2/render/table",
+                Some("page_size=10&cursor=offset%3A10"),
+            ),
+            "http://dashboards:8091/api/dashboards/1/placements/2/render/table?page_size=10&cursor=offset%3A10"
+        );
+        assert_eq!(
+            forwarded_target("http://components:8092", "/components", None),
+            "http://components:8092/components"
+        );
     }
 
     #[test]

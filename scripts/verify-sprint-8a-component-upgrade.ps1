@@ -172,6 +172,11 @@ try {
         schema_version = 1
         evidence_kind = "tessara.sprint-8a.component-upgrade-rollback"
         generated_at = [DateTimeOffset]::UtcNow.ToString("o")
+        source_identity = [ordered]@{
+            commit = (& git -C $repoRoot rev-parse HEAD).Trim()
+            tree = (& git -C $repoRoot rev-parse "HEAD^{tree}").Trim()
+            dirty = @(& git -C $repoRoot status --porcelain=v1).Count -ne 0
+        }
         project = $expectedProject
         baseline_image = $BaselineImage
         candidate_image = $CandidateImage
