@@ -36,7 +36,7 @@ function Get-PostgresContainer {
 function Invoke-Postgres {
     param(
         [Parameter(Mandatory)][string]$Container,
-        [Parameter(Mandatory)][ValidateSet("tessara_core", "tessara_module_dashboards")][string]$Database,
+        [Parameter(Mandatory)][ValidateSet("tessara_core", "tessara_module_components", "tessara_module_dashboards")][string]$Database,
         [Parameter(Mandatory)][string]$Sql,
         [switch]$Json
     )
@@ -129,6 +129,14 @@ function Ensure-Actor {
 function Get-LiveInventory {
     param([Parameter(Mandatory)][string]$Container)
     $contract = Assert-Sprint7AFixtureContract
+    $componentInventoryProjection = if ($script:SplitComponentOwnership) {
+        "'components', NULL"
+    } else {
+        @"
+  'components', (SELECT json_agg(json_build_object('version_id',cv.id,'type',cv.component_type,'authority_revision',cv.authority_revision) ORDER BY cv.id)
+    FROM component_versions cv WHERE cv.id IN ('$($contract.component_versions.stat)'::uuid,'$($contract.component_versions.table)'::uuid,'$($contract.component_versions.chart)'::uuid,'$($contract.component_versions.blocked)'::uuid))
+"@
+    }
     $core = Invoke-Postgres -Container $Container -Database tessara_core -Json -Sql @"
 SELECT json_build_object(
   'actors', (SELECT json_object_agg(a.email, a.id) FROM accounts a WHERE a.email IN
@@ -141,8 +149,7 @@ SELECT json_build_object(
     WHERE d.id IN ('$($contract.datasets.four_tier)'::uuid,'$($contract.datasets.blocked)'::uuid)),
   'row_tiers', (SELECT json_agg(json_build_object('label',label,'tier',__restriction_tier) ORDER BY label)
     FROM dataset_materialized.dataset_major_01980000000270008000000000000003_v1),
-  'components', (SELECT json_agg(json_build_object('version_id',cv.id,'type',cv.component_type,'authority_revision',cv.authority_revision) ORDER BY cv.id)
-    FROM component_versions cv WHERE cv.id IN ('$($contract.component_versions.stat)'::uuid,'$($contract.component_versions.table)'::uuid,'$($contract.component_versions.chart)'::uuid,'$($contract.component_versions.blocked)'::uuid)),
+  $componentInventoryProjection,
   'identifier_specimens', json_build_object(
     'known_blocked_exists',(SELECT EXISTS(SELECT 1 FROM datasets WHERE id='$($contract.identifier_specimens.known_blocked)'::uuid)),
     'random_absent',(SELECT NOT EXISTS(SELECT 1 FROM datasets WHERE id='$($contract.identifier_specimens.random)'::uuid))),
@@ -152,6 +159,15 @@ SELECT json_build_object(
   'security_revisions', (SELECT row_to_json(r) FROM (SELECT authorization_revision,organization_revision FROM core_security_revisions WHERE singleton=true) r)
 );
 "@
+    if ($script:SplitComponentOwnership) {
+        $componentInventory = Invoke-Postgres -Container $Container -Database tessara_module_components -Json -Sql @"
+SELECT json_build_object(
+  'components', (SELECT json_agg(json_build_object('version_id',cv.id,'type',cv.component_type,'authority_revision',cv.authority_revision) ORDER BY cv.id)
+    FROM component_versions cv WHERE cv.id IN ('$($contract.component_versions.stat)'::uuid,'$($contract.component_versions.table)'::uuid,'$($contract.component_versions.chart)'::uuid,'$($contract.component_versions.blocked)'::uuid))
+);
+"@
+        $core.components = $componentInventory.components
+    }
     $dashboard = Invoke-Postgres -Container $Container -Database tessara_module_dashboards -Json -Sql @"
 SELECT json_build_object(
   'dashboards', (SELECT json_agg(json_build_object('id',d.id,'authority_revision',d.authority_revision,'scope_nodes',(SELECT json_agg(node_id ORDER BY node_id) FROM dashboard_scope_nodes WHERE dashboard_id=d.id)) ORDER BY d.id)
@@ -216,11 +232,18 @@ if ($SelfTest) {
         $source -cnotmatch "component_versions\.lifecycle_state IS DISTINCT FROM 'active'") {
         throw "Published ComponentVersion fixtures must declare the active lifecycle state and initial resource revision."
     }
+    if ($source -cnotmatch 'tessara_module_components' -or
+        $source -cnotmatch 'SplitComponentOwnership' -or
+        $source -cnotmatch "kind='module_instance'" -or
+        $source -cnotmatch "resource_type='tessara.components.component_version'") {
+        throw "The shared fixture preparer must preserve independently owned Component storage and references for Sprint 8A."
+    }
     Write-Host "Sprint 7A UAT fixture preparation self-test passed."
     return
 }
 
 $contract = Assert-Sprint7AFixtureContract
+$script:SplitComponentOwnership = $ComposeProject -ceq "tessara-sprint-8a"
 $container = Get-PostgresContainer
 if (-not $VerifyOnly) {
     $token = Get-Sprint7AToken -BaseUrl $BaseUrl -Email $AdminEmail -Password $AdminPassword
@@ -258,6 +281,19 @@ SELECT '$($contract.scope_nodes.subtree_b)'::uuid,node_type_id,NULL,'Tessara UAT
 ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name WHERE nodes.name IS DISTINCT FROM EXCLUDED.name;
 "@
     } else { '' }
+    $legacyComponentSql = if ($script:SplitComponentOwnership) { '' } else {
+@"
+INSERT INTO components(id,name,slug,description) VALUES
+  ('$($script:Sprint7AFixture.chart_component_id)'::uuid,'Sprint 7A Tier Chart','sprint-7a-tier-chart','UAT fixture'),
+  ('$($script:Sprint7AFixture.blocked_component_id)'::uuid,'Sprint 7A Blocked Component','sprint-7a-blocked-component','UAT fixture')
+ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description;
+INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,lifecycle_state,config,published_at,authority_revision,resource_revision) VALUES
+  ('$($contract.component_versions.chart)'::uuid,'$($script:Sprint7AFixture.chart_component_id)'::uuid,'$($contract.datasets.four_tier)'::uuid,1,'major_line','bar',1,'1.0.0','UAT fixture','published','active','{"mode":"summary","summary_field":"label","summary_type":"count","category_field":"label","sort_field":"summary_value","sort_direction":"desc","number_of_points":20,"value_format":"integer"}'::jsonb,now(),2,1),
+  ('$($contract.component_versions.blocked)'::uuid,'$($script:Sprint7AFixture.blocked_component_id)'::uuid,'$($contract.datasets.blocked)'::uuid,1,'major_line','table',1,'1.0.0','UAT fixture','published','active','{"visible_columns":["label"]}'::jsonb,now(),2,1)
+ON CONFLICT(id) DO UPDATE SET config=EXCLUDED.config,lifecycle_state='active',authority_revision=GREATEST(component_versions.authority_revision,2)
+WHERE component_versions.config IS DISTINCT FROM EXCLUDED.config OR component_versions.lifecycle_state IS DISTINCT FROM 'active' OR component_versions.authority_revision < 2;
+"@
+    }
     $coreSql = @"
 BEGIN;
 SET LOCAL client_min_messages TO warning;
@@ -310,15 +346,7 @@ INSERT INTO dataset_major_materializations(dataset_id,version_major,materialized
 VALUES('$($contract.datasets.blocked)'::uuid,1,'dataset_materialized','dataset_major_01980000000270008000000000000008_v1',1,now(),'ready')
 ON CONFLICT(dataset_id,version_major) DO UPDATE SET materialized_row_count=1,materialized_at=now(),rebuild_status='ready';
 
-INSERT INTO components(id,name,slug,description) VALUES
-  ('$($script:Sprint7AFixture.chart_component_id)'::uuid,'Sprint 7A Tier Chart','sprint-7a-tier-chart','UAT fixture'),
-  ('$($script:Sprint7AFixture.blocked_component_id)'::uuid,'Sprint 7A Blocked Component','sprint-7a-blocked-component','UAT fixture')
-ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description;
-INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,lifecycle_state,config,published_at,authority_revision,resource_revision) VALUES
-  ('$($contract.component_versions.chart)'::uuid,'$($script:Sprint7AFixture.chart_component_id)'::uuid,'$($contract.datasets.four_tier)'::uuid,1,'major_line','bar',1,'1.0.0','UAT fixture','published','active','{"mode":"summary","summary_field":"label","summary_type":"count","category_field":"label","sort_field":"summary_value","sort_direction":"desc","number_of_points":20,"value_format":"integer"}'::jsonb,now(),2,1),
-  ('$($contract.component_versions.blocked)'::uuid,'$($script:Sprint7AFixture.blocked_component_id)'::uuid,'$($contract.datasets.blocked)'::uuid,1,'major_line','table',1,'1.0.0','UAT fixture','published','active','{"visible_columns":["label"]}'::jsonb,now(),2,1)
-ON CONFLICT(id) DO UPDATE SET config=EXCLUDED.config,lifecycle_state='active',authority_revision=GREATEST(component_versions.authority_revision,2)
-WHERE component_versions.config IS DISTINCT FROM EXCLUDED.config OR component_versions.lifecycle_state IS DISTINCT FROM 'active' OR component_versions.authority_revision < 2;
+$legacyComponentSql
 
 DO ${roleQuote}
 BEGIN
@@ -343,7 +371,43 @@ COMMIT;
 "@
     $null = Invoke-Postgres -Container $container -Database tessara_core -Sql $coreSql
 
-    $componentReference = { param([string]$VersionId) (@{ installation_id=$script:Sprint7AFixture.installation_id; owner=@{kind='core_installation';installation_id=$script:Sprint7AFixture.installation_id};resource_type='tessara.transition.component_version';resource_id=$VersionId } | ConvertTo-Json -Compress) }
+    $componentOwner = $null
+    if ($script:SplitComponentOwnership) {
+        $componentOwner = Invoke-Postgres -Container $container -Database tessara_core -Json -Sql @"
+SELECT json_build_object('installation_id',installation_id,'module_instance_id',id)
+FROM module_instances
+WHERE definition_id='tessara.components' AND identity_state='live' AND installed AND deployed AND enabled;
+"@
+        if ($null -eq $componentOwner -or [string]::IsNullOrWhiteSpace([string]$componentOwner.module_instance_id)) {
+            throw "Sprint 8A Component Module Instance ownership could not be resolved."
+        }
+        $datasetReference = { param([string]$DatasetId) (@{ reference=@{ installation_id=[string]$componentOwner.installation_id; owner=@{kind='core_installation';installation_id=[string]$componentOwner.installation_id};resource_type='tessara.transition.dataset_major_line';resource_id="$DatasetId@1" } } | ConvertTo-Json -Compress) }
+        $componentSql = @"
+BEGIN;
+SET LOCAL client_min_messages TO warning;
+INSERT INTO components(id,external_key,name,slug,description) VALUES
+  ('$($script:Sprint7AFixture.metric_component_id)'::uuid,'sprint-7a-metric-card','Reference Metric Card','sprint-7a-metric-card','UAT fixture'),
+  ('$($script:Sprint7AFixture.table_component_id)'::uuid,'sprint-7a-record-table','Reference Records Table','sprint-7a-record-table','UAT fixture'),
+  ('$($script:Sprint7AFixture.chart_component_id)'::uuid,'sprint-7a-tier-chart','Sprint 7A Tier Chart','sprint-7a-tier-chart','UAT fixture'),
+  ('$($script:Sprint7AFixture.blocked_component_id)'::uuid,'sprint-7a-blocked-component','Sprint 7A Blocked Component','sprint-7a-blocked-component','UAT fixture')
+ON CONFLICT(id) DO UPDATE SET external_key=EXCLUDED.external_key,name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description;
+INSERT INTO component_versions(id,component_id,dataset_reference,dataset_scope_node_ids,component_type,status,lifecycle_state,resource_revision,authority_revision,version_number,version_label,version_note,config) VALUES
+  ('$($contract.component_versions.stat)'::uuid,'$($script:Sprint7AFixture.metric_component_id)'::uuid,'$(& $datasetReference $contract.datasets.four_tier)'::jsonb,ARRAY['$($contract.scope_nodes.subtree_a)'::uuid],'stat_card','published','active',1,2,1,'1.0.0','UAT fixture','{"label":"Reference metric","summary_type":"row_count","summary_field":""}'::jsonb),
+  ('$($contract.component_versions.table)'::uuid,'$($script:Sprint7AFixture.table_component_id)'::uuid,'$(& $datasetReference $contract.datasets.four_tier)'::jsonb,ARRAY['$($contract.scope_nodes.subtree_a)'::uuid],'table','published','active',1,2,1,'1.0.0','UAT fixture','{"visible_columns":["label"]}'::jsonb),
+  ('$($contract.component_versions.chart)'::uuid,'$($script:Sprint7AFixture.chart_component_id)'::uuid,'$(& $datasetReference $contract.datasets.four_tier)'::jsonb,ARRAY['$($contract.scope_nodes.subtree_a)'::uuid],'bar','published','active',1,2,1,'1.0.0','UAT fixture','{"mode":"summary","summary_field":"label","summary_type":"count","category_field":"label","sort_field":"summary_value","sort_direction":"desc","number_of_points":20,"value_format":"integer"}'::jsonb),
+  ('$($contract.component_versions.blocked)'::uuid,'$($script:Sprint7AFixture.blocked_component_id)'::uuid,'$(& $datasetReference $contract.datasets.blocked)'::jsonb,ARRAY['$($contract.scope_nodes.subtree_b)'::uuid],'table','published','active',1,2,1,'1.0.0','UAT fixture','{"visible_columns":["label"]}'::jsonb)
+ON CONFLICT(id) DO UPDATE SET dataset_reference=EXCLUDED.dataset_reference,dataset_scope_node_ids=EXCLUDED.dataset_scope_node_ids,config=EXCLUDED.config,lifecycle_state='active',authority_revision=GREATEST(component_versions.authority_revision,2)
+WHERE component_versions.dataset_reference IS DISTINCT FROM EXCLUDED.dataset_reference OR component_versions.dataset_scope_node_ids IS DISTINCT FROM EXCLUDED.dataset_scope_node_ids OR component_versions.config IS DISTINCT FROM EXCLUDED.config OR component_versions.lifecycle_state IS DISTINCT FROM 'active' OR component_versions.authority_revision < 2;
+COMMIT;
+"@
+        $null = Invoke-Postgres -Container $container -Database tessara_module_components -Sql $componentSql
+    }
+
+    $componentReference = if ($script:SplitComponentOwnership) {
+        { param([string]$VersionId) (@{ installation_id=[string]$componentOwner.installation_id; owner=@{kind='module_instance';installation_id=[string]$componentOwner.installation_id;module_instance_id=[string]$componentOwner.module_instance_id};resource_type='tessara.components.component_version';resource_id=$VersionId } | ConvertTo-Json -Compress) }
+    } else {
+        { param([string]$VersionId) (@{ installation_id=$script:Sprint7AFixture.installation_id; owner=@{kind='core_installation';installation_id=$script:Sprint7AFixture.installation_id};resource_type='tessara.transition.component_version';resource_id=$VersionId } | ConvertTo-Json -Compress) }
+    }
     $chartReference = & $componentReference $contract.component_versions.chart
     $blockedReference = & $componentReference $contract.component_versions.blocked
     $dashboardSql = @"

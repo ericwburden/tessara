@@ -78,6 +78,17 @@ function Test-Sprint8AAcceptanceContract {
     if ($materializationText -match '(?m)^\s*-SkipLegacySeed(?:\s|`|$)') {
         throw "Sprint 8A reference materialization must rebuild the established acceptance fixtures."
     }
+    $semanticFixtureText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/prepare-sprint-7a-uat-fixtures.ps1") -Raw
+    foreach ($requiredFragment in @(
+        'tessara_module_components',
+        'SplitComponentOwnership',
+        "kind='module_instance'",
+        "resource_type='tessara.components.component_version'"
+    )) {
+        if (-not $semanticFixtureText.Contains($requiredFragment)) {
+            throw "Sprint 8A semantic fixtures do not preserve the extracted Component ownership contract ('$requiredFragment')."
+        }
+    }
     $baselineDockerfile = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/Dockerfile.component-rehearsal-baseline") -Raw
     if ($baselineDockerfile -notmatch '(?m)^ARG COMPONENT_BASE_IMAGE=[^\r\n]+$') {
         throw "Sprint 8A Component rehearsal baseline must declare a valid default base image without Docker warnings."

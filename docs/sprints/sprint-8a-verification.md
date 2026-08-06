@@ -220,12 +220,17 @@ not reused by another command in the same rehearsal.
 
 - Mutable source/environment identity: Not Run.
 - Passing readiness prerequisite: Not Run.
-- Consolidated defects and correction batch: Attempt 13 retained ten findings
-  in one batch: one timing-harness instability, one missing acceptance-fixture
-  rebuild, two acceptance/product contract mismatches, one transient-image
-  upgrade assertion defect, one Docker warning, and four retained operator
-  mistakes. Attempt 12's earlier eight-finding batch remains retained and
-  superseded.
+- Consolidated defects and correction batch: Attempt 14 retained two findings
+  in one batch. The fixture defect showed that the shared Sprint 7A semantic
+  preparer still wrote Component rows to Core after Sprint 8A extracted that
+  product storage; the correction writes and verifies all four semantic
+  Component fixtures in the Component database and emits its real Module
+  Instance references to Dashboard. The operator-harness defect was one omitted
+  destructive-reset acknowledgement shared by the static and workspace
+  invocations; the existing validation preflight already enforced the exact
+  variable, so the correction is to use that canonical environment contract,
+  not duplicate another runner rule. Attempt 13's ten-finding and Attempt 12's
+  eight-finding batches remain retained and superseded.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -278,6 +283,11 @@ docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 ```
 
 The database-backed tests require their validation database URL variables.
+Both `scripts/validate.ps1` and direct workspace all-features execution also
+require
+`SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET=I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET`;
+an attempt that omits it is retained as an invocation failure and is not
+silently retried during diagnostic harvesting.
 Failure teardown/rerun, nondisclosure, deployed smoke, browser coverage, and
 upgrade/rollback are executed and retained by the specialized validation
 workflow. Deployed acceptance smoke belongs to SIT; manual scenarios belong to
