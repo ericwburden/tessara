@@ -27,6 +27,10 @@ The checklist must verify:
 - every runner, argument contract, output-path form, receipt writer, SHA-256
   helper, atomic finalization path, and failure/supersession path by self-test
   or a safe disposable probe;
+- every non-interactive destructive rehearsal command disables host prompting
+  only after its repository-owned explicit authorization and exact-target
+  guards, and readiness executes that command's `WhatIf` path with output
+  captured exactly as rehearsal will capture it;
 - every acceptance clause mapped to automated, deployed-smoke, and manual
   evidence, with explicit justified `N/A` entries rather than blanks; and
 - a clean repository plus source-exact build inputs before rehearsal begins.

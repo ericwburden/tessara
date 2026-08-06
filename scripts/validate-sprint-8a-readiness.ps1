@@ -118,8 +118,17 @@ try {
         & ./scripts/run-sprint-8a-component-upgrade.ps1 -SelfTest
         if($LASTEXITCODE -ne 0){throw "Component upgrade orchestration self-test failed."}
     }
-    Invoke-ReadinessCheck "reset-dry-run" "materialize-sprint-8a.ps1 -AuthorizeDisposableReset -WhatIf" {
-        & ./scripts/materialize-sprint-8a.ps1 -AuthorizeDisposableReset -WhatIf; if($LASTEXITCODE -ne 0){throw "Reset dry-run failed."}
+    Invoke-ReadinessCheck "reset-dry-run" "materialize-sprint-8a.ps1 -AuthorizeDisposableReset -WhatIf -Confirm:`$false with captured output" {
+        $verification = Get-Content -LiteralPath ./docs/sprints/sprint-8a-verification.md -Raw
+        $expectedCommand = '.\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm:$false -VerifyNoOp'
+        if (-not $verification.Contains($expectedCommand)) {
+            throw "The canonical rehearsal command must disable the interactive confirmation prompt after explicit disposable-reset authorization."
+        }
+        $captured = @(& ./scripts/materialize-sprint-8a.ps1 -AuthorizeDisposableReset -WhatIf -Confirm:$false 2>&1)
+        if($LASTEXITCODE -ne 0 -or -not ($captured -match "Fresh-materialize Sprint 8A from empty owner databases")){
+            throw "Captured-output reset dry-run failed."
+        }
+        $captured
     }
     Invoke-ReadinessCheck "package-boundaries" "scripts/check-web-crate-boundaries.ps1" {
         & ./scripts/check-web-crate-boundaries.ps1; if($LASTEXITCODE -ne 0){throw "Package boundaries failed."}

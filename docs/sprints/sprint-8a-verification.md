@@ -1,8 +1,8 @@
 # Sprint 8A Validation Record
 
-Status: Candidate Rehearsal attempt 22 completed a fail-late diagnostic harvest; its consolidated product/acceptance-inventory correction batch requires a complete restarted readiness/rehearsal cycle.
-Its two findings are retained in one correction batch spanning exact Dashboard
-paging-fixture identity and independently deployed Component document hydration. No candidate
+Status: Candidate Rehearsal attempt 23 completed a fail-late diagnostic harvest; its consolidated harness correction requires a complete restarted readiness/rehearsal cycle.
+Its one finding is retained in a batch covering non-interactive destructive
+runner confirmation and evidence capture. No candidate
 has been frozen; SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
@@ -327,6 +327,19 @@ not reused by another command in the same rehearsal.
   blocked only by Playwright. The consolidated correction binds paging to the
   exact multi-page demo Session Log Table and makes Component complete
   documents publish and test the shared hydration marker.
+- Attempt 23 retained one harness finding after six independent checks passed
+  and six deployment-dependent checks were blocked with exact reasons. The
+  source-exact materialization command failed before destructive work when the
+  documented interactive `-Confirm` prompt was invoked through the rehearsal
+  evidence pipeline. Complete Rust validation, all-feature tests, warning-free
+  Clippy, exact 70-test/9-file Playwright discovery, clean source, and current
+  environment containment health passed. Inventory/navigation, deployed
+  smoke, Playwright execution, Component upgrade/rollback, UAT diagnostics,
+  and the aggregate final check were correctly blocked because no corrected
+  source-exact topology existed. A captured-output `WhatIf` reproducer passed
+  with `-Confirm:$false`; the correction makes that automation-safe invocation
+  canonical and readiness-enforced without weakening the explicit disposable
+  reset authorization or exact-target guards.
 - Complete-cycle repetitions: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -367,7 +380,7 @@ docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config
 .\scripts\uat-sprint-8a.ps1 -SelfTest
 .\scripts\test-sprint-validation-harvest.ps1 -SelfTest
 .\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
-.\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm -VerifyNoOp
+.\scripts\materialize-sprint-8a.ps1 -AuthorizeDisposableReset -Confirm:$false -VerifyNoOp
 .\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/rehearsal/deployed-inventory-navigation.json"
 .\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/rehearsal/deployment-fresh.json"
 .\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098"
