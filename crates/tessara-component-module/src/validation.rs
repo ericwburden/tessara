@@ -66,10 +66,8 @@ struct VisualSharedConfig {
     summary_type: String,
     #[serde(default = "default_value_format")]
     value_format: String,
-    #[serde(default = "default_missing_policy")]
-    missing_policy: String,
-    #[serde(default)]
-    value_missing_policy: Option<String>,
+    #[serde(default = "default_value_missing_policy")]
+    value_missing_policy: String,
     #[serde(default)]
     sort_field: Option<String>,
     #[serde(default = "default_sort_direction")]
@@ -202,7 +200,7 @@ impl VisualComponentConfig {
 fn default_value_format() -> String {
     "plain".into()
 }
-fn default_missing_policy() -> String {
+fn default_value_missing_policy() -> String {
     "omit".into()
 }
 fn default_sort_direction() -> String {
@@ -438,19 +436,11 @@ fn validate_visual(
         &mut findings,
     );
     require_enum(
-        &shared.missing_policy,
+        &shared.value_missing_policy,
         &["omit", "zero", "explicit_missing"],
-        "config.missing_policy",
+        "config.value_missing_policy",
         &mut findings,
     );
-    if let Some(value) = &shared.value_missing_policy {
-        require_enum(
-            value,
-            &["omit", "zero", "explicit_missing"],
-            "config.value_missing_policy",
-            &mut findings,
-        );
-    }
     require_enum(
         &shared.sort_direction,
         &["asc", "desc"],
@@ -853,6 +843,65 @@ mod tests {
                 .iter()
                 .any(|finding| finding.code == "config.limit.out_of_range")
         );
+    }
+
+    #[test]
+    fn visual_contract_rejects_retired_shared_missing_policy_alias() {
+        for (component_type, config) in [
+            (
+                "bar",
+                json!({
+                    "summary_field":"amount",
+                    "summary_type":"sum",
+                    "missing_policy":"zero",
+                    "mode":"summary",
+                    "category_field":"label"
+                }),
+            ),
+            (
+                "line",
+                json!({
+                    "summary_field":"amount",
+                    "summary_type":"sum",
+                    "missing_policy":"zero",
+                    "x_field":"label"
+                }),
+            ),
+            (
+                "pie",
+                json!({
+                    "summary_field":"amount",
+                    "summary_type":"sum",
+                    "missing_policy":"zero",
+                    "category_field":"label"
+                }),
+            ),
+            (
+                "donut",
+                json!({
+                    "summary_field":"amount",
+                    "summary_type":"sum",
+                    "missing_policy":"zero",
+                    "category_field":"label"
+                }),
+            ),
+            (
+                "stat_card",
+                json!({
+                    "summary_field":"amount",
+                    "summary_type":"sum",
+                    "missing_policy":"zero"
+                }),
+            ),
+        ] {
+            let findings = validate_component_config(component_type, &config, &fields());
+            assert!(
+                findings
+                    .iter()
+                    .any(|finding| finding.code == "config.invalid"),
+                "{component_type} accepted retired config.missing_policy: {findings:?}"
+            );
+        }
     }
 
     #[test]

@@ -494,8 +494,11 @@ image whose immutable ID and release/source labels do not match the clean
 closing commit and tree. It authenticates to the live BaseUrl, matches the API
 Application Installation to `current_database()` in the database container,
 checks the successful migration ledger and current migration-file checksums,
-recomputes the built-in seed contract digest, and matches all seven current
-transition source digests between SQL and the API. Data state is historical:
+recomputes the built-in seed contract digest, and matches the exact five Core
+transition source identities—Forms, Workflows, Responses, Datasets, and
+Migration—between SQL and the API. Dashboard and Components enter inventory
+only through their real Module Release and Module Instance records. Data state
+is historical:
 an upgraded populated database has at least one product row created before
 migration 3; a fresh database has none. Each acceptance wrapper re-runs those
 checks, verifies the retained JSON SHA-256 sidecar, and rejects evidence from a

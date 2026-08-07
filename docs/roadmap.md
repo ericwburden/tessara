@@ -75,7 +75,7 @@ The codebase already includes a substantial vertical foundation:
 - Sprint 6C Dashboard runtime/data extraction: Dashboard service, database, identities, migrations, manifest, operations, APIs, SSR pages, same-origin routes, transition-only Components contract, and definition-independent Module Management controls, with root web source/build decoupling deliberately remaining for the post-closeout SDK adoption pass
 - Sprint 6D and 6E module SDK/runtime adoption: canonical module contract, runtime, UI/design-system, asset, and conformance packages plus completed Dashboard source/build independence, release-owned documents/assets, and Dashboard-only upgrade/rollback
 - Sprint 6F through 7B composition and cross-module correctness: deterministic Blueprint/lockfile/materialization operations, scoped cross-boundary authorization, typed resource lifecycle and dependency behavior, and the reusable extraction proofs that Phase 8 reruns
-- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; Readiness 37 passed and Rehearsal 30 completed its fail-late harvest with 18 passed, 4 raw failed, and 10 blocked lanes, and formal testing has exited for one consolidated three-root harness/evidence correction before fresh complete gates
+- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; formal testing exited after Readiness 38 retained 12 passes, 2 failures, and 1 exact block, and the plan-to-source audit consolidated the environment-entry, harness, validation-lineage, exact Component configuration, and formal-UAT enforcement gaps before fresh complete gates
 
 ### Historical closed Sprint 6A UI baseline
 
@@ -101,16 +101,19 @@ an enrolled real Module Release/Instance. Sprint 8A applies that pathway to
 Components, which is likewise represented by its real enrollment rather than
 by a Core transition descriptor.
 
-Readiness 37 passed all 15 checks against clean commit `84964c7b`, tree
-`4f39cb71`, and environment `96c2a32e...`. Candidate Rehearsal 30 then
-completed all 32 declared lanes: 18 passed, 4 raw lanes failed, and 10 were
-blocked by exact failed prerequisites. The raw classifications remain two
-`environment`, one `product`, and one `harness`; diagnosis consolidates the
-symptoms under three harness roots: bootstrap action-object rebinding, an
-ordered-dictionary source identity rejected by UAT receipt guards, and seven
-bootstrap-owned process variables not restored before final environment
-comparison. Formal testing has exited for the candidate-affecting consolidated
-correction. No rehearsal pass, candidate, preflight, SIT, or UAT exists.
+Readiness 37 passed and Candidate Rehearsal 30 completed all 32 declared lanes:
+18 passed, 4 raw lanes failed, and 10 were blocked by exact failed
+prerequisites. Their consolidated correction was committed. Readiness 38 then
+consumed R30's one-use authorization against clean commit `91c9936b`, tree
+`564493fd`, and completed all 15 checks with 12 passed, 2 failed, and 1 blocked.
+The failures are the missing same-process `TEST_API_DATABASE_URL` binding
+(`environment`) and a stale failure-containment self-test recovery sequence
+(`harness`); `environment-contract` is blocked by the former. Formal testing
+exited at that terminal boundary. The implementation audit added the failed-
+Readiness retry lineage, truthful Rehearsal checkpoints, retired Component
+`missing_policy` removal, and exact AC-18/AC-19 UAT/evidence contracts to one
+candidate-affecting correction. No corrected readiness, rehearsal pass,
+candidate, preflight, SIT, or UAT exists.
 
 The Sprint 8A implementation lineage now:
 
@@ -155,9 +158,19 @@ The Sprint 8A implementation lineage now:
   and Datasets extractions before broad pilot hardening
 - retain the full R30 fail-late result rather than restarting after the first
   failure, and correct its three diagnosed harness roots as one batch
+- retain the full R38 fail-late result, including both raw failures and the
+  exact blocked environment-contract reason, and add a typed failed-Readiness
+  harvest/batch/authorization lineage instead of stranding a consumed
+  predecessor authorization
 - mark assertions per lane, prefer structured child classification, retain
   comparable environment-mismatch detail, and canonicalize new evidence paths
   so the next harvest is both terminally complete and diagnostically exact
+- remove the active Component `missing_policy` alias from validation, provider,
+  browser, and first-party fixtures; preserve only the four purpose-specific
+  missing-value policy fields and reject the retired key
+- bind all eight manual UAT scenarios to one canonical machine-readable
+  scenario, tester, precondition, evidence, acceptance-criterion, and semantic-
+  predicate contract; enforce AC-18 and AC-19 by exact identity
 - enter downstream validation only through the repository-owned ten-check
   preflight runner, four-lane staged SIT runner, and staged formal-UAT runner;
   their receipts bind the normalized Compose configuration digest in addition
@@ -170,17 +183,18 @@ The Sprint 8A implementation lineage now:
   finalization-only publication retry only from a durable completed
   scripted/manual/restoration checkpoint
 
-Before R37/R30, the corrected product source passed the complete all-feature
+Before R37/R30, the then-corrected product source passed the complete all-feature
 workspace Rust suite against six freshly reset isolated databases,
 all-target/all-feature clippy with warnings denied, all-target/all-feature
 check, formatting, focused contract and integration checks, boundary and
 acceptance contracts, runner self-tests, the exact 75/75 acceptance inventory,
 TypeScript compilation, and 75-test Playwright discovery. Documentation-only
 handoff edits are covered by the final static audits. Those implementation
-results remain useful history, but the current runner, evidence, and
-documentation correction requires focused verification and then one successor
-complete Validation Readiness that consumes the exact R30 authorization. It
-does not authorize preflight or a later phase.
+results remain useful history, but R38 supersedes them for entry-state
+purposes. The current product, runner, evidence, UAT, and documentation
+correction requires focused implementation verification, an append-only R38
+harvest/batch/authorization finalization, and then fresh complete Readiness and
+Rehearsal gates. It does not authorize preflight or a later phase.
 
 ### Frontend transition baseline
 
@@ -1216,18 +1230,18 @@ against the newly physical boundary.
 
 ### Sprint 8A: Component Module Separation Slice (Implementation Correction)
 
-**Validation posture:** Readiness 37 passed all 15 checks against clean source
-`84964c7b`, but Rehearsal 30 completed with 18 passed, 4 raw failed, and 10
-blocked lanes. One immutable harvest, one four-symptom defect batch, and one
-unconsumed successor-Readiness authorization are retained. Diagnosis reduces
-the symptoms to three harness roots—action projection, source-identity object
-shape, and process-environment restoration—plus directly related assertion,
-classification, mismatch-evidence, and reference-canonicalization enforcement.
-The correction is candidate-affecting and supersedes Readiness 37. After it is
-verified and committed cleanly, one successor complete Readiness must consume
-the R30 authorization and one complete Rehearsal must pass against that same
-source and fresh six-database environment identity. Preflight remains closed
-until both pass.
+**Validation posture:** Readiness 38 is terminal with 12 passed, 2 failed, and
+1 blocked check against clean source `91c9936b`/`564493fd`. It consumed the
+Rehearsal 30 correction authorization exactly once. Its missing database
+binding and failure-containment self-test failures, blocked environment
+contract, and raw evidence remain immutable. Formal testing exited so one
+consolidated implementation batch could also close the failed-Readiness retry
+dead end, exact Rehearsal checkpoint gap, retired Component `missing_policy`
+alias, and incomplete AC-18/AC-19 UAT/evidence enforcement. After focused
+verification and a clean correction commit, R38 must be finalized into one
+harvest, one batch, and one exact-next-Readiness authorization. Fresh complete
+Readiness and Rehearsal gates must then pass against one source and fresh six-
+database environment identity. Preflight remains closed until both pass.
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 

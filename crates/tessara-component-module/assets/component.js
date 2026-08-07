@@ -762,7 +762,6 @@ function buildConfig(form) {
     summary_field: configControl(form, "summary_field").value,
     summary_type: summaryType,
     value_format: configControl(form, "value_format").value,
-    missing_policy: configControl(form, "value_missing_policy").value,
     value_missing_policy: configControl(form, "value_missing_policy").value,
     sort_direction: configControl(form, "visual_sort_direction").value,
     filters,
@@ -1111,11 +1110,6 @@ function applyStoredConfig(form, config) {
     "x_field", "x_missing_policy", "smoothing", "max_slices", "legend_title", "panel_style"] ) {
     setControlValue(form, name, config[name]);
   }
-  setControlValue(
-    form,
-    "value_missing_policy",
-    config.value_missing_policy ?? config.missing_policy,
-  );
   setControlValue(form, "visual_sort_field", config.sort_field ?? "");
   setControlValue(form, "visual_sort_direction", config.sort_direction ?? "asc");
   const orientation = config.orientation ?? "horizontal";

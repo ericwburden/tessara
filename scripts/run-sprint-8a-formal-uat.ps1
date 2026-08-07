@@ -672,7 +672,9 @@ function Invoke-Sprint8AFormalUatCatchHarvest {
                 -ExpectedScenario $scenario `
                 -ExpectedAttempt ([int]$AttemptReceipt.attempt) `
                 -CandidateFingerprint $candidateFingerprint `
-                -EnvironmentFingerprint $environmentFingerprint | Out-Null
+                -EnvironmentFingerprint $environmentFingerprint `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRoot $evidenceRootPath | Out-Null
             $leasePair = Assert-Sprint8AManualUatExecutionLeasePair `
                 -Receipt $receipt `
                 -ReceiptReference $reference `
@@ -1044,10 +1046,19 @@ function Get-Sprint8AFormalUatCanonicalPairState {
         [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSha256
     )
 
-    Repair-Sprint7AEvidencePublication -Path $Path
     $sidecarPath = "$Path.sha256"
     $jsonExists = Test-Path -LiteralPath $Path -PathType Leaf
     $sidecarExists = Test-Path -LiteralPath $sidecarPath -PathType Leaf
+    if (-not $jsonExists -and -not $sidecarExists) {
+        Repair-Sprint7AEvidencePublication -Path $Path
+        $jsonExists = Test-Path -LiteralPath $Path -PathType Leaf
+        $sidecarExists = Test-Path -LiteralPath $sidecarPath -PathType Leaf
+    } else {
+        # The authenticated result-content commit makes either canonical half
+        # recoverable. Preserve it and discard only uncommitted publisher
+        # transients; the caller completes the exact missing half.
+        Remove-Sprint7AEvidencePublicationTransients -Path $Path
+    }
     if ($jsonExists -and (Get-Sprint8AFileSha256 -Path $Path) -cne $ExpectedSha256) {
         throw "Canonical formal UAT JSON differs from its committed digest."
     }
@@ -1750,6 +1761,9 @@ if ($SelfTest) {
         -not (Get-Command Publish-Sprint8ALifecycleReceipt).Parameters.ContainsKey("PrepareOnly") -or
         -not (Get-Command Publish-Sprint8AManualUatReceipt).Parameters.ContainsKey("Attempt") -or
         -not (Get-Command Publish-Sprint8AManualUatReceipt).Parameters.ContainsKey("Diagnostic") -or
+        -not (Get-Command Publish-Sprint8AManualUatReceipt).Parameters.ContainsKey("TesterIdentity") -or
+        -not (Get-Command Publish-Sprint8AManualUatReceipt).Parameters.ContainsKey("Preconditions") -or
+        -not (Get-Command Assert-Sprint8AManualUatReceipt).Parameters.ContainsKey("EvidenceRoot") -or
         -not (Get-Command Repair-Sprint8AManualUatPreparedPublications -CommandType Function -ErrorAction SilentlyContinue) -or
         -not (Get-Command Invoke-Sprint8AFormalUatCatchHarvest).Parameters.ContainsKey("RetainedRestorationChecks") -or
         -not (Get-Command Get-Sprint8AEvidenceManifestReplacementPaths -CommandType Function -ErrorAction SilentlyContinue) -or
@@ -2959,7 +2973,9 @@ foreach ($scenario in Get-Sprint8AManualUatScenarioNames) {
             -ExpectedScenario $scenario `
             -ExpectedAttempt $Attempt `
             -CandidateFingerprint $candidateFingerprint `
-            -EnvironmentFingerprint $environmentFingerprint | Out-Null
+            -EnvironmentFingerprint $environmentFingerprint `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath | Out-Null
         Assert-Sprint8AManualUatExecutionLeasePair `
             -Receipt $receipt `
             -ReceiptReference $reference `

@@ -55,60 +55,471 @@ function Get-Sprint8AManualUatScenarioNames {
     @(1..8 | ForEach-Object { "UAT-8A-{0:d2}" -f $_ })
 }
 
+function Assert-Sprint8AManualUatEvidenceCardinality {
+    param(
+        [Parameter(Mandatory)]$Requirement,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    $minimum = 0
+    $maximum = 0
+    if (-not [int]::TryParse([string]$Requirement.minimum, [ref]$minimum) -or
+        -not [int]::TryParse([string]$Requirement.maximum, [ref]$maximum) -or
+        $minimum -ne 1 -or $maximum -ne 1) {
+        throw "$Label must declare exactly one evidence artifact (minimum=1 and maximum=1)."
+    }
+}
+
+function Test-Sprint8AExactPropertyInventory {
+    param(
+        [AllowNull()]$Value,
+        [Parameter(Mandatory)][string[]]$ExpectedProperties
+    )
+
+    if ($null -eq $Value) { return $false }
+    $actualProperties = @($Value.PSObject.Properties.Name)
+    if ($actualProperties.Count -ne $ExpectedProperties.Count) { return $false }
+    foreach ($property in $ExpectedProperties) {
+        if ($actualProperties -cnotcontains $property) { return $false }
+    }
+    return $true
+}
+
+function Get-Sprint8AManualUatContractManifest {
+    $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $manifestPath = "docs/sprints/sprint-8a-uat/scenario-contract.json"
+    $manifestFullPath = Join-Path $repositoryRoot $manifestPath
+    try {
+        $manifest = Get-Content -LiteralPath $manifestFullPath -Raw | ConvertFrom-Json
+    } catch {
+        throw "Sprint 8A manual UAT contract manifest is missing or malformed: $($_.Exception.Message)"
+    }
+    $expectedScenarios = @(Get-Sprint8AManualUatScenarioNames)
+    $actualScenarios = @($manifest.scenarios | ForEach-Object { [string]$_.id })
+    $expectedPreconditions = @(
+        "candidate-fingerprint", "environment-fingerprint", "preflight-receipt",
+        "sit-result-receipt", "evidence-root", "execution-start"
+    )
+    $expectedAcceptanceCriteria = [ordered]@{
+        "UAT-8A-01" = @("AC-01", "AC-07", "AC-15", "AC-19")
+        "UAT-8A-02" = @("AC-03", "AC-04", "AC-05", "AC-16")
+        "UAT-8A-03" = @("AC-08")
+        "UAT-8A-04" = @("AC-09", "AC-10", "AC-18", "AC-19")
+        "UAT-8A-05" = @("AC-11", "AC-18")
+        "UAT-8A-06" = @("AC-01", "AC-02", "AC-06", "AC-12", "AC-16", "AC-18", "AC-19")
+        "UAT-8A-07" = @("AC-13")
+        "UAT-8A-08" = @("AC-14")
+    }
+    $expectedSemanticPredicates = [ordered]@{
+        "UAT-8A-01" = @("component-module-live-script", "complete-browser-inventory", "module-owned-documents-and-assets", "exact-v3-first-party-inputs")
+        "UAT-8A-02" = @("empty-first-apply", "semantic-no-op", "exact-five-core-transitions", "receipt-bound-dashboard-references")
+        "UAT-8A-03" = @("configuration-schema-authority", "label-navigation-projection", "sanitized-diagnostics")
+        "UAT-8A-04" = @("dataset-contract-execution", "joint-dashboard-component-scope", "known-random-nondisclosure", "timeout-outage-recovery", "components-owned-exact-render-contract", "exact-v3-first-party-inputs")
+        "UAT-8A-05" = @("dashboard-lifecycle-findings", "consumer-actions", "provider-outage-containment", "components-owned-exact-render-contract")
+        "UAT-8A-06" = @("core-component-absence", "native-wasm-source-boundaries", "old-input-rejection", "exact-real-module-inventory", "components-owned-exact-render-contract", "exact-v3-first-party-inputs", "retired-missing-policy-rejection")
+        "UAT-8A-07" = @("induced-owner-failure", "exact-teardown", "empty-successor", "successor-no-op-health")
+        "UAT-8A-08" = @("component-only-upgrade", "rollback", "unrelated-identity-stability", "intended-release-restoration")
+    }
+    $manifestPreconditions = @($manifest.receipt_contract.preconditions | ForEach-Object { [string]$_.id })
+    if (($manifest.schema_version -isnot [int] -and $manifest.schema_version -isnot [long]) -or
+        [int]$manifest.schema_version -ne 1 -or [string]$manifest.sprint -cne "sprint-8a" -or
+        [string]$manifest.contract -cne "tessara.sprint-8a.manual-uat-scenarios" -or
+        ($manifest.scenario_count -isnot [int] -and $manifest.scenario_count -isnot [long]) -or
+        [int]$manifest.scenario_count -ne $expectedScenarios.Count -or
+        ($actualScenarios -join "`n") -cne ($expectedScenarios -join "`n") -or
+        @($actualScenarios | Sort-Object -Unique).Count -ne $actualScenarios.Count -or
+        ($manifestPreconditions -join "`n") -cne ($expectedPreconditions -join "`n") -or
+        (@($manifest.receipt_contract.tester_identity_fields) -join "`n") -cne "tester_id`ndisplay_name`nactor_bindings" -or
+        (@($manifest.receipt_contract.actor_binding_fields) -join "`n") -cne "id`nactor_id" -or
+        (@($manifest.receipt_contract.precondition_fields) -join "`n") -cne "id`nstate`nvalue`nreference" -or
+        (@($manifest.receipt_contract.starting_state_fields) -join "`n") -cne "id`nobserved_value" -or
+        (@($manifest.receipt_contract.evidence_fields) -join "`n") -cne "step`nrequirement_id`nkind`ncapture`npath`nsha256" -or
+        [int]$manifest.receipt_contract.authenticated_evidence.schema_version -ne 1 -or
+        [string]$manifest.receipt_contract.authenticated_evidence.phase -cne "uat-manual-structured-evidence" -or
+        $manifest.receipt_contract.authenticated_evidence.sidecar_required -isnot [bool] -or
+        -not [bool]$manifest.receipt_contract.authenticated_evidence.sidecar_required -or
+        (@($manifest.receipt_contract.authenticated_evidence.required_fields) -join "`n") -cne
+            "schema_version`nsprint`nphase`nscenario`nattempt`nevidence_type`nevidence_id`nauthoritative`ndiagnostic`nstate`ncandidate_fingerprint`nenvironment_fingerprint`nstart_checkpoint`nexecution_lease`nproducer_receipt`nassertions") {
+        throw "Sprint 8A manual UAT contract manifest has a non-canonical schema or scenario inventory."
+    }
+    $expectedEvidenceExtensions = [ordered]@{
+        "operator-record" = @(".json"); screenshot = @(".png"); "browser-trace" = @(".zip")
+        "browser-console" = @(".json"); "http-transcript" = @(".json"); "authenticated-json" = @(".json")
+    }
+    $expectedEvidenceContentContracts = [ordered]@{
+        "operator-record" = [ordered]@{
+            schema_version = 1; phase = "uat-manual-operator-record"
+            identity_fields = @("scenario", "attempt", "candidate_fingerprint", "environment_fingerprint", "evidence_id")
+            payload_field = "observations"; minimum_payload_items = 1
+        }
+        screenshot = [ordered]@{ format = "png"; required_chunk = "IHDR" }
+        "browser-trace" = [ordered]@{
+            format = "zip"; required_entry_suffixes = @("trace.trace", "trace.network")
+        }
+        "browser-console" = [ordered]@{
+            schema_version = 1; phase = "uat-manual-browser-console"
+            identity_fields = @("scenario", "attempt", "candidate_fingerprint", "environment_fingerprint", "evidence_id")
+            payload_field = "entries"; minimum_payload_items = 0
+        }
+        "http-transcript" = [ordered]@{
+            schema_version = 1; phase = "uat-manual-http-transcript"
+            identity_fields = @("scenario", "attempt", "candidate_fingerprint", "environment_fingerprint", "evidence_id")
+            payload_field = "exchanges"; minimum_payload_items = 1
+        }
+        "authenticated-json" = [ordered]@{ contract = "authenticated_evidence" }
+    }
+    if ((@($manifest.receipt_contract.evidence_kind_extensions.PSObject.Properties.Name) -join "`n") -cne
+            (@($expectedEvidenceExtensions.Keys) -join "`n") -or
+        (@($manifest.receipt_contract.evidence_kind_content_contracts.PSObject.Properties.Name) -join "`n") -cne
+            (@($expectedEvidenceContentContracts.Keys) -join "`n")) {
+        throw "Sprint 8A manual UAT contract manifest has a non-canonical evidence-kind inventory."
+    }
+    foreach ($kind in $expectedEvidenceExtensions.Keys) {
+        if ((@($manifest.receipt_contract.evidence_kind_extensions.$kind) -join "`n") -cne
+                (@($expectedEvidenceExtensions[$kind]) -join "`n") -or
+            (ConvertTo-Json -InputObject $manifest.receipt_contract.evidence_kind_content_contracts.PSObject.Properties[$kind].Value -Depth 10 -Compress) -cne
+                (ConvertTo-Json -InputObject $expectedEvidenceContentContracts[$kind] -Depth 10 -Compress)) {
+            throw "Sprint 8A manual UAT evidence kind '$kind' has a non-canonical extension contract."
+        }
+    }
+
+    foreach ($scenario in @($manifest.scenarios)) {
+        $scenarioId = [string]$scenario.id
+        $documentPath = [string]$scenario.document.path
+        $expectedDocumentPath = "docs/sprints/sprint-8a-uat/$($scenarioId.ToLowerInvariant()).md"
+        $documentFullPath = Join-Path $repositoryRoot $documentPath
+        $documentLines = @(Get-Content -LiteralPath $documentFullPath)
+        $roleLines = @($documentLines | Where-Object { $_ -match '^- User role:\s*(.+?)\s*$' })
+        $documentRole = if ($roleLines.Count -eq 1) {
+            ([regex]::Match($roleLines[0], '^- User role:\s*(.+?)\s*$')).Groups[1].Value
+        } else { $null }
+        $documentSteps = @($documentLines | ForEach-Object {
+            $match = [regex]::Match($_, '^\|\s*(\d+)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|')
+            if ($match.Success) {
+                [pscustomobject][ordered]@{
+                    step = [int]$match.Groups[1].Value
+                    action = [string]$match.Groups[2].Value
+                    expected_result = [string]$match.Groups[3].Value
+                }
+            }
+        })
+        $actorIds = @($scenario.actor_bindings | ForEach-Object { [string]$_.id })
+        $startingIds = @($scenario.required_starting_state | ForEach-Object { [string]$_.id })
+        $stepNumbers = @($scenario.steps | ForEach-Object { [int]$_.step })
+        $evidenceIds = @($scenario.steps | ForEach-Object {
+            @($_.evidence_requirements | ForEach-Object { [string]$_.id })
+        })
+        if ($documentPath -cne $expectedDocumentPath -or
+            [string]$scenario.document.sha256 -notmatch '^[0-9a-f]{64}$' -or
+            (Get-Sprint8AFileSha256 -Path $documentFullPath) -cne [string]$scenario.document.sha256 -or
+            [string]::IsNullOrWhiteSpace([string]$scenario.role) -or $documentRole -cne [string]$scenario.role -or
+            (@($scenario.acceptance_criteria) -join "`n") -cne (@($expectedAcceptanceCriteria[$scenarioId]) -join "`n") -or
+            (@($scenario.semantic_predicate_ids) -join "`n") -cne (@($expectedSemanticPredicates[$scenarioId]) -join "`n") -or
+            $actorIds.Count -lt 1 -or @($actorIds | Sort-Object -Unique).Count -ne $actorIds.Count -or
+            @($scenario.actor_bindings | Where-Object {
+                [string]::IsNullOrWhiteSpace([string]$_.id) -or [string]::IsNullOrWhiteSpace([string]$_.role)
+            }).Count -ne 0 -or
+            (@($scenario.required_precondition_ids) -join "`n") -cne ($expectedPreconditions -join "`n") -or
+            $startingIds.Count -lt 1 -or @($startingIds | Sort-Object -Unique).Count -ne $startingIds.Count -or
+            @($scenario.required_starting_state | Where-Object {
+                [string]::IsNullOrWhiteSpace([string]$_.id) -or [string]::IsNullOrWhiteSpace([string]$_.description)
+            }).Count -ne 0 -or
+            $documentSteps.Count -ne @($scenario.steps).Count -or
+            ($stepNumbers -join ",") -cne ((1..@($scenario.steps).Count) -join ",") -or
+            @($evidenceIds | Sort-Object -Unique).Count -ne $evidenceIds.Count) {
+            throw "Manual UAT scenario '$scenarioId' differs from the canonical manifest or bound document."
+        }
+        for ($index = 0; $index -lt @($scenario.steps).Count; $index++) {
+            $step = $scenario.steps[$index]
+            $documentStep = $documentSteps[$index]
+            if ([int]$step.step -ne [int]$documentStep.step -or
+                [string]$step.action -cne [string]$documentStep.action -or
+                [string]$step.expected_result -cne [string]$documentStep.expected_result -or
+                @($step.evidence_requirements).Count -lt 1) {
+                throw "Manual UAT scenario '$scenarioId' step $([int]$step.step) differs from its bound document."
+            }
+            foreach ($requirement in @($step.evidence_requirements)) {
+                $hasAuthenticatedContract = $requirement.PSObject.Properties.Name -contains "authenticated_contract"
+                $authenticatedContract = if ($hasAuthenticatedContract) { $requirement.authenticated_contract } else { $null }
+                Assert-Sprint8AManualUatEvidenceCardinality `
+                    -Requirement $requirement `
+                    -Label "Manual UAT scenario '$scenarioId' evidence requirement '$([string]$requirement.id)'"
+                if ([string]$requirement.id -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$' -or
+                    [string]$requirement.kind -notin @("operator-record", "screenshot", "browser-trace", "browser-console", "http-transcript", "authenticated-json") -or
+                    -not (($documentLines -join "`n").Contains("``$([string]$requirement.id)``")) -or
+                    ([string]$requirement.kind -ceq "authenticated-json" -and
+                        ($null -eq $authenticatedContract -or
+                            [string]::IsNullOrWhiteSpace([string]$authenticatedContract.evidence_type) -or
+                            [string]::IsNullOrWhiteSpace([string]$authenticatedContract.producer_phase) -or
+                            @($authenticatedContract.assertion_ids).Count -lt 1 -or
+                            @($authenticatedContract.assertion_ids | Sort-Object -Unique).Count -ne
+                                @($authenticatedContract.assertion_ids).Count)) -or
+                    ([string]$requirement.kind -cne "authenticated-json" -and $hasAuthenticatedContract)) {
+                    throw "Manual UAT scenario '$scenarioId' has an invalid evidence requirement '$([string]$requirement.id)'."
+                }
+            }
+        }
+    }
+    [pscustomobject][ordered]@{
+        path = $manifestPath
+        sha256 = Get-Sprint8AFileSha256 -Path $manifestFullPath
+        document = $manifest
+    }
+}
+
 function Get-Sprint8AManualUatScenarioContract {
     param([Parameter(Mandatory)][string]$Scenario)
 
-    $contracts = [ordered]@{
-        "UAT-8A-01" = [ordered]@{ role = "Component manager and reader"; step_count = 6 }
-        "UAT-8A-02" = [ordered]@{ role = "Operator and Dashboard reader"; step_count = 5 }
-        "UAT-8A-03" = [ordered]@{ role = "Global Module Management manager and reader"; step_count = 5 }
-        "UAT-8A-04" = [ordered]@{ role = "Component manager plus scoped and out-of-scope actors"; step_count = 5 }
-        "UAT-8A-05" = [ordered]@{ role = "Component manager, Dashboard manager, and reader"; step_count = 6 }
-        "UAT-8A-06" = [ordered]@{ role = "Operator plus authorized and restricted users"; step_count = 3 }
-        "UAT-8A-07" = [ordered]@{ role = "Operator"; step_count = 4 }
-        "UAT-8A-08" = [ordered]@{ role = "Operator and reviewer"; step_count = 4 }
-    }
-    if (-not $contracts.Contains($Scenario)) {
+    $manifest = Get-Sprint8AManualUatContractManifest
+    $matches = @($manifest.document.scenarios | Where-Object { [string]$_.id -ceq $Scenario })
+    if ($matches.Count -ne 1) {
         throw "Unknown Sprint 8A manual UAT scenario '$Scenario'."
     }
-    $repositoryRoot = Split-Path -Parent $PSScriptRoot
-    $documentPath = "docs/sprints/sprint-8a-uat/$($Scenario.ToLowerInvariant()).md"
-    $documentFullPath = Join-Path $repositoryRoot $documentPath
-    $documentLines = @(Get-Content -LiteralPath $documentFullPath)
-    $roleLines = @($documentLines | Where-Object { $_ -match '^- User role:\s*(.+?)\s*$' })
-    if ($roleLines.Count -ne 1) {
-        throw "Manual UAT scenario '$Scenario' must declare exactly one user role."
-    }
-    $documentRole = ([regex]::Match($roleLines[0], '^- User role:\s*(.+?)\s*$')).Groups[1].Value
-    $steps = @($documentLines | ForEach-Object {
-        $match = [regex]::Match($_, '^\|\s*(\d+)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|')
-        if ($match.Success) {
-            [pscustomobject][ordered]@{
-                step = [int]$match.Groups[1].Value
-                action = [string]$match.Groups[2].Value
-                expected_result = [string]$match.Groups[3].Value
-            }
-        }
-    })
-    if ($documentRole -cne [string]$contracts[$Scenario].role -or
-        $steps.Count -ne [int]$contracts[$Scenario].step_count -or
-        (($steps.step | Sort-Object) -join ",") -cne ((1..$steps.Count) -join ",") -or
-        @($steps | Where-Object {
-            [string]::IsNullOrWhiteSpace([string]$_.action) -or
-                [string]::IsNullOrWhiteSpace([string]$_.expected_result)
-        }).Count -ne 0) {
-        throw "Manual UAT scenario '$Scenario' role or executable step contract differs from its canonical inventory."
-    }
+    $contract = $matches[0]
     [pscustomobject][ordered]@{
         scenario = $Scenario
-        role = $documentRole
-        step_count = $steps.Count
-        steps = $steps
-        document = [pscustomobject][ordered]@{
-            path = $documentPath
-            sha256 = Get-Sprint8AFileSha256 -Path $documentFullPath
+        role = [string]$contract.role
+        actor_bindings = @($contract.actor_bindings)
+        acceptance_criteria = @($contract.acceptance_criteria)
+        semantic_predicate_ids = @($contract.semantic_predicate_ids)
+        required_precondition_ids = @($contract.required_precondition_ids)
+        required_starting_state = @($contract.required_starting_state)
+        step_count = @($contract.steps).Count
+        steps = @($contract.steps)
+        document = $contract.document
+        manifest = [pscustomobject][ordered]@{ path = [string]$manifest.path; sha256 = [string]$manifest.sha256 }
+        receipt_contract = $manifest.document.receipt_contract
+    }
+}
+
+function Get-Sprint8AManualUatEvidencePlan {
+    param(
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$Attempt,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot
+    )
+
+    $repository = [IO.Path]::GetFullPath($RepositoryRoot)
+    $evidence = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+        [IO.Path]::GetFullPath($EvidenceRoot)
+    } else { [IO.Path]::GetFullPath((Join-Path $repository $EvidenceRoot)) }
+    $evidenceRelative = [IO.Path]::GetRelativePath($repository, $evidence).Replace("\", "/").TrimEnd("/")
+    if ($evidenceRelative -eq "." -or $evidenceRelative.StartsWith("../", [StringComparison]::Ordinal) -or
+        [IO.Path]::IsPathRooted($evidenceRelative)) {
+        throw "Sprint 8A manual UAT evidence root must be a repository-owned path."
+    }
+    $contract = Get-Sprint8AManualUatScenarioContract -Scenario $Scenario
+    $prefix = "$evidenceRelative/uat/attempt-$Attempt/raw/$($Scenario.ToLowerInvariant())"
+    $planned = @($contract.steps | ForEach-Object {
+        $step = $_
+        @($step.evidence_requirements | ForEach-Object {
+            $requirement = $_
+            $extensions = @($contract.receipt_contract.evidence_kind_extensions.PSObject.Properties[[string]$requirement.kind].Value)
+            if ($extensions.Count -ne 1) {
+                throw "Manual UAT scenario '$Scenario' evidence '$([string]$requirement.id)' lacks one canonical extension."
+            }
+            $path = "$prefix/$([string]$requirement.id)$([string]$extensions[0])"
+            [pscustomobject][ordered]@{
+                step = [int]$step.step
+                requirement_id = [string]$requirement.id
+                kind = [string]$requirement.kind
+                capture = if ($requirement.PSObject.Properties.Name -contains "capture") { $requirement.capture } else { $null }
+                minimum = [int]$requirement.minimum
+                maximum = [int]$requirement.maximum
+                path = $path
+                sidecar_path = if ([string]$requirement.kind -ceq "authenticated-json") { "$path.sha256" } else { $null }
+                producer_path = if ([string]$requirement.kind -ceq "authenticated-json") {
+                    "$prefix/$([string]$requirement.id)-producer.json"
+                } else { $null }
+                producer_sidecar_path = if ([string]$requirement.kind -ceq "authenticated-json") {
+                    "$prefix/$([string]$requirement.id)-producer.json.sha256"
+                } else { $null }
+                assertion_raw_evidence = if ([string]$requirement.kind -ceq "authenticated-json") {
+                    @($requirement.authenticated_contract.assertion_ids | ForEach-Object {
+                        [pscustomobject][ordered]@{
+                            assertion_id = [string]$_
+                            path = "$prefix/$([string]$requirement.id)-$([string]$_)-raw.json"
+                        }
+                    })
+                } else { @() }
+            }
+        })
+    })
+    [pscustomobject][ordered]@{
+        scenario = $Scenario
+        attempt = $Attempt
+        raw_prefix = "$prefix/"
+        evidence = $planned
+        cleanup = [pscustomobject][ordered]@{
+            kind = "canonical-restoration"
+            path = "$prefix/canonical-restoration.json"
         }
     }
+}
+
+function Assert-Sprint8AManualUatJsonEvidenceContent {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$Attempt,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$CandidateFingerprint,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][DateTimeOffset]$StartedAt,
+        [Parameter(Mandatory)][string]$Phase,
+        [Parameter(Mandatory)][string]$PayloadField,
+        [Parameter(Mandatory)][ValidateRange(0, 9999)][int]$MinimumPayloadItems,
+        [AllowNull()][string]$RequirementId,
+        [switch]$CanonicalRestoration
+    )
+
+    $json = $null
+    try {
+        $json = [Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText($Path))
+        $root = $json.RootElement
+        if ($root.ValueKind -ne [Text.Json.JsonValueKind]::Object) {
+            throw "top-level JSON value is not an object"
+        }
+        $expectedProperties = if ($CanonicalRestoration) {
+            @(
+                "schema_version", "sprint", "phase", "scenario", "attempt", "result",
+                "candidate_fingerprint", "environment_fingerprint", "restored_at", $PayloadField
+            )
+        } else {
+            @(
+                "schema_version", "sprint", "phase", "scenario", "attempt", "evidence_id",
+                "candidate_fingerprint", "environment_fingerprint", "captured_at", $PayloadField
+            )
+        }
+        $actualProperties = @($root.EnumerateObject() | ForEach-Object { [string]$_.Name })
+        $timestampField = if ($CanonicalRestoration) { "restored_at" } else { "captured_at" }
+        $timestamp = ConvertTo-Sprint8ADateTimeOffset `
+            -Value $root.GetProperty($timestampField).GetString() `
+            -Label "manual UAT $Phase timestamp"
+        $payload = $root.GetProperty($PayloadField)
+        if (($actualProperties -join "`n") -cne ($expectedProperties -join "`n") -or
+            $root.GetProperty("schema_version").GetInt32() -ne 1 -or
+            $root.GetProperty("sprint").GetString() -cne "sprint-8a" -or
+            $root.GetProperty("phase").GetString() -cne $Phase -or
+            $root.GetProperty("scenario").GetString() -cne $Scenario -or
+            $root.GetProperty("attempt").GetInt32() -ne $Attempt -or
+            $root.GetProperty("candidate_fingerprint").GetString() -cne $CandidateFingerprint -or
+            $root.GetProperty("environment_fingerprint").GetString() -cne $EnvironmentFingerprint -or
+            $timestamp -lt $StartedAt -or
+            $timestamp -gt [DateTimeOffset]::UtcNow.AddMinutes(5) -or
+            $payload.ValueKind -ne [Text.Json.JsonValueKind]::Array -or
+            $payload.GetArrayLength() -lt $MinimumPayloadItems -or
+            ($CanonicalRestoration -and $root.GetProperty("result").GetString() -cne "canonical_topology_verified") -or
+            (-not $CanonicalRestoration -and $root.GetProperty("evidence_id").GetString() -cne $RequirementId)) {
+            throw "document differs from its exact content schema"
+        }
+    } catch {
+        $label = if ($CanonicalRestoration) { "canonical-restoration" } else { [string]$RequirementId }
+        throw "Manual UAT scenario '$Scenario' JSON evidence '$label' is malformed: $($_.Exception.Message)"
+    } finally {
+        if ($null -ne $json) { $json.Dispose() }
+    }
+}
+
+function Assert-Sprint8AManualUatEvidenceKindContent {
+    param(
+        [Parameter(Mandatory)][string]$Kind,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$Attempt,
+        [Parameter(Mandatory)][string]$RequirementId,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$CandidateFingerprint,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][DateTimeOffset]$StartedAt,
+        [Parameter(Mandatory)]$ContentContract
+    )
+
+    switch -CaseSensitive ($Kind) {
+        "operator-record" {
+            Assert-Sprint8AManualUatJsonEvidenceContent `
+                -Path $Path -Scenario $Scenario -Attempt $Attempt `
+                -CandidateFingerprint $CandidateFingerprint -EnvironmentFingerprint $EnvironmentFingerprint `
+                -StartedAt $StartedAt `
+                -Phase ([string]$ContentContract.phase) `
+                -PayloadField ([string]$ContentContract.payload_field) `
+                -MinimumPayloadItems ([int]$ContentContract.minimum_payload_items) `
+                -RequirementId $RequirementId
+        }
+        "browser-console" {
+            Assert-Sprint8AManualUatJsonEvidenceContent `
+                -Path $Path -Scenario $Scenario -Attempt $Attempt `
+                -CandidateFingerprint $CandidateFingerprint -EnvironmentFingerprint $EnvironmentFingerprint `
+                -StartedAt $StartedAt `
+                -Phase ([string]$ContentContract.phase) `
+                -PayloadField ([string]$ContentContract.payload_field) `
+                -MinimumPayloadItems ([int]$ContentContract.minimum_payload_items) `
+                -RequirementId $RequirementId
+        }
+        "http-transcript" {
+            Assert-Sprint8AManualUatJsonEvidenceContent `
+                -Path $Path -Scenario $Scenario -Attempt $Attempt `
+                -CandidateFingerprint $CandidateFingerprint -EnvironmentFingerprint $EnvironmentFingerprint `
+                -StartedAt $StartedAt `
+                -Phase ([string]$ContentContract.phase) `
+                -PayloadField ([string]$ContentContract.payload_field) `
+                -MinimumPayloadItems ([int]$ContentContract.minimum_payload_items) `
+                -RequirementId $RequirementId
+        }
+        "screenshot" {
+            $bytes = [IO.File]::ReadAllBytes($Path)
+            $signature = [byte[]](0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+            $signatureValid = $bytes.Length -ge 33
+            for ($index = 0; $signatureValid -and $index -lt $signature.Length; $index++) {
+                $signatureValid = $bytes[$index] -eq $signature[$index]
+            }
+            $chunk = if ($bytes.Length -ge 16) { [Text.Encoding]::ASCII.GetString($bytes, 12, 4) } else { "" }
+            if (-not $signatureValid -or $chunk -cne [string]$ContentContract.required_chunk) {
+                throw "Manual UAT scenario '$Scenario' screenshot '$RequirementId' is not a PNG with the required IHDR chunk."
+            }
+        }
+        "browser-trace" {
+            $archive = $null
+            try {
+                $archive = [IO.Compression.ZipFile]::OpenRead($Path)
+                $entries = @($archive.Entries)
+                if ($entries.Count -lt 2) { throw "archive is empty or incomplete" }
+                foreach ($suffix in @($ContentContract.required_entry_suffixes | ForEach-Object { [string]$_ })) {
+                    $matches = @($entries | Where-Object {
+                        [string]$_.FullName.EndsWith($suffix, [StringComparison]::Ordinal) -and $_.Length -gt 0
+                    })
+                    if ($matches.Count -lt 1) { throw "missing non-empty Playwright entry '*$suffix'" }
+                }
+            } catch {
+                throw "Manual UAT scenario '$Scenario' browser trace '$RequirementId' is not an authenticated Playwright trace ZIP: $($_.Exception.Message)"
+            } finally {
+                if ($null -ne $archive) { $archive.Dispose() }
+            }
+        }
+        "authenticated-json" {
+            if ([string]$ContentContract.contract -cne "authenticated_evidence") {
+                throw "Manual UAT scenario '$Scenario' authenticated evidence '$RequirementId' has no exact content contract."
+            }
+        }
+        default { throw "Manual UAT scenario '$Scenario' evidence '$RequirementId' has unknown kind '$Kind'." }
+    }
+}
+
+function Assert-Sprint8AManualUatCleanupEvidenceContent {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$Attempt,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$CandidateFingerprint,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][DateTimeOffset]$StartedAt
+    )
+
+    Assert-Sprint8AManualUatJsonEvidenceContent `
+        -Path $Path -Scenario $Scenario -Attempt $Attempt `
+        -CandidateFingerprint $CandidateFingerprint -EnvironmentFingerprint $EnvironmentFingerprint `
+        -StartedAt $StartedAt `
+        -Phase "uat-manual-canonical-restoration" -PayloadField "observations" `
+        -MinimumPayloadItems 1 -CanonicalRestoration
 }
 
 function Test-Sprint8ASourceIdentityMatch {
@@ -640,16 +1051,412 @@ function Publish-Sprint8ALifecycleReceipt {
     }
 }
 
+function Publish-Sprint8AManualUatStructuredEvidence {
+    param(
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$Attempt,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$CandidateFingerprint,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][DateTimeOffset]$StartedAt,
+        [Parameter(Mandatory)][string]$RequirementId,
+        [Parameter(Mandatory)][object[]]$AssertionEvidence,
+        [Parameter(Mandatory)]$ExecutionLease,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot
+    )
+
+    $repository = [IO.Path]::GetFullPath($RepositoryRoot)
+    $evidenceRootFullPath = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+        [IO.Path]::GetFullPath($EvidenceRoot)
+    } else { [IO.Path]::GetFullPath((Join-Path $repository $EvidenceRoot)) }
+    $contract = Get-Sprint8AManualUatScenarioContract -Scenario $Scenario
+    $requirementMatches = @($contract.steps | ForEach-Object {
+        $step = $_
+        @($step.evidence_requirements | Where-Object { [string]$_.id -ceq $RequirementId } | ForEach-Object {
+            [pscustomobject][ordered]@{ step = [int]$step.step; definition = $_ }
+        })
+    })
+    if ($requirementMatches.Count -ne 1 -or
+        [string]$requirementMatches[0].definition.kind -cne "authenticated-json") {
+        throw "Manual UAT scenario '$Scenario' requirement '$RequirementId' is not one exact authenticated-JSON contract."
+    }
+    $requirement = $requirementMatches[0].definition
+    $plan = Get-Sprint8AManualUatEvidencePlan `
+        -Scenario $Scenario -Attempt $Attempt -RepositoryRoot $repository -EvidenceRoot $evidenceRootFullPath
+    $plannedMatches = @($plan.evidence | Where-Object { [string]$_.requirement_id -ceq $RequirementId })
+    if ($plannedMatches.Count -ne 1) {
+        throw "Manual UAT scenario '$Scenario' requirement '$RequirementId' has no canonical publication plan."
+    }
+    $planned = $plannedMatches[0]
+    $checkpoint = Assert-Sprint8AManualUatStartCheckpoint `
+        -Attempt $Attempt `
+        -Scenario $Scenario `
+        -CandidateFingerprint $CandidateFingerprint `
+        -EnvironmentFingerprint $EnvironmentFingerprint `
+        -ScenarioStartedAt $StartedAt `
+        -RepositoryRoot $repository `
+        -EvidenceRoot $evidenceRootFullPath
+    Assert-Sprint8AManualUatAttemptOpen `
+        -Attempt $Attempt -Checkpoint $checkpoint -RepositoryRoot $repository -EvidenceRoot $evidenceRootFullPath | Out-Null
+    $expectedLockPath = [IO.Path]::GetFullPath((Join-Path $evidenceRootFullPath "validation-attempt.lock"))
+    if ($ExecutionLease.PSObject.Properties.Name -notcontains "stream" -or
+        $ExecutionLease.stream -isnot [IO.FileStream] -or -not $ExecutionLease.stream.CanWrite -or
+        [IO.Path]::GetFullPath([string]$ExecutionLease.stream.Name) -cne $expectedLockPath -or
+        $ExecutionLease.authoritative -isnot [bool] -or
+        $ExecutionLease.diagnostic -isnot [bool] -or
+        [bool]$ExecutionLease.authoritative -eq [bool]$ExecutionLease.diagnostic -or
+        [int]$ExecutionLease.current_process_id -ne $PID -or
+        [int]$ExecutionLease.attempt -ne $Attempt -or
+        [string]$ExecutionLease.scenario -cne $Scenario -or
+        [string]$ExecutionLease.candidate_fingerprint -cne $CandidateFingerprint -or
+        [string]$ExecutionLease.environment_fingerprint -cne $EnvironmentFingerprint -or
+        [string]$ExecutionLease.started_at -cne $StartedAt.ToString("o") -or
+        (ConvertTo-Json -InputObject $ExecutionLease.checkpoint -Depth 10 -Compress) -cne
+            (ConvertTo-Json -InputObject $checkpoint.reference -Depth 10 -Compress)) {
+        throw "Manual UAT scenario '$Scenario' structured publication requires its exact live execution lease."
+    }
+    $lease = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repository -EvidenceRoot $evidenceRootFullPath -Path ([string]$ExecutionLease.lease.path)
+    if ((Assert-Sprint8AReceiptSidecar -Path ([string]$lease.full_path)) -cne [string]$ExecutionLease.lease.sha256) {
+        throw "Manual UAT scenario '$Scenario' structured publication has a stale execution lease."
+    }
+
+    $expectedAssertionIds = @($requirement.authenticated_contract.assertion_ids | ForEach-Object { [string]$_ })
+    $actualAssertionIds = @($AssertionEvidence | ForEach-Object { [string]$_.assertion_id })
+    if (($actualAssertionIds -join "`n") -cne ($expectedAssertionIds -join "`n") -or
+        @($actualAssertionIds | Sort-Object -Unique).Count -ne $actualAssertionIds.Count) {
+        throw "Manual UAT scenario '$Scenario' structured publication must supply every exact assertion identity in contract order."
+    }
+    $plannedAssertionRaw = @{}
+    foreach ($plannedRaw in @($planned.assertion_raw_evidence)) {
+        $plannedAssertionRaw[[string]$plannedRaw.assertion_id] = [string]$plannedRaw.path
+    }
+    $canonicalAssertions = @($AssertionEvidence | ForEach-Object {
+        $assertion = $_
+        if ((@($assertion.PSObject.Properties.Name) -join "`n") -cne "assertion_id`nraw_evidence" -or
+            @($assertion.raw_evidence).Count -ne 1 -or
+            -not $plannedAssertionRaw.ContainsKey([string]$assertion.assertion_id)) {
+            throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.assertion_id)' is malformed."
+        }
+        $rawReferences = @($assertion.raw_evidence | ForEach-Object {
+            if ((@($_.PSObject.Properties.Name) -join "`n") -cne "path`nsha256") {
+                throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.assertion_id)' has a malformed raw reference."
+            }
+            $raw = Resolve-Sprint8AEvidenceReference `
+                -RepositoryRoot $repository -EvidenceRoot $evidenceRootFullPath -Path ([string]$_.path)
+            if ([string]$raw.path -cne [string]$plannedAssertionRaw[[string]$assertion.assertion_id] -or
+                -not [string]$raw.path.StartsWith([string]$plan.raw_prefix, [StringComparison]::Ordinal) -or
+                [string]$raw.path -in @([string]$planned.path, [string]$planned.producer_path) -or
+                (Get-Sprint8AFileSha256 -Path ([string]$raw.full_path)) -cne [string]$_.sha256 -or
+                (Get-Item -LiteralPath ([string]$raw.full_path)).LastWriteTimeUtc -lt $StartedAt.UtcDateTime) {
+                throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.assertion_id)' has stale, non-canonical, or self-referential raw evidence."
+            }
+            [pscustomobject][ordered]@{ path = [string]$raw.path; sha256 = [string]$_.sha256 }
+        })
+        if (@($rawReferences.path | Sort-Object -Unique).Count -ne $rawReferences.Count) {
+            throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.assertion_id)' repeats raw evidence."
+        }
+        [pscustomobject][ordered]@{
+            id = [string]$assertion.assertion_id
+            state = "passed"
+            producer_receipt = $null
+            raw_evidence = $rawReferences
+        }
+    })
+
+    $producerDocument = [pscustomobject][ordered]@{
+        schema_version = 1
+        sprint = "sprint-8a"
+        phase = [string]$requirement.authenticated_contract.producer_phase
+        scenario = $Scenario
+        attempt = $Attempt
+        authoritative = [bool]$ExecutionLease.authoritative
+        diagnostic = [bool]$ExecutionLease.diagnostic
+        state = "passed"
+        candidate_fingerprint = $CandidateFingerprint
+        environment_fingerprint = $EnvironmentFingerprint
+        start_checkpoint = $checkpoint.reference
+        execution_lease = $ExecutionLease.lease
+        assertion_ids = $expectedAssertionIds
+    }
+    $producerDocument = $producerDocument | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $producerTarget = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repository -EvidenceRoot $evidenceRootFullPath -Path ([string]$planned.producer_path)
+    $producerSha = Get-Sprint8AStringSha256 -Text ((ConvertTo-Json -InputObject $producerDocument -Depth 30) + "`n")
+    Repair-Sprint7AEvidencePublication -Path ([string]$producerTarget.full_path)
+    $producerExists = Test-Path -LiteralPath ([string]$producerTarget.full_path) -PathType Leaf
+    $producerSidecarExists = Test-Path -LiteralPath "$([string]$producerTarget.full_path).sha256" -PathType Leaf
+    if ($producerExists -or $producerSidecarExists) {
+        if (-not $producerExists -or -not $producerSidecarExists -or
+            (Assert-Sprint8AReceiptSidecar -Path ([string]$producerTarget.full_path)) -cne $producerSha) {
+            throw "Manual UAT scenario '$Scenario' already has a different or incomplete structured producer publication."
+        }
+    } else {
+        Publish-Sprint7AEvidence -Document $producerDocument -OutputPath ([string]$producerTarget.full_path) | Out-Null
+    }
+    $producerReference = [pscustomobject][ordered]@{ path = [string]$producerTarget.path; sha256 = $producerSha }
+    foreach ($assertion in $canonicalAssertions) { $assertion.producer_receipt = $producerReference }
+    $wrapperDocument = [pscustomobject][ordered]@{
+        schema_version = 1
+        sprint = "sprint-8a"
+        phase = "uat-manual-structured-evidence"
+        scenario = $Scenario
+        attempt = $Attempt
+        evidence_type = [string]$requirement.authenticated_contract.evidence_type
+        evidence_id = $RequirementId
+        authoritative = [bool]$ExecutionLease.authoritative
+        diagnostic = [bool]$ExecutionLease.diagnostic
+        state = "passed"
+        candidate_fingerprint = $CandidateFingerprint
+        environment_fingerprint = $EnvironmentFingerprint
+        start_checkpoint = $checkpoint.reference
+        execution_lease = $ExecutionLease.lease
+        producer_receipt = $producerReference
+        assertions = $canonicalAssertions
+    }
+    $wrapperDocument = $wrapperDocument | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $wrapperTarget = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repository -EvidenceRoot $evidenceRootFullPath -Path ([string]$planned.path)
+    $wrapperSha = Get-Sprint8AStringSha256 -Text ((ConvertTo-Json -InputObject $wrapperDocument -Depth 30) + "`n")
+    Repair-Sprint7AEvidencePublication -Path ([string]$wrapperTarget.full_path)
+    $wrapperExists = Test-Path -LiteralPath ([string]$wrapperTarget.full_path) -PathType Leaf
+    $wrapperSidecarExists = Test-Path -LiteralPath "$([string]$wrapperTarget.full_path).sha256" -PathType Leaf
+    if ($wrapperExists -or $wrapperSidecarExists) {
+        if (-not $wrapperExists -or -not $wrapperSidecarExists -or
+            (Assert-Sprint8AReceiptSidecar -Path ([string]$wrapperTarget.full_path)) -cne $wrapperSha) {
+            throw "Manual UAT scenario '$Scenario' already has a different or incomplete structured wrapper publication."
+        }
+    } else {
+        Publish-Sprint7AEvidence -Document $wrapperDocument -OutputPath ([string]$wrapperTarget.full_path) | Out-Null
+    }
+    $result = [pscustomobject][ordered]@{
+        step = [int]$requirementMatches[0].step
+        requirement_id = $RequirementId
+        kind = "authenticated-json"
+        capture = if ($requirement.PSObject.Properties.Name -contains "capture") { $requirement.capture } else { $null }
+        path = [string]$wrapperTarget.path
+        sha256 = $wrapperSha
+    }
+    Assert-Sprint8AManualUatStructuredEvidence `
+        -Evidence $result -Requirement $requirement -Scenario $Scenario -Attempt $Attempt `
+        -CandidateFingerprint $CandidateFingerprint -EnvironmentFingerprint $EnvironmentFingerprint `
+        -ExpectedAuthoritative ([bool]$ExecutionLease.authoritative) `
+        -ExpectedDiagnostic ([bool]$ExecutionLease.diagnostic) `
+        -StartedAt $StartedAt -StartCheckpoint $checkpoint.reference -ExecutionLease $ExecutionLease.lease `
+        -RepositoryRoot $repository -EvidenceRoot $evidenceRootFullPath | Out-Null
+    $result
+}
+
+function Assert-Sprint8AManualUatStructuredEvidence {
+    param(
+        [Parameter(Mandatory)]$Evidence,
+        [Parameter(Mandatory)]$Requirement,
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$Attempt,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$CandidateFingerprint,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][bool]$ExpectedAuthoritative,
+        [Parameter(Mandatory)][bool]$ExpectedDiagnostic,
+        [Parameter(Mandatory)][DateTimeOffset]$StartedAt,
+        [Parameter(Mandatory)]$StartCheckpoint,
+        [Parameter(Mandatory)]$ExecutionLease,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot
+    )
+
+    $resolved = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $EvidenceRoot `
+        -Path ([string]$Evidence.path)
+    $evidenceRootFullPath = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+        [IO.Path]::GetFullPath($EvidenceRoot)
+    } else { [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $EvidenceRoot)) }
+    $plan = Get-Sprint8AManualUatEvidencePlan `
+        -Scenario $Scenario -Attempt $Attempt -RepositoryRoot $RepositoryRoot -EvidenceRoot $evidenceRootFullPath
+    $plannedMatches = @($plan.evidence | Where-Object { [string]$_.requirement_id -ceq [string]$Requirement.id })
+    if ($plannedMatches.Count -ne 1 -or [string]$resolved.path -cne [string]$plannedMatches[0].path) {
+        throw "Manual UAT scenario '$Scenario' authenticated evidence '$([string]$Evidence.requirement_id)' has a non-canonical wrapper path."
+    }
+    $planned = $plannedMatches[0]
+    $expectedRawPrefix = [string]$plan.raw_prefix
+    $plannedAssertionRaw = @{}
+    foreach ($plannedRaw in @($planned.assertion_raw_evidence)) {
+        $plannedAssertionRaw[[string]$plannedRaw.assertion_id] = [string]$plannedRaw.path
+    }
+    $sidecarSha = Assert-Sprint8AReceiptSidecar -Path ([string]$resolved.full_path)
+    if ($sidecarSha -cne [string]$Evidence.sha256) {
+        throw "Manual UAT scenario '$Scenario' authenticated evidence '$([string]$Evidence.requirement_id)' has a stale sidecar."
+    }
+    try {
+        $document = Get-Content -LiteralPath ([string]$resolved.full_path) -Raw | ConvertFrom-Json
+    } catch {
+        throw "Manual UAT scenario '$Scenario' authenticated evidence '$([string]$Evidence.requirement_id)' is not valid JSON."
+    }
+    $expectedAssertions = @($Requirement.authenticated_contract.assertion_ids | ForEach-Object { [string]$_ })
+    $actualAssertions = @($document.assertions)
+    $actualAssertionIds = @($actualAssertions | ForEach-Object { [string]$_.id })
+    if ((@($document.PSObject.Properties.Name) -join "`n") -cne
+            "schema_version`nsprint`nphase`nscenario`nattempt`nevidence_type`nevidence_id`nauthoritative`ndiagnostic`nstate`ncandidate_fingerprint`nenvironment_fingerprint`nstart_checkpoint`nexecution_lease`nproducer_receipt`nassertions" -or
+        ($document.schema_version -isnot [int] -and $document.schema_version -isnot [long]) -or
+        [int]$document.schema_version -ne 1 -or [string]$document.sprint -cne "sprint-8a" -or
+        [string]$document.phase -cne "uat-manual-structured-evidence" -or
+        [string]$document.scenario -cne $Scenario -or
+        [int]$document.attempt -ne $Attempt -or
+        [string]$document.evidence_type -cne [string]$Requirement.authenticated_contract.evidence_type -or
+        [string]$document.evidence_id -cne [string]$Requirement.id -or
+        $document.authoritative -isnot [bool] -or [bool]$document.authoritative -ne $ExpectedAuthoritative -or
+        $document.diagnostic -isnot [bool] -or [bool]$document.diagnostic -ne $ExpectedDiagnostic -or
+        [bool]$document.authoritative -eq [bool]$document.diagnostic -or
+        [string]$document.state -cne "passed" -or
+        [string]$document.candidate_fingerprint -cne $CandidateFingerprint -or
+        [string]$document.environment_fingerprint -cne $EnvironmentFingerprint -or
+        (@($document.start_checkpoint.PSObject.Properties.Name) -join "`n") -cne "path`nsha256" -or
+        (@($document.execution_lease.PSObject.Properties.Name) -join "`n") -cne "path`nsha256" -or
+        (@($document.producer_receipt.PSObject.Properties.Name) -join "`n") -cne "path`nsha256" -or
+        (ConvertTo-Json $document.start_checkpoint -Compress) -cne (ConvertTo-Json $StartCheckpoint -Compress) -or
+        (ConvertTo-Json $document.execution_lease -Compress) -cne (ConvertTo-Json $ExecutionLease -Compress) -or
+        ($actualAssertionIds -join "`n") -cne ($expectedAssertions -join "`n") -or
+        @($actualAssertionIds | Sort-Object -Unique).Count -ne $actualAssertionIds.Count) {
+        throw "Manual UAT scenario '$Scenario' authenticated evidence '$([string]$Evidence.requirement_id)' differs from its exact structured contract."
+    }
+    $producer = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $EvidenceRoot `
+        -Path ([string]$document.producer_receipt.path)
+    $producerSha = Assert-Sprint8AReceiptSidecar -Path ([string]$producer.full_path)
+    if ($producerSha -cne [string]$document.producer_receipt.sha256 -or
+        [string]$producer.path -cne [string]$planned.producer_path -or
+        -not [string]$producer.path.StartsWith($expectedRawPrefix, [StringComparison]::Ordinal) -or
+        (Get-Item -LiteralPath ([string]$producer.full_path)).LastWriteTimeUtc -lt $StartedAt.UtcDateTime -or
+        [IO.Path]::GetFullPath([string]$producer.full_path) -ceq [IO.Path]::GetFullPath([string]$resolved.full_path)) {
+        throw "Manual UAT scenario '$Scenario' structured evidence does not bind a distinct authenticated producer receipt."
+    }
+    try {
+        $producerDocument = Get-Content -LiteralPath ([string]$producer.full_path) -Raw | ConvertFrom-Json
+    } catch {
+        throw "Manual UAT scenario '$Scenario' structured-evidence producer receipt is malformed."
+    }
+    if ((@($producerDocument.PSObject.Properties.Name) -join "`n") -cne
+            "schema_version`nsprint`nphase`nscenario`nattempt`nauthoritative`ndiagnostic`nstate`ncandidate_fingerprint`nenvironment_fingerprint`nstart_checkpoint`nexecution_lease`nassertion_ids" -or
+        ($producerDocument.schema_version -isnot [int] -and $producerDocument.schema_version -isnot [long]) -or
+        [int]$producerDocument.schema_version -ne 1 -or [string]$producerDocument.sprint -cne "sprint-8a" -or
+        [string]$producerDocument.phase -cne [string]$Requirement.authenticated_contract.producer_phase -or
+        [string]$producerDocument.scenario -cne $Scenario -or
+        [int]$producerDocument.attempt -ne $Attempt -or
+        $producerDocument.authoritative -isnot [bool] -or [bool]$producerDocument.authoritative -ne $ExpectedAuthoritative -or
+        $producerDocument.diagnostic -isnot [bool] -or [bool]$producerDocument.diagnostic -ne $ExpectedDiagnostic -or
+        [bool]$producerDocument.authoritative -eq [bool]$producerDocument.diagnostic -or
+        [string]$producerDocument.state -cne "passed" -or
+        [string]$producerDocument.candidate_fingerprint -cne $CandidateFingerprint -or
+        [string]$producerDocument.environment_fingerprint -cne $EnvironmentFingerprint -or
+        (@($producerDocument.start_checkpoint.PSObject.Properties.Name) -join "`n") -cne "path`nsha256" -or
+        (@($producerDocument.execution_lease.PSObject.Properties.Name) -join "`n") -cne "path`nsha256" -or
+        (ConvertTo-Json $producerDocument.start_checkpoint -Compress) -cne (ConvertTo-Json $StartCheckpoint -Compress) -or
+        (ConvertTo-Json $producerDocument.execution_lease -Compress) -cne (ConvertTo-Json $ExecutionLease -Compress) -or
+        (@($producerDocument.assertion_ids) -join "`n") -cne ($expectedAssertions -join "`n")) {
+        throw "Manual UAT scenario '$Scenario' structured-evidence producer receipt differs from its exact producer contract."
+    }
+    foreach ($assertion in $actualAssertions) {
+        if ((@($assertion.PSObject.Properties.Name) -join "`n") -cne "id`nstate`nproducer_receipt`nraw_evidence" -or
+            (@($assertion.producer_receipt.PSObject.Properties.Name) -join "`n") -cne "path`nsha256" -or
+            [string]$assertion.state -cne "passed" -or
+            [string]$assertion.producer_receipt.path -cne [string]$document.producer_receipt.path -or
+            [string]$assertion.producer_receipt.sha256 -cne [string]$document.producer_receipt.sha256 -or
+            @($assertion.raw_evidence).Count -ne 1 -or
+            -not $plannedAssertionRaw.ContainsKey([string]$assertion.id)) {
+            throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.id)' lacks a passing producer/raw-evidence binding."
+        }
+        $rawPaths = @()
+        foreach ($rawEvidence in @($assertion.raw_evidence)) {
+            if ((@($rawEvidence.PSObject.Properties.Name) -join "`n") -cne "path`nsha256") {
+                throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.id)' has a malformed raw-evidence reference."
+            }
+            $raw = Resolve-Sprint8AEvidenceReference `
+                -RepositoryRoot $RepositoryRoot `
+                -EvidenceRoot $EvidenceRoot `
+                -Path ([string]$rawEvidence.path)
+            if ([string]$raw.path -cne [string]$plannedAssertionRaw[[string]$assertion.id] -or
+                -not [string]$raw.path.StartsWith($expectedRawPrefix, [StringComparison]::Ordinal) -or
+                (Get-Sprint8AFileSha256 -Path ([string]$raw.full_path)) -cne [string]$rawEvidence.sha256 -or
+                (Get-Item -LiteralPath ([string]$raw.full_path)).LastWriteTimeUtc -lt $StartedAt.UtcDateTime -or
+                [IO.Path]::GetFullPath([string]$raw.full_path) -in @(
+                    [IO.Path]::GetFullPath([string]$resolved.full_path),
+                    [IO.Path]::GetFullPath([string]$producer.full_path)
+                )) {
+                throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.id)' has stale or self-referential raw evidence."
+            }
+            $rawPaths += [string]$raw.path
+        }
+        if (@($rawPaths | Sort-Object -Unique).Count -ne $rawPaths.Count) {
+            throw "Manual UAT scenario '$Scenario' structured assertion '$([string]$assertion.id)' repeats raw evidence."
+        }
+    }
+    $document
+}
+
 function Assert-Sprint8AManualUatReceipt {
     param(
         [Parameter(Mandatory)]$Receipt,
         [Parameter(Mandatory)][string]$ExpectedScenario,
         [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$ExpectedAttempt,
         [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$CandidateFingerprint,
-        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$EnvironmentFingerprint
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$EnvironmentFingerprint,
+        [AllowNull()][string]$RepositoryRoot,
+        [AllowNull()][string]$EvidenceRoot
     )
 
     $contract = Get-Sprint8AManualUatScenarioContract -Scenario $ExpectedScenario
+    $shapeContractValid = $true
+    try {
+        $expectedReceiptProperties = @(
+            "schema_version", "sprint", "phase", "attempt", "authoritative", "diagnostic", "scenario", "state",
+            "candidate_fingerprint", "environment_fingerprint", "assertions_started", "assertions_started_at",
+            "started_at", "ended_at", "duration_ms", "role", "tester_identity", "preconditions", "starting_state",
+            "actions", "expected_result", "actual_result", "classification", "classification_source",
+            "failure_message", "blocked_reason", "scenario_contract", "start_checkpoint", "execution_lease",
+            "resumed", "execution_resume", "evidence", "cleanup_restoration"
+        )
+        if (-not (Test-Sprint8AExactPropertyInventory -Value $Receipt -ExpectedProperties $expectedReceiptProperties) -or
+            $Receipt.tester_identity.actor_bindings -isnot [array] -or
+            $Receipt.preconditions -isnot [array] -or
+            $Receipt.starting_state -isnot [array] -or
+            $Receipt.actions -isnot [array] -or
+            $Receipt.evidence -isnot [array] -or
+            -not (Test-Sprint8AExactPropertyInventory -Value $Receipt.scenario_contract -ExpectedProperties @(
+                    "manifest", "document", "acceptance_criteria", "semantic_predicate_ids"
+                )) -or
+            $Receipt.scenario_contract.acceptance_criteria -isnot [array] -or
+            $Receipt.scenario_contract.semantic_predicate_ids -isnot [array] -or
+            -not (Test-Sprint8AExactPropertyInventory -Value $Receipt.scenario_contract.manifest -ExpectedProperties @("path", "sha256")) -or
+            -not (Test-Sprint8AExactPropertyInventory -Value $Receipt.scenario_contract.document -ExpectedProperties @("path", "sha256")) -or
+            -not (Test-Sprint8AExactPropertyInventory -Value $Receipt.start_checkpoint -ExpectedProperties @("path", "sha256")) -or
+            -not (Test-Sprint8AExactPropertyInventory -Value $Receipt.execution_lease -ExpectedProperties @("path", "sha256")) -or
+            ($null -ne $Receipt.execution_resume -and
+                -not (Test-Sprint8AExactPropertyInventory -Value $Receipt.execution_resume -ExpectedProperties @("path", "sha256"))) -or
+            -not (Test-Sprint8AExactPropertyInventory -Value $Receipt.cleanup_restoration -ExpectedProperties @(
+                    "required", "result", "evidence"
+                )) -or
+            $Receipt.cleanup_restoration.evidence -isnot [array] -or
+            @($Receipt.cleanup_restoration.evidence).Count -ne 1) {
+            $shapeContractValid = $false
+        }
+        foreach ($action in @($Receipt.actions)) {
+            if (-not (Test-Sprint8AExactPropertyInventory -Value $action -ExpectedProperties @(
+                        "step", "action", "expected_result", "actual_result", "state"
+                    ))) {
+                $shapeContractValid = $false
+            }
+        }
+        foreach ($cleanupEvidence in @($Receipt.cleanup_restoration.evidence)) {
+            if (-not (Test-Sprint8AExactPropertyInventory -Value $cleanupEvidence -ExpectedProperties @(
+                        "kind", "path", "sha256"
+                    ))) {
+                $shapeContractValid = $false
+            }
+        }
+    } catch {
+        $shapeContractValid = $false
+    }
     try {
         $started = ConvertTo-Sprint8ADateTimeOffset -Value $Receipt.started_at -Label "manual UAT start"
         $ended = ConvertTo-Sprint8ADateTimeOffset -Value $Receipt.ended_at -Label "manual UAT end"
@@ -683,7 +1490,10 @@ function Assert-Sprint8AManualUatReceipt {
             for ($index = 0; $index -lt $contract.steps.Count; $index++) {
                 $actualAction = $Receipt.actions[$index]
                 $expectedAction = $contract.steps[$index]
-                if (($actualAction.step -isnot [int] -and $actualAction.step -isnot [long]) -or
+                if (-not (Test-Sprint8AExactPropertyInventory -Value $actualAction -ExpectedProperties @(
+                            "step", "action", "expected_result", "actual_result", "state"
+                        )) -or
+                    ($actualAction.step -isnot [int] -and $actualAction.step -isnot [long]) -or
                     [int]$actualAction.step -ne [int]$expectedAction.step -or
                     [string]$actualAction.action -cne [string]$expectedAction.action -or
                     [string]$actualAction.expected_result -cne [string]$expectedAction.expected_result -or
@@ -698,33 +1508,249 @@ function Assert-Sprint8AManualUatReceipt {
     } catch {
         $actionContractValid = $false
     }
-    $evidenceContractValid = $true
+    $identityContractValid = $true
     try {
-        $evidenceSteps = @($Receipt.evidence | ForEach-Object {
-            if (($_.step -isnot [int] -and $_.step -isnot [long]) -or
-                [int]$_.step -lt 1 -or [int]$_.step -gt [int]$contract.step_count -or
-                [string]::IsNullOrWhiteSpace([string]$_.path) -or
-                [string]$_.sha256 -notmatch '^[0-9a-f]{64}$') {
+        $expectedActorIds = @($contract.actor_bindings | ForEach-Object { [string]$_.id })
+        $actualActorBindings = @($Receipt.tester_identity.actor_bindings)
+        $actualActorIds = @($actualActorBindings | ForEach-Object { [string]$_.id })
+        $actualAccountIds = @($actualActorBindings | ForEach-Object { [string]$_.actor_id })
+        if ((@($Receipt.tester_identity.PSObject.Properties.Name) -join "`n") -cne "tester_id`ndisplay_name`nactor_bindings" -or
+            [string]::IsNullOrWhiteSpace([string]$Receipt.tester_identity.tester_id) -or
+            [string]::IsNullOrWhiteSpace([string]$Receipt.tester_identity.display_name) -or
+            ($actualActorIds -join "`n") -cne ($expectedActorIds -join "`n") -or
+            @($actualActorIds | Sort-Object -Unique).Count -ne $actualActorIds.Count -or
+            @($actualAccountIds | Sort-Object -Unique).Count -ne $actualAccountIds.Count -or
+            @($actualActorBindings | Where-Object {
+                (@($_.PSObject.Properties.Name) -join "`n") -cne "id`nactor_id" -or
+                [string]::IsNullOrWhiteSpace([string]$_.actor_id)
+            }).Count -ne 0) {
+            $identityContractValid = $false
+        }
+        $preconditions = @($Receipt.preconditions)
+        $preconditionIds = @($preconditions | ForEach-Object { [string]$_.id })
+        if (($preconditionIds -join "`n") -cne (@($contract.required_precondition_ids) -join "`n") -or
+            @($preconditions | Where-Object {
+                (@($_.PSObject.Properties.Name) -join "`n") -cne "id`nstate`nvalue`nreference" -or
+                [string]$_.state -notin @("satisfied", "failed", "blocked") -or
+                (([string]::IsNullOrWhiteSpace([string]$_.value)) -eq ($null -eq $_.reference))
+            }).Count -ne 0 -or
+            ([string]$Receipt.state -ceq "passed" -and
+                @($preconditions | Where-Object { [string]$_.state -cne "satisfied" }).Count -ne 0)) {
+            $identityContractValid = $false
+        }
+        $preconditionById = @{}
+        foreach ($precondition in $preconditions) { $preconditionById[[string]$precondition.id] = $precondition }
+        $executionStart = ConvertTo-Sprint8ADateTimeOffset `
+            -Value $preconditionById["execution-start"].value `
+            -Label "manual UAT execution-start precondition"
+        if ([string]$preconditionById["candidate-fingerprint"].value -cne $CandidateFingerprint -or
+            $null -ne $preconditionById["candidate-fingerprint"].reference -or
+            [string]$preconditionById["environment-fingerprint"].value -cne $EnvironmentFingerprint -or
+            $null -ne $preconditionById["environment-fingerprint"].reference -or
+            $executionStart -ne $started -or
+            $null -ne $preconditionById["execution-start"].reference -or
+            -not [string]::IsNullOrWhiteSpace([string]$preconditionById["preflight-receipt"].value) -or
+            -not [string]::IsNullOrWhiteSpace([string]$preconditionById["sit-result-receipt"].value)) {
+            $identityContractValid = $false
+        }
+        foreach ($referencePreconditionId in @("preflight-receipt", "sit-result-receipt")) {
+            $reference = $preconditionById[$referencePreconditionId].reference
+            if ((@($reference.PSObject.Properties.Name) -join "`n") -cne "path`nsha256" -or
+                [string]::IsNullOrWhiteSpace([string]$reference.path) -or
+                [string]$reference.sha256 -notmatch '^[0-9a-f]{64}$') {
+                $identityContractValid = $false
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($RepositoryRoot) -and -not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
+            $evidenceRootFullPath = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+                [IO.Path]::GetFullPath($EvidenceRoot)
+            } else { [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $EvidenceRoot)) }
+            $expectedEvidenceRoot = [IO.Path]::GetRelativePath($RepositoryRoot, $evidenceRootFullPath).Replace("\", "/").TrimEnd("/")
+            if ([string]$preconditionById["evidence-root"].value -cne $expectedEvidenceRoot -or
+                $null -ne $preconditionById["evidence-root"].reference) {
+                $identityContractValid = $false
+            }
+            $checkpoint = Resolve-Sprint8AEvidenceReference `
+                -RepositoryRoot $RepositoryRoot `
+                -EvidenceRoot $evidenceRootFullPath `
+                -Path ([string]$Receipt.start_checkpoint.path)
+            $checkpointSha = Assert-Sprint8AReceiptSidecar -Path ([string]$checkpoint.full_path)
+            $checkpointDocument = Get-Content -LiteralPath ([string]$checkpoint.full_path) -Raw | ConvertFrom-Json
+            if ($checkpointSha -cne [string]$Receipt.start_checkpoint.sha256 -or
+                @($checkpointDocument.prerequisite_receipts).Count -ne 3 -or
+                (ConvertTo-Json $preconditionById["preflight-receipt"].reference -Compress) -cne
+                    (ConvertTo-Json $checkpointDocument.prerequisite_receipts[0] -Compress) -or
+                (ConvertTo-Json $preconditionById["sit-result-receipt"].reference -Compress) -cne
+                    (ConvertTo-Json $checkpointDocument.prerequisite_receipts[2] -Compress)) {
+                $identityContractValid = $false
+            }
+        } elseif ([string]::IsNullOrWhiteSpace([string]$preconditionById["evidence-root"].value) -or
+            $null -ne $preconditionById["evidence-root"].reference) {
+            $identityContractValid = $false
+        }
+        $startingState = @($Receipt.starting_state)
+        $startingIds = @($startingState | ForEach-Object { [string]$_.id })
+        $expectedStartingIds = @($contract.required_starting_state | ForEach-Object { [string]$_.id })
+        if (($startingIds -join "`n") -cne ($expectedStartingIds -join "`n") -or
+            @($startingState | Where-Object {
+                (@($_.PSObject.Properties.Name) -join "`n") -cne "id`nobserved_value" -or
+                [string]::IsNullOrWhiteSpace([string]$_.observed_value)
+            }).Count -ne 0) {
+            $identityContractValid = $false
+        }
+    } catch {
+        $identityContractValid = $false
+    }
+    $evidenceContractValid = $true
+    $evidenceContractFailure = $null
+    try {
+        $requirementMap = @{}
+        $plannedEvidenceMap = @{}
+        $evidencePlan = $null
+        if (-not [string]::IsNullOrWhiteSpace($RepositoryRoot) -and -not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
+            $evidencePlan = Get-Sprint8AManualUatEvidencePlan `
+                -Scenario $ExpectedScenario `
+                -Attempt $ExpectedAttempt `
+                -RepositoryRoot $RepositoryRoot `
+                -EvidenceRoot $EvidenceRoot
+            foreach ($plannedEvidence in @($evidencePlan.evidence)) {
+                $plannedEvidenceMap[[string]$plannedEvidence.requirement_id] = $plannedEvidence
+            }
+        }
+        foreach ($step in @($contract.steps)) {
+            foreach ($requirement in @($step.evidence_requirements)) {
+                $requirementMap[[string]$requirement.id] = [pscustomobject]@{
+                    step = [int]$step.step
+                    definition = $requirement
+                }
+            }
+        }
+        $evidenceCounts = @{}
+        foreach ($evidence in @($Receipt.evidence)) {
+            $evidenceProperties = @($evidence.PSObject.Properties.Name)
+            $requirementId = [string]$evidence.requirement_id
+            if (($evidenceProperties -join "`n") -cne "step`nrequirement_id`nkind`ncapture`npath`nsha256" -or
+                -not $requirementMap.ContainsKey($requirementId)) {
+                $evidenceContractValid = $false
+                continue
+            }
+            $requirementBinding = $requirementMap[$requirementId]
+            $expectedCapture = if ($requirementBinding.definition.PSObject.Properties.Name -contains "capture") {
+                $requirementBinding.definition.capture | ConvertTo-Json -Depth 10 -Compress
+            } else { "null" }
+            $actualCapture = $evidence.capture | ConvertTo-Json -Depth 10 -Compress
+            $allowedExtensions = @($contract.receipt_contract.evidence_kind_extensions.([string]$evidence.kind))
+            if (($evidence.step -isnot [int] -and $evidence.step -isnot [long]) -or
+                [int]$evidence.step -ne [int]$requirementBinding.step -or
+                [string]$evidence.kind -cne [string]$requirementBinding.definition.kind -or
+                $actualCapture -cne $expectedCapture -or
+                [string]::IsNullOrWhiteSpace([string]$evidence.path) -or
+                [string]$evidence.path -match '(^|/)\.\.(/|$)|\\' -or
+                [string]$evidence.sha256 -notmatch '^[0-9a-f]{64}$' -or
+                @($allowedExtensions | Where-Object {
+                    [string]$evidence.path.EndsWith([string]$_, [StringComparison]::OrdinalIgnoreCase)
+                }).Count -ne 1) {
                 $evidenceContractValid = $false
             }
-            [int]$_.step
-        } | Sort-Object -Unique)
-        if ([string]$Receipt.state -ceq "passed" -and
-            ($evidenceSteps -join ",") -cne ((1..$contract.step_count) -join ",")) {
-            $evidenceContractValid = $false
+            if (-not [string]::IsNullOrWhiteSpace($RepositoryRoot) -and -not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
+                $evidenceRootFullPath = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+                    [IO.Path]::GetFullPath($EvidenceRoot)
+                } else { [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $EvidenceRoot)) }
+                $evidenceRootRelative = [IO.Path]::GetRelativePath($RepositoryRoot, $evidenceRootFullPath).Replace("\", "/").TrimEnd("/")
+                $expectedRawPrefix = "$evidenceRootRelative/uat/attempt-$ExpectedAttempt/raw/$($ExpectedScenario.ToLowerInvariant())/"
+                $resolvedEvidence = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $RepositoryRoot `
+                    -EvidenceRoot $evidenceRootFullPath `
+                    -Path ([string]$evidence.path)
+                $plannedEvidence = $plannedEvidenceMap[$requirementId]
+                if ($null -eq $plannedEvidence -or
+                    [string]$resolvedEvidence.path -cne [string]$plannedEvidence.path -or
+                    -not [string]$resolvedEvidence.path.StartsWith($expectedRawPrefix, [StringComparison]::Ordinal) -or
+                    (Get-Sprint8AFileSha256 -Path ([string]$resolvedEvidence.full_path)) -cne [string]$evidence.sha256 -or
+                    (Get-Item -LiteralPath ([string]$resolvedEvidence.full_path)).LastWriteTimeUtc -lt $started.UtcDateTime) {
+                    $evidenceContractValid = $false
+                }
+                $contentContract = $contract.receipt_contract.evidence_kind_content_contracts.PSObject.Properties[[string]$evidence.kind].Value
+                Assert-Sprint8AManualUatEvidenceKindContent `
+                    -Kind ([string]$evidence.kind) `
+                    -Path ([string]$resolvedEvidence.full_path) `
+                    -Scenario $ExpectedScenario `
+                    -Attempt $ExpectedAttempt `
+                    -RequirementId $requirementId `
+                    -CandidateFingerprint $CandidateFingerprint `
+                    -EnvironmentFingerprint $EnvironmentFingerprint `
+                    -StartedAt $started `
+                    -ContentContract $contentContract
+            }
+            if (-not $evidenceCounts.ContainsKey($requirementId)) { $evidenceCounts[$requirementId] = 0 }
+            $evidenceCounts[$requirementId] = [int]$evidenceCounts[$requirementId] + 1
+            if ([string]$evidence.kind -ceq "authenticated-json") {
+                if ([string]::IsNullOrWhiteSpace($RepositoryRoot) -or [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
+                    $evidenceContractValid = $false
+                } else {
+                    Assert-Sprint8AManualUatStructuredEvidence `
+                        -Evidence $evidence `
+                        -Requirement $requirementBinding.definition `
+                        -Scenario $ExpectedScenario `
+                        -Attempt $ExpectedAttempt `
+                        -CandidateFingerprint $CandidateFingerprint `
+                        -EnvironmentFingerprint $EnvironmentFingerprint `
+                        -ExpectedAuthoritative ([bool]$Receipt.authoritative) `
+                        -ExpectedDiagnostic ([bool]$Receipt.diagnostic) `
+                        -StartedAt $started `
+                        -StartCheckpoint $Receipt.start_checkpoint `
+                        -ExecutionLease $Receipt.execution_lease `
+                        -RepositoryRoot $RepositoryRoot `
+                        -EvidenceRoot $EvidenceRoot | Out-Null
+                }
+            }
+        }
+        foreach ($requirementId in $requirementMap.Keys) {
+            $count = if ($evidenceCounts.ContainsKey($requirementId)) { [int]$evidenceCounts[$requirementId] } else { 0 }
+            $definition = $requirementMap[$requirementId].definition
+            if ($count -gt [int]$definition.maximum -or
+                ([string]$Receipt.state -ceq "passed" -and $count -lt [int]$definition.minimum)) {
+                $evidenceContractValid = $false
+            }
         }
         foreach ($cleanupEvidence in @($Receipt.cleanup_restoration.evidence)) {
             if ([string]$cleanupEvidence.kind -cne "canonical-restoration" -or
                 [string]::IsNullOrWhiteSpace([string]$cleanupEvidence.path) -or
-                [string]$cleanupEvidence.sha256 -notmatch '^[0-9a-f]{64}$') {
+                [string]$cleanupEvidence.sha256 -notmatch '^[0-9a-f]{64}$' -or
+                -not [string]$cleanupEvidence.path.EndsWith(".json", [StringComparison]::OrdinalIgnoreCase)) {
                 $evidenceContractValid = $false
+            }
+            if (-not [string]::IsNullOrWhiteSpace($RepositoryRoot) -and -not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
+                $evidenceRootFullPath = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+                    [IO.Path]::GetFullPath($EvidenceRoot)
+                } else { [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $EvidenceRoot)) }
+                $evidenceRootRelative = [IO.Path]::GetRelativePath($RepositoryRoot, $evidenceRootFullPath).Replace("\", "/").TrimEnd("/")
+                $expectedRawPrefix = "$evidenceRootRelative/uat/attempt-$ExpectedAttempt/raw/$($ExpectedScenario.ToLowerInvariant())/"
+                $resolvedCleanup = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $RepositoryRoot `
+                    -EvidenceRoot $evidenceRootFullPath `
+                    -Path ([string]$cleanupEvidence.path)
+                if ([string]$resolvedCleanup.path -cne [string]$evidencePlan.cleanup.path -or
+                    -not [string]$resolvedCleanup.path.StartsWith($expectedRawPrefix, [StringComparison]::Ordinal) -or
+                    (Get-Sprint8AFileSha256 -Path ([string]$resolvedCleanup.full_path)) -cne [string]$cleanupEvidence.sha256 -or
+                    (Get-Item -LiteralPath ([string]$resolvedCleanup.full_path)).LastWriteTimeUtc -lt $started.UtcDateTime) {
+                    $evidenceContractValid = $false
+                }
+                Assert-Sprint8AManualUatCleanupEvidenceContent `
+                    -Path ([string]$resolvedCleanup.full_path) `
+                    -Scenario $ExpectedScenario `
+                    -Attempt $ExpectedAttempt `
+                    -CandidateFingerprint $CandidateFingerprint `
+                    -EnvironmentFingerprint $EnvironmentFingerprint `
+                    -StartedAt $started
             }
         }
     } catch {
         $evidenceContractValid = $false
+        $evidenceContractFailure = $_.Exception.Message
     }
     if (($Receipt.schema_version -isnot [int] -and $Receipt.schema_version -isnot [long]) -or
-        [int]$Receipt.schema_version -ne 1 -or
+        [int]$Receipt.schema_version -ne 2 -or
         (Get-Sprint8AManualUatScenarioNames) -cnotcontains $ExpectedScenario -or
         [string]$Receipt.sprint -cne "sprint-8a" -or
         [string]$Receipt.phase -cne "uat-manual-scenario" -or
@@ -739,14 +1765,18 @@ function Assert-Sprint8AManualUatReceipt {
         [string]$Receipt.environment_fingerprint -cne $EnvironmentFingerprint -or
         $Receipt.assertions_started -isnot [bool] -or
         [string]$Receipt.role -cne [string]$contract.role -or
-        [string]::IsNullOrWhiteSpace([string]$Receipt.starting_state) -or
+        -not $shapeContractValid -or
+        -not $identityContractValid -or
         -not $actionContractValid -or
         -not $evidenceContractValid -or
         [string]$Receipt.expected_result -cne $expectedSummary -or
         [string]::IsNullOrWhiteSpace([string]$Receipt.actual_result) -or
-        @($Receipt.evidence).Count -lt 1 -or
-        [string]$Receipt.scenario_contract.path -cne [string]$contract.document.path -or
-        [string]$Receipt.scenario_contract.sha256 -cne [string]$contract.document.sha256 -or
+        [string]$Receipt.scenario_contract.manifest.path -cne [string]$contract.manifest.path -or
+        [string]$Receipt.scenario_contract.manifest.sha256 -cne [string]$contract.manifest.sha256 -or
+        [string]$Receipt.scenario_contract.document.path -cne [string]$contract.document.path -or
+        [string]$Receipt.scenario_contract.document.sha256 -cne [string]$contract.document.sha256 -or
+        (@($Receipt.scenario_contract.acceptance_criteria) -join "`n") -cne (@($contract.acceptance_criteria) -join "`n") -or
+        (@($Receipt.scenario_contract.semantic_predicate_ids) -join "`n") -cne (@($contract.semantic_predicate_ids) -join "`n") -or
         [string]::IsNullOrWhiteSpace([string]$Receipt.start_checkpoint.path) -or
         [string]$Receipt.start_checkpoint.sha256 -notmatch '^[0-9a-f]{64}$' -or
         [string]::IsNullOrWhiteSpace([string]$Receipt.execution_lease.path) -or
@@ -761,7 +1791,10 @@ function Assert-Sprint8AManualUatReceipt {
         $Receipt.cleanup_restoration.required -ne $true -or
         [string]$Receipt.cleanup_restoration.result -cne "canonical_topology_verified" -or
         @($Receipt.cleanup_restoration.evidence).Count -lt 1) {
-        throw "Manual UAT receipt '$ExpectedScenario' is malformed, incomplete, or bound to another candidate/environment."
+        $evidenceFailureDetail = if ([string]::IsNullOrWhiteSpace([string]$evidenceContractFailure)) {
+            ""
+        } else { " Evidence validation failed: $evidenceContractFailure" }
+        throw "Manual UAT receipt '$ExpectedScenario' is malformed, incomplete, or bound to another candidate/environment.$evidenceFailureDetail"
     }
     if (([string]$Receipt.state -ceq "passed" -and
             ((@($actionStates | Where-Object { $_ -cne "passed" }).Count -ne 0) -or
@@ -1357,7 +2390,9 @@ function Assert-Sprint8AManualUatPreparedPublicationCheckpoint {
         -ExpectedScenario $scenario `
         -ExpectedAttempt $ExpectedAttempt `
         -CandidateFingerprint ([string]$Document.candidate_fingerprint) `
-        -EnvironmentFingerprint ([string]$Document.environment_fingerprint) | Out-Null
+        -EnvironmentFingerprint ([string]$Document.environment_fingerprint) `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $evidenceRootFullPath | Out-Null
     $receiptSha = Get-Sprint8AStringSha256 -Text (($receipt | ConvertTo-Json -Depth 30) + "`n")
     $completionSha = Get-Sprint8AStringSha256 -Text (($Document.completion.document | ConvertTo-Json -Depth 30) + "`n")
     $receiptEndedAt = ConvertTo-Sprint8ADateTimeOffset -Value $receipt.ended_at -Label "manual UAT receipt end"
@@ -1574,11 +2609,13 @@ function Publish-Sprint8AManualUatReceipt {
         [AllowNull()][string]$FailureMessage,
         [AllowNull()][string]$BlockedReason,
         [Parameter(Mandatory)][string]$Role,
-        [Parameter(Mandatory)][string]$StartingState,
+        [Parameter(Mandatory)]$TesterIdentity,
+        [Parameter(Mandatory)][object[]]$Preconditions,
+        [Parameter(Mandatory)][object[]]$StartingState,
         [Parameter(Mandatory)][object[]]$Actions,
         [Parameter(Mandatory)][string]$ExpectedResult,
         [Parameter(Mandatory)][string]$ActualResult,
-        [Parameter(Mandatory)][object[]]$Evidence,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Evidence,
         [Parameter(Mandatory)][object[]]$CleanupEvidence,
         [Parameter(Mandatory)][DateTimeOffset]$StartedAt,
         [Parameter(Mandatory)][DateTimeOffset]$EndedAt,
@@ -1694,7 +2731,7 @@ function Publish-Sprint8AManualUatReceipt {
     try {
     $resolveEvidence = {
         param(
-            [Parameter(Mandatory)][object[]]$References,
+            [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$References,
             [Parameter(Mandatory)][ValidateSet("scenario", "cleanup")][string]$Kind
         )
         @($References | ForEach-Object {
@@ -1711,6 +2748,9 @@ function Publish-Sprint8AManualUatReceipt {
             }
             [pscustomobject][ordered]@{
                 step = [int]$_.step
+                requirement_id = [string]$_.requirement_id
+                kind = [string]$_.kind
+                capture = if ($_.PSObject.Properties.Name -contains "capture") { $_.capture } else { $null }
                 path = [string]$reference.path
                 sha256 = [string]$_.sha256
             }
@@ -1726,8 +2766,8 @@ function Publish-Sprint8AManualUatReceipt {
         }
         })
     }
-    $evidenceReferences = & $resolveEvidence -References $Evidence -Kind "scenario"
-    $cleanupEvidenceReferences = & $resolveEvidence -References $CleanupEvidence -Kind "cleanup"
+    $evidenceReferences = @(& $resolveEvidence -References $Evidence -Kind "scenario")
+    $cleanupEvidenceReferences = @(& $resolveEvidence -References $CleanupEvidence -Kind "cleanup")
     $target = Resolve-Sprint8AEvidenceReference `
         -RepositoryRoot $RepositoryRoot `
         -EvidenceRoot $EvidenceRoot `
@@ -1783,8 +2823,9 @@ function Publish-Sprint8AManualUatReceipt {
             throw "Manual UAT scenario '$Scenario' cannot authenticate prior receipt '$($priorPath.FullName)': $($_.Exception.Message)"
         }
     }
+    $scenarioContract = Get-Sprint8AManualUatScenarioContract -Scenario $Scenario
     $receipt = [pscustomobject][ordered]@{
-        schema_version = 1
+        schema_version = 2
         sprint = "sprint-8a"
         phase = "uat-manual-scenario"
         attempt = $Attempt
@@ -1800,7 +2841,9 @@ function Publish-Sprint8AManualUatReceipt {
         ended_at = $EndedAt.ToString("o")
         duration_ms = [long][Math]::Max(0, ($EndedAt - $StartedAt).TotalMilliseconds)
         role = $Role
-        starting_state = $StartingState
+        tester_identity = $TesterIdentity
+        preconditions = @($Preconditions)
+        starting_state = @($StartingState)
         actions = @($Actions)
         expected_result = $ExpectedResult
         actual_result = $ActualResult
@@ -1808,7 +2851,12 @@ function Publish-Sprint8AManualUatReceipt {
         classification_source = if (-not [string]::IsNullOrWhiteSpace($Classification)) { "manual_operator" } else { $null }
         failure_message = $FailureMessage
         blocked_reason = $BlockedReason
-        scenario_contract = (Get-Sprint8AManualUatScenarioContract -Scenario $Scenario).document
+        scenario_contract = [pscustomobject][ordered]@{
+            manifest = $scenarioContract.manifest
+            document = $scenarioContract.document
+            acceptance_criteria = @($scenarioContract.acceptance_criteria)
+            semantic_predicate_ids = @($scenarioContract.semantic_predicate_ids)
+        }
         start_checkpoint = $checkpoint.reference
         execution_lease = $ExecutionLease.lease
         resumed = [bool]$ExecutionLease.resumed
@@ -1825,14 +2873,18 @@ function Publish-Sprint8AManualUatReceipt {
         -ExpectedScenario $Scenario `
         -ExpectedAttempt $Attempt `
         -CandidateFingerprint $CandidateFingerprint `
-        -EnvironmentFingerprint $EnvironmentFingerprint | Out-Null
+        -EnvironmentFingerprint $EnvironmentFingerprint `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $evidenceRootFullPath | Out-Null
     $receipt = $receipt | ConvertTo-Json -Depth 30 | ConvertFrom-Json
     Assert-Sprint8AManualUatReceipt `
         -Receipt $receipt `
         -ExpectedScenario $Scenario `
         -ExpectedAttempt $Attempt `
         -CandidateFingerprint $CandidateFingerprint `
-        -EnvironmentFingerprint $EnvironmentFingerprint | Out-Null
+        -EnvironmentFingerprint $EnvironmentFingerprint `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $evidenceRootFullPath | Out-Null
     $expectedReceiptSha = Get-Sprint8AStringSha256 -Text (($receipt | ConvertTo-Json -Depth 30) + "`n")
     $receiptReference = [pscustomobject][ordered]@{
         path = [string]$target.path
@@ -2648,6 +3700,157 @@ function Test-Sprint8AEvidenceManifestContract {
     }
 }
 
+function Write-Sprint8AManualUatSelfTestEvidenceFile {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Kind,
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][int]$Attempt,
+        [Parameter(Mandatory)][string]$RequirementId,
+        [Parameter(Mandatory)][string]$CandidateFingerprint,
+        [Parameter(Mandatory)][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][DateTimeOffset]$CapturedAt
+    )
+
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $Path)) | Out-Null
+    switch -CaseSensitive ($Kind) {
+        "screenshot" {
+            $png = [Convert]::FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            )
+            [IO.File]::WriteAllBytes($Path, $png)
+        }
+        "browser-trace" {
+            $archive = [IO.Compression.ZipFile]::Open($Path, [IO.Compression.ZipArchiveMode]::Create)
+            try {
+                foreach ($name in @("trace.trace", "trace.network")) {
+                    $entry = $archive.CreateEntry($name)
+                    $writer = [IO.StreamWriter]::new($entry.Open(), [Text.UTF8Encoding]::new($false))
+                    try { $writer.Write("self-test $name") } finally { $writer.Dispose() }
+                }
+            } finally { $archive.Dispose() }
+        }
+        { $_ -in @("operator-record", "browser-console", "http-transcript") } {
+            $phase = switch ($Kind) {
+                "operator-record" { "uat-manual-operator-record" }
+                "browser-console" { "uat-manual-browser-console" }
+                "http-transcript" { "uat-manual-http-transcript" }
+            }
+            $payloadField = switch ($Kind) {
+                "operator-record" { "observations" }
+                "browser-console" { "entries" }
+                "http-transcript" { "exchanges" }
+            }
+            [object[]]$payload = @()
+            if ($Kind -cne "browser-console") {
+                $payload = @([pscustomobject][ordered]@{ state = "observed" })
+            }
+            $document = [ordered]@{
+                schema_version = 1
+                sprint = "sprint-8a"
+                phase = $phase
+                scenario = $Scenario
+                attempt = $Attempt
+                evidence_id = $RequirementId
+                candidate_fingerprint = $CandidateFingerprint
+                environment_fingerprint = $EnvironmentFingerprint
+                captured_at = $CapturedAt.ToString("o")
+            }
+            $document[$payloadField] = $payload
+            [IO.File]::WriteAllText(
+                $Path,
+                ((ConvertTo-Json -InputObject $document -Depth 10) + "`n"),
+                [Text.UTF8Encoding]::new($false)
+            )
+        }
+        default { throw "Unsupported manual UAT self-test evidence kind '$Kind'." }
+    }
+}
+
+function Write-Sprint8AManualUatSelfTestCleanupFile {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Scenario,
+        [Parameter(Mandatory)][int]$Attempt,
+        [Parameter(Mandatory)][string]$CandidateFingerprint,
+        [Parameter(Mandatory)][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][DateTimeOffset]$RestoredAt
+    )
+
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $Path)) | Out-Null
+    $document = [ordered]@{
+        schema_version = 1
+        sprint = "sprint-8a"
+        phase = "uat-manual-canonical-restoration"
+        scenario = $Scenario
+        attempt = $Attempt
+        result = "canonical_topology_verified"
+        candidate_fingerprint = $CandidateFingerprint
+        environment_fingerprint = $EnvironmentFingerprint
+        restored_at = $RestoredAt.ToString("o")
+        observations = @([pscustomobject][ordered]@{ state = "restored" })
+    }
+    [IO.File]::WriteAllText(
+        $Path,
+        ((ConvertTo-Json -InputObject $document -Depth 10) + "`n"),
+        [Text.UTF8Encoding]::new($false)
+    )
+}
+
+function Test-Sprint8AManualUatEvidenceContentContracts {
+    $root = Join-Path ([IO.Path]::GetTempPath()) "tessara-sprint-8a-content-selftest-$([guid]::NewGuid().ToString('N'))"
+    [IO.Directory]::CreateDirectory($root) | Out-Null
+    try {
+        $contract = Get-Sprint8AManualUatScenarioContract -Scenario "UAT-8A-01"
+        $contentContracts = $contract.receipt_contract.evidence_kind_content_contracts
+        $started = [DateTimeOffset]::UtcNow.AddSeconds(-1)
+        $common = @{
+            Scenario = "UAT-8A-01"; Attempt = 1; CandidateFingerprint = "e" * 64
+            EnvironmentFingerprint = "f" * 64; StartedAt = $started
+        }
+        $capturedAt = [DateTimeOffset]::UtcNow
+        foreach ($validKind in @("operator-record", "browser-console", "http-transcript")) {
+            $validPath = Join-Path $root "valid-$validKind.json"
+            Write-Sprint8AManualUatSelfTestEvidenceFile `
+                -Path $validPath -Kind $validKind -Scenario "UAT-8A-01" -Attempt 1 `
+                -RequirementId "valid-$validKind" -CandidateFingerprint ("e" * 64) `
+                -EnvironmentFingerprint ("f" * 64) -CapturedAt $capturedAt
+            Assert-Sprint8AManualUatEvidenceKindContent @common `
+                -Kind $validKind -Path $validPath -RequirementId "valid-$validKind" `
+                -ContentContract $contentContracts.PSObject.Properties[$validKind].Value
+        }
+        $lookalikes = @(
+            [pscustomobject]@{
+                kind = "screenshot"; id = "light-1280-screenshot"; name = "lookalike.png"
+                content = "not a png"
+            },
+            [pscustomobject]@{
+                kind = "browser-trace"; id = "component-lifecycle-trace"; name = "lookalike.zip"
+                content = "not a zip"
+            },
+            [pscustomobject]@{
+                kind = "operator-record"; id = "seeded-kind-route-record"; name = "lookalike.json"
+                content = '{"schema_version":1}'
+            }
+        )
+        foreach ($lookalike in $lookalikes) {
+            $path = Join-Path $root $lookalike.name
+            [IO.File]::WriteAllText($path, $lookalike.content, [Text.UTF8Encoding]::new($false))
+            $rejected = $false
+            try {
+                Assert-Sprint8AManualUatEvidenceKindContent @common `
+                    -Kind $lookalike.kind -Path $path -RequirementId $lookalike.id `
+                    -ContentContract $contentContracts.PSObject.Properties[[string]$lookalike.kind].Value
+            } catch { $rejected = $true }
+            if (-not $rejected) {
+                throw "Sprint 8A manual UAT content self-test accepted relabeled '$($lookalike.kind)' bytes."
+            }
+        }
+    } finally {
+        if (Test-Path -LiteralPath $root -PathType Container) { Remove-Item -LiteralPath $root -Recurse -Force }
+    }
+}
+
 function Test-Sprint8AManualUatAttemptAuthority {
     $repository = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
     $relativeRoot = "artifacts/.sprint-8a-manual-authority-selftest-$([guid]::NewGuid().ToString('N'))"
@@ -2656,6 +3859,8 @@ function Test-Sprint8AManualUatAttemptAuthority {
     if (-not $evidence.StartsWith("$($artifactsRoot.TrimEnd('\'))\", [StringComparison]::OrdinalIgnoreCase)) {
         throw "Sprint 8A manual-authority self-test target escaped the repository artifacts root."
     }
+    $lease = $null
+    $structuredLease = $null
     [IO.Directory]::CreateDirectory((Join-Path $evidence "attempts")) | Out-Null
     try {
         $receipt = [pscustomobject][ordered]@{
@@ -2701,6 +3906,215 @@ function Test-Sprint8AManualUatAttemptAuthority {
             -Checkpoint $checkpoint `
             -RepositoryRoot $repository `
             -EvidenceRoot $evidence | Out-Null
+        $structuredCases = @(
+            [pscustomobject][ordered]@{
+                scenario = "UAT-8A-05"; requirement_id = "dependency-semantic-receipt"
+                started_at = [DateTimeOffset]::Parse("2026-01-01T00:00:05Z")
+                authoritative = $true; diagnostic = $false
+            },
+            [pscustomobject][ordered]@{
+                scenario = "UAT-8A-07"; requirement_id = "failure-containment-receipt"
+                started_at = [DateTimeOffset]::Parse("2026-01-01T00:00:07Z")
+                authoritative = $true; diagnostic = $false
+            },
+            [pscustomobject][ordered]@{
+                scenario = "UAT-8A-08"; requirement_id = "upgrade-rollback-receipt"
+                started_at = [DateTimeOffset]::Parse("2026-01-01T00:00:08Z")
+                authoritative = $false; diagnostic = $true
+            }
+        )
+        foreach ($structuredCase in $structuredCases) {
+            $structuredLease = Open-Sprint8AManualUatScenarioLease `
+                -Scenario ([string]$structuredCase.scenario) `
+                -Attempt 1 `
+                -CandidateFingerprint ("e" * 64) `
+                -EnvironmentFingerprint ("f" * 64) `
+                -StartedAt $structuredCase.started_at `
+                -Authoritative ([bool]$structuredCase.authoritative) `
+                -Diagnostic ([bool]$structuredCase.diagnostic) `
+                -RepositoryRoot $repository `
+                -EvidenceRoot $evidence
+            $structuredContract = Get-Sprint8AManualUatScenarioContract -Scenario $structuredCase.scenario
+            $structuredRequirement = @($structuredContract.steps | ForEach-Object {
+                @($_.evidence_requirements | Where-Object { [string]$_.id -ceq [string]$structuredCase.requirement_id })
+            })[0]
+            $structuredPlan = Get-Sprint8AManualUatEvidencePlan `
+                -Scenario $structuredCase.scenario -Attempt 1 -RepositoryRoot $repository -EvidenceRoot $evidence
+            $assertionEvidence = @($structuredRequirement.authenticated_contract.assertion_ids | ForEach-Object {
+                $assertionId = [string]$_
+                $rawRelative = "$([string]$structuredPlan.raw_prefix)$([string]$structuredCase.requirement_id)-$assertionId-raw.json"
+                $rawPath = Join-Path $repository $rawRelative
+                [IO.Directory]::CreateDirectory((Split-Path -Parent $rawPath)) | Out-Null
+                [IO.File]::WriteAllText(
+                    $rawPath,
+                    "{`"assertion_id`":`"$assertionId`",`"state`":`"observed`"}`n",
+                    [Text.UTF8Encoding]::new($false)
+                )
+                [pscustomobject][ordered]@{
+                    assertion_id = $assertionId
+                    raw_evidence = @([pscustomobject][ordered]@{
+                        path = $rawRelative
+                        sha256 = Get-Sprint8AFileSha256 -Path $rawPath
+                    })
+                }
+            })
+            $structuredArguments = @{
+                Scenario = [string]$structuredCase.scenario
+                Attempt = 1
+                CandidateFingerprint = "e" * 64
+                EnvironmentFingerprint = "f" * 64
+                StartedAt = $structuredCase.started_at
+                RequirementId = [string]$structuredCase.requirement_id
+                AssertionEvidence = $assertionEvidence
+                ExecutionLease = $structuredLease
+                RepositoryRoot = $repository
+                EvidenceRoot = $evidence
+            }
+            $structuredReference = Publish-Sprint8AManualUatStructuredEvidence @structuredArguments
+            $structuredReplay = Publish-Sprint8AManualUatStructuredEvidence @structuredArguments
+            if ([string]$structuredReference.sha256 -cne [string]$structuredReplay.sha256) {
+                throw "Sprint 8A structured-evidence publisher is not idempotent for '$([string]$structuredCase.scenario)'."
+            }
+            $structuredDocument = Get-Content -LiteralPath (Join-Path $repository ([string]$structuredReference.path)) -Raw | ConvertFrom-Json
+            if ([bool]$structuredDocument.authoritative -ne [bool]$structuredCase.authoritative -or
+                [bool]$structuredDocument.diagnostic -ne [bool]$structuredCase.diagnostic) {
+                throw "Sprint 8A structured-evidence publisher lost the execution authority binding."
+            }
+            $missingAssertionRejected = $false
+            try {
+                $structuredArguments.AssertionEvidence = @($assertionEvidence | Select-Object -SkipLast 1)
+                Publish-Sprint8AManualUatStructuredEvidence @structuredArguments | Out-Null
+            } catch { $missingAssertionRejected = $true }
+            if (-not $missingAssertionRejected) {
+                throw "Sprint 8A structured-evidence publisher accepted an incomplete assertion inventory."
+            }
+            if ([string]$structuredCase.scenario -ceq "UAT-8A-07") {
+                foreach ($requiredRawIdentity in @("failed-apply-response-retained", "service-logs-retained")) {
+                    $missingRawRejected = $false
+                    try {
+                        $structuredArguments.AssertionEvidence = @(
+                            $assertionEvidence | Where-Object { [string]$_.assertion_id -cne $requiredRawIdentity }
+                        )
+                        Publish-Sprint8AManualUatStructuredEvidence @structuredArguments | Out-Null
+                    } catch { $missingRawRejected = $true }
+                    if (-not $missingRawRejected) {
+                        throw "Sprint 8A UAT-8A-07 structured evidence accepted missing '$requiredRawIdentity' raw evidence."
+                    }
+                }
+            }
+            $structuredArguments.AssertionEvidence = $assertionEvidence
+            $structuredLeasePath = Join-Path $repository ([string]$structuredLease.lease.path)
+            $structuredLease.stream.Dispose()
+            $structuredLease = $null
+            foreach ($path in @($structuredLeasePath, "$structuredLeasePath.sha256")) {
+                if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
+            }
+            $structuredRawRoot = Join-Path $evidence "uat/attempt-1/raw/$([string]$structuredCase.scenario.ToLowerInvariant())"
+            if (Test-Path -LiteralPath $structuredRawRoot -PathType Container) {
+                Remove-Item -LiteralPath $structuredRawRoot -Recurse -Force
+            }
+            $manifestPath = Join-Path $evidence "evidence-manifest.json"
+            foreach ($path in @($manifestPath, "$manifestPath.sha256")) {
+                if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
+            }
+            $entries = Get-Sprint8AEvidenceFileManifestEntries `
+                -RepositoryRoot $repository `
+                -EvidenceRoot $evidence `
+                -IgnoreExistingManifest `
+                -Overrides @(
+                    [pscustomobject]@{ path = $attemptRelative; phase = "uat-attempt"; authoritative = $false; status = "awaiting-manual" },
+                    [pscustomobject]@{ path = $checkpointRelative; phase = "uat-checkpoint"; authoritative = $false; status = "awaiting-manual" }
+                )
+            Publish-Sprint8AEvidenceManifest `
+                -Entries $entries `
+                -RepositoryRoot $repository `
+                -EvidenceRoot $evidence `
+                -OutputPath "$relativeRoot/evidence-manifest.json" | Out-Null
+        }
+        $blockedScenario = "UAT-8A-02"
+        $blockedStarted = [DateTimeOffset]::Parse("2026-01-01T00:00:00.100Z")
+        $blockedContract = Get-Sprint8AManualUatScenarioContract -Scenario $blockedScenario
+        $blockedPlan = Get-Sprint8AManualUatEvidencePlan `
+            -Scenario $blockedScenario -Attempt 1 -RepositoryRoot $repository -EvidenceRoot $evidence
+        $blockedCleanupPath = Join-Path $repository ([string]$blockedPlan.cleanup.path)
+        Write-Sprint8AManualUatSelfTestCleanupFile `
+            -Path $blockedCleanupPath -Scenario $blockedScenario -Attempt 1 `
+            -CandidateFingerprint ("e" * 64) -EnvironmentFingerprint ("f" * 64) `
+            -RestoredAt $blockedStarted.AddMilliseconds(1)
+        $structuredLease = Open-Sprint8AManualUatScenarioLease `
+            -Scenario $blockedScenario `
+            -Attempt 1 `
+            -CandidateFingerprint ("e" * 64) `
+            -EnvironmentFingerprint ("f" * 64) `
+            -StartedAt $blockedStarted `
+            -Authoritative $false `
+            -Diagnostic $true `
+            -RepositoryRoot $repository `
+            -EvidenceRoot $evidence
+        $blockedReference = Publish-Sprint8AManualUatReceipt `
+            -Scenario $blockedScenario `
+            -Attempt 1 `
+            -CandidateFingerprint ("e" * 64) `
+            -EnvironmentFingerprint ("f" * 64) `
+            -State blocked `
+            -Authoritative $false `
+            -Diagnostic $true `
+            -AssertionsStarted $false `
+            -BlockedReason "self-test independent prerequisite failed" `
+            -Role ([string]$blockedContract.role) `
+            -TesterIdentity ([pscustomobject][ordered]@{
+                tester_id = "self-test-operator"; display_name = "Self-test Operator"
+                actor_bindings = @($blockedContract.actor_bindings | ForEach-Object {
+                    [pscustomobject][ordered]@{ id = [string]$_.id; actor_id = "self-test-$([string]$_.id)" }
+                })
+            }) `
+            -Preconditions @($blockedContract.required_precondition_ids | ForEach-Object {
+                $id = [string]$_
+                [pscustomobject][ordered]@{
+                    id = $id; state = "satisfied"
+                    value = switch ($id) {
+                        "candidate-fingerprint" { "e" * 64 }
+                        "environment-fingerprint" { "f" * 64 }
+                        "evidence-root" { $relativeRoot }
+                        "execution-start" { $blockedStarted.ToString("o") }
+                        default { $null }
+                    }
+                    reference = switch ($id) {
+                        "preflight-receipt" { $receipt.prerequisite_receipts[0] }
+                        "sit-result-receipt" { $receipt.prerequisite_receipts[2] }
+                        default { $null }
+                    }
+                }
+            }) `
+            -StartingState @($blockedContract.required_starting_state | ForEach-Object {
+                [pscustomobject][ordered]@{ id = [string]$_.id; observed_value = "self-test observed" }
+            }) `
+            -Actions @($blockedContract.steps | ForEach-Object {
+                [pscustomobject][ordered]@{
+                    step = [int]$_.step; action = [string]$_.action
+                    expected_result = [string]$_.expected_result
+                    actual_result = "blocked before dependent product action"; state = "blocked"
+                }
+            }) `
+            -ExpectedResult "Every canonical step expectation in $blockedScenario is satisfied." `
+            -ActualResult "Scenario retained as a true dependent block without fabricated observations." `
+            -Evidence @() `
+            -CleanupEvidence @([pscustomobject][ordered]@{
+                kind = "canonical-restoration"; path = [string]$blockedPlan.cleanup.path
+                sha256 = Get-Sprint8AFileSha256 -Path $blockedCleanupPath
+            }) `
+            -StartedAt $blockedStarted `
+            -EndedAt $blockedStarted.AddMilliseconds(2) `
+            -RepositoryRoot $repository `
+            -EvidenceRoot $evidence `
+            -OutputPath "$relativeRoot/uat/attempt-1/manual/$($blockedScenario.ToLowerInvariant()).json" `
+            -ExecutionLease $structuredLease
+        $structuredLease = $null
+        $blockedDocument = Get-Content -LiteralPath (Join-Path $repository ([string]$blockedReference.path)) -Raw | ConvertFrom-Json
+        if ([string]$blockedDocument.state -cne "blocked" -or
+            $blockedDocument.evidence -isnot [array] -or @($blockedDocument.evidence).Count -ne 0) {
+            throw "Sprint 8A manual-authority self-test did not retain a typed zero-evidence dependent block."
+        }
         $scenario = "UAT-8A-01"
         $scenarioStarted = [DateTimeOffset]::Parse("2026-01-01T00:00:01Z")
         $lease = Open-Sprint8AManualUatScenarioLease `
@@ -2739,22 +4153,37 @@ function Test-Sprint8AManualUatAttemptAuthority {
             -EvidenceRoot $evidence `
             -Resume
         $scenarioContract = Get-Sprint8AManualUatScenarioContract -Scenario $scenario
+        $scenarioPlan = Get-Sprint8AManualUatEvidencePlan `
+            -Scenario $scenario -Attempt 1 -RepositoryRoot $repository -EvidenceRoot $evidence
         $scenarioEvidence = [Collections.Generic.List[object]]::new()
-        foreach ($step in @($scenarioContract.steps)) {
-            $rawPath = Join-Path $evidence "uat/attempt-1/raw/$($scenario.ToLowerInvariant())-step-$([int]$step.step).txt"
-            [IO.Directory]::CreateDirectory((Split-Path -Parent $rawPath)) | Out-Null
-            [IO.File]::WriteAllText($rawPath, "observed step $([int]$step.step)`n", [Text.UTF8Encoding]::new($false))
-            $scenarioEvidence.Add([pscustomobject][ordered]@{
-                step = [int]$step.step
-                path = [IO.Path]::GetRelativePath($repository, $rawPath).Replace("\", "/")
-                sha256 = Get-Sprint8AFileSha256 -Path $rawPath
-            })
+        foreach ($plannedEvidence in @($scenarioPlan.evidence)) {
+                $rawPath = Join-Path $repository ([string]$plannedEvidence.path)
+                Write-Sprint8AManualUatSelfTestEvidenceFile `
+                    -Path $rawPath `
+                    -Kind ([string]$plannedEvidence.kind) `
+                    -Scenario $scenario `
+                    -Attempt 1 `
+                    -RequirementId ([string]$plannedEvidence.requirement_id) `
+                    -CandidateFingerprint ("e" * 64) `
+                    -EnvironmentFingerprint ("f" * 64) `
+                    -CapturedAt $scenarioStarted.AddMilliseconds(1)
+                $scenarioEvidence.Add([pscustomobject][ordered]@{
+                    step = [int]$plannedEvidence.step
+                    requirement_id = [string]$plannedEvidence.requirement_id
+                    kind = [string]$plannedEvidence.kind
+                    capture = $plannedEvidence.capture
+                    path = [string]$plannedEvidence.path
+                    sha256 = Get-Sprint8AFileSha256 -Path $rawPath
+                })
         }
-        $cleanupPath = Join-Path $evidence "uat/attempt-1/raw/$($scenario.ToLowerInvariant())-cleanup.txt"
-        [IO.File]::WriteAllText($cleanupPath, "canonical topology restored`n", [Text.UTF8Encoding]::new($false))
+        $cleanupPath = Join-Path $repository ([string]$scenarioPlan.cleanup.path)
+        Write-Sprint8AManualUatSelfTestCleanupFile `
+            -Path $cleanupPath -Scenario $scenario -Attempt 1 `
+            -CandidateFingerprint ("e" * 64) -EnvironmentFingerprint ("f" * 64) `
+            -RestoredAt $scenarioStarted.AddMilliseconds(2)
         $cleanupEvidence = @([pscustomobject][ordered]@{
             kind = "canonical-restoration"
-            path = [IO.Path]::GetRelativePath($repository, $cleanupPath).Replace("\", "/")
+            path = [string]$scenarioPlan.cleanup.path
             sha256 = Get-Sprint8AFileSha256 -Path $cleanupPath
         })
         $passingActions = @($scenarioContract.steps | ForEach-Object {
@@ -2774,7 +4203,35 @@ function Test-Sprint8AManualUatAttemptAuthority {
             Diagnostic = $false
             AssertionsStarted = $true
             Role = [string]$scenarioContract.role
-            StartingState = "canonical"
+            TesterIdentity = [pscustomobject][ordered]@{
+                tester_id = "self-test-operator"
+                display_name = "Self-test Operator"
+                actor_bindings = @($scenarioContract.actor_bindings | ForEach-Object {
+                    [pscustomobject][ordered]@{ id = [string]$_.id; actor_id = "self-test-$([string]$_.id)" }
+                })
+            }
+            Preconditions = @($scenarioContract.required_precondition_ids | ForEach-Object {
+                $id = [string]$_
+                [pscustomobject][ordered]@{
+                    id = $id
+                    state = "satisfied"
+                    value = switch ($id) {
+                        "candidate-fingerprint" { "e" * 64 }
+                        "environment-fingerprint" { "f" * 64 }
+                        "evidence-root" { $relativeRoot }
+                        "execution-start" { $scenarioStarted.ToString("o") }
+                        default { $null }
+                    }
+                    reference = switch ($id) {
+                        "preflight-receipt" { $receipt.prerequisite_receipts[0] }
+                        "sit-result-receipt" { $receipt.prerequisite_receipts[2] }
+                        default { $null }
+                    }
+                }
+            })
+            StartingState = @($scenarioContract.required_starting_state | ForEach-Object {
+                [pscustomobject][ordered]@{ id = [string]$_.id; observed_value = "self-test observed" }
+            })
             Actions = $passingActions
             ExpectedResult = "Every canonical step expectation in $scenario is satisfied."
             ActualResult = "All canonical observations passed."
@@ -2926,6 +4383,13 @@ function Test-Sprint8AManualUatAttemptAuthority {
             throw "Sprint 8A manual-authority self-test accepted publication after the canonical result boundary."
         }
     } finally {
+        foreach ($heldLease in @($lease, $structuredLease)) {
+            if ($null -ne $heldLease -and
+                $heldLease.PSObject.Properties.Name -contains "stream" -and
+                $heldLease.stream -is [IO.FileStream]) {
+                $heldLease.stream.Dispose()
+            }
+        }
         if (Test-Path -LiteralPath $evidence -PathType Container) {
             Remove-Item -LiteralPath $evidence -Recurse -Force
         }
@@ -2945,8 +4409,18 @@ function Test-Sprint8ALifecycleChain {
     if (-not $offsetlessRejected) {
         throw "Sprint 8A lifecycle self-test accepted an offsetless timestamp."
     }
+    $nonExactCardinalityRejected = $false
+    try {
+        Assert-Sprint8AManualUatEvidenceCardinality `
+            -Requirement ([pscustomobject]@{ minimum = 1; maximum = 2 }) `
+            -Label "Sprint 8A lifecycle cardinality self-test"
+    } catch { $nonExactCardinalityRejected = $true }
+    if (-not $nonExactCardinalityRejected) {
+        throw "Sprint 8A lifecycle self-test accepted non-exact manual evidence cardinality."
+    }
     Test-Sprint8ALifecycleExclusiveLock
     Test-Sprint8AEvidenceManifestContract
+    Test-Sprint8AManualUatEvidenceContentContracts
     Test-Sprint8AManualUatAttemptAuthority
     $source = [pscustomobject][ordered]@{
         commit = "a" * 40
@@ -2972,14 +4446,41 @@ function Test-Sprint8ALifecycleChain {
     Assert-Sprint8AExactTerminalIdentities -Results @($sitRoundTrip) -ExpectedNames (Get-Sprint8ASitLaneNames) -Label "SIT JSON round-trip self-test" | Out-Null
     $manualContract = Get-Sprint8AManualUatScenarioContract -Scenario "UAT-8A-01"
     $manual = [pscustomobject]@{
-        schema_version = 1
+        schema_version = 2
         sprint = "sprint-8a"; phase = "uat-manual-scenario"; attempt = 1; authoritative = $true; diagnostic = $false
         scenario = "UAT-8A-01"; state = "passed"; candidate_fingerprint = "e" * 64
         environment_fingerprint = "f" * 64; assertions_started = $true; role = $manualContract.role
         assertions_started_at = "2026-01-01T00:00:00Z"
         started_at = "2026-01-01T00:00:00Z"; ended_at = "2026-01-01T00:00:01Z"
         duration_ms = 1000L
-        starting_state = "canonical"
+        tester_identity = [pscustomobject][ordered]@{
+            tester_id = "self-test-operator"; display_name = "Self-test Operator"
+            actor_bindings = @($manualContract.actor_bindings | ForEach-Object {
+                [pscustomobject][ordered]@{ id = [string]$_.id; actor_id = "self-test-$([string]$_.id)" }
+            })
+        }
+        preconditions = @($manualContract.required_precondition_ids | ForEach-Object {
+            $id = [string]$_
+            [pscustomobject][ordered]@{
+                id = $id
+                state = "satisfied"
+                value = switch ($id) {
+                    "candidate-fingerprint" { "e" * 64 }
+                    "environment-fingerprint" { "f" * 64 }
+                    "evidence-root" { "artifacts/sprint-8a-closeout" }
+                    "execution-start" { "2026-01-01T00:00:00.0000000+00:00" }
+                    default { $null }
+                }
+                reference = switch ($id) {
+                    "preflight-receipt" { [pscustomobject][ordered]@{ path = "preflight"; sha256 = "1" * 64 } }
+                    "sit-result-receipt" { [pscustomobject][ordered]@{ path = "sit"; sha256 = "3" * 64 } }
+                    default { $null }
+                }
+            }
+        })
+        starting_state = @($manualContract.required_starting_state | ForEach-Object {
+            [pscustomobject][ordered]@{ id = [string]$_.id; observed_value = "self-test observed" }
+        })
         actions = @($manualContract.steps | ForEach-Object {
             [pscustomobject]@{
                 step = [int]$_.step
@@ -2992,10 +4493,23 @@ function Test-Sprint8ALifecycleChain {
         expected_result = "Every canonical step expectation in UAT-8A-01 is satisfied."
         actual_result = "observed"
         evidence = @($manualContract.steps | ForEach-Object {
-            [pscustomobject]@{ step = [int]$_.step; path = "evidence-$($_.step)"; sha256 = "a" * 64 }
+            $step = $_
+            @($step.evidence_requirements | ForEach-Object {
+                [pscustomobject][ordered]@{
+                    step = [int]$step.step; requirement_id = [string]$_.id; kind = [string]$_.kind
+                    capture = if ($_.PSObject.Properties.Name -contains "capture") { $_.capture } else { $null }
+                    path = "evidence-$([string]$_.id)$([string]@($manualContract.receipt_contract.evidence_kind_extensions.([string]$_.kind))[0])"
+                    sha256 = "a" * 64
+                }
+            })
         })
         classification = $null; classification_source = $null; failure_message = $null; blocked_reason = $null
-        scenario_contract = $manualContract.document
+        scenario_contract = [pscustomobject][ordered]@{
+            manifest = $manualContract.manifest
+            document = $manualContract.document
+            acceptance_criteria = @($manualContract.acceptance_criteria)
+            semantic_predicate_ids = @($manualContract.semantic_predicate_ids)
+        }
         start_checkpoint = [pscustomobject]@{ path = "checkpoint"; sha256 = "c" * 64 }
         execution_lease = [pscustomobject]@{
             path = "artifacts/sprint-8a-closeout/uat/attempt-1/manual-leases/uat-8a-01-start.json"
@@ -3005,12 +4519,21 @@ function Test-Sprint8ALifecycleChain {
         execution_resume = $null
         cleanup_restoration = [pscustomobject]@{
             required = $true; result = "canonical_topology_verified"
-            evidence = @([pscustomobject]@{ kind = "canonical-restoration"; path = "cleanup"; sha256 = "b" * 64 })
+            evidence = @([pscustomobject]@{ kind = "canonical-restoration"; path = "cleanup.json"; sha256 = "b" * 64 })
         }
     }
     Assert-Sprint8AManualUatReceipt -Receipt $manual -ExpectedScenario "UAT-8A-01" -ExpectedAttempt 1 -CandidateFingerprint ("e" * 64) -EnvironmentFingerprint ("f" * 64) | Out-Null
     $manualRoundTrip = $manual | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     Assert-Sprint8AManualUatReceipt -Receipt $manualRoundTrip -ExpectedScenario "UAT-8A-01" -ExpectedAttempt 1 -CandidateFingerprint ("e" * 64) -EnvironmentFingerprint ("f" * 64) | Out-Null
+    $extraActionPropertyReceipt = $manual | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $extraActionPropertyReceipt.actions[0] | Add-Member -NotePropertyName defects -NotePropertyValue @()
+    $extraActionPropertyRejected = $false
+    try {
+        Assert-Sprint8AManualUatReceipt -Receipt $extraActionPropertyReceipt -ExpectedScenario "UAT-8A-01" -ExpectedAttempt 1 -CandidateFingerprint ("e" * 64) -EnvironmentFingerprint ("f" * 64) | Out-Null
+    } catch { $extraActionPropertyRejected = $true }
+    if (-not $extraActionPropertyRejected) {
+        throw "Sprint 8A lifecycle self-test accepted an undeclared manual action property."
+    }
     $authorityRejected = $false
     try {
         $manualRoundTrip.authoritative = "true"
@@ -3038,6 +4561,7 @@ function Test-Sprint8ALifecycleChain {
     $manualRoundTrip.failure_message = $null
     $manualRoundTrip.blocked_reason = "self-test prerequisite failed"
     $manualRoundTrip.actions[0].state = "blocked"
+    $manualRoundTrip.evidence = @()
     Assert-Sprint8AManualUatReceipt -Receipt $manualRoundTrip -ExpectedScenario "UAT-8A-01" -ExpectedAttempt 1 -CandidateFingerprint ("e" * 64) -EnvironmentFingerprint ("f" * 64) | Out-Null
     $rejected = $false
     try {

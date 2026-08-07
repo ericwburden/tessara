@@ -41,6 +41,7 @@ function Test-Sprint8AFirstPartyComponentContractSources {
                 'function\s+canonicalComponentVersionInput',
                 'function\s+canonicalComponentRequest',
                 'function\s+componentResponseAliases',
+                '(?m)^\s*missing_policy\s*:',
                 '(?m)^\s*dataset_version_major\s*:',
                 'versions\[0\]\s+as\s+\{\s*id:\s*string\s*\}'
             )
@@ -53,6 +54,7 @@ function Test-Sprint8AFirstPartyComponentContractSources {
         }
         "scripts/smoke.ps1" = [ordered]@{
             forbidden = @(
+                '(?m)^\s*missing_policy\s*=',
                 '(?m)^\s*dataset_version_major\s*=',
                 '\$visualComponent\.id',
                 '\$visualVersion\.id'
@@ -65,6 +67,7 @@ function Test-Sprint8AFirstPartyComponentContractSources {
         }
         "scripts/uat-sprint.ps1" = [ordered]@{
             forbidden = @(
+                '(?m)^\s*missing_policy\s*=',
                 '(?m)^\s*dataset_version_major\s*=',
                 '\$visualCreated\.id',
                 '\$visualVersion\.id'
@@ -74,6 +77,55 @@ function Test-Sprint8AFirstPartyComponentContractSources {
                 '$visualCreated.component_id',
                 '$visualVersion.component_version_id'
             )
+        }
+        "crates/tessara-component-module/assets/component.js" = [ordered]@{
+            forbidden = @(
+                '(?m)^\s*missing_policy\s*:',
+                'config\.missing_policy'
+            )
+            required = @(
+                'value_missing_policy: configControl(form, "value_missing_policy").value'
+            )
+        }
+        "end2end/tests/components.spec.ts" = [ordered]@{
+            forbidden = @(
+                '(?m)^\s*missing_policy\s*:',
+                '(?m)^\s*dataset_version_major\s*:'
+            )
+            required = @(
+                'dataset_reference: DatasetReference;',
+                'component_id: string;',
+                'component_version_id: string;',
+                'value_missing_policy: "omit"'
+            )
+        }
+        "end2end/tests/analytics-sprint-7a.spec.ts" = [ordered]@{
+            forbidden = @(
+                '(?m)^\s*missing_policy\s*:',
+                '(?m)^\s*dataset_version_major\s*:'
+            )
+            required = @(
+                'component_id: string;',
+                'component_version_id: string;',
+                'component_version_id: fixture.metricComponentVersionId'
+            )
+        }
+        "end2end/tests/dashboards.spec.ts" = [ordered]@{
+            forbidden = @(
+                '(?m)^\s*missing_policy\s*:',
+                '(?m)^\s*dataset_version_major\s*:'
+            )
+            required = @(
+                'component_version_id: string;',
+                'placement.component?.component_version_id ===',
+                'editorOption!.component_version_id'
+            )
+        }
+        "deploy/sprint-8a/blueprints/reference.json" = [ordered]@{
+            forbidden = @(
+                '"missing_policy"\s*:'
+            )
+            required = @()
         }
     }
     foreach ($sourcePath in $sourceContracts.Keys) {
@@ -279,16 +331,28 @@ function Test-Sprint8AAcceptanceContract {
         [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "enum ComponentFieldRef" },
         [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("field")' },
         [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "item.field_key || item.key || item.field" },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "filter.field_key || filter.field" }
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "filter.field_key || filter.field" },
+        [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "missing_policy: String"; pattern = '(?m)^\s*missing_policy:\s*String' },
+        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("missing_policy")' },
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "`n    missing_policy:" },
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "config.missing_policy" }
     )) {
-        if ($retiredReader.text.Contains($retiredReader.fragment)) {
+        $retiredPresent = if ($retiredReader.PSObject.Properties.Name -contains "pattern") {
+            $retiredReader.text -match [string]$retiredReader.pattern
+        } else {
+            $retiredReader.text.Contains($retiredReader.fragment)
+        }
+        if ($retiredPresent) {
             throw "Component $($retiredReader.source) source retains retired configuration reader '$($retiredReader.fragment)'."
         }
     }
     foreach ($canonicalReader in @(
         [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "visible_columns: Vec<String>" },
         [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("field_key")' },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = 'const storedField = filter.field_key || "";' }
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = 'const storedField = filter.field_key || "";' },
+        [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "value_missing_policy: String" },
+        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("value_missing_policy")' },
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = 'value_missing_policy: configControl(form, "value_missing_policy").value' }
     )) {
         if (-not $canonicalReader.text.Contains($canonicalReader.fragment)) {
             throw "Component $($canonicalReader.source) source omits canonical configuration reader '$($canonicalReader.fragment)'."
@@ -792,6 +856,21 @@ function Test-Sprint8AAcceptanceContract {
             "function Get-Sprint8AResultClassifications",
             "function Test-Sprint8AResultClassificationProjection",
             "function Assert-Sprint8ASourceIdentityObject",
+            "function ConvertTo-Sprint8ACorrectionLineage",
+            "function Get-Sprint8AEvidenceRelativePath",
+            "function Assert-Sprint8ACurrentReadinessReference",
+            "function Add-Sprint8ACorrectionLineageLink",
+            "function Assert-Sprint8ACorrectionIdentityContinuity",
+            "function Assert-Sprint8ACorrectionLineageTopology",
+            "function Assert-Sprint8ACorrectionLineage",
+            "Correction lineage contains a gap or fork",
+            "Root failed-Readiness correction link cannot be a truncated consumed suffix",
+            "Historical R30 immutable Readiness prerequisite",
+            'RelativePath "attempts/readiness-37.json"',
+            "noncanonical start, consumption, or terminal path",
+            "one exact immutable attempt counterpart",
+            "complete preceding lineage prefix",
+            '"docs/sprints/sprint-8a-uat/scenario-contract.json"',
             '[pscustomobject][ordered]@{',
             '".codex/skills/tessara-sprint-validation/**"',
             '"docs/sprints/sprint-8a-*.md"',
@@ -841,13 +920,25 @@ function Test-Sprint8AAcceptanceContract {
             "playwright-acceptance.discovery.json", "playwright-acceptance.xml", "playwright-acceptance.summary.json",
             "productDiagnosticRawEvidence", "acceptance-manifest inventory",
             "evidence_roots", "produced_evidence", "raw_evidence", 'state = "executing"', '[switch]$SelfTest'
-            "Assert-RehearsalIndependentChecks", "correction_transition",
+            "Assert-RehearsalIndependentChecks", "correction_lineage",
+            "Test-RehearsalReadinessLaneIsolation",
+            "Independent Readiness lane retains state-lane dependency",
+            "Resolve-Sprint8AEvidenceReference",
             "state/readiness failure cannot suppress useful safe evidence",
             "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
             "Invoke-RehearsalPowerShellCheck", "Test-RehearsalPowerShellCheck",
             "A stale native exit code falsely failed a successful PowerShell child.",
-            'consumed_by_readiness.attempt -ne [int]$stateIndex.readiness.attempt',
-            'consumed_by_readiness.receipt_sha256 -cne [string]$stateIndex.readiness.sha256',
+            "Assert-Sprint8ACorrectionLineage",
+            "Assert-Sprint8ACurrentReadinessReference",
+            "Assert-Sprint8AReceiptSidecar -Path `$statePath",
+            "ExpectedCurrentReadiness", "RequireConsumedTip",
+            'receipt = [string]$stateIndex.readiness.receipt',
+            "readiness_immutable_reference",
+            'path = [string]$runtimeContext.readiness_immutable_reference.path',
+            'sha256 = [string]$runtimeContext.readiness_immutable_reference.sha256',
+            "Test-Sprint8AFirstRehearsalCorrectionLink",
+            '-ComponentsContractLaneReceipt (Join-Path $laneRoot "components-contract-tests.json")',
+            '$attemptReceipt.correction_lineage = $stateIndex.correction_lineage',
             "function Resolve-LaneClassification",
             '[AllowNull()][string]$StructuredClassification',
             'source = "structured_evidence"',
@@ -870,6 +961,11 @@ function Test-Sprint8AAcceptanceContract {
             '$assertionBearingTerminal = @($terminal | Where-Object assertions_started -EQ $true)',
             'Passed check', 'must not retain a failure classification',
             "Resolve-Sprint8AEvidenceReference"
+            "raw evidence outside the repository evidence root",
+            'Where-Object { $null -ne $_ }',
+            "validation-readiness-harvest", "validation-readiness-defect-batch",
+            '$predecessorPhase-correction-authorization', "allowed_successor_attempt",
+            "Assert-ReadinessHarvestComplete"
         )
         "scripts/validate-e2e.ps1" = @(
             "InventoryOnly", "ActualIdentities", "Independent Playwright discovery",
@@ -885,11 +981,19 @@ function Test-Sprint8AAcceptanceContract {
             "-InventoryOnly -EvidencePath `$playwrightInventoryPath",
             "playwright-inventory.json", "produced_evidence", "Checkpoint-ReadinessAttempt",
             "source_identity_verification_state", "predecessor_correction_authorization",
-            "duplicate consumption is forbidden", "consumed_by_readiness",
-            "a different Readiness attempt cannot reuse it",
+            "correction_lineage", "consumed_by_readiness",
+            "duplicate or alternate Readiness consumption is forbidden",
+            "FinalizeFailedAttempt", "Complete-Sprint8AFailedReadinessHarvest",
+            "Test-Sprint8AAlternatingCorrectionEpochs", "Test-Sprint8AFailedReadinessFinalization",
+            "Test-Sprint8ACorrectionIdentityContinuity", "Assert-Sprint8ANoReadinessSuccessorCollision",
+            "Test-Sprint8ACleanReadinessRerunState", "Add-Sprint8ACorrectionLineageLink",
+            'receipt = $relativeAttemptPath',
+            "CurrentReadinessReference", 'path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath)',
+            'readiness-$Attempt-harvest.json', 'readiness-$Attempt-defect-batch.json',
+            'readiness-$Attempt-correction-authorization.json',
             "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
             "Publish-Sprint8AAppendOnlyJsonReceipt", '[IO.FileMode]::CreateNew',
-            "candidate-rehearsal-correction-consumption", "correction_consumption_receipt",
+            "-correction-consumption", "correction_consumption_receipt",
             '[pscustomobject]@{ name = "compose-optional-properties"; action = { Test-Sprint8AComposeServiceProjection } }',
             '[pscustomobject]@{ name = "result-classification-projection"; action = { Test-Sprint8AResultClassificationProjection } }',
             '[pscustomobject]@{ name = "environment-comparison"; action = { Test-Sprint8AEnvironmentContractComparison } }',
@@ -903,7 +1007,7 @@ function Test-Sprint8AAcceptanceContract {
         "scripts/uat-sprint-8a.ps1" = @(
             "MaterializationLaneReceipt", "InventoryLaneReceipt",
             "DeploymentEvidenceLaneReceipt", "ProductSmokeLaneReceipt",
-            "FailureContainmentLaneReceipt", "UpgradeLaneReceipt",
+            "FailureContainmentLaneReceipt", "UpgradeLaneReceipt", "ComponentsContractLaneReceipt",
             "ComponentConformanceLaneReceipt", "PlaywrightLaneReceipt",
             "ManifestContractLaneReceipt", "WebBoundaryLaneReceipt",
             "DashboardBoundaryLaneReceipt", "ProductDiagnosticLaneReceipt",
@@ -992,14 +1096,29 @@ function Test-Sprint8AAcceptanceContract {
             '"deployment-contract"', '"downstream-command-contract"',
             '"evidence-path-contract"', '"evidence-inventory"',
             "Open-Sprint8AValidationAttemptLock", "validation-attempt.lock",
+            "Assert-Sprint8ACorrectionLineage", "correction_lineage",
+            "Assert-Sprint8ACurrentReadinessReference",
+            "function Assert-Sprint8APreflightRehearsalAttemptReceipt",
+            '"attempts/candidate-rehearsal-$attempt-attempt.json"',
+            "attempt, result, and validation-state correction_lineage values differ",
+            "same immutable Readiness prerequisite",
+            "readiness_immutable_reference",
+            "rehearsal_attempt_reference",
+            '[int]$state.readiness.attempt -ne [int]$readiness.attempt',
+            '[int]$state.rehearsal.attempt -ne [int]$rehearsal.attempt',
+            "ExpectedCurrentReadiness", "RequireConsumedTip", 'receipt = [string]$readinessReference.path',
+            "canonical_consumption_of_current_correction_lineage_tip",
             "function Invoke-Sprint8APreflightCheck", 'state = "harvesting"',
             "blocked by failed prerequisite(s)",
             "function Get-Sprint8APlannedEvidenceInventory",
             'attempts/sit-{attempt}-start.json',
-            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-start.json',
-            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-resume.json',
-            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-publication-prepared.json',
-            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-complete.json',
+            "Get-Sprint8AManualUatContractManifest", "Get-Sprint8AManualUatEvidencePlan",
+            'foreach ($scenario in @(Get-Sprint8AManualUatScenarioNames))',
+            "manual_contract_sources", '"uat/attempt-{attempt}/raw/"',
+            '} else { "authenticated-producer" }', 'kind = "authenticated-assertion-raw"',
+            'kind = "canonical-restoration"',
+            "Sort-Object -Unique).Count -ne @(`$inventory.required).Count",
+            "-cmatch '\{01\.\.08\}'",
             'uat/attempt-{attempt}/finalizations/run-{n}/finalization-completion-checkpoint.json',
             'uat/attempt-{attempt}/finalizations/run-{n}/result-commit.json',
             'uat/attempt-{attempt}/finalizations/run-{n}/publication-retry-checkpoint.json',
@@ -1187,7 +1306,7 @@ function Test-Sprint8AAcceptanceContract {
     $prerequisiteLaneFragment = 'Invoke-RehearsalLane "validation-readiness-prerequisite"'
     $attemptStartIndex = $rehearsalRunnerText.IndexOf($attemptStartFragment, [StringComparison]::Ordinal)
     $stateLaneIndex = $rehearsalRunnerText.IndexOf($stateLaneFragment, [StringComparison]::Ordinal)
-    $prerequisiteLaneIndex = $rehearsalRunnerText.IndexOf($prerequisiteLaneFragment, [StringComparison]::Ordinal)
+    $prerequisiteLaneIndex = $rehearsalRunnerText.LastIndexOf($prerequisiteLaneFragment, [StringComparison]::Ordinal)
     if ([regex]::Matches($rehearsalRunnerText, '(?m)^\$declaredChecks\s*=\s*@\(').Count -ne 1 -or
         $attemptStartIndex -lt 0 -or $stateLaneIndex -le $attemptStartIndex -or
         $prerequisiteLaneIndex -le $attemptStartIndex) {
@@ -1221,8 +1340,18 @@ function Test-Sprint8AAcceptanceContract {
         $prerequisiteLaneIndex,
         $rehearsalRunnerText.IndexOf('Invoke-RehearsalLane "formatting"', $prerequisiteLaneIndex, [StringComparison]::Ordinal) - $prerequisiteLaneIndex
     )
-    if ($readinessLaneExtent.Contains('runtimeContext.validation_state')) {
-        throw "The independent readiness/source/environment lane must not consume state-lane runtime context."
+    foreach ($stateLaneDependency in @(
+        'runtimeContext.validation_state',
+        'runtimeContext.readiness_immutable_reference',
+        '$stateIndex',
+        '$statePath'
+    )) {
+        if ($readinessLaneExtent.Contains($stateLaneDependency)) {
+            throw "The independent readiness/source/environment lane must not consume state-lane dependency '$stateLaneDependency'."
+        }
+    }
+    if (-not $readinessLaneExtent.Contains('Resolve-Sprint8AEvidenceReference')) {
+        throw "The independent readiness/source/environment lane must resolve corrected-consumption evidence inside the evidence root."
     }
     foreach ($destructiveLane in @("source-exact-materialization-no-op", "failure-containment-successor-health")) {
         $destructivePattern = '(?s)name\s*=\s*"' + [regex]::Escape($destructiveLane) + '";\s*depends_on\s*=\s*@\("attempt-state-prerequisite",\s*"validation-readiness-prerequisite"\)'
@@ -1258,29 +1387,95 @@ function Test-Sprint8AAcceptanceContract {
         throw "Candidate rehearsal must validate Compose quietly so normalized runtime secrets never enter retained logs."
     }
     $readinessRunner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/validate-sprint-8a-readiness.ps1") -Raw
-    $readinessStartIndex = $readinessRunner.IndexOf('Publish-Sprint7AEvidence -Document $startReceipt -OutputPath $attemptPath', [StringComparison]::Ordinal)
+    $readinessReservationHelperIndex = $readinessRunner.IndexOf(
+        'function Open-Sprint8AReadinessAttemptReservation',
+        [StringComparison]::Ordinal
+    )
+    $readinessReservationHelperEndIndex = $readinessRunner.IndexOf(
+        'function Publish-Sprint8AReadinessCreateOnceOrVerify',
+        $readinessReservationHelperIndex,
+        [StringComparison]::Ordinal
+    )
+    if ($readinessReservationHelperIndex -lt 0 -or
+        $readinessReservationHelperEndIndex -le $readinessReservationHelperIndex) {
+        throw "Validation Readiness must expose one testable locked reservation helper."
+    }
+    $readinessReservationHelper = $readinessRunner.Substring(
+        $readinessReservationHelperIndex,
+        $readinessReservationHelperEndIndex - $readinessReservationHelperIndex
+    )
+    $readinessHelperLockIndex = $readinessReservationHelper.IndexOf(
+        '$lockHandle = Open-Sprint8AValidationAttemptLock -Path $LockPath',
+        [StringComparison]::Ordinal
+    )
+    $readinessHelperStateIndex = $readinessReservationHelper.IndexOf(
+        'Get-Content -LiteralPath $StatePath',
+        $readinessHelperLockIndex,
+        [StringComparison]::Ordinal
+    )
+    $readinessHelperAuthorizationIndex = $readinessReservationHelper.IndexOf(
+        '$reservation = Get-Sprint8AReadinessAttemptReservation',
+        $readinessHelperStateIndex,
+        [StringComparison]::Ordinal
+    )
+    $readinessHelperNamespaceIndex = $readinessReservationHelper.IndexOf(
+        '$namespaceCollisions = @(',
+        $readinessHelperAuthorizationIndex,
+        [StringComparison]::Ordinal
+    )
+    $readinessHelperLogIndex = $readinessReservationHelper.IndexOf(
+        '[IO.Directory]::CreateDirectory($AttemptLogRoot)',
+        $readinessHelperNamespaceIndex,
+        [StringComparison]::Ordinal
+    )
+    if ($readinessHelperLockIndex -lt 0 -or
+        $readinessHelperStateIndex -le $readinessHelperLockIndex -or
+        $readinessHelperAuthorizationIndex -le $readinessHelperStateIndex -or
+        $readinessHelperNamespaceIndex -le $readinessHelperAuthorizationIndex -or
+        $readinessHelperLogIndex -le $readinessHelperNamespaceIndex) {
+        throw "Validation Readiness reservation must lock, authenticate state/authorization, reject all namespace collisions, and only then create attempt storage."
+    }
+    $readinessMainBoundaryIndex = $readinessRunner.IndexOf('if ($Attempt -lt 1)', [StringComparison]::Ordinal)
+    $readinessFinalizerIndex = $readinessRunner.IndexOf('if ($FinalizeFailedAttempt)', $readinessMainBoundaryIndex, [StringComparison]::Ordinal)
+    $readinessFinalizerReturnIndex = $readinessRunner.IndexOf('    return', $readinessFinalizerIndex, [StringComparison]::Ordinal)
+    $readinessLiveReservationIndex = $readinessRunner.IndexOf(
+        '$reservationHandle = Open-Sprint8AReadinessAttemptReservation',
+        $readinessFinalizerIndex,
+        [StringComparison]::Ordinal
+    )
+    if ($readinessMainBoundaryIndex -lt 0 -or $readinessFinalizerIndex -le $readinessMainBoundaryIndex -or
+        $readinessFinalizerReturnIndex -le $readinessFinalizerIndex -or
+        $readinessLiveReservationIndex -le $readinessFinalizerReturnIndex) {
+        throw "Validation Readiness failed-attempt finalization must complete before a normal attempt reserves its namespace."
+    }
+    $readinessStartIndex = $readinessRunner.IndexOf(
+        'Publish-Sprint7AEvidence -Document $startReceipt -OutputPath $attemptPath',
+        $readinessLiveReservationIndex,
+        [StringComparison]::Ordinal
+    )
     $readinessStateLaneIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "attempt-state-prerequisite"', [StringComparison]::Ordinal)
     $readinessSourceIndex = $readinessRunner.IndexOf(
         'Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot',
         $readinessStartIndex,
         [StringComparison]::Ordinal
     )
-    if ($readinessStartIndex -lt 0 -or $readinessStateLaneIndex -le $readinessStartIndex -or
+    if ($readinessStartIndex -le $readinessLiveReservationIndex -or
+        $readinessStateLaneIndex -le $readinessStartIndex -or
         $readinessSourceIndex -le $readinessStartIndex -or
         [regex]::Matches($readinessRunner, 'Checkpoint-ReadinessAttempt').Count -lt 3) {
-        throw "Validation Readiness must publish an unverified start receipt before state/source work and hash-checkpoint every terminal result."
-    }
-    $readinessExecutionStartIndex = $readinessRunner.IndexOf('if ($Attempt -lt 1)', [StringComparison]::Ordinal)
-    if ($readinessExecutionStartIndex -lt 0 -or $readinessExecutionStartIndex -ge $readinessStartIndex) {
-        throw "Validation Readiness does not expose a distinct post-self-test execution boundary."
+        throw "Validation Readiness must reserve an authorized namespace under lock, publish its unverified start before source/assertion work, and hash-checkpoint every terminal result."
     }
     $readinessPreStartText = $readinessRunner.Substring(
-        $readinessExecutionStartIndex,
-        $readinessStartIndex - $readinessExecutionStartIndex
+        $readinessMainBoundaryIndex,
+        $readinessStartIndex - $readinessMainBoundaryIndex
     )
     if ($readinessPreStartText.Contains('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot') -or
-        $readinessPreStartText.Contains('Get-Content -LiteralPath $statePath')) {
-        throw "Validation Readiness reads source or validation-state before its start receipt."
+        -not $readinessPreStartText.Contains('$reservationHandle = Open-Sprint8AReadinessAttemptReservation') -or
+        -not $readinessPreStartText.Contains('-StatePath $statePath') -or
+        -not $readinessPreStartText.Contains('-AttemptReceiptPath $attemptPath') -or
+        -not $readinessPreStartText.Contains('-StartReceiptPath $startSnapshotPath') -or
+        -not $readinessPreStartText.Contains('-AttemptLogRoot $logRoot')) {
+        throw "Validation Readiness must authenticate state and all five namespace targets before start publication without probing mutable source."
     }
     $composeProbeInvocationIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "compose-database-contract"', [StringComparison]::Ordinal)
     $toolchainInvocationIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "toolchain"', [StringComparison]::Ordinal)
@@ -1376,7 +1571,10 @@ function Test-Sprint8AAcceptanceContract {
                 ForEach-Object { $_.Groups['path'].Value } |
                 Sort-Object -Unique
         )
-        if ($orchestrator -ceq "scripts/run-sprint-8a-candidate-rehearsal.ps1") {
+        if ($orchestrator -in @(
+            "scripts/validate-sprint-8a-readiness.ps1",
+            "scripts/run-sprint-8a-candidate-rehearsal.ps1"
+        )) {
             # The harvest guard is invoked through its absolute PSScriptRoot
             # path after Pop-Location, so it is not discoverable by the static
             # relative-call pattern above. Keep it inside the same no-exit
@@ -1527,12 +1725,12 @@ function Test-Sprint8AAcceptanceContract {
     }
 
     $expectedUatRequirements = [ordered]@{
-        "01" = "Sprint 8A AC-01, AC-07, and AC-15"
+        "01" = "Sprint 8A AC-01, AC-07, AC-15, and AC-19"
         "02" = "Sprint 8A AC-03, AC-04, AC-05, and AC-16"
         "03" = "Sprint 8A AC-08"
-        "04" = "Sprint 8A AC-09 and AC-10"
-        "05" = "Sprint 8A AC-11"
-        "06" = "Sprint 8A AC-01, AC-02, AC-06, AC-12, and AC-16"
+        "04" = "Sprint 8A AC-09, AC-10, AC-18, and AC-19"
+        "05" = "Sprint 8A AC-11 and AC-18"
+        "06" = "Sprint 8A AC-01, AC-02, AC-06, AC-12, AC-16, AC-18, and AC-19"
         "07" = "Sprint 8A AC-13"
         "08" = "Sprint 8A AC-14"
     }

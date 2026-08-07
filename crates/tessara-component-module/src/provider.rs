@@ -390,7 +390,6 @@ pub(super) fn execution_request(
             missing_policy: missing_policy(
                 config
                     .get("value_missing_policy")
-                    .or_else(|| config.get("missing_policy"))
                     .and_then(Value::as_str)
                     .unwrap_or("omit"),
             )?,
@@ -416,7 +415,6 @@ pub(super) fn execution_request(
                         } else {
                             "category_missing_policy"
                         })
-                        .or_else(|| config.get("missing_policy"))
                         .and_then(Value::as_str)
                         .unwrap_or("omit"),
                 )?,
@@ -432,7 +430,6 @@ pub(super) fn execution_request(
                     missing_policy(
                         config
                             .get("comparison_missing_policy")
-                            .or_else(|| config.get("missing_policy"))
                             .and_then(Value::as_str)
                             .unwrap_or("omit"),
                     )?,
@@ -1625,7 +1622,6 @@ mod tests {
             "mode":"comparison",
             "summary_type":"sum",
             "summary_field":"score",
-            "missing_policy":"omit",
             "value_missing_policy":"zero",
             "category_field":"status",
             "category_missing_policy":"explicit_missing",

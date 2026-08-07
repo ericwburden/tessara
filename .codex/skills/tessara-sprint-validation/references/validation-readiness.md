@@ -42,15 +42,57 @@ failure classification. Write `validation-readiness-result.json` only when all
 items pass. Hash it and include its evidence in the manifest. A failed gate
 keeps the build mutable and forbids candidate freeze.
 
-Before any source, environment, state, or prerequisite probe, Readiness writes
-both its live `unverified` start receipt and a create-once hashed copy of that
-start snapshot with the complete declared checklist. Its first declared check
-acquires the evidence-root operating-system exclusive attempt lock. After every
-terminal check or block, Readiness publishes the live attempt receipt and
-sidecar and updates validation state to the exact checkpoint hash. The lock is
-held until the final attempt/result and state index are published. A process
-loss therefore leaves the immutable start plus the latest hashed terminal
-checkpoint rather than only in-memory results.
+Before any canonical attempt artifact exists, Readiness acquires the evidence-
+root operating-system exclusive lock and authenticates only the current state,
+pending authorization, requested number, and empty attempt namespace. It then
+writes both its live `unverified` start receipt and a create-once hashed copy of
+that start snapshot with the complete declared checklist. Source, environment,
+and product assertions begin only after start publication. After every terminal
+check or block, Readiness publishes the live attempt receipt and sidecar and
+updates validation state to the exact checkpoint hash. The same lock is held
+until the final attempt/result and state index are published. A process loss
+therefore leaves the immutable start plus the latest hashed terminal checkpoint
+rather than only in-memory results.
+
+If Readiness fails after its complete fail-late harvest, publish one typed
+Readiness harvest and one consolidated batch covering every failed check and
+exact blocked dependency. Only the completed harvest guard may issue a
+create-once authorization for the exact next Readiness attempt. Failed-attempt
+finalization is recoverable without launching that successor and must never
+rerun or rewrite the failed attempt. The successor consumes the authorization
+once through a receipt bound to its immutable start snapshot. If that successor
+also fails, append its own failed-Readiness link after harvesting rather than
+reusing an earlier authorization or entering a consumed-authorization dead
+end.
+
+Before the failed-attempt finalizer authorizes the exact next attempt, verify
+that its immutable start, terminal receipt, sidecars, and normal evidence
+directory are all unoccupied. Perform this collision check before publishing
+the harvest, batch, or authorization so retry remains deterministic. The
+finalizer branch returns before normal-attempt evidence directories are
+created; finalization does not launch or partially materialize its successor.
+
+A passing Readiness may be rerun without correction lineage only at the narrow
+clean pre-rehearsal boundary: rehearsal remains ineligible and preflight is
+false. Any failed predecessor requires one pending authenticated correction
+link. A consumed corrected Readiness cannot be silently rerun because doing so
+would orphan the retained lineage.
+
+Reserve the requested attempt number before its canonical receipt, start
+snapshot, sidecars, or `readiness-N/` directory exists. Under the exclusive
+evidence-root lock, authenticate current validation state, the pending lineage
+tip, and any exact `allowed_successor_attempt`; only then create the namespace
+and immutable start. Hold the same lock through consumption. An out-of-sequence
+probe is rejected without occupying any collision target, so the authorized
+attempt can still fail, finalize, and authorize its exact successor.
+
+Readiness 38 is the sole legacy failed-Readiness finalizer recovery. Its
+complete terminal receipt/raw evidence and documented consolidated defect set
+were frozen before this finalizer existed. After the user-directed testing exit,
+the clean finalizer/enforcement correction may be committed first; immediately
+finalize R38 without rerunning checks, and do not start R39 until the typed
+harvest, batch, authorization, and pending lineage link exist. Do not generalize
+this exception.
 
 ## Gate 2: Candidate Rehearsal
 
@@ -171,12 +213,69 @@ authorization, predecessor rehearsal receipt, and successor immutable start
 snapshot. Validation state records that transition; duplicate consumption, a
 different successor, or another attempt while an attempt is active is rejected.
 
+Validation state retains these transitions as one correction lineage of
+authenticated append-only references, including any intervening failed
+Readiness attempts. Every non-final link is consumed exactly once, only the
+final link may be pending, and each failed-Readiness successor is the exact
+attempt named by its authorization. Rehearsal and preflight validate the whole
+lineage and require its tip to terminate at the exact current passing
+Readiness.
+
+Each consumed lineage link terminates at immutable
+`attempts/readiness-N.json`. `validation-readiness-result.json` is only the
+current passing alias and must have the same JSON document and SHA-256 as that
+attempt's immutable receipt. Historical links never point at the alias. When a
+later passing Readiness replaces the alias, earlier links remain valid through
+their immutable terminals and only the latest tip may match the current
+alias/counterpart pair.
+
+Validate topology from the root. A root candidate has one immutable passing
+Readiness prerequisite and no prefix; a root failed Readiness has no prior
+authorization, consumption, or lineage. Later candidate failures retain the
+complete exact prefix, while later failed Readiness attempts bind the preceding
+failed terminal and its authorization/consumption. Reject any root that is a
+truncated suffix. Authenticate exact canonical paths for predecessor, harvest,
+batch, authorization, consumption, successor start, and successor terminal,
+and require source/environment identity continuity across the four correction
+authorization documents. The only legacy exception is rehearsal 30 to
+Readiness 38, whose retained prerequisite SHA authenticates immutable
+Readiness 37 rather than the historical canonical alias.
+
+If that passing Readiness enters a later rehearsal which fails, append a new
+candidate-rehearsal anchor after the consumed lineage tip. The failed rehearsal
+receipt must bind the exact passing Readiness as its sole prerequisite and
+retain the complete prior lineage prefix. This permits repeating epochs such
+as rehearsal failure, failed Readiness, passing Readiness, later rehearsal
+failure, and its authorized successor without losing earlier evidence.
+
 Candidate Rehearsal accepts only the passing Readiness path and SHA-256 named as
 current by validation state. It verifies exact equality again against the
 receipt, source/environment identity, and any predecessor authorization and
 consumption receipt before dependent work. A formerly passing Readiness cannot
 be reused after a failed rehearsal or a successor Readiness start, and attempt
 numbers whose start or terminal evidence exists are never reusable.
+
+Validation Preflight additionally authenticates the passing rehearsal's exact
+immutable `attempts/candidate-rehearsal-N-attempt.json` receipt and sidecar. Its
+embedded SHA-256, phase, attempt, state, source/environment identity, and
+correction lineage must agree with the canonical rehearsal result; the attempt,
+result, and validation-state lineage must be identical before candidate freeze.
+The rehearsal attempt and canonical result must also retain the same single
+immutable passing-Readiness prerequisite. The current canonical Readiness alias
+is validated separately against validation state and its exact immutable
+counterpart; it is not persisted as that historical rehearsal prerequisite.
+
+Keep the state/current-Readiness lane and the supplied Readiness/source/
+environment lane truly independent. Only the state lane establishes the
+canonical-alias-to-immutable binding. The sibling Readiness lane authenticates
+its supplied receipt, source, environment, and any correction-consumption
+receipt using evidence-root-contained resolution, without consuming state-lane
+runtime fields. This preserves useful diagnostics when state validation fails.
+
+Harvest treats null `produced_evidence` as an empty set and retains every
+non-null produced reference exactly. Primary logs and produced evidence must
+resolve inside the declared repository evidence root before their SHA-256 is
+accepted; rooted or traversal references outside that root are rejected.
 
 Repeat the complete Test Readiness Gate and the complete Candidate Rehearsal
 after every correction batch until both pass cleanly. Focused or narrow

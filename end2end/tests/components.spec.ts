@@ -1142,7 +1142,6 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       summary_field: fieldKey,
       summary_type: "count",
       value_format: "integer",
-      missing_policy: "omit",
       value_missing_policy: "omit",
       sort_direction: "asc",
       filters: [],

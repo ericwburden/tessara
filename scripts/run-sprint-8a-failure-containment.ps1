@@ -702,6 +702,19 @@ function Invoke-Sprint8AFailureContainmentSelfTest {
     $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "tessara-sprint-8a-containment-$([guid]::NewGuid().ToString('N'))"
     try {
         [IO.Directory]::CreateDirectory($temporaryRoot) | Out-Null
+        $temporaryPrefix = [IO.Path]::GetFullPath($temporaryRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $resetCorruptedSelfTestPair = {
+            param([Parameter(Mandatory)][string]$Path)
+
+            $fullPath = [IO.Path]::GetFullPath($Path)
+            if (-not $fullPath.StartsWith($temporaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Failure-containment self-test refused to reset evidence outside its exact temporary root."
+            }
+            Remove-Item -LiteralPath $fullPath, "$fullPath.sha256" -Force
+            if ((Test-Path -LiteralPath $fullPath) -or (Test-Path -LiteralPath "$fullPath.sha256")) {
+                throw "Failure-containment self-test did not reset its deliberately corrupted evidence pair."
+            }
+        }
         $artifactFixtureRoot = Join-Path $temporaryRoot "artifact-contract"
         $rawApplyPath = Join-Path $artifactFixtureRoot "failed-apply-response.log"
         $rawApplyDocument = [ordered]@{ message = "Dashboard bootstrap layout is invalid" }
@@ -735,12 +748,20 @@ function Invoke-Sprint8AFailureContainmentSelfTest {
         Assert-Sprint8AThrows `
             -Action { Assert-Sprint8AFailureReceipt -Path $failureReceiptPath -Fingerprint ("a" * 64) -AttemptNumber 7 | Out-Null } `
             -ExpectedFragment "sidecar does not exactly bind"
-        Publish-Sprint7AEvidence -Document $rawApplyDocument -OutputPath $rawApplyPath -Overwrite | Out-Null
+        Assert-Sprint8AThrows `
+            -Action { Publish-Sprint7AEvidence -Document $rawApplyDocument -OutputPath $rawApplyPath -Overwrite | Out-Null } `
+            -ExpectedFragment "requires one authenticated prior JSON/sidecar pair"
+        & $resetCorruptedSelfTestPair -Path $rawApplyPath
+        Publish-Sprint7AEvidence -Document $rawApplyDocument -OutputPath $rawApplyPath | Out-Null
         [IO.File]::WriteAllText("$teardownPath.sha256", "$('0' * 64)`n", [Text.UTF8Encoding]::new($false))
         Assert-Sprint8AThrows `
             -Action { Assert-Sprint8AFailureReceipt -Path $failureReceiptPath -Fingerprint ("a" * 64) -AttemptNumber 7 | Out-Null } `
             -ExpectedFragment "sidecar does not exactly bind"
-        Publish-Sprint7AEvidence -Document $teardownDocument -OutputPath $teardownPath -Overwrite | Out-Null
+        Assert-Sprint8AThrows `
+            -Action { Publish-Sprint7AEvidence -Document $teardownDocument -OutputPath $teardownPath -Overwrite | Out-Null } `
+            -ExpectedFragment "requires one authenticated prior JSON/sidecar pair"
+        & $resetCorruptedSelfTestPair -Path $teardownPath
+        Publish-Sprint7AEvidence -Document $teardownDocument -OutputPath $teardownPath | Out-Null
 
         $baselinePath = Join-Path $artifactFixtureRoot "empty-baseline.json"
         $baselineDocument = [ordered]@{
@@ -785,7 +806,11 @@ function Invoke-Sprint8AFailureContainmentSelfTest {
         Assert-Sprint8AThrows `
             -Action { Assert-Sprint8ASuccessorReceipt -Path $successorReceiptPath -Fingerprint ("a" * 64) -AttemptNumber 7 -ExpectedBlueprintHash ("b" * 64) | Out-Null } `
             -ExpectedFragment "sidecar does not exactly bind"
-        Publish-Sprint7AEvidence -Document $finalHealthDocument -OutputPath $finalHealthPath -Overwrite | Out-Null
+        Assert-Sprint8AThrows `
+            -Action { Publish-Sprint7AEvidence -Document $finalHealthDocument -OutputPath $finalHealthPath -Overwrite | Out-Null } `
+            -ExpectedFragment "requires one authenticated prior JSON/sidecar pair"
+        & $resetCorruptedSelfTestPair -Path $finalHealthPath
+        Publish-Sprint7AEvidence -Document $finalHealthDocument -OutputPath $finalHealthPath | Out-Null
 
         $materializeScript = Join-Path $PSScriptRoot "materialize-sprint-8a.ps1"
         foreach ($endpoint in $unsafeEndpoints) {

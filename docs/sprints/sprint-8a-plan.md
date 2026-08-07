@@ -1,32 +1,37 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Formal testing has exited and Sprint 8A is mutable for one consolidated
-Readiness 37/Rehearsal 30 implementation correction. Validation Readiness 37
-passed all 15 checks against clean commit
-`84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`, tree
-`4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`, and environment fingerprint
-`96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`.
-Candidate Rehearsal 30 completed its full fail-late terminal harvest against
-that identity with 18 passed lanes, 4 raw failed lanes, and 10 blocked lanes.
-The four immutable raw lane classifications are two `environment`, one
-`product`, and one `harness`; diagnosis consolidates them under three harness
-root causes in action projection, source-identity shape, and process-environment
-restoration. Readiness 37 is superseded by the candidate-affecting correction.
-No rehearsal pass or candidate exists, and preflight, SIT, formal UAT, and
-closeout remain forbidden until one successor complete Readiness consumes the
-R30 correction authorization and both complete gates pass against the same
-corrected source and environment identity.
+Status: Formal testing exited after Validation Readiness 38 reached a complete
+terminal result against clean commit
+`91c9936be7e0cd9bc6beef78e04dc1937bf6601d`, tree
+`564493fda54badc3d4bc5a99d2336b327424f381`. Its 15-check fail-late graph
+retained 12 passes, 2 failures, and 1 exact dependency block. The raw failures
+are an `environment` defect (the runner process omitted
+`TEST_API_DATABASE_URL`) and a `harness` defect (the failure-containment
+self-test attempted an invalid overwrite after deliberately corrupting its
+temporary fixture pair); `environment-contract` is blocked by the former. Readiness 38 consumed
+the one-use Rehearsal 30 correction authorization and is terminal. The plan-to-
+source audit then consolidated the failed-Readiness retry dead end, incomplete
+rehearsal terminal checkpoints, a retired Component `missing_policy` alias,
+and incomplete AC-18/AC-19 UAT traceability and manual-evidence enforcement
+into the same mutable implementation correction. No corrected Readiness or
+Rehearsal has run. No candidate exists, and preflight, SIT, formal UAT, and
+closeout remain closed until fresh complete gates pass against one corrected
+clean source and environment identity.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
 - Implementation-readiness correction input:
   `7b326838269c3b4218dd579f649a8011feba4d97`
-- Latest superseded passing readiness and failed rehearsal source:
+- Latest failed Readiness source:
+  `91c9936be7e0cd9bc6beef78e04dc1937bf6601d`
+- Latest failed Readiness source tree:
+  `564493fda54badc3d4bc5a99d2336b327424f381`
+- Earlier superseded passing readiness and failed rehearsal source:
   `84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`
-- Latest superseded source tree:
+- Earlier superseded source tree:
   `4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`
-- Latest superseded environment fingerprint:
+- Earlier superseded environment fingerprint:
   `96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Implementation Correction)`
@@ -605,13 +610,14 @@ depends on the successor complete Readiness and Rehearsal gates.
 
 Focused implementation verification uses the all-feature, offline, warnings-
 denied command set recorded in the verification record. It is not a formal
-gate. The next formal commands remain forbidden until the mutable source is
-committed cleanly and the successor complete Readiness consumes the exact R30
-authorization:
+gate. After the mutable source is committed cleanly, finalize R38's retained
+terminal evidence without starting a gate. Only the resulting exact-next-
+attempt authorization may be consumed by the next formal commands:
 
 ```powershell
-.\scripts\validate-sprint-8a-readiness.ps1 -Attempt <readiness-n>
-.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt <rehearsal-n> -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 38 -FinalizeFailedAttempt
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 39
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 31 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
 
 Only when both complete gates pass against the same source and environment
@@ -707,9 +713,12 @@ The correction following Rehearsal 29 was committed and handed back to formal
 validation. Readiness 37 passed all 15 checks, but Rehearsal 30 failed after a
 complete fail-late harvest: 18 lanes passed, 4 failed, and 10 were blocked by
 exact failed prerequisites. Its raw evidence, one harvest, one consolidated
-defect batch, and one unconsumed successor-Readiness authorization are retained.
-Formal testing has exited again so the source can correct that complete batch.
-Readiness 37 cannot authorize a downstream phase.
+defect batch, and one successor-Readiness authorization are retained. Readiness
+38 consumed that authorization exactly once, retained a complete 12-pass,
+2-failure, 1-block result, and failed before it could issue a verified
+environment contract. Formal testing then exited so the implementation audit
+could correct the whole testing-entry batch. Neither Readiness 37 nor Readiness
+38 can authorize a downstream phase.
 
 The implementation lineage that produced the R37/R30 source covers:
 
@@ -794,6 +803,40 @@ evidence-enforcement gaps as one batch:
   the UAT JSON/sidecar pair from the exact committed bytes. An evidence-only
   failure may consume that checkpoint for publication-only retry. None may run
   until corrected successor Readiness and Rehearsal both pass.
+
+Readiness 38 exposed the final testing-entry batch before preflight:
+
+- the operator must export all six disposable database bindings, destructive-
+  reset acknowledgement, and validation Postgres container identity in the
+  same process that invokes Readiness; the missing binding remains retained as
+  an `environment` failure rather than being rewritten as product evidence;
+- the failure-containment self-test must reject an unauthenticated overwrite,
+  preserve the fail-closed behavior for real corrupt retained evidence, remove
+  only its exact deliberately corrupt pair inside the validated temporary
+  self-test root, and then republish create-once;
+- every failed Readiness must retain its exact terminal checks, raw evidence,
+  blocked dependency reasons, one harvest, one consolidated defect batch, one
+  exact-next-attempt authorization, and an append-only correction lineage, so a
+  failed authorized successor cannot dead-end validation or reuse an earlier
+  authorization;
+- before any Readiness receipt, start snapshot, sidecar, or log directory is
+  created, the exclusive validation lock must authenticate the requested
+  attempt number against current state and the pending authorization; an out-
+  of-sequence probe must leave every canonical namespace target absent;
+- Candidate Rehearsal must retain its immutable declared graph separately from
+  the exact terminal check results and checkpoint those results after every
+  pass, failure, and block;
+- the active Component contract must reject the retired shared
+  `missing_policy` key and use only purpose-specific
+  `value_missing_policy`, `category_missing_policy`,
+  `comparison_missing_policy`, and `x_missing_policy` fields across validation,
+  provider, browser, Playwright, seed, smoke, and UAT inputs; and
+- one canonical eight-scenario manual-UAT contract must bind exact scenario,
+  tester, precondition, evidence identity/cardinality, document, AC-18/AC-19,
+  and semantic-predicate expectations. UAT-8A-07 additionally requires an
+  authenticated receipt binding separate hashed failed-apply and service-log
+  evidence. Formal UAT and preflight must fail closed on drift rather than
+  accepting arbitrary per-step hashes or free-text completion claims.
 
 Before R37/R30, the corrected product source passed the complete all-feature
 workspace Rust suite against six freshly reset isolated databases in 619.6
@@ -939,8 +982,10 @@ tracked acceptance inputs are reconciled to those contracts, but formal proof
 still starts at the next complete Readiness gate.
 
 This status authorizes implementation correction and focused diagnostic proof
-only. The next formal boundary is one successor complete Validation Readiness
-that consumes the exact R30 authorization, followed by one complete Candidate
-Rehearsal against the same corrected clean source and environment identity. It
+only. After the correction is committed, the retained failed Readiness 38 must
+first receive its one harvest, one consolidated defect batch, and exact-next-
+Readiness authorization without starting a gate. The next formal boundaries
+are then complete Validation Readiness 39 and complete Candidate Rehearsal 31
+against the same corrected clean source and environment identity. This status
 does not assert candidate freeze, deployed acceptance, preflight, SIT, formal
 UAT, or closeout.

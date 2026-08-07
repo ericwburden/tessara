@@ -38,7 +38,7 @@ pub(crate) const COMPONENT_CSS_SHA256: &str =
 pub(crate) const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
     "f84262d3386f58d17b9ce5d005bb450aa3e78ee7ece5a4fcca6375571cdbb944";
 pub(crate) const COMPONENT_JS_SHA256: &str =
-    "1e139bf20bdb6d1057a1a79a783c5e6ad437570a926bc9263a8c7ac7c8128024";
+    "7f13c08219f641055c1fb3bbabc9ab38f724db9b7bda2cc712ca830c9c736e1e";
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "route", rename_all = "snake_case")]
@@ -931,6 +931,13 @@ mod tests {
         assert!(COMPONENT_JS.contains("`filter[${field}][operator]`"));
         assert!(!COMPONENT_JS.contains("item.field_key || item.key || item.field"));
         assert!(!COMPONENT_JS.contains("filter.field_key || filter.field"));
+        assert!(!COMPONENT_JS.contains("\n    missing_policy:"));
+        assert!(!COMPONENT_JS.contains("config.missing_policy"));
+        assert!(
+            COMPONENT_JS.contains(
+                "value_missing_policy: configControl(form, \"value_missing_policy\").value"
+            )
+        );
         assert!(COMPONENT_JS.contains("component-d3-chart__category-label"));
         assert!(COMPONENT_JS.contains("line_x_axis_label"));
         assert!(COMPONENT_JS.contains("data-component-consumer-review"));

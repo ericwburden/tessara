@@ -194,6 +194,6 @@
   "assets": [
     {"path":"/component.css","digest":"sha256:389ba2d13693f99119be3ecf455f595a9e7def0918372edbacc1948859e2fbb0","content_type":"text/css; charset=utf-8"},
     {"path":"/component-lifecycle.css","digest":"sha256:f84262d3386f58d17b9ce5d005bb450aa3e78ee7ece5a4fcca6375571cdbb944","content_type":"text/css; charset=utf-8"},
-    {"path":"/component.js","digest":"sha256:1e139bf20bdb6d1057a1a79a783c5e6ad437570a926bc9263a8c7ac7c8128024","content_type":"text/javascript; charset=utf-8"}
+    {"path":"/component.js","digest":"sha256:7f13c08219f641055c1fb3bbabc9ab38f724db9b7bda2cc712ca830c9c736e1e","content_type":"text/javascript; charset=utf-8"}
   ]
 }

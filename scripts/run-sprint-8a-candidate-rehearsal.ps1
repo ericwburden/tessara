@@ -169,6 +169,50 @@ function Test-RehearsalScheduler {
     if ($defects.Count -ne 1) { throw "Candidate rehearsal self-test did not consolidate one batch for one diagnostic pass." }
 }
 
+function Test-RehearsalReadinessLaneIsolation {
+    $sourceText = Get-Content -LiteralPath $PSCommandPath -Raw
+    $startMarker = 'Invoke-RehearsalLane "validation-readiness-prerequisite" {'
+    $endMarker = 'Invoke-RehearsalLane "formatting" {'
+    $start = $sourceText.LastIndexOf($startMarker, [StringComparison]::Ordinal)
+    $end = $sourceText.IndexOf($endMarker, $start + $startMarker.Length, [StringComparison]::Ordinal)
+    if ($start -lt 0 -or $end -le $start) {
+        throw "Candidate rehearsal self-test cannot isolate the independent Readiness lane."
+    }
+    $lane = $sourceText.Substring($start, $end - $start)
+    foreach ($forbidden in @(
+        '$runtimeContext.validation_state',
+        '$runtimeContext.readiness_immutable_reference',
+        '$stateIndex',
+        '$statePath'
+    )) {
+        if ($lane.Contains($forbidden)) {
+            throw "Independent Readiness lane retains state-lane dependency '$forbidden'."
+        }
+    }
+    if (-not $lane.Contains('Resolve-Sprint8AEvidenceReference') -or
+        -not $lane.Contains('Assert-Sprint8AReceiptSidecar')) {
+        throw "Independent Readiness lane does not authenticate contained correction-consumption evidence."
+    }
+}
+
+function Test-Sprint8AFirstRehearsalCorrectionLink {
+    $lineage = Add-Sprint8ACorrectionLineageLink `
+        -Lineage $null `
+        -Predecessor ([ordered]@{
+            phase = "candidate-rehearsal"; attempt = 1
+            receipt = [ordered]@{ path = "attempts/candidate-rehearsal-1-attempt.json"; sha256 = "1" * 64 }
+        }) `
+        -Authorization ([ordered]@{
+            path = "attempts/candidate-rehearsal-1-correction-authorization.json"; sha256 = "2" * 64
+        }) `
+        -ConsumedByReadiness $null
+    if ($lineage.links -isnot [array] -or @($lineage.links).Count -ne 1 -or
+        [int]$lineage.links[0].ordinal -ne 1 -or
+        [string]$lineage.links[0].predecessor.phase -cne "candidate-rehearsal") {
+        throw "Candidate rehearsal first-link self-test detected scalar/null correction-lineage collapse."
+    }
+}
+
 function Assert-Sprint8ANestedUatReceiptIdentity {
     param(
         [Parameter(Mandatory)]$Receipt,
@@ -288,6 +332,8 @@ function Test-RehearsalClassificationResolution {
 if ($SelfTest) {
     Test-Sprint8AExclusiveValidationLock
     Test-RehearsalScheduler
+    Test-RehearsalReadinessLaneIsolation
+    Test-Sprint8AFirstRehearsalCorrectionLink
     Test-RehearsalPowerShellCheck
     Test-RehearsalClassificationResolution
     Test-Sprint8AResultClassificationProjection
@@ -443,8 +489,9 @@ $source = [pscustomobject][ordered]@{
 $runtimeContext = [ordered]@{
     readiness = $null
     readiness_sha256 = $null
+    readiness_immutable_reference = $null
     validation_state = $null
-    correction_transition = $null
+    correction_lineage = $null
     launch_authorized = $false
     source_verification_state = "unverified"
     source_verification_failure = $null
@@ -474,7 +521,9 @@ $attemptReceipt = [ordered]@{
     }
     environment_fingerprint = [string]$runtimeContext.environment.fingerprint
     prerequisite_receipts = @()
-    checks = $declaredChecks
+    correction_lineage = $null
+    declared_checks = $declaredChecks
+    checks = @()
     assertion_count = 0
     failure_count = 0
     blocked_count = 0
@@ -489,6 +538,20 @@ Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath | Ou
 $terminalChecks = [Collections.Generic.List[object]]::new()
 $terminalByName = @{}
 $assertionsStartedAt = $null
+
+function Checkpoint-RehearsalAttempt {
+    $attemptReceipt.checks = @($terminalChecks)
+    $attemptReceipt.assertion_count = @($terminalChecks | Where-Object assertions_started -EQ $true).Count
+    $attemptReceipt.failure_count = @($terminalChecks | Where-Object state -CEQ "failed").Count
+    $attemptReceipt.blocked_count = @($terminalChecks | Where-Object state -CEQ "blocked").Count
+    $attemptReceipt.nested_blocked_count = @(
+        $terminalChecks | ForEach-Object { @($_.nested_blocked_checks) }
+    ).Count
+    $attemptReceipt.nested_failure_count = @(
+        $terminalChecks | ForEach-Object { @($_.nested_failed_checks) }
+    ).Count
+    Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
+}
 
 function Invoke-RehearsalLane {
     param(
@@ -518,6 +581,7 @@ function Invoke-RehearsalLane {
             authoritative = $false; mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
             result = $blocked
         }) -OutputPath (Join-Path $laneRoot "$Name.json") | Out-Null
+        Checkpoint-RehearsalAttempt
         return
     }
 
@@ -786,9 +850,8 @@ function Invoke-RehearsalLane {
     }) -OutputPath $laneReceiptPath -Overwrite | Out-Null
     if (-not $passed -and [string]$attemptReceipt.state -cne "harvesting") {
         $attemptReceipt.state = "harvesting"
-        $attemptReceipt.failure_count = 1
-        Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
     }
+    Checkpoint-RehearsalAttempt
 }
 
 Push-Location $repoRoot
@@ -798,6 +861,7 @@ try {
         if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
             throw "Candidate rehearsal requires the current validation-state index written by Readiness."
         }
+        [void](Assert-Sprint8AReceiptSidecar -Path $statePath)
         $stateIndex = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
         if (@("preparing", "executing", "harvesting") -ccontains [string]$stateIndex.readiness.state -or
             @("preparing", "executing", "harvesting") -ccontains [string]$stateIndex.rehearsal.state) {
@@ -806,49 +870,56 @@ try {
         $relativeReadinessPath = [IO.Path]::GetRelativePath($repoRoot, $readinessPath).Replace("\", "/")
         $stateReadinessSha = Assert-Sprint8AReceiptSidecar -Path $readinessPath
         $stateReadinessDocument = Get-Content -LiteralPath $readinessPath -Raw | ConvertFrom-Json
-        if ([string]$stateIndex.readiness.state -cne "passed" -or
+        $stateReadinessValidation = Assert-Sprint8ACurrentReadinessReference `
+            -StateReadiness $stateIndex.readiness `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath `
+            -RequirePassed
+        if (($stateIndex.schema_version -isnot [int] -and $stateIndex.schema_version -isnot [long]) -or
+            [int]$stateIndex.schema_version -ne 1 -or
+            [string]$stateIndex.sprint -cne "sprint-8a" -or
+            [string]$stateIndex.readiness.state -cne "passed" -or
+            [int]$stateIndex.readiness.attempt -ne [int]$stateReadinessDocument.attempt -or
             [string]$stateIndex.readiness.receipt -cne $relativeReadinessPath -or
             [string]$stateIndex.readiness.sha256 -cne $stateReadinessSha -or
+            [string]$stateReadinessValidation.current.full_path -cne [IO.Path]::GetFullPath($readinessPath) -or
+            [string]$stateIndex.rehearsal.state -cne "ineligible" -or
             [bool]$stateIndex.preflight_eligible) {
             throw "Validation-state does not identify the supplied current passing Readiness as the sole rehearsal prerequisite."
         }
-        if ($stateIndex.PSObject.Properties.Name -contains "correction_transition" -and
-            $null -ne $stateIndex.correction_transition) {
-            $transition = $stateIndex.correction_transition
-            if ($null -eq $transition.consumed_by_readiness -or
-                [int]$transition.consumed_by_readiness.attempt -ne [int]$stateIndex.readiness.attempt -or
-                [string]$transition.consumed_by_readiness.receipt -cne [string]$stateIndex.readiness.receipt -or
-                [string]$transition.consumed_by_readiness.receipt_sha256 -notmatch '^[0-9a-f]{64}$' -or
-                [string]$transition.consumed_by_readiness.receipt_sha256 -cne [string]$stateIndex.readiness.sha256 -or
-                [string]$transition.authorization.sha256 -notmatch '^[0-9a-f]{64}$') {
-                throw "Validation-state correction transition lacks exact one-time successor Readiness consumption."
-            }
-            $consumptionRef = $transition.consumed_by_readiness.consumption_receipt
-            $consumptionPath = if ([IO.Path]::IsPathRooted([string]$consumptionRef.path)) {
-                [IO.Path]::GetFullPath([string]$consumptionRef.path)
-            } else {
-                [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$consumptionRef.path)))
-            }
-            if ((Assert-Sprint8AReceiptSidecar -Path $consumptionPath) -cne [string]$consumptionRef.sha256) {
-                throw "Correction-consumption receipt differs from validation-state."
-            }
-            $consumption = Get-Content -LiteralPath $consumptionPath -Raw | ConvertFrom-Json
-            if ([string]$consumption.phase -cne "candidate-rehearsal-correction-consumption" -or
-                [string]$consumption.state -cne "consumed" -or
-                [int]$consumption.successor_readiness.attempt -ne [int]$transition.consumed_by_readiness.attempt -or
-                [int]$transition.consumed_by_readiness.attempt -ne [int]$stateIndex.readiness.attempt -or
-                [string]$consumption.authorization.sha256 -cne [string]$transition.authorization.sha256) {
-                throw "Correction-consumption receipt does not bind the exact authorization and current successor Readiness."
-            }
+        $attemptReceipt.prerequisite_receipts = @([ordered]@{
+            path = [string]$stateReadinessValidation.immutable.path
+            sha256 = [string]$stateReadinessValidation.immutable.sha256
+        })
+        $runtimeContext.readiness_immutable_reference = $stateReadinessValidation.immutable
+        if ($stateIndex.PSObject.Properties.Name -contains "correction_lineage" -and
+            $null -ne $stateIndex.correction_lineage) {
+            $lineageValidation = Assert-Sprint8ACorrectionLineage `
+                -Lineage $stateIndex.correction_lineage `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRoot $evidenceRootPath `
+                -ExpectedCurrentReadiness ([pscustomobject]@{
+                    attempt = [int]$stateIndex.readiness.attempt
+                    receipt = [string]$stateIndex.readiness.receipt
+                    sha256 = [string]$stateIndex.readiness.sha256
+                    state = "passed"
+                }) `
+                -RequireConsumedTip
+            $tip = $lineageValidation.tip
+            $consumptionRef = $tip.consumed_by_readiness.consumption_receipt
             if ($stateReadinessDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
                 $null -eq $stateReadinessDocument.predecessor_correction_authorization -or
-                [string]$stateReadinessDocument.predecessor_correction_authorization.sha256 -cne [string]$transition.authorization.sha256 -or
+                [string]$stateReadinessDocument.predecessor_correction_authorization.sha256 -cne [string]$tip.authorization.sha256 -or
                 $stateReadinessDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
                 [string]$stateReadinessDocument.correction_consumption_receipt.path -cne [string]$consumptionRef.path -or
                 [string]$stateReadinessDocument.correction_consumption_receipt.sha256 -cne [string]$consumptionRef.sha256) {
-                throw "Current passing Readiness does not bind the exact authorization and append-only consumption receipt in validation-state."
+                throw "Current passing Readiness does not bind the correction-lineage tip authorization and consumption."
             }
-            $runtimeContext.correction_transition = $transition
+            $runtimeContext.correction_lineage = $stateIndex.correction_lineage
+            $attemptReceipt.correction_lineage = $stateIndex.correction_lineage
+        } elseif ($null -ne $stateReadinessDocument.predecessor_correction_authorization -or
+            $null -ne $stateReadinessDocument.correction_consumption_receipt) {
+            throw "Current passing Readiness names a correction transition without canonical lineage."
         }
         $runtimeContext.validation_state = $stateIndex
         $runtimeContext.launch_authorized = $true
@@ -861,7 +932,7 @@ try {
                 attempt = $Attempt; state = "preparing"
                 receipt = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
             }
-            correction_transition = $runtimeContext.correction_transition
+            correction_lineage = $runtimeContext.correction_lineage
             preflight_eligible = $false
         }) -OutputPath $statePath -Overwrite | Out-Null
         "candidate rehearsal launch authorized and active-attempt lock acquired"
@@ -916,12 +987,13 @@ try {
                 $null -eq $validatedReadiness.correction_consumption_receipt) {
                 throw "Corrected Readiness omits its append-only correction-consumption receipt."
             }
-            $consumptionPath = if ([IO.Path]::IsPathRooted([string]$validatedReadiness.correction_consumption_receipt.path)) {
-                [IO.Path]::GetFullPath([string]$validatedReadiness.correction_consumption_receipt.path)
-            } else {
-                [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$validatedReadiness.correction_consumption_receipt.path)))
-            }
-            if ((Assert-Sprint8AReceiptSidecar -Path $consumptionPath) -cne [string]$validatedReadiness.correction_consumption_receipt.sha256) {
+            $consumptionReference = Resolve-Sprint8AEvidenceReference `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRoot $evidenceRootPath `
+                -Path ([string]$validatedReadiness.correction_consumption_receipt.path) `
+                -AllowLegacyAbsolute
+            if ((Assert-Sprint8AReceiptSidecar -Path ([string]$consumptionReference.full_path)) -cne
+                [string]$validatedReadiness.correction_consumption_receipt.sha256) {
                 throw "Corrected Readiness correction-consumption digest is invalid."
             }
         }
@@ -939,10 +1011,6 @@ try {
         $attemptReceipt.environment_identity.verification_state = "verified"
         $attemptReceipt.environment_identity.verification_failure = $null
         $attemptReceipt.environment_fingerprint = [string]$validatedEnvironment.fingerprint
-        $attemptReceipt.prerequisite_receipts = @([ordered]@{
-            path = [IO.Path]::GetRelativePath($repoRoot, $readinessPath).Replace("\", "/")
-            sha256 = $validatedReadinessSha
-        })
         Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
         [ordered]@{
             path = $readinessPath
@@ -1023,7 +1091,7 @@ try {
                 attempt = $Attempt; state = "executing"
                 receipt = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
             }
-            correction_transition = $runtimeContext.correction_transition
+            correction_lineage = $runtimeContext.correction_lineage
             preflight_eligible = $false
         }) -OutputPath $statePath -Overwrite | Out-Null
     }
@@ -1081,6 +1149,7 @@ try {
             -ProductSmokeLaneReceipt (Join-Path $laneRoot "successor-product-smoke.json") `
             -FailureContainmentLaneReceipt (Join-Path $laneRoot "failure-containment-successor-health.json") `
             -UpgradeLaneReceipt (Join-Path $laneRoot "component-upgrade-rollback.json") `
+            -ComponentsContractLaneReceipt (Join-Path $laneRoot "components-contract-tests.json") `
             -ComponentConformanceLaneReceipt (Join-Path $laneRoot "component-conformance-nondisclosure.json") `
             -PlaywrightLaneReceipt (Join-Path $laneRoot "playwright-execution.json") `
             -ManifestContractLaneReceipt (Join-Path $laneRoot "compose-manifest-schema-contract.json") `
@@ -1175,6 +1244,7 @@ $attemptReceipt.cleanup_restoration = [ordered]@{
         -not $terminalByName.ContainsKey($_) -or [string]$terminalByName[$_].state -cne "passed"
     }).Count -eq 0) { "canonical_successor_healthy" } else { "not_proven" }
 }
+$attemptReceipt.checks = @($terminalChecks)
 Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
 $attemptSha = Assert-Sprint8AReceiptSidecar -Path $attemptPath
 $readinessStateRecord = if ([bool]$runtimeContext.environment.verified) {
@@ -1265,6 +1335,7 @@ if (-not $passed) {
         )
     }
     Publish-Sprint7AEvidence -Document $batch -OutputPath $batchPath | Out-Null
+    $batchSha = Assert-Sprint8AReceiptSidecar -Path $batchPath
     if (-not [bool]$runtimeContext.launch_authorized) {
         if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }
         throw "Sprint 8A Candidate Rehearsal launch was rejected by the active-attempt/state prerequisite. Safe independent evidence and one consolidated batch were retained, but no correction authorization was issued and validation-state was not overwritten."
@@ -1277,26 +1348,36 @@ if (-not $passed) {
         -EvidenceRoot $evidenceRootPath
     if (-not $?) { throw "Candidate rehearsal harvesting could not authorize the consolidated correction batch." }
     $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $correctionAuthorizationPath
-    $correctionTransition = [ordered]@{
-        predecessor_rehearsal = [ordered]@{
+    $correctionLineage = Add-Sprint8ACorrectionLineageLink `
+        -Lineage $runtimeContext.correction_lineage `
+        -Predecessor ([ordered]@{
+            phase = "candidate-rehearsal"
             attempt = $Attempt
-            receipt = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
-            sha256 = $attemptSha
-            harvest = $harvestRelative
-            defect_batch = [IO.Path]::GetRelativePath($repoRoot, $batchPath).Replace("\", "/")
-        }
-        authorization = [ordered]@{
+            receipt = [ordered]@{
+                path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
+                sha256 = $attemptSha
+            }
+            harvest = [ordered]@{ path = $harvestRelative; sha256 = $harvestSha }
+            defect_batch = [ordered]@{
+                path = [IO.Path]::GetRelativePath($repoRoot, $batchPath).Replace("\", "/")
+                sha256 = $batchSha
+            }
+        }) `
+        -Authorization ([ordered]@{
             path = [IO.Path]::GetRelativePath($repoRoot, $correctionAuthorizationPath).Replace("\", "/")
             sha256 = $authorizationSha
-        }
-        consumed_by_readiness = $null
-    }
+        }) `
+        -ConsumedByReadiness $null
+    [void](Assert-Sprint8ACorrectionLineage `
+        -Lineage $correctionLineage `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath)
     Publish-Sprint7AEvidence -Document ([ordered]@{
         schema_version = 1; sprint = "sprint-8a"; updated_at = [DateTimeOffset]::UtcNow.ToString("o")
         source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
         readiness = $readinessStateRecord
         rehearsal = [ordered]@{ attempt = $Attempt; state = "failed"; receipt = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/"); sha256 = $attemptSha; harvest = $harvestRelative; defect_batch = [IO.Path]::GetRelativePath($repoRoot, $batchPath).Replace("\", "/") }
-        correction_transition = $correctionTransition
+        correction_lineage = $correctionLineage
         preflight_eligible = $false
     }) -OutputPath $statePath -Overwrite | Out-Null
     if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }
@@ -1307,8 +1388,12 @@ $result = [ordered]@{
     schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal"; attempt = $Attempt
     authoritative = $false; state = "passed"; started_at = $startedAt.ToString("o"); ended_at = $endedAt.ToString("o")
     mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
-    prerequisite_receipts = @([ordered]@{ path = [IO.Path]::GetRelativePath($repoRoot, $readinessPath).Replace("\", "/"); sha256 = [string]$runtimeContext.readiness_sha256 })
+    prerequisite_receipts = @([ordered]@{
+        path = [string]$runtimeContext.readiness_immutable_reference.path
+        sha256 = [string]$runtimeContext.readiness_immutable_reference.sha256
+    })
     attempt_receipt = [ordered]@{ path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/"); sha256 = $attemptSha }
+    correction_lineage = $runtimeContext.correction_lineage
     checks = $terminalChecks; assertion_count = @($terminalChecks | Where-Object assertions_started -EQ $true).Count; failure_count = 0; blocked_count = 0; nested_blocked_count = 0; nested_failure_count = 0
     classification = $null; invalidation_decision = "none"; cleanup_restoration = $attemptReceipt.cleanup_restoration
 }
@@ -1319,7 +1404,7 @@ Publish-Sprint7AEvidence -Document ([ordered]@{
     source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
     readiness = $readinessStateRecord
     rehearsal = [ordered]@{ attempt = $Attempt; state = "passed"; receipt = [IO.Path]::GetRelativePath($repoRoot, $resultPath).Replace("\", "/"); sha256 = $resultSha }
-    correction_transition = $runtimeContext.correction_transition
+    correction_lineage = $runtimeContext.correction_lineage
     preflight_eligible = $true
 }) -OutputPath $statePath -Overwrite | Out-Null
 if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }

@@ -1,0 +1,404 @@
+{
+  "schema_version": 1,
+  "sprint": "sprint-8a",
+  "contract": "tessara.sprint-8a.manual-uat-scenarios",
+  "scenario_count": 8,
+  "receipt_contract": {
+    "tester_identity_fields": ["tester_id", "display_name", "actor_bindings"],
+    "actor_binding_fields": ["id", "actor_id"],
+    "precondition_fields": ["id", "state", "value", "reference"],
+    "starting_state_fields": ["id", "observed_value"],
+    "evidence_fields": ["step", "requirement_id", "kind", "capture", "path", "sha256"],
+    "evidence_kind_extensions": {
+      "operator-record": [".json"],
+      "screenshot": [".png"],
+      "browser-trace": [".zip"],
+      "browser-console": [".json"],
+      "http-transcript": [".json"],
+      "authenticated-json": [".json"]
+    },
+    "evidence_kind_content_contracts": {
+      "operator-record": {
+        "schema_version": 1,
+        "phase": "uat-manual-operator-record",
+        "identity_fields": ["scenario", "attempt", "candidate_fingerprint", "environment_fingerprint", "evidence_id"],
+        "payload_field": "observations",
+        "minimum_payload_items": 1
+      },
+      "screenshot": {
+        "format": "png",
+        "required_chunk": "IHDR"
+      },
+      "browser-trace": {
+        "format": "zip",
+        "required_entry_suffixes": ["trace.trace", "trace.network"]
+      },
+      "browser-console": {
+        "schema_version": 1,
+        "phase": "uat-manual-browser-console",
+        "identity_fields": ["scenario", "attempt", "candidate_fingerprint", "environment_fingerprint", "evidence_id"],
+        "payload_field": "entries",
+        "minimum_payload_items": 0
+      },
+      "http-transcript": {
+        "schema_version": 1,
+        "phase": "uat-manual-http-transcript",
+        "identity_fields": ["scenario", "attempt", "candidate_fingerprint", "environment_fingerprint", "evidence_id"],
+        "payload_field": "exchanges",
+        "minimum_payload_items": 1
+      },
+      "authenticated-json": {
+        "contract": "authenticated_evidence"
+      }
+    },
+    "preconditions": [
+      { "id": "candidate-fingerprint", "description": "The frozen candidate fingerprint is recorded." },
+      { "id": "environment-fingerprint", "description": "The UAT environment fingerprint is recorded." },
+      { "id": "preflight-receipt", "description": "The authorizing preflight receipt SHA-256 is recorded." },
+      { "id": "sit-result-receipt", "description": "The passing SIT result receipt SHA-256 is recorded." },
+      { "id": "evidence-root", "description": "The attempt-scoped retained evidence root is recorded." },
+      { "id": "execution-start", "description": "The scenario execution start instant is recorded." }
+    ],
+    "authenticated_evidence": {
+      "schema_version": 1,
+      "phase": "uat-manual-structured-evidence",
+      "required_fields": [
+        "schema_version",
+        "sprint",
+        "phase",
+        "scenario",
+        "attempt",
+        "evidence_type",
+        "evidence_id",
+        "authoritative",
+        "diagnostic",
+        "state",
+        "candidate_fingerprint",
+        "environment_fingerprint",
+        "start_checkpoint",
+        "execution_lease",
+        "producer_receipt",
+        "assertions"
+      ],
+      "sidecar_required": true
+    }
+  },
+  "scenarios": [
+    {
+      "id": "UAT-8A-01",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-01.md", "sha256": "1212934ee871f2eae085e2cd85132f1269822e944b57894ab5dc8c26e6999f55" },
+      "role": "Component manager and reader",
+      "acceptance_criteria": ["AC-01", "AC-07", "AC-15", "AC-19"],
+      "semantic_predicate_ids": ["component-module-live-script", "complete-browser-inventory", "module-owned-documents-and-assets", "exact-v3-first-party-inputs"],
+      "actor_bindings": [
+        { "id": "component-manager", "role": "Component manager" },
+        { "id": "component-reader", "role": "Component reader" }
+      ],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "seeded-component-kinds", "description": "Displayed identities for one recognizable seeded Component of every supported kind." },
+        { "id": "disposable-component-name", "description": "The unique disposable Component name used by the scenario." },
+        { "id": "presentation-matrix", "description": "The exact light/dark 1280/768/390, keyboard, 200% zoom, no-JavaScript, hydration, and console matrix." }
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Open Components from navigation and open every supported seeded kind.",
+          "expected_result": "Each list/detail/view route loads with canonical Components wording and recognizable output.",
+          "evidence_requirements": [
+            { "id": "seeded-kind-route-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Create the disposable Component, edit it, publish a new version, and open its view.",
+          "expected_result": "Each action succeeds and the published view reflects the saved change.",
+          "evidence_requirements": [
+            { "id": "component-lifecycle-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }
+          ]
+        },
+        {
+          "step": 3,
+          "action": "Exercise the allowed lifecycle actions, then remove the disposable record.",
+          "expected_result": "State changes are clear and cleanup succeeds.",
+          "evidence_requirements": [
+            { "id": "component-cleanup-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }
+          ]
+        },
+        {
+          "step": 4,
+          "action": "At 1280, 768, and 390 CSS pixels, inspect the directory, editor, detail, and viewer in both light and dark themes; capture the named evidence.",
+          "expected_result": "Layout, structured controls, table/visual output, focus, contrast, and vocabulary match the accepted baseline with no horizontal overflow or hidden required action.",
+          "evidence_requirements": [
+            { "id": "light-1280-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "theme": "light", "viewport_width": 1280 } },
+            { "id": "light-768-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "theme": "light", "viewport_width": 768 } },
+            { "id": "light-390-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "theme": "light", "viewport_width": 390 } },
+            { "id": "dark-1280-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "theme": "dark", "viewport_width": 1280 } },
+            { "id": "dark-768-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "theme": "dark", "viewport_width": 768 } },
+            { "id": "dark-390-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "theme": "dark", "viewport_width": 390 } }
+          ]
+        },
+        {
+          "step": 5,
+          "action": "Use keyboard-only navigation through filters, editor controls, preview, lifecycle confirmation, and back/forward; repeat a representative directory/editor/view flow at 200% browser zoom.",
+          "expected_result": "Focus order and restoration are visible, dialogs are operable, and zoom does not hide content or require two-dimensional scrolling.",
+          "evidence_requirements": [
+            { "id": "keyboard-operation-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 },
+            { "id": "zoom-200-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "zoom_percent": 200 } }
+          ]
+        },
+        {
+          "step": 6,
+          "action": "Disable JavaScript and directly load manager and reader Component URLs, then re-enable JavaScript and repeat direct load/back/forward while recording the console.",
+          "expected_result": "SSR is useful and role-correct without JavaScript; hydration/navigation preserve content with no hydration or browser-console errors.",
+          "evidence_requirements": [
+            { "id": "no-javascript-ssr-screenshot", "kind": "screenshot", "minimum": 1, "maximum": 1, "capture": { "javascript": false } },
+            { "id": "hydration-browser-console", "kind": "browser-console", "minimum": 1, "maximum": 1, "capture": { "javascript": true, "hydrated": true } }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "UAT-8A-02",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-02.md", "sha256": "2f86bb9ff238868b9e7a0d29da0cd19a44266f5fb134fd58cc391d938235c40c" },
+      "role": "Operator and Dashboard reader",
+      "acceptance_criteria": ["AC-03", "AC-04", "AC-05", "AC-16"],
+      "semantic_predicate_ids": ["empty-first-apply", "semantic-no-op", "exact-five-core-transitions", "receipt-bound-dashboard-references"],
+      "actor_bindings": [
+        { "id": "operator", "role": "Operator" },
+        { "id": "dashboard-reader", "role": "Dashboard reader" }
+      ],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "disposable-project-authorization", "description": "Authorization for the exact tessara-sprint-8a disposable project." },
+        { "id": "resolved-topology", "description": "Resolved project, database, volume, network, and service identities." },
+        { "id": "candidate-source-identity", "description": "The frozen candidate source identity." }
+      ],
+      "steps": [
+        { "step": 1, "action": "Run the approved from-empty materialization.", "expected_result": "Owners initialize and seed in declared order; the topology becomes healthy.", "evidence_requirements": [{ "id": "from-empty-materialization-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 2, "action": "Inspect owner read-back and open Components plus the seeded Dashboard.", "expected_result": "Exactly seven Component shells and eight versions exist: the Stat Card `1.0.0` predecessor is superseded/inactive and names the published/active `2.0.0` successor; the other six versions are published/active.", "evidence_requirements": [{ "id": "owner-readback-record", "kind": "http-transcript", "minimum": 1, "maximum": 1 }] },
+        { "step": 3, "action": "Inspect the seeded Dashboard placements and their resolved references.", "expected_result": "Exactly seven placements exist: four normal/blocked-scope fixtures plus independent `lifecycle-upgrade`, `lifecycle-replace`, and `lifecycle-remove` placements bound to the inactive predecessor; every reference is selected-instance Components v3.", "evidence_requirements": [{ "id": "dashboard-reference-record", "kind": "http-transcript", "minimum": 1, "maximum": 1 }] },
+        { "step": 4, "action": "Inspect module inventory and navigation.", "expected_result": "Dashboard appears once through its real Release/Instance; Core has exactly Forms, Workflows, Responses, Datasets, and Migration transitions.", "evidence_requirements": [{ "id": "module-inventory-navigation-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 5, "action": "Repeat bootstrap unchanged.", "expected_result": "The receipt reports an exact semantic no-op with no duplicate rows, revisions, references, roles, or configuration.", "evidence_requirements": [{ "id": "semantic-no-op-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] }
+      ]
+    },
+    {
+      "id": "UAT-8A-03",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-03.md", "sha256": "5496d154057b6a0d61a7d4a887886d0f96d91663bd1f6759b9081454f9bd57e3" },
+      "role": "Global Module Management manager and reader plus Components manager",
+      "acceptance_criteria": ["AC-08"],
+      "semantic_predicate_ids": ["configuration-schema-authority", "label-navigation-projection", "sanitized-diagnostics"],
+      "actor_bindings": [
+        { "id": "module-management-manager", "role": "Global Module Management manager" },
+        { "id": "module-management-reader", "role": "Global Module Management reader" },
+        { "id": "components-manager", "role": "Components manager without global configuration authority" }
+      ],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "original-display-label", "description": "The original Components display label." },
+        { "id": "original-dataset-timeout", "description": "The original Dataset timeout." },
+        { "id": "temporary-settings", "description": "The exact temporary label Visual Parts and timeout 6." }
+      ],
+      "steps": [
+        { "step": 1, "action": "Confirm the initial Manifest-driven values, then save `Visual Parts` and timeout `6`.", "expected_result": "Defaults are `Components` and `5`; navigation/admin show the temporary label; product headings remain Components; diagnostics show redacted effective values.", "evidence_requirements": [{ "id": "configuration-update-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 2, "action": "Try blank/81-character labels, timeouts 0/31, an unknown field, and unsupported schema version.", "expected_result": "Every invalid value is rejected without clamping or partial save.", "evidence_requirements": [{ "id": "configuration-rejection-record", "kind": "http-transcript", "minimum": 1, "maximum": 1 }] },
+        { "step": 3, "action": "Repeat as a reader and as a Components manager without global configuration authority.", "expected_result": "Read access follows role; unauthorized writes are denied.", "evidence_requirements": [{ "id": "configuration-authority-record", "kind": "http-transcript", "minimum": 1, "maximum": 1 }] },
+        { "step": 4, "action": "Inspect diagnostics after a compatibility-dependent Component operation.", "expected_result": "The selected `tessara.components.dataset-major-line` binding, Core-installation provider, contract ID/version, compatibility, health, observation time, and stable result/failure code appear; raw Dataset references, rows, counts, credentials, and secrets do not.", "evidence_requirements": [{ "id": "sanitized-diagnostics-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 5, "action": "Restore the recorded settings.", "expected_result": "Original configuration and navigation are restored.", "evidence_requirements": [{ "id": "configuration-restoration-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] }
+      ]
+    },
+    {
+      "id": "UAT-8A-04",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-04.md", "sha256": "727e165ee56370a526f918c7e6c841321638c02727e0da46bc84b1d362df9b08" },
+      "role": "Operator, Component manager, dual-scope administrator, and restricted actors",
+      "acceptance_criteria": ["AC-09", "AC-10", "AC-18", "AC-19"],
+      "semantic_predicate_ids": ["dataset-contract-execution", "joint-dashboard-component-scope", "known-random-nondisclosure", "timeout-outage-recovery", "components-owned-exact-render-contract", "exact-v3-first-party-inputs"],
+      "actor_bindings": [
+        { "id": "operator", "role": "Operator authorized to stop and restore the disposable Dataset provider" },
+        { "id": "component-manager", "role": "Component manager" },
+        { "id": "dual-scope-administrator", "role": "Administrator authorized on both otherwise disjoint scopes" },
+        { "id": "out-of-scope-actor", "role": "Out-of-scope actor" },
+        { "id": "wrong-role-actor", "role": "Wrong-role actor" }
+      ],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "allowed-dataset", "description": "The displayed identity of the allowed Dataset." },
+        { "id": "out-of-scope-dataset", "description": "The displayed identity of the out-of-scope Dataset." },
+        { "id": "mixed-dashboard", "description": "The prepared mixed Dashboard and exact shared/disjoint placements." },
+        { "id": "unsaved-component-draft", "description": "The disposable draft with an unsaved visible change." }
+      ],
+      "steps": [
+        { "step": 1, "action": "Preview, save, publish, and execute using the allowed Dataset.", "expected_result": "Operations succeed through the canonical typed reference.", "evidence_requirements": [{ "id": "typed-dataset-execution-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 2, "action": "As an administrator or another actor authorized on both scopes, open the mixed Dashboard. Render the shared scope-A placement, inspect the disjoint scope-B tile, and try its render action.", "expected_result": "The shared placement discloses its exact Component identity and renders normally. The disjoint placement is generic and unavailable, discloses no Component/Dataset identity, scope, title, or data, and its render is denied.", "evidence_requirements": [{ "id": "joint-scope-render-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 3, "action": "Try the out-of-scope record and wrong-role account, then compare a known blocked direct identity with a generated random identity.", "expected_result": "Access is denied without revealing whether a restricted resource exists; the known and random public outcomes are equivalent.", "evidence_requirements": [{ "id": "known-random-nondisclosure-record", "kind": "http-transcript", "minimum": 1, "maximum": 1 }] },
+        { "step": 4, "action": "Stop or timeout the Dataset provider, then retry preview/save.", "expected_result": "Existing metadata remains readable; dependent mutations do not persist; unsaved input remains.", "evidence_requirements": [{ "id": "dataset-outage-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 5, "action": "Restore the provider and retry.", "expected_result": "Readiness returns and the valid operation succeeds once.", "evidence_requirements": [{ "id": "dataset-recovery-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] }
+      ]
+    },
+    {
+      "id": "UAT-8A-05",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-05.md", "sha256": "2eedb06ed174fe63ce7615c2d854fbe670bd2ef1345ebae3955f930051834b6d" },
+      "role": "Operator, Component manager, Dashboard manager, and reader",
+      "acceptance_criteria": ["AC-11", "AC-18"],
+      "semantic_predicate_ids": ["dashboard-lifecycle-findings", "consumer-actions", "provider-outage-containment", "components-owned-exact-render-contract"],
+      "actor_bindings": [
+        { "id": "operator", "role": "Operator authorized to stop and restore the disposable Component provider" },
+        { "id": "component-manager", "role": "Component manager" },
+        { "id": "dashboard-manager", "role": "Dashboard manager" },
+        { "id": "dashboard-reader", "role": "Dashboard reader" }
+      ],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "reference-dashboard", "description": "The exact Reference Operations Dashboard identity." },
+        { "id": "lifecycle-placement-identities", "description": "The upgrade, replace, remove, and blocked-scope placement IDs." },
+        { "id": "predecessor-successor-binding", "description": "The superseded predecessor and its declared published successor." },
+        { "id": "unrelated-route", "description": "The unrelated route used to prove outage containment." }
+      ],
+      "steps": [
+        { "step": 1, "action": "Refresh dependency health before any action.", "expected_result": "Exactly three `lifecycle_unrenderable` findings appear for the three action placements. The blocked-scope placement is absent, while the authorized upgrade finding discloses the declared successor.", "evidence_requirements": [{ "id": "lifecycle-findings-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 2, "action": "Defer the upgrade fixture, refresh it at the returned finding revision, then choose Upgrade.", "expected_result": "Defer advances the finding revision and remains actionable; Upgrade resolves it by using the declared successor.", "evidence_requirements": [{ "id": "defer-upgrade-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 3, "action": "On the independent fixtures, Replace with the authorized current Table reference and Remove the remove placement.", "expected_result": "Replace and Remove each resolve only its selected placement; the three action paths do not consume one another's fixture.", "evidence_requirements": [{ "id": "replace-remove-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 4, "action": "Stop only the Sprint 8A Component provider, refresh the Dashboard, and open the unrelated route.", "expected_result": "Exactly five remaining authorized placements report `provider_unavailable`; the blocked placement remains absent and the unrelated route stays healthy.", "evidence_requirements": [{ "id": "provider-outage-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        { "step": 5, "action": "Restore Components, wait for readiness, and refresh.", "expected_result": "Dashboard health is `healthy`, open/deferred counts are zero, and no visible finding remains.", "evidence_requirements": [{ "id": "provider-recovery-trace", "kind": "browser-trace", "minimum": 1, "maximum": 1 }] },
+        {
+          "step": 6,
+          "action": "Record the structured dependency-semantic receipt and restore the canonical fresh seed as directed by the coordinator.",
+          "expected_result": "The authenticated JSON receipt contains every exact check/action identity and requires canonical reset; restoration is recorded without converting this manual scenario into rehearsal evidence.",
+          "evidence_requirements": [
+            {
+              "id": "dependency-semantic-receipt",
+              "kind": "authenticated-json",
+              "minimum": 1,
+              "maximum": 1,
+              "authenticated_contract": {
+                "evidence_type": "dashboard-dependency-semantics",
+                "producer_phase": "uat-manual-dashboard-dependency-producer",
+                "assertion_ids": [
+                  "exact_lifecycle_finding_placements",
+                  "defer_advances_finding",
+                  "defer_preserves_composition",
+                  "upgrade_uses_declared_successor",
+                  "replace_uses_authorized_renderable_reference",
+                  "remove_consumes_independent_placement",
+                  "action_fixtures_remain_independent",
+                  "provider_outage_is_contained",
+                  "outage_blocked_scope_nondisclosure",
+                  "unrelated_route_remains_healthy",
+                  "provider_recovery_converges",
+                  "canonical_reset_required"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "UAT-8A-06",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-06.md", "sha256": "68d49c040dc7d894f6d2f443962e6ddd8e1cbdb4b5c6b02093c0f0ff8612a23c" },
+      "role": "Operator plus authorized and restricted users",
+      "acceptance_criteria": ["AC-01", "AC-02", "AC-06", "AC-12", "AC-16", "AC-18", "AC-19"],
+      "semantic_predicate_ids": ["core-component-absence", "native-wasm-source-boundaries", "old-input-rejection", "exact-real-module-inventory", "components-owned-exact-render-contract", "exact-v3-first-party-inputs", "retired-missing-policy-rejection"],
+      "actor_bindings": [
+        { "id": "operator", "role": "Operator" },
+        { "id": "authorized-user", "role": "Authorized user" },
+        { "id": "restricted-user", "role": "Restricted user" }
+      ],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "negative-input-set", "description": "The retained v1, v2, Core owner/type, retired missing_policy alias, flat Dataset-major fields, and old-payload negative inputs." },
+        { "id": "selected-component-release-instance", "description": "The selected Component Release and Instance shown in Module Management." }
+      ],
+      "steps": [
+        { "step": 1, "action": "Review inventory, routes, process, database, manifest, and provenance.", "expected_result": "Components and Dashboard each appear as real deployed modules; Dashboard appears once; Core exposes no Component product owner.", "evidence_requirements": [{ "id": "module-isolation-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 2, "action": "Submit each approved old reference/payload, including `missing_policy` and flat Dataset-major fields, as an authorized user.", "expected_result": "Each is rejected by the exact v3/typed-reference contract; no normalization helper, alias, adapter, ledger, copied-count expectation, or fallback is shown.", "evidence_requirements": [{ "id": "old-input-rejection-record", "kind": "http-transcript", "minimum": 1, "maximum": 1 }] },
+        { "step": 3, "action": "Repeat known and random restricted inputs as the restricted user.", "expected_result": "Responses are indistinguishable and disclose no protected identity.", "evidence_requirements": [{ "id": "restricted-input-equivalence-record", "kind": "http-transcript", "minimum": 1, "maximum": 1 }] }
+      ]
+    },
+    {
+      "id": "UAT-8A-07",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-07.md", "sha256": "13090b05cb8c33234581975d425dfb570fbec12150c8539b1c6cfe978e08f7dc" },
+      "role": "Operator",
+      "acceptance_criteria": ["AC-13"],
+      "semantic_predicate_ids": ["induced-owner-failure", "exact-teardown", "empty-successor", "successor-no-op-health"],
+      "actor_bindings": [{ "id": "operator", "role": "Operator" }],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "disposable-project-authorization", "description": "Authorization for the exact disposable project." },
+        { "id": "bounded-fault", "description": "The approved validation-only fault." },
+        { "id": "expected-failing-prerequisite", "description": "The exact prerequisite expected to fail." }
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Run materialization with the approved fault.",
+          "expected_result": "The attempt fails at the intended point and retains raw apply response and service logs.",
+          "evidence_requirements": [
+            { "id": "bounded-failure-record", "kind": "operator-record", "minimum": 1, "maximum": 1 },
+            {
+              "id": "failure-containment-receipt",
+              "kind": "authenticated-json",
+              "minimum": 1,
+              "maximum": 1,
+              "authenticated_contract": {
+                "evidence_type": "failure-containment",
+                "producer_phase": "uat-manual-failure-containment",
+                "assertion_ids": ["failed-apply-response-retained", "service-logs-retained"]
+              }
+            }
+          ]
+        },
+        { "step": 2, "action": "Inspect containers, named volumes, and networks after teardown.", "expected_result": "No resource belonging to `tessara-sprint-8a` remains.", "evidence_requirements": [{ "id": "exact-teardown-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 3, "action": "Remove the fault and run a complete new materialization.", "expected_result": "A new empty attempt reaches canonical health; no partial state is reused.", "evidence_requirements": [{ "id": "empty-successor-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 4, "action": "Repeat bootstrap unchanged.", "expected_result": "The successor reports an exact semantic no-op.", "evidence_requirements": [{ "id": "successor-no-op-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] }
+      ]
+    },
+    {
+      "id": "UAT-8A-08",
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-08.md", "sha256": "33687796fd02f97400bc6e0c832106b16e73dcfc565b4e97e3021796a19bd109" },
+      "role": "Operator and reviewer",
+      "acceptance_criteria": ["AC-14"],
+      "semantic_predicate_ids": ["component-only-upgrade", "rollback", "unrelated-identity-stability", "intended-release-restoration"],
+      "actor_bindings": [
+        { "id": "operator", "role": "Operator" },
+        { "id": "reviewer", "role": "Reviewer" }
+      ],
+      "required_precondition_ids": ["candidate-fingerprint", "environment-fingerprint", "preflight-receipt", "sit-result-receipt", "evidence-root", "execution-start"],
+      "required_starting_state": [
+        { "id": "component-baseline-snapshot", "description": "Component image, container, restart, instance, configuration, and recognizable data baseline." },
+        { "id": "unrelated-owner-baseline", "description": "Unrelated owner image, container, restart, data, navigation, and availability baseline." },
+        { "id": "compatible-release-provenance", "description": "Distinct source-built 0.9.0 and 1.0.0 executable, image, and manifest identities." }
+      ],
+      "steps": [
+        { "step": 1, "action": "From healthy `1.0.0`, apply the compatible-baseline selection through the composition API and Supervisor.", "expected_result": "The resolved plan is an exact Component-only delta; Supervisor/Compose establishes healthy `0.9.0` without changing Component state or unrelated owners.", "evidence_requirements": [{ "id": "baseline-selection-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 2, "action": "Apply the `1.0.0` selection and exercise Component plus Dashboard routes.", "expected_result": "The exact `0.9.0` to `1.0.0` upgrade is health-gated; recorded Component data/configuration and placements remain usable.", "evidence_requirements": [{ "id": "candidate-upgrade-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 3, "action": "Compare the pre-transition and post-upgrade snapshots.", "expected_result": "Core, gateway, Supervisor, Dashboard, Dataset compatibility, and other modules retain image/container/restart, semantic data, navigation, and availability identity.", "evidence_requirements": [{ "id": "unrelated-owner-stability-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        {
+          "step": 4,
+          "action": "Apply rollback to `0.9.0`, verify health/behavior, then restore intended `1.0.0`.",
+          "expected_result": "Each plan remains Component-only and health-gated; release read-back matches each stage; final state is healthy intended `1.0.0`; publish the authenticated upgrade/rollback JSON receipt.",
+          "evidence_requirements": [
+            {
+              "id": "upgrade-rollback-receipt",
+              "kind": "authenticated-json",
+              "minimum": 1,
+              "maximum": 1,
+              "authenticated_contract": {
+                "evidence_type": "component-upgrade-rollback",
+                "producer_phase": "uat-manual-component-upgrade-producer",
+                "assertion_ids": [
+                  "baseline-selection",
+                  "candidate-upgrade",
+                  "component-state-preserved",
+                  "unrelated-owner-stability",
+                  "baseline-rollback",
+                  "candidate-restoration"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -117,12 +117,16 @@ and the validation-state index names the exact current checkpoint hash. This
 preserves an immutable launch boundary while making an interrupted partial gate
 harvestable.
 
-The first declared attempt-state prerequisite acquires an operating-system
-exclusive file handle for the sprint evidence root and holds it through final
-attempt and validation-state publication. The persistent lock path is not proof
-of ownership; exclusivity comes from the open handle. Lock contention is a
-retained prerequisite failure, while safe independent checks still run
-fail-late and destructive or dependent checks remain blocked.
+Readiness acquires an operating-system exclusive file handle during its
+pre-publication reservation and holds it through final attempt and
+validation-state publication. Lock contention or an unauthorized attempt number
+therefore rejects the Readiness launch before any attempt namespace or receipt
+exists. Candidate Rehearsal instead acquires and holds the same kind of handle in
+its first declared attempt-state prerequisite after publishing its immutable
+start receipt; contention there is a retained prerequisite failure, while safe
+independent checks still run fail-late and destructive or dependent checks
+remain blocked. In both phases the persistent lock path is not proof of
+ownership; exclusivity comes from the open handle.
 
 ## Result collection
 
@@ -140,16 +144,88 @@ fail-late and destructive or dependent checks remain blocked.
   whole diagnostic pass and invalidate from that batch.
 - Preserve partial results and raw logs append-only. A narrow reproducer adds
   evidence to the active batch and never closes harvesting by itself.
+- Before creating an attempt receipt, start snapshot, sidecar, or attempt log
+  directory, acquire the evidence-root lock and authenticate that the requested
+  attempt number is permitted by current state and the pending correction-lineage
+  authorization. Reject an out-of-sequence probe without occupying any canonical
+  attempt namespace. Hold that same lock through start publication and one-time
+  authorization consumption.
 - A completed failed rehearsal may authorize exactly one successor Readiness
   start only after its harvest and consolidated batch pass the executable
   harvest guard. That Readiness consumes the authorization through a
   create-once, hashed receipt bound to the failed predecessor receipt and its
   own immutable start snapshot. Duplicate consumption or a different successor
   is forbidden.
+- A completed failed Readiness follows the same terminal discipline: retain one
+  typed Readiness harvest, one consolidated defect batch, and one create-once
+  authorization for the exact next Readiness attempt. This finalization may be
+  recovered without starting the successor. The successor alone creates the
+  append-only consumption receipt bound to its immutable start snapshot.
+- The sole failed-Readiness finalizer recovery exception is the already-terminal
+  Sprint 8A Readiness 38 attempt. Its complete immutable receipt, raw evidence,
+  two failures, one exact block, and documented consolidated correction set were
+  frozen before the finalizer existed and before the user-directed testing exit.
+  Commit only the finalizer/enforcement correction, then run
+  `-Attempt 38 -FinalizeFailedAttempt` before R39. It must not rerun R38 checks or
+  start R39. No later attempt may use this ordering exception.
+- Preserve every rehearsal-to-Readiness and failed-Readiness-to-Readiness link
+  in one authenticated correction lineage. Each link binds its failed receipt,
+  harvest, batch, authorization, consumption, immutable successor start, and
+  terminal successor receipt. Only the last link may be pending; gaps, forks,
+  duplicate consumption, skipped successor attempts, and reuse of an earlier
+  authorization are forbidden.
+- Correction epochs may alternate. When a later rehearsal fails after a
+  correction-authorized Readiness has passed, its new rehearsal link must name
+  that passing Readiness as its sole prerequisite and retain the complete prior
+  lineage prefix. A later failed Readiness then appends after that rehearsal
+  link; it never replaces or forks the earlier epoch.
+- Every correction-lineage successor terminal is the immutable
+  `attempts/readiness-N.json` receipt. Only the current passing Readiness may
+  also be published through `validation-readiness-result.json`, and that alias
+  must have the same SHA-256 and JSON document as its immutable counterpart.
+  Never retain the mutable alias as a historical lineage terminal. An alias
+  rollover leaves each earlier epoch authenticatable through its immutable
+  terminal while the current lineage tip accepts only the new alias/counterpart
+  pair.
+- Enforce the complete lineage topology, not a valid-looking suffix. A root
+  candidate has exactly one immutable passing-Readiness prerequisite and no
+  prior lineage; a root failed Readiness has no predecessor correction
+  authorization, consumption, or prior lineage. Every later candidate retains
+  the exact prefix and every later failed Readiness binds the immediately prior
+  failed terminal. Reject truncated roots, gaps, and forks.
+- Authenticate the exact canonical predecessor, harvest, consolidated batch,
+  authorization, authorization-consumption, successor-start, and successor-
+  terminal paths and documents. The predecessor, harvest, batch, and
+  authorization retain identical mutable-source identity and environment
+  fingerprint. Before authorizing a failed-Readiness correction, reject any
+  occupied artifact or evidence directory for the exact successor attempt.
+- The sole legacy conversion is the retained rehearsal 30 to Readiness 38
+  transition. Authenticate rehearsal 30's legacy prerequisite SHA through
+  immutable `attempts/readiness-37.json`; do not hash the historical canonical
+  alias. No other legacy path or topology exception is allowed.
 - Maintain one validation-state index naming the sole current Readiness receipt
-  path and SHA-256. Rehearsal requires exact equality with that path and digest,
-  including any predecessor authorization and consumption receipt; an older
-  passing Readiness or a used attempt number cannot be selected again.
+  path and SHA-256. Rehearsal requires exact equality with that path and digest
+  and validates the complete correction lineage through the current passing
+  Readiness; an older passing Readiness, an incomplete lineage, or a used
+  attempt number cannot be selected again.
+- Readiness, Candidate Rehearsal, and Validation Preflight authenticate the
+  validation-state sidecar and exact attempt numbers before consuming its
+  references. Preflight also authenticates the passing rehearsal's immutable
+  `attempts/candidate-rehearsal-N-attempt.json` sidecar and SHA, requires its
+  phase/attempt/state to match the canonical rehearsal result, and requires the
+  attempt, result, and validation-state correction lineage to be identical.
+- Candidate Rehearsal's state lane alone binds the canonical current Readiness
+  to its immutable counterpart. The separately declared-independent
+  Readiness/source/environment lane authenticates the supplied receipt and its
+  contained correction-consumption evidence without reading state-lane runtime
+  outputs, so a state defect cannot suppress that sibling diagnostic. On a
+  pass, both the immutable rehearsal attempt and canonical rehearsal result
+  name the same immutable Readiness prerequisite; preflight authenticates that
+  equality separately from the current canonical alias/state check.
+- Treat a null `produced_evidence` value as no additional evidence. Preserve
+  every non-null produced reference exactly alongside the primary check log,
+  and resolve every raw reference inside the repository evidence root before
+  hashing. An absolute or traversal path outside that root is invalid evidence.
 - When an automated UAT diagnostic projects nested semantic assertions, retain
   each failed assertion under its exact scenario/assertion identity with its
   allowed classification, failure reason, and hashed raw evidence. A healthy

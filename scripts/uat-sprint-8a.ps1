@@ -9,6 +9,7 @@ param(
     [string]$ProductSmokeLaneReceipt,
     [string]$FailureContainmentLaneReceipt,
     [string]$UpgradeLaneReceipt,
+    [string]$ComponentsContractLaneReceipt,
     [string]$ComponentConformanceLaneReceipt,
     [string]$PlaywrightLaneReceipt,
     [string]$ManifestContractLaneReceipt,
@@ -24,36 +25,35 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
-. (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-dashboard-dependency-contract.ps1")
 
 $scenarioDependencies = [ordered]@{
-    "UAT-8A-01" = @("successor-deployment-evidence", "successor-product-smoke", "live-product-diagnostics", "playwright-execution")
+    "UAT-8A-01" = @("successor-deployment-evidence", "successor-product-smoke", "live-product-diagnostics", "playwright-execution", "compose-manifest-schema-contract")
     "UAT-8A-02" = @("source-exact-materialization-no-op", "successor-inventory-navigation-audit", "successor-deployment-evidence", "successor-product-smoke")
     "UAT-8A-03" = @("successor-deployment-evidence", "successor-product-smoke", "playwright-execution")
-    "UAT-8A-04" = @("successor-deployment-evidence", "successor-product-smoke", "component-conformance-nondisclosure", "playwright-execution")
-    "UAT-8A-05" = @("successor-deployment-evidence", "successor-product-smoke", "live-product-diagnostics", "playwright-execution")
-    "UAT-8A-06" = @("successor-inventory-navigation-audit", "successor-deployment-evidence", "successor-product-smoke", "compose-manifest-schema-contract", "web-native-wasm-source-boundaries", "dashboard-source-boundaries")
+    "UAT-8A-04" = @("successor-deployment-evidence", "successor-product-smoke", "components-contract-tests", "component-conformance-nondisclosure", "playwright-execution", "dashboard-source-boundaries", "compose-manifest-schema-contract")
+    "UAT-8A-05" = @("successor-deployment-evidence", "successor-product-smoke", "components-contract-tests", "component-conformance-nondisclosure", "live-product-diagnostics", "playwright-execution", "dashboard-source-boundaries")
+    "UAT-8A-06" = @("successor-inventory-navigation-audit", "successor-deployment-evidence", "successor-product-smoke", "components-contract-tests", "compose-manifest-schema-contract", "web-native-wasm-source-boundaries", "dashboard-source-boundaries", "component-conformance-nondisclosure")
     "UAT-8A-07" = @("failure-containment-successor-health", "successor-deployment-evidence", "successor-product-smoke")
     "UAT-8A-08" = @("component-upgrade-rollback", "successor-deployment-evidence", "successor-product-smoke")
 }
 $scenarioAssertions = [ordered]@{
-    "UAT-8A-01" = @("component-module-live-script", "complete-browser-inventory", "module-owned-documents-and-assets")
+    "UAT-8A-01" = @("component-module-live-script", "complete-browser-inventory", "module-owned-documents-and-assets", "exact-v3-first-party-inputs")
     "UAT-8A-02" = @("empty-first-apply", "semantic-no-op", "exact-five-core-transitions", "receipt-bound-dashboard-references")
     "UAT-8A-03" = @("configuration-schema-authority", "label-navigation-projection", "sanitized-diagnostics")
-    "UAT-8A-04" = @("dataset-contract-execution", "joint-dashboard-component-scope", "known-random-nondisclosure", "timeout-outage-recovery")
-    "UAT-8A-05" = @("dashboard-lifecycle-findings", "consumer-actions", "provider-outage-containment")
-    "UAT-8A-06" = @("core-component-absence", "native-wasm-source-boundaries", "old-input-rejection", "exact-real-module-inventory")
+    "UAT-8A-04" = @("dataset-contract-execution", "joint-dashboard-component-scope", "known-random-nondisclosure", "timeout-outage-recovery", "components-owned-exact-render-contract", "exact-v3-first-party-inputs")
+    "UAT-8A-05" = @("dashboard-lifecycle-findings", "consumer-actions", "provider-outage-containment", "components-owned-exact-render-contract")
+    "UAT-8A-06" = @("core-component-absence", "native-wasm-source-boundaries", "old-input-rejection", "exact-real-module-inventory", "components-owned-exact-render-contract", "exact-v3-first-party-inputs", "retired-missing-policy-rejection")
     "UAT-8A-07" = @("induced-owner-failure", "exact-teardown", "empty-successor", "successor-no-op-health")
     "UAT-8A-08" = @("component-only-upgrade", "rollback", "unrelated-identity-stability", "intended-release-restoration")
 }
 $requirementMappings = [ordered]@{
-    "UAT-8A-01" = "Sprint 8A AC-01, AC-07, and AC-15"
+    "UAT-8A-01" = "Sprint 8A AC-01, AC-07, AC-15, and AC-19"
     "UAT-8A-02" = "Sprint 8A AC-03, AC-04, AC-05, and AC-16"
     "UAT-8A-03" = "Sprint 8A AC-08"
-    "UAT-8A-04" = "Sprint 8A AC-09 and AC-10"
-    "UAT-8A-05" = "Sprint 8A AC-11"
-    "UAT-8A-06" = "Sprint 8A AC-01, AC-02, AC-06, AC-12, and AC-16"
+    "UAT-8A-04" = "Sprint 8A AC-09, AC-10, AC-18, and AC-19"
+    "UAT-8A-05" = "Sprint 8A AC-11 and AC-18"
+    "UAT-8A-06" = "Sprint 8A AC-01, AC-02, AC-06, AC-12, AC-16, AC-18, and AC-19"
     "UAT-8A-07" = "Sprint 8A AC-13"
     "UAT-8A-08" = "Sprint 8A AC-14"
 }
@@ -87,6 +87,66 @@ $semanticPredicateRegistry = [ordered]@{
         producers = @("successor-product-smoke")
         evaluator = "smoke"
         smoke_checks = @("component_document")
+    }
+    "components-owned-exact-render-contract" = [ordered]@{
+        producers = @("components-contract-tests", "component-conformance-nondisclosure")
+        evaluator = "cargo_test_logs"
+        cargo_proofs = @(
+            [ordered]@{
+                producer = "components-contract-tests"
+                command = "cargo test --locked --offline -p tessara-components-contract"
+                test_ids = @(
+                    "tests::render_kind_owns_api_route_and_label_vocabulary",
+                    "tests::table_render_response_round_trips_and_rejects_inexact_wire",
+                    "tests::visual_render_response_validates_kind_shape_and_identity",
+                    "tests::visual_render_response_rejects_every_cross_kind_field"
+                )
+                source_paths = @("crates/tessara-components-contract/src/lib.rs")
+                source_fragments = @("pub enum ComponentRenderResponse", "pub struct ComponentTableResponse", "pub struct ComponentVisualResponse")
+            },
+            [ordered]@{
+                producer = "component-conformance-nondisclosure"
+                command = "cargo test --locked --offline -p tessara-component-module"
+                test_ids = @(
+                    "product::tests::component_save_accepts_only_action_specific_identity_shapes",
+                    "provider::tests::exact_body_routes_retain_json_content_type_enforcement",
+                    "validation::tests::table_contract_rejects_unknown_keys_fields_and_invalid_limits",
+                    "validation::tests::visual_contract_rejects_invalid_type_combinations_and_limits"
+                )
+                source_paths = @("crates/tessara-component-module/src/product.rs", "crates/tessara-component-module/src/provider.rs", "crates/tessara-component-module/src/validation.rs")
+                source_fragments = @("component_save_accepts_only_action_specific_identity_shapes", "exact_body_routes_retain_json_content_type_enforcement")
+            }
+        )
+    }
+    "exact-v3-first-party-inputs" = [ordered]@{
+        producers = @("compose-manifest-schema-contract")
+        evaluator = "source_contract"
+        source_paths = @("scripts/sprint-8a-acceptance-contract.ps1")
+        source_fragments = @(
+            "function Test-Sprint8AFirstPartyComponentContractSources",
+            "Test-Sprint8AFirstPartyComponentContractSources -RepoRoot `$repoRoot",
+            "dataset_reference: datasetReference",
+            "dataset_reference = `$visualDatasetReference",
+            "retains a legacy Component payload or response alias",
+            "omits canonical Component contract fragment"
+        )
+    }
+    "retired-missing-policy-rejection" = [ordered]@{
+        producers = @("component-conformance-nondisclosure")
+        evaluator = "cargo_test_logs"
+        cargo_proofs = @(
+            [ordered]@{
+                producer = "component-conformance-nondisclosure"
+                command = "cargo test --locked --offline -p tessara-component-module"
+                test_ids = @("validation::tests::visual_contract_rejects_retired_shared_missing_policy_alias")
+                source_paths = @("crates/tessara-component-module/src/validation.rs")
+                source_fragments = @(
+                    "fn visual_contract_rejects_retired_shared_missing_policy_alias()",
+                    '"missing_policy":"zero"',
+                    "accepted retired config.missing_policy"
+                )
+            }
+        )
     }
     "empty-first-apply" = [ordered]@{
         producers = @("source-exact-materialization-no-op")
@@ -251,9 +311,9 @@ function Assert-DiagnosticInventory {
         throw "Sprint 8A must define exactly eight UAT diagnostic scenarios and requirement mappings."
     }
     $declaredAssertions = @($scenarioAssertions.Values | ForEach-Object { @($_) })
+    $uniqueDeclaredAssertions = @($declaredAssertions | Sort-Object -Unique)
     $registeredAssertions = @($semanticPredicateRegistry.Keys)
-    if ($declaredAssertions.Count -ne @($declaredAssertions | Sort-Object -Unique).Count -or
-        (($declaredAssertions | Sort-Object) -join "`n") -cne (($registeredAssertions | Sort-Object) -join "`n")) {
+    if (($uniqueDeclaredAssertions -join "`n") -cne (($registeredAssertions | Sort-Object -Unique) -join "`n")) {
         throw "Every Sprint 8A UAT assertion must have exactly one executable semantic predicate registration."
     }
     foreach ($number in 1..8) {
@@ -278,10 +338,27 @@ function Assert-DiagnosticInventory {
 
 function Assert-RepositoryDiagnosticContract {
     Test-Sprint8AAcceptanceContract
+    $manifestPath = Join-Path $repoRoot "docs/sprints/sprint-8a-uat/scenario-contract.json"
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $manifestScenarios = @($manifest.scenarios)
+    if ([int]$manifest.schema_version -ne 1 -or [string]$manifest.sprint -cne "sprint-8a" -or
+        [string]$manifest.contract -cne "tessara.sprint-8a.manual-uat-scenarios" -or
+        $manifestScenarios.Count -ne 8) {
+        throw "Sprint 8A UAT diagnostics require the canonical eight-scenario manual contract manifest."
+    }
     foreach ($number in 1..8) {
         $id = "UAT-8A-{0:d2}" -f $number
         $manualPath = Join-Path $repoRoot ("docs/sprints/sprint-8a-uat/uat-8a-{0:d2}.md" -f $number)
         $manual = Get-Content -LiteralPath $manualPath -Raw
+        $manifestScenario = @($manifestScenarios | Where-Object { [string]$_.id -ceq $id })
+        $mappedCriteria = @([regex]::Matches([string]$requirementMappings[$id], 'AC-[0-9]{2}') | ForEach-Object { $_.Value })
+        if ($manifestScenario.Count -ne 1 -or
+            (@($manifestScenario[0].acceptance_criteria) -join "`n") -cne ($mappedCriteria -join "`n") -or
+            (@($manifestScenario[0].semantic_predicate_ids) -join "`n") -cne (@($scenarioAssertions[$id]) -join "`n") -or
+            [string]$manifestScenario[0].document.path -cne [IO.Path]::GetRelativePath($repoRoot, $manualPath).Replace("\", "/") -or
+            [string]$manifestScenario[0].document.sha256 -cne (Get-Sprint8AFileSha256 -Path $manualPath)) {
+            throw "$id diagnostic mapping differs from the canonical machine-readable manual contract."
+        }
         foreach ($heading in @("1. Test Script Summary", "2. Before You Start", "3. Test Steps", "4. Overall Test Result")) {
             if (-not $manual.Contains($heading)) { throw "$id manual script omits '$heading'." }
         }
@@ -867,6 +944,99 @@ function Assert-UatUpgradePredicate {
     }
 }
 
+function Assert-UatCargoTerminalSummaries {
+    param(
+        [Parameter(Mandatory)][string]$Log,
+        [Parameter(Mandatory)][string]$Producer
+    )
+
+    $summaryLines = @([regex]::Matches($Log, '(?m)^.*test result:.*$') | ForEach-Object { [string]$_.Value })
+    if ($summaryLines.Count -lt 1) {
+        throw "Cargo-test semantic proof '$Producer' has no terminal test summary."
+    }
+    foreach ($line in $summaryLines) {
+        $lineMatch = [regex]::Match($line, '^\[(?<timestamp>[^\]]+)\]\s+(?<summary>test result:.*)$')
+        $timestamp = [DateTimeOffset]::MinValue
+        if (-not $lineMatch.Success -or
+            -not [DateTimeOffset]::TryParseExact(
+                $lineMatch.Groups['timestamp'].Value,
+                'o',
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None,
+                [ref]$timestamp
+            ) -or
+            $lineMatch.Groups['summary'].Value -notmatch
+                '^test result:\s+ok\.\s+\d+ passed;\s+0 failed;\s+0 ignored;\s+0 measured;\s+0 filtered out;\s+finished in .+$') {
+            throw "Cargo-test semantic proof '$Producer' has a non-canonical terminal summary: $line"
+        }
+    }
+    $summaryLines.Count
+}
+
+function Assert-UatCargoTestLogPredicate {
+    param(
+        [Parameter(Mandatory)][object[]]$Lanes,
+        [Parameter(Mandatory)][object[]]$Proofs
+    )
+
+    $laneByName = @{}
+    foreach ($lane in $Lanes) { $laneByName[[string]$lane.name] = $lane }
+    $evidence = [Collections.Generic.List[object]]::new()
+    $observedProofs = [Collections.Generic.List[object]]::new()
+    foreach ($proof in $Proofs) {
+        $producer = [string]$proof.producer
+        if (-not $laneByName.ContainsKey($producer)) {
+            throw "Cargo-test semantic proof names undeclared producer '$producer'."
+        }
+        $lane = $laneByName[$producer]
+        if ([string]$lane.command -cne [string]$proof.command -or $null -eq $lane.raw_evidence) {
+            throw "Cargo-test semantic proof '$producer' is not bound to its exact authenticated command/log."
+        }
+        $logPath = Resolve-UatEvidencePath -Path ([string]$lane.raw_evidence.path)
+        if ((Get-Sprint8AFileSha256 -Path $logPath) -cne [string]$lane.raw_evidence.sha256) {
+            throw "Cargo-test semantic proof '$producer' raw log changed after lane authentication."
+        }
+        $log = Get-Content -LiteralPath $logPath -Raw
+        $matchedTests = [Collections.Generic.List[string]]::new()
+        foreach ($testId in @($proof.test_ids | ForEach-Object { [string]$_ })) {
+            $pattern = '(?m)test\s+' + [regex]::Escape($testId) + '\s+\.\.\.\s+ok(?:\s|$)'
+            if ([regex]::Matches($log, $pattern).Count -ne 1) {
+                throw "Cargo-test semantic proof '$producer' lacks one exact passing test identity '$testId'."
+            }
+            $matchedTests.Add($testId)
+        }
+        Assert-UatCargoTerminalSummaries -Log $log -Producer $producer | Out-Null
+        $evidence.Add($lane.raw_evidence)
+        $combinedSource = ""
+        foreach ($sourcePath in @($proof.source_paths | ForEach-Object { [string]$_ })) {
+            $fullPath = Resolve-UatEvidencePath -Path $sourcePath
+            if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+                throw "Cargo-test semantic proof '$producer' source is missing: $sourcePath."
+            }
+            $combinedSource += (Get-Content -LiteralPath $fullPath -Raw) + "`n"
+            $evidence.Add([pscustomobject][ordered]@{
+                path = [IO.Path]::GetRelativePath($repoRoot, $fullPath).Replace("\", "/")
+                sha256 = Get-Sprint8AFileSha256 -Path $fullPath
+            })
+        }
+        foreach ($fragment in @($proof.source_fragments | ForEach-Object { [string]$_ })) {
+            if (-not $combinedSource.Contains($fragment)) {
+                throw "Cargo-test semantic proof '$producer' source omits '$fragment'."
+            }
+        }
+        $observedProofs.Add([pscustomobject][ordered]@{
+            producer = $producer
+            command = [string]$proof.command
+            passing_test_ids = @($matchedTests)
+            terminal_summary = "zero_failures_zero_filtered"
+        })
+    }
+    [pscustomobject][ordered]@{
+        evidence = @($evidence)
+        observed = [pscustomobject][ordered]@{ cargo_test_proofs = @($observedProofs) }
+    }
+}
+
 function Invoke-Sprint8AUatPredicate {
     param(
         [Parameter(Mandatory)][string]$AssertionId,
@@ -896,6 +1066,7 @@ function Invoke-Sprint8AUatPredicate {
         "source_contract" { Assert-UatSourceContractPredicate -Lanes $lanes -SourcePaths @($definition.source_paths) -RequiredFragments @($definition.source_fragments); break }
         "failure_containment" { Assert-UatFailureContainmentPredicate -Lane $lanes[0] -Facts @($definition.containment_facts); break }
         "upgrade" { Assert-UatUpgradePredicate -Lane $lanes[0] -Facts @($definition.upgrade_facts); break }
+        "cargo_test_logs" { Assert-UatCargoTestLogPredicate -Lanes $lanes -Proofs @($definition.cargo_proofs); break }
         default { throw "Semantic assertion '$AssertionId' uses unknown evaluator '$($definition.evaluator)'." }
     }
     [pscustomobject][ordered]@{
@@ -1060,6 +1231,24 @@ if ($SelfTest) {
     if (@(Get-UatPlaywrightResults -Report $playwrightFixture)[0].passed -ne $false) {
         throw "Self-test accepted retried Playwright evidence as an exact semantic pass."
     }
+    $cargoTimestamp = "2026-01-01T00:00:00.0000000+00:00"
+    $validCargoSummaries = @(
+        "[$cargoTimestamp] test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+        "[$cargoTimestamp] test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s"
+    ) -join "`n"
+    if ((Assert-UatCargoTerminalSummaries -Log $validCargoSummaries -Producer "self-test") -ne 2) {
+        throw "Self-test did not accept every canonical timestamp-prefixed Cargo summary."
+    }
+    foreach ($invalidCargoSummary in @(
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "[$cargoTimestamp] test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "[$cargoTimestamp] test result: ok. 1 passed; 0 failed; 0 ignored; 1 measured; 0 filtered out; finished in 0.01s",
+        "[$cargoTimestamp] test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+    )) {
+        Invoke-ExpectedLaneGuardFailure {
+            Assert-UatCargoTerminalSummaries -Log $invalidCargoSummary -Producer "self-test" | Out-Null
+        } "a non-canonical Cargo terminal summary"
+    }
     $semanticFixture = [pscustomobject](New-Sprint8ADashboardDependencySelfTestEvidence)
     $rawSemanticFixture = ($semanticFixture | ConvertTo-Json -Depth 100) | ConvertFrom-Json
     Assert-UatDashboardDependencyEvidenceMatches -Embedded $semanticFixture -Raw $rawSemanticFixture
@@ -1095,6 +1284,7 @@ $paths = [ordered]@{
     "successor-product-smoke" = $ProductSmokeLaneReceipt
     "failure-containment-successor-health" = $FailureContainmentLaneReceipt
     "component-upgrade-rollback" = $UpgradeLaneReceipt
+    "components-contract-tests" = $ComponentsContractLaneReceipt
     "component-conformance-nondisclosure" = $ComponentConformanceLaneReceipt
     "playwright-execution" = $PlaywrightLaneReceipt
     "compose-manifest-schema-contract" = $ManifestContractLaneReceipt

@@ -333,11 +333,13 @@ remaining corrections instead of continuing the lifecycle:
   are shared by smoke and tests, and Playwright inventory now includes the
   responsive/theme matrix, unsaved-state outage retry, and configuration/
   diagnostic authority scenarios.
-- Readiness and Candidate Rehearsal publish unverified start evidence before
-  fallible state/source/environment work and serialize attempts with an
-  evidence-root OS-exclusive file handle. Readiness retains an immutable hashed
-  start snapshot and checkpoints its live receipt, sidecar, and validation-state
-  hash after every terminal check or block.
+- Candidate Rehearsal publishes unverified start evidence before fallible
+  state/source/environment work. Readiness first reserves the requested number
+  by authenticating state and pending authorization under the evidence-root
+  exclusive lock, then publishes its unverified live receipt and immutable
+  hashed start before source/environment assertions. Both checkpoint their live
+  receipt, sidecar, and validation-state hash after every terminal check or
+  block.
 - Safe static rehearsal lanes remain independent of the fallible state and
   Readiness prerequisites. Failed rehearsal harvesting still produces exactly
   one batch; its correction authorization now permits one successor Readiness
@@ -627,12 +629,13 @@ The immutable evidence is retained at:
   SHA-256
   `efed4d4c53d84454372936067a5a9c454457cf2f42419afe331fc89a8d154792`.
 
-The authorization remains unconsumed and permits exactly one successor
-Validation Readiness start. The tracked harness, acceptance, runner,
-validation-reference, and Sprint documentation corrections are
-candidate-affecting. Complete successor Readiness and complete Candidate
-Rehearsal must both pass against the same corrected source and environment
-identity before preflight, candidate freeze, SIT, or formal UAT.
+At publication, the authorization was unconsumed and permitted exactly one
+successor Validation Readiness start. Readiness 38 later consumed it and
+retained that consumption; it cannot be reused. The tracked harness,
+acceptance, runner, validation-reference, and Sprint documentation corrections
+were candidate-affecting. Complete successor Readiness and complete Candidate
+Rehearsal still must both pass against the same corrected source and
+environment identity before preflight, candidate freeze, SIT, or formal UAT.
 
 The downstream handoff is now executable through three repository-owned
 interfaces: `run-sprint-8a-validation-preflight.ps1` owns ten exact checks and
@@ -702,3 +705,85 @@ self-tests. These checks do not issue a gate receipt. All earlier mutable
 Readiness/Rehearsal evidence is superseded; the next testing boundary remains a
 complete successor Validation Readiness followed by a complete Candidate
 Rehearsal against the same corrected source and environment identity.
+
+## 2026-08-07 — Readiness 38 testing exit and consolidated entry correction
+
+Validation Readiness 38 consumed the Rehearsal 30 correction authorization and
+ran its complete 15-check fail-late graph against clean commit
+`91c9936be7e0cd9bc6beef78e04dc1937bf6601d`, tree
+`564493fda54badc3d4bc5a99d2336b327424f381`. It retained 12 passed checks, 2
+failed checks, 1 blocked check, and 14 assertion-bearing checks. The immutable
+attempt receipt SHA-256 is
+`7dcdc6a3d9866311ba12f251b080a4fe732b3fe10d1eb0ff6ad7de1d44a0f86d`;
+the authorization-consumption SHA-256 is
+`867f2628800584bb59bbe287c02673a852c4007320dc9608620b78dbb739fb79`.
+
+The complete retained defect set is:
+
+- `compose-database-contract` — `environment`; the Readiness process omitted
+  `TEST_API_DATABASE_URL`. Its raw log SHA-256 is
+  `f69a6e944f30e1ce3dc998cf212a28c09462b0128de2e9d14c0d9bd074bcd57a`.
+- `runner-self-tests` — `harness`; the failure-containment self-test requested
+  an overwrite after deliberately corrupting a publication pair, rather than
+  resetting only that exact temporary fixture pair before create-once
+  republication. Its raw log SHA-256 is
+  `db508e3b5958bf3dce71af76d64fe053feb068d980f39bd86949461c02ab0c9f`.
+- `environment-contract` — blocked without assertions by exactly
+  `compose-database-contract`; it is not counted as an independent failure.
+
+Formal testing exited at that terminal boundary. The plan, validation
+protocol, source, fixtures, and downstream acceptance inventory were reviewed
+before any restart. That audit expanded the single implementation correction
+batch to close the actual testing-entry gaps:
+
+- require all six disposable database bindings, reset acknowledgement, and
+  Postgres client-container identity in the same process as the next Readiness;
+- make the failure-containment self-test reject unauthenticated overwrite,
+  preserve real corrupt retained evidence, reset only the exact corrupt pair
+  inside its validated temporary self-test root, and republish create-once;
+- add typed failed-Readiness harvesting, one consolidated defect batch, an
+  exact-next-attempt authorization, and an append-only lineage that preserves
+  the earlier consumed R30 link and prevents reuse, gaps, or forks;
+- reserve a Readiness attempt number under the exclusive validation lock before
+  creating its receipt, start snapshot, sidecars, or log directory, so an out-
+  of-sequence probe cannot strand the exact authorized successor namespace;
+- retain immutable Rehearsal declarations separately from exact terminal
+  results, checkpoint every pass/failure/block, and require the attempt and
+  harvest terminal inventories to match;
+- remove the retired Component `missing_policy` alias from validation,
+  provider execution, browser authoring/rehydration, and Playwright fixtures;
+  reject it across all five visual kinds and retain only purpose-specific
+  current policy keys; and
+- define one canonical eight-scenario manual-UAT contract and enforce exact
+  scenario, role/tester, precondition, document, evidence kind/cardinality,
+  AC-18/AC-19, and semantic-predicate mappings. Arbitrary hashes, free-text
+  starting state, ambiguous “accepted with defects” outcomes, or missing named
+  evidence cannot produce formal acceptance. UAT-8A-07 additionally binds the
+  failed apply response and service logs through two exact hashed raw-evidence
+  assertions in an authenticated failure-containment receipt.
+
+The Component JavaScript SHA-256 advances to
+`7f13c08219f641055c1fb3bbabc9ab38f724db9b7bda2cc712ca830c9c736e1e`;
+its canonical Manifest/catalog digest advances to
+`01fdc82cacbc20658a0c2bdcb2177c9aded9fc332e1bcc8d9627c1670944f998`.
+Focused implementation verification is recorded separately from formal gate
+evidence. No Readiness 39, Rehearsal 31, preflight, candidate freeze, SIT, or
+formal UAT runs in this correction phase.
+
+The pre-audit implementation sweep passed all 12 fail-late harness
+checks: PowerShell parsing, failure containment, Readiness, Candidate
+Rehearsal, harvest, lifecycle-chain, formal-UAT, diagnostic-UAT, preflight,
+acceptance-contract, deployed-inventory, and Markdown-link checks. Product
+proof also passed formatting, JavaScript syntax, 33 Component library tests,
+warnings-denied Component clippy, the exact five-transition contract test,
+three exact Dashboard/inventory/navigation API tests, and discovery of all 75
+Playwright scenarios without browser execution. These are narrow mutable-source
+implementation checks only; they did not create or advance a lifecycle receipt.
+
+The independent final diff audit then exposed the attempt-namespace reservation
+defect, weak UAT-8A-07 raw-evidence binding, and two stale verification summaries
+as one last batch. After correction, the complete affected focused cone passed:
+Readiness, lifecycle, formal-UAT, diagnostic-UAT, preflight, acceptance,
+harvest-adversarial, and Candidate Rehearsal self-tests plus PowerShell/JSON
+parsing. The canonical UAT inventory now contains 46 globally unique exact-one
+requirements. Neither diagnostic pass ran a formal lifecycle attempt.

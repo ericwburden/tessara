@@ -122,12 +122,12 @@ function Assert-HashedFileEvidence {
         throw "$Label lacks an exact path and SHA-256 digest."
     }
     if (-not $SkipFileEvidence) {
-        $path = if ([IO.Path]::IsPathRooted([string]$Evidence.path)) {
-            [IO.Path]::GetFullPath([string]$Evidence.path)
-        } else {
-            [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$Evidence.path)))
-        }
-        if ((Get-Sprint8AFileSha256 -Path $path) -cne [string]$Evidence.sha256) {
+        $reference = Resolve-Sprint8AEvidenceReference `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -Path ([string]$Evidence.path) `
+            -AllowLegacyAbsolute
+        if ((Get-Sprint8AFileSha256 -Path ([string]$reference.full_path)) -cne [string]$Evidence.sha256) {
             throw "$Label digest does not match its retained file."
         }
     }
@@ -170,7 +170,8 @@ function Assert-TerminalCheckEvidence {
         [switch]$SkipFileEvidence
     )
 
-    if ([string]$Result.command -cne [string]$Declared.command) {
+    if ($Declared.PSObject.Properties.Name -contains "command" -and
+        [string]$Result.command -cne [string]$Declared.command) {
         throw "Check '$($Declared.name)' terminal command differs from its declaration."
     }
     $state = [string]$Result.state
@@ -240,7 +241,7 @@ function Assert-TerminalCheckEvidence {
         sha256 = [string]$Result.evidence_sha256
     }) -Label "Executed check '$($Declared.name)' raw evidence" -SkipFileEvidence:$SkipFileEvidence
     if ($Result.PSObject.Properties.Name -contains "produced_evidence") {
-        foreach ($evidence in @($Result.produced_evidence)) {
+        foreach ($evidence in @($Result.produced_evidence | Where-Object { $null -ne $_ })) {
             Assert-HashedFileEvidence -Evidence $evidence `
                 -Label "Executed check '$($Declared.name)' produced evidence" `
                 -SkipFileEvidence:$SkipFileEvidence
@@ -248,7 +249,7 @@ function Assert-TerminalCheckEvidence {
     }
 }
 
-function Assert-HarvestComplete {
+function Assert-CandidateRehearsalHarvestComplete {
     param(
         [Parameter(Mandatory)]$Attempt,
         [Parameter(Mandatory)]$Harvest,
@@ -294,15 +295,24 @@ function Assert-HarvestComplete {
         }
     }
 
-    $declared = @($Attempt.checks)
+    if ($Attempt.PSObject.Properties.Name -notcontains "declared_checks") {
+        throw "Attempt receipt omits its immutable declared check graph."
+    }
+    $declared = @($Attempt.declared_checks)
     Assert-AcyclicCheckGraph -Checks $declared
     $terminal = @($Harvest.checks)
+    $attemptTerminal = @($Attempt.checks)
     foreach ($check in $declared) {
         $result = @($terminal | Where-Object name -CEQ ([string]$check.name))
         if ($result.Count -ne 1) { throw "Check '$($check.name)' does not have exactly one terminal result." }
         Assert-TerminalCheckEvidence -Declared $check -Result $result[0] -TerminalChecks $terminal -SkipFileEvidence:$SkipFileEvidence
     }
     if ($terminal.Count -ne $declared.Count) { throw "Harvest contains undeclared or duplicate check results." }
+    if ($attemptTerminal.Count -ne $terminal.Count -or
+        (($attemptTerminal | ConvertTo-Json -Depth 30 -Compress) -cne
+            ($terminal | ConvertTo-Json -Depth 30 -Compress))) {
+        throw "Terminal attempt receipt does not retain the exact harvested terminal check results."
+    }
 
     $failedTerminal = @($terminal | Where-Object state -CEQ "failed")
     $blockedTerminal = @($terminal | Where-Object state -CEQ "blocked")
@@ -474,7 +484,7 @@ function Assert-HarvestComplete {
                 sha256 = [string]$result.evidence_sha256
             }
             if ($result.PSObject.Properties.Name -contains "produced_evidence") {
-                @($result.produced_evidence)
+                @($result.produced_evidence | Where-Object { $null -ne $_ })
             }
         })
         if (-not [string]::IsNullOrWhiteSpace($nestedAssertion)) {
@@ -511,6 +521,148 @@ function Assert-HarvestComplete {
     }
 }
 
+function Assert-ReadinessHarvestComplete {
+    param(
+        [Parameter(Mandatory)]$Attempt,
+        [Parameter(Mandatory)]$Harvest,
+        [Parameter(Mandatory)]$Batch,
+        [switch]$SkipFileEvidence
+    )
+
+    Assert-DiagnosticReceiptHeader -Document $Attempt -SchemaVersion 2 -Phase "validation-readiness" -Label "Readiness attempt"
+    Assert-DiagnosticReceiptHeader -Document $Harvest -SchemaVersion 1 -Phase "validation-readiness-harvest" -Label "Readiness harvest"
+    Assert-DiagnosticReceiptHeader -Document $Batch -SchemaVersion 1 -Phase "validation-readiness-defect-batch" -Label "Readiness defect batch"
+    Assert-MutableSourceIdentity `
+        -Source $Attempt.mutable_source_identity `
+        -VerificationState ([string]$Attempt.source_identity_verification_state)
+    Assert-EnvironmentFingerprint -Document $Attempt -Label "Readiness attempt"
+    Assert-EnvironmentFingerprint -Document $Harvest -Label "Readiness harvest"
+    Assert-EnvironmentFingerprint -Document $Batch -Label "Readiness defect batch"
+    if ([string]$Attempt.state -cne "failed" -or -not [bool]$Attempt.assertions_started -or
+        [string]::IsNullOrWhiteSpace([string]$Attempt.assertions_started_at) -or
+        [string]$Harvest.state -cne "harvest_complete") {
+        throw "Only one assertion-bearing terminal failed Readiness may authorize correction."
+    }
+    foreach ($document in @($Harvest, $Batch)) {
+        if ([int]$document.attempt -ne [int]$Attempt.attempt -or
+            [string]$document.sprint -cne [string]$Attempt.sprint -or
+            (($document.mutable_source_identity | ConvertTo-Json -Depth 30 -Compress) -cne
+                ($Attempt.mutable_source_identity | ConvertTo-Json -Depth 30 -Compress)) -or
+            [string]$document.environment_fingerprint -cne [string]$Attempt.environment_fingerprint) {
+            throw "Readiness harvest and batch must bind the exact failed attempt identity."
+        }
+    }
+    Assert-HashedFileEvidence -Evidence $Harvest.attempt_receipt `
+        -Label "Readiness harvest attempt receipt" `
+        -SkipFileEvidence:$SkipFileEvidence
+    Assert-HashedFileEvidence -Evidence $Batch.harvest_receipt `
+        -Label "Readiness batch harvest receipt" `
+        -SkipFileEvidence:$SkipFileEvidence
+
+    $declared = @($Attempt.declared_checks)
+    $terminal = @($Attempt.checks)
+    $harvestTerminal = @($Harvest.checks)
+    Assert-AcyclicCheckGraph -Checks $declared
+    if ($terminal.Count -ne $declared.Count -or $harvestTerminal.Count -ne $declared.Count -or
+        (($terminal | ConvertTo-Json -Depth 30 -Compress) -cne
+            ($harvestTerminal | ConvertTo-Json -Depth 30 -Compress))) {
+        throw "Readiness attempt and harvest do not retain the exact complete terminal check inventory."
+    }
+    foreach ($check in $declared) {
+        $result = @($terminal | Where-Object name -CEQ ([string]$check.name))
+        if ($result.Count -ne 1) { throw "Readiness check '$($check.name)' is not terminal exactly once." }
+        Assert-TerminalCheckEvidence `
+            -Declared $check `
+            -Result $result[0] `
+            -TerminalChecks $terminal `
+            -SkipFileEvidence:$SkipFileEvidence
+    }
+    $failed = @($terminal | Where-Object state -CEQ "failed")
+    $blocked = @($terminal | Where-Object state -CEQ "blocked")
+    $passed = @($terminal | Where-Object state -CEQ "passed")
+    $assertionBearing = @($terminal | Where-Object assertions_started -EQ $true)
+    if ($failed.Count -eq 0 -or
+        [int]$Attempt.assertion_count -ne $assertionBearing.Count -or
+        [int]$Attempt.failure_count -ne $failed.Count -or
+        [int]$Attempt.blocked_count -ne $blocked.Count -or
+        [int]$Harvest.failed_count -ne $failed.Count -or
+        [int]$Harvest.blocked_count -ne $blocked.Count -or
+        [int]$Harvest.passed_count -ne $passed.Count) {
+        throw "Readiness attempt/harvest pass, fail, block, or assertion counts are not exact."
+    }
+    if ([string]$Attempt.environment_fingerprint -ceq ("0" * 64)) {
+        $environmentResult = @($terminal | Where-Object name -CEQ "environment-contract")
+        if ($environmentResult.Count -ne 1 -or
+            @("failed", "blocked") -cnotcontains [string]$environmentResult[0].state) {
+            throw "A zero Readiness environment fingerprint requires one exact nonpassing environment-contract result."
+        }
+    }
+
+    if ([int]$Batch.batch -ne 1 -or [string]$Batch.state -cne "open" -or
+        [string]$Batch.harvest_receipt.sha256 -notmatch '^[0-9a-f]{64}$') {
+        throw "Failed Readiness must produce exactly one open defect batch bound to its harvest."
+    }
+    $defects = @($Batch.defects)
+    if ([int]$Batch.defect_count -ne $defects.Count -or $defects.Count -ne $failed.Count) {
+        throw "Readiness defect batch must record every failed check exactly once."
+    }
+    foreach ($failedCheck in $failed) {
+        $matching = @($defects | Where-Object {
+            @($_.check_names).Count -eq 1 -and
+            [string]$_.check_names[0] -ceq [string]$failedCheck.name
+        })
+        if ($matching.Count -ne 1 -or
+            [string]$matching[0].classification -cne [string]$failedCheck.classification -or
+            [string]::IsNullOrWhiteSpace([string]$matching[0].summary)) {
+            throw "Failed Readiness check '$($failedCheck.name)' is absent from or duplicated in its batch."
+        }
+        $expectedRaw = @([pscustomobject]@{
+            path = [string]$failedCheck.evidence_path
+            sha256 = [string]$failedCheck.evidence_sha256
+        }) + @($failedCheck.produced_evidence | Where-Object { $null -ne $_ })
+        $expectedKeys = @($expectedRaw | ForEach-Object { "$([string]$_.path)|$([string]$_.sha256)" } | Sort-Object -Unique)
+        $actualKeys = @($matching[0].raw_evidence | ForEach-Object {
+            Assert-HashedFileEvidence -Evidence $_ -Label "Readiness defect raw evidence" -SkipFileEvidence:$SkipFileEvidence
+            "$([string]$_.path)|$([string]$_.sha256)"
+        } | Sort-Object -Unique)
+        if (($expectedKeys -join "`n") -cne ($actualKeys -join "`n")) {
+            throw "Readiness defect '$($matching[0].id)' drops or adds raw evidence."
+        }
+    }
+    $expectedBlocked = @($blocked | ForEach-Object {
+        "$([string]$_.name)|$([string]$_.dependency_reason)"
+    } | Sort-Object)
+    $actualBlocked = @($Batch.blocked_checks | ForEach-Object {
+        if ([string]$_.scope -cne "check" -or
+            [string]::IsNullOrWhiteSpace([string]$_.dependency_reason)) {
+            throw "Readiness defect batch contains an invalid blocked-check record."
+        }
+        "$([string]$_.name)|$([string]$_.dependency_reason)"
+    } | Sort-Object)
+    if (($expectedBlocked -join "`n") -cne ($actualBlocked -join "`n")) {
+        throw "Readiness defect batch does not retain every exact blocked-check reason."
+    }
+}
+
+function Assert-HarvestComplete {
+    param(
+        [Parameter(Mandatory)]$Attempt,
+        [Parameter(Mandatory)]$Harvest,
+        [Parameter(Mandatory)]$Batch,
+        [switch]$SkipFileEvidence
+    )
+
+    switch ([string]$Attempt.phase) {
+        "candidate-rehearsal" {
+            Assert-CandidateRehearsalHarvestComplete @PSBoundParameters
+        }
+        "validation-readiness" {
+            Assert-ReadinessHarvestComplete @PSBoundParameters
+        }
+        default { throw "Unsupported validation harvest predecessor phase '$($Attempt.phase)'." }
+    }
+}
+
 function Invoke-ExpectedGuardFailure {
     param([scriptblock]$Action, [string]$Label)
     try {
@@ -531,11 +683,12 @@ if ($SelfTest) {
         source_identity_verification_state = "verified"
         environment_identity = [pscustomobject]@{ verification_state = "verified" }
         assertion_count = 2; failure_count = 1; blocked_count = 1; nested_blocked_count = 1; nested_failure_count = 1
-        checks = @(
+        declared_checks = @(
             [pscustomobject]@{ name = "independent"; depends_on = @(); command = "fail" },
             [pscustomobject]@{ name = "uat-diagnostics"; depends_on = @(); command = "pass" },
             [pscustomobject]@{ name = "dependent"; depends_on = @("independent"); command = "blocked" }
         )
+        checks = @()
     }
     $harvest = [pscustomobject]@{
         schema_version = 1; sprint = "sprint-8a"; phase = "candidate-rehearsal-harvest"; authoritative = $false
@@ -562,7 +715,56 @@ if ($SelfTest) {
             [pscustomobject]@{ scope = "scenario"; name = "uat-diagnostics/UAT-8A-01"; parent_check = "uat-diagnostics"; blocked_by = @("independent"); dependency_reason = "blocked by invalid prerequisite(s): independent" }
         )
     }
+    $attempt.checks = @($harvest.checks | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
     Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence
+    $readinessAttempt = [pscustomobject]@{
+        schema_version = 2; sprint = "sprint-8a"; phase = "validation-readiness"; authoritative = $false
+        attempt = 38; state = "failed"; assertions_started = $true; assertions_started_at = "2026-01-01T00:00:00Z"
+        mutable_source_identity = $source; source_identity_verification_state = "verified"
+        environment_identity = [pscustomobject]@{ verification_state = "unverified" }
+        environment_fingerprint = "0" * 64; assertion_count = 2; failure_count = 1; blocked_count = 1
+        declared_checks = @(
+            [pscustomobject]@{ name = "compose-database-contract"; depends_on = @(); classification = "environment" },
+            [pscustomobject]@{ name = "runner-self-tests"; depends_on = @(); classification = "harness" },
+            [pscustomobject]@{ name = "environment-contract"; depends_on = @("compose-database-contract"); classification = "environment" }
+        )
+        checks = @(
+            [pscustomobject]@{ name = "compose-database-contract"; depends_on = @(); command = "probe"; state = "failed"; classification = "environment"; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; assertions_started = $true; assertions_started_at = "2026-01-01T00:00:01Z"; duration_ms = 1000; exit_status = 1; evidence_path = "raw/readiness-environment.log"; evidence_sha256 = "1" * 64; produced_evidence = $null },
+            [pscustomobject]@{ name = "runner-self-tests"; depends_on = @(); command = "selftest"; state = "passed"; classification = $null; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; assertions_started = $true; assertions_started_at = "2026-01-01T00:00:01Z"; duration_ms = 1000; exit_status = 0; evidence_path = "raw/readiness-harness.log"; evidence_sha256 = "2" * 64; produced_evidence = @() },
+            [pscustomobject]@{ name = "environment-contract"; depends_on = @("compose-database-contract"); command = "finalize"; state = "blocked"; classification = "environment"; dependency_reason = "blocked by failed prerequisite(s): compose-database-contract"; started_at = $null; ended_at = "2026-01-01T00:00:02Z"; assertions_started = $false; assertions_started_at = $null; duration_ms = 0; exit_status = $null; evidence_path = $null; evidence_sha256 = $null; produced_evidence = @() }
+        )
+    }
+    $readinessHarvest = [pscustomobject]@{
+        schema_version = 1; sprint = "sprint-8a"; phase = "validation-readiness-harvest"; authoritative = $false
+        attempt = 38; state = "harvest_complete"; mutable_source_identity = $source; environment_fingerprint = "0" * 64
+        attempt_receipt = [pscustomobject]@{ path = "attempts/readiness-38.json"; sha256 = "3" * 64 }
+        failed_count = 1; blocked_count = 1; passed_count = 1; checks = $readinessAttempt.checks
+    }
+    $readinessBatch = [pscustomobject]@{
+        schema_version = 1; sprint = "sprint-8a"; phase = "validation-readiness-defect-batch"; authoritative = $false
+        attempt = 38; batch = 1; state = "open"; mutable_source_identity = $source; environment_fingerprint = "0" * 64
+        harvest_receipt = [pscustomobject]@{ path = "attempts/readiness-38-harvest.json"; sha256 = "4" * 64 }
+        defect_count = 1
+        defects = @([pscustomobject]@{ id = "8A-VR38-01"; classification = "environment"; summary = "missing binding"; check_names = @("compose-database-contract"); raw_evidence = @([pscustomobject]@{ path = "raw/readiness-environment.log"; sha256 = "1" * 64 }) })
+        blocked_checks = @([pscustomobject]@{ scope = "check"; name = "environment-contract"; dependency_reason = "blocked by failed prerequisite(s): compose-database-contract" })
+    }
+    Assert-HarvestComplete -Attempt $readinessAttempt -Harvest $readinessHarvest -Batch $readinessBatch -SkipFileEvidence
+    $extraReadinessEvidence = [pscustomobject]@{ path = "raw/readiness-extra.json"; sha256 = "9" * 64 }
+    $readinessAttempt.checks[0].produced_evidence = @($extraReadinessEvidence)
+    $readinessHarvest.checks[0].produced_evidence = @($extraReadinessEvidence)
+    $readinessBatch.defects[0].raw_evidence = @(
+        [pscustomobject]@{ path = "raw/readiness-environment.log"; sha256 = "1" * 64 },
+        $extraReadinessEvidence
+    )
+    Assert-HarvestComplete -Attempt $readinessAttempt -Harvest $readinessHarvest -Batch $readinessBatch -SkipFileEvidence
+    $readinessAttempt.checks[0].produced_evidence = $null
+    $readinessHarvest.checks[0].produced_evidence = $null
+    $readinessBatch.defects[0].raw_evidence = @([pscustomobject]@{ path = "raw/readiness-environment.log"; sha256 = "1" * 64 })
+    $readinessBatch.blocked_checks = @()
+    Invoke-ExpectedGuardFailure {
+        Assert-HarvestComplete -Attempt $readinessAttempt -Harvest $readinessHarvest -Batch $readinessBatch -SkipFileEvidence
+    } "a Readiness batch that drops its blocked dependency"
+    $readinessBatch.blocked_checks = @([pscustomobject]@{ scope = "check"; name = "environment-contract"; dependency_reason = "blocked by failed prerequisite(s): compose-database-contract" })
     $placeholderSource = [pscustomobject]@{
         commit = "0" * 40; tree = "0" * 40; dirty = $false; branch = "unverified"
         acceptance_inventory_sha256 = "0" * 64; deployment_inputs_sha256 = "0" * 64
@@ -607,9 +809,9 @@ if ($SelfTest) {
     $batch.defects[0].raw_evidence = @()
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a defect that drops retained raw evidence"
     $batch.defects[0].raw_evidence = @([pscustomobject]@{ path = "raw/fail.log"; sha256 = "f" * 64 })
-    $attempt.checks[2].depends_on = @("uat-diagnostics")
+    $attempt.declared_checks[2].depends_on = @("uat-diagnostics")
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a block attributed to a passing dependency"
-    $attempt.checks[2].depends_on = @("independent")
+    $attempt.declared_checks[2].depends_on = @("independent")
     $harvest.failed_count = 2
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a false harvest failure count"
     $harvest.failed_count = 1
@@ -639,6 +841,12 @@ if ($SelfTest) {
     $harvest.checks[1].state = "failed"; $harvest.checks[1].classification = "harness"; $harvest.checks[1].exit_status = 1
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "double counting a nested semantic failure as the outer UAT lane"
     $harvest.checks[1].state = "passed"; $harvest.checks[1].classification = $null; $harvest.checks[1].exit_status = 0
+    $outsideEvidencePath = Join-Path ([IO.Path]::GetTempPath()) "tessara-outside-evidence-$([guid]::NewGuid().ToString('N')).json"
+    Invoke-ExpectedGuardFailure {
+        Assert-HashedFileEvidence `
+            -Evidence ([pscustomobject]@{ path = $outsideEvidencePath; sha256 = "a" * 64 }) `
+            -Label "outside evidence"
+    } "raw evidence outside the repository evidence root"
     $harvest.mutable_source_identity = [pscustomobject]@{ commit = "wrong" }
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a mismatched source identity"
     Write-Host "Sprint validation harvest guard adversarial self-test passed."
@@ -681,28 +889,29 @@ $harvest = Get-Content -LiteralPath $HarvestPath -Raw | ConvertFrom-Json
 $batch = Get-Content -LiteralPath $DefectBatchPath -Raw | ConvertFrom-Json
 Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch
 
-$boundAttemptPath = if ([IO.Path]::IsPathRooted([string]$harvest.attempt_receipt.path)) {
-    [IO.Path]::GetFullPath([string]$harvest.attempt_receipt.path)
-} else {
-    [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$harvest.attempt_receipt.path)))
-}
-$boundHarvestPath = if ([IO.Path]::IsPathRooted([string]$batch.harvest_receipt.path)) {
-    [IO.Path]::GetFullPath([string]$batch.harvest_receipt.path)
-} else {
-    [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$batch.harvest_receipt.path)))
-}
-if ($boundAttemptPath -cne [IO.Path]::GetFullPath($AttemptPath) -or
+$boundAttemptReference = Resolve-Sprint8AEvidenceReference `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $EvidenceRoot `
+    -Path ([string]$harvest.attempt_receipt.path) `
+    -AllowLegacyAbsolute
+$boundHarvestReference = Resolve-Sprint8AEvidenceReference `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $EvidenceRoot `
+    -Path ([string]$batch.harvest_receipt.path) `
+    -AllowLegacyAbsolute
+if ([string]$boundAttemptReference.path -cne [string]$attemptReference.path -or
     $attemptSha -cne [string]$harvest.attempt_receipt.sha256) {
     throw "The harvest does not bind the retained failed-attempt digest."
 }
-if ($boundHarvestPath -cne [IO.Path]::GetFullPath($HarvestPath) -or
+if ([string]$boundHarvestReference.path -cne [string]$harvestReference.path -or
     $harvestSha -cne [string]$batch.harvest_receipt.sha256) {
     throw "The consolidated batch does not bind the retained harvest digest."
 }
+$predecessorPhase = [string]$attempt.phase
 $authorization = [ordered]@{
-    schema_version = 1
+    schema_version = if ($predecessorPhase -ceq "validation-readiness") { 2 } else { 1 }
     sprint = [string]$attempt.sprint
-    phase = "candidate-rehearsal-correction-authorization"
+    phase = "$predecessorPhase-correction-authorization"
     attempt = [int]$attempt.attempt
     authoritative = $false
     state = "authorized"
@@ -716,6 +925,9 @@ $authorization = [ordered]@{
     harvest_receipt = [ordered]@{ path = [string]$harvestReference.path; sha256 = $harvestSha }
     defect_batch = [ordered]@{ path = [string]$batchReference.path; sha256 = $batchSha }
     authorization = "tracked correction and one successor readiness attempt are permitted for this consolidated batch"
+}
+if ($predecessorPhase -ceq "validation-readiness") {
+    $authorization["allowed_successor_attempt"] = [int]$attempt.attempt + 1
 }
 Publish-Sprint7AEvidence -Document $authorization -OutputPath ([string]$authorizationReference.full_path) | Out-Null
 Write-Host "Validation harvest is complete; one consolidated correction/restart is authorized."
