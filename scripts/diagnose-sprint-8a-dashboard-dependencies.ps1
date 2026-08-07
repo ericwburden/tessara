@@ -139,6 +139,16 @@ function Get-Token {
     return [string]$document.token
 }
 
+function Initialize-ComponentAccessBasis {
+    param([Parameter(Mandatory)][string]$Token)
+
+    $components = @(Invoke-JsonRequest -Path "/api/components" -Token $Token)
+    if ($components.Count -lt 1) {
+        throw "The Component provider did not return an access-basis catalog."
+    }
+    return $components
+}
+
 function Initialize-ContextIsolationActor {
     param([Parameter(Mandatory)][string]$AdminToken)
 
@@ -185,6 +195,31 @@ function Get-OptionalPropertyValue {
     $property = $Value.PSObject.Properties[$Name]
     if ($null -eq $property) { return $null }
     return $property.Value
+}
+
+function Invoke-DashboardProjectionConvergence {
+    param(
+        [Parameter(Mandatory)][scriptblock]$Operation,
+        [Parameter(Mandatory)][scriptblock]$Assertion,
+        [Parameter(Mandatory)][string]$Label,
+        [ValidateRange(1, 120)][int]$MaximumAttempts = 30,
+        [ValidateRange(0, 30)][int]$DelaySeconds = 1
+    )
+
+    $lastFailure = "no observation"
+    for ($attempt = 1; $attempt -le $MaximumAttempts; $attempt++) {
+        try {
+            $value = & $Operation
+            & $Assertion $value
+            return $value
+        } catch {
+            $lastFailure = $_.Exception.Message
+        }
+        if ($attempt -lt $MaximumAttempts -and $DelaySeconds -gt 0) {
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+    throw "$Label did not converge after $MaximumAttempts attempt(s). Last observation: $lastFailure"
 }
 
 function ConvertTo-ComponentReferenceIdentity {
@@ -243,8 +278,8 @@ function Get-DashboardCompositionSnapshot {
     $snapshot = [ordered]@{
         stage = $Stage
         placement_ids = @($placements | ForEach-Object { [string]$_.placement_id } | Sort-Object)
-        references = @($referenceRows)
-        nondisclosed_placement_ids = @($nondisclosed | Sort-Object)
+        references = @($referenceRows.ToArray())
+        nondisclosed_placement_ids = @($nondisclosed.ToArray() | Sort-Object)
     }
     ConvertTo-Sprint8ADashboardDependencyContractDocument -Value $snapshot
 }
@@ -374,6 +409,27 @@ if (@($expectedActionPlacements | Sort-Object -Unique).Count -ne 3 -or
 }
 if ($SelfTest) {
     Test-Sprint8ADashboardDependencyEvidenceContract
+    if (-not (Get-Command Initialize-ComponentAccessBasis).Definition.Contains('"/api/components"')) {
+        throw "Sprint 8A Dashboard dependency diagnostic no longer primes the provider-evaluated access basis."
+    }
+    $retryState = [pscustomobject]@{ attempt = 0 }
+    $retryOperation = {
+        $retryState.attempt++
+        [pscustomobject]@{ ready = $retryState.attempt -ge 2 }
+    }
+    $retryAssertion = {
+        param($value)
+        if ($value.ready -ne $true) { throw "projection pending" }
+    }
+    $retryResult = Invoke-DashboardProjectionConvergence `
+        -Operation $retryOperation `
+        -Assertion $retryAssertion `
+        -Label "self-test projection" `
+        -MaximumAttempts 3 `
+        -DelaySeconds 0
+    if ($retryState.attempt -ne 2 -or $retryResult.ready -ne $true) {
+        throw "Sprint 8A Dashboard dependency diagnostic did not retry a pending projection deterministically."
+    }
     $probeChecks = [Collections.Generic.List[object]]::new()
     Assert-Condition -Condition $false -Code "probe_failure" -Detail "self-test failure" -Checks $probeChecks
     Add-BlockedCheck -Code "probe_blocked" -DependencyReason "probe_failure did not pass" -Checks $probeChecks
@@ -418,6 +474,7 @@ $checks = [Collections.Generic.List[object]]::new()
 $actions = [Collections.Generic.List[object]]::new()
 $snapshots = [Collections.Generic.List[object]]::new()
 $fatalErrors = [Collections.Generic.List[string]]::new()
+$bootstrapToken = $null
 $token = $null
 $isolationToken = $null
 $isolationActor = $null
@@ -460,24 +517,88 @@ $isolatedRecovered = $null
 $recoveredSnapshot = $null
 Push-Location $repoRoot
 try {
-    $token = Get-Token
-    $isolationActor = Initialize-ContextIsolationActor -AdminToken $token
-    $isolationToken = Get-Token -Email $fixture.isolation_actor_email -Password $isolationActor.password
+    $bootstrapToken = Get-Token
+    $isolationActor = Initialize-ContextIsolationActor -AdminToken $bootstrapToken
     $contextIsolationEvidence.actor_id = [string]$isolationActor.actor_id
     $refreshPath = "/api/admin/dashboards/$($fixture.dashboard_id)/dependencies/refresh"
     $readPath = "/api/admin/dashboards/$($fixture.dashboard_id)/dependencies"
 
     try {
-        $initialSnapshot = Get-DashboardCompositionSnapshot -Token $token -Stage "initial"
+        $initialSnapshotOperation = {
+            $candidateToken = Get-Token
+            try {
+                $null = @(Initialize-ComponentAccessBasis -Token $candidateToken)
+                [pscustomobject]@{
+                    token = $candidateToken
+                    snapshot = Get-DashboardCompositionSnapshot -Token $candidateToken -Stage "initial"
+                }
+            } catch {
+                try { Invoke-JsonRequest -Path "/api/auth/logout" -Method DELETE -Token $candidateToken | Out-Null } catch { }
+                throw
+            }
+        }
+        $initialSnapshotAssertion = {
+            param($candidate)
+            try {
+                Assert-Sprint8ADashboardCompositionSnapshot -Snapshot $candidate.snapshot -Stage "initial"
+            } catch {
+                try { Invoke-JsonRequest -Path "/api/auth/logout" -Method DELETE -Token $candidate.token | Out-Null } catch { }
+                throw
+            }
+        }
+        $initialSnapshotContext = Invoke-DashboardProjectionConvergence `
+            -Operation $initialSnapshotOperation `
+            -Assertion $initialSnapshotAssertion `
+            -Label "Initial Dashboard composition access-basis projection" `
+            -MaximumAttempts 60
+        $token = [string]$initialSnapshotContext.token
+        $initialSnapshot = $initialSnapshotContext.snapshot
         $snapshots.Add($initialSnapshot)
-        Assert-Sprint8ADashboardCompositionSnapshot -Snapshot $initialSnapshot -Stage "initial"
         Assert-Condition -Condition $true -Code "exact_initial_composition" -Detail "Dashboard composition starts with the exact seven receipt-bound placement identities and typed references" -Checks $checks
     } catch {
         Add-FailedCheck -Code "exact_initial_composition" -Detail $_.Exception.Message -Checks $checks
     }
 
     try {
-        $initial = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $token -Body @{}
+        $snapshotToken = $token
+        $initialRefreshOperation = {
+            $candidateToken = Get-Token
+            try {
+                $null = @(Initialize-ComponentAccessBasis -Token $candidateToken)
+                [pscustomobject]@{
+                    token = $candidateToken
+                    result = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $candidateToken -Body @{}
+                }
+            } catch {
+                try { Invoke-JsonRequest -Path "/api/auth/logout" -Method DELETE -Token $candidateToken | Out-Null } catch { }
+                throw
+            }
+        }
+        $initialRefreshAssertion = {
+            param($candidate)
+            try {
+                $placements = @($candidate.result.findings | ForEach-Object { [string]$_.placement_id } | Sort-Object)
+                if ([string]$candidate.result.health -cne "degraded" -or
+                    [long]$candidate.result.open_count -ne 3 -or
+                    [long]$candidate.result.deferred_count -ne 0 -or
+                    ($placements -join ',') -cne ((@($expectedActionPlacements) | Sort-Object) -join ',')) {
+                    throw "the exact three lifecycle findings are not visible yet"
+                }
+            } catch {
+                try { Invoke-JsonRequest -Path "/api/auth/logout" -Method DELETE -Token $candidate.token | Out-Null } catch { }
+                throw
+            }
+        }
+        $initialRefreshContext = Invoke-DashboardProjectionConvergence `
+            -Operation $initialRefreshOperation `
+            -Assertion $initialRefreshAssertion `
+            -Label "Initial Dashboard dependency access-basis projection" `
+            -MaximumAttempts 60
+        $token = [string]$initialRefreshContext.token
+        $initial = $initialRefreshContext.result
+        if (-not [string]::IsNullOrWhiteSpace($snapshotToken) -and $snapshotToken -cne $token) {
+            try { Invoke-JsonRequest -Path "/api/auth/logout" -Method DELETE -Token $snapshotToken | Out-Null } catch { }
+        }
         $initialHealthEvidence = [ordered]@{
             health = [string]$initial.health
             open_count = [long]$initial.open_count
@@ -492,12 +613,17 @@ try {
     } catch {
         Add-FailedCheck -Code "exact_lifecycle_finding_placements" -Detail $_.Exception.Message -Checks $checks
     }
+    $isolationToken = Get-Token -Email $fixture.isolation_actor_email -Password $isolationActor.password
+    $null = @(Initialize-ComponentAccessBasis -Token $isolationToken)
     if ($null -eq $initial) {
         Add-BlockedCheck -Code "inactive_successor_findings" -DependencyReason "initial dependency refresh did not complete" -Checks $checks
         Add-BlockedCheck -Code "blocked_scope_nondisclosure" -DependencyReason "initial dependency refresh did not complete" -Checks $checks
     } else {
         try {
             $initialFindingEvidence = @($initial.findings | Sort-Object { [string]$_.placement_id } | ForEach-Object { ConvertTo-FindingEvidence -Finding $_ })
+            if ($initialFindingEvidence.Count -ne 3) {
+                throw "The exact three authorized lifecycle findings were not retained."
+            }
             foreach ($finding in $initialFindingEvidence) {
                 if ([string]$finding.finding_code -cne "lifecycle_unrenderable" -or
                     [string]$finding.disposition -cne "open" -or
@@ -727,25 +853,45 @@ try {
     }
 
     $preOutagePrimeError = $null
-    try {
-        $primaryPrime = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $token -Body @{}
-        $isolatedPrime = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $isolationToken -Body @{}
-        if ([string]$primaryPrime.health -cne "healthy" -or @($primaryPrime.findings).Count -ne 0 -or
-            [string]$isolatedPrime.health -cne "healthy" -or @($isolatedPrime.findings).Count -ne 0) {
-            throw "Pre-outage access-basis refresh did not converge for both authorization contexts."
-        }
-    } catch {
-        $preOutagePrimeError = $_.Exception.Message
-    }
-    if ($null -ne $preOutagePrimeError) {
-        Add-FailedCheck -Code "provider_outage_is_contained" -Detail $preOutagePrimeError -Checks $checks
+    if ($missingPreOutageStages.Count -ne 0) {
+        Add-BlockedCheck `
+            -Code "provider_outage_is_contained" `
+            -DependencyReason "the action-fixture composition stages did not complete" `
+            -Checks $checks
     } else {
         try {
-            & docker compose -f $composePath --profile reference stop components | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Could not stop the Component provider for the outage diagnostic." }
-            $componentStopped = $true
+            $primeOperation = {
+                [pscustomobject]@{
+                    primary = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $token -Body @{}
+                    isolated = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $isolationToken -Body @{}
+                }
+            }
+            $primeAssertion = {
+                param($candidate)
+                if ([string]$candidate.primary.health -cne "healthy" -or @($candidate.primary.findings).Count -ne 0 -or
+                    [string]$candidate.isolated.health -cne "healthy" -or @($candidate.isolated.findings).Count -ne 0) {
+                    throw "both authorization contexts are not healthy at zero findings yet"
+                }
+            }
+            $primeState = Invoke-DashboardProjectionConvergence `
+                -Operation $primeOperation `
+                -Assertion $primeAssertion `
+                -Label "Pre-outage access-basis refresh"
+            $primaryPrime = $primeState.primary
+            $isolatedPrime = $primeState.isolated
         } catch {
-            Add-FailedCheck -Code "provider_outage_is_contained" -Detail $_.Exception.Message -Checks $checks
+            $preOutagePrimeError = $_.Exception.Message
+        }
+        if ($null -ne $preOutagePrimeError) {
+            Add-FailedCheck -Code "provider_outage_is_contained" -Detail $preOutagePrimeError -Checks $checks
+        } else {
+            try {
+                & docker compose -f $composePath --profile reference stop components | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "Could not stop the Component provider for the outage diagnostic." }
+                $componentStopped = $true
+            } catch {
+                Add-FailedCheck -Code "provider_outage_is_contained" -Detail $_.Exception.Message -Checks $checks
+            }
         }
     }
     if (-not $componentStopped) {
@@ -853,12 +999,34 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "Could not restart the Component provider after the outage diagnostic." }
             Wait-ComponentHealthy
             $componentStopped = $false
-            $recovered = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $token -Body @{}
-            $isolatedRecovered = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $isolationToken -Body @{}
-            if ([string]$recovered.health -cne "healthy" -or @($recovered.findings).Count -ne 0 -or
-                [string]$isolatedRecovered.health -cne "healthy" -or @($isolatedRecovered.findings).Count -ne 0) {
-                throw "The first recovery did not resolve both context-owned finding sets."
+            $firstRecoveryOperation = {
+                $null = @(Initialize-ComponentAccessBasis -Token $token)
+                $null = @(Initialize-ComponentAccessBasis -Token $isolationToken)
+                [pscustomobject]@{
+                    primary = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $token -Body @{}
+                    isolated = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $isolationToken -Body @{}
+                }
             }
+            $exactRecoveryAssertion = {
+                param($candidate)
+                if ([string]$candidate.primary.health -cne "healthy" -or
+                    [long]$candidate.primary.open_count -ne 0 -or
+                    [long]$candidate.primary.deferred_count -ne 0 -or
+                    @($candidate.primary.findings).Count -ne 0 -or
+                    [string]$candidate.isolated.health -cne "healthy" -or
+                    [long]$candidate.isolated.open_count -ne 0 -or
+                    [long]$candidate.isolated.deferred_count -ne 0 -or
+                    @($candidate.isolated.findings).Count -ne 0) {
+                    throw "both authorization contexts are not at exact zero-finding health yet"
+                }
+            }
+            $firstRecovery = Invoke-DashboardProjectionConvergence `
+                -Operation $firstRecoveryOperation `
+                -Assertion $exactRecoveryAssertion `
+                -Label "First provider recovery" `
+                -MaximumAttempts 60
+            $recovered = $firstRecovery.primary
+            $isolatedRecovered = $firstRecovery.isolated
         } catch {
             $recoveryErrors.Add($_.Exception.Message)
         }
@@ -908,11 +1076,29 @@ try {
                 Wait-ComponentHealthy
                 $componentStopped = $false
             }
-            $recovered = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $token -Body @{}
-            $isolatedRecovered = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $isolationToken -Body @{}
-            $recoveredSnapshot = Get-DashboardCompositionSnapshot -Token $token -Stage "recovered"
+            $finalRecoveryOperation = {
+                $null = @(Initialize-ComponentAccessBasis -Token $token)
+                $null = @(Initialize-ComponentAccessBasis -Token $isolationToken)
+                [pscustomobject]@{
+                    primary = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $token -Body @{}
+                    isolated = Invoke-JsonRequest -Path $refreshPath -Method POST -Token $isolationToken -Body @{}
+                    snapshot = Get-DashboardCompositionSnapshot -Token $token -Stage "recovered"
+                }
+            }
+            $finalRecoveryAssertion = {
+                param($candidate)
+                & $exactRecoveryAssertion $candidate
+                Assert-Sprint8ADashboardCompositionSnapshot -Snapshot $candidate.snapshot -Stage "recovered"
+            }
+            $finalRecovery = Invoke-DashboardProjectionConvergence `
+                -Operation $finalRecoveryOperation `
+                -Assertion $finalRecoveryAssertion `
+                -Label "Final provider recovery" `
+                -MaximumAttempts 60
+            $recovered = $finalRecovery.primary
+            $isolatedRecovered = $finalRecovery.isolated
+            $recoveredSnapshot = $finalRecovery.snapshot
             $snapshots.Add($recoveredSnapshot)
-            Assert-Sprint8ADashboardCompositionSnapshot -Snapshot $recoveredSnapshot -Stage "recovered"
         } catch {
             $recoveryErrors.Add($_.Exception.Message)
         }
@@ -941,10 +1127,14 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($isolationToken)) {
         try { Invoke-JsonRequest -Path "/api/auth/logout" -Method DELETE -Token $isolationToken | Out-Null } catch { }
     }
+    if (-not [string]::IsNullOrWhiteSpace($bootstrapToken) -and $bootstrapToken -cne $token) {
+        try { Invoke-JsonRequest -Path "/api/auth/logout" -Method DELETE -Token $bootstrapToken | Out-Null } catch { }
+    }
     Pop-Location
 }
 
-$recordedCodes = @($checks | ForEach-Object { [string]$_.code })
+$checkRows = @($checks.ToArray())
+$recordedCodes = @($checkRows | ForEach-Object { [string]$_.code })
 foreach ($missingCode in @($script:Sprint8ADashboardDependencyCheckCodes | Where-Object { $recordedCodes -cnotcontains $_ })) {
     $reason = if ($fatalErrors.Count -gt 0) {
         "unhandled prerequisite failure: $($fatalErrors -join '; ')"
@@ -953,9 +1143,10 @@ foreach ($missingCode in @($script:Sprint8ADashboardDependencyCheckCodes | Where
     }
     Add-BlockedCheck -Code $missingCode -DependencyReason $reason -Checks $checks
 }
-$duplicateCodes = @($checks | Group-Object code | Where-Object Count -ne 1 | ForEach-Object Name)
-$failedChecks = @($checks | Where-Object { [string]$_.state -ceq "failed" })
-$blockedChecks = @($checks | Where-Object { [string]$_.state -ceq "blocked" })
+$checkRows = @($checks.ToArray())
+$duplicateCodes = @($recordedCodes | Group-Object | Where-Object Count -ne 1 | ForEach-Object { [string]$_.Name })
+$failedChecks = @($checkRows | Where-Object { [string]$_.state -ceq "failed" })
+$blockedChecks = @($checkRows | Where-Object { [string]$_.state -ceq "blocked" })
 $passed = $fatalErrors.Count -eq 0 -and $duplicateCodes.Count -eq 0 -and
     $failedChecks.Count -eq 0 -and $blockedChecks.Count -eq 0 -and
     $checks.Count -eq $script:Sprint8ADashboardDependencyCheckCodes.Count
@@ -963,13 +1154,13 @@ $evidence = [ordered]@{
     schema_version = 3
     evidence_kind = "tessara.sprint-8a.dashboard-dependency-semantic-diagnostic"
     dashboard_id = $fixture.dashboard_id
-    checks = $checks
-    actions = $actions
+    checks = @($checkRows)
+    actions = @($actions.ToArray())
     reference_catalog = $referenceCatalog
     initial_findings = $initialFindingEvidence
     initial_blocked_placement_disclosed = $initialBlockedDisclosed
     initial_health = $initialHealthEvidence
-    composition_snapshots = $snapshots
+    composition_snapshots = @($snapshots.ToArray())
     outage = $outageEvidence
     context_isolation = $contextIsolationEvidence
     repeat_outage = $repeatOutageEvidence
@@ -986,13 +1177,21 @@ $evidence = [ordered]@{
     failure_count = $failedChecks.Count + $fatalErrors.Count
     blocked_count = $blockedChecks.Count
     duplicate_check_codes = $duplicateCodes
-    fatal_errors = $fatalErrors
+    fatal_errors = @($fatalErrors.ToArray())
     harvesting_complete = $true
     canonical_reset_required = $true
     passed = $passed
 }
 if ($passed) {
-    Assert-Sprint8ADashboardDependencyEvidence -Evidence ([pscustomobject]$evidence)
+    try {
+        Assert-Sprint8ADashboardDependencyEvidence -Evidence ([pscustomobject]$evidence)
+    } catch {
+        $fatalErrors.Add("Evidence contract rejected the harvested diagnostic: $($_.Exception.Message)")
+        $passed = $false
+        $evidence.fatal_errors = @($fatalErrors.ToArray())
+        $evidence.failure_count = $failedChecks.Count + $fatalErrors.Count
+        $evidence.passed = $false
+    }
 }
 $null = Publish-DashboardDependencyEvidence -Document $evidence -Path $OutputPath
 $evidence | ConvertTo-Json -Depth 50
