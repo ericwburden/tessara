@@ -26,7 +26,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$composePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ComposeFile))
+
+function Resolve-RepositoryPath {
+    param([Parameter(Mandatory)][string]$Path)
+    if ([IO.Path]::IsPathRooted($Path)) {
+        return [IO.Path]::GetFullPath($Path)
+    }
+    [IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
+}
+
+$composePath = Resolve-RepositoryPath -Path $ComposeFile
 $expectedProject = $ExpectedProject
 $installationId = $InstallationId
 $runtimeDirectory = if ([string]::IsNullOrWhiteSpace($RuntimeDirectory)) {
@@ -206,14 +215,17 @@ function Test-Sprint7ABootstrapHelpers {
         Restore-Sprint7AProcessEnvironmentSnapshot -Snapshot $original
     }
 
-    Write-Host "Sprint 7A bootstrap action projection and caller-environment restoration self-test passed."
-}
-
-function Resolve-RepositoryPath([string]$Path) {
-    if ([IO.Path]::IsPathRooted($Path)) {
-        return [IO.Path]::GetFullPath($Path)
+    $relativeComposePath = "deploy/sprint-7a/compose.yaml"
+    $expectedRelativeComposePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativeComposePath))
+    if ((Resolve-RepositoryPath -Path $relativeComposePath) -cne $expectedRelativeComposePath) {
+        throw "Sprint 7A repository-relative Compose path resolution self-test failed."
     }
-    return [IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
+    $absoluteComposePath = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) "tessara-compose-absolute.yaml"))
+    if ((Resolve-RepositoryPath -Path $absoluteComposePath) -cne $absoluteComposePath) {
+        throw "Sprint 7A absolute Compose path resolution self-test failed."
+    }
+
+    Write-Host "Sprint 7A bootstrap action projection, path resolution, and caller-environment restoration self-test passed."
 }
 
 function Prepare-Sprint7AUatFixtures {

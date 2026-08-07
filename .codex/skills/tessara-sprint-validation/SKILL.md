@@ -51,6 +51,14 @@ Preserve these invariants:
 - UAT never starts before authoritative SIT passes.
 - No candidate freezes until the complete readiness gate and rehearsal both
   pass cleanly against the same mutable source identity.
+- Candidate Rehearsal fixes its authenticated lane selection and deterministic
+  execution order in an immutable start receipt. A potentially passing attempt
+  executes every required lane; a `deferred` lane makes the attempt failed and
+  incomplete and cannot authorize any downstream phase.
+- Candidate Rehearsal acquires its exclusive pre-publication reservation before
+  creating attempt evidence. Contention rejects the launch without an attempt
+  receipt; the Wave A attempt-state lane authenticates the retained lock and
+  state transition after the immutable start exists.
 - Rehearsal is diagnostic and non-authoritative; it is never called SIT or UAT.
 - Deployed acceptance smoke belongs to SIT.
 - One candidate fingerprint covers all authoritative SIT and UAT evidence.
@@ -93,13 +101,24 @@ stale.
 
 1. Execute the complete Test Readiness Gate and retain
    `validation-readiness-result.json`.
-2. Execute the complete non-authoritative Candidate Rehearsal and retain
-   `candidate-rehearsal-result.json`.
-3. Collect all safe-to-discover rehearsal defects into one batch. Correct the
-   batch while source remains mutable, then repeat the complete readiness gate
-   and complete rehearsal until both pass cleanly. A narrow reproducer may
-   diagnose a defect but cannot satisfy either gate or replace an affected
-   rehearsal lane.
+2. Execute the non-authoritative Candidate Rehearsal through its immutable
+   segment order: Wave A, cleanup sinks, Wave B execution or deferral,
+   aggregate sinks, then safety finalizers. If Wave A passes, continue through
+   Wave B in the same attempt so a potentially passing rehearsal executes every
+   required lane. If Wave A fails, finish every safe Wave A sibling, retain
+   mandatory cleanup, restoration, and safety finalizers, and terminalize only
+   eligible Wave B lanes as `deferred`.
+3. Require terminal accounting for every declared rehearsal lane, then collect
+   all safe-to-discover defects into one batch. A failed attempt may authorize
+   correction only after its harvest guard accepts every pass, failure, block,
+   and deferral. Correct the batch while source remains mutable, then repeat the
+   complete readiness gate and rehearsal until both pass cleanly and
+   `candidate-rehearsal-result.json` exists. A narrow reproducer may diagnose a
+   defect but cannot satisfy either gate or replace an affected rehearsal lane.
+   Treat the attempt and harvest as the direct immutable-start bindings. The
+   batch and correction authorization bind transitively through authenticated
+   receipt references; validation state binds the expected attempt and schedule
+   digest to the full schedule in Readiness and the immutable start.
 4. Invoke `tessara-validation-preflight` and require passing
    `preflight-result.json` plus `candidate.json`.
 5. Verify their hashes and immutable candidate fingerprint.
@@ -187,7 +206,10 @@ Never choose a narrower scope merely to avoid expensive work.
 - Retain start/completion receipts, append-only logs, heartbeats, durations,
   and completion sentinels for long-running work.
 - When a controlling tool session disappears, inspect retained completion
-  state before relaunching.
+  state before relaunching. Candidate Rehearsal recovery must authenticate its
+  immutable start schedule and latest checkpoint, preserve ordering and
+  deferral counters, terminalize an orphaned execution with raw evidence, and
+  continue only still-safe work under the same attempt.
 - Keep authoritative results distinct from diagnostic and superseded attempts.
 
 ## Closeout authorization

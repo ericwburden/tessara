@@ -1,20 +1,21 @@
 # Sprint 8A Validation Record
 
-Status: Formal testing exited after Validation Readiness 38 completed its
-15-check fail-late graph against clean commit
-`91c9936be7e0cd9bc6beef78e04dc1937bf6601d`, tree
-`564493fda54badc3d4bc5a99d2336b327424f381`: 12 passed, 2 failed, and 1 was
-blocked by an exact prerequisite. The failures are classified `environment`
-for the missing same-process `TEST_API_DATABASE_URL` binding and `harness` for
-the stale failure-containment self-test recovery sequence;
-`environment-contract` is blocked by the former. The immutable result consumed
-the Rehearsal 30 correction authorization exactly once. The resulting
-implementation audit also found a failed-Readiness retry dead end, incomplete
-Rehearsal terminal checkpoints, an active retired Component `missing_policy`
-alias, and incomplete AC-18/AC-19 UAT/evidence enforcement. These are one
-candidate-affecting correction batch. No corrected readiness, rehearsal pass,
-or candidate exists, and preflight, SIT, formal UAT, and closeout remain Not
-Run.
+Status: Validation Readiness 39 passed its complete 15-check graph against
+clean commit `ffe05aceb526c36023d4946c3f58be641378c50f`, tree
+`1d17533d93429e20e9de510a60cb413b38127797`, and environment fingerprint
+`96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`.
+Candidate Rehearsal 31 then reached a terminal failed state with all 32 lanes
+accounted: 19 passed, 3 failed, and 10 were blocked by exact prerequisites; its
+eight nested automated-UAT scenarios were dependency-blocked, not failed. One
+harvest and one consolidated three-defect batch retain the raw `product`
+workspace-test failure, `product` source-exact materialization failure, and
+`harness` failure-containment defect. The resulting one-use correction
+authorization is unconsumed. The environment was restored through retained
+diagnostic work after terminalization, but no diagnostic repair or restoration
+is a rehearsal pass. The scheduler/protocol, harness, acceptance, fixture, and
+deployment-input correction is candidate-affecting. Readiness 39 is therefore
+superseded for downstream authorization; no candidate exists, and preflight,
+SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -23,7 +24,97 @@ Run.
 
 ## Implementation Readiness Snapshot
 
-### Readiness 38 terminal failure and current implementation correction
+### Readiness 39 pass, Rehearsal 31 failure, and two-wave correction
+
+Readiness 39 passed against the exact R31 source/environment pair. Its
+immutable receipt and canonical alias are byte-identical at
+`artifacts/sprint-8a-closeout/attempts/readiness-39.json`, SHA-256
+`b28da23ad7d3cc3046e3331f85f6616858ec4d14e46071725ad12015b1e80916`.
+It does not authorize preflight because the immediately following Rehearsal 31
+failed and the tracked correction changes validation interpretation and
+candidate inputs.
+
+Rehearsal 31 retained its complete fail-late attempt at
+`artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-31-attempt.json`,
+SHA-256
+`e6efd0e5f480de39e4474e3a3e6c1bd13ae292885591ec10f5621e68ce3bd611`.
+All 32 declared lanes are terminal: 19 passed, 3 failed, and 10 blocked. The
+typed harvest is SHA-256
+`ac2aae8d20ab5d67ed244e73acd142a56e997904b72afafcb957e7adfd92c365`;
+the one three-finding defect batch is SHA-256
+`20109843c4e15a79792f7f8eb8a2521b6ae3ffea371996f98acad72bc9d365cf`;
+and the unconsumed exact-successor-Readiness authorization is SHA-256
+`9f6c60a81d0ecb538a49113fc98b69e0f1d8ebb63f09f5424eef2b113f3b9aae`.
+No historical receipt is rewritten by the correction.
+
+The retained raw findings remain exactly classified by the failed attempt:
+
+1. `workspace-tests` — `product`; diagnosis found that the enrollment test
+   reused a non-fresh `TEST_API_ENROLLMENT_DATABASE_URL` generation. The
+   product expectation remains valid; Readiness must reject user tables in all
+   six disposable test databases before another gate.
+2. `source-exact-materialization-no-op` — `product`; the Supervisor Compose
+   adapter lacked the four module targets required by the applied plan, and
+   supplemental diagnosis exposed a materializer parser that did not accept
+   every valid normalized Compose JSON/array/NDJSON form.
+3. `failure-containment-successor-health` — `harness`; the containment runner
+   must retain and authenticate an unexpected precursor failure before it can
+   evaluate the intended semantic fault and successor recovery.
+
+The ten lane blocks and eight nested UAT blocks retain their exact dependency
+reasons. Post-terminal restoration diagnostics brought up the complete owner
+topology and proved a semantic no-op through corrected temporary inputs; that
+work is diagnostic only and does not alter R31 or satisfy a gate.
+
+The correction introduces one bounded failure-first two-wave scheduler. Its
+launcher first acquires the exclusive reservation; contention rejects launch
+without attempt evidence. Under that retained handle, it captures and attempts
+to authenticate state/Readiness scheduling inputs, selecting conservative full
+harvest if they cannot support bounded deferral. Its create-once start receipt
+then fixes the lane decisions and deterministic order before declared source or
+environment probes. The Wave A attempt-state lane authenticates the retained
+handle, requested attempt, current state, and lifecycle transition. Wave A
+prioritizes prior failures, newly reachable and impact-cone lanes, mandatory
+lifecycle/cleanup, lanes deferred three times,
+and only their required prerequisite closure. Wave B contains authenticated
+prior passes outside the cone. A Wave A pass continues into Wave B in the same
+attempt; a Wave A failure completes safe Wave A harvesting and mandatory
+restoration, then records eligible Wave B lanes as diagnostic-only `deferred`.
+Aggregate lanes remain sinks and do not reverse-expand Wave A.
+
+The immediate post-R31 cycle must use the conservative full-harvest form of
+Wave A. R31 predates immutable scheduler decisions and authenticated deferral
+counters, while this correction changes the scheduler, validation skills,
+runner, acceptance contract, fixtures, environment contract, and deployment
+inputs. Its prior lane passes therefore cannot be promoted into Wave B. The
+retained R9-R11 materialization and R19-R22 Playwright histories are projected
+through `scripts/fixtures/sprint-8a-rehearsal-history-regressions.json` as
+regression fixtures for authentication/fallback behavior only; they are not
+reusable proof. Any later attempt may defer a lane only from a fully authenticated
+two-wave predecessor, and no lane may be deferred more than three consecutive
+times.
+
+Focused implementation verification must prove adversarially that:
+
+- the immutable start fixes deterministic failure-first ordering and safe
+  dependency closure;
+- aggregate sinks do not reverse-expand Wave A;
+- Wave A failure defers eligible Wave B lanes, while Wave A success continues
+  into Wave B in the same attempt;
+- three consecutive deferrals force execution next time and any impact-cone
+  change overrides Wave B eligibility;
+- deferred lanes cannot appear in a passing result or authorize preflight;
+- mandatory cleanup/restoration still executes;
+- process-loss recovery preserves ordering and counters; and
+- harvest and correction authorization accept complete eligible deferred
+  accounting but reject a missing lane.
+
+This implementation phase runs focused correction checks only. The next formal
+lifecycle boundary is a fresh complete Readiness 40 and then Candidate
+Rehearsal 32. The validation coordinator, not this implementation handoff,
+must authorize and launch that cycle.
+
+### Historical Readiness 38 terminal failure and correction
 
 Readiness 38 retained all 15 terminal results at
 `artifacts/sprint-8a-closeout/attempts/readiness-38.json`, SHA-256
@@ -64,10 +155,10 @@ The plan-to-source audit consolidated six correction areas:
    AC-18/AC-19, semantic-predicate, and document identities, and enforce that
    contract before preflight and formal publication.
 
-This source is mutable until the consolidated correction is committed. Only
-focused implementation checks may run in this phase. R38 must then be finalized
-into one harvest/batch/authorization without starting R39. Fresh complete
-Readiness 39 and Rehearsal 31 are required before preflight.
+That source remained mutable until the consolidated correction was committed.
+R38 was then finalized without rerunning its checks, R39 passed, and R31 failed
+as recorded in the current section above. These historical receipts remain
+immutable and do not authorize the post-R31 lifecycle.
 
 ### Readiness 37 and Rehearsal 30 historical consolidated correction
 
@@ -146,11 +237,11 @@ The retained evidence is:
   `efed4d4c53d84454372936067a5a9c454457cf2f42419afe331fc89a8d154792`.
 
 The authorization permitted exactly one successor Readiness start. Readiness
-38 consumed it and failed, so it cannot be reused. The current correction adds
-a second append-only lineage link derived from R38's terminal evidence; that
-link alone may authorize Readiness 39 after R38 finalization. Readiness and
-Rehearsal must both pass against the same corrected clean source and fresh six-
-database environment before preflight.
+38 consumed it and failed, so it cannot be reused. The resulting second
+append-only lineage link authorized only Readiness 39; R39 consumed it and
+passed. Rehearsal 31 then failed and issued the new unconsumed authorization
+described above. Readiness and Rehearsal must both pass against the same
+corrected clean source and fresh six-database environment before preflight.
 
 ### Prior user-directed return from Readiness 36 and Rehearsal 29
 
@@ -231,11 +322,10 @@ transition-ownership, and fail-late enforcement cone. The tracked Playwright
 inventory is 75 exact identities, with the shared-node success/disjoint-node
 redaction and render-denial scenario mapped to UAT-8A-04. That correction was
 exercised by the implementation-level checks below and subsequently reached
-Readiness 38, whose terminal failure and current correction are recorded at the
-top of this file. Formal testing remains paused. R38 finalization is the next
-evidence lifecycle boundary; complete Readiness 39 and Candidate Rehearsal 31
-then must pass against the same corrected clean source and environment
-identity.
+Readiness 38, whose terminal failure and completed correction are recorded at
+the top of this file as historical context. R38 was finalized, R39 passed, and R31
+subsequently failed. The current next boundary is the coordinator-authorized
+Readiness 40/Rehearsal 32 cycle described below.
 
 Implementation-level verification then reset and recreated all six isolated
 readiness databases and passed on the final corrected product source:
@@ -720,21 +810,20 @@ browser execution result.
 ## Required Evidence Inventory
 
 Readiness 38 is the one legacy recovery boundary for the failed-Readiness
-finalizer introduced by this correction. Its complete terminal receipt, raw
-logs, exact two-failure/one-block inventory, and documented consolidated batch
-were frozen before source edits, but the prior runner could not publish typed
-Readiness harvest/batch/authorization artifacts. The user-directed testing exit
-therefore permits only this finalizer and enforcement correction to be committed
-first. The clean commit must then run `-Attempt 38 -FinalizeFailedAttempt`
-without rerunning checks or starting R39; no other attempt may use this
-exception.
+finalizer. It was finalized once without rerunning its checks; no other attempt
+may use that exception. R39 subsequently passed and R31 produced the complete
+failed-attempt/harvest/batch/authorization chain. The next correction advances
+schemas and scheduling prospectively; none of these retained receipts is
+retrofitted.
 
 | Artifact | Producer | Required before | Status |
 |---|---|---|---|
 | `attempts/readiness-38.json` and sidecar | Validation coordinator | R38 correction finalization | Failed; retained with 12 pass, 2 fail, 1 block |
-| `attempts/readiness-38-harvest.json`, `attempts/readiness-38-defect-batch.json`, and `attempts/readiness-38-correction-authorization.json` | Validation coordinator | Readiness 39 | Not Run; sole legacy R38 recovery, required after the clean correction commit and before R39 starts |
-| `validation-readiness-result.json` | Validation coordinator | Rehearsal | R38 failed; Readiness 39 Not Run |
-| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | R30 failed and retained; Rehearsal 31 Not Run |
+| `attempts/readiness-38-harvest.json`, `attempts/readiness-38-defect-batch.json`, and `attempts/readiness-38-correction-authorization.json` | Validation coordinator | Readiness 39 | Passed historical finalization; authorization consumed exactly once by R39 |
+| `attempts/readiness-39.json` and `validation-readiness-result.json` | Validation coordinator | Rehearsal 31 | Passed for R31 source/environment; now superseded by the tracked correction |
+| `attempts/candidate-rehearsal-31-attempt.json`, `-harvest.json`, `-defect-batch.json`, and `-correction-authorization.json` | Validation coordinator | Readiness 40 | Complete failed chain; 19 pass, 3 fail, 10 block; one-use R40 authorization unconsumed |
+| `attempts/candidate-rehearsal-32-start.json` | Validation coordinator | Rehearsal 32 assertions | Not Run; must bind the Readiness-issued conservative full-Wave-A schedule |
+| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not created; R31 failed and R32 is Not Run |
 | `attempts/preflight-<n>.json` | Preflight | Preflight terminal decision | Not Run |
 | `preflight-result.json` | Preflight | Candidate freeze | Not Run |
 | `candidate.json` | Preflight | SIT | Not Run |
@@ -810,12 +899,12 @@ Additional required evidence namespaces:
 
 ## Validation Readiness
 
-- Latest completed check graph: Readiness 38 retained 12 passes, 2 failures,
-  and 1 exact block against clean source `91c9936b`, tree `564493fd`; its
-  environment remained unverified because the runner process omitted a
-  required database binding. It consumed the R30 authorization and is retained
-  as immutable failed evidence. Readiness 37 remains prior-source pass evidence
-  only.
+- Latest completed check graph: Readiness 39 passed all 15 checks against clean
+  source `ffe05ace`, tree `1d17533d`, and environment `96c2a32e...`. R31 then
+  failed and the current tracked correction changes scheduler, harness,
+  acceptance, fixture, environment-contract, and deployment inputs, so the R39
+  pass is retained but superseded. R40 is the next authorized attempt after the
+  correction is committed and all six databases are recreated empty.
 
 - Derived executable checklist: regenerate from the final plan, this inventory,
   source, runners, Compose profile and evidence schemas.
@@ -854,36 +943,60 @@ Additional required evidence namespaces:
   Reject duplicate consumption, active attempts, used attempt identities, and
   any Readiness receipt other than the exact path/hash currently named by
   validation state.
+- Rehearsal schedule: R40 must authenticate the exact R31 history, correction
+  identity, and next attempt number, then bind R32's deterministic two-wave
+  schedule into its passing receipt; validation state binds R32 and the
+  schedule SHA-256. Because R31 has no
+  authenticated scheduler decisions or deferral counters and the correction
+  cone is broad, R40 must select the conservative full-Wave-A fallback.
 - Acceptance mapping: every inventory row maps to SIT, smoke and UAT evidence.
 - Clean repository and source-exact inputs: required before rehearsal.
 - Result receipt: `artifacts/sprint-8a-closeout/validation-readiness-result.json`.
 
 ## Candidate Rehearsal
 
-Attempt 30 is terminal and may not resume. It retained 18 passes, 4 raw failed
-lanes, and 10 exact dependency blocks against the now-superseded Readiness 37
-source and environment. Its complete harvest, consolidated four-symptom batch,
-and correction authorization were consumed exactly once by failed Readiness
-38. After the clean implementation correction is committed, R38 finalization
-must issue one pending exact-R39 authorization. Readiness 39 must consume that
-new authorization and pass against the corrected source/environment identity
-before Candidate Rehearsal 31 may start.
+Attempt 31 is terminal and may not resume. It retained 19 passes, 3 raw failed
+lanes, 10 exact lane blocks, and 8 nested automated-UAT dependency blocks
+against the passing R39 source/environment pair. Its complete harvest,
+three-defect batch, and unconsumed exact-R40 correction authorization are named
+above. Candidate Rehearsal 32 cannot start until the tracked correction is
+committed, R40 consumes that authorization and passes, and the coordinator
+authorizes the formal cycle.
 
-Sprint 8A rehearsal uses the dependency-aware inventory below. The attempt
-receipt declares this graph before assertions. After any failure the attempt is
-`harvesting`: independent siblings continue, dependent checks are recorded as
-blocked with the exact failed prerequisite, and no tracked correction or new
-attempt may begin until one harvest receipt and one consolidated defect batch
-account for every row. `scripts/test-sprint-validation-harvest.ps1` enforces the
-terminal-state and single-batch contract; materialization retains failed apply
-responses and service logs before exact teardown.
+Sprint 8A rehearsal uses the dependency-aware inventory below. A create-once
+start receipt declares the graph, exact Wave A/cleanup/Wave B/aggregate-sink/
+safety-finalizer order, prior evidence hashes, impact decisions, and deferral
+counters before
+assertions. After any failure the attempt is `harvesting`: safe independent
+Wave A siblings continue, true dependents are blocked, mandatory teardown and
+restoration continue, and eligible Wave B lanes become `deferred` only after
+Wave A harvesting finishes. No tracked correction or new attempt may begin
+until one harvest receipt and one consolidated defect batch account for every
+row as passed, failed, blocked, or deferred.
+`scripts/test-sprint-validation-harvest.ps1` enforces terminal accounting and
+the single-batch contract; materialization retains failed apply responses and
+service logs before exact teardown.
 
-The start receipt initially carries unverified source/environment identities.
-The first lane acquires the evidence-root OS-exclusive lock and checks that the
-supplied passing Readiness path and SHA-256 exactly equal the current validation
-state, including any one-use predecessor-correction consumption. Safe static
-lanes remain independent of those fallible prerequisites; only true dependents
-or unsafe destructive work are blocked.
+Before the start receipt exists, the launcher acquires the evidence-root
+OS-exclusive reservation; contention rejects launch without attempt evidence.
+Under that retained handle, it captures current state and Readiness scheduling
+inputs and either authenticates bounded history or selects conservative full
+harvest. The start receipt initially carries unverified source/environment
+identities. The Wave A attempt-state lane authenticates the retained handle,
+requested attempt, current state, and lifecycle transition, while the
+independent Readiness lane authenticates the supplied passing receipt,
+source/environment identity, and one-use predecessor-correction consumption.
+Safe static lanes remain independent of those fallible prerequisites; only true
+dependents or unsafe destructive work are blocked. Process-loss recovery
+authenticates that immutable start plus the latest checkpoint, preserves the
+order and counters, and resumes only safe work in the same attempt.
+
+Aggregate fan-in lanes are sinks and cannot expand Wave A merely because they
+depend on many lanes. Execute them only after their current-attempt
+prerequisites are eligible and pass. Cleanup sinks, failure recovery, canonical
+restoration, and final source/environment identity checks are mandatory. Any
+deferred lane keeps the attempt failed/incomplete and prohibits a canonical
+rehearsal result or preflight.
 
 The automated-UAT lane projects each failed semantic predicate as its exact
 `UAT-8A-xx/assertion-id` identity with classification, reason, and hashed raw
@@ -899,8 +1012,17 @@ harvest. Final environment comparison retains expected and actual fingerprints
 plus changed contract sections, and every newly persisted evidence reference is
 canonical, repository-relative, and contained by the evidence root.
 
+An eligible deferred lane records no execution timestamps, duration, assertion
+start, or current evidence. It retains the authenticated prior-passing receipt
+path/hash and source/environment identities, current impact decision and non-
+impact rationale, prerequisite state, consecutive count,
+`mandatory_by_attempt`, and the exact diagnostic-history-only notice. A lane
+executes on the fourth attempt after three consecutive deferrals, and any
+execution resets its counter. Missing or unauthenticated history selects full
+Wave A rather than a speculative deferral.
+
 The following table is the planned lane summary for the next successor
-Candidate Rehearsal, not a restatement of R30's terminal results.
+Candidate Rehearsal, not a restatement of R31's terminal results.
 
 | Diagnostic lane | Planned command/evidence | Assertions | Successor result | Defect batch |
 |---|---|---|---|---|
@@ -958,24 +1080,23 @@ Component module, API enrollment, and Installation Control. A database
 identity used by one owner integration target is not reused by another target
 in the same rehearsal.
 
-- Mutable source/environment identity: Attempt 30 verified clean commit
-  `84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`, tree
-  `4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`, and environment fingerprint
+- Mutable source/environment identity: Attempt 31 verified clean commit
+  `ffe05aceb526c36023d4946c3f58be641378c50f`, tree
+  `1d17533d93429e20e9de510a60cb413b38127797`, and environment fingerprint
   `96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`;
   all are superseded by the current candidate-affecting correction.
-- Passing readiness prerequisite: Readiness 37 passed for Attempt 30's prior
-  source and environment; no passing prerequisite exists for the next attempt.
-  Its result SHA-256 is
-  `a4ab361af6606ff94eaef8c5be5ca3e864dc90cb41efabdcb3aba73014eacf9b`.
-- Current consolidated defects and correction batch: Attempt 30 retained 18
-  passes, 4 raw failures, and 10 dependency blocks; its three diagnosed harness
-  roots were corrected before R38. Attempt 38 then retained 12 passes, the
-  missing database-binding and failure-containment self-test failures, and the
-  exact blocked environment-contract reason. The implementation audit adds the
-  failed-Readiness correction lineage, exact Rehearsal terminal checkpoints,
-  retired Component `missing_policy` removal, and canonical UAT/AC-18/AC-19
-  evidence enforcement. The correction is candidate-affecting and remains
-  formally unverified until complete successor gates pass.
+- Passing readiness prerequisite: Readiness 39 passed for Attempt 31's source
+  and environment; its result SHA-256 is
+  `b28da23ad7d3cc3046e3331f85f6616858ec4d14e46071725ad12015b1e80916`.
+  It is superseded by the current correction and cannot serve R32; R40 must
+  pass first.
+- Current consolidated defects and correction batch: Attempt 31 retained 19
+  passes, 3 raw failures, 10 dependency blocks, and 8 nested UAT blocks. The
+  current correction advances fresh-database readiness, Supervisor target
+  enrollment, normalized Compose parsing, containment evidence, the two-wave
+  scheduler, receipt/state/harvest schemas, and their adversarial enforcement
+  together. It is candidate-affecting and remains formally unverified until
+  complete successor gates pass.
 - Historical consolidated defects and correction batches: Attempt 15 retained six
   Playwright findings in one fail-late batch after 10 independent checks
   passed. Four acceptance-inventory defects used the former Core Component
@@ -1191,16 +1312,22 @@ in the same rehearsal.
   raw failures, and 10 blocks, retained one harvest/batch/authorization chain,
   and returned to implementation for the three-root harness correction. It may
   not resume, and the correction supersedes Readiness 37.
+- Readiness 39 passed against `ffe05ace`/`1d17533d` and environment
+  `96c2a32e...`. Rehearsal 31 then terminalized all 32 lanes with 19 passes, 3
+  failures, and 10 blocks, retained one harvest/batch/authorization chain, and
+  returned to implementation for the current correction. It may not resume.
 - Complete-cycle repetitions after the current correction: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
 Rehearsal is mutable, diagnostic and non-authoritative. Any correction requires
-complete readiness and complete rehearsal to repeat before freeze.
+new complete readiness and a potentially passing rehearsal that executes all
+required lanes before freeze; a failed rehearsal with deferred lanes remains
+incomplete.
 
 ## Environment Contract
 
 - Corrected successor environment fingerprint: Not issued. The superseded
-  R37/R30 fingerprint is
+  R39/R31 fingerprint is
   `96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`.
 - Intended gateway: `http://127.0.0.1:8088`; intended Supervisor endpoint:
   `http://127.0.0.1:8098`.
@@ -1212,6 +1339,8 @@ complete readiness and complete rehearsal to repeat before freeze.
   `TEST_INSTALLATION_CONTROL_DATABASE_URL`. Readiness requires pairwise-
   distinct loopback, token-bounded test database identities and completes an
   authenticated transactional temporary-table round trip against each one.
+  Before R40, each database must be a freshly recreated generation with no
+  user tables; a reachable but reused database is a failed readiness contract.
   All six bindings, the destructive-reset acknowledgement, and
   `TEST_POSTGRES_CLIENT_CONTAINER_ID` must be exported in the same PowerShell
   process that invokes the top-level Readiness runner; a prior shell process
@@ -1234,23 +1363,25 @@ complete readiness and complete rehearsal to repeat before freeze.
 ## Next Authorized Commands
 
 No formal gate is authorized while the consolidated correction is mutable.
-After review, focused verification, and a clean correction commit, first
-finalize the retained terminal R38 evidence. That command creates no R39 start
-or product assertion. The mutable-build coordinator may then enter Readiness
-and Rehearsal only through the exact top-level runners shown below. Those
-runners own the complete check inventory, dependency graph, evidence paths,
-and subordinate commands; manually assembling lanes is not a Candidate
-Rehearsal and cannot authorize preflight.
+After review, focused verification, a clean correction commit, recreation of
+all six empty databases, and validation-coordinator authorization, the mutable-
+build coordinator may enter Readiness and Rehearsal only through the exact top-
+level runners shown below. Those runners own the complete check inventory,
+immutable schedule, dependency graph, evidence paths, and subordinate commands;
+manually assembling lanes is not a Candidate Rehearsal and cannot authorize
+preflight.
 
 ```powershell
-.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 38 -FinalizeFailedAttempt
-.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 39
-.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 31 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 40
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 32 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
 
-Neither complete gate has passed for the corrected source. Preflight,
-candidate freeze, SIT, and formal UAT remain closed until Readiness 39 and
-Rehearsal 31 pass against the same source and environment identity.
+R40 must consume the exact R31 correction authorization and bind R32's
+conservative full-Wave-A schedule. R32 cannot rely on any legacy pass or
+deferral counter. If its Wave A succeeds, the same attempt continues through
+every remaining lane; only an all-passing, zero-deferred result can enter
+preflight. Neither gate has run for the corrected source, so candidate freeze,
+SIT, and formal UAT remain closed.
 
 Readiness requires and authenticates the six declared disposable database
 URLs, proves their identities are pairwise distinct, records the normalized
@@ -1741,6 +1872,9 @@ Runtime chronology:
 | 2026-08-07 after Readiness 38 testing exit | Pre-audit consolidated testing-entry verification | Focused assertions only; no lifecycle runner attempt | mutable correction source | N/A — implementation checks passed | All 12 fail-late harness checks passed; formatting, JavaScript syntax, 33 Component library tests, warnings-denied Component clippy, exact five-transition identity, three exact Dashboard/inventory/navigation API tests, and 75-scenario Playwright discovery also passed. No browser scenario or formal gate ran. | No formal receipt, candidate, or downstream phase authorized | Independent final diff audit before commit |
 | 2026-08-07 final diff audit | Attempt reservation, UAT-8A-07 raw evidence, and documentation reconciliation | Read-only source audit | mutable correction source | `harness` and evidence/process enforcement | Four actionable findings were retained as one final batch: an out-of-sequence Readiness probe could occupy the authorized successor namespace; UAT-8A-07 could claim raw failure retention through a generic operator record; the Rehearsal section still called R30 authorization unconsumed; and the manual-UAT summary differed from the exact manifest. The batch reserves the attempt under lock before all five namespace targets, requires authenticated hashed apply/log assertions, and reconciles the documentation. | No formal receipt, candidate, or downstream phase authorized | Rerun the complete affected focused cone before commit |
 | 2026-08-07 final correction verification | Readiness/lifecycle/formal-UAT/diagnostic-UAT/preflight/acceptance/harvest/Rehearsal self-tests | Focused assertions only; no lifecycle runner attempt | final mutable correction source | N/A — affected implementation checks passed | PowerShell/JSON parsing, Readiness reservation/finalization, lifecycle schema/identity, formal UAT, diagnostic UAT, preflight, acceptance, harvest adversarial, and Candidate Rehearsal self-tests passed. UAT now has 46 globally unique exact-one requirements; the new failure-containment receipt rejects either missing raw assertion. | No formal receipt, candidate, or downstream phase authorized | Clean diff/evidence audit and one correction commit; then R38 finalization at the documented boundary |
+| 2026-08-07 09:17–09:22 EDT | Readiness 39 / complete gate | Yes; all 15 checks passed | `ffe05ace` / `1d17533d`, environment `96c2a32e...` | N/A — passed, later superseded | Exact immutable receipt and canonical alias retained with SHA-256 `b28da23a...` | R39 and all downstream phases after R31/candidate-affecting correction | Consume R31 authorization in a new complete R40 |
+| 2026-08-07 09:22–10:44 EDT | Rehearsal 31 / complete fail-late harvest | Yes in 22 lanes; 10 lanes and 8 nested UAT scenarios dependency-blocked | `ffe05ace` / `1d17533d`, environment `96c2a32e...` | Raw: 2 `product`, 1 `harness`; 10 exact lane blocks | 19 passes, 3 failures, 10 blocks; one harvest, one three-defect batch, one unconsumed exact-R40 authorization; raw evidence unchanged | Rehearsal 31, R39, and every downstream phase | Correct the consolidated batch; then R40 and R32 |
+| 2026-08-07 after R31 terminalization | Bounded failure-first scheduler and R31 defect correction | Focused implementation assertions only | mutable successor | `harness`, `environment`, deployment/acceptance/evidence enforcement; raw R31 labels retained | Add fresh-database generation guard, exact Supervisor target enrollment, normalized Compose parser, precursor-evidence containment guard, immutable two-wave schedule, exact deferral schema/state/harvest/lineage enforcement, recovery, and adversarial self-tests | No formal gate result; no candidate or downstream phase authorized | Clean correction commit; coordinator-authorized R40 then conservative full-Wave-A R32 |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
@@ -1784,14 +1918,14 @@ immutable fingerprint covers all authoritative SIT and UAT evidence.
 - SIT passed: No.
 - UAT passed: No.
 - Acceptance mapping complete: Planned, not executed.
-- Invalidation decisions satisfied: No — terminal failed Readiness 38 requires
-  the clean correction commit and R38 finalization; complete Readiness 39 and
-  Candidate Rehearsal 31 then remain required.
+- Invalidation decisions satisfied: No — terminal failed Rehearsal 31 has an
+  authorized mutable correction; complete Readiness 40 and Candidate Rehearsal
+  32 remain required after the clean commit and fresh database generations.
 - Unresolved product decisions: None.
 - Intended active route/slot: source-exact Sprint 8A gateway with current
   Component release and canonical fresh seed.
-- Application health: Not proven after terminal failed R38;
-  cleanup/restoration was not proven.
+- Application health: restored diagnostically after R31, but not proven by a
+  passing corrected-source rehearsal.
 - Evidence source commit: Not frozen.
 - Documentation commit: Not created.
 - Authorization timestamp: None.

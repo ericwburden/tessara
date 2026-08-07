@@ -17,6 +17,7 @@ if ($PSVersionTable.PSEdition -cne "Core" -or $PSVersionTable.PSVersion.Major -l
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "sprint-8a-rehearsal-scheduler.ps1")
 $script:PreflightAllowedClassifications = @(
     "preflight/setup",
     "product",
@@ -308,12 +309,175 @@ function ConvertTo-Sprint8APreflightCanonicalJson {
     $InputObject | ConvertTo-Json -Depth 100 -Compress
 }
 
+function Assert-Sprint8APreflightNoDeferredLanes {
+    param(
+        [Parameter(Mandatory)]$Receipt,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    $schema = $Receipt.schema_version
+    if (($schema -isnot [int] -and $schema -isnot [long]) -or
+        @(2, 3) -notcontains [int]$schema) {
+        throw "$Label has an unsupported Candidate Rehearsal schema."
+    }
+    $deferred = @($Receipt.checks | Where-Object state -CEQ "deferred")
+    if ([int]$schema -eq 3) {
+        if ($Receipt.PSObject.Properties.Name -notcontains "deferred_count" -or
+            ($Receipt.deferred_count -isnot [int] -and $Receipt.deferred_count -isnot [long]) -or
+            [int]$Receipt.deferred_count -ne $deferred.Count -or
+            [int]$Receipt.deferred_count -ne 0) {
+            throw "$Label contains deferred lanes or lacks exact zero-deferred accounting; preflight is forbidden."
+        }
+    } elseif ($deferred.Count -ne 0) {
+        throw "Historical schema-2 Candidate Rehearsal evidence cannot acquire deferred semantics or authorize preflight."
+    }
+    if ([string]$Receipt.state -cne "passed" -or
+        @($Receipt.checks | Where-Object state -CNE "passed").Count -ne 0) {
+        throw "$Label does not prove that every declared Candidate Rehearsal lane executed and passed."
+    }
+}
+
+function Assert-Sprint8APreflightImmutableRehearsalStartReceipt {
+    param(
+        [Parameter(Mandatory)]$AttemptReceipt,
+        [Parameter(Mandatory)]$RehearsalResult,
+        [Parameter(Mandatory)]$ReadinessReference,
+        [Parameter(Mandatory)][string[]]$ExpectedNames,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRootPath
+    )
+
+    $attempt = [int]$RehearsalResult.attempt
+    foreach ($entry in @(
+        [pscustomobject]@{ label = "attempt"; document = $AttemptReceipt },
+        [pscustomobject]@{ label = "result"; document = $RehearsalResult }
+    )) {
+        if ($entry.document.PSObject.Properties.Name -notcontains "immutable_start_receipt" -or
+            $null -eq $entry.document.immutable_start_receipt -or
+            [string]$entry.document.immutable_start_receipt.sha256 -notmatch '^[0-9a-f]{64}$' -or
+            $entry.document.PSObject.Properties.Name -notcontains "schedule_sha256" -or
+            [string]$entry.document.schedule_sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Schema-3 Candidate Rehearsal $($entry.label) omits its immutable start or schedule binding."
+        }
+    }
+    if ((ConvertTo-Sprint8APreflightCanonicalJson $AttemptReceipt.immutable_start_receipt) -cne
+            (ConvertTo-Sprint8APreflightCanonicalJson $RehearsalResult.immutable_start_receipt) -or
+        [string]$AttemptReceipt.schedule_sha256 -cne [string]$RehearsalResult.schedule_sha256) {
+        throw "Candidate Rehearsal attempt and result do not bind the same immutable start and schedule."
+    }
+
+    $expectedStartFullPath = Join-Path $EvidenceRootPath "attempts/candidate-rehearsal-$attempt-start.json"
+    $expectedStartPath = [IO.Path]::GetRelativePath(
+        [IO.Path]::GetFullPath($RepositoryRoot),
+        [IO.Path]::GetFullPath($expectedStartFullPath)
+    ).Replace("\", "/")
+    if ([string]$RehearsalResult.immutable_start_receipt.path -cne $expectedStartPath) {
+        throw "Candidate Rehearsal immutable start does not use exact path '$expectedStartPath'."
+    }
+    $startReference = Get-Sprint8APreflightReceiptReference `
+        -Path ([string]$RehearsalResult.immutable_start_receipt.path)
+    if ([string]$startReference.sha256 -cne [string]$RehearsalResult.immutable_start_receipt.sha256) {
+        throw "Candidate Rehearsal immutable start differs from its embedded SHA-256 reference."
+    }
+    $start = $startReference.document
+    if (($start.schema_version -isnot [int] -and $start.schema_version -isnot [long]) -or
+        [int]$start.schema_version -ne 3 -or
+        [string]$start.sprint -cne "sprint-8a" -or
+        [string]$start.phase -cne "candidate-rehearsal-start" -or
+        ($start.attempt -isnot [int] -and $start.attempt -isnot [long]) -or
+        [int]$start.attempt -ne $attempt -or
+        $start.authoritative -isnot [bool] -or [bool]$start.authoritative -or
+        $start.PSObject.Properties.Name -notcontains "schedule" -or
+        $start.PSObject.Properties.Name -notcontains "schedule_sha256" -or
+        [string]$start.schedule_sha256 -notmatch '^[0-9a-f]{64}$' -or
+        [string]$start.schedule_sha256 -cne [string]$RehearsalResult.schedule_sha256 -or
+        (Get-Sprint8APreflightStringSha256 `
+            -Text (ConvertTo-Sprint8APreflightCanonicalJson $start.schedule)) -cne
+                [string]$start.schedule_sha256 -or
+        $start.PSObject.Properties.Name -notcontains "schedule_selection" -or
+        [string]::IsNullOrWhiteSpace([string]$start.schedule_selection.source) -or
+        [string]::IsNullOrWhiteSpace([string]$start.schedule_selection.reason)) {
+        throw "Candidate Rehearsal immutable start has a malformed or stale deterministic schedule."
+    }
+
+    $policies = @(Get-Sprint8ARehearsalLanePolicies)
+    $policyNames = @($policies | ForEach-Object { [string]$_.name })
+    if ((($policyNames | Sort-Object) -join "`n") -cne (($ExpectedNames | Sort-Object) -join "`n")) {
+        throw "Candidate Rehearsal immutable scheduler policy differs from the current runner lane inventory."
+    }
+    Assert-Sprint8ARehearsalScheduleContract `
+        -Schedule $start.schedule `
+        -Checks $policies `
+        -ExpectedAttempt $attempt | Out-Null
+
+    if ((ConvertTo-Sprint8APreflightCanonicalJson $start.readiness_receipt) -cne
+        (ConvertTo-Sprint8APreflightCanonicalJson ([pscustomobject][ordered]@{
+            path = [string]$ReadinessReference.path
+            sha256 = [string]$ReadinessReference.sha256
+        }))) {
+        throw "Candidate Rehearsal immutable start does not bind the exact Readiness prerequisite."
+    }
+    $readiness = $ReadinessReference.document
+    if ($readiness.PSObject.Properties.Name -notcontains "next_candidate_rehearsal" -or
+        [int]$readiness.next_candidate_rehearsal.attempt -ne $attempt -or
+        [string]$readiness.next_candidate_rehearsal.schedule_sha256 -cne [string]$start.schedule_sha256 -or
+        (ConvertTo-Sprint8APreflightCanonicalJson $readiness.next_candidate_rehearsal.schedule) -cne
+            (ConvertTo-Sprint8APreflightCanonicalJson $start.schedule)) {
+        throw "Passing Readiness did not authorize the immutable Candidate Rehearsal attempt and schedule."
+    }
+
+    $expectedCaptureFullPath = Join-Path $EvidenceRootPath "attempts/candidate-rehearsal-$attempt-validation-state.json"
+    $expectedCapturePath = [IO.Path]::GetRelativePath(
+        [IO.Path]::GetFullPath($RepositoryRoot),
+        [IO.Path]::GetFullPath($expectedCaptureFullPath)
+    ).Replace("\", "/")
+    if ($start.PSObject.Properties.Name -notcontains "validation_state_receipt" -or
+        [string]$start.validation_state_receipt.path -cne $expectedCapturePath -or
+        [string]$start.validation_state_receipt.sha256 -notmatch '^[0-9a-f]{64}$') {
+        throw "Candidate Rehearsal immutable start omits its exact validation-state capture."
+    }
+    $captureReference = Get-Sprint8APreflightReceiptReference -Path $expectedCapturePath
+    if ([string]$captureReference.sha256 -cne [string]$start.validation_state_receipt.sha256) {
+        throw "Candidate Rehearsal validation-state capture differs from the immutable start reference."
+    }
+    $capture = $captureReference.document
+    if (($capture.schema_version -isnot [int] -and $capture.schema_version -isnot [long]) -or
+        [int]$capture.schema_version -ne 1 -or
+        [string]$capture.sprint -cne "sprint-8a" -or
+        [string]$capture.phase -cne "candidate-rehearsal-validation-state-capture" -or
+        [int]$capture.attempt -ne $attempt -or
+        $capture.authoritative -isnot [bool] -or [bool]$capture.authoritative -or
+        $null -ne $capture.capture_error -or
+        [string]$capture.captured_path -notmatch '(^|/)validation-state\.json$' -or
+        [string]$capture.captured_sha256 -notmatch '^[0-9a-f]{64}$' -or
+        $null -eq $capture.document -or
+        [int]$capture.document.readiness.attempt -ne [int]$readiness.attempt -or
+        [string]$capture.document.readiness.state -cne "passed" -or
+        [int]$capture.document.next_candidate_rehearsal.attempt -ne $attempt -or
+        [string]$capture.document.next_candidate_rehearsal.schedule_sha256 -cne
+            [string]$start.schedule_sha256) {
+        throw "Candidate Rehearsal immutable validation-state capture is missing, failed, or stale."
+    }
+    $capturedReadiness = Assert-Sprint8ACurrentReadinessReference `
+        -StateReadiness $capture.document.readiness `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $EvidenceRootPath `
+        -RequirePassed
+    if ([string]$capturedReadiness.immutable.path -cne [string]$ReadinessReference.path -or
+        [string]$capturedReadiness.immutable.sha256 -cne [string]$ReadinessReference.sha256) {
+        throw "Candidate Rehearsal validation-state capture does not bind the exact immutable Readiness prerequisite."
+    }
+    $startReference
+}
+
 function Assert-Sprint8APreflightRehearsalAttemptReceipt {
     param(
         [Parameter(Mandatory)]$RehearsalResult,
         [Parameter(Mandatory)]$ValidationState,
         [Parameter(Mandatory)][string]$RepositoryRoot,
-        [Parameter(Mandatory)][string]$EvidenceRootPath
+        [Parameter(Mandatory)][string]$EvidenceRootPath,
+        [AllowNull()]$ReadinessReference,
+        [AllowEmptyCollection()][string[]]$ExpectedNames = @()
     )
 
     if (($RehearsalResult.attempt -isnot [int] -and $RehearsalResult.attempt -isnot [long]) -or
@@ -325,6 +489,11 @@ function Assert-Sprint8APreflightRehearsalAttemptReceipt {
     }
 
     $attempt = [int]$RehearsalResult.attempt
+    $resultSchema = $RehearsalResult.schema_version
+    if (($resultSchema -isnot [int] -and $resultSchema -isnot [long]) -or
+        @(2, 3) -notcontains [int]$resultSchema) {
+        throw "Passing Candidate Rehearsal result has an unsupported schema."
+    }
     $expectedFullPath = Join-Path $EvidenceRootPath "attempts/candidate-rehearsal-$attempt-attempt.json"
     $expectedPath = [IO.Path]::GetRelativePath(
         [IO.Path]::GetFullPath($RepositoryRoot),
@@ -344,7 +513,7 @@ function Assert-Sprint8APreflightRehearsalAttemptReceipt {
     }
     $document = Get-Content -LiteralPath ([string]$resolved.full_path) -Raw | ConvertFrom-Json
     if (($document.schema_version -isnot [int] -and $document.schema_version -isnot [long]) -or
-        [int]$document.schema_version -ne 2 -or
+        [int]$document.schema_version -ne [int]$resultSchema -or
         [string]$document.sprint -cne "sprint-8a" -or
         [string]$document.phase -cne "candidate-rehearsal" -or
         [int]$document.attempt -ne $attempt -or
@@ -357,6 +526,12 @@ function Assert-Sprint8APreflightRehearsalAttemptReceipt {
         [int]$ValidationState.rehearsal.attempt -ne $attempt -or
         [string]$ValidationState.rehearsal.state -cne "passed") {
         throw "Candidate Rehearsal attempt, result, and validation-state identities are not the same passing attempt."
+    }
+    Assert-Sprint8APreflightNoDeferredLanes -Receipt $document -Label "Candidate Rehearsal attempt"
+    Assert-Sprint8APreflightNoDeferredLanes -Receipt $RehearsalResult -Label "Candidate Rehearsal result"
+    if ((ConvertTo-Sprint8APreflightCanonicalJson @($document.checks)) -cne
+        (ConvertTo-Sprint8APreflightCanonicalJson @($RehearsalResult.checks))) {
+        throw "Candidate Rehearsal attempt and result do not retain the exact same terminal lane evidence."
     }
     if (@($document.prerequisite_receipts).Count -ne 1 -or
         @($RehearsalResult.prerequisite_receipts).Count -ne 1 -or
@@ -388,11 +563,31 @@ function Assert-Sprint8APreflightRehearsalAttemptReceipt {
         }
     }
 
+    $startReference = $null
+    if ([int]$resultSchema -eq 3) {
+        if ($null -eq $ReadinessReference -or $ExpectedNames.Count -eq 0) {
+            throw "Schema-3 Candidate Rehearsal authentication requires exact Readiness and lane inventory inputs."
+        }
+        $startReference = Assert-Sprint8APreflightImmutableRehearsalStartReceipt `
+            -AttemptReceipt $document `
+            -RehearsalResult $RehearsalResult `
+            -ReadinessReference $ReadinessReference `
+            -ExpectedNames $ExpectedNames `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRootPath $EvidenceRootPath
+    }
+
     [pscustomobject][ordered]@{
         path = [string]$resolved.path
         sha256 = $sha256
         full_path = [string]$resolved.full_path
         document = $document
+        immutable_start_receipt = if ($null -eq $startReference) { $null } else {
+            [pscustomobject][ordered]@{
+                path = [string]$startReference.path
+                sha256 = [string]$startReference.sha256
+            }
+        }
     }
 }
 
@@ -418,6 +613,9 @@ function Get-Sprint8APlannedEvidenceInventory {
     $required = @(
         [pscustomobject]@{ path = "validation-readiness-result.json"; phase = "readiness"; condition = "always" },
         [pscustomobject]@{ path = "candidate-rehearsal-result.json"; phase = "rehearsal"; condition = "always" },
+        [pscustomobject]@{ path = "attempts/candidate-rehearsal-{attempt}-validation-state.json"; phase = "rehearsal"; condition = "always" },
+        [pscustomobject]@{ path = "attempts/candidate-rehearsal-{attempt}-start.json"; phase = "rehearsal"; condition = "always" },
+        [pscustomobject]@{ path = "attempts/candidate-rehearsal-{attempt}-attempt.json"; phase = "rehearsal"; condition = "always" },
         [pscustomobject]@{ path = "attempts/preflight-$PreflightAttempt.json"; phase = "preflight"; condition = "always" },
         [pscustomobject]@{ path = "preflight-result.json"; phase = "preflight"; condition = "always" },
         [pscustomobject]@{ path = "candidate.json"; phase = "candidate"; condition = "always" },
@@ -573,6 +771,9 @@ function Test-Sprint8AValidationPreflightRunner {
     $expectedRequiredPaths = @(
         "validation-readiness-result.json",
         "candidate-rehearsal-result.json",
+        "attempts/candidate-rehearsal-{attempt}-validation-state.json",
+        "attempts/candidate-rehearsal-{attempt}-start.json",
+        "attempts/candidate-rehearsal-{attempt}-attempt.json",
         "attempts/preflight-7.json",
         "preflight-result.json",
         "candidate.json",
@@ -704,8 +905,10 @@ function Test-Sprint8AValidationPreflightRunner {
             environment_fingerprint = "5" * 64
             prerequisite_receipts = @($syntheticReadinessPrerequisite)
             correction_lineage = $syntheticLineage
+            checks = @()
         }) -Path $rehearsalAttemptPath
         $syntheticResult = [pscustomobject][ordered]@{
+            schema_version = 2
             attempt = 4
             state = "passed"
             mutable_source_identity = $syntheticSource
@@ -716,6 +919,7 @@ function Test-Sprint8AValidationPreflightRunner {
                 sha256 = $rehearsalAttemptSha
             }
             correction_lineage = $syntheticLineage
+            checks = @()
         }
         $syntheticState = [pscustomobject][ordered]@{
             rehearsal = [pscustomobject][ordered]@{ attempt = 4; state = "passed" }
@@ -726,6 +930,23 @@ function Test-Sprint8AValidationPreflightRunner {
             -ValidationState $syntheticState `
             -RepositoryRoot $temporaryRoot `
             -EvidenceRootPath $rehearsalEvidenceRoot | Out-Null
+        $deferredResult = $syntheticResult | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+        $deferredResult.schema_version = 3
+        $deferredResult | Add-Member -NotePropertyName deferred_count -NotePropertyValue 1
+        $deferredResult.checks = @([pscustomobject]@{
+            name = "wave-b-prior-pass"
+            state = "deferred"
+            assertions_started = $false
+        })
+        $deferredPreflightRejected = $false
+        try {
+            Assert-Sprint8APreflightNoDeferredLanes `
+                -Receipt $deferredResult `
+                -Label "deferred self-test result"
+        } catch { $deferredPreflightRejected = $true }
+        if (-not $deferredPreflightRejected) {
+            throw "Sprint 8A preflight self-test allowed a deferred Candidate Rehearsal to authorize freeze."
+        }
         $mismatchedState = [pscustomobject][ordered]@{
             rehearsal = [pscustomobject][ordered]@{ attempt = 4; state = "passed" }
             correction_lineage = [pscustomobject][ordered]@{
@@ -856,6 +1077,8 @@ function Test-Sprint8AValidationPreflightRunner {
 
     $requiredFunctions = @(
         "Open-Sprint8AValidationAttemptLock",
+        "Assert-Sprint8APreflightNoDeferredLanes",
+        "Assert-Sprint8APreflightImmutableRehearsalStartReceipt",
         "Get-Sprint8APreflightDeclaredRunnerChecks",
         "Assert-Sprint8APreflightPassingAttemptChecks",
         "Find-Sprint8APreflightAuthoritativeDownstreamClaim",
@@ -888,10 +1111,53 @@ function Test-Sprint8AValidationPreflightRunner {
 
     foreach ($name in @(
         "Get-Sprint8APreflightDeclaredRunnerChecks",
+        "Assert-Sprint8APreflightPassingAttemptChecks",
         "Find-Sprint8APreflightAuthoritativeDownstreamClaim"
     )) {
         $definition = @($functionDefinitions | Where-Object Name -CEQ $name)[0]
         . ([scriptblock]::Create($definition.Extent.Text))
+    }
+    $evidenceSelfTestRoot = Join-Path $repoRoot "artifacts/sprint-8a-preflight-evidence-selftest-$([guid]::NewGuid().ToString('N'))"
+    [IO.Directory]::CreateDirectory($evidenceSelfTestRoot) | Out-Null
+    try {
+        $script:evidenceRootPath = $evidenceSelfTestRoot
+        $primaryPath = Join-Path $evidenceSelfTestRoot "primary.log"
+        $producedPath = Join-Path $evidenceSelfTestRoot "produced.json"
+        [IO.File]::WriteAllText($primaryPath, "primary`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($producedPath, "{}`n", [Text.UTF8Encoding]::new($false))
+        $evidenceReceipt = [pscustomobject]@{
+            checks = @([pscustomobject]@{
+                name = "passing-evidence"
+                state = "passed"
+                assertions_started = $true
+                exit_status = 0
+                evidence_path = [IO.Path]::GetRelativePath($repoRoot, $primaryPath).Replace("\", "/")
+                evidence_sha256 = Get-Sprint8APreflightFileSha256 -Path $primaryPath
+                produced_evidence = @([pscustomobject]@{
+                    path = [IO.Path]::GetRelativePath($repoRoot, $producedPath).Replace("\", "/")
+                    sha256 = Get-Sprint8APreflightFileSha256 -Path $producedPath
+                })
+            })
+        }
+        Assert-Sprint8APreflightPassingAttemptChecks `
+            -Receipt $evidenceReceipt `
+            -ExpectedNames @("passing-evidence") `
+            -Label "evidence-field self-test"
+        $evidenceReceipt.checks[0].produced_evidence[0].sha256 = "0" * 64
+        $staleProducedEvidenceRejected = $false
+        try {
+            Assert-Sprint8APreflightPassingAttemptChecks `
+                -Receipt $evidenceReceipt `
+                -ExpectedNames @("passing-evidence") `
+                -Label "stale produced-evidence self-test"
+        } catch { $staleProducedEvidenceRejected = $true }
+        if (-not $staleProducedEvidenceRejected) {
+            throw "Sprint 8A preflight self-test accepted stale produced_evidence."
+        }
+    } finally {
+        if (Test-Sprint8APreflightContainedPath -Parent (Join-Path $repoRoot "artifacts") -Child $evidenceSelfTestRoot) {
+            [IO.Directory]::Delete($evidenceSelfTestRoot, $true)
+        }
     }
     $readinessNames = @(Get-Sprint8APreflightDeclaredRunnerChecks `
         -Path (Join-Path $repoRoot "scripts/validate-sprint-8a-readiness.ps1") `
@@ -906,6 +1172,181 @@ function Test-Sprint8AValidationPreflightRunner {
         $rehearsalNames -cnotcontains "failure-containment-successor-health" -or
         @(Find-Sprint8APreflightAuthoritativeDownstreamClaim -Value $claimProbe).Count -ne 1) {
         throw "Sprint 8A preflight self-test found stale prerequisite identity or downstream-authority auditing."
+    }
+
+    $startSelfTestRoot = Join-Path $repoRoot "artifacts/sprint-8a-preflight-start-selftest-$([guid]::NewGuid().ToString('N'))"
+    [IO.Directory]::CreateDirectory((Join-Path $startSelfTestRoot "attempts")) | Out-Null
+    try {
+        $script:evidenceRootPath = $startSelfTestRoot
+        $startAttempt = 4
+        $startSource = [pscustomobject][ordered]@{
+            commit = "1" * 40; tree = "2" * 40; dirty = $false; branch = "self-test"
+            acceptance_inventory_sha256 = "3" * 64; deployment_inputs_sha256 = "4" * 64
+        }
+        $startPolicies = @(Get-Sprint8ARehearsalLanePolicies)
+        $startSchedule = Resolve-Sprint8ARehearsalSchedule `
+            -Checks $startPolicies `
+            -Attempt $startAttempt `
+            -LaneHistory @{} `
+            -ChangedPaths @() `
+            -AcceptanceInventoryChanged:$false `
+            -DeploymentInputsChanged:$false `
+            -EnvironmentContractChanged:$false `
+            -HistoryAuthenticated:$false `
+            -FallbackReason "preflight self-test has no retained history"
+        $startScheduleSha256 = Get-Sprint8APreflightStringSha256 `
+            -Text (ConvertTo-Sprint8APreflightCanonicalJson $startSchedule)
+        $readinessPath = Join-Path $startSelfTestRoot "attempts/readiness-3.json"
+        $readinessDocument = [pscustomobject][ordered]@{
+            schema_version = 3
+            sprint = "sprint-8a"
+            phase = "validation-readiness"
+            attempt = 3
+            authoritative = $false
+            state = "passed"
+            next_candidate_rehearsal = [pscustomobject][ordered]@{
+                attempt = $startAttempt
+                schedule_sha256 = $startScheduleSha256
+                prior_attempt = 3
+                conservative_fallback = $true
+                fallback_reason = "preflight self-test has no retained history"
+                schedule = $startSchedule
+            }
+        }
+        $readinessSha256 = Write-Sprint8APreflightJsonReceipt `
+            -Document $readinessDocument `
+            -Path $readinessPath
+        $readinessAliasPath = Join-Path $startSelfTestRoot "validation-readiness-result.json"
+        $readinessAliasSha256 = Write-Sprint8APreflightJsonReceipt `
+            -Document $readinessDocument `
+            -Path $readinessAliasPath
+        if ($readinessAliasSha256 -cne $readinessSha256) {
+            throw "Sprint 8A preflight self-test could not create an exact Readiness alias/counterpart pair."
+        }
+        $readinessReference = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($repoRoot, $readinessPath).Replace("\", "/")
+            sha256 = $readinessSha256
+            full_path = $readinessPath
+            document = $readinessDocument
+        }
+        $readinessReceipt = [pscustomobject][ordered]@{
+            path = [string]$readinessReference.path
+            sha256 = [string]$readinessReference.sha256
+        }
+        $capturedState = [pscustomobject][ordered]@{
+            schema_version = 1
+            sprint = "sprint-8a"
+            readiness = [pscustomobject][ordered]@{
+                attempt = 3
+                state = "passed"
+                receipt = [IO.Path]::GetRelativePath($repoRoot, $readinessAliasPath).Replace("\", "/")
+                sha256 = $readinessAliasSha256
+            }
+            next_candidate_rehearsal = [pscustomobject][ordered]@{
+                attempt = $startAttempt
+                schedule_sha256 = $startScheduleSha256
+            }
+        }
+        $capturePath = Join-Path $startSelfTestRoot "attempts/candidate-rehearsal-$startAttempt-validation-state.json"
+        $captureSha256 = Write-Sprint8APreflightJsonReceipt -Document ([pscustomobject][ordered]@{
+            schema_version = 1
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal-validation-state-capture"
+            attempt = $startAttempt
+            authoritative = $false
+            captured_path = [IO.Path]::GetRelativePath(
+                $repoRoot,
+                (Join-Path $startSelfTestRoot "validation-state.json")
+            ).Replace("\", "/")
+            captured_sha256 = Get-Sprint8APreflightStringSha256 `
+                -Text (ConvertTo-Sprint8APreflightCanonicalJson $capturedState)
+            capture_error = $null
+            document = $capturedState
+        }) -Path $capturePath
+        $startPath = Join-Path $startSelfTestRoot "attempts/candidate-rehearsal-$startAttempt-start.json"
+        $startSha256 = Write-Sprint8APreflightJsonReceipt -Document ([pscustomobject][ordered]@{
+            schema_version = 3
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal-start"
+            attempt = $startAttempt
+            authoritative = $false
+            readiness_receipt = $readinessReceipt
+            validation_state_receipt = [pscustomobject][ordered]@{
+                path = [IO.Path]::GetRelativePath($repoRoot, $capturePath).Replace("\", "/")
+                sha256 = $captureSha256
+            }
+            schedule = $startSchedule
+            schedule_sha256 = $startScheduleSha256
+            schedule_selection = [pscustomobject][ordered]@{
+                source = "readiness"
+                reason = "authenticated conservative fallback"
+            }
+        }) -Path $startPath
+        $startReference = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($repoRoot, $startPath).Replace("\", "/")
+            sha256 = $startSha256
+        }
+        $startChecks = @($rehearsalNames | ForEach-Object {
+            [pscustomobject][ordered]@{
+                name = [string]$_
+                state = "passed"
+                assertions_started = $true
+            }
+        })
+        $startLineage = [pscustomobject][ordered]@{ schema_version = 1; links = @() }
+        $attemptDocument = [pscustomobject][ordered]@{
+            schema_version = 3
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal"
+            attempt = $startAttempt
+            authoritative = $false
+            state = "passed"
+            mutable_source_identity = $startSource
+            environment_fingerprint = "5" * 64
+            prerequisite_receipts = @($readinessReceipt)
+            correction_lineage = $startLineage
+            immutable_start_receipt = $startReference
+            schedule_sha256 = $startScheduleSha256
+            deferred_count = 0
+            checks = $startChecks
+        }
+        $attemptPath = Join-Path $startSelfTestRoot "attempts/candidate-rehearsal-$startAttempt-attempt.json"
+        $attemptSha256 = Write-Sprint8APreflightJsonReceipt -Document $attemptDocument -Path $attemptPath
+        $startResult = $attemptDocument | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+        $startResult | Add-Member -NotePropertyName attempt_receipt -NotePropertyValue ([pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
+            sha256 = $attemptSha256
+        })
+        $finalState = [pscustomobject][ordered]@{
+            rehearsal = [pscustomobject][ordered]@{ attempt = $startAttempt; state = "passed" }
+            correction_lineage = $startLineage
+        }
+        Assert-Sprint8APreflightRehearsalAttemptReceipt `
+            -RehearsalResult $startResult `
+            -ValidationState $finalState `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRootPath $startSelfTestRoot `
+            -ReadinessReference $readinessReference `
+            -ExpectedNames $rehearsalNames | Out-Null
+        $staleScheduleResult = $startResult | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+        $staleScheduleResult.schedule_sha256 = "0" * 64
+        $staleScheduleRejected = $false
+        try {
+            Assert-Sprint8APreflightRehearsalAttemptReceipt `
+                -RehearsalResult $staleScheduleResult `
+                -ValidationState $finalState `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRootPath $startSelfTestRoot `
+                -ReadinessReference $readinessReference `
+                -ExpectedNames $rehearsalNames | Out-Null
+        } catch { $staleScheduleRejected = $true }
+        if (-not $staleScheduleRejected) {
+            throw "Sprint 8A preflight self-test accepted a stale immutable-start schedule binding."
+        }
+    } finally {
+        if (Test-Sprint8APreflightContainedPath -Parent (Join-Path $repoRoot "artifacts") -Child $startSelfTestRoot) {
+            [IO.Directory]::Delete($startSelfTestRoot, $true)
+        }
     }
 
     $commandInventoryFunction = @($functionDefinitions | Where-Object Name -CEQ "Get-Sprint8ADownstreamCommandSets")[0]
@@ -1086,6 +1527,7 @@ $script:runtimeContext = [ordered]@{
     rehearsal = $null
     rehearsal_reference = $null
     rehearsal_attempt_reference = $null
+    rehearsal_start_reference = $null
     validation_state = $null
     validation_state_reference = $null
     environment = $null
@@ -1341,10 +1783,20 @@ function Assert-Sprint8APreflightPassingAttemptChecks {
         if ([string]$check.state -cne "passed" -or
             $check.assertions_started -isnot [bool] -or -not [bool]$check.assertions_started -or
             [int]$check.exit_status -ne 0 -or
-            @($check.evidence).Count -lt 1) {
+            $check.PSObject.Properties.Name -notcontains "evidence_path" -or
+            [string]::IsNullOrWhiteSpace([string]$check.evidence_path) -or
+            $check.PSObject.Properties.Name -notcontains "evidence_sha256" -or
+            [string]$check.evidence_sha256 -notmatch '^[0-9a-f]{64}$') {
             throw "$Label check '$($check.name)' is not one complete passing asserted result."
         }
-        foreach ($evidence in @($check.evidence)) {
+        $evidenceReferences = @([pscustomobject][ordered]@{
+            path = [string]$check.evidence_path
+            sha256 = [string]$check.evidence_sha256
+        })
+        if ($check.PSObject.Properties.Name -contains "produced_evidence") {
+            $evidenceReferences += @($check.produced_evidence | Where-Object { $null -ne $_ })
+        }
+        foreach ($evidence in $evidenceReferences) {
             $resolved = Resolve-Sprint8APreflightEvidencePath `
                 -RepositoryRoot $repoRoot `
                 -EvidenceRootPath $script:evidenceRootPath `
@@ -1417,7 +1869,7 @@ function Assert-Sprint8APreflightReceiptChain {
     $rehearsal = $rehearsalReference.document
 
     if (($readiness.schema_version -isnot [int] -and $readiness.schema_version -isnot [long]) -or
-        [int]$readiness.schema_version -ne 2 -or
+        @(2, 3) -notcontains [int]$readiness.schema_version -or
         [string]$readiness.sprint -cne "sprint-8a" -or
         [string]$readiness.phase -cne "validation-readiness" -or
         $readiness.authoritative -isnot [bool] -or $readiness.authoritative -ne $false -or
@@ -1451,7 +1903,7 @@ function Assert-Sprint8APreflightReceiptChain {
     }
 
     if (($rehearsal.schema_version -isnot [int] -and $rehearsal.schema_version -isnot [long]) -or
-        [int]$rehearsal.schema_version -ne 2 -or
+        @(2, 3) -notcontains [int]$rehearsal.schema_version -or
         [string]$rehearsal.sprint -cne "sprint-8a" -or
         [string]$rehearsal.phase -cne "candidate-rehearsal" -or
         $rehearsal.authoritative -isnot [bool] -or $rehearsal.authoritative -ne $false -or
@@ -1459,10 +1911,16 @@ function Assert-Sprint8APreflightReceiptChain {
         [string]$rehearsal.environment_fingerprint -notmatch '^[0-9a-f]{64}$' -or
         [int]$rehearsal.failure_count -ne 0 -or [int]$rehearsal.blocked_count -ne 0 -or
         [int]$rehearsal.nested_blocked_count -ne 0 -or [int]$rehearsal.nested_failure_count -ne 0 -or
+        ([int]$rehearsal.schema_version -eq 3 -and (
+            $rehearsal.PSObject.Properties.Name -notcontains "deferred_count" -or
+            [int]$rehearsal.deferred_count -ne 0)) -or
         [string]$rehearsal.cleanup_restoration.result -cne "canonical_successor_healthy") {
         throw "Sprint 8A preflight requires one exact complete passing non-authoritative Candidate Rehearsal receipt."
     }
     Assert-Sprint8ASourceIdentityObject -Source $rehearsal.mutable_source_identity -RequireClean | Out-Null
+    if ([int]$rehearsal.schema_version -eq 3 -and [int]$readiness.schema_version -ne 3) {
+        throw "Schema-3 Candidate Rehearsal cannot consume historical schedule-unbound Readiness evidence."
+    }
     $rehearsalChecks = @(Get-Sprint8APreflightDeclaredRunnerChecks `
         -Path (Join-Path $repoRoot "scripts/run-sprint-8a-candidate-rehearsal.ps1") `
         -EndMarker 'Assert-RehearsalGraph -Checks $declaredChecks')
@@ -1528,14 +1986,22 @@ function Assert-Sprint8APreflightReceiptChain {
         [string]$state.rehearsal.state -cne "passed" -or
         [int]$state.rehearsal.attempt -ne [int]$rehearsal.attempt -or
         [string]$state.rehearsal.receipt -cne [string]$rehearsalReference.path -or
-        [string]$state.rehearsal.sha256 -cne [string]$rehearsalReference.sha256) {
+        [string]$state.rehearsal.sha256 -cne [string]$rehearsalReference.sha256 -or
+        ([int]$rehearsal.schema_version -eq 3 -and (
+            $state.PSObject.Properties.Name -notcontains "next_candidate_rehearsal" -or
+            $null -ne $state.next_candidate_rehearsal -or
+            [string]$state.rehearsal.schedule_sha256 -cne [string]$rehearsal.schedule_sha256 -or
+            (ConvertTo-Sprint8APreflightCanonicalJson $state.rehearsal.immutable_start_receipt) -cne
+                (ConvertTo-Sprint8APreflightCanonicalJson $rehearsal.immutable_start_receipt)))) {
         throw "Validation-state does not authorize preflight for the exact passing Readiness/Rehearsal pair."
     }
     $rehearsalAttemptReference = Assert-Sprint8APreflightRehearsalAttemptReceipt `
         -RehearsalResult $rehearsal `
         -ValidationState $state `
         -RepositoryRoot $repoRoot `
-        -EvidenceRootPath $script:evidenceRootPath
+        -EvidenceRootPath $script:evidenceRootPath `
+        -ReadinessReference $readinessImmutableReference `
+        -ExpectedNames $rehearsalChecks
 
     $lineageProperty = $state.PSObject.Properties["correction_lineage"]
     $lineage = if ($null -eq $lineageProperty) { $null } else { $lineageProperty.Value }
@@ -1577,6 +2043,7 @@ function Assert-Sprint8APreflightReceiptChain {
     $script:runtimeContext.rehearsal = $rehearsal
     $script:runtimeContext.rehearsal_reference = $rehearsalReference
     $script:runtimeContext.rehearsal_attempt_reference = $rehearsalAttemptReference
+    $script:runtimeContext.rehearsal_start_reference = $rehearsalAttemptReference.immutable_start_receipt
     $script:runtimeContext.validation_state = $state
     $script:runtimeContext.validation_state_reference = $stateReference
     $script:runtimeContext.environment = $environment
@@ -1591,6 +2058,7 @@ function Assert-Sprint8APreflightReceiptChain {
         readiness_immutable = [pscustomobject]@{ path = $readinessImmutableReference.path; sha256 = $readinessImmutableReference.sha256 }
         rehearsal = [pscustomobject]@{ path = $rehearsalReference.path; sha256 = $rehearsalReference.sha256 }
         rehearsal_attempt = [pscustomobject]@{ path = $rehearsalAttemptReference.path; sha256 = $rehearsalAttemptReference.sha256 }
+        rehearsal_start = $rehearsalAttemptReference.immutable_start_receipt
         validation_state = [pscustomobject]@{ path = $stateReference.path; sha256 = $stateReference.sha256 }
         environment = [pscustomobject]@{ path = $environmentReference.path; sha256 = $environmentReference.sha256; fingerprint = $environment.fingerprint }
         source_identity = $rehearsal.mutable_source_identity
@@ -2786,6 +3254,7 @@ try {
                 path = [string]$script:runtimeContext.rehearsal_attempt_reference.path
                 sha256 = [string]$script:runtimeContext.rehearsal_attempt_reference.sha256
             }
+            rehearsal_start = $script:runtimeContext.rehearsal_start_reference
             handoff_url = $HandoffUrl.TrimEnd("/")
             normalized_deployment_configuration_sha256 = [string]$script:runtimeContext.normalized_deployment_configuration_sha256
             source_and_environment_exact = $true

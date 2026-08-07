@@ -13,7 +13,8 @@ param(
     [switch]$SkipBuild,
     [switch]$VerifyNoOp,
     [string]$ExpectedFaultId,
-    [string]$ExpectedFailurePattern
+    [string]$ExpectedFailurePattern,
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -221,13 +222,105 @@ function Invoke-Sprint8AComposeDown {
     }
 }
 
-function Get-Sprint8AComposeServiceState {
-    param([Parameter(Mandatory)][string]$ComposePath)
-    $output = @(& docker compose -f $ComposePath --profile reference ps --all --format json 2>&1)
-    if ($LASTEXITCODE -ne 0) { throw "Sprint 8A Compose service-state query failed." }
-    $text = ($output -join "`n").Trim()
-    $services = if ([string]::IsNullOrWhiteSpace($text)) { @() } else { @(ConvertFrom-Json $text) }
-    @($services | ForEach-Object {
+function New-Sprint8AComposeJsonException {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [AllowNull()][Exception]$InnerException
+    )
+    $exception = if ($null -eq $InnerException) {
+        [IO.InvalidDataException]::new($Message)
+    } else {
+        [IO.InvalidDataException]::new($Message, $InnerException)
+    }
+    $exception.Data["TessaraFailureClassification"] = "harness"
+    $exception
+}
+
+function ConvertFrom-Sprint8AComposeServiceJson {
+    param([AllowNull()][AllowEmptyCollection()][object[]]$Lines = @())
+
+    $text = (@($Lines | ForEach-Object { [string]$_ }) -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return @() }
+    $leadingCharacter = $text.Substring(0, 1)
+    if ($leadingCharacter -cne "{" -and $leadingCharacter -cne "[") {
+        throw (New-Sprint8AComposeJsonException `
+            -Message "Sprint 8A Compose service-state output begins with non-JSON content." `
+            -InnerException $null)
+    }
+
+    $wholeDocument = $null
+    $wholeDocumentError = $null
+    $wholeDocumentParsed = $false
+    try {
+        $wholeDocument = ConvertFrom-Json -InputObject $text -NoEnumerate -ErrorAction Stop
+        $wholeDocumentParsed = $true
+    } catch {
+        $wholeDocumentError = $_
+    }
+    if ($wholeDocumentParsed) {
+        if ($leadingCharacter -ceq "{") {
+            if ($wholeDocument -isnot [pscustomobject]) {
+                throw (New-Sprint8AComposeJsonException `
+                    -Message "Sprint 8A Compose service-state JSON object did not decode as an object." `
+                    -InnerException $null)
+            }
+            return $wholeDocument
+        }
+        if ($wholeDocument -isnot [Array]) {
+            throw (New-Sprint8AComposeJsonException `
+                -Message "Sprint 8A Compose service-state JSON array did not decode as an array." `
+                -InnerException $null)
+        }
+        foreach ($record in @($wholeDocument)) {
+            if ($record -isnot [pscustomobject]) {
+                throw (New-Sprint8AComposeJsonException `
+                    -Message "Sprint 8A Compose service-state JSON array contains a non-object value." `
+                    -InnerException $null)
+            }
+            $record
+        }
+        return
+    }
+
+    if ($leadingCharacter -ceq "[") {
+        throw (New-Sprint8AComposeJsonException `
+            -Message "Sprint 8A Compose service-state JSON array is malformed or followed by additional content." `
+            -InnerException $wholeDocumentError.Exception)
+    }
+    $jsonLines = @($text -split '\r?\n')
+    if ($jsonLines.Count -lt 2) {
+        throw (New-Sprint8AComposeJsonException `
+            -Message "Sprint 8A Compose service-state JSON object is malformed." `
+            -InnerException $wholeDocumentError.Exception)
+    }
+    for ($index = 0; $index -lt $jsonLines.Count; $index++) {
+        $line = ([string]$jsonLines[$index]).Trim()
+        if ([string]::IsNullOrWhiteSpace($line) -or
+            -not $line.StartsWith("{", [StringComparison]::Ordinal)) {
+            throw (New-Sprint8AComposeJsonException `
+                -Message "Sprint 8A Compose service-state NDJSON line $($index + 1) is not one JSON object." `
+                -InnerException $wholeDocumentError.Exception)
+        }
+        try {
+            $record = ConvertFrom-Json -InputObject $line -NoEnumerate -ErrorAction Stop
+        } catch {
+            throw (New-Sprint8AComposeJsonException `
+                -Message "Sprint 8A Compose service-state NDJSON line $($index + 1) is malformed." `
+                -InnerException $_.Exception)
+        }
+        if ($record -isnot [pscustomobject]) {
+            throw (New-Sprint8AComposeJsonException `
+                -Message "Sprint 8A Compose service-state NDJSON line $($index + 1) is not one JSON object." `
+                -InnerException $null)
+        }
+        $record
+    }
+}
+
+function ConvertTo-Sprint8AComposeServiceState {
+    param([AllowEmptyCollection()][object[]]$Services = @())
+
+    @($Services | ForEach-Object {
         [pscustomobject][ordered]@{
             service = [string]$_.Service
             id = [string]$_.ID
@@ -238,6 +331,40 @@ function Get-Sprint8AComposeServiceState {
             exit_code = if ($null -eq $_.ExitCode) { $null } else { [int]$_.ExitCode }
         }
     } | Sort-Object service, name)
+}
+
+function Get-Sprint8AComposeServiceState {
+    param([Parameter(Mandatory)][string]$ComposePath)
+    $output = @(& docker compose -f $ComposePath --profile reference ps --all --format json 2>&1)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) { throw "Sprint 8A Compose service-state query failed with exit code $exitCode." }
+    $services = @(ConvertFrom-Sprint8AComposeServiceJson -Lines $output)
+    @(ConvertTo-Sprint8AComposeServiceState -Services $services)
+}
+
+function Get-Sprint8AMaterializationFailureClassification {
+    param(
+        [Parameter(Mandatory)][Management.Automation.ErrorRecord]$ErrorRecord,
+        [AllowNull()]$ExpectedFaultObserved
+    )
+    if ($ExpectedFaultObserved -eq $true) { return "harness" }
+
+    $exception = $ErrorRecord.Exception
+    while ($null -ne $exception) {
+        if ($exception.Data.Contains("TessaraFailureClassification")) {
+            $declared = [string]$exception.Data["TessaraFailureClassification"]
+            if ($declared -in @("product", "harness", "environment")) { return $declared }
+        }
+        $exception = $exception.InnerException
+    }
+    $exceptionType = $ErrorRecord.Exception.GetType().FullName
+    if ($exceptionType -match '^System\.Management\.Automation\.(PropertyNotFoundException|ParameterBindingException|CommandNotFoundException|ParseException)$') {
+        return "harness"
+    }
+    if ($ErrorRecord.Exception.Message -match '(?i)Docker daemon is not running|Cannot connect to the Docker daemon|connection refused|timed out while waiting for .* health') {
+        return "environment"
+    }
+    "product"
 }
 
 function Assert-Sprint8AReceipt {
@@ -504,6 +631,97 @@ function Start-Sprint8APublicGateway {
     }
 }
 
+function Assert-Sprint8AComposeParserRejects {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Lines,
+        [Parameter(Mandatory)][string]$ExpectedFragment
+    )
+    $rejected = $false
+    try {
+        ConvertFrom-Sprint8AComposeServiceJson -Lines $Lines | Out-Null
+    } catch {
+        $rejected = $true
+        if (-not $_.Exception.Message.Contains($ExpectedFragment)) {
+            throw "Compose parser self-test caught the wrong failure: $($_.Exception.Message)"
+        }
+        if ((Get-Sprint8AMaterializationFailureClassification -ErrorRecord $_ -ExpectedFaultObserved $null) -cne "harness") {
+            throw "Compose parser self-test did not classify malformed Compose output as a harness defect."
+        }
+    }
+    if (-not $rejected) {
+        throw "Compose parser self-test accepted invalid output expected to contain '$ExpectedFragment'."
+    }
+}
+
+function Invoke-Sprint8AMaterializationSelfTest {
+    if (@(ConvertFrom-Sprint8AComposeServiceJson -Lines @()).Count -ne 0 -or
+        @(ConvertFrom-Sprint8AComposeServiceJson -Lines @('[]')).Count -ne 0) {
+        throw "Compose parser self-test did not preserve empty output and an empty JSON array."
+    }
+
+    $singleObject = @(ConvertFrom-Sprint8AComposeServiceJson -Lines @(
+        '{"Service":"core","ID":"1","Name":"core-1","Image":"core","State":"running","Health":"healthy","ExitCode":0}'
+    ))
+    if ($singleObject.Count -ne 1 -or [string]$singleObject[0].Service -cne "core") {
+        throw "Compose parser self-test did not accept one JSON object."
+    }
+
+    $arrayRecords = @(ConvertFrom-Sprint8AComposeServiceJson -Lines @(
+        '[{"Service":"zeta","ID":"3","Name":"zeta-1","Image":"zeta","State":"running","Health":"healthy","ExitCode":0},{"Service":"alpha","ID":"2","Name":"alpha-z","Image":"alpha","State":"running","Health":"healthy","ExitCode":0}]'
+    ))
+    if ($arrayRecords.Count -ne 2) {
+        throw "Compose parser self-test did not accept a JSON object array."
+    }
+
+    $ndjsonRecords = @(ConvertFrom-Sprint8AComposeServiceJson -Lines @(
+        '{"Service":"alpha","ID":"2","Name":"alpha-z","Image":"alpha","State":"running","Health":"healthy","ExitCode":0}',
+        '{"Service":"alpha","ID":"1","Name":"alpha-a","Image":"alpha","State":"running","Health":"healthy","ExitCode":0}',
+        '{"Service":"zeta","ID":"3","Name":"zeta-1","Image":"zeta","State":"running","Health":"healthy","ExitCode":0}'
+    ))
+    $sortedState = @(ConvertTo-Sprint8AComposeServiceState -Services $ndjsonRecords)
+    if ($ndjsonRecords.Count -ne 3 -or
+        (@($sortedState | ForEach-Object { "$($_.service)/$($_.name)" }) -join "`n") -cne
+        "alpha/alpha-a`nalpha/alpha-z`nzeta/zeta-1") {
+        throw "Compose parser self-test did not accept NDJSON or produce deterministic service ordering."
+    }
+
+    Assert-Sprint8AComposeParserRejects `
+        -Lines @('{"Service":"alpha"}', '{not-json}') `
+        -ExpectedFragment "NDJSON line 2 is malformed"
+    Assert-Sprint8AComposeParserRejects `
+        -Lines @('{"Service":"alpha"}', 'warning: daemon state changed') `
+        -ExpectedFragment "NDJSON line 2 is not one JSON object"
+    Assert-Sprint8AComposeParserRejects `
+        -Lines @('warning: daemon state changed', '{"Service":"alpha"}') `
+        -ExpectedFragment "begins with non-JSON content"
+    Assert-Sprint8AComposeParserRejects `
+        -Lines @('[{"Service":"alpha"},"warning"]') `
+        -ExpectedFragment "contains a non-object value"
+
+    $productError = $null
+    try { throw [InvalidOperationException]::new("ordinary product failure") } catch { $productError = $_ }
+    if ((Get-Sprint8AMaterializationFailureClassification -ErrorRecord $productError -ExpectedFaultObserved $false) -cne "product" -or
+        (Get-Sprint8AMaterializationFailureClassification -ErrorRecord $productError -ExpectedFaultObserved $true) -cne "harness") {
+        throw "Materialization failure-classification self-test did not distinguish product and injected-fault failures."
+    }
+    $environmentError = $null
+    try { throw [IO.IOException]::new("Cannot connect to the Docker daemon") } catch { $environmentError = $_ }
+    if ((Get-Sprint8AMaterializationFailureClassification -ErrorRecord $environmentError -ExpectedFaultObserved $false) -cne "environment") {
+        throw "Materialization failure-classification self-test did not retain an environment failure."
+    }
+
+    Write-Host "Sprint 8A strict Compose service-state parser and failure-classification self-test passed."
+    [pscustomobject][ordered]@{
+        contract = "tessara.sprint-8a.materialization-self-test"
+        passed = $true
+    }
+}
+
+if ($SelfTest) {
+    Invoke-Sprint8AMaterializationSelfTest
+    return
+}
+
 if (-not $AuthorizeDisposableReset) {
     throw "Sprint 8A materialization is destructive. Re-run with -AuthorizeDisposableReset only for the disposable tessara-sprint-8a project."
 }
@@ -730,7 +948,7 @@ try {
 
         & (Join-Path $PSScriptRoot "bootstrap-sprint-7a-composition.ps1") `
             -Composition reference `
-            -ComposeFile $ComposeFile `
+            -ComposeFile $composePath `
             -BlueprintPath $resolvedBlueprintPath `
             -RuntimeDirectory $runtimeDirectory `
             -CoreUrl $ControlUrl `
@@ -765,7 +983,7 @@ try {
             }
             & (Join-Path $PSScriptRoot "bootstrap-sprint-7a-composition.ps1") `
                 -Composition reference `
-                -ComposeFile $ComposeFile `
+                -ComposeFile $composePath `
                 -BlueprintPath $resolvedBlueprintPath `
                 -RuntimeDirectory $runtimeDirectory `
                 -ReleaseCatalogEnvelope $firstCatalogEnvelope `
@@ -931,15 +1149,9 @@ try {
             }
         }
         $exceptionType = $materializationError.Exception.GetType().FullName
-        $failureClassification = if ($expectedFaultObserved -eq $true) {
-            "harness"
-        } elseif ($exceptionType -match '^System\.Management\.Automation\.(PropertyNotFoundException|ParameterBindingException|CommandNotFoundException|ParseException)$') {
-            "harness"
-        } elseif ($materializationMessage -match '(?i)Docker daemon is not running|Cannot connect to the Docker daemon|connection refused|timed out while waiting for .* health') {
-            "environment"
-        } else {
-            "product"
-        }
+        $failureClassification = Get-Sprint8AMaterializationFailureClassification `
+            -ErrorRecord $materializationError `
+            -ExpectedFaultObserved $expectedFaultObserved
         $failure = [ordered]@{
             schema_version = 2
             contract = "tessara.sprint-8a.materialization-failure"

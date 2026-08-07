@@ -18,7 +18,7 @@ services:
       - ../sprint-8a/postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
 
   core:
-    image: tessara-sprint-8a-core
+    image: ${TESSARA_CORE_IMAGE:-tessara-sprint-8a-core}
     # The loopback-only control port lets destructive materialization use Core's
     # owning APIs while the public gateway container remains stopped. It is not
     # a product ingress endpoint and is bound only for the disposable profile.
@@ -33,7 +33,7 @@ services:
       components: { condition: service_started }
 
   core-migrate:
-    image: tessara-sprint-8a-core
+    image: ${TESSARA_CORE_IMAGE:-tessara-sprint-8a-core}
     environment:
       TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
 
@@ -46,7 +46,7 @@ services:
       TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
       TESSARA_DEPLOYMENT_COMPOSE_FILE: /workspace/deploy/sprint-8a/compose.yaml
       TESSARA_DEPLOYMENT_COMPOSE_PROJECT: tessara-sprint-8a
-      TESSARA_DEPLOYMENT_TARGETS: '{"tessara.components":{"image_environment":"TESSARA_COMPONENT_IMAGE","migration_service":"components-migrate","runtime_service":"components"}}'
+      TESSARA_DEPLOYMENT_TARGETS: '{"core":{"image_environment":"TESSARA_CORE_IMAGE","migration_service":"core-migrate","runtime_service":"core"},"tessara.components":{"image_environment":"TESSARA_COMPONENT_IMAGE","migration_service":"components-migrate","runtime_service":"components"},"tessara.dashboards":{"image_environment":"TESSARA_DASHBOARD_IMAGE","migration_service":"dashboards-migrate","runtime_service":"dashboards"},"tessara.reference.scoped-records":{"image_environment":"TESSARA_REFERENCE_MODULE_IMAGE","migration_service":"scoped-records-migrate","runtime_service":"scoped-records"}}'
     ports: !override ["127.0.0.1:${TESSARA_SUPERVISOR_PORT:-8098}:8090"]
     volumes:
       - ../..:/workspace:ro
@@ -102,11 +102,17 @@ services:
       start_period: 5s
     profiles: ["reference"]
 
+  scoped-records-migrate:
+    image: ${TESSARA_REFERENCE_MODULE_IMAGE:-tessara-sprint-7a-scoped-records}
+
+  scoped-records:
+    image: ${TESSARA_REFERENCE_MODULE_IMAGE:-tessara-sprint-7a-scoped-records}
+
   dashboards-migrate:
-    image: tessara-sprint-8a-dashboards
+    image: ${TESSARA_DASHBOARD_IMAGE:-tessara-sprint-8a-dashboards}
 
   dashboards:
-    image: tessara-sprint-8a-dashboards
+    image: ${TESSARA_DASHBOARD_IMAGE:-tessara-sprint-8a-dashboards}
     environment:
       TESSARA_MODULE_SERVICE_ENDPOINTS: '{"tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091","tessara.reference.scoped-records":"http://scoped-records:8090"}'
     depends_on:

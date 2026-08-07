@@ -13,6 +13,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-rehearsal-scheduler.ps1")
 $allowedClassifications = @(
     "preflight/setup",
     "product",
@@ -33,7 +34,7 @@ function Assert-EqualIdentity {
 function Assert-DiagnosticReceiptHeader {
     param(
         [Parameter(Mandatory)]$Document,
-        [Parameter(Mandatory)][int]$SchemaVersion,
+        [Parameter(Mandatory)][int[]]$SchemaVersions,
         [Parameter(Mandatory)][string]$Phase,
         [Parameter(Mandatory)][string]$Label
     )
@@ -44,14 +45,14 @@ function Assert-DiagnosticReceiptHeader {
         $Document.PSObject.Properties.Name -notcontains "phase" -or
         $Document.PSObject.Properties.Name -notcontains "authoritative" -or
         -not ($schema -is [int] -or $schema -is [long]) -or
-        [long]$schema -ne $SchemaVersion -or
+        $SchemaVersions -notcontains [long]$schema -or
         $Document.sprint -isnot [string] -or
         [string]$Document.sprint -cne "sprint-8a" -or
         $Document.phase -isnot [string] -or
         [string]$Document.phase -cne $Phase -or
         $authoritative -isnot [bool] -or
         $authoritative -ne $false) {
-        throw "$Label is not the exact non-authoritative Sprint 8A receipt type."
+        throw "$Label is not an accepted exact non-authoritative Sprint 8A receipt type."
     }
 }
 
@@ -133,6 +134,228 @@ function Assert-HashedFileEvidence {
     }
 }
 
+function Assert-DeferredLanePriorPassingReceipt {
+    param(
+        [Parameter(Mandatory)]$Deferred,
+        [Parameter(Mandatory)][int]$CurrentAttempt,
+        [switch]$SkipFileEvidence
+    )
+
+    Assert-HashedFileEvidence `
+        -Evidence $Deferred.prior_passing_receipt `
+        -Label "Deferred lane '$($Deferred.name)' prior passing receipt" `
+        -SkipFileEvidence:$SkipFileEvidence
+    Assert-MutableSourceIdentity `
+        -Source $Deferred.prior_source_identity `
+        -VerificationState "verified"
+    if ($Deferred.PSObject.Properties.Name -notcontains "prior_environment_identity" -or
+        @($Deferred.prior_environment_identity.PSObject.Properties.Name).Count -ne 1 -or
+        $Deferred.prior_environment_identity.PSObject.Properties.Name -cnotcontains "fingerprint" -or
+        $Deferred.prior_environment_identity.fingerprint -isnot [string] -or
+        [string]$Deferred.prior_environment_identity.fingerprint -notmatch '^[0-9a-f]{64}$') {
+        throw "Deferred lane '$($Deferred.name)' has a malformed prior environment identity."
+    }
+    if ($SkipFileEvidence) { return }
+
+    $reference = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $EvidenceRoot `
+        -Path ([string]$Deferred.prior_passing_receipt.path) `
+        -AllowLegacyAbsolute
+    $sidecarSha256 = Assert-Sprint8AReceiptSidecar -Path ([string]$reference.full_path)
+    if ([string]$sidecarSha256 -cne [string]$Deferred.prior_passing_receipt.sha256) {
+        throw "Deferred lane '$($Deferred.name)' prior passing receipt differs from its sidecar or embedded SHA-256."
+    }
+    $receipt = Get-Content -LiteralPath ([string]$reference.full_path) -Raw | ConvertFrom-Json
+    $schema = $receipt.schema_version
+    if (($schema -isnot [int] -and $schema -isnot [long]) -or
+        @(1, 2) -notcontains [int]$schema -or
+        $receipt.sprint -isnot [string] -or [string]$receipt.sprint -cne "sprint-8a" -or
+        $receipt.phase -isnot [string] -or [string]$receipt.phase -cne "candidate-rehearsal-lane" -or
+        $receipt.authoritative -isnot [bool] -or [bool]$receipt.authoritative -or
+        ($receipt.attempt -isnot [int] -and $receipt.attempt -isnot [long]) -or
+        [int]$receipt.attempt -lt 1 -or [int]$receipt.attempt -ge $CurrentAttempt -or
+        $receipt.PSObject.Properties.Name -notcontains "result" -or $null -eq $receipt.result) {
+        throw "Deferred lane '$($Deferred.name)' does not bind an exact earlier non-authoritative Candidate Rehearsal lane receipt."
+    }
+    Assert-EqualIdentity `
+        -Expected $Deferred.prior_source_identity `
+        -Actual $receipt.mutable_source_identity `
+        -Label "Deferred lane '$($Deferred.name)' prior source"
+    if ([string]$receipt.environment_fingerprint -cne
+        [string]$Deferred.prior_environment_identity.fingerprint) {
+        throw "Deferred lane '$($Deferred.name)' prior environment identity differs from its retained lane receipt."
+    }
+    if ([string]$receipt.result.name -cne [string]$Deferred.name -or
+        [string]$receipt.result.state -cne "passed" -or
+        $receipt.result.PSObject.Properties.Name -notcontains "assertions_started" -or
+        $receipt.result.assertions_started -isnot [bool] -or
+        -not [bool]$receipt.result.assertions_started) {
+        throw "Deferred lane '$($Deferred.name)' prior receipt does not prove that exact lane previously executed and passed."
+    }
+}
+
+function Assert-CandidateRehearsalScheduleBinding {
+    param(
+        [Parameter(Mandatory)]$Attempt,
+        [Parameter(Mandatory)]$Harvest,
+        [Parameter(Mandatory)][object[]]$DeclaredChecks,
+        [switch]$SkipFileEvidence
+    )
+
+    foreach ($entry in @(
+        [pscustomobject]@{ label = "attempt"; document = $Attempt },
+        [pscustomobject]@{ label = "harvest"; document = $Harvest }
+    )) {
+        if ($entry.document.PSObject.Properties.Name -notcontains "immutable_start_receipt" -or
+            $null -eq $entry.document.immutable_start_receipt -or
+            [string]$entry.document.immutable_start_receipt.path -notmatch
+                '(^|/)attempts/candidate-rehearsal-[0-9]+-start\.json$' -or
+            [string]$entry.document.immutable_start_receipt.sha256 -notmatch '^[0-9a-f]{64}$' -or
+            $entry.document.PSObject.Properties.Name -notcontains "schedule_sha256" -or
+            [string]$entry.document.schedule_sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Schema-3 Candidate Rehearsal $($entry.label) omits its immutable start and schedule binding."
+        }
+    }
+    if ((($Attempt.immutable_start_receipt | ConvertTo-Json -Depth 10 -Compress) -cne
+            ($Harvest.immutable_start_receipt | ConvertTo-Json -Depth 10 -Compress)) -or
+        [string]$Attempt.schedule_sha256 -cne [string]$Harvest.schedule_sha256) {
+        throw "Candidate Rehearsal attempt and harvest bind different immutable starts or schedules."
+    }
+    if ($SkipFileEvidence) { return }
+
+    $startReference = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $EvidenceRoot `
+        -Path ([string]$Attempt.immutable_start_receipt.path) `
+        -AllowLegacyAbsolute
+    $expectedEvidenceRoot = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+        [IO.Path]::GetFullPath($EvidenceRoot)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repoRoot $EvidenceRoot))
+    }
+    $expectedStartPath = [IO.Path]::GetFullPath((Join-Path `
+        $expectedEvidenceRoot `
+        "attempts/candidate-rehearsal-$([int]$Attempt.attempt)-start.json"))
+    if ([IO.Path]::GetFullPath([string]$startReference.full_path) -cne $expectedStartPath -or
+        (Assert-Sprint8AReceiptSidecar -Path ([string]$startReference.full_path)) -cne
+            [string]$Attempt.immutable_start_receipt.sha256) {
+        throw "Candidate Rehearsal immutable start path or sidecar is not exact."
+    }
+    $start = Get-Content -LiteralPath ([string]$startReference.full_path) -Raw | ConvertFrom-Json
+    $declaredNames = @($DeclaredChecks | ForEach-Object { [string]$_.name })
+    if (($start.schema_version -isnot [int] -and $start.schema_version -isnot [long]) -or
+        [int]$start.schema_version -ne 3 -or
+        [string]$start.sprint -cne "sprint-8a" -or
+        [string]$start.phase -cne "candidate-rehearsal-start" -or
+        [int]$start.attempt -ne [int]$Attempt.attempt -or
+        $start.authoritative -isnot [bool] -or [bool]$start.authoritative -or
+        [string]$start.schedule_sha256 -cne [string]$Attempt.schedule_sha256 -or
+        [string]$start.schedule_sha256 -cne (Get-Sprint8ARehearsalJsonSha256 -Document $start.schedule) -or
+        (@($start.declared_lanes | ForEach-Object { [string]$_ }) -join "`n") -cne
+            ($declaredNames -join "`n") -or
+        [string]::IsNullOrWhiteSpace([string]$start.schedule_selection.source) -or
+        [string]::IsNullOrWhiteSpace([string]$start.schedule_selection.reason)) {
+        throw "Candidate Rehearsal immutable start does not retain its exact deterministic schedule declaration."
+    }
+    Assert-Sprint8ARehearsalScheduleContract `
+        -Schedule $start.schedule `
+        -Checks $DeclaredChecks `
+        -ExpectedAttempt ([int]$Attempt.attempt) | Out-Null
+    Assert-HashedFileEvidence `
+        -Evidence $start.validation_state_receipt `
+        -Label "Candidate Rehearsal immutable validation-state capture"
+    $stateCapture = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $EvidenceRoot `
+        -Path ([string]$start.validation_state_receipt.path) `
+        -AllowLegacyAbsolute
+    if ((Assert-Sprint8AReceiptSidecar -Path ([string]$stateCapture.full_path)) -cne
+        [string]$start.validation_state_receipt.sha256) {
+        throw "Candidate Rehearsal immutable validation-state capture sidecar is stale."
+    }
+}
+
+function Assert-DeferredTerminalCheckEvidence {
+    param(
+        [Parameter(Mandatory)]$Declared,
+        [Parameter(Mandatory)]$Result,
+        [Parameter(Mandatory)][object[]]$TerminalChecks,
+        [Parameter(Mandatory)][int]$CurrentAttempt,
+        [switch]$SkipFileEvidence
+    )
+
+    foreach ($property in @(
+        "wave", "scheduling_reason", "prior_passing_receipt", "prior_source_identity",
+        "prior_environment_identity", "current_correction_impact", "non_impact_rationale",
+        "consecutive_deferral_count", "mandatory_by_attempt", "prerequisite_state",
+        "diagnostic_history_notice", "produced_evidence", "nested_blocked_checks",
+        "nested_failed_checks"
+    )) {
+        if ($Result.PSObject.Properties.Name -notcontains $property) {
+            throw "Deferred lane '$($Declared.name)' omits exact '$property' accounting."
+        }
+    }
+    if ([string]$Result.wave -cne "B" -or
+        [string]::IsNullOrWhiteSpace([string]$Result.scheduling_reason) -or
+        [string]$Result.dependency_reason -cne
+            "Wave B was deferred after Wave A failed; this lane executed no assertions." -or
+        $null -ne $Result.started_at -or $null -ne $Result.ended_at -or
+        $null -ne $Result.duration_ms -or $null -ne $Result.exit_status -or
+        [bool]$Result.assertions_started -or $null -ne $Result.assertions_started_at -or
+        $null -ne $Result.classification -or $null -ne $Result.classification_source -or
+        $null -ne $Result.failure_message -or
+        $null -ne $Result.evidence_path -or $null -ne $Result.evidence_sha256 -or
+        @($Result.produced_evidence).Count -ne 0 -or
+        @($Result.nested_blocked_checks).Count -ne 0 -or
+        @($Result.nested_failed_checks).Count -ne 0 -or
+        [string]$Result.diagnostic_history_notice -cne $script:Sprint8ADiagnosticHistoryNotice) {
+        throw "Deferred lane '$($Declared.name)' claims execution, evidence, failure semantics, or authoritative prior proof."
+    }
+    if ($Result.current_correction_impact.PSObject.Properties.Name -notcontains "affected" -or
+        $Result.current_correction_impact.affected -isnot [bool] -or
+        [bool]$Result.current_correction_impact.affected -or
+        [string]$Result.current_correction_impact.decision -cne "outside_correction_impact" -or
+        [string]::IsNullOrWhiteSpace([string]$Result.current_correction_impact.rationale) -or
+        [string]$Result.non_impact_rationale -cne [string]$Result.current_correction_impact.rationale) {
+        throw "Deferred lane '$($Declared.name)' is not proven outside the current correction impact cone."
+    }
+    $count = $Result.consecutive_deferral_count
+    $mandatory = $Result.mandatory_by_attempt
+    if (($count -isnot [int] -and $count -isnot [long]) -or
+        [int]$count -lt 1 -or [int]$count -gt 3 -or
+        ($mandatory -isnot [int] -and $mandatory -isnot [long]) -or
+        [int]$mandatory -ne ($CurrentAttempt + (4 - [int]$count))) {
+        throw "Deferred lane '$($Declared.name)' has invalid bounded-deferral accounting."
+    }
+    $expectedPrerequisites = @($Declared.depends_on | ForEach-Object { [string]$_ })
+    $prerequisites = @($Result.prerequisite_state)
+    $prerequisiteNames = @($prerequisites | ForEach-Object { [string]$_.name })
+    if ($prerequisites.Count -ne $expectedPrerequisites.Count -or
+        @($prerequisiteNames | Sort-Object -Unique).Count -ne $prerequisiteNames.Count -or
+        ($prerequisiteNames -join "`n") -cne ($expectedPrerequisites -join "`n")) {
+        throw "Deferred lane '$($Declared.name)' does not retain its exact prerequisite-state inventory."
+    }
+    foreach ($prerequisite in $prerequisites) {
+        if (@("passed", "failed", "blocked", "deferred", "not_terminal") -cnotcontains
+            [string]$prerequisite.state) {
+            throw "Deferred lane '$($Declared.name)' has invalid prerequisite state '$($prerequisite.state)'."
+        }
+        $terminal = @($TerminalChecks | Where-Object name -CEQ ([string]$prerequisite.name))
+        if ($terminal.Count -ne 1 -or
+            ([string]$prerequisite.state -cne "not_terminal" -and
+                [string]$prerequisite.state -cne [string]$terminal[0].state) -or
+            ([string]$prerequisite.state -ceq "not_terminal" -and
+                [string]$terminal[0].state -cne "deferred")) {
+            throw "Deferred lane '$($Declared.name)' prerequisite state is inconsistent with current terminal accounting."
+        }
+    }
+    Assert-DeferredLanePriorPassingReceipt `
+        -Deferred $Result `
+        -CurrentAttempt $CurrentAttempt `
+        -SkipFileEvidence:$SkipFileEvidence
+}
+
 function Assert-AcyclicCheckGraph {
     param([Parameter(Mandatory)][object[]]$Checks)
 
@@ -167,6 +390,7 @@ function Assert-TerminalCheckEvidence {
         [Parameter(Mandatory)]$Declared,
         [Parameter(Mandatory)]$Result,
         [Parameter(Mandatory)][object[]]$TerminalChecks,
+        [Parameter(Mandatory)][int]$CurrentAttempt,
         [switch]$SkipFileEvidence
     )
 
@@ -175,8 +399,8 @@ function Assert-TerminalCheckEvidence {
         throw "Check '$($Declared.name)' terminal command differs from its declaration."
     }
     $state = [string]$Result.state
-    if (@("passed", "failed", "blocked") -cnotcontains $state) {
-        throw "Check '$($Declared.name)' is not passed, failed, or blocked."
+    if (@("passed", "failed", "blocked", "deferred") -cnotcontains $state) {
+        throw "Check '$($Declared.name)' is not passed, failed, blocked, or deferred."
     }
     if ($Result.PSObject.Properties.Name -notcontains "assertions_started" -or
         $Result.assertions_started -isnot [bool] -or
@@ -203,6 +427,15 @@ function Assert-TerminalCheckEvidence {
             -not [string]::IsNullOrWhiteSpace([string]$Result.assertions_started_at)) {
             throw "Blocked check '$($Declared.name)' must not claim command execution."
         }
+        return
+    }
+    if ($state -ceq "deferred") {
+        Assert-DeferredTerminalCheckEvidence `
+            -Declared $Declared `
+            -Result $Result `
+            -TerminalChecks $TerminalChecks `
+            -CurrentAttempt $CurrentAttempt `
+            -SkipFileEvidence:$SkipFileEvidence
         return
     }
 
@@ -257,9 +490,18 @@ function Assert-CandidateRehearsalHarvestComplete {
         [switch]$SkipFileEvidence
     )
 
-    Assert-DiagnosticReceiptHeader -Document $Attempt -SchemaVersion 2 -Phase "candidate-rehearsal" -Label "Attempt"
-    Assert-DiagnosticReceiptHeader -Document $Harvest -SchemaVersion 1 -Phase "candidate-rehearsal-harvest" -Label "Harvest"
-    Assert-DiagnosticReceiptHeader -Document $Batch -SchemaVersion 1 -Phase "candidate-rehearsal-defect-batch" -Label "Defect batch"
+    Assert-DiagnosticReceiptHeader -Document $Attempt -SchemaVersions @(2, 3) -Phase "candidate-rehearsal" -Label "Attempt"
+    $attemptSchema = [int]$Attempt.schema_version
+    Assert-DiagnosticReceiptHeader `
+        -Document $Harvest `
+        -SchemaVersions $(if ($attemptSchema -eq 3) { @(2) } else { @(1) }) `
+        -Phase "candidate-rehearsal-harvest" `
+        -Label "Harvest"
+    Assert-DiagnosticReceiptHeader `
+        -Document $Batch `
+        -SchemaVersions $(if ($attemptSchema -eq 3) { @(2) } else { @(1) }) `
+        -Phase "candidate-rehearsal-defect-batch" `
+        -Label "Defect batch"
     if ($Attempt.PSObject.Properties.Name -notcontains "source_identity_verification_state") {
         throw "Attempt omits explicit mutable-source verification state."
     }
@@ -272,7 +514,8 @@ function Assert-CandidateRehearsalHarvestComplete {
     Assert-EnvironmentFingerprint -Document $Attempt -Label "Attempt"
     Assert-EnvironmentFingerprint -Document $Harvest -Label "Harvest"
     Assert-EnvironmentFingerprint -Document $Batch -Label "Defect batch"
-    if ([string]$Attempt.state -cnotin @("harvesting", "failed") -or
+    $acceptedAttemptStates = if ($attemptSchema -eq 3) { @("harvesting", "failed", "incomplete") } else { @("harvesting", "failed") }
+    if ([string]$Attempt.state -cnotin $acceptedAttemptStates -or
         -not [bool]$Attempt.assertions_started -or
         [string]::IsNullOrWhiteSpace([string]$Attempt.assertions_started_at)) {
         throw "Only an assertion-bearing failed/harvesting attempt may authorize correction."
@@ -300,12 +543,24 @@ function Assert-CandidateRehearsalHarvestComplete {
     }
     $declared = @($Attempt.declared_checks)
     Assert-AcyclicCheckGraph -Checks $declared
+    if ($attemptSchema -eq 3) {
+        Assert-CandidateRehearsalScheduleBinding `
+            -Attempt $Attempt `
+            -Harvest $Harvest `
+            -DeclaredChecks $declared `
+            -SkipFileEvidence:$SkipFileEvidence
+    }
     $terminal = @($Harvest.checks)
     $attemptTerminal = @($Attempt.checks)
     foreach ($check in $declared) {
         $result = @($terminal | Where-Object name -CEQ ([string]$check.name))
         if ($result.Count -ne 1) { throw "Check '$($check.name)' does not have exactly one terminal result." }
-        Assert-TerminalCheckEvidence -Declared $check -Result $result[0] -TerminalChecks $terminal -SkipFileEvidence:$SkipFileEvidence
+        Assert-TerminalCheckEvidence `
+            -Declared $check `
+            -Result $result[0] `
+            -TerminalChecks $terminal `
+            -CurrentAttempt ([int]$Attempt.attempt) `
+            -SkipFileEvidence:$SkipFileEvidence
     }
     if ($terminal.Count -ne $declared.Count) { throw "Harvest contains undeclared or duplicate check results." }
     if ($attemptTerminal.Count -ne $terminal.Count -or
@@ -316,6 +571,7 @@ function Assert-CandidateRehearsalHarvestComplete {
 
     $failedTerminal = @($terminal | Where-Object state -CEQ "failed")
     $blockedTerminal = @($terminal | Where-Object state -CEQ "blocked")
+    $deferredTerminal = @($terminal | Where-Object state -CEQ "deferred")
     $passedTerminal = @($terminal | Where-Object state -CEQ "passed")
     $assertionBearingTerminal = @($terminal | Where-Object assertions_started -EQ $true)
     if (([string]$Attempt.source_identity_verification_state -cne "verified" -or
@@ -400,6 +656,16 @@ function Assert-CandidateRehearsalHarvestComplete {
             throw "Harvest receipt omits exact '$field' accounting."
         }
     }
+    if ($attemptSchema -eq 3) {
+        foreach ($document in @($Attempt, $Harvest, $Batch)) {
+            if ($document.PSObject.Properties.Name -notcontains "deferred_count" -or
+                ($document.deferred_count -isnot [int] -and $document.deferred_count -isnot [long])) {
+                throw "Schema-3 Candidate Rehearsal accounting requires one exact integer deferred_count in attempt, harvest, and batch."
+            }
+        }
+    } elseif ($deferredTerminal.Count -ne 0) {
+        throw "Historical schema-2 Candidate Rehearsal attempts cannot acquire deferred lane semantics."
+    }
     if ([int]$Attempt.assertion_count -ne $assertionBearingTerminal.Count -or
         [int]$Attempt.failure_count -ne $failedTerminal.Count -or
         [int]$Attempt.blocked_count -ne $blockedTerminal.Count -or
@@ -409,8 +675,12 @@ function Assert-CandidateRehearsalHarvestComplete {
         [int]$Harvest.blocked_count -ne $blockedTerminal.Count -or
         [int]$Harvest.passed_count -ne $passedTerminal.Count -or
         [int]$Harvest.nested_blocked_count -ne $nestedBlocked.Count -or
-        [int]$Harvest.nested_failed_count -ne $nestedFailed.Count) {
-        throw "Attempt/harvest pass, fail, block, or nested-block counts do not match terminal evidence."
+        [int]$Harvest.nested_failed_count -ne $nestedFailed.Count -or
+        ($attemptSchema -eq 3 -and (
+            [int]$Attempt.deferred_count -ne $deferredTerminal.Count -or
+            [int]$Harvest.deferred_count -ne $deferredTerminal.Count -or
+            [int]$Batch.deferred_count -ne $deferredTerminal.Count))) {
+        throw "Attempt/harvest pass, fail, block, deferred, or nested counts do not match terminal evidence."
     }
 
     if ([int]$Batch.batch -ne 1 -or [string]$Batch.state -cne "open" -or
@@ -419,6 +689,17 @@ function Assert-CandidateRehearsalHarvestComplete {
         throw "The diagnostic pass must produce exactly one open batch bound to its harvest receipt and digest."
     }
     Assert-HashedFileEvidence -Evidence $Batch.harvest_receipt -Label "Defect-batch harvest receipt" -SkipFileEvidence:$SkipFileEvidence
+    if ($attemptSchema -eq 3) {
+        if ($Batch.PSObject.Properties.Name -notcontains "deferred_checks") {
+            throw "The schema-2 consolidated batch omits its separate deferred-check inventory."
+        }
+        $batchDeferred = @($Batch.deferred_checks)
+        if ($batchDeferred.Count -ne $deferredTerminal.Count -or
+            (($batchDeferred | ConvertTo-Json -Depth 50 -Compress) -cne
+                ($deferredTerminal | ConvertTo-Json -Depth 50 -Compress))) {
+            throw "The consolidated batch deferred inventory is not exact or is mixed into defect evidence."
+        }
+    }
     if ($Batch.PSObject.Properties.Name -notcontains "blocked_checks") {
         throw "The consolidated batch omits its exact blocked-check inventory."
     }
@@ -529,9 +810,9 @@ function Assert-ReadinessHarvestComplete {
         [switch]$SkipFileEvidence
     )
 
-    Assert-DiagnosticReceiptHeader -Document $Attempt -SchemaVersion 2 -Phase "validation-readiness" -Label "Readiness attempt"
-    Assert-DiagnosticReceiptHeader -Document $Harvest -SchemaVersion 1 -Phase "validation-readiness-harvest" -Label "Readiness harvest"
-    Assert-DiagnosticReceiptHeader -Document $Batch -SchemaVersion 1 -Phase "validation-readiness-defect-batch" -Label "Readiness defect batch"
+    Assert-DiagnosticReceiptHeader -Document $Attempt -SchemaVersions @(2, 3) -Phase "validation-readiness" -Label "Readiness attempt"
+    Assert-DiagnosticReceiptHeader -Document $Harvest -SchemaVersions @(1) -Phase "validation-readiness-harvest" -Label "Readiness harvest"
+    Assert-DiagnosticReceiptHeader -Document $Batch -SchemaVersions @(1) -Phase "validation-readiness-defect-batch" -Label "Readiness defect batch"
     Assert-MutableSourceIdentity `
         -Source $Attempt.mutable_source_identity `
         -VerificationState ([string]$Attempt.source_identity_verification_state)
@@ -575,6 +856,7 @@ function Assert-ReadinessHarvestComplete {
             -Declared $check `
             -Result $result[0] `
             -TerminalChecks $terminal `
+            -CurrentAttempt ([int]$Attempt.attempt) `
             -SkipFileEvidence:$SkipFileEvidence
     }
     $failed = @($terminal | Where-Object state -CEQ "failed")
@@ -717,6 +999,156 @@ if ($SelfTest) {
     }
     $attempt.checks = @($harvest.checks | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
     Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence
+
+    $deferredAttempt = $attempt | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $deferredHarvest = $harvest | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $deferredBatch = $batch | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $deferredAttempt.schema_version = 3
+    $deferredAttempt.state = "incomplete"
+    $deferredHarvest.schema_version = 2
+    $deferredBatch.schema_version = 2
+    $syntheticStartReference = [pscustomobject][ordered]@{
+        path = "attempts/candidate-rehearsal-1-start.json"
+        sha256 = "5" * 64
+    }
+    $deferredAttempt | Add-Member -NotePropertyName immutable_start_receipt -NotePropertyValue $syntheticStartReference
+    $deferredAttempt | Add-Member -NotePropertyName schedule_sha256 -NotePropertyValue ("7" * 64)
+    $deferredHarvest | Add-Member -NotePropertyName immutable_start_receipt -NotePropertyValue $syntheticStartReference
+    $deferredHarvest | Add-Member -NotePropertyName schedule_sha256 -NotePropertyValue ("7" * 64)
+    $deferredDeclaration = [pscustomobject]@{
+        name = "prior-pass"; depends_on = @(); command = "deferred prior passing lane"
+    }
+    $deferredResult = [pscustomobject][ordered]@{
+        name = "prior-pass"
+        depends_on = @()
+        command = "deferred prior passing lane"
+        wave = "B"
+        scheduling_reason = "prior_passing_outside_impact"
+        started_at = $null
+        ended_at = $null
+        duration_ms = $null
+        exit_status = $null
+        assertions_started = $false
+        assertions_started_at = $null
+        state = "deferred"
+        classification = $null
+        classification_source = $null
+        dependency_reason = "Wave B was deferred after Wave A failed; this lane executed no assertions."
+        prior_passing_receipt = [pscustomobject]@{
+            path = "attempts/candidate-rehearsal-0-prior-pass-lane.json"
+            sha256 = "6" * 64
+        }
+        prior_source_identity = $source
+        prior_environment_identity = [pscustomobject]@{ fingerprint = "e" * 64 }
+        current_correction_impact = [pscustomobject]@{
+            affected = $false
+            decision = "outside_correction_impact"
+            matched_paths = @()
+            matched_identity_sources = @()
+            rationale = "No authenticated changed input intersects this lane."
+        }
+        non_impact_rationale = "No authenticated changed input intersects this lane."
+        consecutive_deferral_count = 1
+        mandatory_by_attempt = 4
+        prerequisite_state = @()
+        diagnostic_history_notice = $script:Sprint8ADiagnosticHistoryNotice
+        evidence_path = $null
+        evidence_sha256 = $null
+        produced_evidence = @()
+        failure_message = $null
+        nested_blocked_checks = @()
+        nested_failed_checks = @()
+    }
+    $deferredAttempt.declared_checks = @($deferredAttempt.declared_checks) + @($deferredDeclaration)
+    $deferredAttempt.checks = @($deferredAttempt.checks) + @($deferredResult)
+    $deferredHarvest.checks = @($deferredHarvest.checks) + @($deferredResult)
+    $deferredAttempt | Add-Member -NotePropertyName deferred_count -NotePropertyValue 1
+    $deferredHarvest | Add-Member -NotePropertyName deferred_count -NotePropertyValue 1
+    $deferredBatch | Add-Member -NotePropertyName deferred_count -NotePropertyValue 1
+    $deferredBatch | Add-Member -NotePropertyName deferred_checks -NotePropertyValue @($deferredResult)
+    Assert-HarvestComplete `
+        -Attempt $deferredAttempt `
+        -Harvest $deferredHarvest `
+        -Batch $deferredBatch `
+        -SkipFileEvidence
+
+    $staleScheduleHarvest = $deferredHarvest | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $staleScheduleHarvest.schedule_sha256 = "0" * 64
+    Invoke-ExpectedGuardFailure {
+        Assert-HarvestComplete `
+            -Attempt $deferredAttempt `
+            -Harvest $staleScheduleHarvest `
+            -Batch $deferredBatch `
+            -SkipFileEvidence
+    } "a schema-3 harvest detached from its immutable start schedule"
+
+    $missingDeferredHarvest = $deferredHarvest | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $missingDeferredHarvest.checks = @($missingDeferredHarvest.checks | Where-Object name -CNE "prior-pass")
+    Invoke-ExpectedGuardFailure {
+        Assert-HarvestComplete `
+            -Attempt $deferredAttempt `
+            -Harvest $missingDeferredHarvest `
+            -Batch $deferredBatch `
+            -SkipFileEvidence
+    } "a schema-3 harvest with one declared deferred lane missing"
+    $mixedDeferredBatch = $deferredBatch | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $mixedDeferredBatch.deferred_checks = @()
+    Invoke-ExpectedGuardFailure {
+        Assert-HarvestComplete `
+            -Attempt $deferredAttempt `
+            -Harvest $deferredHarvest `
+            -Batch $mixedDeferredBatch `
+            -SkipFileEvidence
+    } "a consolidated batch that omits its separate deferred inventory"
+
+    $priorReceiptSelfTestRoot = Join-Path $repoRoot "artifacts/sprint-8a-harvest-prior-lane-selftest-$([guid]::NewGuid().ToString('N'))"
+    [IO.Directory]::CreateDirectory($priorReceiptSelfTestRoot) | Out-Null
+    $savedEvidenceRoot = $EvidenceRoot
+    try {
+        $EvidenceRoot = [IO.Path]::GetRelativePath($repoRoot, $priorReceiptSelfTestRoot).Replace("\", "/")
+        $priorReceiptPath = Join-Path $priorReceiptSelfTestRoot "candidate-rehearsal-1-prior-pass-lane.json"
+        $priorReceiptReference = Publish-Sprint7AEvidence -Document ([pscustomobject][ordered]@{
+            schema_version = 2
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal-lane"
+            attempt = 1
+            authoritative = $false
+            mutable_source_identity = $source
+            environment_fingerprint = "e" * 64
+            result = [pscustomobject][ordered]@{
+                name = "prior-pass"
+                state = "passed"
+                assertions_started = $true
+            }
+        }) -OutputPath $priorReceiptPath
+        $deferredResult.prior_passing_receipt = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($repoRoot, $priorReceiptPath).Replace("\", "/")
+            sha256 = [string]$priorReceiptReference.sha256
+        }
+        Assert-DeferredLanePriorPassingReceipt -Deferred $deferredResult -CurrentAttempt 2
+        $savedPriorSha256 = [string]$deferredResult.prior_passing_receipt.sha256
+        $deferredResult.prior_passing_receipt.sha256 = "0" * 64
+        Invoke-ExpectedGuardFailure {
+            Assert-DeferredLanePriorPassingReceipt -Deferred $deferredResult -CurrentAttempt 2
+        } "a deferred lane with a stale prior passing receipt digest"
+        $deferredResult.prior_passing_receipt.sha256 = $savedPriorSha256
+        $savedPriorEnvironment = [string]$deferredResult.prior_environment_identity.fingerprint
+        $deferredResult.prior_environment_identity.fingerprint = "9" * 64
+        Invoke-ExpectedGuardFailure {
+            Assert-DeferredLanePriorPassingReceipt -Deferred $deferredResult -CurrentAttempt 2
+        } "a deferred lane whose prior environment differs from its lane receipt"
+        $deferredResult.prior_environment_identity.fingerprint = $savedPriorEnvironment
+    } finally {
+        $EvidenceRoot = $savedEvidenceRoot
+        $artifactsRoot = Join-Path $repoRoot "artifacts"
+        $relativeSelfTestRoot = [IO.Path]::GetRelativePath($artifactsRoot, $priorReceiptSelfTestRoot)
+        if (-not [IO.Path]::IsPathRooted($relativeSelfTestRoot) -and
+            $relativeSelfTestRoot -ne ".." -and
+            -not $relativeSelfTestRoot.StartsWith("..$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::Ordinal)) {
+            [IO.Directory]::Delete($priorReceiptSelfTestRoot, $true)
+        }
+    }
+
     $readinessAttempt = [pscustomobject]@{
         schema_version = 2; sprint = "sprint-8a"; phase = "validation-readiness"; authoritative = $false
         attempt = 38; state = "failed"; assertions_started = $true; assertions_started_at = "2026-01-01T00:00:00Z"
@@ -749,6 +1181,13 @@ if ($SelfTest) {
         blocked_checks = @([pscustomobject]@{ scope = "check"; name = "environment-contract"; dependency_reason = "blocked by failed prerequisite(s): compose-database-contract" })
     }
     Assert-HarvestComplete -Attempt $readinessAttempt -Harvest $readinessHarvest -Batch $readinessBatch -SkipFileEvidence
+    $schema3ReadinessAttempt = $readinessAttempt | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $schema3ReadinessAttempt.schema_version = 3
+    Assert-HarvestComplete `
+        -Attempt $schema3ReadinessAttempt `
+        -Harvest $readinessHarvest `
+        -Batch $readinessBatch `
+        -SkipFileEvidence
     $extraReadinessEvidence = [pscustomobject]@{ path = "raw/readiness-extra.json"; sha256 = "9" * 64 }
     $readinessAttempt.checks[0].produced_evidence = @($extraReadinessEvidence)
     $readinessHarvest.checks[0].produced_evidence = @($extraReadinessEvidence)
@@ -908,8 +1347,15 @@ if ([string]$boundHarvestReference.path -cne [string]$harvestReference.path -or
     throw "The consolidated batch does not bind the retained harvest digest."
 }
 $predecessorPhase = [string]$attempt.phase
+$authorizationSchema = if ($predecessorPhase -ceq "validation-readiness") {
+    2
+} elseif ([int]$attempt.schema_version -eq 3) {
+    2
+} else {
+    1
+}
 $authorization = [ordered]@{
-    schema_version = if ($predecessorPhase -ceq "validation-readiness") { 2 } else { 1 }
+    schema_version = $authorizationSchema
     sprint = [string]$attempt.sprint
     phase = "$predecessorPhase-correction-authorization"
     attempt = [int]$attempt.attempt
@@ -924,6 +1370,10 @@ $authorization = [ordered]@{
     predecessor_attempt_receipt = [ordered]@{ path = [string]$attemptReference.path; sha256 = $attemptSha }
     harvest_receipt = [ordered]@{ path = [string]$harvestReference.path; sha256 = $harvestSha }
     defect_batch = [ordered]@{ path = [string]$batchReference.path; sha256 = $batchSha }
+    deferred_count = if ($predecessorPhase -ceq "candidate-rehearsal" -and
+        $attempt.PSObject.Properties.Name -contains "deferred_count") {
+        [int]$attempt.deferred_count
+    } else { 0 }
     authorization = "tracked correction and one successor readiness attempt are permitted for this consolidated batch"
 }
 if ($predecessorPhase -ceq "validation-readiness") {

@@ -36,6 +36,22 @@ The checklist must verify:
   evidence, with explicit justified `N/A` entries rather than blanks; and
 - a clean repository plus source-exact build inputs before rehearsal begins.
 
+A passing Readiness also derives the exact schedule for the next authorized
+Candidate Rehearsal attempt. It authenticates the preceding rehearsal's start,
+terminal lane receipts, prior-passing references and hashes, source/environment
+identities, correction lineage, changed paths, impact scope, and consecutive-
+deferral counters. It records the resulting deterministic Wave A, cleanup-sink,
+Wave B, aggregate-sink, and finalizer order as the full schedule in the passing
+Readiness receipt. Validation state binds the exact expected rehearsal attempt
+and that schedule's SHA-256; Candidate Rehearsal copies the full schedule into
+its create-once start receipt and verifies the digest instead of recomputing it
+after launch.
+
+If any prior receipt, hash, identity, impact decision, or counter cannot be
+authenticated, Readiness records the reason and emits the conservative
+full-harvest schedule instead of inferring history. Legacy receipts remain
+unchanged and provide diagnostic history only.
+
 Run independent checks fail-late. Retain a checklist result for every item,
 including exact command/runtime, timestamps, exit status, evidence path, and
 failure classification. Write `validation-readiness-result.json` only when all
@@ -86,13 +102,12 @@ and immutable start. Hold the same lock through consumption. An out-of-sequence
 probe is rejected without occupying any collision target, so the authorized
 attempt can still fail, finalize, and authorize its exact successor.
 
-Readiness 38 is the sole legacy failed-Readiness finalizer recovery. Its
+Readiness 38 was the sole legacy failed-Readiness finalizer recovery. Its
 complete terminal receipt/raw evidence and documented consolidated defect set
-were frozen before this finalizer existed. After the user-directed testing exit,
-the clean finalizer/enforcement correction may be committed first; immediately
-finalize R38 without rerunning checks, and do not start R39 until the typed
-harvest, batch, authorization, and pending lineage link exist. Do not generalize
-this exception.
+were frozen before this finalizer existed. It was finalized once without
+rerunning checks after the user-directed testing exit, and R39 subsequently
+passed. Do not generalize or repeat this exception. Sprint 8A's current
+coordinator-authorized boundary is R40 followed by Candidate Rehearsal 32.
 
 ## Gate 2: Candidate Rehearsal
 
@@ -118,6 +133,77 @@ Run a complete validation-shaped pass containing:
 8. automated diagnostic equivalents of every UAT scenario, including semantic
    fixture verification. These checks are not formal UAT.
 
+### Two-wave rehearsal schedule
+
+Before creating Candidate Rehearsal attempt-specific evidence, the launcher
+acquires the exclusive reservation lock and confirms the target namespace is
+empty. Contention rejects launch without attempt evidence. Under that retained
+handle, it captures current state and Readiness scheduling inputs; authenticated
+history selects the bounded schedule and any authentication gap selects the
+conservative fallback. The immutable start receipt then fixes the complete
+declared graph, each lane's scheduler role and impact decision, captured prior
+history, deferral counters, and deterministic segment order before declared
+source/environment probes or assertions. Every checkpoint and any recovery must
+authenticate that exact start receipt. The Wave A attempt-state lane then
+authenticates the retained lock handle, requested attempt, current state, and
+lifecycle transition as a terminally accounted lane; it does not acquire a
+second lock.
+
+Wave A always includes lifecycle prerequisites, retained-lock/state-transition
+authentication, current Readiness/source/environment authentication, required
+cleanup/restoration,
+lanes that failed in the preceding rehearsal, never-executed and newly
+reachable lanes, lanes in the current correction impact cone, and every lane
+already deferred three consecutive times. Add only the prerequisite closure
+required to execute those lanes safely. A changed source, validation skill,
+runner, test, fixture, environment contract, acceptance inventory, deployment
+input, dependency, or relevant prerequisite puts the affected lane in Wave A
+regardless of its deferral counter. Run safe independent Wave A siblings
+fail-late.
+
+Wave B contains only authenticated prior-passing lanes outside the current
+impact cone with fewer than three consecutive deferrals. When Wave A passes,
+continue directly into Wave B in the same attempt; a potentially passing
+rehearsal must execute every required lane. When Wave A fails, finish every safe
+Wave A sibling, complete mandatory cleanup/restoration, and terminalize each
+eligible Wave B lane as `deferred` without beginning assertions. Execution of a
+lane resets its counter. Three consecutive deferrals make it mandatory in Wave
+A on the fourth attempt.
+
+Treat aggregate lanes as sinks. A previously blocked certification or final-
+health fan-in does not pull all of its prerequisites into Wave A. Execute an
+aggregate only when its current-attempt prerequisites are eligible and pass;
+otherwise record the aggregate as blocked with its exact current dependency
+reason; one of those prerequisites may itself be deferred. A separate final-
+health check that proves canonical restoration remains mandatory when it is
+declared as a cleanup sink. Teardown, recovery, canonical restoration, cleanup
+sinks, and final source/environment safety checks remain mandatory even when
+certification-oriented lanes are deferred.
+
+A deferred receipt is neither a pass nor a skipped or blocked execution. It
+contains the lane name, `state: deferred`, authenticated prior passing receipt
+path and SHA-256, prior source and environment identities, current impact
+decision and non-impact rationale, consecutive-deferral count,
+`mandatory_by_attempt`, prerequisite state, `assertions_started: false`, null
+execution timestamps and duration, and the explicit notice that prior evidence
+is diagnostic history only. It has no current-attempt assertion evidence.
+
+If prior evidence, hashes, impact scope, or counters cannot be authenticated,
+fall back to full harvest: all non-sink diagnostic lanes execute in Wave A,
+with cleanup sinks, Wave B execution, aggregate sinks, and safety finalizers
+retaining their declared order. Do not retrofit schedules or counters into
+historical receipts.
+
+After process loss, resume only the same attempt after authenticating its
+immutable schedule and latest checkpoint. Preserve lane order and counters,
+retain raw evidence and terminalize any orphaned executing lane truthfully, and
+continue only safe remaining work. Never allocate a successor merely because
+the controller disappeared.
+
+Any deferred lane makes the attempt failed and incomplete. It cannot produce
+`candidate-rehearsal-result.json`, authorize preflight, freeze a candidate,
+satisfy SIT/UAT, authorize closeout, or be represented as authoritative proof.
+
 The automated-UAT receipt preserves every scenario's exact semantic assertion
 inventory. Each failed assertion carries its scenario/assertion identity,
 producer/evaluator identity, allowed classification, exact failure reason, and
@@ -140,8 +226,11 @@ when true, an assertion-start timestamp. A passed lane has
 or product actions began; a setup failure before that boundary records false
 and no assertion-start timestamp but remains failed rather than blocked. A
 blocked lane has `assertions_started = false` and no assertion-start timestamp.
-Attempt-level assertion counts count only lanes whose assertions actually
-started, never setup-only failures or terminal blocked receipts.
+A deferred lane likewise has `assertions_started = false` and null execution
+timestamps, but carries its authenticated diagnostic-history and deferral
+fields instead of a block reason or current evidence. Attempt-level assertion
+counts count only lanes whose assertions actually started, never setup-only
+failures or terminal blocked/deferred receipts.
 
 When a retained structured child receipt provides a canonical defect
 classification, the outer lane and consolidated harvest must project that
@@ -152,11 +241,11 @@ immutable evidence even when diagnosis later consolidates several symptoms
 under one different root cause.
 
 The graph must keep every safe static or otherwise topology-independent lane
-free of the fallible state/readiness prerequisite. State, readiness, or lock
+free of the fallible state/readiness prerequisite. A retained-lock/state-lane
 failure blocks only work that actually requires that prerequisite or whose
-destructive execution would be unsafe. The attempt-state lane acquires the same
-evidence-root operating-system exclusive lock and holds it through terminal
-publication.
+destructive execution would be unsafe. The attempt-state lane authenticates the
+already-held evidence-root operating-system exclusive handle and state
+transition; the launcher retains that handle through terminal publication.
 
 When a sprint-specific rehearsal lane must resolve deployed service identities
 or compose several generic helpers, use a repository-owned orchestration runner
@@ -172,17 +261,20 @@ missing executable caused by another check's cleanup is an environment defect,
 not a product failure, and still leaves the originating check failed for that
 diagnostic pass.
 
-The rehearsal start receipt must be retained before authenticating the
-Readiness receipt or probing source/environment prerequisites. It declares
-every lane, whether it is independent or dependent, and the prerequisite lane
-names for dependent work. An initially claimed identity remains explicitly
-`unverified` until the prerequisite lane succeeds. After the first failure,
-set the attempt to `harvesting`; do not edit tracked candidate inputs,
-invalidate/restart the attempt, or allocate a successor attempt number until
-every declared lane is recorded as passed, failed, or blocked with its exact
-dependency reason. A repository-owned runner or equivalent executable guard
-must reject completion, correction, and restart while any lane remains
-unaccounted for.
+The launch reservation authenticates only the current state and supplied
+Readiness schedule references needed to admit and bind the attempt. The
+rehearsal start then declares every lane, whether independent or dependent, the
+prerequisite lane names for dependent work, and the complete immutable two-wave
+schedule. After start publication, the declared Readiness/source/environment
+lane independently authenticates the supplied receipt's contents and live
+identities. An initially claimed identity remains explicitly `unverified` until
+that prerequisite lane succeeds. After the first failure, set the attempt to
+`harvesting`; do not edit tracked candidate inputs, invalidate/restart the
+attempt, or allocate a successor attempt number until every declared lane is
+recorded as passed, failed, blocked with its exact dependency reason, or
+eligible `deferred` with its complete diagnostic-only provenance. A repository-
+owned terminal-accounting and harvest guard must reject completion, correction,
+and restart while any lane remains unaccounted for.
 
 Environment-identity comparisons must retain secret-free expected and actual
 fingerprints plus the names of changed contract sections even when comparison
@@ -203,8 +295,19 @@ into one batch. Correct the batch while the build remains mutable. Do not
 freeze an intermediate correction.
 
 Write exactly one harvest receipt and one consolidated defect-batch receipt per
-diagnostic pass. Narrow reproducers attach evidence to that batch; they do not
-create correction batches or authorize a restart on their own.
+diagnostic pass. Keep deferred-lane inventory distinct from true failures and
+blocked checks. The harvest and correction-authorization guards accept complete
+deferred accounting but reject any missing declaration, ineligible deferral,
+unauthenticated prior pass, or altered counter. Narrow reproducers attach
+evidence to that batch; they do not create correction batches or authorize a
+restart on their own.
+
+The attempt checkpoints and harvest directly bind the immutable start and exact
+terminal-lane accounting. The batch binds through the hashed harvest and stores
+the exact deferred inventory; correction authorization binds the predecessor,
+harvest, and batch with the aggregate deferred count. Validation state stores
+the expected rehearsal attempt and schedule SHA-256, binding them to the full
+schedule retained in passing Readiness and copied into the immutable start.
 
 Only the completed harvest guard may issue a correction authorization, and it
 authorizes one successor Readiness start for that exact failed rehearsal. The
@@ -260,6 +363,9 @@ immutable `attempts/candidate-rehearsal-N-attempt.json` receipt and sidecar. Its
 embedded SHA-256, phase, attempt, state, source/environment identity, and
 correction lineage must agree with the canonical rehearsal result; the attempt,
 result, and validation-state lineage must be identical before candidate freeze.
+It also authenticates the immutable start schedule, requires every declared
+lane to have executed and passed, and rejects any deferred result or nonzero
+deferred count. A forged canonical result cannot hide deferred attempt state.
 The rehearsal attempt and canonical result must also retain the same single
 immutable passing-Readiness prerequisite. The current canonical Readiness alias
 is validated separately against validation state and its exact immutable
@@ -277,13 +383,15 @@ non-null produced reference exactly. Primary logs and produced evidence must
 resolve inside the declared repository evidence root before their SHA-256 is
 accepted; rooted or traversal references outside that root are rejected.
 
-Repeat the complete Test Readiness Gate and the complete Candidate Rehearsal
-after every correction batch until both pass cleanly. Focused or narrow
-reproducers may diagnose corrections but cannot satisfy rehearsal and cannot
-replace the complete affected-lane rerun inside the next full rehearsal.
+Repeat the complete Test Readiness Gate and Candidate Rehearsal after every
+correction batch until both pass cleanly. The bounded scheduler prioritizes the
+affected cone and previous failures, but any attempt that could pass still
+executes all required lanes. Focused or narrow reproducers may diagnose
+corrections but cannot satisfy rehearsal or replace an affected Wave A lane.
 
 Write and hash `candidate-rehearsal-result.json` only after every rehearsal
-lane passes, canonical restoration succeeds, and no defect remains open. It
+lane executes and passes, the deferred count is zero, canonical restoration
+succeeds, and no defect remains open. It
 must name and hash the passing readiness receipt and bind the exact mutable
 source/environment identities that preflight will audit.
 

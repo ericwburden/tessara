@@ -29,6 +29,7 @@ $playwrightInventoryPath = Join-Path $logRoot "playwright-inventory.json"
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-rehearsal-scheduler.ps1")
 
 function Open-Sprint8AValidationAttemptLock {
     param([Parameter(Mandatory)][string]$Path)
@@ -1190,6 +1191,101 @@ function Test-Sprint8AFailedReadinessFinalization {
     }
 }
 
+function Get-Sprint8ANextCandidateRehearsalAttempt {
+    param([Parameter(Mandatory)][string]$EvidenceRootPath)
+
+    $attemptDirectory = Join-Path $EvidenceRootPath "attempts"
+    $numbers = @()
+    if (Test-Path -LiteralPath $attemptDirectory -PathType Container) {
+        $numbers = @(Get-ChildItem -LiteralPath $attemptDirectory -File -Filter "candidate-rehearsal-*-attempt.json" |
+            ForEach-Object {
+                if ($_.Name -match '^candidate-rehearsal-(\d+)-attempt\.json$') { [int]$Matches[1] }
+            })
+    }
+    if ($numbers.Count -eq 0) { return 1 }
+    ([int](($numbers | Measure-Object -Maximum).Maximum)) + 1
+}
+
+function New-Sprint8ANextCandidateRehearsalPlan {
+    param(
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRootPath,
+        [Parameter(Mandatory)]$CurrentSource,
+        [Parameter(Mandatory)][string]$CurrentEnvironmentFingerprint,
+        [AllowNull()]$CorrectionLineage
+    )
+
+    $nextAttempt = Get-Sprint8ANextCandidateRehearsalAttempt -EvidenceRootPath $EvidenceRootPath
+    $policies = @(Get-Sprint8ARehearsalLanePolicies)
+    $history = @{}
+    $historyAuthenticated = $false
+    $fallbackReason = "No authenticated schema-3 preceding Candidate Rehearsal history is available."
+    $changedPaths = @()
+    $acceptanceInventoryChanged = $false
+    $deploymentInputsChanged = $false
+    $environmentContractChanged = $false
+    $priorAttempt = $null
+
+    try {
+        if ($null -eq $CorrectionLineage -or @($CorrectionLineage.links).Count -eq 0) {
+            throw $fallbackReason
+        }
+        $tip = @($CorrectionLineage.links)[-1]
+        if ([string]$tip.predecessor.phase -cne "candidate-rehearsal") {
+            throw "The current correction-lineage tip is not a preceding Candidate Rehearsal."
+        }
+        $snapshot = Get-Sprint8AAuthenticatedRehearsalHistory `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRootPath `
+            -Checks $policies `
+            -PriorAttemptReference $tip.predecessor.receipt
+        $priorAttempt = $snapshot.prior_attempt
+        $history = $snapshot.lane_history
+        $changedPaths = @(Get-Sprint8ARehearsalChangedPaths `
+            -RepositoryRoot $RepositoryRoot `
+            -PriorCommit ([string]$priorAttempt.mutable_source_identity.commit) `
+            -CurrentCommit ([string]$CurrentSource.commit))
+        $acceptanceInventoryChanged = [string]$priorAttempt.mutable_source_identity.acceptance_inventory_sha256 -cne
+            [string]$CurrentSource.acceptance_inventory_sha256
+        $deploymentInputsChanged = [string]$priorAttempt.mutable_source_identity.deployment_inputs_sha256 -cne
+            [string]$CurrentSource.deployment_inputs_sha256
+        $environmentContractChanged = [string]$priorAttempt.environment_fingerprint -cne $CurrentEnvironmentFingerprint
+        $historyAuthenticated = $true
+        $fallbackReason = $null
+    } catch {
+        $history = @{}
+        $historyAuthenticated = $false
+        $fallbackReason = $_.Exception.Message
+        $changedPaths = @()
+        $acceptanceInventoryChanged = $false
+        $deploymentInputsChanged = $false
+        $environmentContractChanged = $false
+        $priorAttempt = $null
+    }
+
+    $schedule = Resolve-Sprint8ARehearsalSchedule `
+        -Checks $policies `
+        -Attempt $nextAttempt `
+        -LaneHistory $history `
+        -ChangedPaths $changedPaths `
+        -AcceptanceInventoryChanged:$acceptanceInventoryChanged `
+        -DeploymentInputsChanged:$deploymentInputsChanged `
+        -EnvironmentContractChanged:$environmentContractChanged `
+        -HistoryAuthenticated:$historyAuthenticated `
+        -FallbackReason $fallbackReason
+    [void](Assert-Sprint8ARehearsalScheduleContract `
+        -Schedule $schedule -Checks $policies -ExpectedAttempt $nextAttempt)
+    [pscustomobject][ordered]@{
+        schema_version = 1
+        attempt = $nextAttempt
+        schedule = $schedule
+        schedule_sha256 = Get-Sprint8ARehearsalJsonSha256 -Document $schedule
+        prior_attempt = $priorAttempt
+        conservative_fallback = -not $historyAuthenticated
+        fallback_reason = $fallbackReason
+    }
+}
+
 Assert-Sprint8AReadinessFailLateGraph -Checks $declaredChecks
 if ($SelfTest) {
     if ($FinalizeFailedAttempt) { throw "Readiness self-test and failed-attempt finalization are mutually exclusive." }
@@ -1201,6 +1297,7 @@ if ($SelfTest) {
     Test-Sprint8AResultClassificationProjection
     Test-Sprint8AEnvironmentContractComparison
     Test-Sprint8AEvidenceReferenceResolution
+    Test-Sprint8ARehearsalTwoWaveScheduler
     $canonicalSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
     Assert-Sprint8ASourceIdentityObject -Source $canonicalSource | Out-Null
     if ($canonicalSource.GetType().FullName -cne "System.Management.Automation.PSCustomObject") {
@@ -1614,7 +1711,11 @@ try {
         $script:source | ConvertTo-Json -Depth 10
     }
     Invoke-ReadinessCheck "compose-database-contract" "quiet Compose normalization and authenticated six-database transaction probes" {
-        $script:deploymentProbe = Get-Sprint8ADeploymentEnvironmentProbe -RepositoryRoot $repoRoot -EvidenceRoot $EvidenceRoot -ProbeDatabases
+        $script:deploymentProbe = Get-Sprint8ADeploymentEnvironmentProbe `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -ProbeDatabases `
+            -RequireFreshDatabases
         $databaseProbes = @($script:deploymentProbe.contract.databases | Where-Object {
             $null -ne $_.authenticated_probe -and [bool]$_.authenticated_probe.transaction_round_trip
         })
@@ -1624,6 +1725,7 @@ try {
         Publish-Sprint7AEvidence -Document $script:deploymentProbe.contract -OutputPath $deploymentProbePath | Out-Null
         [ordered]@{
             fingerprint = [string]$script:deploymentProbe.fingerprint
+            freshness = $script:deploymentProbe.freshness
             receipt = [IO.Path]::GetRelativePath($repoRoot, $deploymentProbePath).Replace("\", "/")
             receipt_sha256 = Assert-Sprint8AReceiptSidecar -Path $deploymentProbePath
         } | ConvertTo-Json -Depth 5
@@ -1774,9 +1876,17 @@ $endedAt = [DateTimeOffset]::UtcNow
 $failures = @($checks | Where-Object state -CEQ "failed")
 $blocked = @($checks | Where-Object state -CEQ "blocked")
 $passed = $failures.Count -eq 0 -and $blocked.Count -eq 0 -and $checks.Count -eq $declaredChecks.Count
+$nextCandidateRehearsal = if ($passed) {
+    New-Sprint8ANextCandidateRehearsalPlan `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRootPath $evidenceRootPath `
+        -CurrentSource $source `
+        -CurrentEnvironmentFingerprint ([string]$environment.fingerprint) `
+        -CorrectionLineage $correctionLineage
+} else { $null }
 $failureClassifications = @(Get-Sprint8AResultClassifications -Results $failures)
 $receipt = [ordered]@{
-    schema_version = 2
+    schema_version = 3
     sprint = "sprint-8a"
     phase = "validation-readiness"
     attempt = $Attempt
@@ -1803,6 +1913,7 @@ $receipt = [ordered]@{
     prerequisite_receipts = @()
     predecessor_correction_authorization = $predecessorCorrectionAuthorization
     correction_consumption_receipt = $correctionConsumptionReceipt
+    next_candidate_rehearsal = $nextCandidateRehearsal
     declared_checks = $declaredChecks
     checks = $checks
     assertion_count = @($checks | Where-Object assertions_started -EQ $true).Count
@@ -1856,7 +1967,18 @@ if ($launchAuthorized) {
             receipt = [IO.Path]::GetRelativePath($repoRoot, $currentReadinessPath).Replace("\", "/")
             sha256 = $currentReadinessSha
         }
-        rehearsal = [ordered]@{ state = "ineligible"; reason = "no rehearsal is eligible until this readiness result passes" }
+        rehearsal = [ordered]@{
+            state = "ineligible"
+            reason = if ($passed) {
+                "passing readiness fixed the exact next rehearsal schedule; no rehearsal attempt is active yet"
+            } else {
+                "no rehearsal is eligible until this readiness result passes"
+            }
+        }
+        next_candidate_rehearsal = if ($passed) { [ordered]@{
+            attempt = [int]$nextCandidateRehearsal.attempt
+            schedule_sha256 = [string]$nextCandidateRehearsal.schedule_sha256
+        } } else { $null }
         correction_lineage = $correctionLineage
         preflight_eligible = $false
     }) -OutputPath $statePath -Overwrite | Out-Null

@@ -143,6 +143,162 @@ function Test-Sprint8AFirstPartyComponentContractSources {
     }
 }
 
+function Get-Sprint8AExpectedDeploymentTargets {
+    [ordered]@{
+        "core" = [ordered]@{
+            image_environment = "TESSARA_CORE_IMAGE"
+            migration_service = "core-migrate"
+            runtime_service = "core"
+            image_template = '${TESSARA_CORE_IMAGE:-tessara-sprint-8a-core}'
+        }
+        "tessara.components" = [ordered]@{
+            image_environment = "TESSARA_COMPONENT_IMAGE"
+            migration_service = "components-migrate"
+            runtime_service = "components"
+            image_template = '${TESSARA_COMPONENT_IMAGE:-tessara-sprint-8a-components}'
+        }
+        "tessara.dashboards" = [ordered]@{
+            image_environment = "TESSARA_DASHBOARD_IMAGE"
+            migration_service = "dashboards-migrate"
+            runtime_service = "dashboards"
+            image_template = '${TESSARA_DASHBOARD_IMAGE:-tessara-sprint-8a-dashboards}'
+        }
+        "tessara.reference.scoped-records" = [ordered]@{
+            image_environment = "TESSARA_REFERENCE_MODULE_IMAGE"
+            migration_service = "scoped-records-migrate"
+            runtime_service = "scoped-records"
+            image_template = '${TESSARA_REFERENCE_MODULE_IMAGE:-tessara-sprint-7a-scoped-records}'
+        }
+    }
+}
+
+function Get-Sprint8AExpectedDeploymentTargetMap {
+    $targets = Get-Sprint8AExpectedDeploymentTargets
+    $map = [ordered]@{}
+    foreach ($owner in $targets.Keys) {
+        $target = $targets[$owner]
+        $map[$owner] = [ordered]@{
+            image_environment = [string]$target.image_environment
+            migration_service = [string]$target.migration_service
+            runtime_service = [string]$target.runtime_service
+        }
+    }
+    $map
+}
+
+function Assert-Sprint8ADeploymentTargetContract {
+    param([Parameter(Mandatory)][string]$ComposeText)
+
+    $targetPattern = "(?m)^      TESSARA_DEPLOYMENT_TARGETS:\s+'(?<json>\{[^\r\n]+\})'\s*$"
+    $targetMatches = @([regex]::Matches($ComposeText, $targetPattern))
+    if ($targetMatches.Count -ne 1) {
+        throw "Sprint 8A Compose must declare exactly one single-line deployment-target map."
+    }
+    try {
+        $actualTargets = ConvertFrom-Json -InputObject $targetMatches[0].Groups["json"].Value -ErrorAction Stop
+    } catch {
+        throw "Sprint 8A deployment-target map is not valid JSON: $($_.Exception.Message)"
+    }
+    $expectedTargets = Get-Sprint8AExpectedDeploymentTargets
+    $actualOwners = @($actualTargets.PSObject.Properties.Name | Sort-Object)
+    $expectedOwners = @($expectedTargets.Keys | Sort-Object)
+    if (($actualOwners -join "`n") -cne ($expectedOwners -join "`n")) {
+        throw "Sprint 8A deployment-target map does not contain the exact four canonical owners."
+    }
+
+    foreach ($owner in $expectedTargets.Keys) {
+        $actualTargetProperty = $actualTargets.PSObject.Properties[[string]$owner]
+        if ($null -eq $actualTargetProperty) {
+            throw "Sprint 8A deployment target '$owner' is missing."
+        }
+        $actualTarget = $actualTargetProperty.Value
+        $expectedTarget = $expectedTargets[$owner]
+        $actualFields = @($actualTarget.PSObject.Properties.Name | Sort-Object)
+        $expectedFields = @("image_environment", "migration_service", "runtime_service") | Sort-Object
+        if (($actualFields -join "`n") -cne ($expectedFields -join "`n") -or
+            [string]$actualTarget.image_environment -cne [string]$expectedTarget.image_environment -or
+            [string]$actualTarget.migration_service -cne [string]$expectedTarget.migration_service -or
+            [string]$actualTarget.runtime_service -cne [string]$expectedTarget.runtime_service) {
+            throw "Sprint 8A deployment target '$owner' differs from its exact image and service mapping."
+        }
+
+        foreach ($service in @([string]$expectedTarget.migration_service, [string]$expectedTarget.runtime_service)) {
+            $servicePattern = "(?ms)^  $([regex]::Escape($service)):\r?\n(?<body>.*?)(?=^  [a-zA-Z0-9][a-zA-Z0-9-]*:\r?\n|\z)"
+            $serviceMatch = [regex]::Match($ComposeText, $servicePattern)
+            if (-not $serviceMatch.Success) {
+                throw "Sprint 8A deployment target '$owner' references missing service '$service'."
+            }
+            $imagePattern = "(?m)^    image:\s+$([regex]::Escape([string]$expectedTarget.image_template))\s*$"
+            if (@([regex]::Matches($serviceMatch.Groups["body"].Value, $imagePattern)).Count -ne 1) {
+                throw "Sprint 8A service '$service' is not wired to '$($expectedTarget.image_environment)'."
+            }
+        }
+    }
+}
+
+function Set-Sprint8ADeploymentTargetFixture {
+    param(
+        [Parameter(Mandatory)][string]$ComposeText,
+        [Parameter(Mandatory)]$Targets
+    )
+    $pattern = [regex]::new("(?m)^      TESSARA_DEPLOYMENT_TARGETS:\s+'\{[^\r\n]+\}'\s*$")
+    $replacement = "      TESSARA_DEPLOYMENT_TARGETS: '$($Targets | ConvertTo-Json -Depth 10 -Compress)'"
+    $pattern.Replace($ComposeText, $replacement, 1)
+}
+
+function Assert-Sprint8ADeploymentTargetFixtureRejected {
+    param(
+        [Parameter(Mandatory)][string]$ComposeText,
+        [Parameter(Mandatory)][string]$Label
+    )
+    $rejected = $false
+    try {
+        Assert-Sprint8ADeploymentTargetContract -ComposeText $ComposeText
+    } catch {
+        $rejected = $true
+    }
+    if (-not $rejected) {
+        throw "Sprint 8A deployment-target adversarial self-test accepted $Label."
+    }
+}
+
+function Test-Sprint8ADeploymentTargetContract {
+    param([Parameter(Mandatory)][string]$ComposeText)
+
+    Assert-Sprint8ADeploymentTargetContract -ComposeText $ComposeText
+    $expectedTargets = Get-Sprint8AExpectedDeploymentTargetMap
+
+    $missingOwner = $expectedTargets | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+    $missingOwner.PSObject.Properties.Remove("core")
+    Assert-Sprint8ADeploymentTargetFixtureRejected `
+        -ComposeText (Set-Sprint8ADeploymentTargetFixture -ComposeText $ComposeText -Targets $missingOwner) `
+        -Label "a missing Core target"
+
+    $extraOwner = $expectedTargets | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+    $extraOwner | Add-Member -NotePropertyName "tessara.unexpected" -NotePropertyValue ([pscustomobject]@{
+        image_environment = "TESSARA_UNEXPECTED_IMAGE"
+        migration_service = "unexpected-migrate"
+        runtime_service = "unexpected"
+    })
+    Assert-Sprint8ADeploymentTargetFixtureRejected `
+        -ComposeText (Set-Sprint8ADeploymentTargetFixture -ComposeText $ComposeText -Targets $extraOwner) `
+        -Label "an extra owner target"
+
+    $wrongTarget = $expectedTargets | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+    $wrongTarget.'tessara.dashboards'.image_environment = "TESSARA_COMPONENT_IMAGE"
+    Assert-Sprint8ADeploymentTargetFixtureRejected `
+        -ComposeText (Set-Sprint8ADeploymentTargetFixture -ComposeText $ComposeText -Targets $wrongTarget) `
+        -Label "a Dashboard target using the Component image environment"
+
+    $hardCodedImage = $ComposeText.Replace(
+        '    image: ${TESSARA_DASHBOARD_IMAGE:-tessara-sprint-8a-dashboards}',
+        '    image: tessara-sprint-8a-dashboards'
+    )
+    Assert-Sprint8ADeploymentTargetFixtureRejected `
+        -ComposeText $hardCodedImage `
+        -Label "hard-coded Dashboard migration and runtime images"
+}
+
 function Test-Sprint8AAcceptanceContract {
     $repoRoot = Split-Path -Parent $PSScriptRoot
     foreach ($name in @(
@@ -558,6 +714,7 @@ function Test-Sprint8AAcceptanceContract {
         '[string]$EnvironmentFingerprint',
         '[string]$BlueprintPath',
         '[string]$ControlUrl',
+        '[switch]$SelfTest',
         '"materialization/attempt-$Attempt"',
         '"resolved-targets.json"',
         '"empty-baseline.json"',
@@ -574,6 +731,9 @@ function Test-Sprint8AAcceptanceContract {
         '$unexpectedNetworks',
         '. (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")',
         'Get-Sprint8AComposeServiceProjection -Services $configuration.services',
+        'ConvertFrom-Sprint8AComposeServiceJson',
+        'Get-Sprint8AMaterializationFailureClassification',
+        '-ComposeFile $composePath',
         'Start-Sprint8APublicGateway',
         '-ExcludePublicGateway',
         '-SemanticNoOp',
@@ -585,6 +745,7 @@ function Test-Sprint8AAcceptanceContract {
             throw "Sprint 8A materialization omits canonical evidence contract fragment '$requiredFragment'."
         }
     }
+    & (Join-Path $repoRoot "scripts/materialize-sprint-8a.ps1") -SelfTest | Out-Null
     $compositionBootstrapText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1") -Raw
     foreach ($requiredFragment in @(
         '[switch]$ExcludePublicGateway',
@@ -617,6 +778,8 @@ function Test-Sprint8AAcceptanceContract {
         'tessara.sprint-8a.required-recovery',
         'tessara.sprint-8a.canonical-restoration',
         'unexpected_fault_acceptance',
+        'unexpected_precondition_failure',
+        'Get-Sprint8AFailureReceiptDisposition',
         'Assert-Sprint8ADestructiveEndpoint',
         'Assert-Sprint8AContainmentReferencedArtifact',
         '-RequireSidecar',
@@ -628,6 +791,7 @@ function Test-Sprint8AAcceptanceContract {
         'verified_evidence.no_op_apply_response',
         'verified_evidence.final_health',
         'verified_evidence.final_health_preceding_apply_response',
+        'fault_raw_artifacts',
         'evidence-finalization',
         '"failure-containment-result.json"'
     )) {
@@ -635,6 +799,24 @@ function Test-Sprint8AAcceptanceContract {
             throw "Sprint 8A failure-containment runner omits canonical contract fragment '$requiredFragment'."
         }
     }
+    $receiptRetentionIndex = $failureContainmentText.IndexOf(
+        '$faultReceiptArtifact = Get-Sprint8AContainmentArtifact -Path $faultFailureReceiptPath -RequireSidecar',
+        [StringComparison]::Ordinal
+    )
+    $receiptAuthenticationIndex = $failureContainmentText.IndexOf(
+        '$faultReceipt = Assert-Sprint8AFailureReceipt',
+        [StringComparison]::Ordinal
+    )
+    $expectedFaultDispositionIndex = $failureContainmentText.IndexOf(
+        '$faultDisposition = Get-Sprint8AFailureReceiptDisposition -Receipt $faultReceipt',
+        [StringComparison]::Ordinal
+    )
+    if ($receiptRetentionIndex -lt 0 -or
+        $receiptAuthenticationIndex -le $receiptRetentionIndex -or
+        $expectedFaultDispositionIndex -le $receiptAuthenticationIndex) {
+        throw "Sprint 8A failure containment must retain the failure receipt, authenticate all referenced evidence, and only then classify expected-fault semantics."
+    }
+    & $failureContainmentPath -SelfTest | Out-Null
     if ($failureContainmentText.Contains('raw_artifacts = $faultReceipt.raw_artifacts') -or
         $failureContainmentText.Contains('teardown = $faultReceipt.teardown') -or
         $failureContainmentText.Contains('empty_baseline = $successorReceipt.evidence.empty_baseline') -or
@@ -672,6 +854,7 @@ function Test-Sprint8AAcceptanceContract {
         '[bool]$action.enabled',
         'function Get-Sprint7AProcessEnvironmentSnapshot',
         'function Restore-Sprint7AProcessEnvironmentSnapshot',
+        '$composePath = Resolve-RepositoryPath -Path $ComposeFile',
         'Restore-Sprint7AProcessEnvironmentSnapshot -Snapshot $processEnvironmentSnapshot',
         'Get-Sprint7AApprovedEffects -Actions @($lockfile.materialization_plan.actions)'
     )) {
@@ -730,13 +913,13 @@ function Test-Sprint8AAcceptanceContract {
     $composeOverride = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/compose.override.yaml") -Raw
     foreach ($requiredFragment in @(
         'TESSARA_DEPLOYMENT_COMPOSE_FILE:',
-        'TESSARA_DEPLOYMENT_TARGETS:',
         '/var/run/docker.sock:/var/run/docker.sock'
     )) {
         if (-not $composeOverride.Contains($requiredFragment)) {
             throw "Sprint 8A Supervisor-owned release transition wiring omits '$requiredFragment'."
         }
     }
+    Test-Sprint8ADeploymentTargetContract -ComposeText $composeOverride
     $inventoryAudit = Join-Path $repoRoot "scripts/audit-sprint-8a-deployed-inventory.ps1"
     if (-not (Test-Path -LiteralPath $inventoryAudit -PathType Leaf)) {
         throw "Sprint 8A exact deployed inventory/navigation audit runner is missing."
@@ -875,6 +1058,7 @@ function Test-Sprint8AAcceptanceContract {
             '".codex/skills/tessara-sprint-validation/**"',
             '"docs/sprints/sprint-8a-*.md"',
             '"end2end/**"',
+            '"scripts/fixtures/**"',
             '"scripts/*sprint-8a*.ps1"',
             '"scripts/test-sprint-validation-harvest.ps1"',
             '"deploy/sprint-7a/**"',
@@ -886,9 +1070,21 @@ function Test-Sprint8AAcceptanceContract {
             "transaction_round_trip", "canonical_server", 'identity = "$canonicalServer/',
             "environment", "fingerprint"
         )
+        "scripts/sprint-8a-rehearsal-scheduler.ps1" = @(
+            "Get-Sprint8ARehearsalLanePolicies", "Resolve-Sprint8ARehearsalSchedule",
+            "Assert-Sprint8ARehearsalScheduleContract", "Get-Sprint8AAuthenticatedRehearsalHistory",
+            "Get-Sprint8ARehearsalChangedPaths", "New-Sprint8ADeferredLaneResult",
+            "Get-Sprint8ARehearsalWaveBDisposition",
+            "Assert-Sprint8ARehearsalTerminalAccounting", "Test-Sprint8ARehearsalTwoWaveScheduler",
+            "Test-Sprint8ARehearsalHistoryRegressionFixtures", "sprint-8a-rehearsal-history-regressions.json",
+            "bounded_failure_first_two_wave", "conservative_full_harvest_fallback",
+            "maximum_consecutive_deferrals_reached", "aggregate_sink_waits_for_current_attempt_prerequisites",
+            "Prior evidence is diagnostic history only"
+        )
         "scripts/materialize-sprint-8a.ps1" = @(
             '$exceptionType = $materializationError.Exception.GetType().FullName',
-            '$failureClassification = if ($expectedFaultObserved -eq $true)',
+            'Get-Sprint8AMaterializationFailureClassification',
+            'TessaraFailureClassification',
             'PropertyNotFoundException|ParameterBindingException|CommandNotFoundException|ParseException',
             'Docker daemon is not running|Cannot connect to the Docker daemon|connection refused|timed out while waiting for .* health',
             'failure = [ordered]@{',
@@ -948,7 +1144,11 @@ function Test-Sprint8AAcceptanceContract {
             "final-environment-identity.json", "Compare-Sprint8AEnvironmentContracts",
             "changed_sections",
             'Test-Sprint8AResultClassificationProjection',
-            'Get-Sprint8AResultClassifications -Results (@($failedChecks) + @($nestedFailedChecks))'
+            'Get-Sprint8AResultClassifications -Results (@($failedChecks) + @($nestedFailedChecks))',
+            'candidate-rehearsal-$Attempt-start.json', "immutable_start_receipt", "schedule_sha256",
+            "next_candidate_rehearsal", "deferred_count", "deferred_checks",
+            "New-Sprint8ADeferredLaneResult", "Complete-RehearsalOrphanedLane",
+            "Test-Sprint8ACandidateTwoWaveRunnerContract", "ResumeInterruptedAttempt"
         )
         "scripts/test-sprint-validation-harvest.ps1" = @(
             "Assert-DiagnosticReceiptHeader", "Assert-MutableSourceIdentity", "Assert-EnvironmentFingerprint",
@@ -989,6 +1189,8 @@ function Test-Sprint8AAcceptanceContract {
             "Test-Sprint8ACleanReadinessRerunState", "Add-Sprint8ACorrectionLineageLink",
             'receipt = $relativeAttemptPath',
             "CurrentReadinessReference", 'path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath)',
+            "New-Sprint8ANextCandidateRehearsalPlan", "next_candidate_rehearsal",
+            "schedule_sha256", "conservative_fallback", "RequireFreshDatabases",
             'readiness-$Attempt-harvest.json', 'readiness-$Attempt-defect-batch.json',
             'readiness-$Attempt-correction-authorization.json',
             "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
@@ -1301,16 +1503,26 @@ function Test-Sprint8AAcceptanceContract {
             throw "Sprint 8A runner '$powerShellChildRunner' uses native LASTEXITCODE to classify a PowerShell child script."
         }
     }
+    $immutableStartFragment = 'Publish-Sprint7AEvidence -Document $startDocument -OutputPath $startPath'
+    $reservationLockFragment = '$validationLockHandle = Open-Sprint8AValidationAttemptLock -Path $validationLockPath'
     $attemptStartFragment = 'Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath'
+    $stateCaptureFragment = 'Publish-Sprint7AEvidence -Document $prelaunchStateCapture -OutputPath $stateSnapshotPath'
     $stateLaneFragment = 'Invoke-RehearsalLane "attempt-state-prerequisite"'
     $prerequisiteLaneFragment = 'Invoke-RehearsalLane "validation-readiness-prerequisite"'
-    $attemptStartIndex = $rehearsalRunnerText.IndexOf($attemptStartFragment, [StringComparison]::Ordinal)
-    $stateLaneIndex = $rehearsalRunnerText.IndexOf($stateLaneFragment, [StringComparison]::Ordinal)
+    $immutableStartIndex = $rehearsalRunnerText.LastIndexOf($immutableStartFragment, [StringComparison]::Ordinal)
+    $reservationLockIndex = $rehearsalRunnerText.LastIndexOf($reservationLockFragment, [StringComparison]::Ordinal)
+    $executionStartIndex = $rehearsalRunnerText.LastIndexOf('if ($Attempt -lt 1)', [StringComparison]::Ordinal)
+    $attemptStartIndex = $rehearsalRunnerText.IndexOf($attemptStartFragment, $immutableStartIndex, [StringComparison]::Ordinal)
+    $stateCaptureIndex = $rehearsalRunnerText.IndexOf($stateCaptureFragment, [StringComparison]::Ordinal)
+    $stateLaneIndex = $rehearsalRunnerText.LastIndexOf($stateLaneFragment, [StringComparison]::Ordinal)
     $prerequisiteLaneIndex = $rehearsalRunnerText.LastIndexOf($prerequisiteLaneFragment, [StringComparison]::Ordinal)
     if ([regex]::Matches($rehearsalRunnerText, '(?m)^\$declaredChecks\s*=\s*@\(').Count -ne 1 -or
-        $attemptStartIndex -lt 0 -or $stateLaneIndex -le $attemptStartIndex -or
+        $executionStartIndex -lt 0 -or $reservationLockIndex -le $executionStartIndex -or
+        $reservationLockIndex -ge $stateCaptureIndex -or
+        $stateCaptureIndex -lt 0 -or $immutableStartIndex -le $stateCaptureIndex -or
+        $attemptStartIndex -le $immutableStartIndex -or $stateLaneIndex -le $attemptStartIndex -or
         $prerequisiteLaneIndex -le $attemptStartIndex) {
-        throw "Candidate Rehearsal must declare one check graph and publish its attempt-start receipt before validating readiness prerequisites."
+        throw "Candidate Rehearsal must reserve the attempt namespace, declare one check graph, retain prelaunch state, and publish immutable schedule plus mutable attempt before executing lifecycle prerequisites."
     }
     foreach ($independentLane in @(
         "attempt-state-prerequisite", "validation-readiness-prerequisite",
@@ -1325,16 +1537,29 @@ function Test-Sprint8AAcceptanceContract {
             throw "Candidate Rehearsal must keep safe diagnostic lane '$independentLane' independent of fallible readiness prerequisites."
         }
     }
-    $executionStartIndex = $rehearsalRunnerText.IndexOf('if ($Attempt -lt 1)', [StringComparison]::Ordinal)
-    if ($executionStartIndex -lt 0 -or $executionStartIndex -ge $attemptStartIndex) {
+    if ($executionStartIndex -lt 0 -or $executionStartIndex -ge $immutableStartIndex) {
         throw "Candidate Rehearsal does not expose a distinct post-self-test execution boundary."
     }
-    $preStartText = $rehearsalRunnerText.Substring($executionStartIndex, $attemptStartIndex - $executionStartIndex)
-    if ($preStartText.Contains('Assert-Sprint8AReceiptSidecar -Path $readinessPath') -or
-        $preStartText.Contains('-ProbeDatabases') -or
-        $preStartText.Contains('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot') -or
-        $preStartText.Contains('Get-Content -LiteralPath $statePath')) {
-        throw "Candidate Rehearsal validates source, state, readiness, or environment before retaining its unverified attempt-start receipt."
+    $preStartText = $rehearsalRunnerText.Substring($executionStartIndex, $immutableStartIndex - $executionStartIndex)
+    if ($preStartText.Contains('-ProbeDatabases') -or
+        $preStartText.Contains('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot')) {
+        throw "Candidate Rehearsal probes mutable source or environment before retaining its immutable scheduled start receipt."
+    }
+    foreach ($fragment in @(
+        '$scheduleSha = Get-Sprint8ARehearsalJsonSha256',
+        'Assert-Sprint8ARehearsalScheduleContract',
+        'source = "conservative_full_harvest"',
+        'foreach ($name in @($selectedSchedule.wave_a))',
+        'foreach ($name in @($selectedSchedule.cleanup_sinks))',
+        'Add-RehearsalDeferredLane',
+        'foreach ($name in @($selectedSchedule.aggregate_sinks))',
+        'foreach ($name in @($selectedSchedule.finalizers))',
+        'Complete-RehearsalOrphanedLane',
+        'Assert-Sprint8ARehearsalTerminalAccounting'
+    )) {
+        if (-not $rehearsalRunnerText.Contains($fragment)) {
+            throw "Candidate Rehearsal bounded failure-first enforcement omits '$fragment'."
+        }
     }
     $readinessLaneExtent = $rehearsalRunnerText.Substring(
         $prerequisiteLaneIndex,

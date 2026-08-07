@@ -249,20 +249,36 @@ function Assert-Sprint8AFailureReceipt {
         [Parameter(Mandatory)][string]$Fingerprint,
         [Parameter(Mandatory)][int]$AttemptNumber
     )
+    Get-Sprint8AContainmentArtifact -Path $Path -RequireSidecar | Out-Null
     $receipt = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $expectedFaultProperty = $receipt.PSObject.Properties["expected_fault"]
+    $failureDetailsProperty = $receipt.PSObject.Properties["failure"]
+    $expectedFault = if ($null -eq $expectedFaultProperty) { $null } else { $expectedFaultProperty.Value }
+    $failureDetails = if ($null -eq $failureDetailsProperty) { $null } else { $failureDetailsProperty.Value }
+    $observedProperty = if ($null -eq $expectedFault) {
+        $null
+    } else {
+        $expectedFault.PSObject.Properties["observed"]
+    }
+    $validFailureClassifications = @("product", "harness", "environment")
     if ([string]$receipt.contract -cne "tessara.sprint-8a.materialization-failure" -or
         [int]$receipt.attempt -ne $AttemptNumber -or
         [string]$receipt.environment.declared_fingerprint -cne $Fingerprint.ToLowerInvariant() -or
-        [string]$receipt.expected_fault.id -cne $faultId -or
-        [string]$receipt.expected_fault.classification -cne "validation_only_fault_injection" -or
-        -not [bool]$receipt.expected_fault.observed -or
+        $null -eq $expectedFault -or
+        [string]$expectedFault.id -cne $faultId -or
+        [string]$expectedFault.classification -cne "validation_only_fault_injection" -or
+        $null -eq $observedProperty -or
+        $observedProperty.Value -isnot [bool] -or
+        $null -eq $failureDetails -or
+        $validFailureClassifications -cnotcontains [string]$failureDetails.classification -or
+        [string]::IsNullOrWhiteSpace([string]$failureDetails.message) -or
+        [string]::IsNullOrWhiteSpace([string]$failureDetails.exception_type) -or
         -not [bool]$receipt.teardown_passed -or
         [bool]$receipt.retained_partial_topology) {
-        throw "Induced owner-bootstrap failure receipt is incomplete or not exact."
+        throw "Induced owner-bootstrap failure receipt evidence is incomplete or not exact."
     }
-    $rawApply = @($receipt.raw_artifacts | Where-Object path -CLike '*/failed-apply-response.log')
-    if ($rawApply.Count -ne 1) {
-        throw "Induced owner-bootstrap failure did not retain one hashed raw apply response."
+    if (@($receipt.raw_artifacts).Count -eq 0) {
+        throw "Induced owner-bootstrap failure did not retain hashed raw evidence."
     }
     $verifiedRawArtifacts = @($receipt.raw_artifacts | ForEach-Object {
         Assert-Sprint8AContainmentReferencedArtifact -Artifact $_ -Label "Induced owner-bootstrap raw evidence"
@@ -280,9 +296,33 @@ function Assert-Sprint8AFailureReceipt {
     }
     $receipt | Add-Member -NotePropertyName verified_evidence -NotePropertyValue ([pscustomobject][ordered]@{
         raw_artifacts = $verifiedRawArtifacts
+        failed_apply_response = @($verifiedRawArtifacts | Where-Object path -CLike '*/failed-apply-response.log')
         teardown = $verifiedTeardown
     }) -Force
     $receipt
+}
+
+function Get-Sprint8AFailureReceiptDisposition {
+    param([Parameter(Mandatory)]$Receipt)
+
+    $observed = [bool]$Receipt.expected_fault.observed
+    if ($observed -and @($Receipt.verified_evidence.failed_apply_response).Count -ne 1) {
+        throw "Observed owner-bootstrap fault did not retain exactly one authenticated failed apply response."
+    }
+    $classification = [string]$Receipt.failure.classification
+    $actualMessage = [string]$Receipt.failure.message
+    $exceptionType = [string]$Receipt.failure.exception_type
+    [pscustomobject][ordered]@{
+        expected_fault_observed = $observed
+        classification = $classification
+        kind = if ($observed) { "expected_validation_fault" } else { "unexpected_precondition_failure" }
+        exception_type = $exceptionType
+        message = if ($observed) {
+            $actualMessage
+        } else {
+            "Expected fault '$faultId' was not observed because materialization failed first: $actualMessage"
+        }
+    }
 }
 
 function Assert-Sprint8ASuccessorReceipt {
@@ -734,6 +774,11 @@ function Invoke-Sprint8AFailureContainmentSelfTest {
             contract = "tessara.sprint-8a.materialization-failure"; attempt = 7
             environment = [ordered]@{ declared_fingerprint = "a" * 64 }
             expected_fault = [ordered]@{ id = $faultId; classification = "validation_only_fault_injection"; observed = $true }
+            failure = [ordered]@{
+                classification = "harness"
+                message = "Dashboard bootstrap layout is invalid"
+                exception_type = "System.InvalidOperationException"
+            }
             teardown_passed = $true; retained_partial_topology = $false
             raw_artifacts = @($rawApplyArtifact); teardown = $teardownArtifact
         }
@@ -744,6 +789,39 @@ function Invoke-Sprint8AFailureContainmentSelfTest {
             throw "Failure-containment self-test did not retain actual sidecar hashes for failure evidence."
         }
         Get-Sprint8AContainmentArtifact -Path $failureReceiptPath -RequireSidecar | Out-Null
+
+        $unexpectedServiceLogPath = Join-Path $artifactFixtureRoot "unexpected-precondition-services.log"
+        Publish-Sprint7AEvidence `
+            -Document ([ordered]@{ message = "Supervisor target closure failed before Dashboard bootstrap" }) `
+            -OutputPath $unexpectedServiceLogPath | Out-Null
+        $unexpectedServiceLogArtifact = Get-Sprint8AContainmentArtifact -Path $unexpectedServiceLogPath
+        $unexpectedFailureReceiptPath = Join-Path $artifactFixtureRoot "unexpected-precondition-materialization-failure.json"
+        $unexpectedFailureReceiptDocument = $failureReceiptDocument | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+        $unexpectedFailureReceiptDocument.expected_fault.observed = $false
+        $unexpectedFailureReceiptDocument.failure.classification = "product"
+        $unexpectedFailureReceiptDocument.failure.message = "no Compose deployment target is configured for changed owner core"
+        $unexpectedFailureReceiptDocument.raw_artifacts = @($unexpectedServiceLogArtifact)
+        Publish-Sprint7AEvidence `
+            -Document $unexpectedFailureReceiptDocument `
+            -OutputPath $unexpectedFailureReceiptPath | Out-Null
+        $unexpectedFailureArtifact = Get-Sprint8AContainmentArtifact `
+            -Path $unexpectedFailureReceiptPath `
+            -RequireSidecar
+        $verifiedUnexpectedFailure = Assert-Sprint8AFailureReceipt `
+            -Path $unexpectedFailureReceiptPath `
+            -Fingerprint ("a" * 64) `
+            -AttemptNumber 7
+        $unexpectedDisposition = Get-Sprint8AFailureReceiptDisposition -Receipt $verifiedUnexpectedFailure
+        if ([string]$unexpectedFailureArtifact.sha256 -notmatch '^[0-9a-f]{64}$' -or
+            [bool]$unexpectedDisposition.expected_fault_observed -or
+            [string]$unexpectedDisposition.classification -cne "product" -or
+            [string]$unexpectedDisposition.kind -cne "unexpected_precondition_failure" -or
+            -not ([string]$unexpectedDisposition.message).Contains("no Compose deployment target is configured for changed owner core") -or
+            @($verifiedUnexpectedFailure.verified_evidence.failed_apply_response).Count -ne 0 -or
+            [string]$verifiedUnexpectedFailure.verified_evidence.raw_artifacts[0].sidecar.sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Failure-containment self-test did not authenticate and retain an unexpected precursor before expected-fault classification."
+        }
+
         [IO.File]::AppendAllText($rawApplyPath, "tampered", [Text.UTF8Encoding]::new($false))
         Assert-Sprint8AThrows `
             -Action { Assert-Sprint8AFailureReceipt -Path $failureReceiptPath -Fingerprint ("a" * 64) -AttemptNumber 7 | Out-Null } `
@@ -922,6 +1000,8 @@ if ((Test-Path -LiteralPath $paths.output_path) -or (Test-Path -LiteralPath "$($
 [IO.Directory]::CreateDirectory($paths.containment_directory) | Out-Null
 $phase = "fault_input"
 $faultReceiptArtifact = $null
+$faultReceipt = $null
+$faultDisposition = $null
 $successorReceiptArtifact = $null
 $faultExecutionBegan = $false
 $unexpectedFaultAcceptance = $false
@@ -970,11 +1050,17 @@ try {
     if (-not (Test-Path -LiteralPath $faultFailureReceiptPath -PathType Leaf)) {
         throw "Induced owner-bootstrap failure did not publish its deterministic failure receipt: $($faultException.Exception.Message)"
     }
+    $faultReceiptArtifact = Get-Sprint8AContainmentArtifact -Path $faultFailureReceiptPath -RequireSidecar
     $faultReceipt = Assert-Sprint8AFailureReceipt `
         -Path $faultFailureReceiptPath `
         -Fingerprint $EnvironmentFingerprint `
         -AttemptNumber $Attempt
-    $faultReceiptArtifact = Get-Sprint8AContainmentArtifact -Path $faultFailureReceiptPath -RequireSidecar
+    $faultDisposition = Get-Sprint8AFailureReceiptDisposition -Receipt $faultReceipt
+    if (-not [bool]$faultDisposition.expected_fault_observed) {
+        $defectClassification = [string]$faultDisposition.classification
+        $defectKind = [string]$faultDisposition.kind
+        throw [InvalidOperationException]::new([string]$faultDisposition.message)
+    }
 
     $phase = "clean_from_empty_successor"
     $defectClassification = "product"
@@ -1065,6 +1151,19 @@ try {
         -UnexpectedFaultAcceptance $unexpectedFaultAcceptance `
         -OriginalEvidence ([ordered]@{
             fault_receipt = $faultReceiptArtifact
+            fault_raw_artifacts = if ($null -eq $faultReceipt) { @() } else { @($faultReceipt.verified_evidence.raw_artifacts) }
+            fault_teardown = if ($null -eq $faultReceipt) { $null } else { $faultReceipt.verified_evidence.teardown }
+            actual_failure = if ($null -eq $faultDisposition) {
+                $null
+            } else {
+                [ordered]@{
+                    expected_fault_observed = [bool]$faultDisposition.expected_fault_observed
+                    classification = [string]$faultDisposition.classification
+                    kind = [string]$faultDisposition.kind
+                    exception_type = [string]$faultDisposition.exception_type
+                    message = [string]$faultDisposition.message
+                }
+            }
             successor_receipt = $successorReceiptArtifact
         }) `
         -FaultExecutionBegan $faultExecutionBegan `

@@ -312,6 +312,7 @@ function Get-Sprint8ASourceIdentity {
         "crates/**/tests/**",
         "crates/**/fixtures/**",
         "scripts/*sprint-8a*.ps1",
+        "scripts/fixtures/**",
         "scripts/bootstrap-sprint-7a-composition.ps1",
         "scripts/capture-sprint-6a-deployment-evidence.ps1",
         "scripts/check-web-crate-boundaries.ps1",
@@ -445,10 +446,23 @@ function ConvertTo-Sprint8ADatabaseBinding {
 function Invoke-Sprint8ADatabaseProbe {
     param(
         [Parameter(Mandatory)]$Binding,
-        [string]$PostgresContainerId
+        [string]$PostgresContainerId,
+        [switch]$RequireFreshDatabase
     )
 
-    $sql = "BEGIN; CREATE TEMP TABLE tessara_readiness_probe(value integer); INSERT INTO tessara_readiness_probe VALUES (8); SELECT current_database() || '|' || current_user || '|' || (SELECT value::text FROM tessara_readiness_probe); ROLLBACK;"
+    $sql = @"
+BEGIN;
+CREATE TEMP TABLE tessara_readiness_probe(value integer);
+INSERT INTO tessara_readiness_probe VALUES (8);
+SELECT current_database() || '|' || current_user || '|' ||
+       (SELECT value::text FROM tessara_readiness_probe) || '|' ||
+       (SELECT oid::text FROM pg_database WHERE datname = current_database()) || '|' ||
+       (SELECT count(*)::text FROM pg_catalog.pg_tables
+          WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+            AND schemaname NOT LIKE 'pg_toast%'
+            AND schemaname NOT LIKE 'pg_temp_%');
+ROLLBACK;
+"@
     $output = @()
     $client = $null
     if (-not [string]::IsNullOrWhiteSpace($PostgresContainerId)) {
@@ -498,13 +512,24 @@ function Invoke-Sprint8ADatabaseProbe {
     if ($LASTEXITCODE -ne 0) {
         throw "Authenticated database probe failed for $($Binding.name)."
     }
-    $expected = "$($Binding.database)|$($Binding.role)|8"
-    if (@($output | Where-Object { $_ -ceq $expected }).Count -ne 1) {
+    $probeLines = @($output | Where-Object { $_ -match '^.+\|.+\|8\|[0-9]+\|[0-9]+$' })
+    if ($probeLines.Count -ne 1) {
         throw "Authenticated database probe returned the wrong database or role for $($Binding.name)."
+    }
+    $parts = @($probeLines[0].Split('|'))
+    if ($parts.Count -ne 5 -or $parts[0] -cne [string]$Binding.database -or
+        $parts[1] -cne [string]$Binding.role -or $parts[2] -cne "8" -or
+        [long]$parts[3] -lt 1 -or [long]$parts[4] -lt 0) {
+        throw "Authenticated database probe returned a malformed generation identity for $($Binding.name)."
+    }
+    $userTableCount = [long]$parts[4]
+    if ($RequireFreshDatabase -and $userTableCount -ne 0) {
+        throw "Fresh validation database prerequisite rejected $($Binding.name): its database generation already contains $userTableCount user table(s). Recreate all six disposable databases before Readiness."
     }
     [ordered]@{
         database = [string]$Binding.database
         role = [string]$Binding.role
+        database_oid = [long]$parts[3]
         transaction_round_trip = $true
         client = $client
     }
@@ -514,7 +539,8 @@ function Get-Sprint8ADeploymentEnvironmentProbe {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$EvidenceRoot,
-        [switch]$ProbeDatabases
+        [switch]$ProbeDatabases,
+        [switch]$RequireFreshDatabases
     )
 
     $root = [IO.Path]::GetFullPath($RepositoryRoot)
@@ -553,9 +579,27 @@ function Get-Sprint8ADeploymentEnvironmentProbe {
         throw "Sprint 8A environment requires the exact destructive fresh-reset acknowledgement."
     }
     $containerId = [Environment]::GetEnvironmentVariable("TEST_POSTGRES_CLIENT_CONTAINER_ID")
+    if ($RequireFreshDatabases -and -not $ProbeDatabases) {
+        throw "Fresh validation database authentication requires live database probes."
+    }
+    $freshnessEvidence = [Collections.Generic.List[object]]::new()
     $databaseContracts = @($bindings | ForEach-Object {
         $binding = $_
-        $probe = if ($ProbeDatabases) { Invoke-Sprint8ADatabaseProbe -Binding $binding -PostgresContainerId $containerId } else { $null }
+        $probe = if ($ProbeDatabases) {
+            Invoke-Sprint8ADatabaseProbe `
+                -Binding $binding `
+                -PostgresContainerId $containerId `
+                -RequireFreshDatabase:$RequireFreshDatabases
+        } else { $null }
+        if ($RequireFreshDatabases) {
+            $freshnessEvidence.Add([pscustomobject][ordered]@{
+                variable = [string]$binding.name
+                database = [string]$binding.database
+                database_oid = [long]$probe.database_oid
+                user_table_count = 0
+                fresh = $true
+            })
+        }
         [ordered]@{
             variable = [string]$binding.name
             value_sha256 = [string]$binding.value_sha256
@@ -607,6 +651,10 @@ function Get-Sprint8ADeploymentEnvironmentProbe {
     [ordered]@{
         contract = $probe
         fingerprint = Get-Sprint8AStringSha256 -Text $canonical
+        freshness = if ($RequireFreshDatabases) { [ordered]@{
+            verified = $true
+            databases = @($freshnessEvidence)
+        } } else { $null }
     }
 }
 
@@ -640,6 +688,7 @@ function Get-Sprint8AEnvironmentContract {
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$EvidenceRoot,
         [switch]$ProbeDatabases,
+        [switch]$RequireFreshDatabases,
         [AllowNull()]$DeploymentProbe
     )
 
@@ -647,7 +696,8 @@ function Get-Sprint8AEnvironmentContract {
         Get-Sprint8ADeploymentEnvironmentProbe `
             -RepositoryRoot $RepositoryRoot `
             -EvidenceRoot $EvidenceRoot `
-            -ProbeDatabases:$ProbeDatabases
+            -ProbeDatabases:$ProbeDatabases `
+            -RequireFreshDatabases:$RequireFreshDatabases
     } else {
         $DeploymentProbe
     }
