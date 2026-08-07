@@ -53,19 +53,19 @@ function Get-Sprint8ARehearsalLanePolicies {
         New-Policy -Name "component-conformance-nondisclosure" -Role "ordinary" -ImpactPaths @("Cargo.*", "crates/tessara-component-*/*", "crates/tessara-components-contract/*", "crates/tessara-datasets-contract/*") -ImpactSources @("environment_contract")
         New-Policy -Name "module-testkit-conformance" -Role "ordinary" -ImpactPaths @("Cargo.*", "crates/tessara-module-contract/*", "crates/tessara-module-testkit/*")
         New-Policy -Name "playwright-discovery" -Role "ordinary" -ImpactPaths @("end2end/*", "scripts/validate-e2e.ps1", "scripts/sprint-8a-acceptance-contract.ps1", "docs/sprints/sprint-8a-uat/*") -ImpactSources @("acceptance_inventory")
-        New-Policy -Name "source-exact-materialization-no-op" -DependsOn @("attempt-state-prerequisite", "validation-readiness-prerequisite") -Role "ordinary" -ImpactPaths @("Cargo.*", "Dockerfile*", "deploy/*", "crates/tessara-composition/*", "crates/tessara-supervisor/*", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "crates/tessara-reference-*/*", "scripts/bootstrap-sprint-7a-composition.ps1", "scripts/materialize-sprint-8a.ps1", "scripts/sprint-8a-validation-environment.ps1") -ImpactSources @("deployment_inputs", "environment_contract")
+        New-Policy -Name "source-exact-materialization-no-op" -DependsOn @("attempt-state-prerequisite", "validation-readiness-prerequisite") -Role "ordinary" -ImpactPaths @("Cargo.*", "Dockerfile*", "deploy/*", "crates/tessara-composition/*", "crates/tessara-supervisor/*", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "crates/tessara-reference-*/*", "scripts/bootstrap-sprint-7a-composition.ps1", "scripts/materialize-sprint-8a.ps1", "scripts/sprint-8a-health-contract.ps1", "scripts/sprint-8a-validation-environment.ps1") -ImpactSources @("deployment_inputs", "environment_contract")
         New-Policy -Name "deployed-inventory-navigation-audit" -DependsOn @("source-exact-materialization-no-op") -Role "ordinary" -ImpactPaths @("scripts/audit-sprint-8a-deployed-inventory.ps1", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "deploy/*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
         New-Policy -Name "deployment-evidence" -DependsOn @("source-exact-materialization-no-op") -Role "ordinary" -ImpactPaths @("scripts/run-sprint-8a-deployed-smoke.ps1", "scripts/capture-sprint-6a-deployment-evidence.ps1", "deploy/*", "Dockerfile*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
-        New-Policy -Name "product-smoke" -DependsOn @("source-exact-materialization-no-op") -Role "ordinary" -ImpactPaths @("scripts/smoke-sprint-8a.ps1", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "deploy/*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
+        New-Policy -Name "product-smoke" -DependsOn @("source-exact-materialization-no-op") -Role "ordinary" -ImpactPaths @("scripts/smoke-sprint-8a.ps1", "scripts/sprint-8a-health-contract.ps1", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "deploy/*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
         New-Policy -Name "playwright-execution" -DependsOn @("source-exact-materialization-no-op", "deployment-evidence") -Role "ordinary" -ImpactPaths @("end2end/*", "scripts/validate-e2e.ps1", "crates/tessara-web/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "deploy/*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
-        New-Policy -Name "component-upgrade-rollback" -DependsOn @("source-exact-materialization-no-op") -Role "ordinary" -ImpactPaths @("Dockerfile.component", "deploy/*", "crates/tessara-component-*/*", "scripts/*sprint-8a-component*") -ImpactSources @("deployment_inputs", "environment_contract")
-        New-Policy -Name "failure-containment-successor-health" -DependsOn @("attempt-state-prerequisite", "validation-readiness-prerequisite") -Role "cleanup" -ImpactPaths @("Dockerfile*", "deploy/*", "crates/tessara-supervisor/*", "crates/tessara-composition/*", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "scripts/bootstrap-sprint-7a-composition.ps1", "scripts/materialize-sprint-8a.ps1", "scripts/run-sprint-8a-failure-containment.ps1") -ImpactSources @("deployment_inputs", "environment_contract")
+        New-Policy -Name "component-upgrade-rollback" -DependsOn @("source-exact-materialization-no-op") -Role "ordinary" -ImpactPaths @("Dockerfile.component", "deploy/*", "crates/tessara-component-*/*", "scripts/*sprint-8a-component*", "scripts/sprint-8a-health-contract.ps1") -ImpactSources @("deployment_inputs", "environment_contract")
+        New-Policy -Name "failure-containment-successor-health" -DependsOn @("attempt-state-prerequisite", "validation-readiness-prerequisite") -Role "cleanup" -ImpactPaths @("Dockerfile*", "deploy/*", "crates/tessara-supervisor/*", "crates/tessara-composition/*", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "scripts/bootstrap-sprint-7a-composition.ps1", "scripts/materialize-sprint-8a.ps1", "scripts/sprint-8a-health-contract.ps1", "scripts/run-sprint-8a-failure-containment.ps1") -ImpactSources @("deployment_inputs", "environment_contract")
         New-Policy -Name "successor-inventory-navigation-audit" -DependsOn @("failure-containment-successor-health") -Role "ordinary" -ImpactPaths @("scripts/audit-sprint-8a-deployed-inventory.ps1", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "deploy/*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
         New-Policy -Name "successor-deployment-evidence" -DependsOn @("failure-containment-successor-health") -Role "ordinary" -ImpactPaths @("scripts/run-sprint-8a-deployed-smoke.ps1", "scripts/capture-sprint-6a-deployment-evidence.ps1", "deploy/*", "Dockerfile*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
-        New-Policy -Name "successor-product-smoke" -DependsOn @("failure-containment-successor-health") -Role "ordinary" -ImpactPaths @("scripts/smoke-sprint-8a.ps1", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "deploy/*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
+        New-Policy -Name "successor-product-smoke" -DependsOn @("failure-containment-successor-health") -Role "ordinary" -ImpactPaths @("scripts/smoke-sprint-8a.ps1", "scripts/sprint-8a-health-contract.ps1", "crates/tessara-api/*", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*", "deploy/*") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
         New-Policy -Name "live-product-diagnostics" -DependsOn @("deployment-evidence", "product-smoke") -Role "ordinary" -ImpactPaths @("scripts/diagnose-sprint-8a-product.ps1", "scripts/diagnose-sprint-8a-dashboard-dependencies.ps1", "crates/tessara-component-*/*", "crates/tessara-dashboard-*/*") -ImpactSources @("acceptance_inventory", "environment_contract")
         New-Policy -Name "uat-diagnostics" -DependsOn @("source-exact-materialization-no-op", "successor-inventory-navigation-audit", "successor-deployment-evidence", "successor-product-smoke", "failure-containment-successor-health", "component-upgrade-rollback", "components-contract-tests", "component-conformance-nondisclosure", "playwright-execution", "compose-manifest-schema-contract", "web-native-wasm-source-boundaries", "dashboard-source-boundaries", "live-product-diagnostics") -Role "aggregate_sink" -ImpactPaths @("scripts/uat-sprint-8a.ps1", "docs/sprints/sprint-8a-uat/*", "scripts/sprint-8a-acceptance-contract.ps1") -ImpactSources @("acceptance_inventory", "environment_contract")
-        New-Policy -Name "final-successor-health" -DependsOn @("failure-containment-successor-health") -Role "cleanup_sink" -ImpactPaths @("deploy/*", "scripts/materialize-sprint-8a.ps1", "scripts/run-sprint-8a-failure-containment.ps1") -ImpactSources @("deployment_inputs", "environment_contract")
+        New-Policy -Name "final-successor-health" -DependsOn @("attempt-state-prerequisite", "validation-readiness-prerequisite") -Role "cleanup_sink" -ImpactPaths @("deploy/*", "scripts/materialize-sprint-8a.ps1", "scripts/sprint-8a-health-contract.ps1", "scripts/audit-sprint-8a-deployed-inventory.ps1", "scripts/run-sprint-8a-failure-containment.ps1", "scripts/run-sprint-8a-candidate-rehearsal.ps1") -ImpactSources @("acceptance_inventory", "deployment_inputs", "environment_contract")
         New-Policy -Name "final-clean-source" -Role "safety_finalizer" -ImpactPaths @("*") -ImpactSources @("acceptance_inventory", "deployment_inputs")
         New-Policy -Name "final-environment-identity" -Role "safety_finalizer" -ImpactPaths @("deploy/*", "scripts/sprint-8a-validation-environment.ps1") -ImpactSources @("environment_contract", "deployment_inputs")
     )
@@ -333,6 +333,13 @@ function Resolve-Sprint8ARehearsalSchedule {
             $reason = "no_authenticated_prior_passing_receipt"
             $priority = 20
         }
+        if ($segment -ceq "wave_a") {
+            if ($name -ceq "source-exact-materialization-no-op") {
+                $priority = 5
+            } elseif ($name -ceq "failure-containment-successor-health") {
+                $priority = 6
+            }
+        }
         $decisions[$name] = [pscustomobject][ordered]@{
             name = $name
             wave = $wave
@@ -363,7 +370,11 @@ function Resolve-Sprint8ARehearsalSchedule {
                 $affectedDependencies = @($check.depends_on | Where-Object {
                     $dependencyDecision = $decisions[[string]$_]
                     [bool]$dependencyDecision.current_correction_impact.affected -or
-                        [string]$dependencyDecision.reason -eq "failed_in_preceding_rehearsal"
+                        [string]$dependencyDecision.reason -in @(
+                            "failed_in_preceding_rehearsal",
+                            "blocked_or_newly_reachable_in_preceding_rehearsal",
+                            "never_executed_or_newly_reachable"
+                        )
                 })
                 if ($affectedDependencies.Count -gt 0 -and [string]$decision.wave -cne "A") {
                     $decision.wave = "A"
@@ -434,9 +445,9 @@ function Resolve-Sprint8ARehearsalSchedule {
             environment_contract = $EnvironmentContractChanged
         }
         wave_a = $waveA
-        cleanup_sinks = $cleanupSinks
         wave_b = $waveB
         aggregate_sinks = $aggregateSinks
+        cleanup_sinks = $cleanupSinks
         finalizers = $finalizers
         decisions = @($Checks | ForEach-Object { $decisions[[string]$_.name] })
     }
@@ -466,8 +477,8 @@ function Assert-Sprint8ARehearsalScheduleContract {
     }
     $declaredNames = @($Checks | ForEach-Object { [string]$_.name })
     $segments = @(
-        @($Schedule.wave_a), @($Schedule.cleanup_sinks), @($Schedule.wave_b),
-        @($Schedule.aggregate_sinks), @($Schedule.finalizers)
+        @($Schedule.wave_a), @($Schedule.wave_b), @($Schedule.aggregate_sinks),
+        @($Schedule.cleanup_sinks), @($Schedule.finalizers)
     )
     $scheduledNames = @($segments | ForEach-Object { @($_) } | ForEach-Object { [string]$_ })
     if ($scheduledNames.Count -ne $declaredNames.Count -or
@@ -482,9 +493,9 @@ function Assert-Sprint8ARehearsalScheduleContract {
     }
     $segmentProperties = [ordered]@{
         wave_a = @($Schedule.wave_a)
-        cleanup_sinks = @($Schedule.cleanup_sinks)
         wave_b = @($Schedule.wave_b)
         aggregate_sinks = @($Schedule.aggregate_sinks)
+        cleanup_sinks = @($Schedule.cleanup_sinks)
         finalizers = @($Schedule.finalizers)
     }
     foreach ($segmentName in $segmentProperties.Keys) {
@@ -506,18 +517,41 @@ function Assert-Sprint8ARehearsalScheduleContract {
             [string]$decision.prior_environment_fingerprint -notmatch '^[0-9a-f]{64}$') {
             throw "Candidate Rehearsal Wave B lane '$name' is not an authenticated prior pass outside the correction impact cone."
         }
+        if ($ExpectedAttempt -gt 32) {
+            Assert-Sprint8ARehearsalCanonicalReferencePath `
+                -Path ([string]$decision.prior_passing_receipt.path) `
+                -Label "Candidate Rehearsal Wave B prior passing receipt for '$name'"
+        }
     }
     if (-not [bool]$Schedule.history_authentication.authenticated -and @($Schedule.wave_b).Count -ne 0) {
         throw "Unauthenticated Candidate Rehearsal history must select conservative full harvest with no Wave B lanes."
     }
-    foreach ($segmentName in @("wave_a", "cleanup_sinks", "wave_b")) {
+    $segmentRanks = [ordered]@{
+        wave_a = 0
+        wave_b = 1
+        aggregate_sinks = 2
+        cleanup_sinks = 3
+        finalizers = 4
+    }
+    $segmentByName = @{}
+    foreach ($segmentName in $segmentProperties.Keys) {
+        foreach ($name in @($segmentProperties[$segmentName])) {
+            $segmentByName[[string]$name] = [string]$segmentName
+        }
+    }
+    foreach ($segmentName in $segmentProperties.Keys) {
         $ordered = @($segmentProperties[$segmentName])
         for ($index = 0; $index -lt $ordered.Count; $index++) {
             $name = [string]$ordered[$index]
             $check = @($Checks | Where-Object name -CEQ $name)[0]
             foreach ($dependency in @($check.depends_on)) {
-                if ($ordered -ccontains [string]$dependency -and
-                    [Array]::IndexOf([object[]]$ordered, [string]$dependency) -gt $index) {
+                $dependencyName = [string]$dependency
+                $dependencySegment = [string]$segmentByName[$dependencyName]
+                if ([int]$segmentRanks[$dependencySegment] -gt [int]$segmentRanks[$segmentName]) {
+                    throw "Candidate Rehearsal lane '$name' in segment '$segmentName' depends on later segment '$dependencySegment' lane '$dependencyName'."
+                }
+                if ($ordered -ccontains $dependencyName -and
+                    [Array]::IndexOf([object[]]$ordered, $dependencyName) -gt $index) {
                     throw "Candidate Rehearsal segment '$segmentName' orders '$name' before prerequisite '$dependency'."
                 }
             }
@@ -526,21 +560,67 @@ function Assert-Sprint8ARehearsalScheduleContract {
     $Schedule
 }
 
+function Assert-Sprint8ARehearsalDeferredCounterBinding {
+    param(
+        [Parameter(Mandatory)]$Schedule,
+        [Parameter(Mandatory)][object[]]$TerminalChecks
+    )
+
+    foreach ($result in @($TerminalChecks | Where-Object state -CEQ "deferred")) {
+        $decision = @($Schedule.decisions | Where-Object {
+            [string]$_.name -ceq [string]$result.name
+        })
+        if ($decision.Count -ne 1 -or
+            [string]$decision[0].segment -cne "wave_b" -or
+            ($decision[0].consecutive_deferrals_before -isnot [int] -and
+                $decision[0].consecutive_deferrals_before -isnot [long]) -or
+            [int]$decision[0].consecutive_deferrals_before -lt 0 -or
+            [int]$decision[0].consecutive_deferrals_before -ge $script:Sprint8AMaxConsecutiveDeferrals -or
+            ($result.consecutive_deferral_count -isnot [int] -and
+                $result.consecutive_deferral_count -isnot [long]) -or
+            [int]$result.consecutive_deferral_count -ne
+                ([int]$decision[0].consecutive_deferrals_before + 1)) {
+            throw "Deferred lane '$($result.name)' does not advance its immutable-start deferral counter exactly once."
+        }
+    }
+}
+
+function Get-Sprint8ARehearsalContinuationDeferralCount {
+    param(
+        [Parameter(Mandatory)]$Result,
+        [Parameter(Mandatory)]$ScheduleDecision
+    )
+
+    if ([string]$Result.state -ceq "deferred") {
+        return [int]$Result.consecutive_deferral_count
+    }
+    if ($Result.assertions_started -is [bool] -and [bool]$Result.assertions_started) {
+        return 0
+    }
+    if (($ScheduleDecision.consecutive_deferrals_before -isnot [int] -and
+            $ScheduleDecision.consecutive_deferrals_before -isnot [long]) -or
+        [int]$ScheduleDecision.consecutive_deferrals_before -lt 0 -or
+        [int]$ScheduleDecision.consecutive_deferrals_before -gt $script:Sprint8AMaxConsecutiveDeferrals) {
+        throw "Candidate Rehearsal lane '$($Result.name)' has an invalid immutable-start deferral counter."
+    }
+    [int]$ScheduleDecision.consecutive_deferrals_before
+}
+
 function Get-Sprint8ARehearsalWaveBDisposition {
     param(
         [Parameter(Mandatory)]$Schedule,
         [Parameter(Mandatory)]$TerminalByName
     )
 
-    $waveAAndCleanup = @(@($Schedule.wave_a) + @($Schedule.cleanup_sinks))
-    $unterminated = @($waveAAndCleanup | Where-Object {
+    $waveA = @($Schedule.wave_a)
+    $unterminated = @($waveA | Where-Object {
         -not $TerminalByName.ContainsKey([string]$_) -or
             @("passed", "failed", "blocked") -cnotcontains [string]$TerminalByName[[string]$_].state
     })
     if ($unterminated.Count -gt 0) {
-        throw "Candidate Rehearsal cannot decide Wave B before every Wave A and cleanup-sink lane is terminal: $($unterminated -join ', ')."
+        throw "Candidate Rehearsal cannot decide Wave B before every diagnostic Wave A lane is terminal: $($unterminated -join ', ')."
     }
-    if (@($waveAAndCleanup | Where-Object {
+    if (@($waveA | Where-Object {
         [string]$TerminalByName[[string]$_].state -cne "passed"
     }).Count -gt 0) { "defer" } else { "execute" }
 }
@@ -565,7 +645,7 @@ function Assert-Sprint8ARehearsalRecoveryScheduleBinding {
         [int]$AttemptDocument.schema_version -ne 3 -or
         [string]$AttemptDocument.phase -cne "candidate-rehearsal" -or
         [int]$AttemptDocument.attempt -ne $ExpectedAttempt -or
-        @("preparing", "executing", "harvesting") -cnotcontains [string]$AttemptDocument.state -or
+        @("preparing", "executing", "harvesting", "passed", "failed") -cnotcontains [string]$AttemptDocument.state -or
         [string]$AttemptDocument.schedule_sha256 -cne $computedScheduleSha -or
         [string]$AttemptDocument.immutable_start_receipt.path -cne $ExpectedStartPath -or
         [string]$AttemptDocument.immutable_start_receipt.sha256 -cne $ExpectedStartSha256) {
@@ -573,7 +653,40 @@ function Assert-Sprint8ARehearsalRecoveryScheduleBinding {
     }
     [void](Assert-Sprint8ARehearsalScheduleContract `
         -Schedule $StartDocument.schedule -Checks $Checks -ExpectedAttempt $ExpectedAttempt)
+    if ([string]$AttemptDocument.state -in @("passed", "failed")) {
+        if ($AttemptDocument.PSObject.Properties.Name -notcontains "active_lane" -or
+            $null -ne $AttemptDocument.active_lane -or
+            [string]::IsNullOrWhiteSpace([string]$AttemptDocument.ended_at)) {
+            throw "Candidate Rehearsal recovery rejected a non-final terminal attempt checkpoint."
+        }
+        Assert-Sprint8ARehearsalTerminalAccounting `
+            -DeclaredChecks $Checks `
+            -TerminalChecks @($AttemptDocument.checks) `
+            -Attempt $ExpectedAttempt `
+            -AttemptState ([string]$AttemptDocument.state)
+        Assert-Sprint8ARehearsalDeferredCounterBinding `
+            -Schedule $StartDocument.schedule `
+            -TerminalChecks @($AttemptDocument.checks)
+    }
     $StartDocument.schedule
+}
+
+function Assert-Sprint8ARehearsalCanonicalReferencePath {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    $segments = @($Path -split '/')
+    if ([string]::IsNullOrWhiteSpace($Path) -or
+        [IO.Path]::IsPathRooted($Path) -or
+        $Path.Contains('\') -or
+        $Path.StartsWith('./', [StringComparison]::Ordinal) -or
+        $Path.Contains('//') -or
+        @($segments | Where-Object { $_ -in @('', '.', '..') }).Count -gt 0) {
+        throw "$Label must use a canonical repository-relative evidence path."
+    }
+    $Path
 }
 
 function Resolve-Sprint8ARehearsalEvidenceReference {
@@ -587,16 +700,22 @@ function Resolve-Sprint8ARehearsalEvidenceReference {
         [string]$Reference.sha256 -notmatch '^[0-9a-f]{64}$') {
         throw "Candidate Rehearsal history reference is malformed."
     }
+    $repositoryRootPath = [IO.Path]::GetFullPath($RepositoryRoot)
+    $evidenceRootPath = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+        [IO.Path]::GetFullPath($EvidenceRoot)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repositoryRootPath $EvidenceRoot))
+    }
     $fullPath = if ([IO.Path]::IsPathRooted([string]$Reference.path)) {
         [IO.Path]::GetFullPath([string]$Reference.path)
     } else {
-        [IO.Path]::GetFullPath((Join-Path $RepositoryRoot ([string]$Reference.path)))
+        [IO.Path]::GetFullPath((Join-Path $repositoryRootPath ([string]$Reference.path)))
     }
-    $repoPrefix = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-    $evidencePrefix = [IO.Path]::GetFullPath($EvidenceRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-    if (-not $fullPath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase) -and
+    $repoPrefix = $repositoryRootPath.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $evidencePrefix = $evidenceRootPath.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    if (-not $fullPath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase) -or
         -not $fullPath.StartsWith($evidencePrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Candidate Rehearsal history reference escapes the repository/evidence roots."
+        throw "Candidate Rehearsal history reference escapes its declared repository evidence root."
     }
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf) -or
         -not (Test-Path -LiteralPath "$fullPath.sha256" -PathType Leaf)) {
@@ -612,6 +731,90 @@ function Resolve-Sprint8ARehearsalEvidenceReference {
         sha256 = $actual
         full_path = $fullPath
         document = Get-Content -LiteralPath $fullPath -Raw | ConvertFrom-Json
+    }
+}
+
+function Test-Sprint8ARehearsalPlaceholderSourceIdentity {
+    param([AllowNull()]$Source)
+
+    if ($null -eq $Source) { return $false }
+    $expectedProperties = @(
+        "acceptance_inventory_sha256", "branch", "commit", "deployment_inputs_sha256", "dirty", "tree"
+    )
+    $actualProperties = @($Source.PSObject.Properties.Name | Sort-Object)
+    ($actualProperties -join "`n") -ceq (($expectedProperties | Sort-Object) -join "`n") -and
+        [string]$Source.commit -ceq ("0" * 40) -and
+        [string]$Source.tree -ceq ("0" * 40) -and
+        $Source.dirty -is [bool] -and -not [bool]$Source.dirty -and
+        [string]$Source.branch -ceq "unverified" -and
+        [string]$Source.acceptance_inventory_sha256 -ceq ("0" * 64) -and
+        [string]$Source.deployment_inputs_sha256 -ceq ("0" * 64)
+}
+
+function Test-Sprint8ARehearsalLaneIdentityBinding {
+    param(
+        [Parameter(Mandatory)]$Lane,
+        [Parameter(Mandatory)]$AttemptDocument,
+        [Parameter(Mandatory)][string]$LaneName,
+        [Parameter(Mandatory)][string]$ReadinessPrerequisiteState
+    )
+
+    $identityBinding = if ($Lane.PSObject.Properties.Name -contains "identity_binding") {
+        [string]$Lane.identity_binding
+    } else { $null }
+    $matchesAttempt =
+        [string]$Lane.environment_fingerprint -ceq [string]$AttemptDocument.environment_fingerprint -and
+        ($Lane.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -ceq
+            ($AttemptDocument.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress)
+    if ($matchesAttempt) {
+        return [int]$AttemptDocument.attempt -le 32 -or $identityBinding -ceq "attempt_identity"
+    }
+    if ([int]$AttemptDocument.attempt -le 32 -and
+        $LaneName -ceq "attempt-state-prerequisite" -and
+        [string]::IsNullOrWhiteSpace($identityBinding) -and
+        (Test-Sprint8ARehearsalPlaceholderSourceIdentity -Source $Lane.mutable_source_identity) -and
+        [string]$Lane.environment_fingerprint -ceq ("0" * 64) -and
+        [string]$Lane.result.state -ceq "passed" -and
+        $Lane.result.assertions_started -is [bool] -and [bool]$Lane.result.assertions_started -and
+        [string]$AttemptDocument.source_identity_verification_state -ceq "verified" -and
+        [string]$AttemptDocument.environment_identity.verification_state -ceq "verified" -and
+        $ReadinessPrerequisiteState -ceq "passed") {
+        # Immutable attempts through R32 predate the explicit identity_binding member. This is
+        # the sole legacy exception and preserves the exact lifecycle-placeholder semantics.
+        return $true
+    }
+    $LaneName -ceq "attempt-state-prerequisite" -and
+        $identityBinding -ceq "pre_authentication_lifecycle_placeholder" -and
+        (Test-Sprint8ARehearsalPlaceholderSourceIdentity -Source $Lane.mutable_source_identity) -and
+        [string]$Lane.environment_fingerprint -ceq ("0" * 64) -and
+        [string]$Lane.result.state -ceq "passed" -and
+        $Lane.result.assertions_started -is [bool] -and [bool]$Lane.result.assertions_started -and
+        [string]$AttemptDocument.source_identity_verification_state -ceq "verified" -and
+        [string]$AttemptDocument.environment_identity.verification_state -ceq "verified" -and
+        $ReadinessPrerequisiteState -ceq "passed"
+}
+
+function Assert-Sprint8ARehearsalHistoryGraphBinding {
+    param(
+        [Parameter(Mandatory)]$StartDocument,
+        [Parameter(Mandatory)]$AttemptDocument
+    )
+
+    if ($StartDocument.PSObject.Properties.Name -notcontains "declared_lanes" -or
+        $StartDocument.PSObject.Properties.Name -notcontains "declared_checks" -or
+        $AttemptDocument.PSObject.Properties.Name -notcontains "declared_checks") {
+        throw "Preceding Candidate Rehearsal does not authenticate its complete immutable declared-check graph."
+    }
+    $startChecks = @($StartDocument.declared_checks)
+    $expectedNames = @($startChecks | ForEach-Object { [string]$_.name })
+    if ([string]$StartDocument.sprint -cne "sprint-8a" -or
+        $StartDocument.authoritative -isnot [bool] -or
+        [bool]$StartDocument.authoritative -or
+        (@($StartDocument.declared_lanes | ForEach-Object { [string]$_ }) -join "`n") -cne
+            ($expectedNames -join "`n") -or
+        ($AttemptDocument.declared_checks | ConvertTo-Json -Depth 50 -Compress) -cne
+            ($StartDocument.declared_checks | ConvertTo-Json -Depth 50 -Compress)) {
+        throw "Preceding Candidate Rehearsal does not authenticate its complete immutable declared-check graph."
     }
 }
 
@@ -634,6 +837,15 @@ function Get-Sprint8AAuthenticatedRehearsalHistory {
         $attempt.PSObject.Properties.Name -notcontains "immutable_start_receipt") {
         throw "Preceding Candidate Rehearsal is not a terminal schema-3 attempt with an immutable start receipt."
     }
+    $strictCanonicalReferences = [int]$attempt.attempt -gt 32
+    if ($strictCanonicalReferences) {
+        Assert-Sprint8ARehearsalCanonicalReferencePath `
+            -Path ([string]$PriorAttemptReference.path) `
+            -Label "Preceding Candidate Rehearsal attempt receipt" | Out-Null
+        Assert-Sprint8ARehearsalCanonicalReferencePath `
+            -Path ([string]$attempt.immutable_start_receipt.path) `
+            -Label "Preceding Candidate Rehearsal immutable start receipt" | Out-Null
+    }
     $startRef = Resolve-Sprint8ARehearsalEvidenceReference `
         -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Reference $attempt.immutable_start_receipt
     $start = $startRef.document
@@ -645,39 +857,74 @@ function Get-Sprint8AAuthenticatedRehearsalHistory {
         [string]$attempt.schedule_sha256 -cne [string]$start.schedule_sha256) {
         throw "Preceding Candidate Rehearsal immutable schedule authentication failed."
     }
+    if ($strictCanonicalReferences) {
+        Assert-Sprint8ARehearsalHistoryGraphBinding `
+            -StartDocument $start `
+            -AttemptDocument $attempt
+    }
+    $priorChecks = if ($strictCanonicalReferences) { @($start.declared_checks) } else { $Checks }
     [void](Assert-Sprint8ARehearsalScheduleContract `
-        -Schedule $start.schedule -Checks $Checks -ExpectedAttempt ([int]$attempt.attempt))
+        -Schedule $start.schedule -Checks $priorChecks -ExpectedAttempt ([int]$attempt.attempt))
     $terminalChecks = @($attempt.checks)
     Assert-Sprint8ARehearsalTerminalAccounting `
-        -DeclaredChecks $Checks -TerminalChecks $terminalChecks `
+        -DeclaredChecks $priorChecks -TerminalChecks $terminalChecks `
         -Attempt ([int]$attempt.attempt) -AttemptState ([string]$attempt.state)
+    Assert-Sprint8ARehearsalDeferredCounterBinding `
+        -Schedule $start.schedule `
+        -TerminalChecks $terminalChecks
     $history = @{}
+    $readinessPrerequisite = @($terminalChecks | Where-Object name -CEQ "validation-readiness-prerequisite")
     foreach ($declaration in $Checks) {
         $name = [string]$declaration.name
+        $priorDeclaration = @($priorChecks | Where-Object name -CEQ $name)
+        if ($priorDeclaration.Count -ne 1 -or
+            ($priorDeclaration[0] | ConvertTo-Json -Depth 50 -Compress) -cne
+                ($declaration | ConvertTo-Json -Depth 50 -Compress)) {
+            continue
+        }
         $result = @($terminalChecks | Where-Object name -CEQ $name)[0]
+        $scheduleDecision = @($start.schedule.decisions | Where-Object name -CEQ $name)[0]
         if ($result.PSObject.Properties.Name -notcontains "lane_receipt") {
             throw "Preceding Candidate Rehearsal lane '$name' omits its authenticated lane receipt."
+        }
+        if ($strictCanonicalReferences) {
+            Assert-Sprint8ARehearsalCanonicalReferencePath `
+                -Path ([string]$result.lane_receipt.path) `
+                -Label "Preceding Candidate Rehearsal lane '$name' receipt" | Out-Null
         }
         $laneRef = Resolve-Sprint8ARehearsalEvidenceReference `
             -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Reference $result.lane_receipt
         $lane = $laneRef.document
+        $identityBindingAccepted = Test-Sprint8ARehearsalLaneIdentityBinding `
+            -Lane $lane `
+            -AttemptDocument $attempt `
+            -LaneName $name `
+            -ReadinessPrerequisiteState $(if ($readinessPrerequisite.Count -eq 1) {
+                [string]$readinessPrerequisite[0].state
+            } else { "missing_or_duplicate" })
         if (($lane.schema_version -isnot [int] -and $lane.schema_version -isnot [long]) -or
             [int]$lane.schema_version -notin @(1, 2) -or
             [string]$lane.phase -cne "candidate-rehearsal-lane" -or
             [int]$lane.attempt -ne [int]$attempt.attempt -or
             [string]$lane.result.name -cne $name -or
             [string]$lane.result.state -cne [string]$result.state -or
-            [string]$lane.environment_fingerprint -cne [string]$attempt.environment_fingerprint -or
-            ($lane.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -cne
-                ($attempt.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress)) {
+            -not $identityBindingAccepted) {
             throw "Preceding Candidate Rehearsal lane '$name' does not bind the attempt source/environment identity."
         }
         $priorPassingReceipt = $null
-        $deferrals = 0
+        $priorSourceIdentity = $attempt.mutable_source_identity
+        $priorEnvironmentFingerprint = [string]$attempt.environment_fingerprint
+        $deferrals = Get-Sprint8ARehearsalContinuationDeferralCount `
+            -Result $result `
+            -ScheduleDecision $scheduleDecision
         if ([string]$result.state -ceq "passed") {
             $priorPassingReceipt = [pscustomobject][ordered]@{ path = $laneRef.path; sha256 = $laneRef.sha256 }
         } elseif ([string]$result.state -ceq "deferred") {
-            $deferrals = [int]$result.consecutive_deferral_count
+            if ($strictCanonicalReferences) {
+                Assert-Sprint8ARehearsalCanonicalReferencePath `
+                    -Path ([string]$result.prior_passing_receipt.path) `
+                    -Label "Deferred lane '$name' prior passing receipt" | Out-Null
+            }
             $priorPassRef = Resolve-Sprint8ARehearsalEvidenceReference `
                 -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Reference $result.prior_passing_receipt
             $priorPass = $priorPassRef.document
@@ -690,18 +937,47 @@ function Get-Sprint8AAuthenticatedRehearsalHistory {
                 throw "Deferred lane '$name' does not authenticate its diagnostic prior passing lane receipt."
             }
             $priorPassingReceipt = [pscustomobject][ordered]@{ path = $priorPassRef.path; sha256 = $priorPassRef.sha256 }
+            $priorSourceIdentity = $result.prior_source_identity
+            $priorEnvironmentFingerprint = [string]$result.prior_environment_identity.fingerprint
+        } elseif (-not [bool]$result.assertions_started -and
+            $null -ne $scheduleDecision.prior_passing_receipt) {
+            if ($strictCanonicalReferences) {
+                Assert-Sprint8ARehearsalCanonicalReferencePath `
+                    -Path ([string]$scheduleDecision.prior_passing_receipt.path) `
+                    -Label "Non-executed lane '$name' prior passing receipt" | Out-Null
+            }
+            $priorPassRef = Resolve-Sprint8ARehearsalEvidenceReference `
+                -RepositoryRoot $RepositoryRoot `
+                -EvidenceRoot $EvidenceRoot `
+                -Reference $scheduleDecision.prior_passing_receipt
+            $priorPass = $priorPassRef.document
+            if ([string]$priorPass.phase -cne "candidate-rehearsal-lane" -or
+                [string]$priorPass.result.name -cne $name -or
+                [string]$priorPass.result.state -cne "passed" -or
+                [string]$priorPass.environment_fingerprint -cne
+                    [string]$scheduleDecision.prior_environment_fingerprint -or
+                ($priorPass.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -cne
+                    ($scheduleDecision.prior_source_identity | ConvertTo-Json -Depth 20 -Compress)) {
+                throw "Non-executed lane '$name' does not preserve its authenticated diagnostic prior pass."
+            }
+            $priorPassingReceipt = [pscustomobject][ordered]@{
+                path = $priorPassRef.path
+                sha256 = $priorPassRef.sha256
+            }
+            $priorSourceIdentity = $scheduleDecision.prior_source_identity
+            $priorEnvironmentFingerprint = [string]$scheduleDecision.prior_environment_fingerprint
         }
         $history[$name] = [pscustomobject][ordered]@{
             preceding_state = [string]$result.state
             consecutive_deferrals = $deferrals
-            ever_executed = [bool]$result.assertions_started -or [string]$result.state -in @("passed", "failed")
+            ever_executed = if ([bool]$result.assertions_started) {
+                $true
+            } else {
+                [bool]$scheduleDecision.ever_executed_before
+            }
             prior_passing_receipt = $priorPassingReceipt
-            prior_source_identity = if ([string]$result.state -ceq "deferred") {
-                $result.prior_source_identity
-            } else { $attempt.mutable_source_identity }
-            prior_environment_fingerprint = if ([string]$result.state -ceq "deferred") {
-                [string]$result.prior_environment_identity.fingerprint
-            } else { [string]$attempt.environment_fingerprint }
+            prior_source_identity = $priorSourceIdentity
+            prior_environment_fingerprint = $priorEnvironmentFingerprint
         }
     }
     [pscustomobject][ordered]@{
@@ -857,10 +1133,36 @@ function Assert-Sprint8ARehearsalTerminalAccounting {
         throw "Candidate Rehearsal terminal accounting is missing or duplicates declared lanes."
     }
     foreach ($result in $TerminalChecks) {
-        if (@("passed", "failed", "blocked", "deferred") -cnotcontains [string]$result.state) {
+        $state = [string]$result.state
+        if (@("passed", "failed", "blocked", "deferred") -cnotcontains $state) {
             throw "Candidate Rehearsal lane '$($result.name)' has unsupported terminal state '$($result.state)'."
         }
-        if ([string]$result.state -ceq "deferred") {
+        if ($result.PSObject.Properties.Name -notcontains "assertions_started" -or
+            $result.assertions_started -isnot [bool] -or
+            ($state -ceq "passed" -and -not [bool]$result.assertions_started) -or
+            ($state -in @("blocked", "deferred") -and [bool]$result.assertions_started)) {
+            throw "Candidate Rehearsal lane '$($result.name)' has assertion-start accounting inconsistent with '$state'."
+        }
+        $declaration = @($DeclaredChecks | Where-Object {
+            [string]$_.name -ceq [string]$result.name
+        })[0]
+        if ($state -in @("passed", "failed")) {
+            $nonpassingPrerequisites = @($declaration.depends_on | Where-Object {
+                $dependencyName = [string]$_
+                $dependency = @($TerminalChecks | Where-Object {
+                    [string]$_.name -ceq $dependencyName
+                })
+                $dependency.Count -ne 1 -or [string]$dependency[0].state -cne "passed"
+            })
+            if ($nonpassingPrerequisites.Count -gt 0) {
+                throw "Candidate Rehearsal lane '$($result.name)' executed despite nonpassing declared prerequisite(s): $($nonpassingPrerequisites -join ', ')."
+            }
+        }
+        if ($state -ceq "deferred") {
+            $expectedMandatoryAttempt = $Attempt + (
+                $script:Sprint8AMaxConsecutiveDeferrals -
+                [int]$result.consecutive_deferral_count + 1
+            )
             if ([bool]$result.assertions_started -or $null -ne $result.started_at -or $null -ne $result.ended_at -or
                 $null -ne $result.duration_ms -or $null -ne $result.assertions_started_at -or
                 [string]$result.prior_passing_receipt.sha256 -notmatch '^[0-9a-f]{64}$' -or
@@ -870,9 +1172,14 @@ function Assert-Sprint8ARehearsalTerminalAccounting {
                 [string]::IsNullOrWhiteSpace([string]$result.non_impact_rationale) -or
                 [int]$result.consecutive_deferral_count -lt 1 -or
                 [int]$result.consecutive_deferral_count -gt $script:Sprint8AMaxConsecutiveDeferrals -or
-                [int]$result.mandatory_by_attempt -le $Attempt -or
+                [int]$result.mandatory_by_attempt -ne $expectedMandatoryAttempt -or
                 [string]$result.diagnostic_history_notice -cne $script:Sprint8ADiagnosticHistoryNotice) {
                 throw "Deferred lane '$($result.name)' does not satisfy the exact diagnostic-only receipt contract."
+            }
+            if ($Attempt -gt 32) {
+                Assert-Sprint8ARehearsalCanonicalReferencePath `
+                    -Path ([string]$result.prior_passing_receipt.path) `
+                    -Label "Deferred lane '$($result.name)' prior passing receipt" | Out-Null
             }
         }
     }
@@ -886,6 +1193,35 @@ function Assert-Sprint8ARehearsalTerminalAccounting {
 }
 
 function Test-Sprint8ARehearsalTwoWaveScheduler {
+    $canonicalFinalHealth = @(Get-Sprint8ARehearsalLanePolicies | Where-Object name -CEQ "final-successor-health")
+    if ($canonicalFinalHealth.Count -ne 1 -or
+        (@($canonicalFinalHealth[0].depends_on | Sort-Object) -join ",") -cne
+            ((@("attempt-state-prerequisite", "validation-readiness-prerequisite") | Sort-Object) -join ",") -or
+        @($canonicalFinalHealth[0].depends_on) -ccontains "failure-containment-successor-health" -or
+        @($canonicalFinalHealth[0].impact_paths) -cnotcontains "scripts/sprint-8a-health-contract.ps1") {
+        throw "Mandatory final restoration is not independent from a failed containment diagnostic or its exact health contract."
+    }
+    $failureFirstPolicies = @(Get-Sprint8ARehearsalLanePolicies)
+    $failureFirstSchedule = Resolve-Sprint8ARehearsalSchedule `
+        -Checks $failureFirstPolicies `
+        -Attempt 33 `
+        -LaneHistory @{} `
+        -ChangedPaths @() `
+        -AcceptanceInventoryChanged:$false `
+        -DeploymentInputsChanged:$false `
+        -EnvironmentContractChanged:$false `
+        -HistoryAuthenticated:$false `
+        -FallbackReason "ordering self-test"
+    $expectedFailureFirstPrefix = @(
+        "attempt-state-prerequisite",
+        "validation-readiness-prerequisite",
+        "source-exact-materialization-no-op",
+        "failure-containment-successor-health"
+    )
+    if ((@($failureFirstSchedule.wave_a | Select-Object -First 4) -join "`n") -cne
+        ($expectedFailureFirstPrefix -join "`n")) {
+        throw "Candidate Rehearsal Wave A does not prioritize lifecycle authentication, materialization, and failure containment before other expensive lanes."
+    }
     $checks = @(
         [ordered]@{ name = "lock"; depends_on = @(); command = "lock"; scheduler_role = "lifecycle"; impact_paths = @(); impact_sources = @() },
         [ordered]@{ name = "prior-pass"; depends_on = @(); command = "pass"; scheduler_role = "ordinary"; impact_paths = @("src/pass/**"); impact_sources = @() },
@@ -934,6 +1270,85 @@ function Test-Sprint8ARehearsalTwoWaveScheduler {
         commit = "b" * 40; tree = "c" * 40; dirty = $false; branch = "test"
         acceptance_inventory_sha256 = "d" * 64; deployment_inputs_sha256 = "e" * 64
     }
+    $placeholderSource = [pscustomobject]@{
+        commit = "0" * 40; tree = "0" * 40; dirty = $false; branch = "unverified"
+        acceptance_inventory_sha256 = "0" * 64; deployment_inputs_sha256 = "0" * 64
+    }
+    $identityAttempt = [pscustomobject]@{
+        attempt = 33
+        mutable_source_identity = $source
+        environment_fingerprint = "f" * 64
+        source_identity_verification_state = "verified"
+        environment_identity = [pscustomobject]@{ verification_state = "verified" }
+    }
+    $lifecyclePlaceholderLane = [pscustomobject]@{
+        identity_binding = "pre_authentication_lifecycle_placeholder"
+        mutable_source_identity = $placeholderSource
+        environment_fingerprint = "0" * 64
+        result = [pscustomobject]@{
+            name = "attempt-state-prerequisite"; state = "passed"; assertions_started = $true
+        }
+    }
+    if (-not (Test-Sprint8ARehearsalLaneIdentityBinding `
+            -Lane $lifecyclePlaceholderLane `
+            -AttemptDocument $identityAttempt `
+            -LaneName "attempt-state-prerequisite" `
+            -ReadinessPrerequisiteState "passed")) {
+        throw "Candidate Rehearsal history rejected its exact pre-authentication lifecycle identity binding."
+    }
+    $legacyIdentityAttempt = $identityAttempt | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $legacyIdentityAttempt.attempt = 32
+    $legacyLifecycleLane = $lifecyclePlaceholderLane | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $legacyLifecycleLane.PSObject.Properties.Remove("identity_binding")
+    if (-not (Test-Sprint8ARehearsalLaneIdentityBinding `
+            -Lane $legacyLifecycleLane `
+            -AttemptDocument $legacyIdentityAttempt `
+            -LaneName "attempt-state-prerequisite" `
+            -ReadinessPrerequisiteState "passed")) {
+        throw "Candidate Rehearsal history rejected the exact pre-R33 lifecycle placeholder compatibility case."
+    }
+    $tamperedLifecycleLane = $lifecyclePlaceholderLane | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $tamperedLifecycleLane.identity_binding = "attempt_identity"
+    if (Test-Sprint8ARehearsalLaneIdentityBinding `
+            -Lane $tamperedLifecycleLane `
+            -AttemptDocument $identityAttempt `
+            -LaneName "attempt-state-prerequisite" `
+            -ReadinessPrerequisiteState "passed") {
+        throw "Candidate Rehearsal history accepted a mislabeled lifecycle placeholder."
+    }
+    if (Test-Sprint8ARehearsalLaneIdentityBinding `
+            -Lane $lifecyclePlaceholderLane `
+            -AttemptDocument $identityAttempt `
+            -LaneName "formatting" `
+            -ReadinessPrerequisiteState "passed") {
+        throw "Candidate Rehearsal history allowed an ordinary lane to use lifecycle placeholder identity."
+    }
+    $historyGraphStart = [pscustomobject][ordered]@{
+        sprint = "sprint-8a"
+        authoritative = $false
+        declared_lanes = @($checks | ForEach-Object { [string]$_.name })
+        declared_checks = $checks
+    }
+    $historyGraphAttempt = [pscustomobject][ordered]@{ declared_checks = $checks }
+    Assert-Sprint8ARehearsalHistoryGraphBinding `
+        -StartDocument $historyGraphStart `
+        -AttemptDocument $historyGraphAttempt
+    $tamperedHistoryGraphStart = $historyGraphStart | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    @($tamperedHistoryGraphStart.declared_checks | Where-Object name -CEQ "prior-failure")[0].depends_on = @()
+    try {
+        Assert-Sprint8ARehearsalHistoryGraphBinding `
+            -StartDocument $tamperedHistoryGraphStart `
+            -AttemptDocument $historyGraphAttempt
+        throw "Candidate Rehearsal scheduler self-test accepted changed predecessor graph semantics."
+    } catch {
+        if ($_.Exception.Message -ceq
+            "Candidate Rehearsal scheduler self-test accepted changed predecessor graph semantics.") {
+            throw
+        }
+        if ($_.Exception.Message -notlike "Preceding Candidate Rehearsal does not authenticate its complete immutable declared-check graph.*") {
+            throw "Candidate Rehearsal scheduler rejected changed predecessor graph semantics for the wrong reason: $($_.Exception.Message)"
+        }
+    }
     $history = @{
         "lock" = [pscustomobject]@{ preceding_state = "passed"; consecutive_deferrals = 0; ever_executed = $true; prior_passing_receipt = $priorPass; prior_source_identity = $source; prior_environment_fingerprint = "f" * 64 }
         "prior-pass" = [pscustomobject]@{ preceding_state = "passed"; consecutive_deferrals = 0; ever_executed = $true; prior_passing_receipt = $priorPass; prior_source_identity = $source; prior_environment_fingerprint = "f" * 64 }
@@ -967,8 +1382,92 @@ function Test-Sprint8ARehearsalTwoWaveScheduler {
     if ([string]$sinkDecision.segment -cne "aggregate_sinks") {
         throw "Aggregate sink incorrectly expanded Wave A to the whole graph."
     }
+    $unsafeCrossSegmentChecks = @($checks | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+    @($unsafeCrossSegmentChecks | Where-Object name -CEQ "prior-failure")[0].depends_on = @("cleanup-sink")
+    $unsafeCrossSegmentSchedule = Resolve-Sprint8ARehearsalSchedule `
+        -Checks $unsafeCrossSegmentChecks -Attempt 8 -LaneHistory $history `
+        -ChangedPaths @("src/dependent/value.rs") `
+        -AcceptanceInventoryChanged:$false -DeploymentInputsChanged:$false `
+        -EnvironmentContractChanged:$false -HistoryAuthenticated:$true -FallbackReason $null
+    try {
+        Assert-Sprint8ARehearsalScheduleContract `
+            -Schedule $unsafeCrossSegmentSchedule -Checks $unsafeCrossSegmentChecks -ExpectedAttempt 8 | Out-Null
+        throw "Candidate Rehearsal scheduler self-test accepted a Wave A lane that depends on a later cleanup sink."
+    } catch {
+        if ($_.Exception.Message -ceq
+            "Candidate Rehearsal scheduler self-test accepted a Wave A lane that depends on a later cleanup sink.") {
+            throw
+        }
+        if ($_.Exception.Message -notlike "*depends on later segment*") {
+            throw "Candidate Rehearsal scheduler rejected an unsafe cross-segment dependency for the wrong reason: $($_.Exception.Message)"
+        }
+    }
+    try {
+        Assert-Sprint8ARehearsalCanonicalReferencePath `
+            -Path "C:\\absolute\\receipt.json" `
+            -Label "scheduler self-test receipt" | Out-Null
+        throw "Candidate Rehearsal scheduler self-test accepted a noncanonical absolute evidence reference."
+    } catch {
+        if ($_.Exception.Message -ceq
+            "Candidate Rehearsal scheduler self-test accepted a noncanonical absolute evidence reference.") {
+            throw
+        }
+        if ($_.Exception.Message -notlike "*canonical repository-relative evidence path*") {
+            throw "Candidate Rehearsal scheduler rejected a noncanonical evidence path for the wrong reason: $($_.Exception.Message)"
+        }
+    }
+    $containmentRepository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+    $containmentRoot = Join-Path $containmentRepository "artifacts/sprint-8a-scheduler-containment-selftest-$([guid]::NewGuid().ToString('N'))"
+    $containmentEvidenceRoot = Join-Path $containmentRoot "declared-evidence"
+    $outsideEvidenceRoot = Join-Path $containmentRoot "outside-evidence"
+    $outsideReceiptPath = Join-Path $outsideEvidenceRoot "receipt.json"
+    try {
+        [IO.Directory]::CreateDirectory($containmentEvidenceRoot) | Out-Null
+        [IO.Directory]::CreateDirectory($outsideEvidenceRoot) | Out-Null
+        [IO.File]::WriteAllText(
+            $outsideReceiptPath,
+            "{}`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        $outsideReceiptSha = (Get-FileHash -LiteralPath $outsideReceiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        [IO.File]::WriteAllText(
+            "$outsideReceiptPath.sha256",
+            "$outsideReceiptSha`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        $outsideReceiptReference = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($containmentRepository, $outsideReceiptPath).Replace("\", "/")
+            sha256 = $outsideReceiptSha
+        }
+        try {
+            Resolve-Sprint8ARehearsalEvidenceReference `
+                -RepositoryRoot $containmentRepository `
+                -EvidenceRoot $containmentEvidenceRoot `
+                -Reference $outsideReceiptReference | Out-Null
+            throw "Candidate Rehearsal scheduler self-test accepted a repository receipt outside the declared evidence root."
+        } catch {
+            if ($_.Exception.Message -ceq
+                "Candidate Rehearsal scheduler self-test accepted a repository receipt outside the declared evidence root.") {
+                throw
+            }
+            if ($_.Exception.Message -notlike "Candidate Rehearsal history reference escapes its declared repository evidence root.*") {
+                throw "Candidate Rehearsal scheduler rejected an out-of-root receipt for the wrong reason: $($_.Exception.Message)"
+            }
+        }
+    } finally {
+        $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $containmentRepository "artifacts"))
+        $relativeContainmentRoot = [IO.Path]::GetRelativePath($artifactsRoot, $containmentRoot)
+        if ([IO.Path]::IsPathRooted($relativeContainmentRoot) -or
+            $relativeContainmentRoot -eq ".." -or
+            $relativeContainmentRoot.StartsWith("..$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::Ordinal)) {
+            throw "Candidate Rehearsal scheduler containment self-test root escaped repository artifacts."
+        }
+        if (Test-Path -LiteralPath $containmentRoot -PathType Container) {
+            [IO.Directory]::Delete($containmentRoot, $true)
+        }
+    }
     $dispositionStates = @{}
-    foreach ($name in @(@($schedule.wave_a) + @($schedule.cleanup_sinks))) {
+    foreach ($name in @($schedule.wave_a)) {
         $dispositionStates[[string]$name] = [pscustomobject]@{ state = "passed" }
     }
     if ((Get-Sprint8ARehearsalWaveBDisposition -Schedule $schedule -TerminalByName $dispositionStates) -cne "execute") {
@@ -979,27 +1478,48 @@ function Test-Sprint8ARehearsalTwoWaveScheduler {
         throw "Failed Wave A did not defer eligible Wave B lanes after safe harvesting."
     }
     $dispositionStates["prior-failure"].state = "passed"
-    [void]$dispositionStates.Remove("cleanup-sink")
+    [void]$dispositionStates.Remove("lock")
     try {
         Get-Sprint8ARehearsalWaveBDisposition -Schedule $schedule -TerminalByName $dispositionStates | Out-Null
-        throw "Wave B disposition self-test ignored mandatory cleanup terminalization."
+        throw "Wave B disposition self-test ignored incomplete diagnostic Wave A terminalization."
     } catch {
-        if ($_.Exception.Message -ceq "Wave B disposition self-test ignored mandatory cleanup terminalization.") { throw }
+        if ($_.Exception.Message -ceq "Wave B disposition self-test ignored incomplete diagnostic Wave A terminalization.") { throw }
     }
-    $dispositionStates["cleanup-sink"] = [pscustomobject]@{ state = "passed" }
+    $dispositionStates["lock"] = [pscustomobject]@{ state = "passed" }
 
     $deferHistory = $history["prior-pass"]
-    $decision = [pscustomobject][ordered]@{
-        wave = "B"; reason = "prior_passing_outside_impact"
-        current_correction_impact = [pscustomobject][ordered]@{
-            affected = $false; decision = "outside_correction_impact"; matched_paths = @(); matched_identity_sources = @()
-            rationale = "No authenticated changed input intersects this lane."
-        }
+    $deferSchedule = Resolve-Sprint8ARehearsalSchedule `
+        -Checks $checks -Attempt 8 -LaneHistory $history -ChangedPaths @() `
+        -AcceptanceInventoryChanged:$false -DeploymentInputsChanged:$false -EnvironmentContractChanged:$false `
+        -HistoryAuthenticated:$true -FallbackReason $null
+    $decision = @($deferSchedule.decisions | Where-Object name -CEQ "prior-pass")[0]
+    if ([string]$decision.segment -cne "wave_b") {
+        throw "Candidate Rehearsal deferred-result self-test did not select its prior passing lane in Wave B."
     }
     $deferred = New-Sprint8ADeferredLaneResult -Declaration $checks[1] -Decision $decision -History $deferHistory -Attempt 8 -TerminalByName @{}
     if ([string]$deferred.state -cne "deferred" -or [bool]$deferred.assertions_started -or
         [int]$deferred.consecutive_deferral_count -ne 1 -or [int]$deferred.mandatory_by_attempt -ne 11) {
         throw "Wave A failure did not create the exact eligible Wave B deferred result."
+    }
+    Assert-Sprint8ARehearsalDeferredCounterBinding `
+        -Schedule $deferSchedule `
+        -TerminalChecks @($deferred)
+    $tamperedDeferredCounter = $deferred | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $tamperedDeferredCounter.consecutive_deferral_count = 2
+    $tamperedDeferredCounter.mandatory_by_attempt = 10
+    try {
+        Assert-Sprint8ARehearsalDeferredCounterBinding `
+            -Schedule $deferSchedule `
+            -TerminalChecks @($tamperedDeferredCounter)
+        throw "Candidate Rehearsal scheduler self-test accepted a deferred counter detached from immutable start."
+    } catch {
+        if ($_.Exception.Message -ceq
+            "Candidate Rehearsal scheduler self-test accepted a deferred counter detached from immutable start.") {
+            throw
+        }
+        if ($_.Exception.Message -notlike "Deferred lane 'prior-pass' does not advance its immutable-start deferral counter exactly once.*") {
+            throw "Candidate Rehearsal scheduler rejected a detached deferred counter for the wrong reason: $($_.Exception.Message)"
+        }
     }
 
     $history["prior-pass"].consecutive_deferrals = 3
@@ -1010,6 +1530,21 @@ function Test-Sprint8ARehearsalTwoWaveScheduler {
     if ($forced.wave_a -cnotcontains "prior-pass") {
         throw "Three consecutive deferrals did not force execution on the next attempt."
     }
+    $forcedDecision = @($forced.decisions | Where-Object name -CEQ "prior-pass")[0]
+    $blockedBeforeAssertions = [pscustomobject]@{
+        name = "prior-pass"; state = "blocked"; assertions_started = $false
+    }
+    $failedAfterAssertions = [pscustomobject]@{
+        name = "prior-pass"; state = "failed"; assertions_started = $true
+    }
+    if ((Get-Sprint8ARehearsalContinuationDeferralCount `
+            -Result $blockedBeforeAssertions `
+            -ScheduleDecision $forcedDecision) -ne 3 -or
+        (Get-Sprint8ARehearsalContinuationDeferralCount `
+            -Result $failedAfterAssertions `
+            -ScheduleDecision $forcedDecision) -ne 0) {
+        throw "Candidate Rehearsal history did not preserve a blocked lane's counter or reset it after assertion execution."
+    }
     $history["prior-pass"].consecutive_deferrals = 0
 
     $impactOverride = Resolve-Sprint8ARehearsalSchedule `
@@ -1018,6 +1553,24 @@ function Test-Sprint8ARehearsalTwoWaveScheduler {
         -HistoryAuthenticated:$true -FallbackReason $null
     if ($impactOverride.wave_a -cnotcontains "prior-pass") {
         throw "Correction impact did not override Wave B eligibility."
+    }
+    $newlyReachableChecks = @($checks | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+    @($newlyReachableChecks | Where-Object name -CEQ "impacted-dependent")[0].depends_on = @("prior-failure")
+    $newlyReachableHistory = @{}
+    foreach ($entry in $history.GetEnumerator()) {
+        $newlyReachableHistory[[string]$entry.Key] =
+            $entry.Value | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    }
+    $newlyReachableHistory["prior-failure"].preceding_state = "blocked"
+    $newlyReachable = Resolve-Sprint8ARehearsalSchedule `
+        -Checks $newlyReachableChecks -Attempt 9 -LaneHistory $newlyReachableHistory `
+        -ChangedPaths @() -AcceptanceInventoryChanged:$false `
+        -DeploymentInputsChanged:$false -EnvironmentContractChanged:$false `
+        -HistoryAuthenticated:$true -FallbackReason $null
+    if ($newlyReachable.wave_a -cnotcontains "impacted-dependent" -or
+        [string]@($newlyReachable.decisions | Where-Object name -CEQ "impacted-dependent")[0].reason -cne
+            "relevant_prerequisite_changed") {
+        throw "A dependent lane was not promoted with its blocked/newly reachable prerequisite."
     }
     $fallback = Resolve-Sprint8ARehearsalSchedule `
         -Checks $checks -Attempt 9 -LaneHistory @{} -ChangedPaths @() `
@@ -1029,14 +1582,48 @@ function Test-Sprint8ARehearsalTwoWaveScheduler {
     }
 
     $terminal = @(
-        [pscustomobject]@{ name = "lock"; state = "passed" },
+        [pscustomobject]@{ name = "lock"; state = "passed"; assertions_started = $true },
         $deferred,
-        [pscustomobject]@{ name = "prior-failure"; state = "failed" },
-        [pscustomobject]@{ name = "impacted-dependent"; state = "blocked" },
-        [pscustomobject]@{ name = "cleanup"; state = "passed" },
-        [pscustomobject]@{ name = "cleanup-sink"; state = "passed" },
-        [pscustomobject]@{ name = "sink"; state = "blocked" }
+        [pscustomobject]@{ name = "prior-failure"; state = "failed"; assertions_started = $true },
+        [pscustomobject]@{ name = "impacted-dependent"; state = "blocked"; assertions_started = $false },
+        [pscustomobject]@{ name = "cleanup"; state = "passed"; assertions_started = $true },
+        [pscustomobject]@{ name = "cleanup-sink"; state = "passed"; assertions_started = $true },
+        [pscustomobject]@{ name = "sink"; state = "blocked"; assertions_started = $false }
     )
+    $invalidMandatoryTerminal = @($terminal | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+    @($invalidMandatoryTerminal | Where-Object name -CEQ "prior-pass")[0].mandatory_by_attempt = 12
+    try {
+        Assert-Sprint8ARehearsalTerminalAccounting `
+            -DeclaredChecks $checks -TerminalChecks $invalidMandatoryTerminal `
+            -Attempt 8 -AttemptState "failed"
+        throw "Candidate Rehearsal scheduler self-test accepted a non-exact mandatory-by-attempt value."
+    } catch {
+        if ($_.Exception.Message -ceq
+            "Candidate Rehearsal scheduler self-test accepted a non-exact mandatory-by-attempt value.") {
+            throw
+        }
+        if ($_.Exception.Message -notlike "Deferred lane 'prior-pass' does not satisfy the exact*") {
+            throw "Candidate Rehearsal scheduler rejected malformed bounded-deferral accounting for the wrong reason: $($_.Exception.Message)"
+        }
+    }
+    $invalidDependencyTerminal = @($terminal | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+    @($invalidDependencyTerminal | Where-Object name -CEQ "impacted-dependent")[0].state = "passed"
+    @($invalidDependencyTerminal | Where-Object name -CEQ "impacted-dependent")[0].assertions_started = $true
+    try {
+        Assert-Sprint8ARehearsalTerminalAccounting `
+            -DeclaredChecks $checks -TerminalChecks $invalidDependencyTerminal `
+            -Attempt 8 -AttemptState "failed"
+        throw "Candidate Rehearsal scheduler self-test accepted an executed lane with a nonpassing prerequisite."
+    } catch {
+        if ($_.Exception.Message -ceq
+            "Candidate Rehearsal scheduler self-test accepted an executed lane with a nonpassing prerequisite.") {
+            throw
+        }
+        if ($_.Exception.Message -notlike
+            "Candidate Rehearsal lane 'impacted-dependent' executed despite nonpassing declared prerequisite(s): prior-pass.*") {
+            throw "Candidate Rehearsal scheduler rejected impossible terminal dependency state for the wrong reason: $($_.Exception.Message)"
+        }
+    }
     try {
         Assert-Sprint8ARehearsalTerminalAccounting -DeclaredChecks $checks -TerminalChecks $terminal -Attempt 8 -AttemptState "passed"
         throw "Deferred Candidate Rehearsal self-test incorrectly authorized a pass."

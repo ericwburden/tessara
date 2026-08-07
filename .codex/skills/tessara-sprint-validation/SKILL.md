@@ -102,12 +102,13 @@ stale.
 1. Execute the complete Test Readiness Gate and retain
    `validation-readiness-result.json`.
 2. Execute the non-authoritative Candidate Rehearsal through its immutable
-   segment order: Wave A, cleanup sinks, Wave B execution or deferral,
-   aggregate sinks, then safety finalizers. If Wave A passes, continue through
-   Wave B in the same attempt so a potentially passing rehearsal executes every
-   required lane. If Wave A fails, finish every safe Wave A sibling, retain
-   mandatory cleanup, restoration, and safety finalizers, and terminalize only
-   eligible Wave B lanes as `deferred`.
+   segment order: Wave A, Wave B execution or deferral, aggregate sinks,
+   terminal cleanup/restoration sinks, then safety finalizers. If Wave A passes,
+   continue through Wave B in the same attempt so a potentially passing
+   rehearsal executes every required lane. If Wave A fails, finish every safe
+   Wave A sibling, terminalize only eligible Wave B lanes as `deferred`, then
+   retain mandatory aggregate accounting, cleanup/restoration, and safety
+   finalizers.
 3. Require terminal accounting for every declared rehearsal lane, then collect
    all safe-to-discover defects into one batch. A failed attempt may authorize
    correction only after its harvest guard accepts every pass, failure, block,

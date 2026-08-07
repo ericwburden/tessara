@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/emergency-overrides", get(emergency_overrides))
         .with_state(AppState {
             ledger,
-            client: reqwest::Client::new(),
+            client: build_health_client()?,
             core_url: env::var("TESSARA_CORE_INTERNAL_URL")
                 .unwrap_or_else(|_| "http://core:8080".into()),
             module_urls: env::var("TESSARA_MODULE_CONTROL_ENDPOINTS")
@@ -727,6 +727,75 @@ fn prepare_bootstrap_request(
     })
 }
 
+fn build_health_client() -> anyhow::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .context("build exact no-redirect Supervisor health client")
+}
+
+fn owner_health_path(owner: &str) -> &'static str {
+    if owner == "core" {
+        "/health"
+    } else {
+        "/health/ready"
+    }
+}
+
+fn is_utf8_plain_text(content_type: Option<&str>) -> bool {
+    let Some(content_type) = content_type else {
+        return false;
+    };
+    let mut parts = content_type.split(';').map(str::trim);
+    if !parts
+        .next()
+        .is_some_and(|media_type| media_type.eq_ignore_ascii_case("text/plain"))
+    {
+        return false;
+    }
+    parts.all(|parameter| {
+        let Some((name, value)) = parameter.split_once('=') else {
+            return false;
+        };
+        name.trim().eq_ignore_ascii_case("charset")
+            && value.trim().trim_matches('"').eq_ignore_ascii_case("utf-8")
+    })
+}
+
+fn validate_owner_health_response(
+    owner: &str,
+    status: StatusCode,
+    content_type: Option<&str>,
+    body: &[u8],
+) -> Result<(), String> {
+    if owner == "core" {
+        if status != StatusCode::OK {
+            return Err(format!("Core /health returned HTTP {status}"));
+        }
+        if !is_utf8_plain_text(content_type) {
+            return Err("Core /health did not return text/plain UTF-8 content".into());
+        }
+        if body != b"ok" {
+            return Err(format!(
+                "Core /health did not return the exact two-byte body (observed {} bytes)",
+                body.len()
+            ));
+        }
+        return Ok(());
+    }
+    if status != StatusCode::NO_CONTENT {
+        return Err(format!("{owner} /health/ready returned HTTP {status}"));
+    }
+    if !body.is_empty() {
+        return Err(format!(
+            "{owner} /health/ready did not return the exact empty body (observed {} bytes)",
+            body.len()
+        ));
+    }
+    Ok(())
+}
+
 async fn verify_owner_health(state: &AppState, owner: &str) -> anyhow::Result<()> {
     let base = if owner == "core" {
         state.core_url.as_str()
@@ -736,12 +805,30 @@ async fn verify_owner_health(state: &AppState, owner: &str) -> anyhow::Result<()
             .get(owner)
             .ok_or_else(|| anyhow::anyhow!("no health endpoint is configured for {owner}"))?
     };
-    let url = format!("{}/health/ready", base.trim_end_matches('/'));
+    let url = format!("{}{}", base.trim_end_matches('/'), owner_health_path(owner));
     let mut last_status = None;
     for attempt in 1..=60 {
         match state.client.get(&url).send().await {
-            Ok(response) if response.status().is_success() => return Ok(()),
-            Ok(response) => last_status = Some(response.status().to_string()),
+            Ok(response) => {
+                let status = response.status();
+                let content_type = response
+                    .headers()
+                    .get(reqwest::header::CONTENT_TYPE)
+                    .and_then(|value| value.to_str().ok())
+                    .map(str::to_owned);
+                match response.bytes().await {
+                    Ok(body) => match validate_owner_health_response(
+                        owner,
+                        status,
+                        content_type.as_deref(),
+                        &body,
+                    ) {
+                        Ok(()) => return Ok(()),
+                        Err(error) => last_status = Some(error),
+                    },
+                    Err(error) => last_status = Some(error.to_string()),
+                }
+            }
             Err(error) => last_status = Some(error.to_string()),
         }
         if attempt < 60 {
@@ -880,6 +967,90 @@ mod tests {
                 .to_string(),
             )]),
         }
+    }
+
+    #[test]
+    fn owner_health_contract_uses_core_health_and_module_readiness_paths() {
+        assert_eq!(owner_health_path("core"), "/health");
+        assert_eq!(owner_health_path("tessara.components"), "/health/ready");
+    }
+
+    #[test]
+    fn owner_health_contract_requires_exact_core_semantics() {
+        assert!(
+            validate_owner_health_response(
+                "core",
+                StatusCode::OK,
+                Some("text/plain; charset=utf-8"),
+                b"ok"
+            )
+            .is_ok()
+        );
+        for (status, content_type, body) in [
+            (StatusCode::NO_CONTENT, Some("text/plain"), b"ok".as_slice()),
+            (StatusCode::OK, Some("text/html; charset=utf-8"), b"ok"),
+            (StatusCode::OK, Some("text/plain"), b"<html>login</html>"),
+        ] {
+            assert!(validate_owner_health_response("core", status, content_type, body).is_err());
+        }
+    }
+
+    #[test]
+    fn owner_health_contract_rejects_redirects_for_modules() {
+        assert!(
+            validate_owner_health_response("tessara.components", StatusCode::NO_CONTENT, None, b"")
+                .is_ok()
+        );
+        assert!(
+            validate_owner_health_response(
+                "tessara.components",
+                StatusCode::SEE_OTHER,
+                Some("text/html"),
+                b""
+            )
+            .is_err()
+        );
+        assert!(
+            validate_owner_health_response("tessara.components", StatusCode::OK, None, b"")
+                .is_err()
+        );
+        assert!(
+            validate_owner_health_response(
+                "tessara.components",
+                StatusCode::NO_CONTENT,
+                None,
+                b"unexpected"
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn health_client_does_not_follow_login_redirects() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new()
+                    .route(
+                        "/health",
+                        get(|| async { axum::response::Redirect::to("/login") }),
+                    )
+                    .route("/login", get(|| async { "ok" })),
+            )
+            .await
+            .unwrap();
+        });
+        let response = build_health_client()
+            .unwrap()
+            .get(format!("http://{address}/health"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(response.url().as_str(), format!("http://{address}/health"));
+        server.abort();
     }
 
     #[test]

@@ -20,6 +20,10 @@ The checklist must verify:
   support, including runner parsing and invocation in each supported shell;
 - ports, Compose project/profile, databases, topology, service health,
   handoff slot, and source-provenance inputs and label keys;
+- every service-specific health endpoint, redirect policy, expected status,
+  media type, and exact body contract used by materialization, smoke, upgrade,
+  recovery, and final restoration; a generic HTTP-success check cannot stand in
+  for the owning service's declared contract;
 - fixtures semantically: actors, credentials usability, roles, capability and
   scope assignments, products, allowed and blocked resources, provider and
   security revisions, recognizable data, negative identifiers/services, and
@@ -40,12 +44,12 @@ A passing Readiness also derives the exact schedule for the next authorized
 Candidate Rehearsal attempt. It authenticates the preceding rehearsal's start,
 terminal lane receipts, prior-passing references and hashes, source/environment
 identities, correction lineage, changed paths, impact scope, and consecutive-
-deferral counters. It records the resulting deterministic Wave A, cleanup-sink,
-Wave B, aggregate-sink, and finalizer order as the full schedule in the passing
-Readiness receipt. Validation state binds the exact expected rehearsal attempt
-and that schedule's SHA-256; Candidate Rehearsal copies the full schedule into
-its create-once start receipt and verifies the digest instead of recomputing it
-after launch.
+deferral counters. It records the resulting deterministic Wave A, Wave B,
+aggregate-sink, terminal-cleanup-sink, and safety-finalizer order as the full
+schedule in the passing Readiness receipt. Validation state binds the exact
+expected rehearsal attempt and that schedule's SHA-256; Candidate Rehearsal
+copies the full schedule into its create-once start receipt and verifies the
+digest instead of recomputing it after launch.
 
 If any prior receipt, hash, identity, impact decision, or counter cannot be
 authenticated, Readiness records the reason and emits the conservative
@@ -172,26 +176,33 @@ authenticates the retained lock handle, requested attempt, current state, and
 lifecycle transition as a terminally accounted lane; it does not acquire a
 second lock.
 
+The immutable graph contains the complete per-lane declaration: name,
+prerequisites, scheduler role/segment, impact paths, evidence paths and roots,
+and nested-result path. A names-only lane inventory is insufficient. Normalize
+each new evidence reference to repository-relative forward-slash form inside
+the declared evidence root before publication, and require resume/recovery to
+match the complete graph exactly.
+
 Wave A always includes lifecycle prerequisites, retained-lock/state-transition
-authentication, current Readiness/source/environment authentication, required
-cleanup/restoration,
-lanes that failed in the preceding rehearsal, never-executed and newly
-reachable lanes, lanes in the current correction impact cone, and every lane
-already deferred three consecutive times. Add only the prerequisite closure
-required to execute those lanes safely. A changed source, validation skill,
-runner, test, fixture, environment contract, acceptance inventory, deployment
-input, dependency, or relevant prerequisite puts the affected lane in Wave A
-regardless of its deferral counter. Run safe independent Wave A siblings
-fail-late.
+authentication, current Readiness/source/environment authentication, and
+required diagnostic failure-containment recovery. It also includes lanes that
+failed in the preceding rehearsal, never-executed and newly reachable lanes,
+lanes in the current correction impact cone, and every lane already deferred
+three consecutive times. Add only the prerequisite closure required to execute
+those lanes safely. A changed source, validation skill, runner, test, fixture,
+environment contract, acceptance inventory, deployment input, dependency, or
+relevant prerequisite puts the affected lane in Wave A regardless of its
+deferral counter. Run safe independent Wave A siblings fail-late.
 
 Wave B contains only authenticated prior-passing lanes outside the current
 impact cone with fewer than three consecutive deferrals. When Wave A passes,
 continue directly into Wave B in the same attempt; a potentially passing
 rehearsal must execute every required lane. When Wave A fails, finish every safe
-Wave A sibling, complete mandatory cleanup/restoration, and terminalize each
-eligible Wave B lane as `deferred` without beginning assertions. Execution of a
-lane resets its counter. Three consecutive deferrals make it mandatory in Wave
-A on the fourth attempt.
+Wave A sibling and terminalize each eligible Wave B lane as `deferred` without
+beginning assertions. Wave B disposition depends only on diagnostic Wave A;
+after it, execute eligible aggregate sinks and then mandatory terminal canonical
+restoration and safety finalizers. Execution of a lane resets its counter.
+Three consecutive deferrals make it mandatory in Wave A on the fourth attempt.
 
 Treat aggregate lanes as sinks. A previously blocked certification or final-
 health fan-in does not pull all of its prerequisites into Wave A. Execute an
@@ -203,6 +214,16 @@ declared as a cleanup sink. Teardown, recovery, canonical restoration, cleanup
 sinks, and final source/environment safety checks remain mandatory even when
 certification-oriented lanes are deferred.
 
+The terminal final-health cleanup sink must not inherit the failed containment
+lane as a prerequisite merely because it verifies the successor topology. It
+independently materializes or restores the canonical source-exact topology when
+safe, then uses the exact service-specific health contracts and inventory/
+navigation contract. Redirect-followed login HTML, another service's endpoint,
+or a broad HTTP-success interpretation cannot prove restoration. The cleanup
+sink also authenticates its materialization receipt and exact attempt, source,
+environment, first-apply, semantic no-op, and final-health claims before it can
+report canonical restoration.
+
 A deferred receipt is neither a pass nor a skipped or blocked execution. It
 contains the lane name, `state: deferred`, authenticated prior passing receipt
 path and SHA-256, prior source and environment identities, current impact
@@ -213,15 +234,24 @@ is diagnostic history only. It has no current-attempt assertion evidence.
 
 If prior evidence, hashes, impact scope, or counters cannot be authenticated,
 fall back to full harvest: all non-sink diagnostic lanes execute in Wave A,
-with cleanup sinks, Wave B execution, aggregate sinks, and safety finalizers
-retaining their declared order. Do not retrofit schedules or counters into
-historical receipts.
+with Wave B execution, aggregate sinks, terminal cleanup sinks, and safety
+finalizers retaining their declared order. Do not retrofit schedules or
+counters into historical receipts.
 
 After process loss, resume only the same attempt after authenticating its
 immutable schedule and latest checkpoint. Preserve lane order and counters,
 retain raw evidence and terminalize any orphaned executing lane truthfully, and
 continue only safe remaining work. Never allocate a successor merely because
-the controller disappeared.
+the controller disappeared. Recovery must accept an authenticated snapshot-only
+or start-only pre-attempt boundary, mid-lane and deferred-loop checkpoints, and
+a terminal attempt awaiting harvest, batch, authorization/state, or passing
+result/state publication. Once the attempt is terminal, execute no lane again;
+authenticate and reuse existing immutable tail pairs and publish only the
+missing append-only or mutable-index tail. An exact lifecycle receipt created
+before source/environment authentication may retain the explicit placeholder
+identity. Nonterminal recovery checkpoints the newly authenticated identity
+before resuming any lane, while a terminal pre-authentication failure keeps its
+recorded placeholder identity through harvest.
 
 Any deferred lane makes the attempt failed and incomplete. It cannot produce
 `candidate-rehearsal-result.json`, authorize preflight, freeze a candidate,
@@ -338,6 +368,26 @@ successor Readiness writes a create-once hashed consumption receipt binding the
 authorization, predecessor rehearsal receipt, and successor immutable start
 snapshot. Validation state records that transition; duplicate consumption, a
 different successor, or another attempt while an attempt is active is rejected.
+
+Terminal accounting, harvest, and the consolidated batch remain valid when a
+failed attempt records `cleanup_restoration.result = not_proven`, but correction
+authorization does not. Prospective schema-3 authorization requires
+`cleanup_restoration.required = true` and result
+`canonical_successor_healthy`, with exact passing current-attempt
+`final-successor-health` and `final-environment-identity` receipt references.
+The schema-3 authorization embeds both canonical receipt references and hashes.
+Withhold authorization if that proof is absent; do not rewrite the attempt,
+harvest, batch, or raw evidence.
+
+Sprint 8A Candidate Rehearsal 32 is the sole historical exception predating
+that authorization guard. Its already-issued schema-2 authorization remains
+quarantined and is effective only as a tuple with the create-once
+`candidate-rehearsal-32-correction-authorization-qualification.json`, which
+authenticates the append-only diagnostic supplement and post-harvest canonical
+restoration receipt and permits exactly Readiness 42. The qualification is not
+independently consumable and authorizes no rehearsal result, preflight,
+candidate freeze, SIT, UAT, or closeout. Do not generalize this exception or
+rewrite the R32 receipts.
 
 Validation state retains these transitions as one correction lineage of
 authenticated append-only references, including any intervening failed

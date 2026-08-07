@@ -18,6 +18,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-health-contract.ps1")
 
 $faultId = "sprint-8a.dashboard-owner-bootstrap-invalid-layout"
 $faultPattern = "Dashboard bootstrap layout is invalid"
@@ -369,14 +370,46 @@ function Assert-Sprint8ASuccessorReceipt {
     $verifiedPrecedingApply = Assert-Sprint8AContainmentReferencedArtifact `
         -Artifact $finalHealth.preceding_apply_response `
         -Label "Clean successor final-health preceding-apply evidence"
-    if ([string]$finalHealth.contract -cne "tessara.sprint-8a.final-health" -or
+    if ([int]$finalHealth.schema_version -ne 2 -or
+        [string]$finalHealth.contract -cne "tessara.sprint-8a.final-health" -or
         [int]$finalHealth.attempt -ne $AttemptNumber -or
         [string]$finalHealth.environment_fingerprint -cne $Fingerprint.ToLowerInvariant() -or
         -not [bool]$finalHealth.preceding_apply_no_op -or
         [string]$finalHealth.preceding_apply_response.sha256 -cne
             [string]$receipt.evidence.no_op_apply_response.sha256 -or
+        [string]$finalHealth.health.health_contract -cne "tessara.sprint-8a.health-observation/v1" -or
+        @($finalHealth.health.failures).Count -ne 0 -or
         -not [bool]$finalHealth.health.passed) {
         throw "Clean successor final health is not bound to its exact no-op apply response."
+    }
+    $verifiedGatewayHealth = Test-Sprint8AHealthObservation -Observation $finalHealth.health.gateway_core
+    $verifiedSupervisorHealth = Test-Sprint8AHealthObservation -Observation $finalHealth.health.supervisor
+    if ([int]$finalHealth.health.gateway_core.schema_version -ne 1 -or
+        [string]$finalHealth.health.gateway_core.contract -cne "tessara.sprint-8a.health-observation" -or
+        [string]$finalHealth.health.gateway_core.target -cne "gateway_core" -or
+        [int]$finalHealth.health.supervisor.schema_version -ne 1 -or
+        [string]$finalHealth.health.supervisor.contract -cne "tessara.sprint-8a.health-observation" -or
+        [string]$finalHealth.health.supervisor.target -cne "supervisor" -or
+        -not [bool]$verifiedGatewayHealth.passed -or
+        -not [bool]$verifiedSupervisorHealth.passed -or
+        -not [bool]$finalHealth.health.gateway_core.passed -or
+        -not [bool]$finalHealth.health.supervisor.passed) {
+        throw "Clean successor final health does not prove the exact Core and Supervisor health contracts."
+    }
+    $expectedRuntimeServices = @(
+        "components", "core", "dashboards", "gateway", "postgres", "scoped-records", "supervisor"
+    )
+    $declaredRuntimeServices = @($finalHealth.health.expected_runtime_services | ForEach-Object { [string]$_ } | Sort-Object)
+    if (($declaredRuntimeServices -join "`n") -cne (($expectedRuntimeServices | Sort-Object) -join "`n")) {
+        throw "Clean successor final health does not declare the exact runtime service set."
+    }
+    foreach ($serviceName in $expectedRuntimeServices) {
+        $service = @($finalHealth.health.compose_services | Where-Object service -CEQ $serviceName)
+        if ($service.Count -ne 1 -or [string]$service[0].state -cne "running" -or
+            (-not [string]::IsNullOrWhiteSpace([string]$service[0].health) -and
+                [string]$service[0].health -cne "healthy")) {
+            throw "Clean successor final health does not prove runtime service '$serviceName' uniquely healthy."
+        }
     }
     $verifiedPrecedingPath = Resolve-Sprint8AContainmentPath -Path ([string]$verifiedPrecedingApply.path)
     $verifiedNoOpPath = Resolve-Sprint8AContainmentPath -Path ([string]$verifiedSuccessorEvidence.no_op_apply_response.path)
@@ -854,10 +887,53 @@ function Invoke-Sprint8AFailureContainmentSelfTest {
         Publish-Sprint7AEvidence -Document $noOpDocument -OutputPath $noOpApplyPath | Out-Null
         $noOpArtifact = Get-Sprint8AContainmentArtifact -Path $noOpApplyPath
         $finalHealthPath = Join-Path $artifactFixtureRoot "final-health.json"
+        $coreHealth = Test-Sprint8AHealthObservation -Observation ([ordered]@{
+            target = "gateway_core"
+            request = [ordered]@{
+                method = "GET"; uri = "http://127.0.0.1:8088/health"; path = "/health"
+                timeout_seconds = 5; redirect_policy = "forbid"
+            }
+            response = [ordered]@{
+                received = $true; uri = "http://127.0.0.1:8088/health"; status = 200
+                content_type = "text/plain; charset=utf-8"; media_type = "text/plain"; charset = "utf-8"
+                location = $null; body_utf8_length = 2
+                body_sha256 = "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df"
+                redirects_followed = 0
+            }
+        })
+        $supervisorHealth = Test-Sprint8AHealthObservation -Observation ([ordered]@{
+            target = "supervisor"
+            request = [ordered]@{
+                method = "GET"; uri = "http://127.0.0.1:8098/health/ready"; path = "/health/ready"
+                timeout_seconds = 5; redirect_policy = "forbid"
+            }
+            response = [ordered]@{
+                received = $true; uri = "http://127.0.0.1:8098/health/ready"; status = 204
+                content_type = $null; media_type = $null; charset = $null; location = $null
+                body_utf8_length = 0
+                body_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                redirects_followed = 0
+            }
+        })
+        $runtimeServices = @(
+            "components", "core", "dashboards", "gateway", "postgres", "scoped-records", "supervisor"
+        )
         $finalHealthDocument = [ordered]@{
+            schema_version = 2
             contract = "tessara.sprint-8a.final-health"; attempt = 7
             environment_fingerprint = "a" * 64; preceding_apply_no_op = $true
-            preceding_apply_response = $noOpArtifact; health = [ordered]@{ passed = $true }
+            preceding_apply_response = $noOpArtifact
+            health = [ordered]@{
+                health_contract = "tessara.sprint-8a.health-observation/v1"
+                gateway_core = $coreHealth
+                supervisor = $supervisorHealth
+                expected_runtime_services = $runtimeServices
+                compose_services = @($runtimeServices | ForEach-Object {
+                    [ordered]@{ service = $_; state = "running"; health = "healthy" }
+                })
+                failures = @()
+                passed = $true
+            }
         }
         Publish-Sprint7AEvidence -Document $finalHealthDocument -OutputPath $finalHealthPath | Out-Null
         $successorReceiptPath = Join-Path $artifactFixtureRoot "materialization-result.json"
@@ -880,6 +956,29 @@ function Invoke-Sprint8AFailureContainmentSelfTest {
                 throw "Failure-containment self-test did not retain the '$verifiedName' sidecar hash."
             }
         }
+        $tamperedFinalHealthDocument = $finalHealthDocument | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+        $tamperedFinalHealthDocument.health.gateway_core.response.status = 303
+        $tamperedFinalHealthDocument.health.gateway_core.response.media_type = "text/html"
+        $tamperedFinalHealthDocument.health.gateway_core.response.body_utf8_length = 4710
+        $tamperedFinalHealthDocument.health.gateway_core.response.body_sha256 = "f00cefaa866bef8a84a0dff0ecaa73c6437ab295e961c20779d5b31a9cc4a574"
+        $tamperedFinalHealthDocument.health.gateway_core.passed = $true
+        $tamperedFinalHealthDocument.health.passed = $true
+        [IO.File]::WriteAllText(
+            $finalHealthPath,
+            ($tamperedFinalHealthDocument | ConvertTo-Json -Depth 30) + "`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        $tamperedHealthDigest = Get-Sprint7AFileSha256 -Path $finalHealthPath
+        [IO.File]::WriteAllText("$finalHealthPath.sha256", "$tamperedHealthDigest`n", [Text.UTF8Encoding]::new($false))
+        $successorReceiptDocument.evidence.final_health = Get-Sprint8AContainmentArtifact -Path $finalHealthPath
+        Publish-Sprint7AEvidence -Document $successorReceiptDocument -OutputPath $successorReceiptPath -Overwrite | Out-Null
+        Assert-Sprint8AThrows `
+            -Action { Assert-Sprint8ASuccessorReceipt -Path $successorReceiptPath -Fingerprint ("a" * 64) -AttemptNumber 7 -ExpectedBlueprintHash ("b" * 64) | Out-Null } `
+            -ExpectedFragment "exact Core and Supervisor health contracts"
+        & $resetCorruptedSelfTestPair -Path $finalHealthPath
+        Publish-Sprint7AEvidence -Document $finalHealthDocument -OutputPath $finalHealthPath | Out-Null
+        $successorReceiptDocument.evidence.final_health = Get-Sprint8AContainmentArtifact -Path $finalHealthPath
+        Publish-Sprint7AEvidence -Document $successorReceiptDocument -OutputPath $successorReceiptPath -Overwrite | Out-Null
         [IO.File]::WriteAllText("$finalHealthPath.sha256", "$('0' * 64)`n", [Text.UTF8Encoding]::new($false))
         Assert-Sprint8AThrows `
             -Action { Assert-Sprint8ASuccessorReceipt -Path $successorReceiptPath -Fingerprint ("a" * 64) -AttemptNumber 7 -ExpectedBlueprintHash ("b" * 64) | Out-Null } `

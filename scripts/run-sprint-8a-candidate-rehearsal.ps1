@@ -14,10 +14,352 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-8a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-rehearsal-scheduler.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-health-contract.ps1")
 
 function Open-Sprint8AValidationAttemptLock {
     param([Parameter(Mandatory)][string]$Path)
     [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+}
+
+function Publish-OrAuthenticateRehearsalImmutableEvidence {
+    param(
+        [Parameter(Mandatory)]$Document,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    Repair-Sprint7AEvidencePublication -Path $Path
+    $documentExists = Test-Path -LiteralPath $Path -PathType Leaf
+    $sidecarExists = Test-Path -LiteralPath "$Path.sha256" -PathType Leaf
+    if ($documentExists -xor $sidecarExists) {
+        throw "$Label has an incomplete immutable receipt/sidecar pair; recovery will not rewrite it."
+    }
+    if (-not $documentExists) {
+        Publish-Sprint7AEvidence -Document $Document -OutputPath $Path | Out-Null
+        return Assert-Sprint8AReceiptSidecar -Path $Path
+    }
+
+    $sha = Assert-Sprint8AReceiptSidecar -Path $Path
+    $retained = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    if (($retained | ConvertTo-Json -Depth 100 -Compress) -cne
+        ($Document | ConvertTo-Json -Depth 100 -Compress)) {
+        throw "$Label already exists but does not match the authenticated recovery projection; recovery will not rewrite it."
+    }
+    $sha
+}
+
+function Assert-RehearsalCorrectionAuthorizationTail {
+    param(
+        [Parameter(Mandatory)]$Authorization,
+        [Parameter(Mandatory)]$Source,
+        [Parameter(Mandatory)][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][string]$AttemptPath,
+        [Parameter(Mandatory)][string]$AttemptSha256,
+        [Parameter(Mandatory)][string]$HarvestPath,
+        [Parameter(Mandatory)][string]$HarvestSha256,
+        [Parameter(Mandatory)][string]$BatchPath,
+        [Parameter(Mandatory)][string]$BatchSha256,
+        [Parameter(Mandatory)]$AttemptDocument
+    )
+
+    $attemptReference = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $AttemptPath
+    $harvestReference = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $HarvestPath
+    $batchReference = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $BatchPath
+    if (($Authorization.schema_version -isnot [int] -and $Authorization.schema_version -isnot [long]) -or
+        [int]$Authorization.schema_version -ne 3 -or
+        [string]$Authorization.sprint -cne "sprint-8a" -or
+        [string]$Authorization.phase -cne "candidate-rehearsal-correction-authorization" -or
+        [int]$Authorization.attempt -ne $Attempt -or
+        $Authorization.authoritative -isnot [bool] -or
+        $Authorization.authoritative -ne $false -or
+        [string]$Authorization.state -cne "authorized" -or
+        [string]$Authorization.consumption_state -cne "unconsumed" -or
+        [string]$Authorization.allowed_successor_phase -cne "validation-readiness" -or
+        [int]$Authorization.allowed_successor_count -ne 1 -or
+        [string]$Authorization.authorization -cne "tracked correction and one successor readiness attempt are permitted for this consolidated batch" -or
+        [int]$Authorization.deferred_count -ne [int]$AttemptDocument.deferred_count -or
+        [string]$Authorization.environment_fingerprint -cne $EnvironmentFingerprint -or
+        ($Authorization.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -cne
+            ($Source | ConvertTo-Json -Depth 20 -Compress) -or
+        [string]$Authorization.predecessor_attempt_receipt.path -cne $attemptReference -or
+        [string]$Authorization.predecessor_attempt_receipt.sha256 -cne $AttemptSha256 -or
+        [string]$Authorization.harvest_receipt.path -cne $harvestReference -or
+        [string]$Authorization.harvest_receipt.sha256 -cne $HarvestSha256 -or
+        [string]$Authorization.defect_batch.path -cne $batchReference -or
+        [string]$Authorization.defect_batch.sha256 -cne $BatchSha256 -or
+        $Authorization.cleanup_restoration.required -ne $true -or
+        [string]$Authorization.cleanup_restoration.result -cne "canonical_successor_healthy") {
+        throw "Candidate Rehearsal recovery rejected an inauthentic existing correction-authorization tail receipt."
+    }
+    try {
+        [void][DateTimeOffset]::Parse([string]$Authorization.generated_at)
+    } catch {
+        throw "Candidate Rehearsal recovery rejected an undated existing correction-authorization tail receipt."
+    }
+    $expectedCleanupEvidence = @(@("final-successor-health", "final-environment-identity") | ForEach-Object {
+        $lane = @($AttemptDocument.checks | Where-Object name -CEQ $_)
+        if ($lane.Count -ne 1) {
+            throw "Candidate Rehearsal recovery cannot bind correction authorization without exact cleanup lane '$_'."
+        }
+        [ordered]@{ lane = $_; path = [string]$lane[0].lane_receipt.path; sha256 = [string]$lane[0].lane_receipt.sha256 }
+    })
+    if ((@($Authorization.cleanup_restoration.evidence) | ConvertTo-Json -Depth 20 -Compress) -cne
+        ($expectedCleanupEvidence | ConvertTo-Json -Depth 20 -Compress)) {
+        throw "Candidate Rehearsal recovery rejected changed correction-authorization cleanup evidence."
+    }
+}
+
+function Assert-RehearsalLaneIdentityBinding {
+    param(
+        [Parameter(Mandatory)]$LaneDocument,
+        [Parameter(Mandatory)]$AttemptDocument,
+        [Parameter(Mandatory)][string]$LaneName
+    )
+
+    if ([string]$LaneDocument.identity_binding -ceq "attempt_identity") {
+        if (($LaneDocument.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -cne
+                ($AttemptDocument.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -or
+            [string]$LaneDocument.environment_fingerprint -cne [string]$AttemptDocument.environment_fingerprint) {
+            throw "Candidate Rehearsal recovery rejected lane '$LaneName' source/environment binding."
+        }
+        return
+    }
+
+    # The lifecycle prerequisite intentionally executes before current source and environment
+    # authentication. Its zero-valued identity is therefore valid diagnostic evidence even when
+    # process loss occurs before the subsequent Readiness lane can verify the attempt checkpoint.
+    if ([string]$LaneDocument.identity_binding -cne "pre_authentication_lifecycle_placeholder" -or
+        $LaneName -cne "attempt-state-prerequisite" -or
+        -not (Test-Sprint8ARehearsalPlaceholderSourceIdentity -Source $LaneDocument.mutable_source_identity) -or
+        [string]$LaneDocument.environment_fingerprint -cne ("0" * 64) -or
+        @("passed", "failed") -cnotcontains [string]$LaneDocument.result.state -or
+        $LaneDocument.result.assertions_started -isnot [bool] -or
+        -not [bool]$LaneDocument.result.assertions_started) {
+        throw "Candidate Rehearsal recovery rejected lane '$LaneName' identity-binding mode."
+    }
+}
+
+function Set-RehearsalRecoveredAttemptIdentity {
+    param(
+        [Parameter(Mandatory)]$AttemptDocument,
+        [Parameter(Mandatory)]$Source,
+        [Parameter(Mandatory)][string]$EnvironmentFingerprint,
+        [Parameter(Mandatory)][string]$ReadinessSha256
+    )
+
+    $AttemptDocument.mutable_source_identity = $Source
+    $AttemptDocument.source_identity_verification_state = "verified"
+    $AttemptDocument.source_identity_verification_failure = $null
+    $AttemptDocument.environment_identity.readiness_sha256 = $ReadinessSha256
+    $AttemptDocument.environment_identity.verification_state = "verified"
+    $AttemptDocument.environment_identity.verification_failure = $null
+    $AttemptDocument.environment_fingerprint = $EnvironmentFingerprint
+    $AttemptDocument
+}
+
+function Test-RehearsalRecoveredTerminalSourceBinding {
+    param(
+        [Parameter(Mandatory)]$AttemptDocument,
+        [Parameter(Mandatory)]$RecoveredSource
+    )
+
+    if (($AttemptDocument.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -ceq
+        ($RecoveredSource | ConvertTo-Json -Depth 20 -Compress)) {
+        return $true
+    }
+    @("unverified", "failed") -ccontains [string]$AttemptDocument.source_identity_verification_state -and
+        (Test-Sprint8ARehearsalPlaceholderSourceIdentity -Source $AttemptDocument.mutable_source_identity)
+}
+
+function Assert-RehearsalRestorationMaterializationDocument {
+    param(
+        [Parameter(Mandatory)]$Document,
+        [Parameter(Mandatory)]$ExpectedSource,
+        [Parameter(Mandatory)][string]$ExpectedEnvironmentFingerprint,
+        [Parameter(Mandatory)][int]$ExpectedAttempt
+    )
+
+    if (($Document.schema_version -isnot [int] -and $Document.schema_version -isnot [long]) -or
+        [int]$Document.schema_version -ne 1 -or
+        [string]$Document.contract -cne "tessara.sprint-8a.materialization-result" -or
+        [int]$Document.attempt -ne $ExpectedAttempt -or
+        $Document.passed -isnot [bool] -or -not [bool]$Document.passed -or
+        ($Document.source | ConvertTo-Json -Depth 20 -Compress) -cne
+            ($ExpectedSource | ConvertTo-Json -Depth 20 -Compress) -or
+        [string]$Document.environment.declared_fingerprint -cne $ExpectedEnvironmentFingerprint -or
+        $Document.first_apply.no_op -isnot [bool] -or [bool]$Document.first_apply.no_op -or
+        $Document.no_op_apply.no_op -isnot [bool] -or -not [bool]$Document.no_op_apply.no_op -or
+        $Document.final_health_passed -isnot [bool] -or -not [bool]$Document.final_health_passed) {
+        throw "Mandatory final restoration materialization receipt does not prove the exact attempt, source, environment, first apply, no-op, and final health contract."
+    }
+}
+
+function Assert-RehearsalRestorationMaterializationReceipt {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)]$ExpectedSource,
+        [Parameter(Mandatory)][string]$ExpectedEnvironmentFingerprint,
+        [Parameter(Mandatory)][int]$ExpectedAttempt
+    )
+
+    $sha = Assert-Sprint8AReceiptSidecar -Path $Path
+    $document = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    Assert-RehearsalRestorationMaterializationDocument `
+        -Document $document `
+        -ExpectedSource $ExpectedSource `
+        -ExpectedEnvironmentFingerprint $ExpectedEnvironmentFingerprint `
+        -ExpectedAttempt $ExpectedAttempt
+    [ordered]@{
+        path = ConvertTo-Sprint8ACanonicalEvidencePath `
+            -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $Path
+        sha256 = $sha
+    }
+}
+
+function Assert-RehearsalRecoveredTerminalLaneReceipt {
+    param(
+        [Parameter(Mandatory)]$Terminal,
+        [Parameter(Mandatory)]$AttemptDocument
+    )
+
+    $laneName = [string]$Terminal.name
+    $laneReceiptPath = Join-Path $laneRoot "$laneName.json"
+    Repair-Sprint7AEvidencePublication -Path $laneReceiptPath
+    $expectedLaneReference = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $laneReceiptPath
+    if ($Terminal.PSObject.Properties.Name -notcontains "lane_receipt" -or
+        [string]$Terminal.lane_receipt.path -cne $expectedLaneReference) {
+        throw "Candidate Rehearsal recovery rejected lane '$laneName' without its exact immutable receipt reference."
+    }
+    $laneSha = Assert-Sprint8AReceiptSidecar -Path $laneReceiptPath
+    if ([string]$Terminal.lane_receipt.sha256 -cne $laneSha) {
+        throw "Candidate Rehearsal recovery rejected lane '$laneName' receipt digest drift."
+    }
+    $laneDocument = Get-Content -LiteralPath $laneReceiptPath -Raw | ConvertFrom-Json
+    if (($laneDocument.schema_version -isnot [int] -and $laneDocument.schema_version -isnot [long]) -or
+        [int]$laneDocument.schema_version -ne 2 -or
+        [string]$laneDocument.sprint -cne "sprint-8a" -or
+        [string]$laneDocument.phase -cne "candidate-rehearsal-lane" -or
+        [int]$laneDocument.attempt -ne $Attempt -or
+        $laneDocument.authoritative -isnot [bool] -or [bool]$laneDocument.authoritative -or
+        [string]$laneDocument.result.name -cne $laneName) {
+        throw "Candidate Rehearsal recovery rejected lane '$laneName' identity."
+    }
+    $attemptLaneProjection = $Terminal | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    $attemptLaneProjection.PSObject.Properties.Remove("lane_receipt")
+    if (($laneDocument.result | ConvertTo-Json -Depth 100 -Compress) -cne
+        ($attemptLaneProjection | ConvertTo-Json -Depth 100 -Compress)) {
+        throw "Candidate Rehearsal recovery rejected lane '$laneName' result drift."
+    }
+    Assert-RehearsalLaneIdentityBinding `
+        -LaneDocument $laneDocument `
+        -AttemptDocument $AttemptDocument `
+        -LaneName $laneName
+}
+
+function Resolve-RehearsalPreAttemptRecoveryState {
+    param(
+        [Parameter(Mandatory)][bool]$SnapshotReceiptExists,
+        [Parameter(Mandatory)][bool]$SnapshotSidecarExists,
+        [Parameter(Mandatory)][bool]$StartReceiptExists,
+        [Parameter(Mandatory)][bool]$StartSidecarExists,
+        [Parameter(Mandatory)][bool]$AttemptReceiptExists,
+        [Parameter(Mandatory)][bool]$AttemptSidecarExists
+    )
+
+    if ($SnapshotReceiptExists -xor $SnapshotSidecarExists -or -not $SnapshotReceiptExists) {
+        throw "Candidate Rehearsal recovery requires a complete immutable validation-state capture pair."
+    }
+    if ($StartReceiptExists -xor $StartSidecarExists) {
+        throw "Candidate Rehearsal recovery rejected an incomplete immutable start pair."
+    }
+    if ($AttemptReceiptExists -xor $AttemptSidecarExists) {
+        throw "Candidate Rehearsal recovery rejected an incomplete attempt checkpoint pair."
+    }
+    if ($AttemptReceiptExists -and -not $StartReceiptExists) {
+        throw "Candidate Rehearsal recovery rejected an attempt checkpoint without its immutable start."
+    }
+    if ($AttemptReceiptExists) { return "attempt_checkpoint" }
+    if ($StartReceiptExists) { return "start_only" }
+    "snapshot_only"
+}
+
+function Resolve-RehearsalAttemptRecoveryState {
+    param(
+        [Parameter(Mandatory)][ValidateSet("preparing", "executing", "harvesting", "failed", "passed")][string]$AttemptState,
+        [Parameter(Mandatory)][int]$TerminalLaneCount,
+        [Parameter(Mandatory)][int]$DeclaredLaneCount,
+        [Parameter(Mandatory)][bool]$HasActiveLane,
+        [Parameter(Mandatory)][bool]$HarvestReceiptExists,
+        [Parameter(Mandatory)][bool]$HarvestSidecarExists,
+        [Parameter(Mandatory)][bool]$BatchReceiptExists,
+        [Parameter(Mandatory)][bool]$BatchSidecarExists,
+        [Parameter(Mandatory)][bool]$AuthorizationReceiptExists,
+        [Parameter(Mandatory)][bool]$AuthorizationSidecarExists,
+        [Parameter(Mandatory)][bool]$ResultReceiptExists,
+        [Parameter(Mandatory)][bool]$ResultSidecarExists,
+        [Parameter(Mandatory)][bool]$StateReceiptExists,
+        [Parameter(Mandatory)][bool]$StateSidecarExists,
+        [Parameter(Mandatory)][bool]$CurrentPassingResultExists,
+        [Parameter(Mandatory)][bool]$CurrentTerminalStateExists
+    )
+
+    foreach ($pair in @(
+        [pscustomobject]@{ label = "harvest"; receipt = $HarvestReceiptExists; sidecar = $HarvestSidecarExists },
+        [pscustomobject]@{ label = "defect batch"; receipt = $BatchReceiptExists; sidecar = $BatchSidecarExists },
+        [pscustomobject]@{ label = "correction authorization"; receipt = $AuthorizationReceiptExists; sidecar = $AuthorizationSidecarExists },
+        [pscustomobject]@{ label = "candidate result alias"; receipt = $ResultReceiptExists; sidecar = $ResultSidecarExists },
+        [pscustomobject]@{ label = "validation state"; receipt = $StateReceiptExists; sidecar = $StateSidecarExists }
+    )) {
+        if ([bool]$pair.receipt -xor [bool]$pair.sidecar) {
+            throw "Candidate Rehearsal recovery rejected an incomplete $([string]$pair.label) pair."
+        }
+    }
+    if ($TerminalLaneCount -lt 0 -or $TerminalLaneCount -gt $DeclaredLaneCount) {
+        throw "Candidate Rehearsal recovery rejected impossible terminal lane accounting."
+    }
+
+    if (@("preparing", "executing", "harvesting") -ccontains $AttemptState) {
+        if ($HarvestReceiptExists -or $BatchReceiptExists -or $AuthorizationReceiptExists -or
+            $CurrentPassingResultExists -or $CurrentTerminalStateExists) {
+            throw "Candidate Rehearsal recovery rejected terminal-tail evidence before the attempt terminalized."
+        }
+        if ($HasActiveLane) { return "mid_lane_checkpoint" }
+        if ($AttemptState -ceq "harvesting" -and $TerminalLaneCount -lt $DeclaredLaneCount) {
+            return "deferred_or_harvest_loop_checkpoint"
+        }
+        return "lane_loop_checkpoint"
+    }
+
+    if ($TerminalLaneCount -ne $DeclaredLaneCount -or $HasActiveLane) {
+        throw "Candidate Rehearsal recovery rejected incomplete accounting in a terminal attempt."
+    }
+    if ($AttemptState -ceq "passed") {
+        if ($HarvestReceiptExists -or $BatchReceiptExists -or $AuthorizationReceiptExists) {
+            throw "Candidate Rehearsal recovery rejected failed-attempt tail evidence for a passing attempt."
+        }
+        if (-not $CurrentPassingResultExists) { return "passed_needs_result" }
+        if (-not $CurrentTerminalStateExists) { return "passed_needs_state" }
+        return "passed_tail_complete"
+    }
+
+    if ($CurrentPassingResultExists) {
+        throw "Candidate Rehearsal recovery rejected a passing current-attempt result for a failed attempt."
+    }
+    if ($BatchReceiptExists -and -not $HarvestReceiptExists) {
+        throw "Candidate Rehearsal recovery rejected a defect batch without its harvest."
+    }
+    if ($AuthorizationReceiptExists -and -not $BatchReceiptExists) {
+        throw "Candidate Rehearsal recovery rejected correction authorization without its consolidated defect batch."
+    }
+    if (-not $HarvestReceiptExists) { return "failed_needs_harvest" }
+    if (-not $BatchReceiptExists) { return "failed_needs_batch" }
+    if (-not $AuthorizationReceiptExists) { return "failed_needs_authorization_or_withheld_state" }
+    if (-not $CurrentTerminalStateExists) { return "failed_needs_state" }
+    "failed_tail_complete"
 }
 
 function Invoke-RehearsalPowerShellCheck {
@@ -343,6 +685,10 @@ function Test-Sprint8ACandidateTwoWaveRunnerContract {
         'candidate-rehearsal-process-loss-capture',
         '$recoveredPublishedTerminal',
         'active_lane_started_at',
+        'declared_checks = $declaredChecks',
+        'Assert-Sprint8ADeclaredEvidencePaths',
+        'pre_authentication_lifecycle_placeholder',
+        'identity_binding = Get-RehearsalLaneIdentityBinding -Name $Name',
         'foreach ($name in @($selectedSchedule.wave_a))',
         'foreach ($name in @($selectedSchedule.cleanup_sinks))',
         'if ($waveBDisposition -ceq "defer")',
@@ -360,19 +706,271 @@ function Test-Sprint8ACandidateTwoWaveRunnerContract {
     $reservationLock = $sourceText.LastIndexOf('$validationLockHandle = Open-Sprint8AValidationAttemptLock -Path $validationLockPath', [StringComparison]::Ordinal)
     $publishStart = $sourceText.LastIndexOf('Publish-Sprint7AEvidence -Document $startDocument -OutputPath $startPath', [StringComparison]::Ordinal)
     $waveA = $sourceText.LastIndexOf('foreach ($name in @($selectedSchedule.wave_a))', [StringComparison]::Ordinal)
-    $cleanup = $sourceText.LastIndexOf('foreach ($name in @($selectedSchedule.cleanup_sinks))', [StringComparison]::Ordinal)
     $decision = $sourceText.LastIndexOf('if ($waveBDisposition -ceq "defer")', [StringComparison]::Ordinal)
     $aggregate = $sourceText.LastIndexOf('foreach ($name in @($selectedSchedule.aggregate_sinks))', [StringComparison]::Ordinal)
+    $cleanup = $sourceText.LastIndexOf('foreach ($name in @($selectedSchedule.cleanup_sinks))', [StringComparison]::Ordinal)
     $finalizers = $sourceText.LastIndexOf('foreach ($name in @($selectedSchedule.finalizers))', [StringComparison]::Ordinal)
     if ($executionBoundary -lt 0 -or $reservationLock -le $executionBoundary -or
-        $publishStart -le $reservationLock -or $waveA -le $publishStart -or $cleanup -le $waveA -or
-        $decision -le $cleanup -or $aggregate -le $decision -or $finalizers -le $aggregate) {
-        throw "Candidate Rehearsal reservation, immutable start, Wave A, cleanup, Wave B decision, aggregate, and finalizer ordering is not fixed."
+        $publishStart -le $reservationLock -or $waveA -le $publishStart -or
+        $decision -le $waveA -or $aggregate -le $decision -or $cleanup -le $aggregate -or
+        $finalizers -le $cleanup) {
+        throw "Candidate Rehearsal reservation, immutable start, Wave A, Wave B decision, aggregate, terminal cleanup, and finalizer ordering is not fixed."
     }
     if (-not $sourceText.Contains('$selectedSchedule = $startDocument.schedule') -or
         -not $sourceText.Contains('Complete-RehearsalOrphanedLane') -or
+        -not $sourceText.Contains('($startDocument.declared_checks | ConvertTo-Json -Depth 30 -Compress)') -or
         -not $sourceText.Contains('$attemptReceipt.schedule_sha256 -cne $scheduleSha')) {
         throw "Candidate Rehearsal process-loss recovery does not preserve the immutable ordering and deferral counters."
+    }
+}
+
+function Test-Sprint8AProcessLossRecoveryContract {
+    $sourceText = Get-Content -LiteralPath $PSCommandPath -Raw
+    foreach ($fragment in @(
+        '$ResumeInterruptedAttempt -and $resumeHasStart',
+        '$ResumeInterruptedAttempt -and $resumeHasAttempt',
+        '$recoveredTerminalAttempt = @("passed", "failed")',
+        'if (-not $recoveredTerminalAttempt) {',
+        '$attemptSha = $attemptShaBeforeRecovery',
+        'Publish-OrAuthenticateRehearsalImmutableEvidence',
+        'Assert-RehearsalCorrectionAuthorizationTail',
+        'recovery will not rewrite it'
+    )) {
+        if (-not $sourceText.Contains($fragment)) {
+            throw "Candidate Rehearsal process-loss self-test cannot find recovery enforcement fragment '$fragment'."
+        }
+    }
+    $resumeGate = $sourceText.LastIndexOf('$resumeHasStart = $false', [StringComparison]::Ordinal)
+    $resumeStart = $sourceText.LastIndexOf('if ($ResumeInterruptedAttempt -and $resumeHasStart) {', [StringComparison]::Ordinal)
+    $resumeAttempt = $sourceText.LastIndexOf('if ($ResumeInterruptedAttempt -and $resumeHasAttempt) {', [StringComparison]::Ordinal)
+    $terminalExecutionGuard = $sourceText.LastIndexOf('if (-not $recoveredTerminalAttempt) {', [StringComparison]::Ordinal)
+    $terminalAttemptReuse = $sourceText.LastIndexOf('$attemptSha = $attemptShaBeforeRecovery', [StringComparison]::Ordinal)
+    $harvestTail = $sourceText.LastIndexOf('if (-not $passed) {', [StringComparison]::Ordinal)
+    if ($resumeGate -lt 0 -or $resumeStart -le $resumeGate -or $resumeAttempt -le $resumeStart -or
+        $terminalExecutionGuard -le $resumeAttempt -or $terminalAttemptReuse -le $terminalExecutionGuard -or
+        $harvestTail -le $terminalAttemptReuse) {
+        throw "Candidate Rehearsal process-loss self-test found unsafe pre-attempt, terminal-execution, or append-only-tail ordering."
+    }
+
+    $preAttemptStates = @(
+        Resolve-RehearsalPreAttemptRecoveryState -SnapshotReceiptExists $true -SnapshotSidecarExists $true -StartReceiptExists $false -StartSidecarExists $false -AttemptReceiptExists $false -AttemptSidecarExists $false
+        Resolve-RehearsalPreAttemptRecoveryState -SnapshotReceiptExists $true -SnapshotSidecarExists $true -StartReceiptExists $true -StartSidecarExists $true -AttemptReceiptExists $false -AttemptSidecarExists $false
+        Resolve-RehearsalPreAttemptRecoveryState -SnapshotReceiptExists $true -SnapshotSidecarExists $true -StartReceiptExists $true -StartSidecarExists $true -AttemptReceiptExists $true -AttemptSidecarExists $true
+    )
+    if (($preAttemptStates -join ",") -cne "snapshot_only,start_only,attempt_checkpoint") {
+        throw "Candidate Rehearsal recovery self-test did not distinguish snapshot-only, start-only, and checkpoint recovery."
+    }
+    foreach ($invalidPreAttempt in @(
+        { Resolve-RehearsalPreAttemptRecoveryState -SnapshotReceiptExists $true -SnapshotSidecarExists $false -StartReceiptExists $false -StartSidecarExists $false -AttemptReceiptExists $false -AttemptSidecarExists $false },
+        { Resolve-RehearsalPreAttemptRecoveryState -SnapshotReceiptExists $true -SnapshotSidecarExists $true -StartReceiptExists $false -StartSidecarExists $false -AttemptReceiptExists $true -AttemptSidecarExists $true }
+    )) {
+        try {
+            & $invalidPreAttempt | Out-Null
+            throw "Candidate Rehearsal recovery self-test accepted invalid pre-attempt evidence topology."
+        } catch {
+            if ($_.Exception.Message -ceq "Candidate Rehearsal recovery self-test accepted invalid pre-attempt evidence topology.") { throw }
+        }
+    }
+
+    $placeholderSource = [pscustomobject][ordered]@{
+        commit = "0" * 40; tree = "0" * 40; dirty = $false; branch = "unverified"
+        acceptance_inventory_sha256 = "0" * 64; deployment_inputs_sha256 = "0" * 64
+    }
+    $verifiedSource = [pscustomobject][ordered]@{
+        commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "sprint-8a"
+        acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
+    }
+    $recoveryAttempt = [pscustomobject][ordered]@{
+        mutable_source_identity = $placeholderSource
+        source_identity_verification_state = "unverified"
+        source_identity_verification_failure = $null
+        environment_identity = [pscustomobject][ordered]@{
+            readiness_sha256 = $null; verification_state = "unverified"; verification_failure = $null
+        }
+        environment_fingerprint = "0" * 64
+    }
+    $lifecycleLane = [pscustomobject][ordered]@{
+        identity_binding = "pre_authentication_lifecycle_placeholder"
+        mutable_source_identity = $placeholderSource
+        environment_fingerprint = "0" * 64
+        result = [pscustomobject][ordered]@{
+            state = "passed"; assertions_started = $true
+        }
+    }
+    Assert-RehearsalLaneIdentityBinding `
+        -LaneDocument $lifecycleLane `
+        -AttemptDocument $recoveryAttempt `
+        -LaneName "attempt-state-prerequisite"
+    $lifecycleLane.result.state = "failed"
+    Assert-RehearsalLaneIdentityBinding `
+        -LaneDocument $lifecycleLane `
+        -AttemptDocument $recoveryAttempt `
+        -LaneName "attempt-state-prerequisite"
+    $lifecycleLane.result.state = "passed"
+    if (-not (Test-RehearsalRecoveredTerminalSourceBinding `
+        -AttemptDocument $recoveryAttempt -RecoveredSource $verifiedSource)) {
+        throw "Candidate Rehearsal recovery self-test rejected an exact pre-authentication terminal source identity."
+    }
+    $recoveryAttempt = Set-RehearsalRecoveredAttemptIdentity `
+        -AttemptDocument $recoveryAttempt `
+        -Source $verifiedSource `
+        -EnvironmentFingerprint ("e" * 64) `
+        -ReadinessSha256 ("f" * 64)
+    $postRecoveryLifecycleLane = [pscustomobject][ordered]@{
+        identity_binding = "attempt_identity"
+        mutable_source_identity = $verifiedSource
+        environment_fingerprint = "e" * 64
+        result = [pscustomobject][ordered]@{
+            state = "passed"; assertions_started = $true
+        }
+    }
+    Assert-RehearsalLaneIdentityBinding `
+        -LaneDocument $postRecoveryLifecycleLane `
+        -AttemptDocument $recoveryAttempt `
+        -LaneName "attempt-state-prerequisite"
+    if ([string]$recoveryAttempt.source_identity_verification_state -cne "verified" -or
+        [string]$recoveryAttempt.environment_identity.verification_state -cne "verified" -or
+        [string]$recoveryAttempt.environment_identity.readiness_sha256 -cne ("f" * 64) -or
+        -not (Test-RehearsalRecoveredTerminalSourceBinding `
+            -AttemptDocument $recoveryAttempt -RecoveredSource $verifiedSource)) {
+        throw "Candidate Rehearsal recovery self-test did not checkpoint authenticated identity before lane resumption."
+    }
+    $postRecoveryLifecycleLane.environment_fingerprint = "9" * 64
+    try {
+        Assert-RehearsalLaneIdentityBinding `
+            -LaneDocument $postRecoveryLifecycleLane `
+            -AttemptDocument $recoveryAttempt `
+            -LaneName "attempt-state-prerequisite"
+        throw "Candidate Rehearsal recovery self-test accepted a post-authentication lane identity mismatch."
+    } catch {
+        if ($_.Exception.Message -ceq "Candidate Rehearsal recovery self-test accepted a post-authentication lane identity mismatch.") { throw }
+    } finally {
+        $postRecoveryLifecycleLane.environment_fingerprint = "e" * 64
+    }
+
+    $restorationDocument = [pscustomobject][ordered]@{
+        schema_version = 1
+        contract = "tessara.sprint-8a.materialization-result"
+        attempt = 33
+        passed = $true
+        source = $verifiedSource
+        environment = [pscustomobject][ordered]@{ declared_fingerprint = "e" * 64 }
+        first_apply = [pscustomobject][ordered]@{ no_op = $false }
+        no_op_apply = [pscustomobject][ordered]@{ no_op = $true }
+        final_health_passed = $true
+    }
+    Assert-RehearsalRestorationMaterializationDocument `
+        -Document $restorationDocument `
+        -ExpectedSource $verifiedSource `
+        -ExpectedEnvironmentFingerprint ("e" * 64) `
+        -ExpectedAttempt 33
+    $restorationDocument.no_op_apply.no_op = $false
+    try {
+        Assert-RehearsalRestorationMaterializationDocument `
+            -Document $restorationDocument `
+            -ExpectedSource $verifiedSource `
+            -ExpectedEnvironmentFingerprint ("e" * 64) `
+            -ExpectedAttempt 33
+        throw "Candidate Rehearsal recovery self-test accepted restoration without a proven no-op apply."
+    } catch {
+        if ($_.Exception.Message -ceq "Candidate Rehearsal recovery self-test accepted restoration without a proven no-op apply.") { throw }
+    } finally {
+        $restorationDocument.no_op_apply.no_op = $true
+    }
+
+    function Resolve-RecoveryFixture {
+        param([hashtable]$Overrides)
+        $fixture = @{
+            AttemptState = "executing"; TerminalLaneCount = 4; DeclaredLaneCount = 10; HasActiveLane = $false
+            HarvestReceiptExists = $false; HarvestSidecarExists = $false
+            BatchReceiptExists = $false; BatchSidecarExists = $false
+            AuthorizationReceiptExists = $false; AuthorizationSidecarExists = $false
+            ResultReceiptExists = $true; ResultSidecarExists = $true
+            StateReceiptExists = $true; StateSidecarExists = $true
+            CurrentPassingResultExists = $false; CurrentTerminalStateExists = $false
+        }
+        foreach ($key in $Overrides.Keys) { $fixture[$key] = $Overrides[$key] }
+        Resolve-RehearsalAttemptRecoveryState @fixture
+    }
+    $attemptStates = @(
+        Resolve-RecoveryFixture @{ HasActiveLane = $true }
+        Resolve-RecoveryFixture @{ AttemptState = "harvesting" }
+        Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10 }
+        Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10; HarvestReceiptExists = $true; HarvestSidecarExists = $true }
+        Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10; HarvestReceiptExists = $true; HarvestSidecarExists = $true; BatchReceiptExists = $true; BatchSidecarExists = $true }
+        Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10; HarvestReceiptExists = $true; HarvestSidecarExists = $true; BatchReceiptExists = $true; BatchSidecarExists = $true; AuthorizationReceiptExists = $true; AuthorizationSidecarExists = $true }
+        Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10; HarvestReceiptExists = $true; HarvestSidecarExists = $true; BatchReceiptExists = $true; BatchSidecarExists = $true; AuthorizationReceiptExists = $true; AuthorizationSidecarExists = $true; CurrentTerminalStateExists = $true }
+        Resolve-RecoveryFixture @{ AttemptState = "passed"; TerminalLaneCount = 10; ResultReceiptExists = $false; ResultSidecarExists = $false }
+        Resolve-RecoveryFixture @{ AttemptState = "passed"; TerminalLaneCount = 10; CurrentPassingResultExists = $true }
+        Resolve-RecoveryFixture @{ AttemptState = "passed"; TerminalLaneCount = 10; CurrentPassingResultExists = $true; CurrentTerminalStateExists = $true }
+    )
+    $expectedAttemptStates = @(
+        "mid_lane_checkpoint", "deferred_or_harvest_loop_checkpoint", "failed_needs_harvest",
+        "failed_needs_batch", "failed_needs_authorization_or_withheld_state", "failed_needs_state",
+        "failed_tail_complete", "passed_needs_result", "passed_needs_state", "passed_tail_complete"
+    )
+    if (($attemptStates -join ",") -cne ($expectedAttemptStates -join ",")) {
+        throw "Candidate Rehearsal recovery self-test did not traverse every checkpoint and terminal-tail state."
+    }
+    foreach ($invalidAttempt in @(
+        { Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10; BatchReceiptExists = $true; BatchSidecarExists = $true } },
+        { Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10; AuthorizationReceiptExists = $true; AuthorizationSidecarExists = $true } },
+        { Resolve-RecoveryFixture @{ AttemptState = "passed"; TerminalLaneCount = 9 } },
+        { Resolve-RecoveryFixture @{ AttemptState = "passed"; TerminalLaneCount = 10; HarvestReceiptExists = $true; HarvestSidecarExists = $true } },
+        { Resolve-RecoveryFixture @{ AttemptState = "failed"; TerminalLaneCount = 10; HarvestReceiptExists = $true; HarvestSidecarExists = $false } }
+    )) {
+        try {
+            & $invalidAttempt | Out-Null
+            throw "Candidate Rehearsal recovery self-test accepted an impossible attempt/tail state."
+        } catch {
+            if ($_.Exception.Message -ceq "Candidate Rehearsal recovery self-test accepted an impossible attempt/tail state.") { throw }
+        }
+    }
+
+    $temporaryBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $temporaryRoot = [IO.Path]::GetFullPath((Join-Path $temporaryBase "tessara-sprint-8a-recovery-$([guid]::NewGuid().ToString('N'))"))
+    if (-not $temporaryRoot.StartsWith($temporaryBase, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [IO.Path]::GetFileName($temporaryRoot).StartsWith("tessara-sprint-8a-recovery-", [StringComparison]::Ordinal)) {
+        throw "Candidate Rehearsal recovery self-test refused an unexpected temporary root."
+    }
+    [IO.Directory]::CreateDirectory($temporaryRoot) | Out-Null
+    try {
+        $path = Join-Path $temporaryRoot "immutable-tail.json"
+        $document = [ordered]@{ schema_version = 1; phase = "recovery-self-test"; state = "complete" }
+        $firstSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
+            -Document $document -Path $path -Label "Recovery self-test"
+        $firstBytes = [IO.File]::ReadAllBytes($path)
+        $secondSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
+            -Document $document -Path $path -Label "Recovery self-test"
+        if ($firstSha -cne $secondSha -or
+            [Convert]::ToBase64String($firstBytes) -cne
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($path))) {
+            throw "Candidate Rehearsal recovery self-test rewrote authenticated immutable evidence."
+        }
+        try {
+            Publish-OrAuthenticateRehearsalImmutableEvidence `
+                -Document ([ordered]@{ schema_version = 1; phase = "recovery-self-test"; state = "mutated" }) `
+                -Path $path `
+                -Label "Recovery self-test" | Out-Null
+            throw "Candidate Rehearsal recovery self-test accepted changed immutable evidence."
+        } catch {
+            if ($_.Exception.Message -ceq "Candidate Rehearsal recovery self-test accepted changed immutable evidence.") { throw }
+        }
+
+        $incompletePath = Join-Path $temporaryRoot "incomplete-tail.json"
+        Publish-Sprint7AEvidence -Document $document -OutputPath $incompletePath | Out-Null
+        Remove-Item -LiteralPath "$incompletePath.sha256" -Force
+        try {
+            Publish-OrAuthenticateRehearsalImmutableEvidence `
+                -Document $document -Path $incompletePath -Label "Incomplete recovery self-test" | Out-Null
+            throw "Candidate Rehearsal recovery self-test accepted an incomplete immutable pair."
+        } catch {
+            if ($_.Exception.Message -ceq "Candidate Rehearsal recovery self-test accepted an incomplete immutable pair.") { throw }
+        }
+    } finally {
+        if (Test-Path -LiteralPath $temporaryRoot -PathType Container) {
+            [IO.Directory]::Delete($temporaryRoot, $true)
+        }
     }
 }
 
@@ -385,6 +983,7 @@ if ($SelfTest) {
     Test-RehearsalPowerShellCheck
     Test-RehearsalClassificationResolution
     Test-Sprint8ACandidateTwoWaveRunnerContract
+    Test-Sprint8AProcessLossRecoveryContract
     Test-Sprint8AResultClassificationProjection
     Test-Sprint8AEnvironmentContractComparison
     Test-Sprint8AEvidenceReferenceResolution
@@ -434,7 +1033,7 @@ if ($SelfTest) {
     } finally {
         $nested.mutable_source_identity = $source
     }
-    Write-Host "Sprint 8A candidate rehearsal fail-late and nested-UAT authority self-test passed."
+    Write-Host "Sprint 8A candidate rehearsal fail-late, process-loss recovery, immutable-tail, and nested-UAT authority self-test passed."
     return
 }
 
@@ -464,12 +1063,52 @@ $readinessPath = if ([IO.Path]::IsPathRooted($ReadinessReceipt)) {
 }
 [IO.Directory]::CreateDirectory((Split-Path -Parent $attemptPath)) | Out-Null
 $validationLockHandle = Open-Sprint8AValidationAttemptLock -Path $validationLockPath
+$resumeHasStart = $false
+$resumeHasAttempt = $false
 if ($ResumeInterruptedAttempt) {
-    foreach ($path in @($startPath, "$startPath.sha256", $stateSnapshotPath, "$stateSnapshotPath.sha256", $attemptPath, "$attemptPath.sha256", $attemptRoot, $laneRoot, $logRoot)) {
-        if (-not (Test-Path -LiteralPath $path)) {
+    foreach ($pair in @(
+        [pscustomobject]@{ label = "immutable validation-state capture"; path = $stateSnapshotPath; required = $true },
+        [pscustomobject]@{ label = "immutable start"; path = $startPath; required = $false },
+        [pscustomobject]@{ label = "attempt checkpoint"; path = $attemptPath; required = $false }
+    )) {
+        Repair-Sprint7AEvidencePublication -Path ([string]$pair.path)
+        $receiptExists = Test-Path -LiteralPath ([string]$pair.path) -PathType Leaf
+        $sidecarExists = Test-Path -LiteralPath "$([string]$pair.path).sha256" -PathType Leaf
+        if ($receiptExists -xor $sidecarExists -or ([bool]$pair.required -and -not $receiptExists)) {
             $validationLockHandle.Dispose(); $validationLockHandle = $null
-            throw "Candidate Rehearsal process-loss recovery requires existing immutable and mutable attempt evidence: $path"
+            throw "Candidate Rehearsal process-loss recovery requires a complete $([string]$pair.label) receipt/sidecar pair."
         }
+    }
+    $resumeHasStart = Test-Path -LiteralPath $startPath -PathType Leaf
+    $resumeHasAttempt = Test-Path -LiteralPath $attemptPath -PathType Leaf
+    $preAttemptRecoveryState = Resolve-RehearsalPreAttemptRecoveryState `
+        -SnapshotReceiptExists (Test-Path -LiteralPath $stateSnapshotPath -PathType Leaf) `
+        -SnapshotSidecarExists (Test-Path -LiteralPath "$stateSnapshotPath.sha256" -PathType Leaf) `
+        -StartReceiptExists $resumeHasStart `
+        -StartSidecarExists (Test-Path -LiteralPath "$startPath.sha256" -PathType Leaf) `
+        -AttemptReceiptExists $resumeHasAttempt `
+        -AttemptSidecarExists (Test-Path -LiteralPath "$attemptPath.sha256" -PathType Leaf)
+    if (($resumeHasAttempt -and $preAttemptRecoveryState -cne "attempt_checkpoint") -or
+        (-not $resumeHasAttempt -and $resumeHasStart -and $preAttemptRecoveryState -cne "start_only") -or
+        (-not $resumeHasAttempt -and -not $resumeHasStart -and $preAttemptRecoveryState -cne "snapshot_only")) {
+        throw "Candidate Rehearsal process-loss recovery resolved an inconsistent pre-attempt state '$preAttemptRecoveryState'."
+    }
+    if ($resumeHasAttempt -and -not (Test-Path -LiteralPath $attemptRoot -PathType Container)) {
+        $validationLockHandle.Dispose(); $validationLockHandle = $null
+        throw "Candidate Rehearsal process-loss recovery found an attempt checkpoint without its retained attempt evidence root."
+    }
+    [IO.Directory]::CreateDirectory($laneRoot) | Out-Null
+    [IO.Directory]::CreateDirectory($logRoot) | Out-Null
+    if (-not $resumeHasAttempt -and
+        (@(Get-ChildItem -LiteralPath $laneRoot -Force).Count -gt 0 -or
+            @(Get-ChildItem -LiteralPath $logRoot -Force).Count -gt 0 -or
+            @(Test-Path -LiteralPath @(
+                    $harvestPath, "$harvestPath.sha256",
+                    $batchPath, "$batchPath.sha256",
+                    $correctionAuthorizationPath, "$correctionAuthorizationPath.sha256") |
+                Where-Object { $_ }).Count -gt 0)) {
+        $validationLockHandle.Dispose(); $validationLockHandle = $null
+        throw "Candidate Rehearsal pre-attempt recovery found lane or terminal-tail evidence without an authenticated attempt checkpoint."
     }
 } else {
     foreach ($path in @($startPath, "$startPath.sha256", $stateSnapshotPath, "$stateSnapshotPath.sha256", $attemptPath, "$attemptPath.sha256", $attemptRoot)) {
@@ -503,6 +1142,9 @@ $productDiagnosticEvidence = Join-Path $attemptRoot "product-diagnostic.json"
 $productDiagnosticRawEvidence = "$productDiagnosticEvidence.dashboard-dependencies.json"
 $uatResult = Join-Path $attemptRoot "uat-diagnostics.json"
 $finalEnvironmentEvidence = Join-Path $attemptRoot "final-environment-identity.json"
+$finalHealthEvidence = Join-Path $attemptRoot "final-successor-health.json"
+$finalRestorationInventory = Join-Path $attemptRoot "final-restoration-inventory.json"
+$finalRestorationRoot = Join-Path $attemptRoot "final-restoration"
 
 $declaredChecks = @(
     [ordered]@{ name = "attempt-state-prerequisite"; depends_on = @(); command = "validate active-attempt lock and current readiness transition"; classification = "preflight/setup"; evidence_paths = @() },
@@ -536,7 +1178,7 @@ $declaredChecks = @(
     [ordered]@{ name = "uat-diagnostics"; depends_on = @("validation-readiness-prerequisite"); command = "uat-sprint-8a.ps1 project exact eight-scenario results from every terminal prerequisite receipt"; classification = "harness"; evidence_paths = @($uatResult); nested_results_path = $uatResult },
     [ordered]@{ name = "final-clean-source"; depends_on = @("validation-readiness-prerequisite"); command = "final unchanged clean source identity"; classification = "product"; evidence_paths = @() },
     [ordered]@{ name = "final-environment-identity"; depends_on = @("validation-readiness-prerequisite"); command = "final authenticated unchanged environment identity"; classification = "environment"; evidence_paths = @($finalEnvironmentEvidence) },
-    [ordered]@{ name = "final-successor-health"; depends_on = @("failure-containment-successor-health"); command = "final canonical successor gateway health"; classification = "product"; evidence_paths = @() }
+    [ordered]@{ name = "final-successor-health"; depends_on = @("attempt-state-prerequisite", "validation-readiness-prerequisite"); command = "perform terminal source-exact canonical restoration, then prove topology, inventory, Core health, and Supervisor readiness"; classification = "environment"; evidence_paths = @($finalHealthEvidence, $finalRestorationInventory); evidence_roots = @($finalRestorationRoot) }
 )
 $lanePolicies = @(Get-Sprint8ARehearsalLanePolicies)
 if ($lanePolicies.Count -ne $declaredChecks.Count) {
@@ -549,6 +1191,34 @@ foreach ($declaration in $declaredChecks) {
     $declaration["scheduler_role"] = [string]$policy[0].scheduler_role
     $declaration["impact_paths"] = @($policy[0].impact_paths)
     $declaration["impact_sources"] = @($policy[0].impact_sources)
+    foreach ($pathProperty in @("evidence_paths", "evidence_roots")) {
+        if ($declaration.Contains($pathProperty)) {
+            $declaration[$pathProperty] = @($declaration[$pathProperty] | ForEach-Object {
+                ConvertTo-Sprint8ACanonicalEvidencePath `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$_)
+            })
+        }
+    }
+    if ($declaration.Contains("nested_results_path")) {
+        $declaration["nested_results_path"] = ConvertTo-Sprint8ACanonicalEvidencePath `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath `
+            -Path ([string]$declaration.nested_results_path)
+    }
+}
+Assert-Sprint8ADeclaredEvidencePaths `
+    -Checks $declaredChecks `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $evidenceRootPath `
+    -Label "Candidate Rehearsal $Attempt declarations" | Out-Null
+foreach ($declaration in $declaredChecks | Where-Object { $_.Contains("nested_results_path") }) {
+    Assert-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath `
+        -Path ([string]$declaration.nested_results_path) `
+        -Label "Candidate Rehearsal nested result" | Out-Null
 }
 Assert-RehearsalGraph -Checks $declaredChecks
 Assert-Sprint8ARehearsalSchedulerDeclarations -Checks $declaredChecks
@@ -571,13 +1241,17 @@ $prelaunchStateCapture = $null
 $claimedReadinessSha = "0" * 64
 $startReadinessReference = [ordered]@{ path = $relativeReadinessPath; sha256 = $claimedReadinessSha }
 
-if ($ResumeInterruptedAttempt) {
+if ($ResumeInterruptedAttempt -and $resumeHasStart) {
     $startSha = Assert-Sprint8AReceiptSidecar -Path $startPath
     $startDocument = Get-Content -LiteralPath $startPath -Raw | ConvertFrom-Json
     if (($startDocument.schema_version -isnot [int] -and $startDocument.schema_version -isnot [long]) -or
         [int]$startDocument.schema_version -ne 3 -or
         [string]$startDocument.phase -cne "candidate-rehearsal-start" -or
         [int]$startDocument.attempt -ne $Attempt -or
+        $startDocument.PSObject.Properties.Name -notcontains "declared_checks" -or
+        ($startDocument.declared_checks | ConvertTo-Json -Depth 30 -Compress) -cne
+            ($declaredChecks | ConvertTo-Json -Depth 30 -Compress) -or
+        [string]$startDocument.readiness_receipt.path -cne $relativeReadinessPath -or
         [string]$startDocument.schedule_sha256 -cne (Get-Sprint8ARehearsalJsonSha256 -Document $startDocument.schedule)) {
         $validationLockHandle.Dispose(); $validationLockHandle = $null
         throw "Candidate Rehearsal recovery rejected a mutated or malformed immutable start receipt."
@@ -598,26 +1272,42 @@ if ($ResumeInterruptedAttempt) {
     $captureError = $null
     $capturedStateSha = $null
     $capturedState = $null
-    try {
-        $capturedStateSha = Assert-Sprint8AReceiptSidecar -Path $statePath
-        $capturedState = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-    } catch {
-        $captureError = $_.Exception.Message
+    if ($ResumeInterruptedAttempt) {
+        $stateSnapshotSha = Assert-Sprint8AReceiptSidecar -Path $stateSnapshotPath
+        $prelaunchStateCapture = Get-Content -LiteralPath $stateSnapshotPath -Raw | ConvertFrom-Json
+        if (($prelaunchStateCapture.schema_version -isnot [int] -and $prelaunchStateCapture.schema_version -isnot [long]) -or
+            [int]$prelaunchStateCapture.schema_version -ne 1 -or
+            [string]$prelaunchStateCapture.phase -cne "candidate-rehearsal-validation-state-capture" -or
+            [int]$prelaunchStateCapture.attempt -ne $Attempt -or
+            [string]$prelaunchStateCapture.captured_path -cne $relativeStatePath) {
+            $validationLockHandle.Dispose(); $validationLockHandle = $null
+            throw "Candidate Rehearsal process-loss recovery rejected a malformed immutable validation-state capture."
+        }
+        $captureError = $prelaunchStateCapture.capture_error
+        $capturedStateSha = $prelaunchStateCapture.captured_sha256
+        $capturedState = $prelaunchStateCapture.document
+    } else {
+        try {
+            $capturedStateSha = Assert-Sprint8AReceiptSidecar -Path $statePath
+            $capturedState = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        } catch {
+            $captureError = $_.Exception.Message
+        }
+        $prelaunchStateCapture = [ordered]@{
+            schema_version = 1
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal-validation-state-capture"
+            attempt = $Attempt
+            authoritative = $false
+            captured_at = [DateTimeOffset]::UtcNow.ToString("o")
+            captured_path = $relativeStatePath
+            captured_sha256 = $capturedStateSha
+            capture_error = $captureError
+            document = $capturedState
+        }
+        Publish-Sprint7AEvidence -Document $prelaunchStateCapture -OutputPath $stateSnapshotPath | Out-Null
+        $stateSnapshotSha = Assert-Sprint8AReceiptSidecar -Path $stateSnapshotPath
     }
-    $prelaunchStateCapture = [ordered]@{
-        schema_version = 1
-        sprint = "sprint-8a"
-        phase = "candidate-rehearsal-validation-state-capture"
-        attempt = $Attempt
-        authoritative = $false
-        captured_at = [DateTimeOffset]::UtcNow.ToString("o")
-        captured_path = $relativeStatePath
-        captured_sha256 = $capturedStateSha
-        capture_error = $captureError
-        document = $capturedState
-    }
-    Publish-Sprint7AEvidence -Document $prelaunchStateCapture -OutputPath $stateSnapshotPath | Out-Null
-    $stateSnapshotSha = Assert-Sprint8AReceiptSidecar -Path $stateSnapshotPath
 
     $selectionFailure = $null
     try {
@@ -695,6 +1385,7 @@ if ($ResumeInterruptedAttempt) {
         schedule_sha256 = $scheduleSha
         schedule_selection = $scheduleSelection
         declared_lanes = @($declaredChecks | ForEach-Object { [string]$_.name })
+        declared_checks = $declaredChecks
         diagnostic_history_notice = $script:Sprint8ADiagnosticHistoryNotice
     }
     Publish-Sprint7AEvidence -Document $startDocument -OutputPath $startPath | Out-Null
@@ -724,28 +1415,36 @@ $terminalByName = @{}
 $assertionsStartedAt = $null
 $orphanedLaneName = $null
 $recoveredPublishedTerminal = $false
+$recoveredTerminalAttempt = $false
+$attemptShaBeforeRecovery = $null
 
-if ($ResumeInterruptedAttempt) {
+if ($ResumeInterruptedAttempt -and $resumeHasAttempt) {
     $attemptShaBeforeRecovery = Assert-Sprint8AReceiptSidecar -Path $attemptPath
     $attemptReceipt = Get-Content -LiteralPath $attemptPath -Raw | ConvertFrom-Json
     if (($attemptReceipt.schema_version -isnot [int] -and $attemptReceipt.schema_version -isnot [long]) -or
         [int]$attemptReceipt.schema_version -ne 3 -or
         [string]$attemptReceipt.phase -cne "candidate-rehearsal" -or
         [int]$attemptReceipt.attempt -ne $Attempt -or
-        @("preparing", "executing", "harvesting") -cnotcontains [string]$attemptReceipt.state -or
+        @("preparing", "executing", "harvesting", "passed", "failed") -cnotcontains [string]$attemptReceipt.state -or
+        $attemptReceipt.PSObject.Properties.Name -notcontains "declared_checks" -or
+        ($attemptReceipt.declared_checks | ConvertTo-Json -Depth 30 -Compress) -cne
+            ($startDocument.declared_checks | ConvertTo-Json -Depth 30 -Compress) -or
         [string]$attemptReceipt.immutable_start_receipt.path -cne $relativeStartPath -or
         [string]$attemptReceipt.immutable_start_receipt.sha256 -cne [string]$immutableStartReceipt.sha256 -or
         [string]$attemptReceipt.schedule_sha256 -cne $scheduleSha) {
         $validationLockHandle.Dispose(); $validationLockHandle = $null
-        throw "Candidate Rehearsal process-loss recovery rejected an inauthentic or terminal mutable checkpoint."
+        throw "Candidate Rehearsal process-loss recovery rejected an inauthentic attempt checkpoint."
     }
-    [void](Assert-Sprint8ARehearsalRecoveryScheduleBinding `
-        -StartDocument $startDocument `
-        -AttemptDocument $attemptReceipt `
-        -Checks $declaredChecks `
-        -ExpectedAttempt $Attempt `
-        -ExpectedStartPath $relativeStartPath `
-        -ExpectedStartSha256 ([string]$immutableStartReceipt.sha256))
+    $recoveredTerminalAttempt = @("passed", "failed") -ccontains [string]$attemptReceipt.state
+    if (-not $recoveredTerminalAttempt) {
+        [void](Assert-Sprint8ARehearsalRecoveryScheduleBinding `
+            -StartDocument $startDocument `
+            -AttemptDocument $attemptReceipt `
+            -Checks $declaredChecks `
+            -ExpectedAttempt $Attempt `
+            -ExpectedStartPath $relativeStartPath `
+            -ExpectedStartSha256 ([string]$immutableStartReceipt.sha256))
+    }
     $startedAt = [DateTimeOffset]::Parse([string]$attemptReceipt.started_at)
     foreach ($terminal in @($attemptReceipt.checks)) {
         if ($terminalByName.ContainsKey([string]$terminal.name) -or
@@ -761,6 +1460,7 @@ if ($ResumeInterruptedAttempt) {
         $name = [string]$declaration.name
         if ($terminalByName.ContainsKey($name)) { continue }
         $laneReceiptPath = Join-Path $laneRoot "$name.json"
+        Repair-Sprint7AEvidencePublication -Path $laneReceiptPath
         if (-not (Test-Path -LiteralPath $laneReceiptPath -PathType Leaf)) { continue }
         $laneSha = Assert-Sprint8AReceiptSidecar -Path $laneReceiptPath
         $laneDocument = Get-Content -LiteralPath $laneReceiptPath -Raw | ConvertFrom-Json
@@ -794,6 +1494,108 @@ if ($ResumeInterruptedAttempt) {
         -not $terminalByName.ContainsKey([string]$attemptReceipt.active_lane)) {
         $orphanedLaneName = [string]$attemptReceipt.active_lane
     }
+    foreach ($terminal in @($terminalChecks)) {
+        Assert-RehearsalRecoveredTerminalLaneReceipt `
+            -Terminal $terminal `
+            -AttemptDocument $attemptReceipt
+    }
+    if ($recoveredTerminalAttempt -and $recoveredPublishedTerminal) {
+        throw "Candidate Rehearsal terminal-tail recovery rejected lane evidence omitted from the immutable terminal attempt receipt."
+    }
+    foreach ($tailPath in @($harvestPath, $batchPath, $correctionAuthorizationPath, $resultPath, $statePath)) {
+        Repair-Sprint7AEvidencePublication -Path $tailPath
+    }
+    $harvestReceiptExists = Test-Path -LiteralPath $harvestPath -PathType Leaf
+    $harvestSidecarExists = Test-Path -LiteralPath "$harvestPath.sha256" -PathType Leaf
+    $batchReceiptExists = Test-Path -LiteralPath $batchPath -PathType Leaf
+    $batchSidecarExists = Test-Path -LiteralPath "$batchPath.sha256" -PathType Leaf
+    $authorizationReceiptExists = Test-Path -LiteralPath $correctionAuthorizationPath -PathType Leaf
+    $authorizationSidecarExists = Test-Path -LiteralPath "$correctionAuthorizationPath.sha256" -PathType Leaf
+    $resultReceiptExists = Test-Path -LiteralPath $resultPath -PathType Leaf
+    $resultSidecarExists = Test-Path -LiteralPath "$resultPath.sha256" -PathType Leaf
+    $stateReceiptExists = Test-Path -LiteralPath $statePath -PathType Leaf
+    $stateSidecarExists = Test-Path -LiteralPath "$statePath.sha256" -PathType Leaf
+    $currentPassingResultExists = $false
+    if ($resultReceiptExists -and $resultSidecarExists) {
+        [void](Assert-Sprint8AReceiptSidecar -Path $resultPath)
+        $candidateResultTail = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+        $currentPassingResultExists = [int]$candidateResultTail.attempt -eq $Attempt -and
+            [string]$candidateResultTail.state -ceq "passed"
+    }
+    $currentTerminalStateExists = $false
+    if ($stateReceiptExists -and $stateSidecarExists) {
+        [void](Assert-Sprint8AReceiptSidecar -Path $statePath)
+        $validationStateTail = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        $currentTerminalStateExists = @("failed", "passed") -ccontains [string]$attemptReceipt.state -and
+            [int]$validationStateTail.rehearsal.attempt -eq $Attempt -and
+            [string]$validationStateTail.rehearsal.state -ceq [string]$attemptReceipt.state
+    }
+    $attemptRecoveryState = Resolve-RehearsalAttemptRecoveryState `
+        -AttemptState ([string]$attemptReceipt.state) `
+        -TerminalLaneCount $terminalChecks.Count `
+        -DeclaredLaneCount $declaredChecks.Count `
+        -HasActiveLane ($null -ne $attemptReceipt.active_lane) `
+        -HarvestReceiptExists $harvestReceiptExists `
+        -HarvestSidecarExists $harvestSidecarExists `
+        -BatchReceiptExists $batchReceiptExists `
+        -BatchSidecarExists $batchSidecarExists `
+        -AuthorizationReceiptExists $authorizationReceiptExists `
+        -AuthorizationSidecarExists $authorizationSidecarExists `
+        -ResultReceiptExists $resultReceiptExists `
+        -ResultSidecarExists $resultSidecarExists `
+        -StateReceiptExists $stateReceiptExists `
+        -StateSidecarExists $stateSidecarExists `
+        -CurrentPassingResultExists $currentPassingResultExists `
+        -CurrentTerminalStateExists $currentTerminalStateExists
+    if ($recoveredTerminalAttempt) {
+        if (-not ([string]$attemptRecoveryState).StartsWith("$([string]$attemptReceipt.state)_", [StringComparison]::Ordinal)) {
+            throw "Candidate Rehearsal terminal-tail recovery resolved an inconsistent recovery state '$attemptRecoveryState'."
+        }
+    } elseif (-not ([string]$attemptRecoveryState).EndsWith("checkpoint", [StringComparison]::Ordinal)) {
+        throw "Candidate Rehearsal lane-loop recovery resolved an inconsistent recovery state '$attemptRecoveryState'."
+    }
+    if ($recoveredTerminalAttempt) {
+        if ($null -ne $attemptReceipt.active_lane -or $null -ne $attemptReceipt.active_lane_started_at -or
+            [string]::IsNullOrWhiteSpace([string]$attemptReceipt.ended_at)) {
+            $validationLockHandle.Dispose(); $validationLockHandle = $null
+            throw "Candidate Rehearsal terminal-tail recovery rejected an active or undated terminal attempt."
+        }
+        [void](Assert-Sprint8ARehearsalScheduleContract `
+            -Schedule $startDocument.schedule -Checks $declaredChecks -ExpectedAttempt $Attempt)
+        [void](Assert-Sprint8ARehearsalTerminalAccounting `
+            -DeclaredChecks $declaredChecks `
+            -TerminalChecks @($terminalChecks) `
+            -Attempt $Attempt `
+            -AttemptState ([string]$attemptReceipt.state))
+
+        $recoveredFailed = @($terminalChecks | Where-Object state -CEQ "failed")
+        $recoveredBlocked = @($terminalChecks | Where-Object state -CEQ "blocked")
+        $recoveredDeferred = @($terminalChecks | Where-Object state -CEQ "deferred")
+        $recoveredNestedBlocked = @($terminalChecks | ForEach-Object { @($_.nested_blocked_checks) })
+        $recoveredNestedFailed = @($terminalChecks | ForEach-Object { @($_.nested_failed_checks) })
+        $recoveredAssertions = @($terminalChecks | Where-Object assertions_started -EQ $true)
+        $shouldHavePassed = $recoveredFailed.Count -eq 0 -and
+            $recoveredBlocked.Count -eq 0 -and
+            $recoveredDeferred.Count -eq 0 -and
+            $recoveredNestedBlocked.Count -eq 0 -and
+            $recoveredNestedFailed.Count -eq 0
+        $cleanupProven = @(@("final-successor-health", "final-environment-identity") | Where-Object {
+            -not $terminalByName.ContainsKey($_) -or [string]$terminalByName[$_].state -cne "passed"
+        }).Count -eq 0
+        if ([int]$attemptReceipt.assertion_count -ne $recoveredAssertions.Count -or
+            [int]$attemptReceipt.failure_count -ne $recoveredFailed.Count -or
+            [int]$attemptReceipt.blocked_count -ne $recoveredBlocked.Count -or
+            [int]$attemptReceipt.deferred_count -ne $recoveredDeferred.Count -or
+            [int]$attemptReceipt.nested_blocked_count -ne $recoveredNestedBlocked.Count -or
+            [int]$attemptReceipt.nested_failure_count -ne $recoveredNestedFailed.Count -or
+            $attemptReceipt.cleanup_restoration.required -ne $true -or
+            ([string]$attemptReceipt.cleanup_restoration.result -ceq "canonical_successor_healthy") -ne $cleanupProven -or
+            (([string]$attemptReceipt.state -ceq "passed") -ne $shouldHavePassed)) {
+            $validationLockHandle.Dispose(); $validationLockHandle = $null
+            throw "Candidate Rehearsal terminal-tail recovery rejected inconsistent terminal attempt counts or state."
+        }
+
+    }
     $stateCapture = Get-Content -LiteralPath $stateSnapshotPath -Raw | ConvertFrom-Json
     $validatedReadinessSha = Assert-Sprint8AReceiptSidecar -Path $readinessPath
     $validatedReadiness = Get-Content -LiteralPath $readinessPath -Raw | ConvertFrom-Json
@@ -805,7 +1607,9 @@ if ($ResumeInterruptedAttempt) {
         ($recoveredSource | ConvertTo-Json -Depth 20 -Compress) -cne
             ($validatedReadiness.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -or
         [string]$recoveredEnvironment.fingerprint -cne [string]$validatedReadiness.environment_fingerprint -or
-        [string]$attemptReceipt.environment_fingerprint -notin @(("0" * 64), [string]$recoveredEnvironment.fingerprint)) {
+        [string]$attemptReceipt.environment_fingerprint -notin @(("0" * 64), [string]$recoveredEnvironment.fingerprint) -or
+        ($recoveredTerminalAttempt -and -not (Test-RehearsalRecoveredTerminalSourceBinding `
+            -AttemptDocument $attemptReceipt -RecoveredSource $recoveredSource))) {
         $validationLockHandle.Dispose(); $validationLockHandle = $null
         throw "Candidate Rehearsal recovery source, environment, Readiness, or state capture authentication failed."
     }
@@ -826,6 +1630,28 @@ if ($ResumeInterruptedAttempt) {
             -StateReadiness $stateCapture.document.readiness `
             -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -RequirePassed
         $runtimeContext.readiness_immutable_reference = $stateReadinessValidation.immutable
+    }
+    if (-not $recoveredTerminalAttempt) {
+        # Persist recovery authentication before re-entering the lane loop. This keeps a second
+        # process loss recoverable whether it occurs immediately before or immediately after the
+        # lifecycle-prerequisite lane publishes its terminal receipt.
+        $attemptReceipt = Set-RehearsalRecoveredAttemptIdentity `
+            -AttemptDocument $attemptReceipt `
+            -Source $recoveredSource `
+            -EnvironmentFingerprint ([string]$recoveredEnvironment.fingerprint) `
+            -ReadinessSha256 $validatedReadinessSha
+        Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
+    } else {
+        # Terminal-tail recovery must reproduce the identity that the terminal attempt actually
+        # retained. Current authentication makes recovery safe; it does not retroactively replace
+        # a pre-authentication failure's explicit placeholder identity.
+        $source = $attemptReceipt.mutable_source_identity
+        $runtimeContext.source_verification_state = [string]$attemptReceipt.source_identity_verification_state
+        $runtimeContext.environment.fingerprint = [string]$attemptReceipt.environment_fingerprint
+        $runtimeContext.environment.verified =
+            [string]$attemptReceipt.environment_identity.verification_state -ceq "verified"
+        $runtimeContext.environment.verification_state =
+            [string]$attemptReceipt.environment_identity.verification_state
     }
 } else {
     $startedAt = [DateTimeOffset]::UtcNow
@@ -893,6 +1719,18 @@ foreach ($decision in @($selectedSchedule.decisions)) {
     $scheduleDecisionsByName[[string]$decision.name] = $decision
 }
 
+function Get-RehearsalLaneIdentityBinding {
+    param([Parameter(Mandatory)][string]$Name)
+
+    if ($Name -ceq "attempt-state-prerequisite" -and
+        [string]$source.commit -ceq ("0" * 40) -and
+        [string]$source.tree -ceq ("0" * 40) -and
+        [string]$runtimeContext.environment.fingerprint -ceq ("0" * 64)) {
+        return "pre_authentication_lifecycle_placeholder"
+    }
+    "attempt_identity"
+}
+
 function Invoke-RehearsalLane {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -928,6 +1766,7 @@ function Invoke-RehearsalLane {
         Publish-Sprint7AEvidence -Document ([ordered]@{
             schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal-lane"; attempt = $Attempt
             authoritative = $false; mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+            identity_binding = Get-RehearsalLaneIdentityBinding -Name $Name
             result = $blocked
         }) -OutputPath $laneReceiptPath | Out-Null
         $blocked | Add-Member -NotePropertyName lane_receipt -NotePropertyValue ([pscustomobject][ordered]@{
@@ -962,6 +1801,7 @@ function Invoke-RehearsalLane {
     Publish-Sprint7AEvidence -Document ([ordered]@{
         schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal-lane"; attempt = $Attempt
         authoritative = $false; mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+        identity_binding = Get-RehearsalLaneIdentityBinding -Name $Name
         result = [ordered]@{
             name = $Name; depends_on = @($declaration[0].depends_on); command = [string]$declaration[0].command
             wave = [string]$scheduleDecisionsByName[$Name].wave; scheduling_reason = [string]$scheduleDecisionsByName[$Name].reason
@@ -1206,6 +2046,7 @@ function Invoke-RehearsalLane {
     Publish-Sprint7AEvidence -Document ([ordered]@{
         schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal-lane"; attempt = $Attempt
         authoritative = $false; mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+        identity_binding = Get-RehearsalLaneIdentityBinding -Name $Name
         result = $entry
     }) -OutputPath $laneReceiptPath -Overwrite | Out-Null
     $entry | Add-Member -NotePropertyName lane_receipt -NotePropertyValue ([pscustomobject][ordered]@{
@@ -1247,8 +2088,10 @@ function Complete-RehearsalOrphanedLane {
         active_lane_started_at = $attemptReceipt.active_lane_started_at
         diagnostic = "The process ended after the active-lane checkpoint and before its executing receipt was retained."
     } }
-    Publish-Sprint7AEvidence -Document $retainedDocument -OutputPath $retainedPath | Out-Null
-    $retainedSha = Assert-Sprint8AReceiptSidecar -Path $retainedPath
+    $retainedSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
+        -Document $retainedDocument `
+        -Path $retainedPath `
+        -Label "Candidate Rehearsal process-loss lane capture '$Name'"
     $ended = [DateTimeOffset]::UtcNow
     if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
         [IO.File]::WriteAllText($logPath, "", [Text.UTF8Encoding]::new($false))
@@ -1292,6 +2135,7 @@ function Complete-RehearsalOrphanedLane {
     Publish-Sprint7AEvidence -Document ([ordered]@{
         schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal-lane"; attempt = $Attempt
         authoritative = $false; mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+        identity_binding = Get-RehearsalLaneIdentityBinding -Name $Name
         result = $entry
     }) -OutputPath $laneReceiptPath -Overwrite | Out-Null
     $entry | Add-Member -NotePropertyName lane_receipt -NotePropertyValue ([pscustomobject][ordered]@{
@@ -1330,6 +2174,7 @@ function Add-RehearsalDeferredLane {
     Publish-Sprint7AEvidence -Document ([ordered]@{
         schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal-lane"; attempt = $Attempt
         authoritative = $false; mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+        identity_binding = Get-RehearsalLaneIdentityBinding -Name $Name
         result = $entry
     }) -OutputPath $laneReceiptPath | Out-Null
     $entry | Add-Member -NotePropertyName lane_receipt -NotePropertyValue ([pscustomobject][ordered]@{
@@ -1696,9 +2541,107 @@ try {
         $comparison | ConvertTo-Json -Depth 30
     }
     Invoke-RehearsalLane "final-successor-health" {
-        $health = Invoke-RestMethod -Uri "http://127.0.0.1:8088/health" -Method Get
-        if ($null -eq $health) { throw "Final gateway health response is empty." }
-        $health | ConvertTo-Json -Depth 10
+        # This terminal sink runs after both diagnostic waves and every aggregate sink. Even a
+        # passing containment lane cannot prove that later lanes left the canonical topology
+        # intact, so every attempt performs one final source-exact materialization and no-op
+        # verification before health and inventory are certified.
+        $restorationRequired = $true
+        $restorationFailure = $null
+        $restorationEvidence = $null
+        $inventoryFailure = $null
+        $restorationResultPath = Join-Path $finalRestorationRoot "materialization/attempt-$Attempt/materialization-result.json"
+        $reuseSourceExactImages = $terminalByName.ContainsKey("source-exact-materialization-no-op") -and
+            [string]$terminalByName["source-exact-materialization-no-op"].state -ceq "passed"
+        try {
+            Invoke-RehearsalPowerShellCheck -Action {
+                & ./scripts/materialize-sprint-8a.ps1 `
+                    -Attempt $Attempt `
+                    -EvidenceRoot $finalRestorationRoot `
+                    -EnvironmentFingerprint ([string]$runtimeContext.environment.fingerprint) `
+                    -AuthorizeDisposableReset `
+                    -VerifyNoOp `
+                    -SkipBuild:$reuseSourceExactImages `
+                    -Confirm:$false
+            } -FailureMessage "Mandatory final canonical restoration materialization failed."
+        } catch {
+            $restorationFailure = $_.Exception.Message
+        }
+        if ($null -eq $restorationFailure) {
+            try {
+                if (-not (Test-Path -LiteralPath $restorationResultPath -PathType Leaf)) {
+                    throw "Mandatory final restoration did not retain its materialization result receipt."
+                }
+                $restorationEvidence = Assert-RehearsalRestorationMaterializationReceipt `
+                    -Path $restorationResultPath `
+                    -ExpectedSource $source `
+                    -ExpectedEnvironmentFingerprint ([string]$runtimeContext.environment.fingerprint) `
+                    -ExpectedAttempt $Attempt
+            } catch {
+                $restorationFailure = $_.Exception.Message
+            }
+        }
+
+        $coreHealth = Invoke-Sprint8AHealthProbe -Target gateway_core -BaseUrl "http://127.0.0.1:8088"
+        $supervisorHealth = Invoke-Sprint8AHealthProbe -Target supervisor -BaseUrl "http://127.0.0.1:8098"
+        if ([bool]$coreHealth.passed -and [bool]$supervisorHealth.passed) {
+            try {
+                Invoke-RehearsalPowerShellCheck -Action {
+                    & ./scripts/audit-sprint-8a-deployed-inventory.ps1 `
+                        -BaseUrl "http://127.0.0.1:8088" `
+                        -OutputPath $finalRestorationInventory
+                } -FailureMessage "Mandatory final canonical inventory/navigation audit failed."
+            } catch {
+                $inventoryFailure = $_.Exception.Message
+            }
+        } else {
+            $inventoryFailure = "blocked by failed exact Core or Supervisor health prerequisite"
+        }
+
+        $inventoryEvidence = if (Test-Path -LiteralPath $finalRestorationInventory -PathType Leaf) {
+            [ordered]@{
+                path = ConvertTo-Sprint8ACanonicalEvidencePath -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $finalRestorationInventory
+                sha256 = Assert-Sprint8AReceiptSidecar -Path $finalRestorationInventory
+            }
+        } else { $null }
+        $healthy = $null -eq $restorationFailure -and
+            $null -ne $restorationEvidence -and
+            [bool]$coreHealth.passed -and [bool]$supervisorHealth.passed -and
+            $null -eq $inventoryFailure -and $null -ne $inventoryEvidence
+        $finalHealth = [ordered]@{
+            schema_version = 2
+            contract = "tessara.sprint-8a.final-successor-health"
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal-final-successor-health"
+            attempt = $Attempt
+            authoritative = $false
+            generated_at = [DateTimeOffset]::UtcNow.ToString("o")
+            mutable_source_identity = $source
+            environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+            restoration = [ordered]@{
+                required = $restorationRequired
+                performed = $true
+                materialization = $restorationEvidence
+                failure = $restorationFailure
+            }
+            health = [ordered]@{
+                core = $coreHealth
+                supervisor = $supervisorHealth
+            }
+            inventory_navigation = [ordered]@{
+                evidence = $inventoryEvidence
+                failure = $inventoryFailure
+            }
+            cleanup_restoration = [ordered]@{
+                required = $true
+                result = if ($healthy) { "canonical_successor_healthy" } else { "not_proven" }
+            }
+            passed = $healthy
+        }
+        Publish-Sprint7AEvidence -Document $finalHealth -OutputPath $finalHealthEvidence | Out-Null
+        if (-not $healthy) {
+            throw "Mandatory final canonical restoration was not proven: restoration=$restorationFailure; core=$($coreHealth.passed); supervisor=$($supervisorHealth.passed); inventory=$inventoryFailure"
+        }
+        $finalHealth | ConvertTo-Json -Depth 30
     }
 
     if ($laneActions.Count -ne $declaredChecks.Count -or
@@ -1707,64 +2650,70 @@ try {
         throw "Candidate Rehearsal runner does not implement every declared lane exactly once."
     }
     $collectLaneActions = $false
-    if ($recoveredPublishedTerminal) {
-        Checkpoint-RehearsalAttempt
-    }
-    if ($null -ne $orphanedLaneName) {
-        Complete-RehearsalOrphanedLane -Name $orphanedLaneName
-    }
-    $executionStatePublished = $false
-    foreach ($name in @($selectedSchedule.wave_a)) {
-        Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
-        if (-not $executionStatePublished -and
-            $terminalByName.ContainsKey("attempt-state-prerequisite") -and
-            [string]$terminalByName["attempt-state-prerequisite"].state -ceq "passed" -and
-            $terminalByName.ContainsKey("validation-readiness-prerequisite") -and
-            [string]$terminalByName["validation-readiness-prerequisite"].state -ceq "passed") {
-            Publish-Sprint7AEvidence -Document ([ordered]@{
-                schema_version = 1; sprint = "sprint-8a"; updated_at = [DateTimeOffset]::UtcNow.ToString("o")
-                source_identity = $source; source_identity_verification_state = "verified"
-                environment_fingerprint = [string]$runtimeContext.environment.fingerprint
-                readiness = $runtimeContext.validation_state.readiness
-                rehearsal = [ordered]@{
-                    attempt = $Attempt; state = "executing"
-                    receipt = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
-                    immutable_start_receipt = $immutableStartReceipt
-                    schedule_sha256 = $scheduleSha
-                }
-                next_candidate_rehearsal = [ordered]@{ attempt = $Attempt; schedule_sha256 = $scheduleSha }
-                correction_lineage = $runtimeContext.correction_lineage
-                preflight_eligible = $false
-            }) -OutputPath $statePath -Overwrite | Out-Null
-            $executionStatePublished = $true
+    if (-not $recoveredTerminalAttempt) {
+        if ($recoveredPublishedTerminal) {
+            Checkpoint-RehearsalAttempt
         }
-    }
-    foreach ($name in @($selectedSchedule.cleanup_sinks)) {
-        Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
-    }
-    $waveBDisposition = Get-Sprint8ARehearsalWaveBDisposition `
-        -Schedule $selectedSchedule `
-        -TerminalByName $terminalByName
-    if ($waveBDisposition -ceq "defer") {
-        foreach ($name in @($selectedSchedule.wave_b)) {
-            Add-RehearsalDeferredLane -Name ([string]$name)
+        if ($null -ne $orphanedLaneName) {
+            Complete-RehearsalOrphanedLane -Name $orphanedLaneName
         }
-    } else {
-        foreach ($name in @($selectedSchedule.wave_b)) {
+        $executionStatePublished = $false
+        foreach ($name in @($selectedSchedule.wave_a)) {
+            Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
+            if (-not $executionStatePublished -and
+                $terminalByName.ContainsKey("attempt-state-prerequisite") -and
+                [string]$terminalByName["attempt-state-prerequisite"].state -ceq "passed" -and
+                $terminalByName.ContainsKey("validation-readiness-prerequisite") -and
+                [string]$terminalByName["validation-readiness-prerequisite"].state -ceq "passed") {
+                Publish-Sprint7AEvidence -Document ([ordered]@{
+                    schema_version = 1; sprint = "sprint-8a"; updated_at = [DateTimeOffset]::UtcNow.ToString("o")
+                    source_identity = $source; source_identity_verification_state = "verified"
+                    environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+                    readiness = $runtimeContext.validation_state.readiness
+                    rehearsal = [ordered]@{
+                        attempt = $Attempt; state = "executing"
+                        receipt = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
+                        immutable_start_receipt = $immutableStartReceipt
+                        schedule_sha256 = $scheduleSha
+                    }
+                    next_candidate_rehearsal = [ordered]@{ attempt = $Attempt; schedule_sha256 = $scheduleSha }
+                    correction_lineage = $runtimeContext.correction_lineage
+                    preflight_eligible = $false
+                }) -OutputPath $statePath -Overwrite | Out-Null
+                $executionStatePublished = $true
+            }
+        }
+        $waveBDisposition = Get-Sprint8ARehearsalWaveBDisposition `
+            -Schedule $selectedSchedule `
+            -TerminalByName $terminalByName
+        if ($waveBDisposition -ceq "defer") {
+            foreach ($name in @($selectedSchedule.wave_b)) {
+                Add-RehearsalDeferredLane -Name ([string]$name)
+            }
+        } else {
+            foreach ($name in @($selectedSchedule.wave_b)) {
+                Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
+            }
+        }
+        foreach ($name in @($selectedSchedule.aggregate_sinks)) {
             Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
         }
-    }
-    foreach ($name in @($selectedSchedule.aggregate_sinks)) {
-        Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
-    }
-    foreach ($name in @($selectedSchedule.finalizers)) {
-        Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
+        foreach ($name in @($selectedSchedule.cleanup_sinks)) {
+            Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
+        }
+        foreach ($name in @($selectedSchedule.finalizers)) {
+            Invoke-RehearsalLane -Name ([string]$name) -Action ([scriptblock]$laneActions[[string]$name])
+        }
     }
 } finally {
     Pop-Location
 }
 
-$endedAt = [DateTimeOffset]::UtcNow
+$endedAt = if ($recoveredTerminalAttempt) {
+    [DateTimeOffset]::Parse([string]$attemptReceipt.ended_at)
+} else {
+    [DateTimeOffset]::UtcNow
+}
 $failedChecks = @($terminalChecks | Where-Object state -CEQ "failed")
 $blockedChecks = @($terminalChecks | Where-Object state -CEQ "blocked")
 $deferredChecks = @($terminalChecks | Where-Object state -CEQ "deferred")
@@ -1776,42 +2725,53 @@ $passed = $terminalChecks.Count -eq $declaredChecks.Count -and
     $deferredChecks.Count -eq 0 -and
     $nestedBlockedChecks.Count -eq 0 -and
     $nestedFailedChecks.Count -eq 0
-$attemptReceipt.state = if ($passed) { "passed" } else { "failed" }
-$attemptReceipt.ended_at = $endedAt.ToString("o")
-$attemptReceipt.assertion_count = @($terminalChecks | Where-Object assertions_started -EQ $true).Count
-$attemptReceipt.failure_count = $failedChecks.Count
-$attemptReceipt.blocked_count = $blockedChecks.Count
-$attemptReceipt.deferred_count = $deferredChecks.Count
-$attemptReceipt.nested_blocked_count = $nestedBlockedChecks.Count
-$attemptReceipt.nested_failure_count = $nestedFailedChecks.Count
-$failureClassifications = @(Get-Sprint8AResultClassifications -Results (@($failedChecks) + @($nestedFailedChecks)))
-$attemptReceipt.classification = if ($failureClassifications.Count -eq 1) {
-    [string]$failureClassifications[0]
+if ($recoveredTerminalAttempt) {
+    if (([string]$attemptReceipt.state -ceq "passed") -ne $passed) {
+        throw "Candidate Rehearsal terminal-tail recovery state no longer matches its authenticated terminal lane accounting."
+    }
+    $attemptSha = $attemptShaBeforeRecovery
 } else {
-    $null
+    $attemptReceipt.state = if ($passed) { "passed" } else { "failed" }
+    $attemptReceipt.ended_at = $endedAt.ToString("o")
+    $attemptReceipt.assertion_count = @($terminalChecks | Where-Object assertions_started -EQ $true).Count
+    $attemptReceipt.failure_count = $failedChecks.Count
+    $attemptReceipt.blocked_count = $blockedChecks.Count
+    $attemptReceipt.deferred_count = $deferredChecks.Count
+    $attemptReceipt.nested_blocked_count = $nestedBlockedChecks.Count
+    $attemptReceipt.nested_failure_count = $nestedFailedChecks.Count
+    $failureClassifications = @(Get-Sprint8AResultClassifications -Results (@($failedChecks) + @($nestedFailedChecks)))
+    $attemptReceipt.classification = if ($failureClassifications.Count -eq 1) {
+        [string]$failureClassifications[0]
+    } else {
+        $null
+    }
+    $attemptReceipt.invalidation_decision = if ($passed) { "none" } else { "candidate freeze forbidden; deferred lanes are incomplete and one consolidated correction batch governs any correction" }
+    $restorationChecks = @(
+        "final-successor-health",
+        "final-environment-identity"
+    )
+    $attemptReceipt.cleanup_restoration = [ordered]@{
+        required = $true
+        result = if (@($restorationChecks | Where-Object {
+            -not $terminalByName.ContainsKey($_) -or [string]$terminalByName[$_].state -cne "passed"
+        }).Count -eq 0) { "canonical_successor_healthy" } else { "not_proven" }
+    }
+    $attemptReceipt.checks = @($terminalChecks)
+    $attemptReceipt.active_lane = $null
+    $attemptReceipt.active_lane_started_at = $null
+    [void](Assert-Sprint8ARehearsalTerminalAccounting `
+        -DeclaredChecks $declaredChecks `
+        -TerminalChecks @($terminalChecks) `
+        -Attempt $Attempt `
+        -AttemptState ([string]$attemptReceipt.state))
+    Assert-Sprint8ADeclaredEvidencePaths `
+        -Checks @($attemptReceipt.declared_checks) `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath `
+        -Label "Candidate Rehearsal $Attempt terminal declarations" | Out-Null
+    Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
+    $attemptSha = Assert-Sprint8AReceiptSidecar -Path $attemptPath
 }
-$attemptReceipt.invalidation_decision = if ($passed) { "none" } else { "candidate freeze forbidden; deferred lanes are incomplete and one consolidated correction batch governs any correction" }
-$restorationChecks = @(
-    "failure-containment-successor-health",
-    "final-successor-health",
-    "final-environment-identity"
-)
-$attemptReceipt.cleanup_restoration = [ordered]@{
-    required = $true
-    result = if (@($restorationChecks | Where-Object {
-        -not $terminalByName.ContainsKey($_) -or [string]$terminalByName[$_].state -cne "passed"
-    }).Count -eq 0) { "canonical_successor_healthy" } else { "not_proven" }
-}
-$attemptReceipt.checks = @($terminalChecks)
-$attemptReceipt.active_lane = $null
-$attemptReceipt.active_lane_started_at = $null
-[void](Assert-Sprint8ARehearsalTerminalAccounting `
-    -DeclaredChecks $declaredChecks `
-    -TerminalChecks @($terminalChecks) `
-    -Attempt $Attempt `
-    -AttemptState ([string]$attemptReceipt.state))
-Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
-$attemptSha = Assert-Sprint8AReceiptSidecar -Path $attemptPath
 $readinessStateRecord = if ([bool]$runtimeContext.environment.verified) {
     [ordered]@{
         attempt = [int]$runtimeContext.readiness.attempt
@@ -1846,8 +2806,8 @@ if (-not $passed) {
         nested_failed_count = $nestedFailedChecks.Count
         passed_count = @($terminalChecks | Where-Object state -CEQ "passed").Count
     }
-    Publish-Sprint7AEvidence -Document $harvest -OutputPath $harvestPath | Out-Null
-    $harvestSha = Assert-Sprint8AReceiptSidecar -Path $harvestPath
+    $harvestSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
+        -Document $harvest -Path $harvestPath -Label "Candidate Rehearsal harvest"
     $laneDefects = @($failedChecks | ForEach-Object {
         [ordered]@{
             id = $null
@@ -1879,7 +2839,7 @@ if (-not $passed) {
     }
     $batch = [ordered]@{
         schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal-defect-batch"; attempt = $Attempt
-        authoritative = $false; batch = 1; state = "open"; generated_at = [DateTimeOffset]::UtcNow.ToString("o")
+        authoritative = $false; batch = 1; state = "open"; generated_at = $endedAt.ToString("o")
         mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
         harvest_receipt = [ordered]@{ path = $harvestRelative; sha256 = $harvestSha }
         defect_count = $defects.Count; defects = $defects
@@ -1903,8 +2863,8 @@ if (-not $passed) {
             })
         )
     }
-    Publish-Sprint7AEvidence -Document $batch -OutputPath $batchPath | Out-Null
-    $batchSha = Assert-Sprint8AReceiptSidecar -Path $batchPath
+    $batchSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
+        -Document $batch -Path $batchPath -Label "Candidate Rehearsal consolidated defect batch"
     if (-not [bool]$runtimeContext.launch_authorized) {
         if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }
         throw "Sprint 8A Candidate Rehearsal launch was rejected by the active-attempt/state prerequisite. Safe independent evidence and one consolidated batch were retained, but no correction authorization was issued and validation-state was not overwritten."
@@ -1913,10 +2873,75 @@ if (-not $passed) {
         -AttemptPath $attemptPath `
         -HarvestPath $harvestPath `
         -DefectBatchPath $batchPath `
-        -CorrectionAuthorizationPath $correctionAuthorizationPath `
-        -EvidenceRoot $evidenceRootPath
-    if (-not $?) { throw "Candidate rehearsal harvesting could not authorize the consolidated correction batch." }
-    $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $correctionAuthorizationPath
+        -EvidenceRoot $evidenceRootPath `
+        -HarvestOnly
+    if (-not $?) { throw "Candidate rehearsal harvest authentication did not complete." }
+
+    $attemptRelative = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $attemptPath
+    $batchRelative = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $batchPath
+    $failedStateDocument = [ordered]@{
+        schema_version = 1; sprint = "sprint-8a"; updated_at = [DateTimeOffset]::UtcNow.ToString("o")
+        source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
+        readiness = $readinessStateRecord
+        rehearsal = [ordered]@{
+            attempt = $Attempt; state = "failed"
+            receipt = $attemptRelative; sha256 = $attemptSha
+            immutable_start_receipt = $immutableStartReceipt; schedule_sha256 = $scheduleSha
+            failed_count = $failedChecks.Count; blocked_count = $blockedChecks.Count; deferred_count = $deferredChecks.Count
+            harvest = $harvestRelative; defect_batch = $batchRelative
+            harvest_guard = "passed"
+        }
+        next_candidate_rehearsal = $null
+        correction_lineage = $runtimeContext.correction_lineage
+        correction_authorization = $null
+        preflight_eligible = $false
+    }
+    if ([string]$attemptReceipt.cleanup_restoration.result -cne "canonical_successor_healthy") {
+        if ((Test-Path -LiteralPath $correctionAuthorizationPath -PathType Leaf) -or
+            (Test-Path -LiteralPath "$correctionAuthorizationPath.sha256" -PathType Leaf)) {
+            throw "Candidate Rehearsal recovery found correction authorization despite unproven canonical cleanup/restoration."
+        }
+        $failedStateDocument.correction_authorization = [ordered]@{
+            state = "withheld"
+            reason = "correction_authorization_withheld_cleanup_not_proven"
+        }
+        Publish-Sprint7AEvidence -Document $failedStateDocument -OutputPath $statePath -Overwrite | Out-Null
+        if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }
+        throw "Sprint 8A Candidate Rehearsal terminalized and its complete harvest was authenticated, but correction authorization is withheld because mandatory canonical cleanup/restoration was not proven."
+    }
+
+    Repair-Sprint7AEvidencePublication -Path $correctionAuthorizationPath
+    $authorizationExists = Test-Path -LiteralPath $correctionAuthorizationPath -PathType Leaf
+    $authorizationSidecarExists = Test-Path -LiteralPath "$correctionAuthorizationPath.sha256" -PathType Leaf
+    if ($authorizationExists -xor $authorizationSidecarExists) {
+        throw "Candidate Rehearsal correction-authorization tail has an incomplete immutable receipt/sidecar pair; recovery will not rewrite it."
+    }
+    if ($authorizationExists) {
+        $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $correctionAuthorizationPath
+        $authorizationDocument = Get-Content -LiteralPath $correctionAuthorizationPath -Raw | ConvertFrom-Json
+        Assert-RehearsalCorrectionAuthorizationTail `
+            -Authorization $authorizationDocument `
+            -Source $source `
+            -EnvironmentFingerprint ([string]$runtimeContext.environment.fingerprint) `
+            -AttemptPath $attemptPath `
+            -AttemptSha256 $attemptSha `
+            -HarvestPath $harvestPath `
+            -HarvestSha256 $harvestSha `
+            -BatchPath $batchPath `
+            -BatchSha256 $batchSha `
+            -AttemptDocument $attemptReceipt
+    } else {
+        & (Join-Path $PSScriptRoot "test-sprint-validation-harvest.ps1") `
+            -AttemptPath $attemptPath `
+            -HarvestPath $harvestPath `
+            -DefectBatchPath $batchPath `
+            -CorrectionAuthorizationPath $correctionAuthorizationPath `
+            -EvidenceRoot $evidenceRootPath
+        if (-not $?) { throw "Candidate rehearsal harvesting could not authorize the consolidated correction batch." }
+        $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $correctionAuthorizationPath
+    }
     $correctionLineage = Add-Sprint8ACorrectionLineageLink `
         -Lineage $runtimeContext.correction_lineage `
         -Predecessor ([ordered]@{
@@ -1941,21 +2966,16 @@ if (-not $passed) {
         -Lineage $correctionLineage `
         -RepositoryRoot $repoRoot `
         -EvidenceRoot $evidenceRootPath)
-    Publish-Sprint7AEvidence -Document ([ordered]@{
-        schema_version = 1; sprint = "sprint-8a"; updated_at = [DateTimeOffset]::UtcNow.ToString("o")
-        source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
-        readiness = $readinessStateRecord
-        rehearsal = [ordered]@{
-            attempt = $Attempt; state = "failed"
-            receipt = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/"); sha256 = $attemptSha
-            immutable_start_receipt = $immutableStartReceipt; schedule_sha256 = $scheduleSha
-            failed_count = $failedChecks.Count; blocked_count = $blockedChecks.Count; deferred_count = $deferredChecks.Count
-            harvest = $harvestRelative; defect_batch = [IO.Path]::GetRelativePath($repoRoot, $batchPath).Replace("\", "/")
-        }
-        next_candidate_rehearsal = $null
-        correction_lineage = $correctionLineage
-        preflight_eligible = $false
-    }) -OutputPath $statePath -Overwrite | Out-Null
+    $authorizationRelative = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot -EvidenceRoot $evidenceRootPath -Path $correctionAuthorizationPath
+    $failedStateDocument.updated_at = [DateTimeOffset]::UtcNow.ToString("o")
+    $failedStateDocument.correction_lineage = $correctionLineage
+    $failedStateDocument.correction_authorization = [ordered]@{
+        state = "authorized"
+        path = $authorizationRelative
+        sha256 = $authorizationSha
+    }
+    Publish-Sprint7AEvidence -Document $failedStateDocument -OutputPath $statePath -Overwrite | Out-Null
     if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }
     throw "Sprint 8A Candidate Rehearsal failed $($failedChecks.Count) checks, blocked $($blockedChecks.Count) lanes, deferred $($deferredChecks.Count) Wave B lanes, and retained $($nestedBlockedChecks.Count) blocked UAT scenarios. One consolidated defect batch is retained at $batchPath."
 }
@@ -1975,8 +2995,29 @@ $result = [ordered]@{
     checks = $terminalChecks; assertion_count = @($terminalChecks | Where-Object assertions_started -EQ $true).Count; failure_count = 0; blocked_count = 0; deferred_count = 0; nested_blocked_count = 0; nested_failure_count = 0
     classification = $null; invalidation_decision = "none"; cleanup_restoration = $attemptReceipt.cleanup_restoration
 }
-Publish-Sprint7AEvidence -Document $result -OutputPath $resultPath -Overwrite | Out-Null
-$resultSha = Assert-Sprint8AReceiptSidecar -Path $resultPath
+Repair-Sprint7AEvidencePublication -Path $resultPath
+$resultExists = Test-Path -LiteralPath $resultPath -PathType Leaf
+$resultSidecarExists = Test-Path -LiteralPath "$resultPath.sha256" -PathType Leaf
+if ($resultExists -xor $resultSidecarExists) {
+    throw "Candidate Rehearsal result alias has an incomplete receipt/sidecar pair; recovery will not rewrite it."
+}
+if ($resultExists) {
+    $retainedResultSha = Assert-Sprint8AReceiptSidecar -Path $resultPath
+    $retainedResult = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+    if ([int]$retainedResult.attempt -eq $Attempt) {
+        if (($retainedResult | ConvertTo-Json -Depth 100 -Compress) -cne
+            ($result | ConvertTo-Json -Depth 100 -Compress)) {
+            throw "Candidate Rehearsal recovery rejected a changed current-attempt passing result; recovery will not rewrite it."
+        }
+        $resultSha = $retainedResultSha
+    } else {
+        Publish-Sprint7AEvidence -Document $result -OutputPath $resultPath -Overwrite | Out-Null
+        $resultSha = Assert-Sprint8AReceiptSidecar -Path $resultPath
+    }
+} else {
+    Publish-Sprint7AEvidence -Document $result -OutputPath $resultPath | Out-Null
+    $resultSha = Assert-Sprint8AReceiptSidecar -Path $resultPath
+}
 Publish-Sprint7AEvidence -Document ([ordered]@{
     schema_version = 1; sprint = "sprint-8a"; updated_at = [DateTimeOffset]::UtcNow.ToString("o")
     source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint

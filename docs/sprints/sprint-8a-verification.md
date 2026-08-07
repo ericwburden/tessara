@@ -1,21 +1,20 @@
 # Sprint 8A Validation Record
 
-Status: Validation Readiness 40 passed its complete 15-check graph against clean
-commit `b4f1581e5c60522eab86da23301d92f9e1c36cf0`, tree
-`af0ab5cf246ede958e94521766226e609e818ec1`, and environment fingerprint
-`6967aa2c0f9edad2e52c18f54d3faaec6b7459f89f22586d01ceef6aa784f105`.
-Candidate Rehearsal 32 then rejected before start because its scheduler did not
-recognize the runner's ordered-dictionary declarations. That correction was
-committed as `231bd8d9ea1889870653d991b2cbaa9531074522`, but the requested
-Readiness 41 launch exposed two further pre-start `harness` defects: correction-
-lineage authentication rejected R40's current schema-3 terminal, and the clean
-pre-rehearsal path could not preserve an already-consumed lineage without
-treating it as duplicate consumption. R41 rejected before reservation,
-immutable start, check registration, assertions, or product actions. No R41
-attempt or normal namespace exists, and R41 and R32 both remain unused. The
-tracked lineage/rerun correction supersedes `231bd8d9`; complete R41 followed
-by complete R32 remain the next coordinator-controlled gates. No candidate
-exists, and preflight, SIT, formal UAT, and closeout remain Not Run.
+Status: Validation Readiness 41 passed its complete 15-check graph against clean
+commit `d703e7a67c3f1177b621b0e14161e0661209ea42`, tree
+`889ddc5f784ea1e81686ce63dd22669aabde956d`, and environment fingerprint
+`53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`.
+Candidate Rehearsal 32 then completed its immutable 32-lane conservative
+full-harvest schedule with 19 passes, 2 raw `product` failures, 11 exact
+dependency blocks, and 0 deferrals. Cleanup/restoration was not proven and no
+`candidate-rehearsal-result.json` was created. Its immutable evidence, one
+harvest, and one raw two-defect batch remain unchanged. Append-only diagnosis
+and a separate source-exact restoration qualified the prematurely issued R32
+authorization for exactly one Readiness 42 start; that qualification does not
+make R32 pass or authorize preflight, freeze, SIT, UAT, or closeout. The
+consolidated product/harness/evidence correction is now mutable. After focused
+verification and a clean commit, complete Readiness 42 and complete Rehearsal
+33 remain the next coordinator-controlled gates.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -24,7 +23,169 @@ exists, and preflight, SIT, formal UAT, and closeout remain Not Run.
 
 ## Implementation Readiness Snapshot
 
-### Readiness 41 pre-start rejection and lineage-preserving correction
+### Readiness 41 pass, Rehearsal 32 failure, and restoration-qualified correction
+
+Readiness 41 ran from 13:56:43 through 14:01:45 EDT on 2026-08-07 and passed all
+15 checks. Its immutable start SHA-256 is
+`8365d2b96048b1e5c2c60f776b16ee9048cc9272933ef1549284c5f2d8a48ee5`;
+its immutable terminal and byte-identical canonical alias SHA-256 is
+`547940b0ca6685d98304a1f51d9810e38bd54463f6fd378dd375d46c7407c2aa`.
+It bound Rehearsal 32's conservative full-harvest schedule at SHA-256
+`7b09c1b33568e6b1bf16b9347efd31d9d99291fc40176d7e4de7d8aa1c3a7f22`.
+
+Rehearsal 32 ran from 14:06:12 through 15:37:28 EDT (about 5,476 seconds by its
+receipt timestamps). Its
+immutable start SHA-256 is
+`c397c6f4b1290911724fd07cabc74bc866371abc762b23392f6dc4ab19fff670`;
+its terminal failed-attempt SHA-256 is
+`98cddc03977a476af5c5843131b9114ec2f025a1f5eefffa57514daccd5448c5`.
+All 32 declarations are terminal: 19 passed, 2 failed, 11 blocked, and 0 were
+deferred. Twenty-one lanes began assertions. The immutable raw failures remain:
+
+1. `source-exact-materialization-no-op` — `product`, with the first
+   materialization failure retained at SHA-256
+   `6fcccdf3d31607e578eccbf22004049d38f9d2c57757f9e4090f40911916b99e`.
+2. `failure-containment-successor-health` — `product`, with the containment
+   result retained at SHA-256
+   `2ca4015419ef96993900755d8965b6fab3518d18ff7feeed0a8c64926f63bf9a`.
+
+The exact blocked checks are:
+
+- `deployed-inventory-navigation-audit`, `deployment-evidence`,
+  `product-smoke`, and `component-upgrade-rollback`, each blocked by
+  `source-exact-materialization-no-op`;
+- `playwright-execution`, blocked by `source-exact-materialization-no-op` and
+  `deployment-evidence`;
+- `successor-inventory-navigation-audit`,
+  `successor-deployment-evidence`, `successor-product-smoke`, and
+  `final-successor-health`, each blocked by
+  `failure-containment-successor-health`;
+- `live-product-diagnostics`, blocked by `deployment-evidence` and
+  `product-smoke`; and
+- `uat-diagnostics`, blocked by the failed materialization and containment
+  lanes plus their six unavailable live/successor dependents.
+
+The terminal harvest SHA-256 is
+`89861d8add519812993934dba182e6939b1437d38e7f524e4469693001c2c809`;
+the one immutable raw two-defect batch SHA-256 is
+`4a5219fd0e16d13fbf0e15286ae75f53c84e261a264bbef877127ff8866a1249`.
+The raw classifications are retained even though the append-only diagnostic
+supplement, SHA-256
+`8bcfc25ca7eee86681fa1208a8bfc01da3e51b6505da6316b7e793aa0f08a897`,
+found three implementation roots: one shared `harness` health-probe contract,
+one `harness` restoration-before-authorization guard, and one
+`evidence-finalization` path-serialization defect.
+
+The health diagnosis is endpoint-exact. Core owns `GET /health` = HTTP 200,
+`text/plain`, exact body `ok`; Supervisor owns `GET /health/ready` = HTTP 204,
+empty body. The materializer queried Core through the Supervisor endpoint,
+followed the resulting redirect to `/login`, accepted a 200 HTML document as
+Core health, then rejected Supervisor's valid 204 response. Materialization,
+smoke, upgrade/rollback, Supervisor owner verification, containment, and final
+restoration now share `scripts/sprint-8a-health-contract.ps1`, one
+redirect-disabled contract helper. Broad 200/204 acceptance is not the
+correction: each owner must match its own exact contract.
+The retained false-Core-health HTML body is 4,710 bytes at SHA-256
+`f00cefaa866bef8a84a0dff0ecaa73c6437ab295e961c20779d5b31a9cc4a574`.
+
+R32 also exposed the lifecycle enforcement gap. Its attempt recorded
+`cleanup_restoration.result = not_proven`, recovery recorded `restored=false`,
+and the mandatory `final-successor-health` lane was blocked, yet the old harvest
+helper issued schema-2 authorization SHA-256
+`8b8a44ec3c76d441495bb100e7268dfbfc9e4d400d63dc7956f5db17f81829f5`.
+Prospectively, complete terminal accounting may retain a harvest and batch in
+that state, but `-HarvestOnly` emits no authorization. Schema-3 authorization
+requires exact passing current-attempt `final-successor-health` and
+`final-environment-identity` receipts and result
+`canonical_successor_healthy`.
+
+The other receipt enforcement gap was narrower than the already-sufficient
+two-wave policy. R41 persisted six rooted Windows declaration paths and R32
+persisted twenty-one; R32's immutable start also retained lane names rather
+than the complete declaration graph. New starts persist the full lane contract
+and canonical repository-relative forward-slash paths inside the evidence root;
+resume/recovery requires exact full-graph equality. No historical receipt is
+retrofitted or rewritten.
+
+Post-harvest restoration generation 2 is retained at SHA-256
+`e082eefd3be3aeb6dffa1e639047d7173b3306ba530848271625074a29f426e2`.
+It proved source-exact images, first apply, semantic no-op, exact Core and
+Supervisor health, canonical topology, five exact Core transitions, Dashboard
+exactly once through its real Module Release/Instance, and no duplicate
+navigation. Its platform-health evidence SHA-256 is
+`228e3e9a1ce72ee98e5e98c83ce64ef0bd783f298bf2491e7e4ee7ceb7af1050`;
+its topology evidence SHA-256 is
+`3196c746b49ef25e953cf30d48f2c912a5452e9674ac7fa12dbd3a187b401fdc`;
+its contract-aware product diagnostic SHA-256 is
+`1711c1e582306446508f66e87dbd69b9057a2c69771039941ad29426ae11465f`.
+The existing smoke then truthfully retained one `harness` failure at SHA-256
+`86acf08d770c43d68efbbbeb0d0240aced2e384657d8e145dc5b1ed686b78ebc`:
+it required bootstrap-only `placement_key` in the public response. The stronger
+replacement asserts opaque placement IDs, exact geometry/resolution, six exact
+authorized Component references, and restricted-placement nondisclosure.
+
+That diagnosis also found one real `product` defect: Dashboard bootstrap wrote
+an unversioned placement config, so all seven rows were read through fallback
+geometry. The correction stores the canonical V1 layout and validates unique
+IDs/keys, dense positions, and the exact one-based row/column/width/height
+matrix: 1/1/4/2, 3/1/12/6, 9/1/6/4, 9/7/6/4, and row 13 at columns 1/5/9 with
+width 4 and height 2. No migration compatibility is retained because Tessara is
+pre-production and these databases are disposable.
+
+Together, the shared health contract, restoration authorization guard,
+canonical-path/full-graph enforcement, stale smoke expectation, and Dashboard
+layout persistence are five diagnosed correction findings handled as one
+tracked correction batch. They do not create a second R32 defect-batch receipt.
+
+The implementation-to-validation mapping for that batch is explicit:
+
+| Governing validation clause | Implementation slice | Focused proof required before handoff |
+|---|---|---|
+| Fresh-baseline materialization and exact semantic no-op | `materialize-sprint-8a.ps1`, owner health helper, Supervisor health client | clean disposable materialization receipt, first apply, no-op apply, exact Core/Supervisor health |
+| Failure containment, recovery, and canonical restoration | failure-containment runner and final cleanup sink | injected failure receipt, clean successor materialization/no-op, inventory/navigation, final health |
+| Receipt-bound Dashboard seed and nondisclosure | Dashboard bootstrap/config writer and smoke projection | exact seven IDs/geometries, six Component references, restricted nondisclosure, no `placement_key` |
+| Complete fail-late terminal accounting and one consolidated batch | two-wave scheduler, runner recovery, harvest guard | adversarial ordering, dependency, deferral, process-loss, missing-lane, and exact-counter self-tests |
+| No deferred or unauthenticated evidence may authorize certification | correction lineage, validation state, and preflight guards | canonical contained references, exact graph/lineage binding, deferred-result/preflight rejection |
+
+These are implementation diagnostics only. They cannot create or replace a
+passing Readiness receipt, complete Candidate Rehearsal result, candidate
+freeze, SIT evidence, or UAT evidence.
+
+The append-only qualification SHA-256 is
+`859a8dba81792127820a12367e9d0430aaebb9bf7cb77442b50e34322ba4c7bb`.
+It authenticates the diagnostic supplement and restoration and makes the old
+authorization effective only as a tuple for one Readiness 42 consumption. The
+qualification is not independently consumable. The sidecar-bound validation
+state and its immutable snapshot are byte-identical at SHA-256
+`85ac129f40204aef8d4b9a876c72c9ba948400da76e258b0da068c8afd443c8c`,
+with preflight ineligible and the R32 lineage tip unconsumed.
+
+The correction retains the bounded failure-first scheduler already specified
+after R31 and closes its executable gaps. Wave A includes lifecycle,
+prior-failed, never-executed/newly-reachable, impact-cone, three-times-deferred,
+and prerequisite-closure lanes; safe siblings run fail-late. Aggregate lanes
+remain sinks. If Wave A fails, mandatory cleanup/restoration still executes and
+eligible Wave B prior passes become diagnostic-only `deferred` first; if Wave A
+passes, the same attempt executes Wave B. Aggregate sinks follow that Wave B
+disposition, then terminal canonical restoration and safety finalizers execute
+regardless. Any unauthenticated history/hash/cone or counter selects
+conservative full harvest, and any deferred lane keeps the attempt
+failed/incomplete. Focused adversarial self-tests must cover deterministic
+ordering, dependency closure, aggregate sinks, both Wave outcomes, the
+three-deferral limit, impact overrides, recovery, cleanup, preflight rejection,
+and complete-versus-missing terminal accounting. R9-R11 materialization and
+R19-R22 Playwright histories remain regression fixtures only.
+
+Process-loss recovery now covers both sides of the pre-authentication lifecycle
+boundary. It accepts the exact lifecycle placeholder receipt, checkpoints the
+authenticated source/environment identity before a nonterminal attempt resumes,
+and preserves a terminal pre-authentication failure's recorded identity through
+harvest. Final cleanup cannot pass from healthy leftover services alone: its
+hashed materialization receipt must prove the exact attempt, source,
+environment, first apply, semantic no-op, and final health before the cleanup
+lane can authorize correction.
+
+### Historical Readiness 41 pre-start rejection and lineage-preserving correction
 
 The R41 launcher evaluated clean source
 `231bd8d9ea1889870653d991b2cbaa9531074522`, tree
@@ -65,7 +226,7 @@ may reach current R41 through that clean edge without relabeling R41 as the
 authorization consumer. R41's own `predecessor_correction_authorization` and
 `correction_consumption_receipt` remain null.
 
-The sidecar-bound validation state remains the passing R40 state, with
+At that pre-start boundary, the sidecar-bound validation state remained the passing R40 state, with
 Rehearsal ineligible and `preflight_eligible=false`. There is no
 `readiness-41-start.json`, `readiness-41.json`, `readiness-41/` evidence
 directory, or R41 correction consumption. The pre-start records do not rewrite
@@ -80,8 +241,8 @@ consumes a pending authorization, so validation state can bind the final
 terminal hash without embedding a stale self-reference; only clean successors
 carry the already-complete preserved lineage.
 
-After the clean correction commit, the coordinator may authorize the same
-unused R41 identity; only a passing R41 may issue the still-unused R32 schedule.
+The documented next action at that boundary was to authorize the same unused
+R41 identity so a passing R41 could issue the then-unused R32 schedule.
 
 ### Readiness 40 pass and Rehearsal 32 pre-start rejection
 
@@ -173,8 +334,18 @@ lifecycle/cleanup, lanes deferred three times,
 and only their required prerequisite closure. Wave B contains authenticated
 prior passes outside the cone. A Wave A pass continues into Wave B in the same
 attempt; a Wave A failure completes safe Wave A harvesting and mandatory
-restoration, then records eligible Wave B lanes as diagnostic-only `deferred`.
-Aggregate lanes remain sinks and do not reverse-expand Wave A.
+siblings, records eligible Wave B lanes as diagnostic-only `deferred`, then
+terminalizes aggregate sinks before mandatory restoration and safety
+finalizers. Aggregate lanes remain sinks and do not reverse-expand Wave A.
+
+Complete Candidate Rehearsal is the final certification pass, not the primary
+debugging loop. Its deterministic Wave A order puts the two cheap lifecycle
+prerequisites first, then source-exact materialization and containment/recovery
+as the first expensive branch; stable expensive checks remain later unless a
+real prerequisite or correction impact requires them. A lane with two
+consecutive full-attempt failures must first pass its clean focused reproducer;
+a third consecutive failure is a concentrated validation-platform incident
+that must be resolved before another full launch.
 
 The immediate post-R31 cycle must use the conservative full-harvest form of
 Wave A. R31 predates immutable scheduler decisions and authenticated deferral
@@ -203,10 +374,9 @@ Focused implementation verification must prove adversarially that:
 - harvest and correction authorization accept complete eligible deferred
   accounting but reject a missing lane.
 
-This implementation phase runs focused correction checks only. The next formal
-lifecycle boundary is a fresh complete Readiness 41 and then the still-unused
-Candidate Rehearsal 32. The validation coordinator, not this implementation
-handoff, must authorize and launch that cycle.
+That historical implementation phase ran focused correction checks only. Its
+next formal boundary was a fresh complete Readiness 41 and then the then-unused
+Candidate Rehearsal 32; both later ran as recorded above.
 
 ### Historical Readiness 38 terminal failure and correction
 
@@ -911,9 +1081,10 @@ browser execution result.
 Readiness 38 is the one legacy recovery boundary for the failed-Readiness
 finalizer. It was finalized once without rerunning its checks; no other attempt
 may use that exception. R39 subsequently passed and R31 produced the complete
-failed-attempt/harvest/batch/authorization chain. The next correction advances
-schemas and scheduling prospectively; none of these retained receipts is
-retrofitted.
+failed-attempt/harvest/batch/authorization chain. R32 is separately the sole
+historical cleanup-authorization qualification described above. The current
+correction advances schemas and enforcement prospectively; none of these
+retained receipts is retrofitted.
 
 | Artifact | Producer | Required before | Status |
 |---|---|---|---|
@@ -922,10 +1093,14 @@ retrofitted.
 | `attempts/readiness-39.json` and `validation-readiness-result.json` | Validation coordinator | Rehearsal 31 | Passed for R31 source/environment; now superseded by the tracked correction |
 | `attempts/candidate-rehearsal-31-attempt.json`, `-harvest.json`, `-defect-batch.json`, and `-correction-authorization.json` | Validation coordinator | Readiness 40 | Complete failed chain; 19 pass, 3 fail, 10 block; one-use authorization consumed exactly once by R40 |
 | `attempts/readiness-40.json` and `validation-readiness-result.json` | Validation coordinator | Rehearsal 32 | Passed all 15 checks for `b4f1581e` / `af0ab5cf` / `6967aa2c...`; superseded by the pre-start harness correction |
-| `attempts/candidate-rehearsal-32-prestart-launch.log`, `attempts/candidate-rehearsal-32-prestart-failure.json`, and `attempts/candidate-rehearsal-32-prestart-defect-batch.json` | Validation coordinator | Corrected R41 | Retained one pre-start `harness` defect; no attempt or lane assertions began; R32 remains unused |
-| `attempts/readiness-41-prestart-launch.log`, `attempts/readiness-41-prestart-diagnostic.log`, `attempts/readiness-41-prestart-failure.json`, and `attempts/readiness-41-prestart-defect-batch.json` | Validation coordinator | Corrected R41 | Retained two pre-start `harness` defects; no reservation, namespace, attempt, check, assertion, or product action began; R41 remains unused |
-| `attempts/candidate-rehearsal-32-start.json` | Validation coordinator | Rehearsal 32 assertions | Not created; corrected launch requires a passing R41-issued schedule |
-| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not created; R31 failed, R41 has not passed, and R32 has no attempt |
+| `attempts/candidate-rehearsal-32-prestart-launch.log`, `attempts/candidate-rehearsal-32-prestart-failure.json`, and `attempts/candidate-rehearsal-32-prestart-defect-batch.json` | Validation coordinator | Corrected R41 | Historical pre-start `harness` defect; no attempt or lane assertions began; the identity was later admitted after R41 passed |
+| `attempts/readiness-41-prestart-launch.log`, `attempts/readiness-41-prestart-diagnostic.log`, `attempts/readiness-41-prestart-failure.json`, and `attempts/readiness-41-prestart-defect-batch.json` | Validation coordinator | Corrected R41 | Historical two-defect pre-start batch; no reservation/check began; the identity was later admitted and passed after correction |
+| `attempts/readiness-41-start.json`, `attempts/readiness-41.json`, and `validation-readiness-result.json` | Validation coordinator | Rehearsal 32 | Passed 15/15 for `d703e7a6` / `889ddc5f` / `53fbb1f7...`; immutable terminal/canonical alias SHA-256 `547940b0...`; superseded by the R32 correction |
+| `attempts/candidate-rehearsal-32-start.json` and `attempts/candidate-rehearsal-32-attempt.json` | Validation coordinator | R32 harvest | Terminal failed; immutable start `c397c6f4...`, attempt `98cddc03...`; 19 pass, 2 fail, 11 block, 0 defer |
+| `attempts/candidate-rehearsal-32-harvest.json` and `attempts/candidate-rehearsal-32-defect-batch.json` | Validation coordinator | R32 correction | Complete immutable harvest `89861d8a...` and one raw two-defect batch `4a5219fd...`; raw `product` classifications retained |
+| `attempts/candidate-rehearsal-32-diagnostic-supplement.json` and `attempts/candidate-rehearsal-32-post-harvest-restoration.json` | Validation coordinator | R32 correction authorization effectiveness | Append-only diagnosis `8bcfc25c...` and proven canonical restoration `e082eefd...`; neither rewrites nor passes R32 |
+| `attempts/candidate-rehearsal-32-correction-authorization.json` and `attempts/candidate-rehearsal-32-correction-authorization-qualification.json` | Validation coordinator | Readiness 42 | Original schema-2 authorization remains quarantined; effective only with qualification `859a8dba...` for exactly one R42 start |
+| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not created; R32 failed and cleanup was not proven within its immutable attempt |
 | `attempts/preflight-<n>.json` | Preflight | Preflight terminal decision | Not Run |
 | `preflight-result.json` | Preflight | Candidate freeze | Not Run |
 | `candidate.json` | Preflight | SIT | Not Run |
@@ -1001,15 +1176,14 @@ Additional required evidence namespaces:
 
 ## Validation Readiness
 
-- Latest completed check graph: Readiness 40 passed all 15 checks against clean
-  source `b4f1581e`, tree `af0ab5cf`, and environment `6967aa2c...`. The R32
-  launcher then exposed the pre-start scheduler declaration-shape defect before
-  creating an attempt. Its correction at `231bd8d9` superseded R40. The R41
-  launcher subsequently exposed the schema-3 lineage-terminal and consumed-
-  lineage clean-supersession defects before reservation. The current tracked
-  lineage/runner/acceptance/documentation correction supersedes `231bd8d9`.
-  R41 remains the next complete Readiness after that correction is committed
-  and all six databases are recreated empty.
+- Latest completed check graph: Readiness 41 passed all 15 checks against clean
+  source `d703e7a6`, tree `889ddc5f`, and environment `53fbb1f7...`; immutable
+  terminal and canonical alias SHA-256 `547940b0...`. R32 then failed, and the
+  current product/harness/evidence correction changes source, validation
+  interpretation, fixtures, acceptance, and deployment/materialization inputs.
+  It therefore supersedes R41. The qualified R32 correction transition permits
+  exactly Readiness 42 after this correction is committed and all six test
+  databases are recreated empty.
 
 - Derived executable checklist: regenerate from the final plan, this inventory,
   source, runners, Compose profile and evidence schemas.
@@ -1048,45 +1222,41 @@ Additional required evidence namespaces:
   Reject duplicate consumption, active attempts, used attempt identities, and
   any Readiness receipt other than the exact path/hash currently named by
   validation state.
-- Clean pre-rehearsal supersession: when current Readiness passed, Rehearsal is
-  still ineligible, and preflight is false, admit only the exact sequential next
-  unused Readiness. Its immutable start and terminal name immutable R40 as the
-  sole Readiness prerequisite, carry the existing consumed `correction_lineage`
-  value semantically unchanged, leave their own predecessor-authorization and
-  correction-consumption fields null, and create no new lineage link or
-  consumption. Current-lineage validation must reach R41 through that exact
-  clean edge and reject a gap, tampered hash, skipped attempt, changed lineage,
-  or non-clean state before creating the namespace.
-- Rehearsal schedule: R40 authenticated the exact R31 history, correction
-  identity, and next attempt number and selected the conservative full-Wave-A
-  fallback. Because both retained pre-start correction batches change the
-  validation harness and its acceptance proof before R32 starts, R41 must
-  recompute and bind R32's deterministic schedule to the corrected source and
-  environment identity.
+- R32 correction transition: R32 is the sole historical cleanup-authorization
+  exception. Its schema-2 authorization is effective only with qualification
+  SHA-256 `859a8dba...`, which authenticates diagnostic supplement
+  `8bcfc25c...` and restoration `e082eefd...` and permits exactly R42. The tuple
+  remains unconsumed; it authorizes no other attempt or phase.
+- Rehearsal schedule: R42 must authenticate the full R32 lineage and current
+  changed-path/identity cone, then bind R33's complete declaration graph and
+  deterministic two-wave schedule. Because the correction changes shared
+  health, materialization, smoke, cleanup/authorization, evidence paths,
+  scheduler/runner declarations, acceptance fixtures, and Dashboard seed
+  behavior, every intersecting lane belongs in Wave A. Any unauthenticated
+  history or counter selects conservative full harvest.
 - Acceptance mapping: every inventory row maps to SIT, smoke and UAT evidence.
 - Clean repository and source-exact inputs: required before rehearsal.
 - Result receipt: `artifacts/sprint-8a-closeout/validation-readiness-result.json`.
 
 ## Candidate Rehearsal
 
-Attempt 31 is terminal and may not resume. It retained 19 passes, 3 raw failed
-lanes, 10 exact lane blocks, and 8 nested automated-UAT dependency blocks
-against the passing R39 source/environment pair. Its complete harvest and
-three-defect batch are named above; R40 consumed its authorization exactly once
-and passed. Candidate Rehearsal 32 did not begin because its first launch was
-rejected at scheduler declaration validation. The corrected R41 launch then
-rejected before reservation, so it issued no R32 schedule. R32 cannot start
-until the current tracked correction is committed, the still-unused R41 passes,
-and the coordinator authorizes the formal cycle.
+Attempt 32 is terminal and may not resume. It retained 19 passes, 2 raw
+`product` failures, 11 exact lane blocks, 0 deferrals, and 21 assertion-bearing
+lanes against passing R41's exact source/environment pair. Its immutable start,
+attempt, harvest, raw batch, append-only diagnosis, restoration, and qualified
+authorization are named above. No passing result exists. The current correction
+is candidate-affecting; R33 cannot start until it is committed, R42 passes, and
+the validation coordinator authorizes the formal rehearsal.
 
 Sprint 8A rehearsal uses the dependency-aware inventory below. A create-once
-start receipt declares the graph, exact Wave A/cleanup/Wave B/aggregate-sink/
-safety-finalizer order, prior evidence hashes, impact decisions, and deferral
+start receipt declares the graph, exact Wave A/Wave B/aggregate-sink/terminal-
+cleanup-sink/safety-finalizer order, prior evidence hashes, impact decisions, and deferral
 counters before
 assertions. After any failure the attempt is `harvesting`: safe independent
-Wave A siblings continue, true dependents are blocked, mandatory teardown and
-restoration continue, and eligible Wave B lanes become `deferred` only after
-Wave A harvesting finishes. No tracked correction or new attempt may begin
+Wave A siblings continue, true dependents are blocked, and eligible Wave B
+lanes become `deferred` only after Wave A harvesting finishes. Aggregate sinks
+follow, then mandatory teardown, terminal restoration, and safety finalizers
+continue. No tracked correction or new attempt may begin
 until one harvest receipt and one consolidated defect batch account for every
 row as passed, failed, blocked, or deferred.
 `scripts/test-sprint-validation-harvest.ps1` enforces terminal accounting and
@@ -1138,13 +1308,13 @@ execution resets its counter. Missing or unauthenticated history selects full
 Wave A rather than a speculative deferral.
 
 The following table is the planned lane summary for the next successor
-Candidate Rehearsal, not a restatement of R31's terminal results.
+Candidate Rehearsal, not a restatement of R32's terminal results.
 
 | Diagnostic lane | Planned command/evidence | Assertions | Successor result | Defect batch |
 |---|---|---|---|---|
 | Static and boundaries | fmt/check/Clippy, manifests, links, native/WASM graphs, source/image audits | zero warnings; no forbidden owner/dependency/route/storage/legacy edge; exact-body and joint-scope enforcement present | Not Run | |
 | Full Rust | `cargo test --workspace --locked` plus targeted contract/schema/authorization tests | all pass, including render kind/identity, raw-body tamper, exact assertion and same-node matrix | Not Run | |
-| Source-exact materialization | authorized reset, empty schemas, first/no-op owner bootstrap | exact provenance, healthy topology, semantic seed, exact no-op; manifest-declared target and canonical opaque payload; request-bound one-use authorization; provider-owned result; no product-specific Core/Supervisor branch; zero writes on mismatch, expiry, replay, incompatibility, or outage | Not Run | |
+| Source-exact materialization | authorized reset, empty schemas, first/no-op owner bootstrap | exact provenance; Core 200/text/plain/`ok` and Supervisor 204/empty redirect-disabled health; canonical Dashboard V1 layout; semantic seed and exact no-op; manifest-declared target and canonical opaque payload; request-bound one-use authorization; provider-owned result; no product-specific Core/Supervisor branch; zero writes on mismatch, expiry, replay, incompatibility, or outage | Not Run | |
 | Playwright | `scripts/validate-e2e.ps1` with exact gateway, deployment receipt, fresh-state, Sprint 8A profile, and evidence bindings | complete inventory; zero unexpected skip/retry/flake; retained outputs | Not Run | |
 | Conformance and nondisclosure | module testkit plus Components/Dataset/Dashboard matrix | owner/version/scope/audience/known-random/timing/lifecycle cases pass; shared-node render succeeds and disjoint metadata/render stay restricted | Not Run | |
 | Deployed smoke | general and Sprint 8A smoke in rehearsal namespace | real boundaries, fixtures, old-input rejection, outage/recovery and final health | Not Run | |
@@ -1152,14 +1322,17 @@ Candidate Rehearsal, not a restatement of R31's terminal results.
 | Component release transition | source-built `0.9.0` metadata plus Supervisor/Compose apply receipts and stage snapshots | exact one-owner `0.9.0`/`1.0.0` upgrade, rollback and restoration; Component preservation; unrelated identity stability | Not Run | |
 | Failure teardown/rerun | induced partial materialization failure | evidence retained; exact topology/volumes removed; new empty rerun healthy | Not Run | |
 | Automated UAT diagnostics | automated equivalents of UAT-01 through UAT-08, including the structured live-product receipt | every precondition and expected semantic state reproducible; UAT-8A-04 includes `joint-dashboard-component-scope`; failed nested predicates retain exact identity/classification/reason/raw hash without outer double count; UAT-8A-05 cannot pass from lane labels alone | Not Run | |
+| Terminal canonical restoration | independent `final-successor-health` cleanup sink after Wave B and aggregate disposition, then final environment identity | source-exact canonical topology; exact Core/Supervisor health and inventory/navigation; cleanup result `canonical_successor_healthy`; executes despite diagnostic failure/deferral | Not Run | |
 
 The first two lanes are independent of a deployed topology. Playwright locked
 installation/discovery, runner self-tests, and acceptance-inventory checks are
 also independent. Healthy materialization/no-op is the prerequisite for live
 Playwright execution, deployed smoke, deployed inventory/navigation audit,
-automated UAT diagnostics, failure-containment successor health, and the
-Component upgrade/rollback baseline. Formal deployed acceptance smoke remains
-SIT-owned and is not a rehearsal substitute.
+automated UAT diagnostics, and the Component upgrade/rollback baseline.
+Failure-containment recovery owns an isolated diagnostic topology; terminal
+canonical restoration is independently mandatory after Wave B/aggregate
+disposition. Formal deployed acceptance smoke remains SIT-owned and is not a
+rehearsal substitute.
 
 The Sprint 8A reference materialization rebuilds the canonical seed through
 signed owner bootstrap and receipt read-back before deployment evidence is
@@ -1196,24 +1369,22 @@ Component module, API enrollment, and Installation Control. A database
 identity used by one owner integration target is not reused by another target
 in the same rehearsal.
 
-- Mutable source/environment identity: Readiness 40 verified clean commit
-  `b4f1581e5c60522eab86da23301d92f9e1c36cf0`, tree
-  `af0ab5cf246ede958e94521766226e609e818ec1`, and environment fingerprint
-  `6967aa2c0f9edad2e52c18f54d3faaec6b7459f89f22586d01ceef6aa784f105`;
-  the first pre-start correction produced clean `231bd8d9` / `359789b1`, and
-  both source identities are superseded by the current candidate-affecting
-  correction.
-- Passing readiness prerequisite: Readiness 40 passed, but its result SHA-256
-  `f4fd1745606a0094f648aa92b8fdca97bdc5e0101e2b74179f274e5614e1b939`
-  is superseded by the scheduler/self-test correction and cannot serve R32;
-  R41 must pass first.
-- Current consolidated defects and correction batch: the rejected R41 launch
-  retained two `harness` defects before reservation or an attempt existed. The
-  correction authenticates schema-2 historical and schema-3 current Readiness
-  terminals, and represents a clean pre-rehearsal Readiness as an exact
-  immutable prerequisite edge that preserves a consumed lineage without a new
-  link or consumption. It is candidate-affecting and remains formally
-  unverified until complete successor gates pass.
+- Mutable source/environment identity: Readiness 41 and Rehearsal 32 verified
+  clean commit `d703e7a67c3f1177b621b0e14161e0661209ea42`, tree
+  `889ddc5f784ea1e81686ce63dd22669aabde956d`, and environment fingerprint
+  `53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`.
+  The current candidate-affecting correction supersedes that source.
+- Passing readiness prerequisite: Readiness 41 passed with SHA-256
+  `547940b0ca6685d98304a1f51d9810e38bd54463f6fd378dd375d46c7407c2aa`,
+  but R32 failed. Its qualified correction transition permits exactly R42; R41
+  cannot be reused by a later rehearsal.
+- Current consolidated correction: preserve R32's two raw `product` findings
+  while correcting the shared endpoint-specific health harness, independent
+  canonical-restoration sink, restoration-before-authorization guard,
+  canonical full-graph evidence paths, stale public `placement_key` assertion,
+  and Dashboard's unversioned fallback-layout seed. The bounded scheduler,
+  deferred schema/counters, validation state, harvest/batch lineage, and
+  preflight rejection receive adversarial enforcement in the same cone.
 - Preceding pre-start correction: the rejected R32 launch retained one
   `harness` defect before an attempt existed. Commit `231bd8d9` made
   declaration-member validation representation-aware and added adversarial
@@ -1444,18 +1615,23 @@ in the same rehearsal.
 - Readiness 39 passed against `ffe05ace`/`1d17533d` and environment
   `96c2a32e...`. Rehearsal 31 then terminalized all 32 lanes with 19 passes, 3
   failures, and 10 blocks, retained one harvest/batch/authorization chain, and
-  returned to implementation for the current correction. It may not resume.
+  returned to implementation for its scheduler/materialization correction. It
+  may not resume.
 - Readiness 40 passed against `b4f1581e`/`af0ab5cf` and environment
   `6967aa2c...`. The requested R32 launch was rejected before an immutable start
   or attempt receipt because the scheduler validator did not recognize the
-  runner's ordered-dictionary declarations. R32 remains unused; the retained
-  pre-start batch required corrected R41 before another launch.
+  runner's ordered-dictionary declarations. The retained pre-start batch
+  required corrected R41 before that attempt identity was later admitted.
 - The first corrected R41 launch against `231bd8d9`/`359789b1` rejected before
   reservation because correction-lineage validation required every successor
   terminal to be schema 2 and clean rerun admission was unreachable for an
   already-consumed lineage. Two `harness` defects and all reachable pre-start
-  diagnostics are retained. R41 remains unused; the current correction must
-  pass focused verification before another coordinator-authorized launch.
+  diagnostics are retained. The subsequent corrected R41 passed against
+  `d703e7a6`/`889ddc5f` and environment `53fbb1f7...`.
+- Rehearsal 32 then terminalized all 32 lanes with 19 passes, 2 raw `product`
+  failures, 11 blocks, and 0 deferrals. Its immutable harvest and raw batch,
+  append-only diagnosis, canonical restoration, and R42-only authorization
+  qualification are retained. It may not resume.
 - Complete-cycle repetitions after the current correction: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -1467,10 +1643,14 @@ incomplete.
 ## Environment Contract
 
 - Corrected successor environment fingerprint: Not issued. The latest
-  superseded R40 fingerprint is
-  `6967aa2c0f9edad2e52c18f54d3faaec6b7459f89f22586d01ceef6aa784f105`.
+  superseded R41/R32 fingerprint is
+  `53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`.
 - Intended gateway: `http://127.0.0.1:8088`; intended Supervisor endpoint:
   `http://127.0.0.1:8098`.
+- Exact health contracts: Core `GET /health` returns HTTP 200,
+  `text/plain`, exact body `ok`; Supervisor `GET /health/ready` returns HTTP
+  204 with an empty body. Every probe disables redirects and retains the exact
+  endpoint, status, media/body observation, and contract result.
 - Compose project/profile: `tessara-sprint-8a`,
   `deploy/sprint-8a/compose.yaml`, required profiles explicitly enabled.
 - Validation database bindings: `TEST_API_DATABASE_URL`,
@@ -1479,7 +1659,7 @@ incomplete.
   `TEST_INSTALLATION_CONTROL_DATABASE_URL`. Readiness requires pairwise-
   distinct loopback, token-bounded test database identities and completes an
   authenticated transactional temporary-table round trip against each one.
-  Before R41, each database must be a freshly recreated generation with no
+  Before R42, each database must be a freshly recreated generation with no
   user tables; a reachable but reused database is a failed readiness contract.
   All six bindings, the destructive-reset acknowledgement, and
   `TEST_POSTGRES_CLIENT_CONTAINER_ID` must be exported in the same PowerShell
@@ -1512,18 +1692,20 @@ manually assembling lanes is not a Candidate Rehearsal and cannot authorize
 preflight.
 
 ```powershell
-.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 41
-.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 32 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 42
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 33 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
 
-R41 is the clean-pre-rehearsal successor to superseded passing R40. It must name
-immutable R40 as its sole Readiness prerequisite, preserve the existing
-consumed correction lineage without a new link or consumption, and bind R32's
-corrected conservative full-Wave-A schedule. R32 cannot rely on any legacy pass
-or deferral counter. If its Wave A succeeds, the same attempt continues through
-every remaining lane; only an all-passing, zero-deferred result can enter
-preflight. Neither gate has run for the corrected source, so candidate freeze,
-SIT, and formal UAT remain closed.
+R42 must consume the exact R32 schema-2 authorization together with its
+append-only qualification, bind the immutable failed attempt/harvest/batch and
+proven restoration, and leave the complete preceding correction lineage
+unchanged. It then fixes R33's full declaration graph and schedule. If R33 Wave
+A succeeds, the same attempt continues through every Wave B lane; if Wave A
+fails, it finishes safe siblings and terminalizes eligible Wave B deferrals,
+then runs aggregate sinks, mandatory restoration, and safety finalizers. Only
+an all-passing, zero-deferred result can enter preflight.
+Neither corrected-source gate has run, so candidate freeze, SIT, and formal UAT
+remain closed.
 
 Readiness requires and authenticates the six declared disposable database
 URLs, proves their identities are pairwise distinct, records the normalized
@@ -2017,10 +2199,13 @@ Runtime chronology:
 | 2026-08-07 09:17–09:22 EDT | Readiness 39 / complete gate | Yes; all 15 checks passed | `ffe05ace` / `1d17533d`, environment `96c2a32e...` | N/A — passed, later superseded | Exact immutable receipt and canonical alias retained with SHA-256 `b28da23a...` | R39 and all downstream phases after R31/candidate-affecting correction | Consume R31 authorization in a new complete R40 |
 | 2026-08-07 09:22–10:44 EDT | Rehearsal 31 / complete fail-late harvest | Yes in 22 lanes; 10 lanes and 8 nested UAT scenarios dependency-blocked | `ffe05ace` / `1d17533d`, environment `96c2a32e...` | Raw: 2 `product`, 1 `harness`; 10 exact lane blocks | 19 passes, 3 failures, 10 blocks; one harvest, one three-defect batch, one unconsumed exact-R40 authorization; raw evidence unchanged | Rehearsal 31, R39, and every downstream phase | Correct the consolidated batch; then R40 and R32 |
 | 2026-08-07 after R31 terminalization | Bounded failure-first scheduler and R31 defect correction | Focused implementation assertions only | mutable successor | `harness`, `environment`, deployment/acceptance/evidence enforcement; raw R31 labels retained | Add fresh-database generation guard, exact Supervisor target enrollment, normalized Compose parser, precursor-evidence containment guard, immutable two-wave schedule, exact deferral schema/state/harvest/lineage enforcement, recovery, and adversarial self-tests | No formal gate result; no candidate or downstream phase authorized | Clean correction commit; coordinator-authorized R40 then conservative full-Wave-A R32 |
-| 2026-08-07 12:27–12:32 EDT | Readiness 40 / complete gate | Yes; all 15 checks passed | `b4f1581e` / `af0ab5cf`, environment `6967aa2c...` | N/A — passed, later superseded | Exact immutable receipt and canonical alias retained with SHA-256 `f4fd1745...`; R32 conservative schedule SHA-256 `7b09c1b3...` | R40 and all downstream phases after the pre-start correction | Complete corrected Readiness 41, then still-unused R32 |
-| 2026-08-07 12:35 EDT | Rehearsal 32 / rejected pre-start launch | No; no immutable start, attempt receipt, lane registration, assertions, or product actions | `b4f1581e` / `af0ab5cf`, environment `6967aa2c...` | One `harness` defect | Ordered-dictionary declarations were rejected by PSObject-only member validation; raw log, typed failure, and one consolidated pre-start batch retained; authenticated empty reservation residue removed | R40 and every downstream phase; R32 remains unused | Correct representation-aware validation and live-shape self-test together; commit; complete R41; then R32 |
-| 2026-08-07 after R32 pre-start rejection | Ordered-dictionary scheduler correction / focused implementation verification | Focused self-tests and static checks only; no lifecycle attempt | mutable correction source | N/A — focused implementation proof passed | Candidate Rehearsal and Readiness self-tests, complete Sprint 8A acceptance contract, PowerShell parsing, Markdown links, formatting, workspace check, and all-target/all-feature warnings-denied Clippy passed; missing scheduler role/impact members fail closed on the live declaration shape | No formal receipt, candidate, or downstream phase authorized | Clean commit; coordinator-authorized R41 then still-unused R32 |
+| 2026-08-07 12:27–12:32 EDT | Readiness 40 / complete gate | Yes; all 15 checks passed | `b4f1581e` / `af0ab5cf`, environment `6967aa2c...` | N/A — passed, later superseded | Exact immutable receipt and canonical alias retained with SHA-256 `f4fd1745...`; R32 conservative schedule SHA-256 `7b09c1b3...` | R40 and all downstream phases after the pre-start correction | Complete corrected Readiness 41, then the then-unused R32 identity |
+| 2026-08-07 12:35 EDT | Rehearsal 32 / rejected pre-start launch | No; no immutable start, attempt receipt, lane registration, assertions, or product actions | `b4f1581e` / `af0ab5cf`, environment `6967aa2c...` | One `harness` defect | Ordered-dictionary declarations were rejected by PSObject-only member validation; raw log, typed failure, and one consolidated pre-start batch retained; authenticated empty reservation residue removed | R40 and every downstream phase; R32 was still unused at this boundary | Correct representation-aware validation and live-shape self-test together; commit; complete R41; then R32 |
+| 2026-08-07 after R32 pre-start rejection | Ordered-dictionary scheduler correction / focused implementation verification | Focused self-tests and static checks only; no lifecycle attempt | mutable correction source | N/A — focused implementation proof passed | Candidate Rehearsal and Readiness self-tests, complete Sprint 8A acceptance contract, PowerShell parsing, Markdown links, formatting, workspace check, and all-target/all-feature warnings-denied Clippy passed; missing scheduler role/impact members fail closed on the live declaration shape | No formal receipt, candidate, or downstream phase authorized | Clean commit; coordinator-authorized R41 then the still-unused R32 identity |
 | 2026-08-07 12:58–13:00 EDT | Readiness 41 / rejected pre-start launch and diagnostic harvest | No; no reservation, immutable start, attempt receipt, check registration, assertion, or product action | `231bd8d9` / `359789b1`; current retained environment `6967aa2c...` | Two `harness` defects | R40's schema-3 terminal was rejected by schema-2-only lineage validation; the same diagnostic pass proved clean rerun admission could not preserve an already-consumed lineage. Launch log, diagnostic log, typed failure, and one two-defect pre-start batch are retained; no R41 namespace exists. | `231bd8d9`, R40, and every downstream phase; R41 and R32 remain unused | Correct lineage-terminal schema enforcement and exact clean-pre-rehearsal supersession together; focused verification and clean commit; coordinator-authorized R41 then R32 |
+| 2026-08-07 13:56–14:01 EDT | Readiness 41 / complete gate | Yes; all 15 checks passed | `d703e7a6` / `889ddc5f`, environment `53fbb1f7...` | N/A — passed, later superseded | Immutable start `8365d2b9...`; immutable terminal/canonical alias `547940b0...`; R32 schedule `7b09c1b3...` | R41 and downstream phases after R32 candidate-affecting findings | Consume qualified R32 transition in complete R42 after correction |
+| 2026-08-07 14:06–15:37 EDT | Rehearsal 32 / complete conservative fail-late harvest | Yes in 21 lanes; 11 exact dependency blocks | `d703e7a6` / `889ddc5f`, environment `53fbb1f7...` | Raw: 2 `product`; 11 exact blocks; diagnosed shared `harness` health root | 19 passes, 2 failures, 11 blocks, 0 deferrals; immutable attempt `98cddc03...`, harvest `89861d8a...`, and one raw two-defect batch `4a5219fd...`; no passing result | R32, R41, and every downstream phase | Preserve raw evidence; restore canonical environment; correct one consolidated batch; then R42/R33 |
+| 2026-08-07 15:37–16:04 EDT | R32 append-only diagnosis, canonical restoration, and authorization qualification | Yes in diagnostic restoration only; no formal gate | Same retained `d703e7a6` / `889ddc5f`; predecessor environment `53fbb1f7...` | `harness`, `evidence-finalization`, stale smoke `harness`, and Dashboard seed `product`; raw R32 labels unchanged | Diagnostic supplement `8bcfc25c...`; restoration `e082eefd...`; qualification `859a8dba...`; validation state `85ac129f...`. The old authorization is usable only as the R42 tuple and authorizes no later phase. | Current tracked product/harness/evidence cone and all downstream phases | Focused implementation verification and clean commit; coordinator-authorized complete R42 then complete R33 |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
@@ -2064,16 +2249,17 @@ immutable fingerprint covers all authoritative SIT and UAT evidence.
 - SIT passed: No.
 - UAT passed: No.
 - Acceptance mapping complete: Planned, not executed.
-- Invalidation decisions satisfied: No — the rejected R32 pre-start launch has
-  one retained historical `harness` correction, and the rejected R41 pre-start
-  launch has the current two-defect `harness` correction. Complete Readiness 41
-  and the still-unused Candidate Rehearsal 32 remain required after the clean
-  commit and fresh database generations.
+- Invalidation decisions satisfied: No — R32 is terminal failed with two raw
+  `product` findings, eleven blocks, and no passing result. Its append-only
+  restoration qualifies correction only; the tracked product/harness/evidence
+  cone remains formally unverified. Complete Readiness 42 and complete
+  Candidate Rehearsal 33 remain required after the clean commit and fresh
+  database generations.
 - Unresolved product decisions: None.
 - Intended active route/slot: source-exact Sprint 8A gateway with current
   Component release and canonical fresh seed.
-- Application health: restored diagnostically after R31, but not proven by a
-  passing corrected-source rehearsal.
+- Application health: source-exact canonical restoration after R32 is retained
+  diagnostically, but not proven by a passing corrected-source rehearsal.
 - Evidence source commit: Not frozen.
 - Documentation commit: Not created.
 - Authorization timestamp: None.

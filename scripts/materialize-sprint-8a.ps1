@@ -21,6 +21,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-health-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
 
 $expectedProject = "tessara-sprint-8a"
@@ -510,39 +511,35 @@ function Assert-Sprint8ANoOpMatchesFirst {
 
 function Get-Sprint8AFinalHealth {
     param([Parameter(Mandatory)][string]$ComposePath)
-    $gatewayReady = Invoke-Sprint7ARequest -BaseUrl $CoreUrl -Path "/health/ready"
-    $supervisorReady = Invoke-Sprint7ARequest -BaseUrl $SupervisorUrl -Path "/health/ready"
-    if ($gatewayReady.status -ne 200 -or $supervisorReady.status -ne 200) {
-        throw "Sprint 8A final gateway/Core or Supervisor readiness failed."
-    }
+    $gatewayReady = Invoke-Sprint8AHealthProbe -Target gateway_core -BaseUrl $CoreUrl
+    $supervisorReady = Invoke-Sprint8AHealthProbe -Target supervisor -BaseUrl $SupervisorUrl
     $services = @(Get-Sprint8AComposeServiceState -ComposePath $ComposePath)
     $expectedRuntimeServices = @(
         "components", "core", "dashboards", "gateway", "postgres", "scoped-records", "supervisor"
     )
+    $failures = [Collections.Generic.List[string]]::new()
+    if (-not [bool]$gatewayReady.passed) {
+        $failures.Add("gateway_core_health_contract_failed")
+    }
+    if (-not [bool]$supervisorReady.passed) {
+        $failures.Add("supervisor_health_contract_failed")
+    }
     foreach ($serviceName in $expectedRuntimeServices) {
         $service = @($services | Where-Object service -CEQ $serviceName)
         if ($service.Count -ne 1 -or $service[0].state -cne "running" -or
             ($service[0].health -and $service[0].health -cne "healthy")) {
-            throw "Sprint 8A final runtime service '$serviceName' is not uniquely running and healthy."
+            $failures.Add("runtime_service_not_healthy:$serviceName")
         }
     }
     [pscustomobject][ordered]@{
         captured_at = [DateTimeOffset]::UtcNow.ToString("o")
-        gateway_core = [ordered]@{
-            status = $gatewayReady.status
-            content_type = $gatewayReady.content_type
-            body_sha256 = $gatewayReady.body_sha256
-            body_utf8_length = $gatewayReady.body_utf8_length
-        }
-        supervisor = [ordered]@{
-            status = $supervisorReady.status
-            content_type = $supervisorReady.content_type
-            body_sha256 = $supervisorReady.body_sha256
-            body_utf8_length = $supervisorReady.body_utf8_length
-        }
+        health_contract = "tessara.sprint-8a.health-observation/v1"
+        gateway_core = $gatewayReady
+        supervisor = $supervisorReady
         expected_runtime_services = $expectedRuntimeServices
         compose_services = $services
-        passed = $true
+        failures = @($failures)
+        passed = $failures.Count -eq 0
     }
 }
 
@@ -557,22 +554,14 @@ function Start-Sprint8APublicGateway {
     if (@($gatewayBefore | Where-Object state -CEQ "running").Count -ne 0) {
         throw "Sprint 8A public gateway became available before owner materialization completed."
     }
-    $probeBefore = try {
-        $unexpected = Invoke-Sprint7ARequest -BaseUrl $CoreUrl -Path "/health/ready"
-        [ordered]@{
-            available = $true
-            status = [int]$unexpected.status
-            observed_at = [DateTimeOffset]::UtcNow.ToString("o")
-        }
-    } catch {
-        [ordered]@{
-            available = $false
-            status = $null
-            observed_at = [DateTimeOffset]::UtcNow.ToString("o")
-            failure_category = [string]$_.CategoryInfo.Category
-        }
+    $probeBeforeObservation = Invoke-Sprint8AHealthProbe -Target gateway_core -BaseUrl $CoreUrl
+    $probeBefore = [ordered]@{
+        response_received = [bool]$probeBeforeObservation.response.received
+        unavailable_proven = -not [bool]$probeBeforeObservation.response.received
+        observed_at = [DateTimeOffset]::UtcNow.ToString("o")
+        observation = $probeBeforeObservation
     }
-    if ([bool]$probeBefore.available) {
+    if ([bool]$probeBefore.response_received) {
         throw "Sprint 8A public gateway endpoint responded before owner materialization completed."
     }
 
@@ -584,30 +573,23 @@ function Start-Sprint8APublicGateway {
         throw "Sprint 8A public gateway startup failed after owner materialization."
     }
 
-    $ready = $null
-    for ($attempt = 1; $attempt -le 60; $attempt++) {
-        try {
-            $candidate = Invoke-Sprint7ARequest -BaseUrl $CoreUrl -Path "/health/ready"
-            if ([int]$candidate.status -eq 200) {
-                $ready = $candidate
-                break
-            }
-        } catch {
-            if ($attempt -eq 60) { throw }
-        }
-        Start-Sleep -Seconds 1
-    }
-    if ($null -eq $ready) {
-        throw "Sprint 8A public gateway did not become ready after owner materialization."
-    }
+    $ready = Wait-Sprint8AHealthProbe `
+        -Target gateway_core `
+        -BaseUrl $CoreUrl `
+        -MaximumAttempts 60 `
+        -DelaySeconds 1
     $servicesAfter = @(Get-Sprint8AComposeServiceState -ComposePath $ComposePath)
     $gatewayAfter = @($servicesAfter | Where-Object service -CEQ "gateway")
+    $failures = [Collections.Generic.List[string]]::new()
+    if (-not [bool]$ready.passed) {
+        $failures.Add("public_gateway_health_contract_failed")
+    }
     if ($gatewayAfter.Count -ne 1 -or $gatewayAfter[0].state -cne "running") {
-        throw "Sprint 8A public gateway is not uniquely running after the offline boundary opened."
+        $failures.Add("gateway_service_not_uniquely_running")
     }
 
     [ordered]@{
-        schema_version = 1
+        schema_version = 2
         contract = "tessara.sprint-8a.public-gateway-boundary"
         public_gateway_url = $CoreUrl
         materialization_control_url = $ControlUrl
@@ -619,15 +601,12 @@ function Start-Sprint8APublicGateway {
             exit_code = $exitCode
             raw_log = $rawLog
         }
-        public_ready_at = [DateTimeOffset]::UtcNow.ToString("o")
-        public_ready = [ordered]@{
-            status = [int]$ready.status
-            content_type = [string]$ready.content_type
-            body_sha256 = [string]$ready.body_sha256
-            body_utf8_length = [long]$ready.body_utf8_length
-        }
-        gateway_service_after = $gatewayAfter[0]
-        passed = $true
+        public_ready_at = if ([bool]$ready.passed) { [DateTimeOffset]::UtcNow.ToString("o") } else { $null }
+        public_ready_attempts = [int]$ready.attempts
+        public_ready = $ready.observation
+        gateway_service_after = $gatewayAfter
+        failures = @($failures)
+        passed = $failures.Count -eq 0
     }
 }
 
@@ -654,6 +633,7 @@ function Assert-Sprint8AComposeParserRejects {
 }
 
 function Invoke-Sprint8AMaterializationSelfTest {
+    Test-Sprint8AHealthContract | Out-Null
     if (@(ConvertFrom-Sprint8AComposeServiceJson -Lines @()).Count -ne 0 -or
         @(ConvertFrom-Sprint8AComposeServiceJson -Lines @('[]')).Count -ne 0) {
         throw "Compose parser self-test did not preserve empty output and an empty JSON array."
@@ -1018,16 +998,25 @@ try {
             Assert-Sprint8ANoOpMatchesFirst -First $first -NoOp $noOp
         }
 
+        $gatewayBoundary = Start-Sprint8APublicGateway `
+            -ComposePath $composePath `
+            -RawLogPath (Join-Path $attemptDirectory "public-gateway-start.log")
         $gatewayBoundaryPublication = Publish-Sprint7AEvidence `
-            -Document (Start-Sprint8APublicGateway `
-                -ComposePath $composePath `
-                -RawLogPath (Join-Path $attemptDirectory "public-gateway-start.log")) `
+            -Document $gatewayBoundary `
             -OutputPath (Join-Path $attemptDirectory "public-gateway-boundary.json")
+        if (-not [bool]$gatewayBoundary.passed) {
+            if (-not [bool]$gatewayBoundary.public_ready.passed) {
+                Assert-Sprint8AHealthPassed `
+                    -Observation $gatewayBoundary.public_ready `
+                    -Context "Sprint 8A public gateway/Core health contract"
+            }
+            throw "Sprint 8A public gateway is not uniquely running after the offline boundary opened."
+        }
 
         $finalHealth = Get-Sprint8AFinalHealth -ComposePath $composePath
         $finalHealthPublication = Publish-Sprint7AEvidence `
             -Document ([ordered]@{
-                schema_version = 1
+                schema_version = 2
                 contract = "tessara.sprint-8a.final-health"
                 attempt = $Attempt
                 source = $source
@@ -1037,6 +1026,19 @@ try {
                 health = $finalHealth
             }) `
             -OutputPath (Join-Path $attemptDirectory "final-health.json")
+        if (-not [bool]$finalHealth.passed) {
+            if (-not [bool]$finalHealth.gateway_core.passed) {
+                Assert-Sprint8AHealthPassed `
+                    -Observation $finalHealth.gateway_core `
+                    -Context "Sprint 8A final gateway/Core health contract"
+            }
+            if (-not [bool]$finalHealth.supervisor.passed) {
+                Assert-Sprint8AHealthPassed `
+                    -Observation $finalHealth.supervisor `
+                    -Context "Sprint 8A final Supervisor health contract"
+            }
+            throw "Sprint 8A final runtime services are not uniquely running and healthy: $(@($finalHealth.failures) -join ', ')."
+        }
 
         $result = [ordered]@{
             schema_version = 1
@@ -1087,6 +1089,12 @@ try {
             $rawArtifacts.Add((Copy-Sprint8ARawEvidence `
                 -Source $bootstrapFailurePath `
                 -Destination (Join-Path $attemptDirectory "failed-apply-response.log")))
+        }
+        foreach ($healthEvidenceName in @("public-gateway-boundary.json", "final-health.json")) {
+            $healthEvidencePath = Join-Path $attemptDirectory $healthEvidenceName
+            if (Test-Path -LiteralPath $healthEvidencePath -PathType Leaf) {
+                $rawArtifacts.Add((Get-Sprint8AArtifact -Path $healthEvidencePath))
+            }
         }
         try {
             $serviceLogs = @(& docker compose -f $composePath --profile reference logs --no-color --timestamps 2>&1)

@@ -38,6 +38,12 @@ Before editing, identify:
   harnesses, and documentation; and
 - focused proof that the resulting behavior and boundary are correct.
 
+Map every implementation work item to the exact governing sprint-plan,
+acceptance, architecture, or validation-spec clause it satisfies. Keep that
+mapping in the implementation notes or sprint verification document so the
+handoff can show which behavior proves each clause; a list of changed files or
+test counts is not a substitute.
+
 Use the touched dependency cone as the cleanup boundary. Remove obsolete paths
 from the changed capability and its directly affected consumers without turning
 the task into unrelated repository-wide cleanup. Report related debt outside
@@ -117,6 +123,11 @@ that cone instead of silently expanding scope.
   coverage.
 - Update focused tests, fixtures, harnesses, and affected documentation in the
   same implementation slice as the behavior.
+- Deliver a behavior change together with every directly affected
+  materialization, semantic no-op, rollback/recovery, fixture, runner, smoke,
+  acceptance-contract, and evidence-schema change. Do not leave validation
+  consumers to discover an already-known producer/contract mismatch during a
+  full candidate run.
 - Require formatting, compilation, and Clippy with warnings denied. Do not add
   blanket warning allowlists or suppressions to defer cleanup.
 
@@ -134,6 +145,8 @@ Before handoff, answer from the diff and repository rather than intention:
   deleted or reconciled?
 - Are required resilience and fail-closed states still explicit?
 - Are tests at least as strong, and are warnings still denied?
+- Does the implementation-to-validation-clause mapping have passing focused
+  proof for every affected clause?
 
 Resolve findings inside the touched cone before declaring implementation
 complete.
@@ -142,16 +155,30 @@ complete.
 
 1. Run the narrowest relevant format check, compile, Clippy with `-D warnings`,
    and focused tests during implementation.
-2. Run applicable repository boundary checks such as
+2. When migrations, seeds, bootstrap, deployment inputs, materialization, or
+   owner health changed, complete a source-exact materialization from a clean
+   disposable environment and its exact semantic no-op/idempotence pass before
+   declaring implementation complete. When rollback, failure containment, or
+   recovery changed, also prove focused recovery to the canonical topology.
+   Retain the resulting evidence as non-authoritative implementation
+   diagnostics; it does not replace Validation Readiness or Candidate
+   Rehearsal.
+3. Run every focused reproducer for the known product, harness, fixture,
+   runner, smoke, acceptance, and evidence-contract regressions in the touched
+   cone. If the same formal validation lane has failed twice consecutively, do
+   not launch it again until its clean focused reproducer passes. After three
+   consecutive failures, treat the lane as a concentrated validation-platform
+   incident and resolve its root cause before another full launch.
+4. Run applicable repository boundary checks such as
    `scripts/check-web-crate-boundaries.ps1`,
    `scripts/verify-module-sdk-boundaries.ps1`, or
    `scripts/verify-module-sdk-compatibility.ps1` when their contracts are
    affected.
-3. Run `git diff --check` and inspect `git status --short`. Identify preserved
+5. Run `git diff --check` and inspect `git status --short`. Identify preserved
    unrelated user changes explicitly.
-4. Run broader repository checks in proportion to the change and the sprint
+6. Run broader repository checks in proportion to the change and the sprint
    plan. Do not claim checks that were skipped or silently filtered.
-5. Hand the clean implementation commit to `tessara-validation-preflight` when
+7. Hand the clean implementation commit to `tessara-validation-preflight` when
    formal sprint validation is requested. Let `tessara-sprint-validation`,
    `tessara-sit`, `tessara-uat`, and `tessara-sprint-closeout` retain authority
    over candidate freeze, SIT, UAT, evidence, and closeout.

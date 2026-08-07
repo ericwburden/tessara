@@ -13,9 +13,109 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-acceptance-contract.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-health-contract.ps1")
+
+function Test-Sprint8ADashboardPlacementProjection {
+    param(
+        [Parameter(Mandatory)]$Placement,
+        [Parameter(Mandatory)]$Expected
+    )
+
+    $propertyNames = @($Placement.PSObject.Properties.Name)
+    $geometryMatches = [int]$Placement.grid_row -eq [int]$Expected.grid_row -and
+        [int]$Placement.grid_column -eq [int]$Expected.grid_column -and
+        [int]$Placement.grid_width -eq [int]$Expected.grid_width -and
+        [int]$Placement.grid_height -eq [int]$Expected.grid_height
+    $baseMatches = $propertyNames -cnotcontains "placement_key" -and
+        $geometryMatches -and
+        [string]$Placement.resolution_state -ceq [string]$Expected.resolution_state -and
+        [string]$Placement.availability -ceq [string]$Expected.availability
+
+    if ([string]$Expected.disclosure -ceq "restricted") {
+        $encoded = $Placement | ConvertTo-Json -Depth 20 -Compress
+        $passed = $baseMatches -and
+            $propertyNames -cnotcontains "component" -and
+            $propertyNames -cnotcontains "title" -and
+            -not $encoded.Contains('"resource_id":') -and
+            [string]$Placement.resolution.access_state -ceq "unauthorized" -and
+            [string]$Placement.resolution.owner_state.kind -ceq "undisclosed" -and
+            [string]$Placement.resolution.resource_identity_state -ceq "undisclosed"
+        return [pscustomobject][ordered]@{
+            passed = $passed
+            detail = "restricted placement preserves exact geometry and discloses no bootstrap key, title, or Component identity"
+        }
+    }
+
+    $reference = if ($propertyNames -ccontains "component") {
+        $Placement.component.reference.reference
+    } else {
+        $null
+    }
+    $passed = $baseMatches -and $null -ne $reference -and
+        [string]$reference.installation_id -ceq $script:Sprint8AFixture.installation_id -and
+        [string]$reference.owner.kind -ceq "module_instance" -and
+        [string]$reference.owner.installation_id -ceq $script:Sprint8AFixture.installation_id -and
+        [string]$reference.owner.module_instance_id -ceq $script:Sprint8AFixture.component_module_instance_id -and
+        [string]$reference.resource_type -ceq $script:Sprint8AFixture.component_resource_type -and
+        [string]$reference.resource_id -ceq [string]$Expected.component_version_id
+    [pscustomobject][ordered]@{
+        passed = $passed
+        detail = "placement preserves exact geometry and receipt-bound Components v3 identity without exposing bootstrap-only placement_key"
+    }
+}
+
+function Test-Sprint8ADashboardPlacementProjectionContract {
+    $authorizedExpected = $script:Sprint8AFixture.dashboard_placements[$script:Sprint8AFixture.stat_placement_id]
+    $authorized = [pscustomobject][ordered]@{
+        placement_id = $script:Sprint8AFixture.stat_placement_id
+        grid_row = 1; grid_column = 1; grid_width = 4; grid_height = 2
+        availability = "available"; resolution_state = "available"
+        resolution = [pscustomobject]@{ access_state = "authorized"; owner_state = [pscustomobject]@{ kind = "module_instance" }; resource_identity_state = "resolved" }
+        component = [pscustomobject]@{ reference = [pscustomobject]@{ reference = [pscustomobject]@{
+            installation_id = $script:Sprint8AFixture.installation_id
+            owner = [pscustomobject]@{ kind = "module_instance"; installation_id = $script:Sprint8AFixture.installation_id; module_instance_id = $script:Sprint8AFixture.component_module_instance_id }
+            resource_type = $script:Sprint8AFixture.component_resource_type
+            resource_id = $authorizedExpected.component_version_id
+        } } }
+    }
+    if (-not (Test-Sprint8ADashboardPlacementProjection -Placement $authorized -Expected $authorizedExpected).passed) {
+        throw "Sprint 8A smoke projection rejected an exact authorized placement without placement_key."
+    }
+    $authorized | Add-Member -NotePropertyName placement_key -NotePropertyValue "row-count"
+    if ((Test-Sprint8ADashboardPlacementProjection -Placement $authorized -Expected $authorizedExpected).passed) {
+        throw "Sprint 8A smoke projection accepted a bootstrap-only placement_key in the public response."
+    }
+    $authorized.PSObject.Properties.Remove("placement_key")
+    $authorized.component.reference.reference.resource_id = $script:Sprint8AFixture.component_versions.table
+    if ((Test-Sprint8ADashboardPlacementProjection -Placement $authorized -Expected $authorizedExpected).passed) {
+        throw "Sprint 8A smoke projection accepted a same-count Component identity swap."
+    }
+    $authorized.component.reference.reference.resource_id = $authorizedExpected.component_version_id
+    $authorized.grid_width = 12
+    if ((Test-Sprint8ADashboardPlacementProjection -Placement $authorized -Expected $authorizedExpected).passed) {
+        throw "Sprint 8A smoke projection accepted fallback rather than canonical seed geometry."
+    }
+
+    $restrictedExpected = $script:Sprint8AFixture.dashboard_placements["01980000-0003-7000-8000-000000000005"]
+    $restricted = [pscustomobject][ordered]@{
+        placement_id = "01980000-0003-7000-8000-000000000005"
+        grid_row = 9; grid_column = 7; grid_width = 6; grid_height = 4
+        availability = "unavailable"; resolution_state = "restricted"
+        resolution = [pscustomobject]@{ access_state = "unauthorized"; owner_state = [pscustomobject]@{ kind = "undisclosed" }; resource_identity_state = "undisclosed" }
+    }
+    if (-not (Test-Sprint8ADashboardPlacementProjection -Placement $restricted -Expected $restrictedExpected).passed) {
+        throw "Sprint 8A smoke projection rejected the exact restricted nondisclosure response."
+    }
+    $restricted | Add-Member -NotePropertyName component -NotePropertyValue $authorized.component
+    if ((Test-Sprint8ADashboardPlacementProjection -Placement $restricted -Expected $restrictedExpected).passed) {
+        throw "Sprint 8A smoke projection accepted restricted Component identity disclosure."
+    }
+}
 
 if ($SelfTest) {
     Test-Sprint8AAcceptanceContract
+    Test-Sprint8AHealthContract
+    Test-Sprint8ADashboardPlacementProjectionContract
     foreach ($path in @(
         "deploy/sprint-8a/blueprints/reference.json",
         "deploy/sprint-8a/catalogs/local-release-catalog.json",
@@ -31,10 +131,10 @@ if ($SelfTest) {
 
 Test-Sprint8AAcceptanceContract
 $checks = [Collections.Generic.List[object]]::new()
-$ready = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/health/ready"
-Assert-Sprint7A ($ready.status -in 200, 204) "core_ready" "HTTP $($ready.status)" $checks
-$supervisorReady = Invoke-Sprint7ARequest -BaseUrl $SupervisorUrl -Path "/health/ready"
-Assert-Sprint7A ($supervisorReady.status -in 200, 204) "supervisor_ready" "HTTP $($supervisorReady.status)" $checks
+$ready = Invoke-Sprint8AHealthProbe -Target gateway_core -BaseUrl $BaseUrl
+Assert-Sprint7A ([bool]$ready.passed) "core_ready" "HTTP $($ready.response.status); exact /health text/plain ok contract" $checks
+$supervisorReady = Invoke-Sprint8AHealthProbe -Target supervisor -BaseUrl $SupervisorUrl
+Assert-Sprint7A ([bool]$supervisorReady.passed) "supervisor_ready" "HTTP $($supervisorReady.response.status); exact /health/ready empty 204 contract" $checks
 
 $token = Get-Sprint7AToken -BaseUrl $BaseUrl -Email $AdminEmail -Password $AdminPassword
 $componentsResponse = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/components" -Token $token
@@ -69,17 +169,12 @@ Assert-Sprint7A (
 ) "dashboard_placement_inventory" "Dashboard owner returned the exact seven receipt-bound placements" $checks
 foreach ($placement in @($dashboard.placements)) {
     $expectedPlacement = $script:Sprint8AFixture.dashboard_placements[[string]$placement.placement_id]
-    $reference = $placement.component.reference.reference
-    Assert-Sprint7A (
-        $null -ne $expectedPlacement -and
-        [string]$placement.placement_key -ceq [string]$expectedPlacement.placement_key -and
-        $reference.installation_id -ceq $script:Sprint8AFixture.installation_id -and
-        $reference.owner.kind -ceq "module_instance" -and
-        $reference.owner.installation_id -ceq $script:Sprint8AFixture.installation_id -and
-        $reference.owner.module_instance_id -ceq $script:Sprint8AFixture.component_module_instance_id -and
-        $reference.resource_type -ceq $script:Sprint8AFixture.component_resource_type -and
-        $reference.resource_id -ceq [string]$expectedPlacement.component_version_id
-    ) "dashboard_reference_$($placement.placement_id)" "Dashboard placement uses its exact receipt-bound Components v3 reference" $checks
+    $projection = if ($null -eq $expectedPlacement) {
+        [pscustomobject][ordered]@{ passed = $false; detail = "Dashboard returned an undeclared placement identity" }
+    } else {
+        Test-Sprint8ADashboardPlacementProjection -Placement $placement -Expected $expectedPlacement
+    }
+    Assert-Sprint7A ([bool]$projection.passed) "dashboard_reference_$($placement.placement_id)" ([string]$projection.detail) $checks
 }
 
 foreach ($render in @(
@@ -114,6 +209,10 @@ $result = [ordered]@{
     evidence_kind = "tessara.sprint-8a.smoke"
     generated_at = [DateTimeOffset]::UtcNow.ToString("o")
     base_url = $BaseUrl.TrimEnd('/')
+    health = [ordered]@{
+        core = $ready
+        supervisor = $supervisorReady
+    }
     checks = $checks
     passed = $true
 }

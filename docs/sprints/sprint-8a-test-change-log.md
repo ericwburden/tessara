@@ -787,3 +787,83 @@ Readiness, lifecycle, formal-UAT, diagnostic-UAT, preflight, acceptance,
 harvest-adversarial, and Candidate Rehearsal self-tests plus PowerShell/JSON
 parsing. The canonical UAT inventory now contains 46 globally unique exact-one
 requirements. Neither diagnostic pass ran a formal lifecycle attempt.
+
+## 2026-08-07 — Rehearsal 32 health, restoration, and layout correction
+
+Validation Readiness 41 passed 15/15 against clean `d703e7a6` / `889ddc5f`
+and environment `53fbb1f7...`. Candidate Rehearsal 32 then terminalized its
+32-lane conservative full-harvest schedule with 19 passes, 2 raw `product`
+failures, 11 exact dependency blocks, and 0 deferrals. The immutable attempt
+SHA-256 is `98cddc03977a476af5c5843131b9114ec2f025a1f5eefffa57514daccd5448c5`;
+the harvest is `89861d8add519812993934dba182e6939b1437d38e7f524e4469693001c2c809`;
+and its single raw two-defect batch is
+`4a5219fd0e16d13fbf0e15286ae75f53c84e261a264bbef877127ff8866a1249`.
+Those receipts and classifications remain unchanged.
+
+The consolidated correction changes expectations only where diagnosis proved
+the prior harness or product contract stale:
+
+- All Sprint 8A health callers now consume the endpoint-specific,
+  redirect-disabled `scripts/sprint-8a-health-contract.ps1`: Core
+  `GET /health` is 200 `text/plain` with exact body `ok`; Supervisor
+  `GET /health/ready` is 204 with an empty body.
+  R32 had followed Core's redirected Supervisor-style request to `/login`,
+  accepted HTML as healthy, and then rejected Supervisor's valid 204. No retry,
+  timeout increase, broad 200/204 acceptance, or product-health weakening is
+  introduced.
+- The Dashboard smoke contract no longer requires bootstrap-only
+  `placement_key` in a public response. Stronger proof pins all seven opaque
+  placement IDs and geometries, six disclosed exact Component references and
+  resolution states, and the restricted placement's title/Component identity
+  nondisclosure.
+- Dashboard bootstrap now persists the one canonical V1 placement-config
+  representation instead of an unversioned `{placement_key,width,height}`
+  object that every reader treated as legacy fallback geometry. The seed
+  validates seven unique IDs/keys, dense positions 0 through 6, and exact
+  one-based row/column/width/height values: 1/1/4/2, 3/1/12/6, 9/1/6/4,
+  9/7/6/4, and row 13 at columns 1/5/9 with width 4 and height 2. This is a
+  forward-only pre-production seed correction; bootstrap-only keys do not enter
+  product config, and no old-row reader or migration is retained.
+- New Candidate Rehearsal starts serialize the complete lane declarations,
+  not a names-only list, and canonicalize every evidence path/root/nested-result
+  reference to contained repository-relative forward-slash form. Recovery must
+  match that full graph and schedule exactly.
+- Wave B execution/deferral depends only on the completed diagnostic Wave A.
+  Aggregate sinks follow Wave B, then the terminal canonical-restoration sink
+  and safety finalizers run regardless. Failure-containment recovery remains a
+  Wave A diagnostic and cannot substitute for final restoration.
+- A failed attempt with complete terminal accounting but unproven restoration
+  may publish its harvest and one batch through `-HarvestOnly`, but receives no
+  prospective correction authorization. Schema-3 authorization requires exact
+  passing current-attempt final-health and final-environment receipts and
+  `cleanup_restoration.result = canonical_successor_healthy`.
+
+R32 predates that last guard. Its already-issued schema-2 authorization remains
+quarantined and is effective only with append-only qualification SHA-256
+`859a8dba81792127820a12367e9d0430aaebb9bf7cb77442b50e34322ba4c7bb`,
+which authenticates diagnostic supplement `8bcfc25c...` and source-exact
+restoration `e082eefd...` and permits exactly one Readiness 42 start. This is a
+one-off historical bridge, not a reusable compatibility path, and it authorizes
+no rehearsal result, preflight, candidate freeze, SIT, UAT, or closeout.
+
+Focused adversarial verification must cover fixed immutable ordering, safe
+dependency closure, aggregate-sink behavior, both Wave outcomes, the
+three-deferral limit, impact-cone override, cleanup/restoration, process-loss
+recovery, deferred-result/preflight rejection, and complete-versus-missing
+terminal accounting. R9-R11 materialization and R19-R22 Playwright histories
+remain diagnostic regression fixtures only. These source, harness, fixture,
+schema, acceptance, runner, skill-reference, and documentation changes are
+candidate-affecting. They require a clean implementation commit followed, only
+with validation-coordinator authorization, by complete Readiness 42 and
+complete Rehearsal 33.
+
+The final implementation audit additionally requires exact dependency and
+deferral-counter semantics, evidence-root containment, full start/attempt graph
+authentication, lifecycle-boundary process-loss recovery, and a hashed
+materialization receipt before final restoration can pass. Candidate Rehearsal
+ordering now places its lifecycle prerequisites first and materialization plus
+containment/recovery as the first expensive Wave A branch. Full Rehearsal is
+reserved for final certification: the clean disposable materialization/no-op,
+recovery, health, smoke, regression, acceptance, and runner reproducers must
+pass and retain explicitly non-authoritative evidence before Readiness 42 may be
+started.

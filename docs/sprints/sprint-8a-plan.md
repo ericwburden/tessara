@@ -1,38 +1,31 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Formal testing exited after Validation Readiness 38 reached a complete
-terminal result against clean commit
-`91c9936be7e0cd9bc6beef78e04dc1937bf6601d`, tree
-`564493fda54badc3d4bc5a99d2336b327424f381`. Its 15-check fail-late graph
-retained 12 passes, 2 failures, and 1 exact dependency block. The raw failures
-are an `environment` defect (the runner process omitted
-`TEST_API_DATABASE_URL`) and a `harness` defect (the failure-containment
-self-test attempted an invalid overwrite after deliberately corrupting its
-temporary fixture pair); `environment-contract` is blocked by the former. Readiness 38 consumed
-the one-use Rehearsal 30 correction authorization and is terminal. The plan-to-
-source audit then consolidated the failed-Readiness retry dead end, incomplete
-rehearsal terminal checkpoints, a retired Component `missing_policy` alias,
-and incomplete AC-18/AC-19 UAT traceability and manual-evidence enforcement
-into the same mutable implementation correction. No corrected Readiness or
-Rehearsal has run. No candidate exists, and preflight, SIT, formal UAT, and
-closeout remain closed until fresh complete gates pass against one corrected
-clean source and environment identity.
+Status: Validation Readiness 41 passed its complete 15-check graph against
+clean commit `d703e7a67c3f1177b621b0e14161e0661209ea42`, tree
+`889ddc5f784ea1e81686ce63dd22669aabde956d`, and environment fingerprint
+`53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`.
+Candidate Rehearsal 32 then completed all 32 declared lanes under its
+conservative full-harvest schedule with 19 passes, 2 raw `product` failures,
+11 exact dependency blocks, and 0 deferrals. It issued no passing rehearsal
+result. Post-harvest diagnosis found one shared health-probe harness root, an
+authorization-before-restoration guard defect, noncanonical declaration paths,
+a stale Dashboard smoke assertion, and a real Dashboard bootstrap-layout
+product defect. Canonical source-exact restoration is now retained separately,
+and the already-issued R32 authorization is quarantined unless paired with its
+one-off append-only qualification for exactly Readiness 42. Implementation is
+mutable again; no candidate exists, and preflight, SIT, formal UAT, and closeout
+remain closed until complete Readiness 42 and its complete successor Rehearsal
+pass against the same corrected clean source and environment identity.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
-- Implementation-readiness correction input:
-  `7b326838269c3b4218dd579f649a8011feba4d97`
-- Latest failed Readiness source:
-  `91c9936be7e0cd9bc6beef78e04dc1937bf6601d`
-- Latest failed Readiness source tree:
-  `564493fda54badc3d4bc5a99d2336b327424f381`
-- Earlier superseded passing readiness and failed rehearsal source:
-  `84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`
-- Earlier superseded source tree:
-  `4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`
-- Earlier superseded environment fingerprint:
-  `96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`
+- Current correction input and latest failed rehearsal source:
+  `d703e7a67c3f1177b621b0e14161e0661209ea42`
+- Current correction input tree:
+  `889ddc5f784ea1e81686ce63dd22669aabde956d`
+- Latest rehearsal environment fingerprint:
+  `53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Implementation Correction)`
   and the reconciled
@@ -291,6 +284,12 @@ Dataset reference.
 - Materialization creates empty Core, Supervisor, Component, Dashboard, and
   other selected-module databases, applies each owner's schema migrations, and
   starts the new source-exact topology.
+- Health is owner-specific and redirect-free throughout materialization,
+  smoke, upgrade/rollback, recovery, and final restoration. Core proves
+  `GET /health` with HTTP 200, `text/plain`, and exact body `ok`; Supervisor
+  proves `GET /health/ready` with HTTP 204 and an empty body. A followed login
+  redirect, HTML document, swapped endpoint, or generic HTTP-success range is
+  not health evidence.
 - Canonical seeding runs only through owning APIs/bootstrap contracts in this
   dependency order:
   1. Core installation, identity/RBAC, Organization, and still-in-process
@@ -321,6 +320,15 @@ Dataset reference.
   lifecycle-action placements bind the inactive predecessor and are named
   `lifecycle-upgrade`, `lifecycle-replace`, and `lifecycle-remove`; they make
   Defer followed by Upgrade, Replace, and Remove independently executable.
+- Dashboard bootstrap persists one canonical versioned placement-config shape
+  and the exact one-based row/column/width/height layout: `row-count` at
+  1/1/4/2, `records` at 3/1/12/6, `tier-chart` at 9/1/6/4, `blocked-scope` at
+  9/7/6/4, and the three lifecycle placements at row 13, columns 1/5/9, each
+  width 4 and height 2. Bootstrap-only placement keys are validated for unique
+  orchestration identity but are not persisted in product config. The public
+  response exposes opaque placement IDs, geometry, resolution, and only
+  authorized Component identity; it does not expose bootstrap-only
+  `placement_key` labels.
 - Repeating bootstrap without reset is an exact semantic no-op: no duplicate
   product rows, revisions, references, roles, configuration, or receipts.
 - Any failure retains the failed attempt and raw evidence, destroys the partial
@@ -430,14 +438,18 @@ requires a plan amendment and user approval.
   Manifest/lockfile target and opaque inline payload pass provider-owned
   Dataset validation under the exact one-use signed request; altered or
   replayed invocations are non-disclosing and leave zero Component rows or
-  receipts.
+  receipts. Health evidence uses Core `GET /health` = 200 `text/plain` body
+  `ok` and Supervisor `GET /health/ready` = 204 empty, with redirects disabled.
 - **AC-04:** An unchanged second bootstrap is a semantic no-op with no duplicate
   data, references, revisions, roles, configuration, or receipts.
 - **AC-05:** Dashboard seed creates every placement directly with a Component
   v3 Module Instance reference returned by Component read-back; no old owner or
   transition resource type exists in live state. Its exact seven placements
   include three independent lifecycle-action fixtures bound to the one
-  superseded/inactive predecessor with a published/active successor.
+  superseded/inactive predecessor with a published/active successor. Bootstrap
+  persists the canonical versioned geometry above; smoke asserts public opaque
+  placement IDs and exact geometry without requiring the private
+  `placement_key` label.
 - **AC-06:** Old Core Component references, V1/V2 runtime envelopes, and old
   Core payload shapes fail exact normal-contract validation; no translation,
   migrated/retired result, or fallback exists.
@@ -610,14 +622,15 @@ depends on the successor complete Readiness and Rehearsal gates.
 
 Focused implementation verification uses the all-feature, offline, warnings-
 denied command set recorded in the verification record. It is not a formal
-gate. After the mutable source is committed cleanly, finalize R38's retained
-terminal evidence without starting a gate. Only the resulting exact-next-
-attempt authorization may be consumed by the next formal commands:
+gate. R32's immutable attempt, harvest, raw two-defect batch, diagnostic
+supplement, post-harvest restoration, and authorization qualification remain
+append-only. After the mutable correction is committed cleanly and the
+validation coordinator authorizes the exact transition, only the qualified
+one-use R32 authorization may admit the next formal commands:
 
 ```powershell
-.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 38 -FinalizeFailedAttempt
-.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 39
-.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 31 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 42
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 33 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
 
 Only when both complete gates pass against the same source and environment
@@ -655,6 +668,32 @@ and render-denial case mapped to UAT-8A-04.
 
 - Run complete Test Readiness and complete mutable Candidate Rehearsal. Both
   must pass after the last correction before preflight may freeze a candidate.
+  Treat the complete Rehearsal as final certification, not the primary
+  debugging loop. Before handing a correction back, retain non-authoritative
+  clean-environment materialization/no-op, containment/recovery, exact-health,
+  product-smoke, acceptance, fixture, evidence, and runner reproducers. Two
+  consecutive failures of one formal lane forbid another full launch until its
+  clean focused reproducer passes; a third makes that lane a concentrated
+  validation-platform incident that must be resolved before relaunch.
+- Readiness fixes the next Rehearsal's complete declaration graph and bounded
+  two-wave order. Wave A contains lifecycle/authentication, preceding failures,
+  newly reachable and correction-affected lanes, three-times-deferred lanes,
+  their safe prerequisite closure, and failure-containment recovery. If Wave A
+  places source-exact materialization and containment/recovery immediately
+  after its cheap lifecycle prerequisites as the first expensive branch;
+  stable expensive checks remain later unless a real prerequisite or the
+  correction cone requires them. If Wave A passes, the same attempt executes
+  every Wave B lane. If Wave A fails, it finishes all
+  safe Wave A siblings, then records only eligible prior passes outside the
+  cone as `deferred`; any deferral keeps the attempt incomplete. After Wave B
+  execution/deferral, run aggregate sinks, then mandatory terminal canonical
+  restoration and safety finalizers. Unauthenticated history selects full
+  harvest.
+- A failed rehearsal may retain terminal accounting, one harvest, and one
+  consolidated batch while restoration is unproven, but cannot issue usable
+  correction authorization. Prospective authorization requires the exact
+  passing current-attempt final-health and final-environment receipts and
+  `cleanup_restoration.result = canonical_successor_healthy`.
 - Preflight binds commit/tree/dirty state and every product, test, harness,
   schema migration, fixture, seed, manifest, bootstrap, deployment,
   configuration, contract, and acceptance-inventory identity.
@@ -708,6 +747,23 @@ and render-denial case mapped to UAT-8A-04.
   mutable and formally unverified after R30.
 
 ## Implementation Handoff And Current Gaps
+
+The current handoff is the single correction cone opened by terminal failed
+Rehearsal 32. It advances every health caller to the exact Core/Supervisor
+contracts, makes final canonical restoration an independent mandatory cleanup
+sink, withholds prospective correction authorization until current-attempt
+cleanup receipts pass, canonicalizes every new declaration path, serializes the
+full immutable lane graph, and retains bounded two-wave scheduling with full
+harvest as the authentication fallback. It also replaces the stale public
+`placement_key` smoke assertion with exact opaque placement identity, geometry,
+resolution, and nondisclosure checks, and makes Dashboard bootstrap persist the
+canonical versioned placement layout. These product, harness, schema,
+acceptance, validation-reference, and runner changes are candidate-affecting.
+They require focused implementation verification and one clean commit before
+the coordinator may consume the R32 authorization/qualification tuple in
+Readiness 42. No formal cycle starts in this implementation phase.
+
+The earlier R37/R30/R38 implementation handoff is retained below as history.
 
 The correction following Rehearsal 29 was committed and handed back to formal
 validation. Readiness 37 passed all 15 checks, but Rehearsal 30 failed after a
@@ -971,7 +1027,7 @@ that the remaining enforcement gap was evidence precision: lane receipts did
 not distinguish executed assertions from terminal blocks, structured child
 classification could lose to defaults, mismatch evidence omitted the compared
 identity sections, and new references were not uniformly canonical. The
-current correction makes those obligations executable while preserving the
+R30 correction made those obligations executable while preserving the
 existing dependency graph, raw evidence, exact blocked reasons, and one-batch
 harvest contract.
 
@@ -982,10 +1038,10 @@ tracked acceptance inputs are reconciled to those contracts, but formal proof
 still starts at the next complete Readiness gate.
 
 This status authorizes implementation correction and focused diagnostic proof
-only. After the correction is committed, the retained failed Readiness 38 must
-first receive its one harvest, one consolidated defect batch, and exact-next-
-Readiness authorization without starting a gate. The next formal boundaries
-are then complete Validation Readiness 39 and complete Candidate Rehearsal 31
-against the same corrected clean source and environment identity. This status
-does not assert candidate freeze, deployed acceptance, preflight, SIT, formal
-UAT, or closeout.
+only. R32's append-only post-harvest restoration qualifies, but does not
+replace, its quarantined one-use correction authorization for exactly Readiness
+42. After a clean correction commit and explicit validation-coordinator
+authorization, the next formal boundaries are complete Validation Readiness 42
+and complete Candidate Rehearsal 33 against the same corrected clean source and
+environment identity. This status does not assert candidate freeze, deployed
+acceptance, preflight, SIT, formal UAT, or closeout.

@@ -16,6 +16,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-health-contract.ps1")
 $composePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ComposeFile))
 $expectedProject = "tessara-sprint-8a"
 $componentDefinition = "tessara.components"
@@ -60,6 +61,7 @@ function Get-RunningContainerId([string]$Service) {
 }
 
 if ($SelfTest) {
+    Test-Sprint8AHealthContract | Out-Null
     $mock = [pscustomobject]@{
         materialization_plan = [pscustomobject]@{
             actions = @(
@@ -314,14 +316,20 @@ function Get-UnrelatedSnapshot {
     })
     $scoped = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/reference/scoped-records/api/records" -Token $token
     if ($scoped.status -ne 200) { throw "Scoped Records availability/data probe returned HTTP $($scoped.status)." }
-    $gatewayReady = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/health/ready"
-    $supervisorReady = Invoke-Sprint7ARequest -BaseUrl $SupervisorUrl -Path "/health/ready"
-    if ($gatewayReady.status -notin 200,204 -or $supervisorReady.status -notin 200,204) {
-        throw "Gateway or Supervisor availability changed during the Component exercise."
-    }
+    $gatewayReady = Invoke-Sprint8AHealthProbe -Target gateway_core -BaseUrl $BaseUrl
+    $supervisorReady = Invoke-Sprint8AHealthProbe -Target supervisor -BaseUrl $SupervisorUrl
+    Assert-Sprint8AHealthPassed `
+        -Observation $gatewayReady `
+        -Context "Component exercise gateway/Core health contract"
+    Assert-Sprint8AHealthPassed `
+        -Observation $supervisorReady `
+        -Context "Component exercise Supervisor health contract"
     return [ordered]@{
         services = Get-ServiceIdentity @("postgres", "gateway", "core", "supervisor", "dashboards", "scoped-records")
-        availability = [ordered]@{ gateway = $gatewayReady.status; supervisor = $supervisorReady.status }
+        availability = [ordered]@{
+            gateway_core = $gatewayReady
+            supervisor = $supervisorReady
+        }
         datasets = @(Invoke-ApiJson "/api/datasets")
         forms = @(Invoke-ApiJson "/api/forms")
         workflows = @(Invoke-ApiJson "/api/workflows")

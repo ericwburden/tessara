@@ -19,13 +19,13 @@ $script:Sprint8AFixture = [ordered]@{
         stat_card = "01980000-0001-7000-8000-000000000011"
     }
     dashboard_placements = [ordered]@{
-        "01980000-0003-7000-8000-000000000002" = [ordered]@{ placement_key = "row-count"; resource_key = "sprint-8a-row-count"; component_version_id = "01980000-0001-7000-8000-000000000011" }
-        "01980000-0003-7000-8000-000000000003" = [ordered]@{ placement_key = "records"; resource_key = "sprint-8a-record-table"; component_version_id = "01980000-0001-7000-8000-000000000002" }
-        "01980000-0003-7000-8000-000000000004" = [ordered]@{ placement_key = "tier-chart"; resource_key = "sprint-8a-label-bar"; component_version_id = "01980000-0001-7000-8000-000000000003" }
-        "01980000-0003-7000-8000-000000000005" = [ordered]@{ placement_key = "blocked-scope"; resource_key = "sprint-8a-blocked-component"; component_version_id = "01980000-0001-7000-8000-000000000004" }
-        "01980000-0003-7000-8000-000000000006" = [ordered]@{ placement_key = "lifecycle-upgrade"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001" }
-        "01980000-0003-7000-8000-000000000007" = [ordered]@{ placement_key = "lifecycle-replace"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001" }
-        "01980000-0003-7000-8000-000000000008" = [ordered]@{ placement_key = "lifecycle-remove"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001" }
+        "01980000-0003-7000-8000-000000000002" = [ordered]@{ placement_key = "row-count"; resource_key = "sprint-8a-row-count"; component_version_id = "01980000-0001-7000-8000-000000000011"; grid_row = 1; grid_column = 1; grid_width = 4; grid_height = 2; disclosure = "authorized"; resolution_state = "available"; availability = "available" }
+        "01980000-0003-7000-8000-000000000003" = [ordered]@{ placement_key = "records"; resource_key = "sprint-8a-record-table"; component_version_id = "01980000-0001-7000-8000-000000000002"; grid_row = 3; grid_column = 1; grid_width = 12; grid_height = 6; disclosure = "authorized"; resolution_state = "available"; availability = "available" }
+        "01980000-0003-7000-8000-000000000004" = [ordered]@{ placement_key = "tier-chart"; resource_key = "sprint-8a-label-bar"; component_version_id = "01980000-0001-7000-8000-000000000003"; grid_row = 9; grid_column = 1; grid_width = 6; grid_height = 4; disclosure = "authorized"; resolution_state = "available"; availability = "available" }
+        "01980000-0003-7000-8000-000000000005" = [ordered]@{ placement_key = "blocked-scope"; resource_key = "sprint-8a-blocked-component"; component_version_id = "01980000-0001-7000-8000-000000000004"; grid_row = 9; grid_column = 7; grid_width = 6; grid_height = 4; disclosure = "restricted"; resolution_state = "restricted"; availability = "unavailable" }
+        "01980000-0003-7000-8000-000000000006" = [ordered]@{ placement_key = "lifecycle-upgrade"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001"; grid_row = 13; grid_column = 1; grid_width = 4; grid_height = 2; disclosure = "authorized"; resolution_state = "inactive"; availability = "unavailable" }
+        "01980000-0003-7000-8000-000000000007" = [ordered]@{ placement_key = "lifecycle-replace"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001"; grid_row = 13; grid_column = 5; grid_width = 4; grid_height = 2; disclosure = "authorized"; resolution_state = "inactive"; availability = "unavailable" }
+        "01980000-0003-7000-8000-000000000008" = [ordered]@{ placement_key = "lifecycle-remove"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001"; grid_row = 13; grid_column = 9; grid_width = 4; grid_height = 2; disclosure = "authorized"; resolution_state = "inactive"; availability = "unavailable" }
     }
 }
 
@@ -341,7 +341,12 @@ function Test-Sprint8AAcceptanceContract {
             throw "Sprint 8A Dashboard placement fixture '$placementId' is not canonical."
         }
         if ([string]::IsNullOrWhiteSpace([string]$placement.placement_key) -or
-            [string]::IsNullOrWhiteSpace([string]$placement.resource_key)) {
+            [string]::IsNullOrWhiteSpace([string]$placement.resource_key) -or
+            [int]$placement.grid_row -lt 1 -or [int]$placement.grid_column -lt 1 -or
+            [int]$placement.grid_width -lt 1 -or [int]$placement.grid_height -lt 1 -or
+            @("authorized", "restricted") -cnotcontains [string]$placement.disclosure -or
+            @("available", "inactive", "restricted") -cnotcontains [string]$placement.resolution_state -or
+            @("available", "unavailable") -cnotcontains [string]$placement.availability) {
             throw "Sprint 8A Dashboard placement fixture '$placementId' lacks exact owner binding identities."
         }
     }
@@ -724,6 +729,11 @@ function Test-Sprint8AAcceptanceContract {
         '"public-gateway-boundary.json"',
         '"final-health.json"',
         '"materialization-result.json"',
+        '. (Join-Path $PSScriptRoot "sprint-8a-health-contract.ps1")',
+        'Invoke-Sprint8AHealthProbe -Target gateway_core',
+        'Invoke-Sprint8AHealthProbe -Target supervisor',
+        'schema_version = 2',
+        'tessara.sprint-8a.health-observation/v1',
         'Assert-Sprint8ADestructiveEndpoint',
         'ExpectedPort 8088',
         'ExpectedPort 18088',
@@ -791,6 +801,8 @@ function Test-Sprint8AAcceptanceContract {
         'verified_evidence.no_op_apply_response',
         'verified_evidence.final_health',
         'verified_evidence.final_health_preceding_apply_response',
+        'Test-Sprint8AHealthObservation -Observation $finalHealth.health.gateway_core',
+        'Test-Sprint8AHealthObservation -Observation $finalHealth.health.supervisor',
         'fault_raw_artifacts',
         'evidence-finalization',
         '"failure-containment-result.json"'
@@ -925,6 +937,14 @@ function Test-Sprint8AAcceptanceContract {
         throw "Sprint 8A exact deployed inventory/navigation audit runner is missing."
     }
     $rehearsalRunners = [ordered]@{
+        "scripts/smoke-sprint-8a.ps1" = @(
+            "Test-Sprint8ADashboardPlacementProjection",
+            '$propertyNames -cnotcontains "placement_key"',
+            '$Placement.grid_row', '$Placement.grid_column',
+            '$Placement.grid_width', '$Placement.grid_height',
+            'Invoke-Sprint8AHealthProbe -Target gateway_core',
+            'Invoke-Sprint8AHealthProbe -Target supervisor'
+        )
         "scripts/run-sprint-8a-deployed-smoke.ps1" = @(
             "ApiContainerId", "GatewayContainerId", "DatabaseContainerId",
             "ExpectedDataState fresh", "TransitionCatalogProfile sprint-8a",
@@ -981,7 +1001,9 @@ function Test-Sprint8AAcceptanceContract {
             "TESSARA_DEPLOYMENT_COMPOSE_FILE", "run_compose_migration(",
             "run_compose_runtime_switch(", "available_bootstrap_receipts",
             "owner_adapter_prepare_failed", "core_projection_failed",
-            "rollback_projection_failure("
+            "rollback_projection_failure(", "build_health_client()",
+            "Policy::none()", 'owner_health_path("core")',
+            'validate_owner_health_response(', 'b"ok"'
         )
         "scripts/build-sprint-8a-component-rehearsal-baseline.ps1" = @(
             "source-built-compatible-release-v1", "executable_sha256",
@@ -992,7 +1014,20 @@ function Test-Sprint8AAcceptanceContract {
             "upgrade-to-candidate", "rollback-to-baseline", "restore-intended-candidate",
             "Assert-ExactDeltaPlan", "Assert-Preservation",
             "unrelated_container_image_restart_data_availability",
-            "x-tessara-module-control-key: `$moduleControlKey", '$smokeSucceeded = $?'
+            "x-tessara-module-control-key: `$moduleControlKey", '$smokeSucceeded = $?',
+            'Invoke-Sprint8AHealthProbe -Target gateway_core',
+            'Invoke-Sprint8AHealthProbe -Target supervisor'
+        )
+        "scripts/sprint-8a-health-contract.ps1" = @(
+            'function Get-Sprint8AHealthContract',
+            'function Test-Sprint8AHealthObservation',
+            'function Invoke-Sprint8AHealthProbe',
+            '$handler.AllowAutoRedirect = $false',
+            'path = "/health"',
+            'path = "/health/ready"',
+            'status = 204',
+            'sprint-8a-health-contract-regressions.json',
+            'diagnostic_history_only'
         )
     }
     foreach ($path in $upgradeContracts.Keys) {
@@ -1080,7 +1115,9 @@ function Test-Sprint8AAcceptanceContract {
             "tessara.sprint-8a.deployment-environment-probe", "DeploymentProbe",
             "materialization_control",
             "transaction_round_trip", "canonical_server", 'identity = "$canonicalServer/',
-            "environment", "fingerprint"
+            "environment", "fingerprint",
+            'function Assert-Sprint8ACanonicalEvidencePath', '$strictLineagePaths',
+            '$strictConsumptionPaths', '-RequireCanonical:$strictLineagePaths'
         )
         "scripts/sprint-8a-rehearsal-scheduler.ps1" = @(
             "Get-Sprint8ARehearsalLanePolicies", "Resolve-Sprint8ARehearsalSchedule",
@@ -1093,6 +1130,8 @@ function Test-Sprint8AAcceptanceContract {
             "bounded_failure_first_two_wave", "conservative_full_harvest_fallback",
             "maximum_consecutive_deferrals_reached", "aggregate_sink_waits_for_current_attempt_prerequisites",
             "Prior evidence is diagnostic history only",
+            "Assert-Sprint8ARehearsalCanonicalReferencePath", "depends on later segment",
+            "relevant_prerequisite_changed", "pre_authentication_lifecycle_placeholder",
             "scheduler self-test must exercise live ordered-dictionary declarations",
             "scheduler self-test must dispatch member lookup through the IDictionary interface"
         )
@@ -1166,7 +1205,14 @@ function Test-Sprint8AAcceptanceContract {
             'candidate-rehearsal-$Attempt-start.json', "immutable_start_receipt", "schedule_sha256",
             "next_candidate_rehearsal", "deferred_count", "deferred_checks",
             "New-Sprint8ADeferredLaneResult", "Complete-RehearsalOrphanedLane",
-            "Test-Sprint8ACandidateTwoWaveRunnerContract", "ResumeInterruptedAttempt"
+            "Test-Sprint8ACandidateTwoWaveRunnerContract", "ResumeInterruptedAttempt",
+            "Resolve-RehearsalPreAttemptRecoveryState", "Resolve-RehearsalAttemptRecoveryState",
+            "Test-Sprint8AProcessLossRecoveryContract", "Publish-OrAuthenticateRehearsalImmutableEvidence",
+            "Assert-RehearsalLaneIdentityBinding", "Set-RehearsalRecoveredAttemptIdentity",
+            "Test-RehearsalRecoveredTerminalSourceBinding",
+            "Assert-RehearsalRestorationMaterializationReceipt", '$null -ne $restorationEvidence',
+            '-HarvestOnly', "correction_authorization_withheld_cleanup_not_proven",
+            '$restorationRequired = $true'
         )
         "scripts/test-sprint-validation-harvest.ps1" = @(
             "Assert-DiagnosticReceiptHeader", "Assert-MutableSourceIdentity", "Assert-EnvironmentFingerprint",
@@ -1183,7 +1229,8 @@ function Test-Sprint8AAcceptanceContract {
             'Where-Object { $null -ne $_ }',
             "validation-readiness-harvest", "validation-readiness-defect-batch",
             '$predecessorPhase-correction-authorization', "allowed_successor_attempt",
-            "Assert-ReadinessHarvestComplete"
+            "Assert-ReadinessHarvestComplete", '$script:StrictCanonicalEvidencePaths',
+            "Assert-CandidateRehearsalLaneReceipt", '[switch]$HarvestOnly'
         )
         "scripts/validate-e2e.ps1" = @(
             "InventoryOnly", "ActualIdentities", "Independent Playwright discovery",
@@ -1360,6 +1407,8 @@ function Test-Sprint8AAcceptanceContract {
             'mutable_attempt_checkpoints_are_overwritten_only_by_the_owning_runner',
             'immutable_snapshots_and_terminal_receipts_are_never_overwritten',
             'attempt lock was not acquired before evidence-root mutation',
+            "complete exact declared-check graph",
+            "declared graph differs from immutable start",
             "function Test-Sprint8AValidationPreflightRunner"
         )
         "scripts/run-sprint-8a-sit.ps1" = @(
@@ -2087,7 +2136,8 @@ function Test-Sprint8AAcceptanceContract {
     $expectedPlacementIds = @($script:Sprint8AFixture.dashboard_placements.Keys | Sort-Object)
     if (@($dashboardBootstrap.placements).Count -ne 7 -or
         (@($dashboardBootstrap.placements.placement_id | Sort-Object) -join ',') -cne
-        ($expectedPlacementIds -join ',')) {
+        ($expectedPlacementIds -join ',') -or
+        @($dashboardBootstrap.placements.placement_key | Sort-Object -Unique).Count -ne 7) {
         throw "Sprint 8A Dashboard bootstrap must own the exact seven-placement acceptance inventory."
     }
     if (@($dashboardBootstrap.placements | Where-Object { $null -ne $_.component_reference }).Count -ne 0) {
@@ -2113,6 +2163,10 @@ function Test-Sprint8AAcceptanceContract {
         $binding = @($dashboardModuleBootstrap.receipt_bindings | Where-Object target_pointer -CEQ $targetPointer)
         if ($binding.Count -ne 1 -or
             [string]$placementInput.placement_key -cne [string]$expectedPlacement.placement_key -or
+            [int]$placementInput.row + 1 -ne [int]$expectedPlacement.grid_row -or
+            [int]$placementInput.column + 1 -ne [int]$expectedPlacement.grid_column -or
+            [int]$placementInput.width -ne [int]$expectedPlacement.grid_width -or
+            [int]$placementInput.height -ne [int]$expectedPlacement.grid_height -or
             [string]$binding[0].source_owner -cne "tessara.components" -or
             [string]$binding[0].resource_key -cne [string]$expectedReceiptBindings[$targetPointer] -or
             [string]$binding[0].value_encoding -cne "json") {

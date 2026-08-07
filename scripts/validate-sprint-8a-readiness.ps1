@@ -352,6 +352,96 @@ function Test-Sprint8ACorrectionIdentityContinuity {
     if (-not $rejected) { throw "Correction identity self-test accepted an authorization source fork." }
 }
 
+function Test-Sprint8ACanonicalDeclaredEvidencePaths {
+    $relative = "artifacts/sprint-8a-closeout/readiness-self-test/example.json"
+    $absolute = Join-Path $repoRoot $relative
+    $converted = ConvertTo-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath `
+        -Path $absolute
+    if ($converted -cne $relative) {
+        throw "Canonical evidence-path self-test did not normalize an in-root producer path."
+    }
+    [void](Assert-Sprint8ACanonicalEvidencePath `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath `
+        -Path $relative)
+    [void](Assert-Sprint8ADeclaredEvidencePaths `
+        -Checks @([ordered]@{
+            name = "canonical-self-test"
+            evidence_paths = @($relative)
+            evidence_roots = @("artifacts/sprint-8a-closeout/readiness-self-test")
+        }) `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath)
+    foreach ($unsafe in @(
+        $absolute,
+        "artifacts\sprint-8a-closeout\readiness-self-test\example.json",
+        "artifacts/sprint-8a-closeout/readiness-self-test/../example.json",
+        "artifacts/outside.json"
+    )) {
+        $rejected = $false
+        try {
+            [void](Assert-Sprint8ACanonicalEvidencePath `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRoot $evidenceRootPath `
+                -Path $unsafe)
+        } catch { $rejected = $true }
+        if (-not $rejected) {
+            throw "Canonical evidence-path self-test accepted unsafe/noncanonical path '$unsafe'."
+        }
+    }
+}
+
+function Test-Sprint8AR32CorrectionAuthorizationQualification {
+    $qualifiedStatePath = Join-Path $evidenceRootPath "attempts/candidate-rehearsal-32-correction-qualified-state.json"
+    [void](Assert-Sprint8AReceiptSidecar -Path $qualifiedStatePath)
+    $qualifiedState = Get-Content -LiteralPath $qualifiedStatePath -Raw | ConvertFrom-Json
+    $lineage = Get-Sprint8AReadinessCorrectionLineage -State $qualifiedState
+    $validation = Assert-Sprint8ACorrectionLineage `
+        -Lineage $lineage `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath
+    if ([int]$validation.tip.predecessor.attempt -ne 32 -or
+        $null -eq $validation.tip_qualification -or
+        [int]$validation.tip_qualification.allowed_successor_attempt -ne 42) {
+        throw "R32 qualification self-test did not authenticate the exact pending one-use bridge."
+    }
+    $reservation = Get-Sprint8AReadinessAttemptReservation `
+        -StateDocument $qualifiedState `
+        -AttemptNumber 42 `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath
+    if ($null -eq $reservation.authorization_qualification_reference -or
+        [string]$reservation.authorization_qualification_reference.path -cne
+            "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-32-correction-authorization-qualification.json") {
+        throw "R32 qualification self-test did not reserve its exact qualification tuple."
+    }
+    $wrongAttemptRejected = $false
+    try {
+        [void](Get-Sprint8AReadinessAttemptReservation `
+            -StateDocument $qualifiedState `
+            -AttemptNumber 43 `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath)
+    } catch { $wrongAttemptRejected = $true }
+    if (-not $wrongAttemptRejected) {
+        throw "R32 qualification self-test admitted a successor other than exact Readiness 42."
+    }
+    $tamperedState = $qualifiedState | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    @($tamperedState.correction_lineage.links)[-1].authorization_qualification.sha256 = "0" * 64
+    $tamperedRejected = $false
+    try {
+        [void](Assert-Sprint8ACorrectionLineage `
+            -Lineage $tamperedState.correction_lineage `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath)
+    } catch { $tamperedRejected = $true }
+    if (-not $tamperedRejected) {
+        throw "R32 qualification self-test admitted a stale qualification digest."
+    }
+}
+
 $declaredChecks = @(
     [ordered]@{ name = "attempt-state-prerequisite"; depends_on = @(); classification = "preflight/setup" },
     [ordered]@{ name = "clean-source"; depends_on = @(); classification = "preflight/setup" },
@@ -369,6 +459,22 @@ $declaredChecks = @(
     [ordered]@{ name = "markdown-links"; depends_on = @(); classification = "product" },
     [ordered]@{ name = "final-clean-source"; depends_on = @("clean-source"); classification = "product" }
 )
+foreach ($declaration in $declaredChecks) {
+    foreach ($propertyName in @("evidence_paths", "evidence_roots")) {
+        if (-not $declaration.Contains($propertyName)) { continue }
+        $declaration[$propertyName] = @($declaration[$propertyName] | ForEach-Object {
+            ConvertTo-Sprint8ACanonicalEvidencePath `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRoot $evidenceRootPath `
+                -Path ([string]$_)
+        })
+    }
+}
+Assert-Sprint8ADeclaredEvidencePaths `
+    -Checks $declaredChecks `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $evidenceRootPath `
+    -Label "Validation Readiness declarations"
 
 function Assert-Sprint8AReadinessFailLateGraph {
     param([Parameter(Mandatory)][object[]]$Checks)
@@ -445,6 +551,8 @@ function Get-Sprint8AReadinessAttemptReservation {
             authorization_reference = $null
             authorization_sha256 = $null
             authorization = $null
+            authorization_qualification_reference = $null
+            authorization_qualification = $null
         }
     }
 
@@ -493,6 +601,9 @@ function Get-Sprint8AReadinessAttemptReservation {
                 -Name "correction_consumption_receipt") -or
             $null -ne (Get-Sprint8AOptionalObjectPropertyValue `
                 -InputObject $currentReadinessValidation.immutable.document `
+                -Name "predecessor_correction_authorization_qualification") -or
+            $null -ne (Get-Sprint8AOptionalObjectPropertyValue `
+                -InputObject $currentReadinessValidation.immutable.document `
                 -Name "correction_lineage")) {
             throw "A corrected passing Readiness cannot enter a clean rerun after its canonical correction lineage is removed."
         }
@@ -509,6 +620,8 @@ function Get-Sprint8AReadinessAttemptReservation {
             authorization_reference = $null
             authorization_sha256 = $null
             authorization = $null
+            authorization_qualification_reference = $null
+            authorization_qualification = $null
         }
     }
 
@@ -546,6 +659,19 @@ function Get-Sprint8AReadinessAttemptReservation {
         throw "Pending correction-lineage authorization differs from its authenticated reference."
     }
     $authorization = Get-Content -LiteralPath ([string]$resolvedAuthorization.full_path) -Raw | ConvertFrom-Json
+    if ([string]$tip.predecessor.phase -ceq "candidate-rehearsal" -and
+        [int]$tip.predecessor.attempt -ge 32) {
+        Assert-Sprint8APendingCandidateDeferredCountBinding `
+            -PredecessorState $predecessorState `
+            -AuthorizationDocument $authorization `
+            -Attempt ([int]$tip.predecessor.attempt)
+    }
+    $qualificationValidation = $lineageValidation.tip_qualification
+    $qualificationReference = if ($null -eq $qualificationValidation) {
+        $null
+    } else {
+        $qualificationValidation.qualification
+    }
     $hasExactAttempt = $authorization.PSObject.Properties.Name -contains "allowed_successor_attempt"
     if ([string]$authorization.allowed_successor_phase -cne "validation-readiness" -or
         [int]$authorization.allowed_successor_count -ne 1 -or
@@ -557,6 +683,10 @@ function Get-Sprint8AReadinessAttemptReservation {
         $allowed = if ($hasExactAttempt) { [string]$authorization.allowed_successor_attempt } else { "the next unused attempt" }
         throw "Correction authorization permits only Readiness attempt $allowed, not attempt $AttemptNumber."
     }
+    if ($null -ne $qualificationValidation -and
+        [int]$qualificationValidation.allowed_successor_attempt -ne $AttemptNumber) {
+        throw "The retained R32 qualification tuple permits only Readiness attempt $([int]$qualificationValidation.allowed_successor_attempt), not attempt $AttemptNumber."
+    }
 
     [pscustomobject][ordered]@{
         prior_state = $StateDocument
@@ -567,6 +697,8 @@ function Get-Sprint8AReadinessAttemptReservation {
         authorization_reference = $resolvedAuthorization
         authorization_sha256 = $authorizationSha
         authorization = $authorization
+        authorization_qualification_reference = $qualificationReference
+        authorization_qualification = if ($null -eq $qualificationReference) { $null } else { $qualificationReference.document }
     }
 }
 
@@ -903,6 +1035,7 @@ function Test-Sprint8AFailedReadinessFinalization {
             correction_consumption_receipt = $null
             declared_checks = @([pscustomobject]@{ name = "environment-contract"; depends_on = @(); classification = "environment" })
             checks = @($terminalCheck); assertion_count = 1; failure_count = 1; blocked_count = 0
+            cleanup_restoration = [pscustomobject]@{ required = $false; result = "not_applicable" }
         }
         $attemptSha = Publish-Sprint8AAppendOnlyJsonReceipt -Document $attemptDocument -Path $script:attemptPath
         $attemptDocument = Get-Content -LiteralPath $script:attemptPath -Raw | ConvertFrom-Json
@@ -1031,7 +1164,9 @@ function Test-Sprint8AFailedReadinessFinalization {
             authoritative = $false; state = "preparing"; assertions_started = $false; assertions_started_at = $null
             started_at = "2026-08-07T12:01:00Z"; ended_at = $null; mutable_source_identity = $source
             source_identity_verification_state = "unverified"; environment_fingerprint = "0" * 64
-            prerequisite_receipts = @(); predecessor_correction_authorization = $null; correction_consumption_receipt = $null; checks = @()
+            prerequisite_receipts = @(); predecessor_correction_authorization = $null
+            predecessor_correction_authorization_qualification = $null
+            correction_consumption_receipt = $null; checks = @()
         }
         $successorStartSha = Publish-Sprint8AAppendOnlyJsonReceipt -Document $successorStart -Path $successorStartPath
         $authorizationRelative = [IO.Path]::GetRelativePath($repoRoot, $script:correctionAuthorizationPath).Replace("\", "/")
@@ -1469,9 +1604,11 @@ function Test-Sprint8AFailedReadinessFinalization {
             source_identity_verification_state = "unverified"; environment_fingerprint = "0" * 64
             prerequisite_receipts = @()
             predecessor_correction_authorization = [ordered]@{ path = $thirdAuthorizationRelative; sha256 = $thirdAuthorizationSha }
+            predecessor_correction_authorization_qualification = $null
             correction_consumption_receipt = [ordered]@{ path = $thirdConsumptionRelative; sha256 = $thirdConsumptionSha }
             declared_checks = @([ordered]@{ name = "environment-contract"; depends_on = @(); classification = "environment" })
             checks = @($terminalCheck); assertion_count = 1; failure_count = 1; blocked_count = 0
+            cleanup_restoration = [ordered]@{ required = $false; result = "not_applicable" }
         }
         $failedAttemptSha = Publish-Sprint8AAppendOnlyJsonReceipt -Document $failedAttempt -Path $failedAttemptPath
         $failedSuccessorLineage.links[2].consumed_by_readiness = [ordered]@{
@@ -1646,6 +1783,8 @@ if ($SelfTest) {
     Test-Sprint8AResultClassificationProjection
     Test-Sprint8AEnvironmentContractComparison
     Test-Sprint8AEvidenceReferenceResolution
+    Test-Sprint8ACanonicalDeclaredEvidencePaths
+    Test-Sprint8AR32CorrectionAuthorizationQualification
     Test-Sprint8ARehearsalTwoWaveScheduler
     $canonicalSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
     Assert-Sprint8ASourceIdentityObject -Source $canonicalSource | Out-Null
@@ -1745,6 +1884,7 @@ $correctionLineage = $launchReservation.preserved_correction_lineage
 $receiptCorrectionLineage = Get-Sprint8AReadinessReceiptCorrectionLineage -Reservation $launchReservation
 $readinessPrerequisiteReceipts = @($launchReservation.prerequisite_receipts)
 $predecessorCorrectionAuthorization = $null
+$predecessorCorrectionAuthorizationQualification = $null
 $correctionConsumptionReceipt = $null
 $startedAt = [DateTimeOffset]::UtcNow
 $startReceipt = [ordered]@{
@@ -1765,6 +1905,7 @@ $startReceipt = [ordered]@{
     environment_fingerprint = "0" * 64
     prerequisite_receipts = @($readinessPrerequisiteReceipts)
     predecessor_correction_authorization = $predecessorCorrectionAuthorization
+    predecessor_correction_authorization_qualification = $predecessorCorrectionAuthorizationQualification
     correction_consumption_receipt = $correctionConsumptionReceipt
     correction_lineage = $receiptCorrectionLineage
     declared_checks = $declaredChecks
@@ -1796,6 +1937,7 @@ function Checkpoint-ReadinessAttempt {
     $startReceipt.environment_fingerprint = if ($null -eq $environment) { "0" * 64 } else { [string]$environment.fingerprint }
     $startReceipt.prerequisite_receipts = @($readinessPrerequisiteReceipts)
     $startReceipt.predecessor_correction_authorization = $predecessorCorrectionAuthorization
+    $startReceipt.predecessor_correction_authorization_qualification = $predecessorCorrectionAuthorizationQualification
     $startReceipt.correction_consumption_receipt = $correctionConsumptionReceipt
     $startReceipt.correction_lineage = $receiptCorrectionLineage
     $startReceipt.checks = @($checks)
@@ -1927,7 +2069,11 @@ function Invoke-ReadinessCheck {
         }
         if ($declaration[0].Contains("evidence_paths")) {
             foreach ($evidencePath in @($declaration[0].evidence_paths)) {
-                if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
+                $evidenceReference = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$evidencePath)
+                if (-not (Test-Path -LiteralPath ([string]$evidenceReference.full_path) -PathType Leaf)) {
                     throw "Readiness check '$Name' did not produce required evidence '$evidencePath'."
                 }
             }
@@ -1948,10 +2094,16 @@ function Invoke-ReadinessCheck {
         [Text.UTF8Encoding]::new($false)
     )
     $producedEvidence = if ($declaration[0].Contains("evidence_paths")) {
-        @($declaration[0].evidence_paths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object {
-            [ordered]@{
-                path = [IO.Path]::GetRelativePath($repoRoot, [IO.Path]::GetFullPath($_)).Replace("\", "/")
-                sha256 = Get-Sprint8AFileSha256 -Path $_
+        @($declaration[0].evidence_paths | ForEach-Object {
+            $evidenceReference = Resolve-Sprint8AEvidenceReference `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRoot $evidenceRootPath `
+                -Path ([string]$_)
+            if (Test-Path -LiteralPath ([string]$evidenceReference.full_path) -PathType Leaf) {
+                [ordered]@{
+                    path = [string]$evidenceReference.path
+                    sha256 = Get-Sprint8AFileSha256 -Path ([string]$evidenceReference.full_path)
+                }
             }
         })
     } else {
@@ -1996,6 +2148,7 @@ try {
             if ([bool]$launchReservation.clean_rerun) {
                 if (@($script:readinessPrerequisiteReceipts).Count -ne 1 -or
                     $null -ne $script:predecessorCorrectionAuthorization -or
+                    $null -ne $script:predecessorCorrectionAuthorizationQualification -or
                     $null -ne $script:correctionConsumptionReceipt) {
                     throw "Clean pre-rehearsal Readiness must bind one immutable predecessor without consuming a correction authorization."
                 }
@@ -2023,6 +2176,15 @@ try {
                 predecessor_phase = [string]$tip.predecessor.phase
                 predecessor_attempt = [int]$tip.predecessor.attempt
             }
+            $qualifiedReference = $launchReservation.authorization_qualification_reference
+            $script:predecessorCorrectionAuthorizationQualification = if ($null -eq $qualifiedReference) {
+                $null
+            } else {
+                [ordered]@{
+                    path = [string]$qualifiedReference.path
+                    sha256 = [string]$qualifiedReference.sha256
+                }
+            }
             $consumptionPath = "$authorizationPath.consumption.json"
             $startSnapshotSha = Assert-Sprint8AReceiptSidecar -Path $startSnapshotPath
             $consumptionDocument = [ordered]@{
@@ -2033,6 +2195,7 @@ try {
                 state = "consumed"
                 consumed_at = [DateTimeOffset]::UtcNow.ToString("o")
                 authorization = [ordered]@{ path = $relativeAuthorizationPath; sha256 = $authorizationSha }
+                authorization_qualification = $script:predecessorCorrectionAuthorizationQualification
                 predecessor = $tip.predecessor
                 successor_readiness = [ordered]@{
                     attempt = $Attempt
@@ -2279,6 +2442,7 @@ $receipt = [ordered]@{
     environment_fingerprint = if ($null -eq $environment) { "0" * 64 } else { [string]$environment.fingerprint }
     prerequisite_receipts = @($readinessPrerequisiteReceipts)
     predecessor_correction_authorization = $predecessorCorrectionAuthorization
+    predecessor_correction_authorization_qualification = $predecessorCorrectionAuthorizationQualification
     correction_consumption_receipt = $correctionConsumptionReceipt
     correction_lineage = $receiptCorrectionLineage
     next_candidate_rehearsal = $nextCandidateRehearsal

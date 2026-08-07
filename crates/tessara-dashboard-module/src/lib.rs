@@ -4,7 +4,11 @@
 //! process. Core supplies signed shell and authorization projections; the
 //! module never receives Core browser state or reusable Core authority.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::Duration,
+};
 
 use axum::{
     Json, Router,
@@ -19,9 +23,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool, Row};
+use tessara_dashboards::{
+    DashboardPlacementConfigV1, GridPlacement, GridRect, encode_dashboard_placement_config,
+    validate_dashboard_layout,
+};
 use tessara_module_contract::{
     ModuleDefinitionId, ModuleManifest, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
     ResourceOwner, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
+    derive_row_major_positions,
 };
 use uuid::Uuid;
 
@@ -227,6 +236,12 @@ pub struct DashboardBootstrapPlacementV2 {
     pub height: u16,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PreparedDashboardBootstrapPlacement {
+    position: i32,
+    config: Value,
+}
+
 async fn apply_bootstrap(
     State(state): State<DashboardModuleState>,
     headers: HeaderMap,
@@ -251,7 +266,8 @@ async fn apply_bootstrap(
             "Dashboard bootstrap belongs to another installation".into(),
         ));
     }
-    validate_dashboard_bootstrap_input(request.installation_id, &request.input)?;
+    let prepared_placements =
+        validate_dashboard_bootstrap_input(request.installation_id, &request.input)?;
     if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
         "SELECT input_digest,receipt FROM dashboard_bootstrap_receipts WHERE idempotency_key=$1",
     )
@@ -286,18 +302,12 @@ async fn apply_bootstrap(
     sqlx::query("INSERT INTO dashboard_scope_nodes(dashboard_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING")
         .bind(request.input.dashboard_id).bind(request.input.scope_node_id)
         .execute(&mut *transaction).await?;
-    for placement in &request.input.placements {
+    for (placement, prepared) in request.input.placements.iter().zip(prepared_placements) {
         let reference = placement.component_reference.reference().clone();
-        let position = i32::from(placement.row) * 12 + i32::from(placement.column);
-        let config = serde_json::json!({
-            "placement_key": placement.placement_key,
-            "width": placement.width,
-            "height": placement.height
-        });
         sqlx::query("INSERT INTO dashboard_placements(id,dashboard_id,component_reference,position,config) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET component_reference=EXCLUDED.component_reference,position=EXCLUDED.position,config=EXCLUDED.config,updated_at=now()")
             .bind(placement.placement_id).bind(request.input.dashboard_id)
             .bind(serde_json::to_value(reference).map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?)
-            .bind(position).bind(config).execute(&mut *transaction).await?;
+            .bind(prepared.position).bind(prepared.config).execute(&mut *transaction).await?;
     }
     let result_digest = tessara_composition::canonical_digest(&serde_json::json!({
         "dashboard_id": request.input.dashboard_id,
@@ -331,18 +341,10 @@ async fn apply_bootstrap(
 fn validate_dashboard_bootstrap_input(
     installation_id: Uuid,
     input: &DashboardBootstrapV2,
-) -> Result<(), DashboardModuleError> {
-    if input.name.trim().is_empty()
-        || input.placements.len() > 240
-        || input.placements.iter().any(|placement| {
-            placement.column >= 12
-                || placement.width == 0
-                || placement.column + placement.width > 12
-                || placement.height == 0
-        })
-    {
+) -> Result<Vec<PreparedDashboardBootstrapPlacement>, DashboardModuleError> {
+    if input.name.trim().is_empty() {
         return Err(DashboardModuleError::BadRequest(
-            "Dashboard bootstrap layout is invalid".into(),
+            "Dashboard bootstrap name is required".into(),
         ));
     }
     let expected_component_instance = tessara_composition::module_instance_id(
@@ -366,7 +368,69 @@ fn validate_dashboard_bootstrap_input(
                 .into(),
         ));
     }
-    Ok(())
+
+    let mut placement_ids = BTreeSet::new();
+    let mut placement_keys = BTreeSet::new();
+    let mut layout = Vec::with_capacity(input.placements.len());
+    let mut configs = BTreeMap::new();
+    for placement in &input.placements {
+        if !placement_ids.insert(placement.placement_id) {
+            return Err(DashboardModuleError::BadRequest(
+                "Dashboard bootstrap placement IDs must be unique".into(),
+            ));
+        }
+        let placement_key = placement.placement_key.trim();
+        if placement_key.is_empty() || !placement_keys.insert(placement_key.to_string()) {
+            return Err(DashboardModuleError::BadRequest(
+                "Dashboard bootstrap placement keys must be non-empty and unique".into(),
+            ));
+        }
+
+        // Blueprint coordinates are zero-based. Product-owned Dashboard config
+        // is the canonical, one-based V1 grid contract.
+        let rect = GridRect::new(
+            i32::from(placement.row) + 1,
+            i32::from(placement.column) + 1,
+            i32::from(placement.width),
+            i32::from(placement.height),
+        );
+        let config = DashboardPlacementConfigV1::new(None, rect)
+            .and_then(|config| encode_dashboard_placement_config(&config))
+            .map_err(|error| {
+                DashboardModuleError::BadRequest(format!(
+                    "Dashboard bootstrap layout is invalid: {error}"
+                ))
+            })?;
+        layout.push(GridPlacement::new(placement.placement_id, rect));
+        configs.insert(placement.placement_id, config);
+    }
+    validate_dashboard_layout(&layout).map_err(|error| {
+        DashboardModuleError::BadRequest(format!("Dashboard bootstrap layout is invalid: {error}"))
+    })?;
+
+    let positions = derive_row_major_positions(&layout)
+        .into_iter()
+        .map(|(placement_id, position)| {
+            i32::try_from(position)
+                .map(|position| (placement_id, position))
+                .map_err(|_| {
+                    DashboardModuleError::BadRequest(
+                        "Dashboard bootstrap placement position is out of range".into(),
+                    )
+                })
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+
+    input
+        .placements
+        .iter()
+        .map(|placement| {
+            Ok(PreparedDashboardBootstrapPlacement {
+                position: positions[&placement.placement_id],
+                config: configs[&placement.placement_id].clone(),
+            })
+        })
+        .collect()
 }
 
 pub(crate) async fn verified_shell_context(
@@ -686,6 +750,7 @@ mod tests {
 
     use axum::{Router, routing::get};
     use sha2::{Digest, Sha256};
+    use tessara_dashboards::DashboardPlacementConfigV1;
     use tessara_module_contract::{ModuleManifest, ResourceOwner, TypedResourceReference};
 
     use super::{
@@ -804,8 +869,9 @@ mod tests {
         .expect("Dashboard receipt bindings resolve");
         let bootstrap: DashboardBootstrapV2 =
             serde_json::from_value(resolved).expect("typed Dashboard bootstrap");
-        validate_dashboard_bootstrap_input(blueprint.installation_id, &bootstrap)
-            .expect("resolved Dashboard bootstrap identity");
+        let prepared_placements =
+            validate_dashboard_bootstrap_input(blueprint.installation_id, &bootstrap)
+                .expect("resolved Dashboard bootstrap identity and layout");
         assert_eq!(
             bootstrap
                 .placements
@@ -823,6 +889,32 @@ mod tests {
             ]
             .map(|value| uuid::Uuid::parse_str(value).expect("placement UUID"))
         );
+        let expected_layout = [
+            (0, 1, 1, 4, 2),
+            (1, 3, 1, 12, 6),
+            (2, 9, 1, 6, 4),
+            (3, 9, 7, 6, 4),
+            (4, 13, 1, 4, 2),
+            (5, 13, 5, 4, 2),
+            (6, 13, 9, 4, 2),
+        ];
+        for (prepared, (position, row, column, width, height)) in
+            prepared_placements.iter().zip(expected_layout)
+        {
+            assert_eq!(prepared.position, position);
+            assert!(
+                prepared.config.get("placement_key").is_none(),
+                "bootstrap-only placement keys must not enter product config"
+            );
+            let config: DashboardPlacementConfigV1 =
+                serde_json::from_value(prepared.config.clone()).expect("canonical V1 config");
+            assert_eq!(config.schema_version, 1);
+            assert_eq!(config.title, None);
+            assert_eq!(config.grid_row, row);
+            assert_eq!(config.grid_column, column);
+            assert_eq!(config.grid_width, width);
+            assert_eq!(config.grid_height, height);
+        }
         let expected_resources = std::collections::BTreeMap::from([
             (
                 "01980000-0003-7000-8000-000000000002",
@@ -896,6 +988,136 @@ mod tests {
             "width": 4,
             "height": 2
         })
+    }
+
+    fn valid_bootstrap_placement(
+        installation_id: uuid::Uuid,
+        placement_id: uuid::Uuid,
+        placement_key: &str,
+        row: u16,
+        column: u16,
+        width: u16,
+        height: u16,
+    ) -> DashboardBootstrapPlacementV2 {
+        let component_instance_id = tessara_composition::module_instance_id(
+            installation_id,
+            tessara_components_contract::COMPONENT_MODULE_DEFINITION_ID,
+        );
+        DashboardBootstrapPlacementV2 {
+            placement_id,
+            placement_key: placement_key.into(),
+            component_reference: tessara_components_contract::ComponentVersionReference::new(
+                TypedResourceReference::new(
+                    installation_id,
+                    ResourceOwner::ModuleInstance {
+                        installation_id,
+                        module_instance_id: component_instance_id,
+                    },
+                    tessara_components_contract::COMPONENT_RESOURCE_TYPE
+                        .parse()
+                        .expect("Component resource type"),
+                    uuid::Uuid::new_v4().to_string(),
+                )
+                .expect("typed Component resource reference"),
+            )
+            .expect("Component version reference"),
+            column,
+            row,
+            width,
+            height,
+        }
+    }
+
+    fn valid_dashboard_bootstrap(
+        placements: Vec<DashboardBootstrapPlacementV2>,
+    ) -> DashboardBootstrapV2 {
+        DashboardBootstrapV2 {
+            schema_version: "tessara.io/dashboard-bootstrap/v2".into(),
+            dashboard_id: uuid::Uuid::new_v4(),
+            external_key: "validation-fixture".into(),
+            name: "Validation fixture".into(),
+            description: None,
+            scope_node_id: uuid::Uuid::new_v4(),
+            placements,
+        }
+    }
+
+    #[test]
+    fn dashboard_bootstrap_derives_dense_positions_from_zero_based_blueprint_geometry() {
+        let installation_id = uuid::Uuid::new_v4();
+        let first =
+            valid_bootstrap_placement(installation_id, uuid::Uuid::new_v4(), "first", 0, 0, 4, 2);
+        let second =
+            valid_bootstrap_placement(installation_id, uuid::Uuid::new_v4(), "second", 2, 0, 4, 2);
+        let bootstrap = valid_dashboard_bootstrap(vec![second, first]);
+
+        let prepared = validate_dashboard_bootstrap_input(installation_id, &bootstrap)
+            .expect("valid complete bootstrap layout");
+
+        assert_eq!(
+            prepared
+                .iter()
+                .map(|placement| placement.position)
+                .collect::<Vec<_>>(),
+            vec![1, 0],
+            "positions are dense row-major ranks, not sparse cell offsets"
+        );
+        let second_config: DashboardPlacementConfigV1 =
+            serde_json::from_value(prepared[0].config.clone()).expect("canonical second config");
+        let first_config: DashboardPlacementConfigV1 =
+            serde_json::from_value(prepared[1].config.clone()).expect("canonical first config");
+        assert_eq!(
+            second_config.rect(),
+            tessara_dashboards::GridRect::new(3, 1, 4, 2)
+        );
+        assert_eq!(
+            first_config.rect(),
+            tessara_dashboards::GridRect::new(1, 1, 4, 2)
+        );
+    }
+
+    #[test]
+    fn dashboard_bootstrap_rejects_duplicate_ids_and_normalized_keys() {
+        let installation_id = uuid::Uuid::new_v4();
+        let first = valid_bootstrap_placement(
+            installation_id,
+            uuid::Uuid::new_v4(),
+            "duplicate",
+            0,
+            0,
+            4,
+            2,
+        );
+        let mut duplicate_id =
+            valid_bootstrap_placement(installation_id, first.placement_id, "second", 2, 0, 4, 2);
+        let duplicate_ids = valid_dashboard_bootstrap(vec![first.clone(), duplicate_id.clone()]);
+        assert!(validate_dashboard_bootstrap_input(installation_id, &duplicate_ids).is_err());
+
+        duplicate_id.placement_id = uuid::Uuid::new_v4();
+        duplicate_id.placement_key = " duplicate ".into();
+        let duplicate_keys = valid_dashboard_bootstrap(vec![first, duplicate_id]);
+        assert!(validate_dashboard_bootstrap_input(installation_id, &duplicate_keys).is_err());
+    }
+
+    #[test]
+    fn dashboard_bootstrap_rejects_overlapping_and_out_of_bounds_complete_layouts() {
+        let installation_id = uuid::Uuid::new_v4();
+        let first =
+            valid_bootstrap_placement(installation_id, uuid::Uuid::new_v4(), "first", 0, 0, 4, 2);
+        let mut second =
+            valid_bootstrap_placement(installation_id, uuid::Uuid::new_v4(), "second", 1, 0, 4, 2);
+        let overlap = valid_dashboard_bootstrap(vec![first.clone(), second.clone()]);
+        assert!(validate_dashboard_bootstrap_input(installation_id, &overlap).is_err());
+
+        second.row = 239;
+        let beyond_bottom = valid_dashboard_bootstrap(vec![first.clone(), second.clone()]);
+        assert!(validate_dashboard_bootstrap_input(installation_id, &beyond_bottom).is_err());
+
+        second.row = 2;
+        second.column = 11;
+        second.width = 2;
+        let beyond_right = valid_dashboard_bootstrap(vec![first, second]);
+        assert!(validate_dashboard_bootstrap_input(installation_id, &beyond_right).is_err());
     }
 
     #[test]

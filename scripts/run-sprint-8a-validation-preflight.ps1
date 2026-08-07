@@ -405,6 +405,32 @@ function Assert-Sprint8APreflightImmutableRehearsalStartReceipt {
     if ((($policyNames | Sort-Object) -join "`n") -cne (($ExpectedNames | Sort-Object) -join "`n")) {
         throw "Candidate Rehearsal immutable scheduler policy differs from the current runner lane inventory."
     }
+    if ($start.PSObject.Properties.Name -notcontains "declared_checks" -or
+        $AttemptReceipt.PSObject.Properties.Name -notcontains "declared_checks" -or
+        (ConvertTo-Sprint8APreflightCanonicalJson @($start.declared_checks)) -cne
+            (ConvertTo-Sprint8APreflightCanonicalJson @($AttemptReceipt.declared_checks)) -or
+        (@($start.declared_checks | ForEach-Object { [string]$_.name }) -join "`n") -cne
+            (@($start.declared_lanes | ForEach-Object { [string]$_ }) -join "`n")) {
+        throw "Candidate Rehearsal immutable start does not bind the complete exact declared-check graph."
+    }
+    Assert-Sprint8ADeclaredEvidencePaths `
+        -Checks @($start.declared_checks) `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $EvidenceRootPath `
+        -Label "Candidate Rehearsal immutable start declarations"
+    foreach ($policy in $policies) {
+        $declaration = @($start.declared_checks | Where-Object name -CEQ ([string]$policy.name))
+        if ($declaration.Count -ne 1 -or
+            [string]$declaration[0].scheduler_role -cne [string]$policy.scheduler_role -or
+            (ConvertTo-Sprint8APreflightCanonicalJson @($declaration[0].depends_on)) -cne
+                (ConvertTo-Sprint8APreflightCanonicalJson @($policy.depends_on)) -or
+            (ConvertTo-Sprint8APreflightCanonicalJson @($declaration[0].impact_paths)) -cne
+                (ConvertTo-Sprint8APreflightCanonicalJson @($policy.impact_paths)) -or
+            (ConvertTo-Sprint8APreflightCanonicalJson @($declaration[0].impact_sources)) -cne
+                (ConvertTo-Sprint8APreflightCanonicalJson @($policy.impact_sources))) {
+            throw "Candidate Rehearsal immutable declaration '$([string]$policy.name)' differs from its scheduler policy."
+        }
+    }
     Assert-Sprint8ARehearsalScheduleContract `
         -Schedule $start.schedule `
         -Checks $policies `
@@ -1286,6 +1312,8 @@ function Test-Sprint8AValidationPreflightRunner {
                 source = "readiness"
                 reason = "authenticated conservative fallback"
             }
+            declared_lanes = @($startPolicies | ForEach-Object { [string]$_.name })
+            declared_checks = $startPolicies
         }) -Path $startPath
         $startReference = [pscustomobject][ordered]@{
             path = [IO.Path]::GetRelativePath($repoRoot, $startPath).Replace("\", "/")
@@ -1312,6 +1340,7 @@ function Test-Sprint8AValidationPreflightRunner {
             correction_lineage = $startLineage
             immutable_start_receipt = $startReference
             schedule_sha256 = $startScheduleSha256
+            declared_checks = $startPolicies
             deferred_count = 0
             checks = $startChecks
         }
@@ -1333,6 +1362,29 @@ function Test-Sprint8AValidationPreflightRunner {
             -EvidenceRootPath $startSelfTestRoot `
             -ReadinessReference $readinessReference `
             -ExpectedNames $rehearsalNames | Out-Null
+        $mutatedGraphAttempt = $attemptDocument | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+        $mutatedGraphAttempt.declared_checks[0].depends_on = @("validation-readiness-prerequisite")
+        $mutatedGraphResult = $startResult | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+        $mutatedGraphResult.attempt_receipt.sha256 = Write-Sprint8APreflightJsonReceipt `
+            -Document $mutatedGraphAttempt `
+            -Path $attemptPath `
+            -Overwrite
+        $mutatedGraphRejected = $false
+        try {
+            Assert-Sprint8APreflightRehearsalAttemptReceipt `
+                -RehearsalResult $mutatedGraphResult `
+                -ValidationState $finalState `
+                -RepositoryRoot $repoRoot `
+                -EvidenceRootPath $startSelfTestRoot `
+                -ReadinessReference $readinessReference `
+                -ExpectedNames $rehearsalNames | Out-Null
+        } catch { $mutatedGraphRejected = $true }
+        $attemptSha256 = Write-Sprint8APreflightJsonReceipt `
+            -Document $attemptDocument -Path $attemptPath -Overwrite
+        $startResult.attempt_receipt.sha256 = $attemptSha256
+        if (-not $mutatedGraphRejected) {
+            throw "Sprint 8A preflight self-test accepted an attempt whose declared graph differs from immutable start."
+        }
         $staleScheduleResult = $startResult | ConvertTo-Json -Depth 100 | ConvertFrom-Json
         $staleScheduleResult.schedule_sha256 = "0" * 64
         $staleScheduleRejected = $false

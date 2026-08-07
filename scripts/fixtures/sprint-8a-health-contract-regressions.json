@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "tessara.sprint-8a.health-contract-regressions",
+  "authority": "diagnostic_history_only",
+  "source_attempt": 32,
+  "cases": [
+    {
+      "name": "r32-initial-materialization-login-html",
+      "source_receipt": {
+        "path": "artifacts/sprint-8a-closeout/rehearsal/attempt-32/materialization/attempt-32/public-gateway-boundary.json",
+        "sha256": "e3aaca8880875a5ff49afada3c7d2beaecbb0fccae9bbd0af7f6a065a7e6aa40"
+      },
+      "observation": {
+        "target": "gateway_core",
+        "request": {
+          "method": "GET",
+          "uri": "http://127.0.0.1:8088/health/ready",
+          "path": "/health/ready",
+          "timeout_seconds": 5,
+          "redirect_policy": "legacy_follow"
+        },
+        "response": {
+          "received": true,
+          "uri": null,
+          "status": 200,
+          "content_type": "text/html; charset=utf-8",
+          "media_type": "text/html",
+          "charset": "utf-8",
+          "location": null,
+          "body_utf8_length": 4710,
+          "body_sha256": "f00cefaa866bef8a84a0dff0ecaa73c6437ab295e961c20779d5b31a9cc4a574",
+          "redirects_followed": null
+        }
+      },
+      "required_failure_codes": [
+        "unexpected_request_path",
+        "redirect_policy_not_forbid",
+        "response_uri_missing",
+        "redirect_accounting_missing",
+        "unexpected_media_type",
+        "unexpected_body"
+      ]
+    },
+    {
+      "name": "r32-successor-materialization-login-html",
+      "source_receipt": {
+        "path": "artifacts/sprint-8a-closeout/rehearsal/attempt-32/failure-containment/attempt-32/successor/materialization/attempt-32/public-gateway-boundary.json",
+        "sha256": "2c08914fba0839635289a3fabee90420d8685c5ae9e213891ccb9d9d6119c886"
+      },
+      "observation": {
+        "target": "gateway_core",
+        "request": {
+          "method": "GET",
+          "uri": "http://127.0.0.1:8088/health/ready",
+          "path": "/health/ready",
+          "timeout_seconds": 5,
+          "redirect_policy": "legacy_follow"
+        },
+        "response": {
+          "received": true,
+          "uri": null,
+          "status": 200,
+          "content_type": "text/html; charset=utf-8",
+          "media_type": "text/html",
+          "charset": "utf-8",
+          "location": null,
+          "body_utf8_length": 4710,
+          "body_sha256": "f00cefaa866bef8a84a0dff0ecaa73c6437ab295e961c20779d5b31a9cc4a574",
+          "redirects_followed": null
+        }
+      },
+      "required_failure_codes": [
+        "unexpected_request_path",
+        "redirect_policy_not_forbid",
+        "response_uri_missing",
+        "redirect_accounting_missing",
+        "unexpected_media_type",
+        "unexpected_body"
+      ]
+    }
+  ]
+}
