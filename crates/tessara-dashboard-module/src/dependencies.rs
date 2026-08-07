@@ -26,8 +26,10 @@ use crate::{
     DashboardModuleError, DashboardModuleState, MANAGE_CAPABILITY,
     composition::{
         ComponentAuthorizationContext, ComponentResolutionAttempt, ComponentResolutionOrigin,
-        authorization_header, component_authorization_context, load_dashboard_scope,
-        resolve_component_since,
+        authorization_header, authorized_dashboard_scope, canonical_nonempty_scope,
+        component_authorization_context, load_dashboard_scope, resolve_component_since,
+        restrict_component_attempt_for_dashboard_projection,
+        validated_inbound_dashboard_authorization,
     },
     product::{authorize, authorized_organizations},
 };
@@ -295,6 +297,8 @@ pub(super) async fn refresh_for_editor(
     dashboard_id: Uuid,
 ) -> Result<DependencyHealthResponse, DashboardModuleError> {
     let authorization = authorization_header(headers)?;
+    let inbound = validated_inbound_dashboard_authorization(state, authorization).await?;
+    let dashboard_scope = load_dashboard_scope(state, dashboard_id).await?;
     let correlation_id = correlation_id(headers);
     let placements = load_placements(state, dashboard_id).await?;
     let mut authorization_context = None;
@@ -302,6 +306,8 @@ pub(super) async fn refresh_for_editor(
         let observed_context = refresh_placement(
             state,
             authorization,
+            &inbound.payload,
+            &dashboard_scope,
             dashboard_id,
             placement,
             correlation_id,
@@ -417,6 +423,7 @@ async fn act_on_dependency(
     let replacement = proposed_reference(
         &state,
         authorization,
+        &grant.payload,
         dashboard_id,
         finding_id,
         action_context.digest(),
@@ -668,6 +675,7 @@ async fn ensure_finding_visible_to_authorization(
 async fn proposed_reference(
     state: &DashboardModuleState,
     authorization: &str,
+    grant: &AuthorizationGrantV3,
     dashboard_id: Uuid,
     finding_id: Uuid,
     authorization_context_digest: &str,
@@ -748,23 +756,46 @@ async fn proposed_reference(
     };
     let wrapped = ComponentVersionReference::new(reference.clone())
         .map_err(|error| DashboardModuleError::BadRequest(error.to_string()))?;
-    let attempt = resolve_component_since(state, authorization, wrapped, None).await?;
+    let dashboard_scope = load_dashboard_scope(state, dashboard_id).await?;
+    let managed_dashboard_scope =
+        authorized_dashboard_scope(grant, MANAGE_CAPABILITY, &dashboard_scope);
+    let attempt = restrict_component_attempt_for_dashboard_projection(
+        resolve_component_since(state, authorization, wrapped, None).await?,
+        grant,
+        MANAGE_CAPABILITY,
+        &dashboard_scope,
+    );
     if attempt.origin() == ComponentResolutionOrigin::SyntheticUnavailable {
         return Err(DashboardModuleError::Unavailable(
             "Component provider unavailable".into(),
         ));
     }
     if attempt.origin() != ComponentResolutionOrigin::ProviderEvaluated
-        || !attempt
-            .response()
-            .metadata()
-            .is_some_and(|metadata| metadata.renderable())
+        || !attempt.response().metadata().is_some_and(|metadata| {
+            metadata.renderable()
+                && component_scope_within_dashboard_scope(
+                    &metadata.scope_node_ids,
+                    &managed_dashboard_scope,
+                )
+        })
     {
         return Err(DashboardModuleError::Conflict(
-            "replacement Component version is not currently renderable".into(),
+            "replacement Component version is not currently renderable in the Dashboard scope"
+                .into(),
         ));
     }
     Ok(Some(reference))
+}
+
+fn component_scope_within_dashboard_scope(
+    component_scope_node_ids: &[Uuid],
+    dashboard_scope_node_ids: &[Uuid],
+) -> bool {
+    canonical_nonempty_scope(component_scope_node_ids)
+        && canonical_nonempty_scope(dashboard_scope_node_ids)
+        && component_scope_node_ids
+            .iter()
+            .all(|node_id| dashboard_scope_node_ids.binary_search(node_id).is_ok())
 }
 
 async fn resolve_finding(
@@ -841,6 +872,8 @@ async fn load_placements(
 async fn refresh_placement(
     state: &DashboardModuleState,
     authorization: &str,
+    inbound_dashboard_grant: &AuthorizationGrantV3,
+    dashboard_scope_node_ids: &[Uuid],
     dashboard_id: Uuid,
     placement: PlacementToRefresh,
     correlation_id: &str,
@@ -870,7 +903,12 @@ async fn refresh_placement(
     .map(|revision| ResourceRevision::new(revision as u64))
     .transpose()
     .map_err(|_| DashboardModuleError::Conflict("stored observation revision is invalid".into()))?;
-    let attempt = resolve_component_since(state, authorization, wrapped, prior_revision).await?;
+    let attempt = restrict_component_attempt_for_dashboard_projection(
+        resolve_component_since(state, authorization, wrapped, prior_revision).await?,
+        inbound_dashboard_grant,
+        MANAGE_CAPABILITY,
+        dashboard_scope_node_ids,
+    );
     if let (Some(requested), Some(observed)) =
         (requested_context.as_ref(), attempt.authorization_context())
         && requested.digest() != observed.digest()
@@ -1263,6 +1301,38 @@ mod tests {
         let mut invalid = request;
         invalid.expected_finding_revision = 0;
         assert!(validate_action_request(&invalid).is_err());
+    }
+
+    #[test]
+    fn replacement_scope_must_be_nonempty_canonical_and_contained_by_dashboard_scope() {
+        let dashboard_a = Uuid::from_u128(10);
+        let dashboard_b = Uuid::from_u128(11);
+        let outside = Uuid::from_u128(12);
+
+        assert!(component_scope_within_dashboard_scope(
+            &[dashboard_a],
+            &[dashboard_a, dashboard_b],
+        ));
+        assert!(component_scope_within_dashboard_scope(
+            &[dashboard_a, dashboard_b],
+            &[dashboard_a, dashboard_b],
+        ));
+        assert!(!component_scope_within_dashboard_scope(
+            &[],
+            &[dashboard_a, dashboard_b],
+        ));
+        assert!(!component_scope_within_dashboard_scope(
+            &[dashboard_b, dashboard_a],
+            &[dashboard_a, dashboard_b],
+        ));
+        assert!(!component_scope_within_dashboard_scope(
+            &[dashboard_a, dashboard_a],
+            &[dashboard_a, dashboard_b],
+        ));
+        assert!(!component_scope_within_dashboard_scope(
+            &[dashboard_a, outside],
+            &[dashboard_a, dashboard_b],
+        ));
     }
 
     #[test]

@@ -18,6 +18,55 @@ function Open-Sprint8AValidationAttemptLock {
     [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
 }
 
+function Invoke-RehearsalPowerShellCheck {
+    param(
+        [Parameter(Mandatory)][scriptblock]$Action,
+        [Parameter(Mandatory)][string]$FailureMessage
+    )
+
+    & $Action
+    $childSucceeded = $?
+    if (-not $childSucceeded) { throw $FailureMessage }
+}
+
+function Test-RehearsalPowerShellCheck {
+    $savedNativeExitCodeVariable = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+    $savedNativeExitCode = if ($null -eq $savedNativeExitCodeVariable) {
+        $null
+    } else {
+        $savedNativeExitCodeVariable.Value
+    }
+    try {
+        $global:LASTEXITCODE = 1
+        $output = @(Invoke-RehearsalPowerShellCheck -Action {
+            Write-Output "successful PowerShell child"
+        } -FailureMessage "A stale native exit code falsely failed a successful PowerShell child.")
+        if (($output -join "") -cne "successful PowerShell child") {
+            throw "PowerShell child status self-test did not preserve successful output."
+        }
+
+        try {
+            Invoke-RehearsalPowerShellCheck -Action {
+                throw "intentional PowerShell child failure"
+            } -FailureMessage "PowerShell child failure was not propagated."
+            throw "PowerShell child status self-test accepted a thrown child failure."
+        } catch {
+            if ($_.Exception.Message -ceq "PowerShell child status self-test accepted a thrown child failure.") {
+                throw
+            }
+            if ($_.Exception.Message -cne "intentional PowerShell child failure") {
+                throw "PowerShell child status self-test did not preserve the thrown child failure."
+            }
+        }
+    } finally {
+        if ($null -eq $savedNativeExitCodeVariable) {
+            Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+        } else {
+            $global:LASTEXITCODE = $savedNativeExitCode
+        }
+    }
+}
+
 function Test-Sprint8AExclusiveValidationLock {
     $path = Join-Path ([IO.Path]::GetTempPath()) "tessara-sprint-8a-lock-$([guid]::NewGuid().ToString('N')).lock"
     $first = Open-Sprint8AValidationAttemptLock -Path $path
@@ -172,6 +221,7 @@ function Assert-Sprint8ANestedUatReceiptIdentity {
 if ($SelfTest) {
     Test-Sprint8AExclusiveValidationLock
     Test-RehearsalScheduler
+    Test-RehearsalPowerShellCheck
     Test-Sprint8AResultClassificationProjection
     $source = [pscustomobject]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "sprint-8a"
@@ -823,16 +873,24 @@ try {
         Test-Sprint8AAcceptanceContract
     }
     Invoke-RehearsalLane "web-native-wasm-source-boundaries" {
-        & ./scripts/check-web-crate-boundaries.ps1; if ($LASTEXITCODE -ne 0) { throw "Package-boundary audit failed." }
+        Invoke-RehearsalPowerShellCheck -Action {
+            & ./scripts/check-web-crate-boundaries.ps1
+        } -FailureMessage "Package-boundary audit failed."
     }
     Invoke-RehearsalLane "module-sdk-boundaries" {
-        & ./scripts/verify-module-sdk-boundaries.ps1; if ($LASTEXITCODE -ne 0) { throw "Module SDK boundary audit failed." }
+        Invoke-RehearsalPowerShellCheck -Action {
+            & ./scripts/verify-module-sdk-boundaries.ps1
+        } -FailureMessage "Module SDK boundary audit failed."
     }
     Invoke-RehearsalLane "dashboard-source-boundaries" {
-        & ./scripts/verify-sprint-6e-boundaries.ps1; if ($LASTEXITCODE -ne 0) { throw "Dashboard source boundary audit failed." }
+        Invoke-RehearsalPowerShellCheck -Action {
+            & ./scripts/verify-sprint-6e-boundaries.ps1
+        } -FailureMessage "Dashboard source boundary audit failed."
     }
     Invoke-RehearsalLane "markdown-links" {
-        & ./scripts/verify-markdown-links.ps1; if ($LASTEXITCODE -ne 0) { throw "Markdown-link audit failed." }
+        Invoke-RehearsalPowerShellCheck -Action {
+            & ./scripts/verify-markdown-links.ps1
+        } -FailureMessage "Markdown-link audit failed."
     }
     Invoke-RehearsalLane "workspace-tests" {
         & cargo test --workspace --all-features --locked --offline; if ($LASTEXITCODE -ne 0) { throw "Full workspace tests failed." }

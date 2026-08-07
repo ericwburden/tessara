@@ -13,6 +13,11 @@ use std::collections::VecDeque;
 
 use icons::{ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Fullscreen, ListFilter, RotateCcw};
 use leptos::prelude::*;
+#[cfg(feature = "hydrate")]
+use tessara_components_contract::ComponentRenderResponse;
+use tessara_components_contract::{
+    ComponentRenderKind, ComponentTableColumn, ComponentTableResponse as ComponentTable,
+};
 use tessara_module_ui::{
     EmptyState, FullscreenDialog, TableColumnOption, TableColumnSelector, TablePaginationBar,
     TablePopoverController, TableSearch,
@@ -26,72 +31,14 @@ use crate::request::{
 };
 #[cfg(feature = "hydrate")]
 use crate::request::{RequestActivityGuard, schedule_bounded_retry};
-use crate::types::{ComponentTable, ComponentTableColumn};
 use crate::visual::ComponentVisualViewer;
-
-/// The six executable Component kinds supported by reader surfaces.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ComponentVersionKind {
-    Table,
-    Bar,
-    Line,
-    Pie,
-    Donut,
-    StatCard,
-}
-
-impl ComponentVersionKind {
-    /// Adapts the API's stable snake-case Component kind vocabulary.
-    pub fn from_api_kind(value: &str) -> Option<Self> {
-        match value {
-            "table" => Some(Self::Table),
-            "bar" => Some(Self::Bar),
-            "line" => Some(Self::Line),
-            "pie" => Some(Self::Pie),
-            "donut" => Some(Self::Donut),
-            "stat_card" => Some(Self::StatCard),
-            _ => None,
-        }
-    }
-
-    /// Returns the stable API vocabulary for this kind.
-    pub const fn as_api_value(self) -> &'static str {
-        match self {
-            Self::Table => "table",
-            Self::Bar => "bar",
-            Self::Line => "line",
-            Self::Pie => "pie",
-            Self::Donut => "donut",
-            Self::StatCard => "stat_card",
-        }
-    }
-
-    /// Returns the canonical execution endpoint segment for this kind.
-    pub const fn endpoint_segment(self) -> &'static str {
-        match self {
-            Self::StatCard => "stat-card",
-            other => other.as_api_value(),
-        }
-    }
-
-    pub(crate) const fn label(self) -> &'static str {
-        match self {
-            Self::Table => "Table",
-            Self::Bar => "Bar",
-            Self::Line => "Line",
-            Self::Pie => "Pie",
-            Self::Donut => "Donut",
-            Self::StatCard => "Stat Card",
-        }
-    }
-}
 
 /// Identifies one exact published or superseded ComponentVersion endpoint.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComponentVersionTarget {
     component_ref: String,
     component_version_id: String,
-    kind: ComponentVersionKind,
+    kind: ComponentRenderKind,
     execution_route: ComponentExecutionRoute,
 }
 
@@ -106,7 +53,7 @@ impl ComponentVersionTarget {
     pub fn new(
         component_ref: impl Into<String>,
         component_version_id: impl Into<String>,
-        kind: ComponentVersionKind,
+        kind: ComponentRenderKind,
     ) -> Self {
         Self {
             component_ref: component_ref.into(),
@@ -122,7 +69,7 @@ impl ComponentVersionTarget {
     pub fn mediated(
         component_ref: impl Into<String>,
         component_version_id: impl Into<String>,
-        kind: ComponentVersionKind,
+        kind: ComponentRenderKind,
         endpoint_path: impl Into<String>,
     ) -> Self {
         Self {
@@ -136,7 +83,7 @@ impl ComponentVersionTarget {
     }
 
     /// Returns the target kind without exposing mutable execution state.
-    pub const fn kind(&self) -> ComponentVersionKind {
+    pub const fn kind(&self) -> ComponentRenderKind {
         self.kind
     }
 
@@ -312,7 +259,7 @@ pub fn ComponentVersionExecutionContent(
             data-viewer-mode=mode.as_data_value()
         >
             {match kind {
-                ComponentVersionKind::Table => {
+                ComponentRenderKind::Table => {
                     view! {
                         <ComponentTableViewer
                             target
@@ -768,7 +715,7 @@ fn ComponentTableResults(
     let columns = table.columns.clone();
     let rows = table.rows.clone();
     let row_count = rows.len();
-    let returned_page_size = table.pagination.page_size.max(1);
+    let returned_page_size = usize::try_from(table.pagination.page_size.max(1)).unwrap_or(1);
     let next_cursor = table.pagination.next_cursor.clone();
     let has_more = table.pagination.has_more && next_cursor.is_some();
     let mut page_sizes = vec![10_usize, 25, 50, 100, 200];
@@ -1310,13 +1257,12 @@ fn load_component_table(request: ComponentTableRequest) {
             }
             loading.set(false);
             let completion = match result {
-                Ok(Some(response))
-                    if response.component_type == "table"
-                        && response.component_version_id == expected_version_id =>
+                Ok(Some(ComponentRenderResponse::Table(response)))
+                    if response.component_version_id.to_string() == expected_version_id =>
                 {
                     let retryable = materialization_is_retryable(&response.materialization_state);
                     known_columns.update(|known| merge_known_columns(known, &response.columns));
-                    table.set(Some(response));
+                    table.set(Some(*response));
                     error.set(None);
                     if retryable {
                         schedule_bounded_retry(
@@ -1404,28 +1350,12 @@ fn load_component_table(request: ComponentTableRequest) {
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::types::{
-        ComponentStatValue, ComponentTablePagination, ComponentTableRow, ComponentVisual,
-        ComponentVisualPoint, ComponentVisualSlice,
-    };
-    #[cfg(feature = "ssr")]
     use std::collections::BTreeMap;
-
     #[cfg(feature = "ssr")]
-    fn dataset_reference() -> tessara_datasets_contract::DatasetMajorLineReference {
-        serde_json::from_value(serde_json::json!({
-            "reference": {
-                "installation_id": "11111111-1111-4111-8111-111111111111",
-                "owner": {
-                    "kind": "core_installation",
-                    "installation_id": "11111111-1111-4111-8111-111111111111"
-                },
-                "resource_type": "tessara.transition.dataset_major_line",
-                "resource_id": "22222222-2222-4222-8222-222222222222@1"
-            }
-        }))
-        .expect("canonical Dataset major-line reference")
-    }
+    use tessara_components_contract::{
+        ComponentStatValue, ComponentTablePagination, ComponentTableRow, ComponentVisualPoint,
+        ComponentVisualResponse, ComponentVisualSlice,
+    };
 
     #[test]
     fn persisted_table_state_restores_page_controls_and_stays_bounded() {
@@ -1450,12 +1380,12 @@ mod tests {
     #[test]
     fn exact_version_targets_build_all_supported_endpoint_paths() {
         for (kind, segment) in [
-            (ComponentVersionKind::Table, "table"),
-            (ComponentVersionKind::Bar, "bar"),
-            (ComponentVersionKind::Line, "line"),
-            (ComponentVersionKind::Pie, "pie"),
-            (ComponentVersionKind::Donut, "donut"),
-            (ComponentVersionKind::StatCard, "stat-card"),
+            (ComponentRenderKind::Table, "table"),
+            (ComponentRenderKind::Bar, "bar"),
+            (ComponentRenderKind::Line, "line"),
+            (ComponentRenderKind::Pie, "pie"),
+            (ComponentRenderKind::Donut, "donut"),
+            (ComponentRenderKind::StatCard, "stat-card"),
         ] {
             assert_eq!(
                 ComponentVersionTarget::new("attendance", "version-2", kind).endpoint_path(),
@@ -1469,7 +1399,7 @@ mod tests {
         let target = ComponentVersionTarget::mediated(
             "attendance",
             "secret-version-id",
-            ComponentVersionKind::Table,
+            ComponentRenderKind::Table,
             "/api/presentations/container-1/items/item-2/render/table",
         );
         let endpoint = target.endpoint_path();
@@ -1484,19 +1414,19 @@ mod tests {
     #[test]
     fn api_kind_adapter_accepts_only_the_six_reader_kinds() {
         for kind in [
-            ComponentVersionKind::Table,
-            ComponentVersionKind::Bar,
-            ComponentVersionKind::Line,
-            ComponentVersionKind::Pie,
-            ComponentVersionKind::Donut,
-            ComponentVersionKind::StatCard,
+            ComponentRenderKind::Table,
+            ComponentRenderKind::Bar,
+            ComponentRenderKind::Line,
+            ComponentRenderKind::Pie,
+            ComponentRenderKind::Donut,
+            ComponentRenderKind::StatCard,
         ] {
             assert_eq!(
-                ComponentVersionKind::from_api_kind(kind.as_api_value()),
+                ComponentRenderKind::from_api_kind(kind.as_api_value()),
                 Some(kind)
             );
         }
-        assert_eq!(ComponentVersionKind::from_api_kind("report"), None);
+        assert_eq!(ComponentRenderKind::from_api_kind("report"), None);
     }
 
     #[test]
@@ -1593,10 +1523,13 @@ mod tests {
         values.insert("program".into(), Some("Outreach".into()));
         let table = ComponentTable {
             schema_version: 1,
-            component_id: "component-1".into(),
-            component_version_id: "version-1".into(),
-            dataset_reference: dataset_reference(),
-            component_type: "table".into(),
+            component_id: "01980000-0002-7000-8000-000000000011"
+                .parse()
+                .expect("Component id"),
+            component_version_id: "01980000-0001-7000-8000-000000000011"
+                .parse()
+                .expect("ComponentVersion id"),
+            component_type: ComponentRenderKind::Table,
             materialization_state: "ready".into(),
             columns: vec![ComponentTableColumn {
                 key: "program".into(),
@@ -1719,15 +1652,19 @@ mod tests {
     }
 
     #[cfg(feature = "ssr")]
-    fn visual_fixture(kind: &str) -> ComponentVisual {
+    fn visual_fixture(kind: &str) -> ComponentVisualResponse {
+        let component_type = ComponentRenderKind::from_api_kind(kind).expect("Component kind");
         let is_stat = kind == "stat_card";
         let is_round = matches!(kind, "pie" | "donut");
-        ComponentVisual {
+        ComponentVisualResponse {
             schema_version: 1,
-            component_id: "component-1".into(),
-            component_version_id: "version-1".into(),
-            dataset_reference: dataset_reference(),
-            component_type: kind.into(),
+            component_id: "01980000-0002-7000-8000-000000000011"
+                .parse()
+                .expect("Component id"),
+            component_version_id: "01980000-0001-7000-8000-000000000011"
+                .parse()
+                .expect("ComponentVersion id"),
+            component_type,
             materialization_state: "ready".into(),
             value_format: "number".into(),
             legend_title: Some("Program".into()),

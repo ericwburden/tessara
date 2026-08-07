@@ -781,20 +781,35 @@ try {
     if (-not $visualField -or -not $visualField.key) {
         throw "Expected seeded dataset to expose an output field for visual component coverage"
     }
+    $visualDatasetResourceId = "$($seed.dataset_id)@$($datasetDetail.current_version_major)"
+    $componentDatasetCatalog = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/components/datasets" -Headers $headers
+    $visualDatasetOptions = @($componentDatasetCatalog.datasets | Where-Object {
+        [string]$_.reference.reference.resource_id -ceq $visualDatasetResourceId
+    })
+    if ($componentDatasetCatalog.schema_version -ne 1 -or $visualDatasetOptions.Count -ne 1) {
+        throw "Expected Component authoring catalog to expose exact Dataset major line '$visualDatasetResourceId'"
+    }
+    $visualDatasetReference = $visualDatasetOptions[0].reference
+    if ([string]$visualDatasetReference.reference.resource_type -cne "tessara.transition.dataset_major_line" -or
+        [string]$visualDatasetReference.reference.owner.kind -cne "core_installation" -or
+        [string]$visualDatasetReference.reference.owner.installation_id -cne [string]$visualDatasetReference.reference.installation_id) {
+        throw "Expected Component authoring catalog to return one canonical Core-owned Dataset major-line reference"
+    }
     $visualSlug = "smoke-visual-bar-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
     $visualComponent = Invoke-Json `
         -Method "Post" `
         -Uri "$baseUrl/api/admin/components" `
         -Headers $headers `
         -Body @{
+            schema_version = 1
             name        = "Smoke Visual Bar"
             slug        = $visualSlug
             description = "Sprint 4B smoke visual component fixture."
             version     = @{
-                dataset_id            = $seed.dataset_id
-                dataset_version_major = $datasetDetail.current_version_major
-                component_type        = "bar"
-                config                = @{
+                dataset_reference = $visualDatasetReference
+                component_type    = "bar"
+                version_note      = "Smoke visual permission fixture"
+                config            = @{
                     mode             = "summary"
                     summary_field    = $visualField.key
                     summary_type     = "count"
@@ -808,9 +823,15 @@ try {
         }
     $visualDetail = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/components/$visualSlug" -Headers $headers
     $visualVersion = $visualDetail.versions | Select-Object -First 1
+    if ($visualComponent.schema_version -ne 1 -or
+        [string]$visualDetail.component_id -cne [string]$visualComponent.component_id -or
+        -not $visualVersion -or
+        [string]$visualVersion.dataset_reference.reference.resource_id -cne $visualDatasetResourceId) {
+        throw "Expected visual Component create/read-back to retain exact canonical identities"
+    }
     Invoke-Json `
         -Method "Post" `
-        -Uri "$baseUrl/api/admin/components/$($visualComponent.id)/versions/$($visualVersion.id)/publish" `
+        -Uri "$baseUrl/api/admin/components/$($visualComponent.component_id)/versions/$($visualVersion.component_version_id)/publish" `
         -Headers $headers | Out-Null
     $visualBar = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/$visualSlug/bar" -Headers $headers
     if ($visualBar.materialization_state -ne "ready" -or $visualBar.component_type -ne "bar" -or $visualBar.points.Count -lt 1) {

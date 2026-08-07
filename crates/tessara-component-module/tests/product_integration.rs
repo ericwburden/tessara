@@ -39,8 +39,8 @@ use tessara_module_contract::{
     AuthorizationGrantV2, AuthorizationGrantV3, CapabilityScopeBindingV1, DependencyBindingKey,
     FunctionalContractId, ModuleDefinitionId, ModuleServiceIdentityRegistryV1,
     ModuleServicePrincipalV1, ModuleServiceRequestV1, ProtocolSignaturePurposeV1,
-    PurposeBoundSigningKeyV1, ResourceOwner, SecurityCapabilityId, SignedEnvelopeV1,
-    TypedResourceReference,
+    PurposeBoundSigningKeyV1, ResourceAuthorizationAssertionV2, ResourceOwner, ResourceTypeId,
+    SecurityCapabilityId, SignedEnvelopeV1, TypedResourceReference,
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -193,6 +193,10 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     let valid_bootstrap_input = component_bootstrap_input(
         &dataset_reference,
         allowed_scope,
+        vec![
+            any_type_field_requirement("amount"),
+            any_type_field_requirement("label"),
+        ],
         json!({
             "visible_columns": ["label", "amount"],
             "search_fields": ["label"],
@@ -339,6 +343,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         &DatasetMajorLineReference::from_parts(installation_id, Uuid::new_v4(), 1)
             .expect("nonexistent Dataset major-line reference"),
         allowed_scope,
+        vec![any_type_field_requirement("label")],
         json!({"visible_columns": ["label"]}),
     );
     let nonexistent_digest = tessara_composition::canonical_digest(&nonexistent_input)
@@ -375,6 +380,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         &dataset_reference,
         allowed_scope,
         "stat_card",
+        vec![json!({"field_key":"label","accepted_types":["number"]})],
         json!({
             "summary_field": "label",
             "summary_type": "average",
@@ -419,6 +425,10 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     };
     let cached_bootstrap_input = json!({
         "schema_version": "tessara.io/component-bootstrap/v1",
+        "dependency_validation": {
+            "schema_version": 1,
+            "items": []
+        },
         "components": []
     });
     let cached_bootstrap_digest = tessara_composition::canonical_digest(&cached_bootstrap_input)
@@ -466,6 +476,17 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         StatusCode::BAD_REQUEST,
         "a cached Component receipt must remain installation-bound: {}",
         cross_installation_replay.body
+    );
+    let removed_cached_receipt =
+        sqlx::query("DELETE FROM component_bootstrap_receipts WHERE idempotency_key=$1")
+            .bind("cross-installation-replay")
+            .execute(&pool)
+            .await
+            .expect("remove isolated cross-installation replay receipt");
+    assert_eq!(
+        removed_cached_receipt.rows_affected(),
+        1,
+        "the isolated cross-installation replay fixture must be removed exactly once"
     );
     let table_config = json!({
         "visible_columns": ["label", "amount"],
@@ -917,12 +938,17 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         .expect("absent Component resolution request"),
     )
     .await;
-    assert_eq!(draft_resolution.status, StatusCode::OK);
+    assert_eq!(
+        draft_resolution.status,
+        StatusCode::OK,
+        "{}",
+        draft_resolution.body
+    );
     assert_eq!(draft_resolution.status, absent_draft_resolution.status);
     assert_eq!(draft_resolution.body, absent_draft_resolution.body);
     assert_eq!(
         draft_resolution.body["resolution"]["access_state"],
-        "not_evaluated"
+        "unauthorized"
     );
     assert!(draft_resolution.body["metadata"].is_null());
 
@@ -1082,6 +1108,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         dashboard_instance_id,
         allowed_scope,
         "/api/private/components/resolve",
+        None,
         replay_body.clone(),
     );
     let replay_first =
@@ -1093,6 +1120,26 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             .await;
     assert_eq!(replay_second.status, StatusCode::FORBIDDEN);
 
+    let mut altered_body = private_provider_message(
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/resolve",
+        None,
+        replay_body.clone(),
+    );
+    altered_body.body.push(b' ');
+    assert_eq!(
+        send_private_provider_message(&app, "/api/private/components/resolve", &altered_body)
+            .await
+            .status,
+        StatusCode::FORBIDDEN,
+        "changing an otherwise equivalent JSON body byte without re-signing must fail closed"
+    );
+
     let wrong_instance = private_provider_message(
         &core_signer,
         &dashboard_signer,
@@ -1101,6 +1148,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         Uuid::new_v4(),
         allowed_scope,
         "/api/private/components/resolve",
+        None,
         replay_body.clone(),
     );
     assert_eq!(
@@ -1125,6 +1173,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         dashboard_instance_id,
         allowed_scope,
         "/api/private/components/resolve",
+        None,
         replay_body,
     );
     assert_eq!(
@@ -1160,6 +1209,177 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     let authority_revision = public_detail.body["versions"][0]["authority_revision"]
         .as_u64()
         .expect("published Component authority revision");
+    let provider_render_body = |dashboard_scope_node_ids: Vec<Uuid>| {
+        serde_json::to_value(ComponentRenderRequest {
+            schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
+            action: ComponentAction::Render,
+            reference: known_reference.clone(),
+            kind: ComponentRenderKind::Table,
+            resource_authority_revision: authority_revision,
+            query: String::new(),
+            dashboard_scope_node_ids,
+        })
+        .expect("provider Component render request")
+    };
+    let authorized_provider_render = private_provider_request(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        provider_render_body(vec![allowed_scope]),
+    )
+    .await;
+    assert_eq!(
+        authorized_provider_render.status,
+        StatusCode::OK,
+        "{}",
+        authorized_provider_render.body
+    );
+    assert_eq!(
+        uuid_at(&authorized_provider_render.body, "/component_version_id"),
+        first_version_id
+    );
+
+    let disjoint_dashboard_render = private_provider_request(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        provider_render_body(vec![hidden_scope]),
+    )
+    .await;
+    assert_eq!(disjoint_dashboard_render.status, StatusCode::FORBIDDEN);
+
+    let empty_dashboard_scope_render = private_provider_request(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        provider_render_body(Vec::new()),
+    )
+    .await;
+    assert_eq!(empty_dashboard_scope_render.status, StatusCode::FORBIDDEN);
+
+    let mut unsorted_dashboard_scope = vec![allowed_scope, hidden_scope];
+    unsorted_dashboard_scope.sort_unstable();
+    unsorted_dashboard_scope.reverse();
+    let unsorted_dashboard_scope_render = private_provider_request(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        provider_render_body(unsorted_dashboard_scope),
+    )
+    .await;
+    assert_eq!(
+        unsorted_dashboard_scope_render.status,
+        StatusCode::FORBIDDEN
+    );
+
+    let exact_resource_assertion = ResourceAuthorizationAssertionV2 {
+        resource_type: ResourceTypeId::new(COMPONENT_RESOURCE_TYPE)
+            .expect("Component resource type"),
+        resource_id: first_version_id.to_string(),
+        authority_revision,
+        governing_organization_ids: vec![allowed_scope],
+    };
+    let mut empty_scope_resource_assertion = exact_resource_assertion.clone();
+    empty_scope_resource_assertion
+        .governing_organization_ids
+        .clear();
+    let empty_scope_resource_assertion_render = private_provider_request_with_assertion(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        Some(empty_scope_resource_assertion),
+        provider_render_body(vec![allowed_scope]),
+    )
+    .await;
+    assert_eq!(
+        empty_scope_resource_assertion_render.status,
+        StatusCode::FORBIDDEN
+    );
+
+    let mut unsorted_scope_resource_assertion = exact_resource_assertion.clone();
+    unsorted_scope_resource_assertion.governing_organization_ids =
+        vec![allowed_scope, hidden_scope];
+    unsorted_scope_resource_assertion
+        .governing_organization_ids
+        .sort_unstable();
+    unsorted_scope_resource_assertion
+        .governing_organization_ids
+        .reverse();
+    let unsorted_scope_resource_assertion_render = private_provider_request_with_assertion(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        Some(unsorted_scope_resource_assertion),
+        provider_render_body(vec![allowed_scope]),
+    )
+    .await;
+    assert_eq!(
+        unsorted_scope_resource_assertion_render.status,
+        StatusCode::FORBIDDEN
+    );
+
+    let mut stale_resource_assertion = exact_resource_assertion.clone();
+    stale_resource_assertion.authority_revision += 1;
+    let stale_resource_assertion_render = private_provider_request_with_assertion(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        Some(stale_resource_assertion),
+        provider_render_body(vec![allowed_scope]),
+    )
+    .await;
+    assert_eq!(
+        stale_resource_assertion_render.status,
+        StatusCode::FORBIDDEN
+    );
+
+    let mut wrong_resource_assertion = exact_resource_assertion;
+    wrong_resource_assertion.resource_id = Uuid::new_v4().to_string();
+    let wrong_resource_assertion_render = private_provider_request_with_assertion(
+        &app,
+        &core_signer,
+        &dashboard_signer,
+        &grants,
+        dashboard_instance_id,
+        allowed_scope,
+        "/api/private/components/render",
+        Some(wrong_resource_assertion),
+        provider_render_body(vec![allowed_scope]),
+    )
+    .await;
+    assert_eq!(
+        wrong_resource_assertion_render.status,
+        StatusCode::FORBIDDEN
+    );
+
     let random_render = private_provider_request(
         &app,
         &core_signer,
@@ -1516,7 +1736,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
 
     assert_eq!(dataset.schema_calls.load(Ordering::Relaxed), 12);
     assert_eq!(dataset.compatibility_calls.load(Ordering::Relaxed), 10);
-    assert_eq!(dataset.execute_calls.load(Ordering::Relaxed), 4);
+    assert_eq!(dataset.execute_calls.load(Ordering::Relaxed), 5);
     dataset_server.abort();
     let _ = dataset_server.await;
 
@@ -2157,6 +2377,33 @@ async fn private_provider_request(
     path: &str,
     body: Value,
 ) -> TestResponse {
+    let resource_assertion = default_provider_resource_assertion(path, scope, &body);
+    private_provider_request_with_assertion(
+        app,
+        core_signer,
+        dashboard_signer,
+        context,
+        dashboard_instance_id,
+        scope,
+        path,
+        resource_assertion,
+        body,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn private_provider_request_with_assertion(
+    app: &Router,
+    core_signer: &PurposeBoundSigningKeyV1,
+    dashboard_signer: &PurposeBoundSigningKeyV1,
+    context: &GrantContext,
+    dashboard_instance_id: Uuid,
+    scope: Uuid,
+    path: &str,
+    resource_assertion: Option<ResourceAuthorizationAssertionV2>,
+    body: Value,
+) -> TestResponse {
     let message = private_provider_message(
         core_signer,
         dashboard_signer,
@@ -2165,9 +2412,29 @@ async fn private_provider_request(
         dashboard_instance_id,
         scope,
         path,
+        resource_assertion,
         body,
     );
     send_private_provider_message(app, path, &message).await
+}
+
+fn default_provider_resource_assertion(
+    path: &str,
+    governing_scope: Uuid,
+    body: &Value,
+) -> Option<ResourceAuthorizationAssertionV2> {
+    if path != "/api/private/components/render" {
+        return None;
+    }
+    let request: ComponentRenderRequest =
+        serde_json::from_value(body.clone()).expect("typed Component render request");
+    Some(ResourceAuthorizationAssertionV2 {
+        resource_type: ResourceTypeId::new(COMPONENT_RESOURCE_TYPE)
+            .expect("Component resource type"),
+        resource_id: request.reference.reference().resource_id().to_string(),
+        authority_revision: request.resource_authority_revision,
+        governing_organization_ids: vec![governing_scope],
+    })
 }
 
 struct PrivateProviderMessage {
@@ -2186,6 +2453,7 @@ fn private_provider_message(
     service_module_instance_id: Uuid,
     scope: Uuid,
     path: &str,
+    resource_assertion: Option<ResourceAuthorizationAssertionV2>,
     body: Value,
 ) -> PrivateProviderMessage {
     let now = Utc::now();
@@ -2223,7 +2491,7 @@ fn private_provider_message(
                 organization_root_id: scope,
                 authorized_organization_ids: Vec::new(),
             }],
-            resource_assertion: None,
+            resource_assertion,
             delegation_basis: Vec::new(),
             authorization_revision: 7,
             organization_revision: 11,
@@ -2576,25 +2844,25 @@ fn signing_key(
 fn component_bootstrap_input(
     dataset_reference: &DatasetMajorLineReference,
     dataset_scope_node_id: Uuid,
+    required_fields: Vec<Value>,
     config: Value,
 ) -> Value {
-    component_bootstrap_input_for_kind(dataset_reference, dataset_scope_node_id, "table", config)
+    component_bootstrap_input_for_kind(
+        dataset_reference,
+        dataset_scope_node_id,
+        "table",
+        required_fields,
+        config,
+    )
 }
 
 fn component_bootstrap_input_for_kind(
     dataset_reference: &DatasetMajorLineReference,
     dataset_scope_node_id: Uuid,
     component_type: &str,
+    required_fields: Vec<Value>,
     config: Value,
 ) -> Value {
-    let required_fields = if component_type == "stat_card" {
-        vec![json!({"field_key":"label","accepted_types":["number"]})]
-    } else {
-        vec![json!({
-            "field_key":"label",
-            "accepted_types":["boolean","date","multi_choice","number","single_choice","text"]
-        })]
-    };
     json!({
         "schema_version": "tessara.io/component-bootstrap/v1",
         "dependency_validation": {
@@ -2628,6 +2896,13 @@ fn component_bootstrap_input_for_kind(
                 "config": config
             }]
         }]
+    })
+}
+
+fn any_type_field_requirement(field_key: &str) -> Value {
+    json!({
+        "field_key": field_key,
+        "accepted_types": ["boolean", "date", "multi_choice", "number", "single_choice", "text"]
     })
 }
 

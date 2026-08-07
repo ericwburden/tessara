@@ -53,6 +53,23 @@ pub(crate) fn configured_registry() -> anyhow::Result<Option<ModuleServiceIdenti
         .map_err(anyhow::Error::from)
 }
 
+pub(crate) fn require_json_content_type(headers: &HeaderMap) -> ApiResult<()> {
+    let is_json = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim)
+        .is_some_and(|media_type| {
+            let media_type = media_type.to_ascii_lowercase();
+            media_type == "application/json"
+                || (media_type.starts_with("application/") && media_type.ends_with("+json"))
+        });
+    if !is_json {
+        return Err(restricted_authorization());
+    }
+    Ok(())
+}
+
 /// Projects the source-exact key for one selected Module Instance. A module
 /// that declares downstream actions must have a configured signing identity;
 /// request-time traffic never creates or updates this row.
@@ -365,8 +382,37 @@ mod tests {
 
     use super::{
         AuthorizationGrantConsumption, materializing_instance_is_selected,
-        verified_correlation_header,
+        require_json_content_type, verified_correlation_header,
     };
+
+    #[test]
+    fn exact_body_routes_retain_json_content_type_enforcement() {
+        for content_type in [
+            "application/json",
+            "application/json; charset=utf-8",
+            "application/vnd.tessara+json",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                HeaderValue::from_static(content_type),
+            );
+            require_json_content_type(&headers).unwrap_or_else(|_| {
+                panic!("valid JSON content type '{content_type}' was rejected")
+            });
+        }
+
+        for content_type in [None, Some("text/json"), Some("application/octet-stream")] {
+            let mut headers = HeaderMap::new();
+            if let Some(content_type) = content_type {
+                headers.insert(
+                    axum::http::header::CONTENT_TYPE,
+                    HeaderValue::from_static(content_type),
+                );
+            }
+            assert!(require_json_content_type(&headers).is_err());
+        }
+    }
 
     #[test]
     fn correlation_header_must_match_the_inbound_grant_exactly() {

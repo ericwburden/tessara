@@ -78,23 +78,62 @@ type DatasetTable = {
     values: Record<string, string | null>;
   }>;
 };
+type DatasetReference = {
+  reference: {
+    installation_id: string;
+    owner: {
+      kind: "core_installation";
+      installation_id: string;
+    };
+    resource_type: "tessara.transition.dataset_major_line";
+    resource_id: string;
+  };
+};
+type ComponentDatasetCatalog = {
+  schema_version: number;
+  datasets: Array<{ reference: DatasetReference }>;
+};
 type ComponentListSummary = { component_id: string; name: string; slug: string };
-type ComponentSummary = { id: string; name: string; slug: string };
-type ComponentDefinition = {
-  id: string;
+type ComponentSummary = {
+  component_id: string;
+  component_version_id: string;
   name: string;
   slug: string;
-  versions: Array<{ id: string; status: string; component_type: string }>;
+};
+type ComponentVersion = {
+  component_version_id: string;
+  dataset_reference: DatasetReference;
+  component_type: string;
+  publication_state: string;
+  lifecycle_state: string;
+};
+type ComponentDefinition = {
+  schema_version: number;
+  component_id: string;
+  name: string;
+  slug: string;
+  versions: ComponentVersion[];
+};
+type ComponentMutationResponse = {
+  schema_version: number;
+  component_id: string;
+  component_version_id: string | null;
+  outcome: string;
 };
 type ComponentTable = {
+  schema_version: number;
+  component_id: string;
   component_version_id: string;
   materialization_state: string;
+  component_type: "table";
   rows: Array<{ values: Record<string, string | null> }>;
 };
 type ComponentVisual = {
+  schema_version: number;
+  component_id: string;
   component_version_id: string;
   materialization_state: string;
-  component_type: string;
+  component_type: "bar" | "line" | "pie" | "donut" | "stat_card";
   points: Array<{ x: string; value: number }>;
 };
 type DashboardSummary = { id: string; name: string; visibility_nodes: VisibilityNode[] };
@@ -177,6 +216,8 @@ type FixtureState = {
   outOfScopeForm: FormSummary;
   inScopeDataset: DatasetSummary;
   outOfScopeDataset: DatasetSummary;
+  inScopeDatasetReference: DatasetReference;
+  outOfScopeDatasetReference: DatasetReference;
   inScopeComponent: ComponentSummary;
   outOfScopeComponent: ComponentSummary;
   inScopeVisualComponent: ComponentSummary;
@@ -205,75 +246,6 @@ async function expectJson<T>(response: APIResponse): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-function canonicalComponentVersionInput(data: Record<string, unknown>) {
-  if (data.dataset_reference) return data;
-  const datasetId = String(data.dataset_id);
-  const major = Number(data.dataset_version_major);
-  const installationId = "01980000-0000-7000-8000-00000000008a";
-  const { dataset_id: _datasetId, dataset_version_major: _major, ...rest } = data;
-  return {
-    ...rest,
-    dataset_reference: {
-      reference: {
-        installation_id: installationId,
-        owner: { kind: "core_installation", installation_id: installationId },
-        resource_type: "tessara.transition.dataset_major_line",
-        resource_id: `${datasetId}@${major}`,
-      },
-    },
-  };
-}
-
-function canonicalComponentRequest(url: string, data?: Record<string, unknown>) {
-  if (!data || !url.startsWith("/api/admin/components")) return data;
-  if (url === "/api/admin/components") {
-    return {
-      ...data,
-      schema_version: 1,
-      version: canonicalComponentVersionInput(data.version as Record<string, unknown>),
-    };
-  }
-  if (url.endsWith("/validate") || url.endsWith("/preview")) {
-    return canonicalComponentVersionInput(data);
-  }
-  if (/\/versions(?:\/[^/]+)?$/.test(url)) {
-    return { schema_version: 1, version: canonicalComponentVersionInput(data) };
-  }
-  if (/^\/api\/admin\/components\/[^/]+$/.test(url)) {
-    return { ...data, schema_version: 1 };
-  }
-  return data;
-}
-
-function componentResponseAliases(url: string, value: unknown): unknown {
-  if (!url.startsWith("/api/admin/components") || !value || Array.isArray(value)) return value;
-  const response = value as Record<string, unknown>;
-  if (response.schema_version !== 1) return value;
-  const versions = Array.isArray(response.versions)
-    ? response.versions.map((raw) => {
-        const version = raw as Record<string, unknown>;
-        const resourceId = String(
-          ((version.dataset_reference as Record<string, unknown>)?.reference as Record<string, unknown>)
-            ?.resource_id ?? "",
-        );
-        const [datasetId, major] = resourceId.split("@");
-        return {
-          ...version,
-          id: version.component_version_id,
-          status: version.publication_state,
-          dataset_id: datasetId,
-          dataset_version_major: Number(major),
-        };
-      })
-    : response.versions;
-  const versionMutation = /\/versions(?:\/[^/]+)?$/.test(url);
-  return {
-    ...response,
-    id: versionMutation ? response.component_version_id : response.component_id,
-    versions,
-  };
-}
-
 async function ensureDemoSeed(admin: APIRequestContext) {
   const response = await invokeDemoSeedEndpoint(admin);
   if (response === null) {
@@ -290,22 +262,15 @@ async function ensureDemoSeed(admin: APIRequestContext) {
 }
 
 async function getJson<T>(context: APIRequestContext, url: string) {
-  const value = await expectJson<unknown>(await context.get(url));
-  return componentResponseAliases(url, value) as T;
+  return expectJson<T>(await context.get(url));
 }
 
 async function postJson<T>(context: APIRequestContext, url: string, data?: Record<string, unknown>) {
-  const value = await expectJson<unknown>(
-    await context.post(url, { data: canonicalComponentRequest(url, data) }),
-  );
-  return componentResponseAliases(url, value) as T;
+  return expectJson<T>(await context.post(url, data ? { data } : undefined));
 }
 
 async function putJson<T>(context: APIRequestContext, url: string, data?: Record<string, unknown>) {
-  const value = await expectJson<unknown>(
-    await context.put(url, { data: canonicalComponentRequest(url, data) }),
-  );
-  return componentResponseAliases(url, value) as T;
+  return expectJson<T>(await context.put(url, data ? { data } : undefined));
 }
 
 async function expectStatus(
@@ -315,8 +280,7 @@ async function expectStatus(
   statuses: number[],
   data?: Record<string, unknown>,
 ) {
-  const canonicalData = canonicalComponentRequest(url, data);
-  const response = await context[method](url, canonicalData ? { data: canonicalData } : undefined);
+  const response = await context[method](url, data ? { data } : undefined);
   expect(statuses, `${method.toUpperCase()} ${url} returned ${response.status()}: ${await response.text()}`).toContain(
     response.status(),
   );
@@ -475,6 +439,47 @@ function datasetMajor(dataset: DatasetSummary) {
   return major!;
 }
 
+function componentDatasetReference(
+  catalog: ComponentDatasetCatalog,
+  dataset: DatasetSummary,
+) {
+  expect(catalog.schema_version).toBe(1);
+  const resourceId = `${dataset.id}@${datasetMajor(dataset)}`;
+  const option = requireItem(
+    catalog.datasets,
+    (candidate) => candidate.reference.reference.resource_id === resourceId,
+    `Component authoring catalog should expose Dataset major line ${resourceId}`,
+  );
+  expect(option.reference.reference.resource_type).toBe(
+    "tessara.transition.dataset_major_line",
+  );
+  expect(option.reference.reference.owner).toEqual({
+    kind: "core_installation",
+    installation_id: option.reference.reference.installation_id,
+  });
+  return option.reference;
+}
+
+function componentVersionInput(
+  datasetReference: DatasetReference,
+  componentType: "table" | "bar",
+  config: Record<string, unknown>,
+  versionNote: string,
+) {
+  return {
+    dataset_reference: datasetReference,
+    component_type: componentType,
+    config,
+    version_note: versionNote,
+  };
+}
+
+function requireComponentVersionId(response: ComponentMutationResponse) {
+  expect(response.schema_version).toBe(1);
+  expect(response.component_version_id).toBeTruthy();
+  return response.component_version_id!;
+}
+
 function tableConfig(dataset: DatasetSummary) {
   const firstField = dataset.output_fields.find((field) => !field.key.startsWith("__"))?.key;
   expect(firstField, `dataset ${dataset.name} should expose output fields`).toBeTruthy();
@@ -501,55 +506,69 @@ function visualConfig(dataset: DatasetSummary) {
 async function createPublishedVisualComponent(
   admin: APIRequestContext,
   dataset: DatasetSummary,
+  datasetReference: DatasetReference,
   slug: string,
   name: string,
 ) {
-  const component = await postJson<IdResponse>(admin, "/api/admin/components", {
+  const component = await postJson<ComponentDefinition>(admin, "/api/admin/components", {
+    schema_version: 1,
     name,
     slug,
     description: "Visual component permission fixture.",
-    version: {
-      dataset_id: dataset.id,
-      dataset_version_major: datasetMajor(dataset),
-      component_type: "bar",
-      config: visualConfig(dataset),
-    },
+    version: componentVersionInput(
+      datasetReference,
+      "bar",
+      visualConfig(dataset),
+      "Initial visual permission fixture",
+    ),
   });
   const detail = await getJson<ComponentDefinition>(admin, `/api/admin/components/${slug}`);
   const version = detail.versions[0];
   expect(version.component_type).toBe("bar");
-  await postJson<IdResponse>(
+  await postJson<ComponentMutationResponse>(
     admin,
-    `/api/admin/components/${component.id}/versions/${version.id}/publish`,
+    `/api/admin/components/${component.component_id}/versions/${version.component_version_id}/publish`,
   );
-  return { id: component.id, name, slug };
+  return {
+    component_id: component.component_id,
+    component_version_id: version.component_version_id,
+    name,
+    slug,
+  };
 }
 
 async function createPublishedTableComponent(
   admin: APIRequestContext,
   dataset: DatasetSummary,
+  datasetReference: DatasetReference,
   slug: string,
   name: string,
 ) {
-  const component = await postJson<IdResponse>(admin, "/api/admin/components", {
+  const component = await postJson<ComponentDefinition>(admin, "/api/admin/components", {
+    schema_version: 1,
     name,
     slug,
     description: "Table component permission fixture.",
-    version: {
-      dataset_id: dataset.id,
-      dataset_version_major: datasetMajor(dataset),
-      component_type: "table",
-      config: tableConfig(dataset),
-    },
+    version: componentVersionInput(
+      datasetReference,
+      "table",
+      tableConfig(dataset),
+      "Initial table permission fixture",
+    ),
   });
   const detail = await getJson<ComponentDefinition>(admin, `/api/admin/components/${slug}`);
   const version = detail.versions[0];
   expect(version.component_type).toBe("table");
-  await postJson<IdResponse>(
+  await postJson<ComponentMutationResponse>(
     admin,
-    `/api/admin/components/${component.id}/versions/${version.id}/publish`,
+    `/api/admin/components/${component.component_id}/versions/${version.component_version_id}/publish`,
   );
-  return { id: component.id, name, slug };
+  return {
+    component_id: component.component_id,
+    component_version_id: version.component_version_id,
+    name,
+    slug,
+  };
 }
 
 async function createAssignmentFor(
@@ -773,33 +792,49 @@ async function setupFixtures(): Promise<FixtureState> {
       disjointFrom(dataset.visibility_nodes, componentManagerNodeIds),
     "an out-of-scope dataset should exist",
   );
+  const componentDatasetCatalog = await getJson<ComponentDatasetCatalog>(
+    admin,
+    "/api/admin/components/datasets",
+  );
+  const inScopeDatasetReference = componentDatasetReference(
+    componentDatasetCatalog,
+    inScopeDataset,
+  );
+  const outOfScopeDatasetReference = componentDatasetReference(
+    componentDatasetCatalog,
+    outOfScopeDataset,
+  );
   const inScopeComponent = await createPublishedTableComponent(
     admin,
     inScopeDataset,
+    inScopeDatasetReference,
     `${RUN_ID}-visible-table-component`,
     `${RUN_ID} Visible Table Component`,
   );
   const outOfScopeComponent = await createPublishedTableComponent(
     admin,
     outOfScopeDataset,
+    outOfScopeDatasetReference,
     `${RUN_ID}-hidden-table-component`,
     `${RUN_ID} Hidden Table Component`,
   );
   const adminComponents = await getJson<ComponentListSummary[]>(admin, "/api/components");
   const scopedComponents = await getJson<ComponentListSummary[]>(scopedManager, "/api/components");
-  expect(adminComponents.some((component) => component.component_id === inScopeComponent.id)).toBe(true);
-  expect(adminComponents.some((component) => component.component_id === outOfScopeComponent.id)).toBe(true);
-  expect(scopedComponents.some((component) => component.component_id === inScopeComponent.id)).toBe(true);
-  expect(scopedComponents.some((component) => component.component_id === outOfScopeComponent.id)).toBe(false);
+  expect(adminComponents.some((component) => component.component_id === inScopeComponent.component_id)).toBe(true);
+  expect(adminComponents.some((component) => component.component_id === outOfScopeComponent.component_id)).toBe(true);
+  expect(scopedComponents.some((component) => component.component_id === inScopeComponent.component_id)).toBe(true);
+  expect(scopedComponents.some((component) => component.component_id === outOfScopeComponent.component_id)).toBe(false);
   const inScopeVisualComponent = await createPublishedVisualComponent(
     admin,
     inScopeDataset,
+    inScopeDatasetReference,
     `${RUN_ID}-visible-bar-component`,
     `${RUN_ID} Visible Bar Component`,
   );
   const outOfScopeVisualComponent = await createPublishedVisualComponent(
     admin,
     outOfScopeDataset,
+    outOfScopeDatasetReference,
     `${RUN_ID}-hidden-bar-component`,
     `${RUN_ID} Hidden Bar Component`,
   );
@@ -853,6 +888,8 @@ async function setupFixtures(): Promise<FixtureState> {
     outOfScopeForm,
     inScopeDataset,
     outOfScopeDataset,
+    inScopeDatasetReference,
+    outOfScopeDatasetReference,
     inScopeComponent,
     outOfScopeComponent,
     inScopeVisualComponent,
@@ -1546,24 +1583,41 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
 
     const components = await getJson<ComponentListSummary[]>(fixtures.scopedManager, "/api/components");
-    expect(components.some((component) => component.component_id === fixtures.inScopeComponent.id)).toBe(true);
-    expect(components.some((component) => component.component_id === fixtures.outOfScopeComponent.id)).toBe(false);
-    expect(components.some((component) => component.component_id === fixtures.inScopeVisualComponent.id)).toBe(true);
-    expect(components.some((component) => component.component_id === fixtures.outOfScopeVisualComponent.id)).toBe(false);
+    expect(components.some((component) => component.component_id === fixtures.inScopeComponent.component_id)).toBe(true);
+    expect(components.some((component) => component.component_id === fixtures.outOfScopeComponent.component_id)).toBe(false);
+    expect(components.some((component) => component.component_id === fixtures.inScopeVisualComponent.component_id)).toBe(true);
+    expect(components.some((component) => component.component_id === fixtures.outOfScopeVisualComponent.component_id)).toBe(false);
     const inComponent = await getJson<ComponentDefinition>(
       fixtures.scopedManager,
       `/api/components/${fixtures.inScopeComponent.slug}`,
     );
+    expect(inComponent.component_id).toBe(fixtures.inScopeComponent.component_id);
     expect(inComponent.versions.length).toBeGreaterThan(0);
+    expect(
+      inComponent.versions.some(
+        (version) =>
+          version.component_version_id ===
+          fixtures.inScopeComponent.component_version_id,
+      ),
+    ).toBe(true);
     const componentTable = await getJson<ComponentTable>(
       fixtures.scopedManager,
       `/api/components/${fixtures.inScopeComponent.slug}/table`,
     );
+    expect(componentTable).toMatchObject({
+      schema_version: 1,
+      component_id: fixtures.inScopeComponent.component_id,
+      component_version_id: fixtures.inScopeComponent.component_version_id,
+      component_type: "table",
+    });
     expect(componentTable.materialization_state).toBe("ready");
     expect(componentTable.rows.length).toBeGreaterThan(0);
     const visualComponent = await getJson<ComponentDefinition>(
       fixtures.scopedManager,
       `/api/components/${fixtures.inScopeVisualComponent.slug}`,
+    );
+    expect(visualComponent.component_id).toBe(
+      fixtures.inScopeVisualComponent.component_id,
     );
     expect(visualComponent.versions.some((version) => version.component_type === "bar")).toBe(true);
     const visual = await getJson<ComponentVisual>(
@@ -1571,7 +1625,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       `/api/components/${fixtures.inScopeVisualComponent.slug}/bar`,
     );
     expect(visual.materialization_state).toBe("ready");
-    expect(visual.component_type).toBe("bar");
+    expect(visual).toMatchObject({
+      schema_version: 1,
+      component_id: fixtures.inScopeVisualComponent.component_id,
+      component_version_id: fixtures.inScopeVisualComponent.component_version_id,
+      component_type: "bar",
+    });
     expect(visual.points.length).toBeGreaterThan(0);
     await expectStatus(
       fixtures.scopedManager,
@@ -1644,8 +1703,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("scoped component manager cannot bind or publish out-of-scope dataset major lines", async () => {
-    const inScopeMajor = datasetMajor(fixtures.inScopeDataset);
-    const outOfScopeMajor = datasetMajor(fixtures.outOfScopeDataset);
     const outOfScopeSlug = `${RUN_ID}-component-manage-out`;
     const manageableSlug = `${RUN_ID}-component-manage-in`;
     const componentSession = await getJson<SessionState>(fixtures.componentManager, "/api/auth/session");
@@ -1660,30 +1717,32 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       403,
       "forbidden",
       {
+        schema_version: 1,
         name: `${RUN_ID} Partial Containment Component`,
         slug: `${RUN_ID}-partial-containment-component`,
         description: "Partial-overlap authoring containment fixture.",
-        version: {
-          dataset_id: fixtures.inScopeDataset.id,
-          dataset_version_major: inScopeMajor,
-          component_type: "table",
-          config: tableConfig(fixtures.inScopeDataset),
-        },
+        version: componentVersionInput(
+          fixtures.inScopeDatasetReference,
+          "table",
+          tableConfig(fixtures.inScopeDataset),
+          "Partial-overlap authoring containment fixture",
+        ),
       },
     );
-    const manageableComponent = await postJson<IdResponse>(
+    const manageableComponent = await postJson<ComponentDefinition>(
       fixtures.componentManager,
       "/api/admin/components",
       {
+        schema_version: 1,
         name: `${RUN_ID} Manageable Component`,
         slug: manageableSlug,
         description: "In-scope component management permission fixture.",
-        version: {
-          dataset_id: fixtures.inScopeDataset.id,
-          dataset_version_major: inScopeMajor,
-          component_type: "table",
-          config: tableConfig(fixtures.inScopeDataset),
-        },
+        version: componentVersionInput(
+          fixtures.inScopeDatasetReference,
+          "table",
+          tableConfig(fixtures.inScopeDataset),
+          "In-scope component management permission fixture",
+        ),
       },
     );
     const manageableComponents = await getJson<ComponentListSummary[]>(
@@ -1691,19 +1750,27 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "/api/admin/components",
     );
     expect(manageableComponents.length).toBeGreaterThan(0);
-    expect(manageableComponents.some((component) => component.component_id === manageableComponent.id)).toBe(true);
+    expect(
+      manageableComponents.some(
+        (component) =>
+          component.component_id === manageableComponent.component_id,
+      ),
+    ).toBe(true);
 
     const bindError = await expectErrorStatus(
       fixtures.componentManager,
       "post",
-      `/api/admin/components/${manageableComponent.id}/versions`,
+      `/api/admin/components/${manageableComponent.component_id}/versions`,
       403,
       "forbidden",
       {
-        dataset_id: fixtures.outOfScopeDataset.id,
-        dataset_version_major: outOfScopeMajor,
-        component_type: "table",
-        config: tableConfig(fixtures.outOfScopeDataset),
+        schema_version: 1,
+        version: componentVersionInput(
+          fixtures.outOfScopeDatasetReference,
+          "table",
+          tableConfig(fixtures.outOfScopeDataset),
+          "Out-of-scope version binding probe",
+        ),
       },
     );
     expect(bindError.message).toContain("components:manage");
@@ -1714,36 +1781,38 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "/api/admin/components/validate",
       403,
       "forbidden",
-      {
-        dataset_id: fixtures.outOfScopeDataset.id,
-        dataset_version_major: outOfScopeMajor,
-        component_type: "table",
-        config: tableConfig(fixtures.outOfScopeDataset),
-      },
+      componentVersionInput(
+        fixtures.outOfScopeDatasetReference,
+        "table",
+        tableConfig(fixtures.outOfScopeDataset),
+        "Out-of-scope validation probe",
+      ),
     );
     expect(validateError.message).toContain("components:manage");
 
-    const outOfScopeDraft = await postJson<IdResponse>(fixtures.admin, "/api/admin/components", {
+    const outOfScopeDraft = await postJson<ComponentDefinition>(fixtures.admin, "/api/admin/components", {
+      schema_version: 1,
       name: `${RUN_ID} Out Component`,
       slug: outOfScopeSlug,
       description: "Out-of-scope component management permission fixture.",
-      version: {
-        dataset_id: fixtures.outOfScopeDataset.id,
-        dataset_version_major: outOfScopeMajor,
-        component_type: "table",
-        config: tableConfig(fixtures.outOfScopeDataset),
-      },
+      version: componentVersionInput(
+        fixtures.outOfScopeDatasetReference,
+        "table",
+        tableConfig(fixtures.outOfScopeDataset),
+        "Out-of-scope component management permission fixture",
+      ),
     });
     const outOfScopeComponent = await getJson<ComponentDefinition>(
       fixtures.admin,
-      `/api/admin/components/${outOfScopeDraft.id}`,
+      `/api/admin/components/${outOfScopeDraft.component_id}`,
     );
-    const outVersion = outOfScopeComponent.versions[0] as { id: string };
+    expect(outOfScopeComponent.component_id).toBe(outOfScopeDraft.component_id);
+    const outVersion = outOfScopeComponent.versions[0];
 
     const publishError = await expectErrorStatus(
       fixtures.componentManager,
       "post",
-      `/api/admin/components/${outOfScopeDraft.id}/versions/${outVersion.id}/publish`,
+      `/api/admin/components/${outOfScopeDraft.component_id}/versions/${outVersion.component_version_id}/publish`,
       403,
       "forbidden",
       {},
@@ -1752,45 +1821,49 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("explicit historical component table checks selected version dataset scope", async () => {
-    const inScopeMajor = datasetMajor(fixtures.inScopeDataset);
-    const outOfScopeMajor = datasetMajor(fixtures.outOfScopeDataset);
     const slug = `${RUN_ID}-historical-component-scope`;
-    const component = await postJson<IdResponse>(fixtures.admin, "/api/admin/components", {
+    const component = await postJson<ComponentDefinition>(fixtures.admin, "/api/admin/components", {
+      schema_version: 1,
       name: `${RUN_ID} Historical Component Scope`,
       slug,
       description: "Historical version selected-dataset permission fixture.",
-      version: {
-        dataset_id: fixtures.outOfScopeDataset.id,
-        dataset_version_major: outOfScopeMajor,
-        component_type: "table",
-        config: tableConfig(fixtures.outOfScopeDataset),
-      },
+      version: componentVersionInput(
+        fixtures.outOfScopeDatasetReference,
+        "table",
+        tableConfig(fixtures.outOfScopeDataset),
+        "Initial out-of-scope historical version",
+      ),
     });
     const firstVersion = await getJson<ComponentDefinition>(
       fixtures.admin,
-      `/api/admin/components/${component.id}`,
+      `/api/admin/components/${component.component_id}`,
     );
-    const hiddenHistoryVersion = firstVersion.versions[0] as { id: string };
-    await postJson<IdResponse>(
+    expect(firstVersion.component_id).toBe(component.component_id);
+    const hiddenHistoryVersion = firstVersion.versions[0];
+    await postJson<ComponentMutationResponse>(
       fixtures.admin,
-      `/api/admin/components/${component.id}/versions/${hiddenHistoryVersion.id}/publish`,
+      `/api/admin/components/${component.component_id}/versions/${hiddenHistoryVersion.component_version_id}/publish`,
       {},
     );
 
-    const secondVersion = await postJson<IdResponse>(
+    const secondVersion = await postJson<ComponentMutationResponse>(
       fixtures.admin,
-      `/api/admin/components/${component.id}/versions`,
+      `/api/admin/components/${component.component_id}/versions`,
       {
-        dataset_id: fixtures.inScopeDataset.id,
-        dataset_version_major: inScopeMajor,
-        component_type: "table",
-        config: tableConfig(fixtures.inScopeDataset),
-        version_note: "Switch visible published history to the in-scope dataset.",
+        schema_version: 1,
+        version: componentVersionInput(
+          fixtures.inScopeDatasetReference,
+          "table",
+          tableConfig(fixtures.inScopeDataset),
+          "Switch visible published history to the in-scope dataset.",
+        ),
       },
     );
-    await postJson<IdResponse>(
+    const secondVersionId = requireComponentVersionId(secondVersion);
+    expect(secondVersion.component_id).toBe(component.component_id);
+    await postJson<ComponentMutationResponse>(
       fixtures.admin,
-      `/api/admin/components/${component.id}/versions/${secondVersion.id}/publish`,
+      `/api/admin/components/${component.component_id}/versions/${secondVersionId}/publish`,
       {},
     );
 
@@ -1798,14 +1871,25 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.scopedManager,
       `/api/components/${slug}/table`,
     );
+    expect(currentTable).toMatchObject({
+      schema_version: 1,
+      component_id: component.component_id,
+      component_version_id: secondVersionId,
+      component_type: "table",
+    });
     expect(currentTable.materialization_state).toBe("ready");
     expect(currentTable.rows.length).toBeGreaterThan(0);
-    expect(await getJson<ComponentTable>(fixtures.admin, `/api/components/${slug}/versions/${hiddenHistoryVersion.id}/table`))
-      .toMatchObject({ component_version_id: hiddenHistoryVersion.id });
+    expect(await getJson<ComponentTable>(fixtures.admin, `/api/components/${slug}/versions/${hiddenHistoryVersion.component_version_id}/table`))
+      .toMatchObject({
+        schema_version: 1,
+        component_id: component.component_id,
+        component_version_id: hiddenHistoryVersion.component_version_id,
+        component_type: "table",
+      });
     const hiddenHistoryError = await expectErrorStatus(
       fixtures.scopedManager,
       "get",
-      `/api/components/${slug}/versions/${hiddenHistoryVersion.id}/table`,
+      `/api/components/${slug}/versions/${hiddenHistoryVersion.component_version_id}/table`,
       404,
       "not_found",
     );
@@ -1814,10 +1898,16 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       message: "component not found",
       error: "component not found",
     });
-    await getJson<ComponentTable>(
+    const selectedCurrentTable = await getJson<ComponentTable>(
       fixtures.scopedManager,
-      `/api/components/${slug}/versions/${secondVersion.id}/table`,
+      `/api/components/${slug}/versions/${secondVersionId}/table`,
     );
+    expect(selectedCurrentTable).toMatchObject({
+      schema_version: 1,
+      component_id: component.component_id,
+      component_version_id: secondVersionId,
+      component_type: "table",
+    });
   });
 
   test("dataset revision UI hides drafts from scoped readers", async ({ page }) => {

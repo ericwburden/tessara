@@ -3,13 +3,13 @@
 #[cfg(feature = "hydrate")]
 use crate::http::{ComponentRequestError, fetch_json_request};
 #[cfg(feature = "hydrate")]
-use crate::types::{ComponentTable, ComponentVisual};
+use tessara_components_contract::ComponentRenderResponse;
 
 #[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_component_table_endpoint(
     endpoint: &str,
     query: &str,
-) -> Result<Option<ComponentTable>, ComponentRequestError> {
+) -> Result<Option<ComponentRenderResponse>, ComponentRequestError> {
     let suffix = if query.is_empty() {
         String::new()
     } else {
@@ -21,6 +21,6 @@ pub(crate) async fn fetch_component_table_endpoint(
 #[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_component_visual_endpoint(
     endpoint: &str,
-) -> Result<Option<ComponentVisual>, ComponentRequestError> {
+) -> Result<Option<ComponentRenderResponse>, ComponentRequestError> {
     fetch_json_request(endpoint, "Component visual").await
 }

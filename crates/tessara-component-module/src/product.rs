@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, Postgres, Row, Transaction};
-use tessara_components_contract::{COMPONENT_RESOURCE_TYPE, ComponentVersionReference};
+use tessara_components_contract::{
+    COMPONENT_RESOURCE_TYPE, ComponentRenderResponse, ComponentVersionReference,
+};
 use tessara_datasets_contract::{
     DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY, DATASET_CONTRACT_SCHEMA_VERSION,
     DatasetAction, DatasetCatalogRequest, DatasetCatalogResponse, DatasetCompatibilityRequest,
@@ -222,7 +224,7 @@ async fn execute_current_component(
     headers: HeaderMap,
     Path((component_ref, kind)): Path<(String, String)>,
     query: RawQuery,
-) -> Result<Json<Value>, ComponentModuleError> {
+) -> Result<Json<ComponentRenderResponse>, ComponentModuleError> {
     let grant = authorize(
         &state,
         &headers,
@@ -257,7 +259,7 @@ async fn execute_component_version(
     headers: HeaderMap,
     Path((component_ref, version_id, kind)): Path<(String, Uuid, String)>,
     query: RawQuery,
-) -> Result<Json<Value>, ComponentModuleError> {
+) -> Result<Json<ComponentRenderResponse>, ComponentModuleError> {
     let grant = authorize(
         &state,
         &headers,
@@ -286,7 +288,7 @@ async fn execute_component(
     version_id: Uuid,
     kind: String,
     query: Option<String>,
-) -> Result<Json<Value>, ComponentModuleError> {
+) -> Result<Json<ComponentRenderResponse>, ComponentModuleError> {
     let row = sqlx::query(
         "SELECT dataset_reference,dataset_scope_node_ids,component_type::text AS component_type,
                 config,status::text AS status,lifecycle_state::text AS lifecycle_state
@@ -331,11 +333,10 @@ async fn execute_component(
         execution,
         version_id,
         component_id,
-        dataset_reference,
         &stored_kind,
         &config,
         limit,
-    )))
+    )?))
 }
 
 async fn create_component(
@@ -1446,7 +1447,7 @@ async fn preview_version(
     State(state): State<ComponentModuleState>,
     headers: HeaderMap,
     Json(request): Json<ComponentVersionInputV1>,
-) -> Result<Json<Value>, ComponentModuleError> {
+) -> Result<Json<ComponentRenderResponse>, ComponentModuleError> {
     let grant = authorize(
         &state,
         &headers,
@@ -1475,15 +1476,16 @@ async fn preview_version(
         &execution_request,
     )
     .await?;
-    Ok(Json(crate::provider::render_execution(
+    let response = crate::provider::render_execution(
         execution,
         Uuid::nil(),
         Uuid::nil(),
-        request.dataset_reference,
         &request.component_type,
         &request.config,
         execution_request.limit,
-    )))
+    )?;
+    response.validate_for_preview().map_err(internal)?;
+    Ok(Json(response))
 }
 
 async fn dataset_catalog(

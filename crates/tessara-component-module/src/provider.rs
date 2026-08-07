@@ -4,15 +4,18 @@ use axum::{Json, Router, body::Bytes, extract::State, http::HeaderMap, routing::
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use semver::Version;
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_components_contract::{
     COMPONENT_CONTRACT_ID, COMPONENT_CONTRACT_SCHEMA_VERSION, COMPONENT_CONTRACT_VERSION,
-    ComponentAction, ComponentCatalogResponse, ComponentChange, ComponentChangeCategory,
-    ComponentLifecycleState, ComponentMetadata, ComponentPublicationState, ComponentRenderRequest,
-    ComponentResolutionRequest, ComponentResolutionResponse, ComponentSuccessor,
-    ComponentVersionReference,
+    COMPONENT_RENDER_RESPONSE_SCHEMA_VERSION, ComponentAction, ComponentCatalogResponse,
+    ComponentChange, ComponentChangeCategory, ComponentLifecycleState, ComponentMetadata,
+    ComponentPublicationState, ComponentRenderKind, ComponentRenderRequest,
+    ComponentRenderResponse, ComponentResolutionRequest, ComponentResolutionResponse,
+    ComponentStatValue, ComponentSuccessor, ComponentTableColumn, ComponentTablePagination,
+    ComponentTableResponse, ComponentTableRow, ComponentVersionReference, ComponentVisualPoint,
+    ComponentVisualResponse, ComponentVisualSlice,
 };
 use tessara_datasets_contract::{
     DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction, DatasetAggregate, DatasetAggregateFunction,
@@ -25,9 +28,10 @@ use tessara_module_contract::{
     AuthorizationValidationContextV3, ContractCompatibilityState, FunctionalContractId,
     ModuleDefinitionId, ModuleInstanceOwnerState, ModuleServicePrincipalV1, ModuleServiceRequestV1,
     ModuleServiceRequestValidationContextV1, OwnerDataState, ProviderAvailabilityState,
-    ProviderContractIdentity, ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
-    ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceOwnerState,
-    ResourceResolutionV1, ResourceRevision, ResourceTypeId, SecurityCapabilityId, SignedEnvelopeV1,
+    ProviderContractIdentity, ResourceAccessState, ResourceAuthorizationAssertionV2,
+    ResourceIdentityState, ResourceLifecycleState, ResourceObservationStrategy,
+    ResourceObservationV1, ResourceOwner, ResourceOwnerState, ResourceResolutionV1,
+    ResourceRevision, ResourceTypeId, SecurityCapabilityId, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -43,20 +47,33 @@ pub(super) fn routes() -> Router<ComponentModuleState> {
         .route("/api/private/components/render", post(render))
 }
 
+#[derive(Clone, Copy)]
+enum ProviderResourceAssertion {
+    Forbidden,
+    Required,
+}
+
 async fn resolve(
     State(state): State<ComponentModuleState>,
     headers: HeaderMap,
-    Json(request): Json<ComponentResolutionRequest>,
+    body: Bytes,
 ) -> Result<Json<ComponentResolutionResponse>, ComponentModuleError> {
-    let body = serde_json::to_vec(&request).map_err(internal)?;
+    require_json_content_type(&headers)?;
     let component_grant = validate_provider_request(
         &state,
         &headers,
         "/api/private/components/resolve",
         &body,
         "components.resolve",
+        ProviderResourceAssertion::Forbidden,
     )
     .await?;
+    let request: ComponentResolutionRequest = serde_json::from_slice(&body).map_err(|_| {
+        ComponentModuleError::BadRequest("Component resolution request is invalid".into())
+    })?;
+    if request.action != ComponentAction::ResolveMetadata {
+        return Err(ComponentModuleError::Forbidden);
+    }
     let reference = request.reference.reference();
     let security = load_security_state(&state.pool)
         .await?
@@ -107,6 +124,7 @@ async fn catalog(
         "/api/private/components/catalog",
         &body,
         "components.catalog",
+        ProviderResourceAssertion::Forbidden,
     )
     .await?;
     let security = load_security_state(&state.pool)
@@ -146,20 +164,24 @@ async fn catalog(
 async fn render(
     State(state): State<ComponentModuleState>,
     headers: HeaderMap,
-    Json(request): Json<ComponentRenderRequest>,
-) -> Result<Json<Value>, ComponentModuleError> {
-    if request.action != ComponentAction::Render {
-        return Err(ComponentModuleError::Forbidden);
-    }
-    let body = serde_json::to_vec(&request).map_err(internal)?;
+    body: Bytes,
+) -> Result<Json<ComponentRenderResponse>, ComponentModuleError> {
+    require_json_content_type(&headers)?;
     let component_grant = validate_provider_request(
         &state,
         &headers,
         "/api/private/components/render",
         &body,
         "components.render",
+        ProviderResourceAssertion::Required,
     )
     .await?;
+    let request: ComponentRenderRequest = serde_json::from_slice(&body).map_err(|_| {
+        ComponentModuleError::BadRequest("Component render request is invalid".into())
+    })?;
+    if request.action != ComponentAction::Render {
+        return Err(ComponentModuleError::Forbidden);
+    }
     let security = load_security_state(&state.pool)
         .await?
         .ok_or_else(unavailable_security)?;
@@ -179,9 +201,22 @@ async fn render(
         .await?
         .ok_or(ComponentModuleError::Forbidden)?;
     let scope: Vec<Uuid> = row.try_get("dataset_scope_node_ids")?;
-    if !scope_authorized(&component_grant.payload, &scope)
-        || row.try_get::<i64, _>("authority_revision")? as u64
-            != request.resource_authority_revision
+    let authority_revision = row.try_get::<i64, _>("authority_revision")? as u64;
+    let resource_assertion = ResourceAuthorizationAssertionV2 {
+        resource_type: ResourceTypeId::new(tessara_components_contract::COMPONENT_RESOURCE_TYPE)
+            .map_err(internal)?,
+        resource_id: version_id.to_string(),
+        authority_revision,
+        governing_organization_ids: scope.clone(),
+    };
+    if !canonical_nonempty_scope(&request.dashboard_scope_node_ids)
+        || component_grant.payload.resource_assertion.as_ref() != Some(&resource_assertion)
+        || !render_authorized_on_same_governing_node(
+            &component_grant.payload,
+            &request.dashboard_scope_node_ids,
+            &scope,
+        )
+        || authority_revision != request.resource_authority_revision
         || row.try_get::<String, _>("lifecycle_state")? != "active"
     {
         return Err(ComponentModuleError::Forbidden);
@@ -191,6 +226,9 @@ async fn render(
     let authorization =
         URL_SAFE_NO_PAD.encode(serde_json::to_vec(&component_grant).map_err(internal)?);
     let component_type: String = row.try_get("component_type")?;
+    if request.kind.component_type() != component_type {
+        return Err(ComponentModuleError::Forbidden);
+    }
     let config: Value = row.try_get("config")?;
     let execution_request = execution_request(
         dataset_reference.clone(),
@@ -205,15 +243,19 @@ async fn render(
         &execution_request,
     )
     .await?;
-    Ok(Json(render_execution(
+    let component_id = row.try_get("component_id")?;
+    let response = render_execution(
         execution,
         version_id,
-        row.try_get("component_id")?,
-        dataset_reference,
+        component_id,
         &component_type,
         &config,
         execution_request.limit,
-    )))
+    )?;
+    response
+        .validate_for(request.kind, component_id, version_id)
+        .map_err(internal)?;
+    Ok(Json(response))
 }
 
 pub(super) fn execution_request(
@@ -463,27 +505,60 @@ pub(super) fn render_execution(
     execution: DatasetExecutionResponse,
     version_id: Uuid,
     component_id: Uuid,
-    dataset_reference: DatasetMajorLineReference,
     component_type: &str,
     config: &Value,
     limit: u32,
-) -> Value {
-    if component_type == "table" {
-        let values=execution.rows.into_iter().map(|row|json!({"row_id":row.row_id,"values":row.values.into_iter().map(|(key,value)|(key,value.map(|value|text_value(&value)))).collect::<std::collections::BTreeMap<_,_>>() })).collect::<Vec<_>>();
-        return json!({
-        "schema_version": 1,
-        "component_version_id": version_id,
-        "component_id": component_id,
-        "dataset_reference": dataset_reference,
-        "component_type": component_type,
-        "materialization_state": execution.materialization_state,
-        "columns": execution.fields.into_iter().map(|field| {
-            let label = config.get("display_labels").and_then(Value::as_object).and_then(|labels| labels.get(&field.key)).and_then(Value::as_str).unwrap_or(&field.label);
-            json!({"key":field.key,"label":label,"field_type":field.field_type})
-        }).collect::<Vec<_>>(),
-        "rows": values,
-        "pagination": {"page_size":limit,"next_cursor":execution.next_cursor,"has_more":execution.next_cursor.is_some()}
-        });
+) -> Result<ComponentRenderResponse, ComponentModuleError> {
+    let kind = ComponentRenderKind::from_api_kind(component_type).ok_or_else(|| {
+        ComponentModuleError::BadRequest("Component render kind is unsupported".into())
+    })?;
+    if kind == ComponentRenderKind::Table {
+        let rows = execution
+            .rows
+            .into_iter()
+            .map(|row| ComponentTableRow {
+                row_id: row.row_id,
+                values: row
+                    .values
+                    .into_iter()
+                    .map(|(key, value)| (key, value.map(|value| text_value(&value))))
+                    .collect(),
+            })
+            .collect();
+        let columns = execution
+            .fields
+            .into_iter()
+            .map(|field| {
+                let label = config
+                    .get("display_labels")
+                    .and_then(Value::as_object)
+                    .and_then(|labels| labels.get(&field.key))
+                    .and_then(Value::as_str)
+                    .unwrap_or(&field.label)
+                    .to_string();
+                ComponentTableColumn {
+                    key: field.key,
+                    label,
+                    field_type: field.field_type,
+                }
+            })
+            .collect();
+        let has_more = execution.next_cursor.is_some();
+        return ComponentRenderResponse::table(ComponentTableResponse {
+            schema_version: COMPONENT_RENDER_RESPONSE_SCHEMA_VERSION,
+            component_version_id: version_id,
+            component_id,
+            component_type: kind,
+            materialization_state: execution.materialization_state,
+            columns,
+            rows,
+            pagination: ComponentTablePagination {
+                page_size: limit,
+                next_cursor: execution.next_cursor,
+                has_more,
+            },
+        })
+        .map_err(internal);
     }
     let value_format = config
         .get("value_format")
@@ -529,18 +604,109 @@ pub(super) fn render_execution(
             .and_then(Value::as_str)
             .map(str::to_string)
     };
-    let stat=(component_type=="stat_card").then(||{let value=rows.first().map(&numeric);json!({"label":config.get("label").and_then(Value::as_str).unwrap_or("Value"),"value":value,"display_value":value.map(|v|format_value(v,value_format)),"supporting_text":config.get("supporting_text"),"panel_style":config.get("panel_style").and_then(Value::as_str).unwrap_or("default")})});
-    let points = if matches!(component_type, "bar" | "line") {
-        rows.iter().map(|row|{let raw=dimension(row,category_key);let comparison=dimension(row,comparison_key);let value=numeric(row);let x=if has_bar_comparison {raw.clone()} else {label(raw.clone())};let point_color=color(if has_bar_comparison {&comparison} else {&raw});let comparison_label=(!comparison.is_empty()).then(||if has_bar_comparison {label(comparison.clone())} else {comparison.clone()});json!({"x":x,"value":value,"display_value":format_value(value,value_format),"color":point_color,"comparison":comparison_label})}).collect::<Vec<_>>()
+    let stat = (kind == ComponentRenderKind::StatCard).then(|| {
+        let value = rows.first().map(&numeric);
+        ComponentStatValue {
+            label: config
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or("Value")
+                .to_string(),
+            value,
+            display_value: value.map(|value| format_value(value, value_format)),
+            supporting_text: config
+                .get("supporting_text")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            panel_style: config
+                .get("panel_style")
+                .and_then(Value::as_str)
+                .unwrap_or("default")
+                .to_string(),
+        }
+    });
+    let points = if matches!(kind, ComponentRenderKind::Bar | ComponentRenderKind::Line) {
+        rows.iter()
+            .map(|row| {
+                let raw = dimension(row, category_key);
+                let comparison = dimension(row, comparison_key);
+                let value = numeric(row);
+                let x = if has_bar_comparison {
+                    raw.clone()
+                } else {
+                    label(raw.clone())
+                };
+                let point_color = color(if has_bar_comparison {
+                    &comparison
+                } else {
+                    &raw
+                });
+                let comparison = (!comparison.is_empty()).then(|| {
+                    if has_bar_comparison {
+                        label(comparison.clone())
+                    } else {
+                        comparison.clone()
+                    }
+                });
+                ComponentVisualPoint {
+                    x,
+                    value,
+                    display_value: format_value(value, value_format),
+                    color: point_color,
+                    comparison,
+                }
+            })
+            .collect()
     } else {
         Vec::new()
     };
-    let slices = if matches!(component_type, "pie" | "donut") {
-        rows.iter().map(|row|{let raw=dimension(row,category_key);let value=numeric(row);json!({"category":label(raw.clone()),"value":value,"display_value":format_value(value,value_format),"color":color(&raw)})}).collect::<Vec<_>>()
+    let slices = if matches!(kind, ComponentRenderKind::Pie | ComponentRenderKind::Donut) {
+        rows.iter()
+            .map(|row| {
+                let raw = dimension(row, category_key);
+                let value = numeric(row);
+                ComponentVisualSlice {
+                    category: label(raw.clone()),
+                    value,
+                    display_value: format_value(value, value_format),
+                    color: color(&raw),
+                }
+            })
+            .collect()
     } else {
         Vec::new()
     };
-    json!({"schema_version":1,"component_version_id":version_id,"component_id":component_id,"dataset_reference":dataset_reference,"component_type":component_type,"materialization_state":execution.materialization_state,"value_format":value_format,"legend_title":config.get("legend_title"),"bar_orientation":config.get("orientation"),"bar_comparison_layout":config.get("comparison_layout"),"x_axis_label":config.get("x_axis_label"),"y_axis_label":config.get("y_axis_label"),"line_smoothing":config.get("smoothing").and_then(Value::as_bool).unwrap_or(true),"stat":stat,"points":points,"slices":slices})
+    ComponentRenderResponse::visual(ComponentVisualResponse {
+        schema_version: COMPONENT_RENDER_RESPONSE_SCHEMA_VERSION,
+        component_version_id: version_id,
+        component_id,
+        component_type: kind,
+        materialization_state: execution.materialization_state,
+        value_format: value_format.to_string(),
+        legend_title: optional_config_string(config, "legend_title"),
+        bar_orientation: (kind == ComponentRenderKind::Bar)
+            .then(|| optional_config_string(config, "orientation"))
+            .flatten(),
+        bar_comparison_layout: (kind == ComponentRenderKind::Bar)
+            .then(|| optional_config_string(config, "comparison_layout"))
+            .flatten(),
+        x_axis_label: optional_config_string(config, "x_axis_label"),
+        y_axis_label: optional_config_string(config, "y_axis_label"),
+        line_smoothing: (kind == ComponentRenderKind::Line).then(|| {
+            config
+                .get("smoothing")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        }),
+        stat,
+        points,
+        slices,
+    })
+    .map_err(internal)
+}
+
+fn optional_config_string(config: &Value, key: &str) -> Option<String> {
+    config.get(key).and_then(Value::as_str).map(str::to_string)
 }
 
 fn text_value(value: &Value) -> String {
@@ -572,6 +738,7 @@ async fn validate_provider_request(
     path: &str,
     body: &[u8],
     expected_action: &str,
+    resource_assertion: ProviderResourceAssertion,
 ) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, ComponentModuleError> {
     let authorization = authorization_header(headers)?;
     let grant: SignedEnvelopeV1<AuthorizationGrantV3> = decode(authorization)?;
@@ -602,6 +769,21 @@ async fn validate_provider_request(
         module_definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
             .map_err(internal)?,
     };
+    let expected_resource_assertion = match resource_assertion {
+        ProviderResourceAssertion::Forbidden => {
+            if grant.payload.resource_assertion.is_some() {
+                return Err(ComponentModuleError::Forbidden);
+            }
+            None
+        }
+        ProviderResourceAssertion::Required => Some(
+            grant
+                .payload
+                .resource_assertion
+                .clone()
+                .ok_or(ComponentModuleError::Forbidden)?,
+        ),
+    };
     grant
         .payload
         .validate_for(&AuthorizationValidationContextV3 {
@@ -614,7 +796,7 @@ async fn validate_provider_request(
                 .map_err(internal)?,
             action: expected_action.into(),
             operation: AuthorizationGrantOperationV1::Read,
-            resource_assertion: None,
+            resource_assertion: expected_resource_assertion,
             authorization_revision: security.authorization_revision as u64,
             organization_revision: security.organization_revision as u64,
             now: Utc::now(),
@@ -858,6 +1040,31 @@ fn restricted(
 fn undisclosed_reference() -> Result<ComponentResolutionResponse, ComponentModuleError> {
     restricted(ResourceAccessState::Unauthorized)
 }
+
+fn canonical_nonempty_scope(scope: &[Uuid]) -> bool {
+    !scope.is_empty() && scope.windows(2).all(|pair| pair[0] < pair[1])
+}
+
+fn render_authorized_on_same_governing_node(
+    grant: &AuthorizationGrantV3,
+    dashboard_scope_node_ids: &[Uuid],
+    component_scope_node_ids: &[Uuid],
+) -> bool {
+    if !canonical_nonempty_scope(dashboard_scope_node_ids)
+        || !canonical_nonempty_scope(component_scope_node_ids)
+    {
+        return false;
+    }
+    SecurityCapabilityId::new(READ_CAPABILITY)
+        .ok()
+        .is_some_and(|capability| {
+            component_scope_node_ids.iter().any(|node_id| {
+                dashboard_scope_node_ids.binary_search(node_id).is_ok()
+                    && grant.authorizes(&capability, *node_id)
+            })
+        })
+}
+
 fn scope_authorized(grant: &AuthorizationGrantV3, scope: &[Uuid]) -> bool {
     SecurityCapabilityId::new(READ_CAPABILITY)
         .ok()
@@ -868,6 +1075,23 @@ fn authorization_header(headers: &HeaderMap) -> Result<&str, ComponentModuleErro
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
         .ok_or(ComponentModuleError::Forbidden)
+}
+
+fn require_json_content_type(headers: &HeaderMap) -> Result<(), ComponentModuleError> {
+    let is_json = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim)
+        .is_some_and(|media_type| {
+            let media_type = media_type.to_ascii_lowercase();
+            media_type == "application/json"
+                || (media_type.starts_with("application/") && media_type.ends_with("+json"))
+        });
+    if !is_json {
+        return Err(ComponentModuleError::Forbidden);
+    }
+    Ok(())
 }
 fn decode<T: serde::de::DeserializeOwned>(value: &str) -> Result<T, ComponentModuleError> {
     let bytes = URL_SAFE_NO_PAD
@@ -1077,13 +1301,50 @@ mod tests {
     };
     use uuid::Uuid;
 
-    use axum::{Json, body::to_bytes, response::IntoResponse};
+    use axum::{
+        Json,
+        body::to_bytes,
+        http::{HeaderMap, HeaderValue},
+        response::IntoResponse,
+    };
+    use tessara_components_contract::ComponentRenderResponse;
     use tessara_module_contract::{
         ContractCompatibilityState, ProviderAvailabilityState, ResourceAccessState,
         ResourceIdentityState, ResourceOwnerState,
     };
 
-    use super::{execution_request, render_execution, undisclosed_reference};
+    use super::{
+        execution_request, render_execution, require_json_content_type, undisclosed_reference,
+    };
+
+    #[test]
+    fn exact_body_routes_retain_json_content_type_enforcement() {
+        for content_type in [
+            "application/json",
+            "application/json; charset=utf-8",
+            "application/vnd.tessara+json",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                HeaderValue::from_static(content_type),
+            );
+            require_json_content_type(&headers).unwrap_or_else(|_| {
+                panic!("valid JSON content type '{content_type}' was rejected")
+            });
+        }
+
+        for content_type in [None, Some("text/json"), Some("application/octet-stream")] {
+            let mut headers = HeaderMap::new();
+            if let Some(content_type) = content_type {
+                headers.insert(
+                    axum::http::header::CONTENT_TYPE,
+                    HeaderValue::from_static(content_type),
+                );
+            }
+            assert!(require_json_content_type(&headers).is_err());
+        }
+    }
 
     fn dataset_reference() -> DatasetMajorLineReference {
         DatasetMajorLineReference::from_parts(Uuid::from_u128(1), Uuid::from_u128(2), 1)
@@ -1201,15 +1462,21 @@ mod tests {
             response,
             Uuid::from_u128(3),
             Uuid::from_u128(4),
-            dataset_reference(),
             "bar",
             &config,
             request.limit,
+        )
+        .expect("typed visual response");
+        let ComponentRenderResponse::Visual(rendered) = rendered else {
+            panic!("expected visual response");
+        };
+        assert_eq!(rendered.points[0].x, "Completed");
+        assert_eq!(
+            rendered.points[0].comparison.as_deref(),
+            Some("North region")
         );
-        assert_eq!(rendered["points"][0]["x"], "Completed");
-        assert_eq!(rendered["points"][0]["comparison"], "North region");
-        assert_eq!(rendered["points"][0]["color"], "#3568d4");
-        assert_eq!(rendered["points"][0]["display_value"], "7");
+        assert_eq!(rendered.points[0].color.as_deref(), Some("#3568d4"));
+        assert_eq!(rendered.points[0].display_value, "7");
     }
 
     #[test]
@@ -1244,15 +1511,18 @@ mod tests {
             response,
             Uuid::from_u128(3),
             Uuid::from_u128(4),
-            dataset_reference(),
             "bar",
             &config,
             request.limit,
-        );
-        assert_eq!(rendered["points"][0]["x"], "Completed work");
-        assert!(rendered["points"][0]["comparison"].is_null());
-        assert_eq!(rendered["points"][0]["color"], "#3568d4");
-        assert_eq!(rendered["points"][0]["display_value"], "7");
+        )
+        .expect("typed visual response");
+        let ComponentRenderResponse::Visual(rendered) = rendered else {
+            panic!("expected visual response");
+        };
+        assert_eq!(rendered.points[0].x, "Completed work");
+        assert_eq!(rendered.points[0].comparison, None);
+        assert_eq!(rendered.points[0].color.as_deref(), Some("#3568d4"));
+        assert_eq!(rendered.points[0].display_value, "7");
     }
 
     #[test]
@@ -1274,12 +1544,15 @@ mod tests {
             response,
             Uuid::from_u128(3),
             Uuid::from_u128(4),
-            dataset_reference(),
             "line",
             &config,
             20,
-        );
-        assert_eq!(rendered["line_smoothing"], true);
+        )
+        .expect("typed line response");
+        let ComponentRenderResponse::Visual(rendered) = rendered else {
+            panic!("expected visual response");
+        };
+        assert_eq!(rendered.line_smoothing, Some(true));
     }
 
     #[test]

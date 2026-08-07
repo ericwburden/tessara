@@ -3,7 +3,7 @@
 //! Manifest and the exact applied lockfile; target operation and capability
 //! come from the provider's declaration.
 
-use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
+use axum::{Json, Router, body::Bytes, extract::State, http::HeaderMap, routing::post};
 use chrono::{Duration, Utc};
 use semver::Version;
 use sqlx::Row;
@@ -48,16 +48,15 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn exchange(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<AuthorizationExchangeRequestV2>,
+    body: Bytes,
 ) -> ApiResult<Json<AuthorizationExchangeResponseV2>> {
-    request.validate().map_err(|_| restricted())?;
+    crate::module_service_requests::require_json_content_type(&headers)?;
     let inbound = crate::module_service_requests::verified_authorization(&headers)?;
     let installation_id = inbound.payload.installation_id;
     let lockfile = applied_lockfile(&state, installation_id).await?;
     let caller = audience_module(&state, installation_id, &inbound.payload.audience).await?;
     validate_inbound_grant(&state, &lockfile, &inbound.payload, &caller).await?;
 
-    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
     let caller_principal = ModuleServicePrincipalV1::ModuleInstance {
         module_instance_id: caller.instance_id,
         module_definition_id: caller.definition_id.clone(),
@@ -76,6 +75,9 @@ async fn exchange(
         },
     )
     .await?;
+    let request: AuthorizationExchangeRequestV2 =
+        serde_json::from_slice(&body).map_err(|_| restricted())?;
+    request.validate().map_err(|_| restricted())?;
 
     let provider_action = resolve_requested_provider_action(
         &state,

@@ -488,16 +488,31 @@ $visualDatasetMajor = $datasetDefinition.current_version_major
 if (-not $visualDatasetMajor) {
     throw "Sprint UAT failure: seeded dataset did not expose a current major version for visual component coverage."
 }
+$visualDatasetResourceId = "$($seedSummary.dataset_id)@$visualDatasetMajor"
+$componentDatasetCatalog = Invoke-RestMethod -Uri "$BaseUrl/api/admin/components/datasets" -Headers $headers -TimeoutSec 30
+$visualDatasetOptions = @($componentDatasetCatalog.datasets | Where-Object {
+    [string]$_.reference.reference.resource_id -ceq $visualDatasetResourceId
+})
+if ($componentDatasetCatalog.schema_version -ne 1 -or $visualDatasetOptions.Count -ne 1) {
+    throw "Sprint UAT failure: Component authoring catalog did not expose exact Dataset major line '$visualDatasetResourceId'."
+}
+$visualDatasetReference = $visualDatasetOptions[0].reference
+if ([string]$visualDatasetReference.reference.resource_type -cne "tessara.transition.dataset_major_line" -or
+    [string]$visualDatasetReference.reference.owner.kind -cne "core_installation" -or
+    [string]$visualDatasetReference.reference.owner.installation_id -cne [string]$visualDatasetReference.reference.installation_id) {
+    throw "Sprint UAT failure: Component authoring catalog returned a noncanonical Dataset major-line reference."
+}
 $visualSlug = "uat-visual-bar-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 $visualCreateBody = @{
+    schema_version = 1
     name        = "UAT Visual Bar"
     slug        = $visualSlug
     description = "Sprint 4B UAT visual component fixture."
     version     = @{
-        dataset_id            = $seedSummary.dataset_id
-        dataset_version_major = $visualDatasetMajor
-        component_type        = "bar"
-        config                = @{
+        dataset_reference = $visualDatasetReference
+        component_type    = "bar"
+        version_note      = "UAT visual permission fixture"
+        config            = @{
             mode             = "summary"
             summary_field    = $visualField.key
             summary_type     = "count"
@@ -512,7 +527,13 @@ $visualCreateBody = @{
 $visualCreated = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components" -Headers $headers -ContentType "application/json" -Body $visualCreateBody -TimeoutSec 30
 $visualDetail = Invoke-RestMethod -Uri "$BaseUrl/api/admin/components/$visualSlug" -Headers $headers -TimeoutSec 30
 $visualVersion = $visualDetail.versions | Select-Object -First 1
-Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components/$($visualCreated.id)/versions/$($visualVersion.id)/publish" -Headers $headers -TimeoutSec 30 | Out-Null
+if ($visualCreated.schema_version -ne 1 -or
+    [string]$visualDetail.component_id -cne [string]$visualCreated.component_id -or
+    -not $visualVersion -or
+    [string]$visualVersion.dataset_reference.reference.resource_id -cne $visualDatasetResourceId) {
+    throw "Sprint UAT failure: visual Component create/read-back did not retain exact canonical identities."
+}
+Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components/$($visualCreated.component_id)/versions/$($visualVersion.component_version_id)/publish" -Headers $headers -TimeoutSec 30 | Out-Null
 $visualBar = Invoke-RestMethod -Uri "$BaseUrl/api/components/$visualSlug/bar" -Headers $headers -TimeoutSec 30
 if ($visualBar.materialization_state -ne "ready" -or $visualBar.component_type -ne "bar" -or -not $visualBar.points -or $visualBar.points.Count -lt 1) {
     throw "Sprint UAT failure: visual Bar component did not return ready points."

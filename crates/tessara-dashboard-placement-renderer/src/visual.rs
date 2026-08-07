@@ -1,6 +1,9 @@
 //! Dashboard-owned visual execution and stat/chart placement presentation.
 
 use leptos::prelude::*;
+#[cfg(feature = "hydrate")]
+use tessara_components_contract::ComponentRenderResponse;
+use tessara_components_contract::{ComponentRenderKind, ComponentVisualResponse};
 use tessara_module_ui::{EmptyState, Skeleton};
 
 #[cfg(feature = "hydrate")]
@@ -12,11 +15,7 @@ use crate::{
         BoundedRetry, RequestCompletion, RequestLifecycle, RequestLifecycleDecision,
         notify_request_activity,
     },
-    types::ComponentVisual,
-    viewer::{
-        ComponentRequestActivity, ComponentRequestActivityCallback, ComponentVersionKind,
-        ComponentVersionTarget,
-    },
+    viewer::{ComponentRequestActivity, ComponentRequestActivityCallback, ComponentVersionTarget},
 };
 
 /// Renders an already-loaded visual response without route or request state.
@@ -24,8 +23,8 @@ use crate::{
 /// The Components editor uses the same renderer for draft previews that the
 /// exact-version viewer uses for published and superseded versions.
 #[component]
-pub fn ComponentVisualPresentation(visual: ComponentVisual) -> impl IntoView {
-    if visual.component_type == "stat_card" {
+pub fn ComponentVisualPresentation(visual: ComponentVisualResponse) -> impl IntoView {
+    if visual.component_type == ComponentRenderKind::StatCard {
         view! { <ComponentStatCard visual/> }.into_any()
     } else {
         view! { <ComponentD3Chart visual/> }.into_any()
@@ -33,7 +32,7 @@ pub fn ComponentVisualPresentation(visual: ComponentVisual) -> impl IntoView {
 }
 
 #[component]
-fn ComponentStatCard(visual: ComponentVisual) -> impl IntoView {
+fn ComponentStatCard(visual: ComponentVisualResponse) -> impl IntoView {
     let class_name = format!(
         "component-stat-card component-stat-card--{}",
         visual
@@ -65,20 +64,15 @@ fn ComponentStatCard(visual: ComponentVisual) -> impl IntoView {
 }
 
 #[component]
-fn ComponentD3Chart(visual: ComponentVisual) -> impl IntoView {
-    let kind = visual.component_type.clone();
-    let item_count = if matches!(kind.as_str(), "pie" | "donut") {
+fn ComponentD3Chart(visual: ComponentVisualResponse) -> impl IntoView {
+    let kind = visual.component_type;
+    let item_count = if matches!(kind, ComponentRenderKind::Pie | ComponentRenderKind::Donut) {
         visual.slices.len()
     } else {
         visual.points.len()
     };
     let payload = serde_json::to_string(&visual).unwrap_or_else(|_| "{}".into());
-    let aria_label = format!(
-        "{} chart preview",
-        ComponentVersionKind::from_api_kind(&kind)
-            .map(ComponentVersionKind::label)
-            .unwrap_or("Component")
-    );
+    let aria_label = format!("{} chart preview", kind.label());
     view! {
         <div class="component-chart component-d3-chart" data-chart=payload>
             {if item_count == 0 {
@@ -110,7 +104,7 @@ pub(crate) fn ComponentVisualViewer(
     execution_active: Signal<bool>,
     on_request_activity: Option<ComponentRequestActivityCallback>,
 ) -> impl IntoView {
-    let visual = ArcRwSignal::new(None::<ComponentVisual>);
+    let visual = ArcRwSignal::new(None::<ComponentVisualResponse>);
     let loading = ArcRwSignal::new(true);
     let error = ArcRwSignal::new(None::<String>);
     let active_request_id = ArcRwSignal::new(0_u64);
@@ -243,7 +237,7 @@ struct ComponentVisualRequest {
     target: ComponentVersionTarget,
     request_id: u64,
     active_request_id: ArcRwSignal<u64>,
-    visual: ArcRwSignal<Option<ComponentVisual>>,
+    visual: ArcRwSignal<Option<ComponentVisualResponse>>,
     loading: ArcRwSignal<bool>,
     error: ArcRwSignal<Option<String>>,
     request_lifecycle: ArcRwSignal<RequestLifecycle<((), u64)>>,
@@ -273,7 +267,7 @@ fn load_component_visual(request: ComponentVisualRequest) {
         let request_guard = RequestActivityGuard::new(request_lifecycle, on_request_activity);
         leptos::task::spawn_local(async move {
             let mut request_guard = request_guard;
-            let expected_kind = target.kind().as_api_value();
+            let expected_kind = target.kind();
             let expected_version_id = target.component_version_id().to_owned();
             let endpoint = target.endpoint_path();
             let result = api::fetch_component_visual_endpoint(&endpoint).await;
@@ -282,12 +276,12 @@ fn load_component_visual(request: ComponentVisualRequest) {
             }
             loading.set(false);
             let completion = match result {
-                Ok(Some(response))
+                Ok(Some(ComponentRenderResponse::Visual(response)))
                     if response.component_type == expected_kind
-                        && response.component_version_id == expected_version_id =>
+                        && response.component_version_id.to_string() == expected_version_id =>
                 {
                     let retryable = materialization_is_retryable(&response.materialization_state);
-                    visual.set(Some(response));
+                    visual.set(Some(*response));
                     error.set(None);
                     if retryable {
                         schedule_bounded_retry(

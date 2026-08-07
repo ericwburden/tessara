@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
+use axum::{Json, Router, body::Bytes, extract::State, http::HeaderMap, routing::post};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use serde::Deserialize;
@@ -147,12 +147,9 @@ async fn authorize(
 async fn catalog(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DatasetCatalogRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<DatasetCatalogResponse>> {
-    if request.action != DatasetAction::Catalog {
-        return Err(restricted());
-    }
-    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
+    crate::module_service_requests::require_json_content_type(&headers)?;
     let (inbound, account) = authorize(
         &state,
         &headers,
@@ -161,6 +158,11 @@ async fn catalog(
         &body,
     )
     .await?;
+    let request: DatasetCatalogRequest = serde_json::from_slice(&body)
+        .map_err(|_| ApiError::BadRequest("Dataset catalog request is invalid".into()))?;
+    if request.action != DatasetAction::Catalog {
+        return Err(restricted());
+    }
     let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
     let rows = sqlx::query(
         "SELECT DISTINCT ON (d.id,r.version_major)
@@ -220,12 +222,9 @@ async fn catalog(
 async fn schema(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DatasetSchemaRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<DatasetMajorLineMetadata>> {
-    if request.action != DatasetAction::ResolveSchema {
-        return Err(restricted());
-    }
-    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
+    crate::module_service_requests::require_json_content_type(&headers)?;
     let (inbound, account) = authorize(
         &state,
         &headers,
@@ -234,6 +233,11 @@ async fn schema(
         &body,
     )
     .await?;
+    let request: DatasetSchemaRequest = serde_json::from_slice(&body)
+        .map_err(|_| ApiError::BadRequest("Dataset schema request is invalid".into()))?;
+    if request.action != DatasetAction::ResolveSchema {
+        return Err(restricted());
+    }
     Ok(Json(
         load_authorized_metadata(&state, &account, &inbound, &request.reference).await?,
     ))
@@ -242,17 +246,9 @@ async fn schema(
 async fn distinct_values(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DatasetDistinctValuesRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<DatasetDistinctValuesResponse>> {
-    if request.action != DatasetAction::DistinctValues
-        || request.field_key.trim().is_empty()
-        || !(1..=200).contains(&request.limit)
-    {
-        return Err(ApiError::BadRequest(
-            "Dataset distinct-value request is invalid".into(),
-        ));
-    }
-    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
+    crate::module_service_requests::require_json_content_type(&headers)?;
     let (inbound, account) = authorize(
         &state,
         &headers,
@@ -261,6 +257,16 @@ async fn distinct_values(
         &body,
     )
     .await?;
+    let request: DatasetDistinctValuesRequest = serde_json::from_slice(&body)
+        .map_err(|_| ApiError::BadRequest("Dataset distinct-value request is invalid".into()))?;
+    if request.action != DatasetAction::DistinctValues
+        || request.field_key.trim().is_empty()
+        || !(1..=200).contains(&request.limit)
+    {
+        return Err(ApiError::BadRequest(
+            "Dataset distinct-value request is invalid".into(),
+        ));
+    }
     let metadata = load_authorized_metadata(&state, &account, &inbound, &request.reference).await?;
     if !metadata
         .fields
@@ -287,12 +293,9 @@ async fn distinct_values(
 async fn compatibility(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DatasetCompatibilityRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<DatasetCompatibilityResponse>> {
-    if request.action != DatasetAction::CheckCompatibility {
-        return Err(restricted());
-    }
-    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
+    crate::module_service_requests::require_json_content_type(&headers)?;
     let (inbound, account) = authorize(
         &state,
         &headers,
@@ -301,6 +304,11 @@ async fn compatibility(
         &body,
     )
     .await?;
+    let request: DatasetCompatibilityRequest = serde_json::from_slice(&body)
+        .map_err(|_| ApiError::BadRequest("Dataset compatibility request is invalid".into()))?;
+    if request.action != DatasetAction::CheckCompatibility {
+        return Err(restricted());
+    }
     let metadata = load_authorized_metadata(&state, &account, &inbound, &request.reference).await?;
     let fields = metadata
         .fields
@@ -357,14 +365,9 @@ fn compatibility_findings(
 async fn validate_bootstrap(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<BootstrapDependencyValidationRequestV1>,
+    body: Bytes,
 ) -> ApiResult<Json<DatasetBootstrapValidationResponse>> {
-    if request.schema_version != BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1
-        || request.desired_revision == 0
-        || request.apply_sequence == 0
-    {
-        return Err(restricted());
-    }
+    crate::module_service_requests::require_json_content_type(&headers)?;
     let encoded = headers
         .get("x-tessara-bootstrap-validation-authorization")
         .and_then(|value| value.to_str().ok())
@@ -383,8 +386,6 @@ async fn validate_bootstrap(
         module_definition_id: ModuleDefinitionId::new(&authorization.payload.module_definition_id)
             .map_err(|_| restricted())?,
     };
-    validate_bootstrap_request_authorization(&authorization.payload, &request, Utc::now())?;
-    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
     crate::module_service_requests::validate_materializing_principal_with_authorization(
         &state,
         &headers,
@@ -403,6 +404,15 @@ async fn validate_bootstrap(
         },
     )
     .await?;
+    let request: BootstrapDependencyValidationRequestV1 =
+        serde_json::from_slice(&body).map_err(|_| restricted())?;
+    if request.schema_version != BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1
+        || request.desired_revision == 0
+        || request.apply_sequence == 0
+    {
+        return Err(restricted());
+    }
+    validate_bootstrap_request_authorization(&authorization.payload, &request, Utc::now())?;
 
     let batch: DatasetBootstrapValidationBatch =
         serde_json::from_value(request.payload).map_err(|_| restricted())?;
@@ -488,14 +498,9 @@ fn validate_bootstrap_request_authorization(
 async fn execute(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DatasetExecutionRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<DatasetExecutionResponse>> {
-    if request.action != DatasetAction::Execute || request.limit == 0 || request.limit > 1_000 {
-        return Err(ApiError::BadRequest(
-            "Dataset execution request is invalid".into(),
-        ));
-    }
-    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
+    crate::module_service_requests::require_json_content_type(&headers)?;
     let (inbound, account) = authorize(
         &state,
         &headers,
@@ -504,6 +509,13 @@ async fn execute(
         &body,
     )
     .await?;
+    let request: DatasetExecutionRequest = serde_json::from_slice(&body)
+        .map_err(|_| ApiError::BadRequest("Dataset execution request is invalid".into()))?;
+    if request.action != DatasetAction::Execute || request.limit == 0 || request.limit > 1_000 {
+        return Err(ApiError::BadRequest(
+            "Dataset execution request is invalid".into(),
+        ));
+    }
     let metadata = load_authorized_metadata(&state, &account, &inbound, &request.reference).await?;
     if metadata.materialization_state != "ready" {
         return Ok(Json(DatasetExecutionResponse {

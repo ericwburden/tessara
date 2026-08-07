@@ -40,7 +40,7 @@ $scenarioAssertions = [ordered]@{
     "UAT-8A-01" = @("component-module-live-script", "complete-browser-inventory", "module-owned-documents-and-assets")
     "UAT-8A-02" = @("empty-first-apply", "semantic-no-op", "exact-five-core-transitions", "receipt-bound-dashboard-references")
     "UAT-8A-03" = @("configuration-schema-authority", "label-navigation-projection", "sanitized-diagnostics")
-    "UAT-8A-04" = @("dataset-contract-execution", "known-random-nondisclosure", "timeout-outage-recovery")
+    "UAT-8A-04" = @("dataset-contract-execution", "joint-dashboard-component-scope", "known-random-nondisclosure", "timeout-outage-recovery")
     "UAT-8A-05" = @("dashboard-lifecycle-findings", "consumer-actions", "provider-outage-containment")
     "UAT-8A-06" = @("core-component-absence", "native-wasm-source-boundaries", "old-input-rejection", "exact-real-module-inventory")
     "UAT-8A-07" = @("induced-owner-failure", "exact-teardown", "empty-successor", "successor-no-op-health")
@@ -136,6 +136,11 @@ $semanticPredicateRegistry = [ordered]@{
         evaluator = "smoke_and_playwright"
         smoke_checks = @("component_execution_contract")
         playwright_titles = @("Sprint 8A extracted Component UI parity › admin can create, update, publish, and view a major-line table component")
+    }
+    "joint-dashboard-component-scope" = [ordered]@{
+        producers = @("playwright-execution")
+        evaluator = "playwright"
+        playwright_titles = @("Sprint 7A scoped analytics boundary › Dashboard and Component scopes must share a governing node before disclosure or render")
     }
     "known-random-nondisclosure" = [ordered]@{
         producers = @("playwright-execution")

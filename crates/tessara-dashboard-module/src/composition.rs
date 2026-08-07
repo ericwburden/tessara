@@ -1,8 +1,9 @@
 //! Dashboard-owned composition read boundary.
 //!
 //! Placement rows contain only typed ComponentVersion references. Every
-//! request resolves metadata through Core's action-bound compatibility
-//! adapter; the Dashboard database never joins or copies Components tables.
+//! request resolves metadata and executes through the selected Components
+//! Module Instance's public contract; the Dashboard database never joins or
+//! copies Components tables.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -11,7 +12,7 @@ use axum::{
     body::Body,
     extract::{Path, RawQuery, State},
     http::{HeaderMap, header},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::get,
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -22,9 +23,10 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_components_contract::{
     COMPONENT_BINDING_KEY, COMPONENT_CONTRACT_ID, COMPONENT_CONTRACT_SCHEMA_VERSION,
-    COMPONENT_MODULE_DEFINITION_ID, ComponentAction, ComponentCatalogResponse, ComponentMetadata,
-    ComponentPublicationState, ComponentRenderKind, ComponentRenderRequest,
-    ComponentResolutionRequest, ComponentResolutionResponse, ComponentVersionReference,
+    COMPONENT_MODULE_DEFINITION_ID, COMPONENT_RESOURCE_TYPE, ComponentAction,
+    ComponentCatalogResponse, ComponentMetadata, ComponentPublicationState, ComponentRenderKind,
+    ComponentRenderRequest, ComponentRenderResponse, ComponentResolutionRequest,
+    ComponentResolutionResponse, ComponentVersionReference,
 };
 use tessara_dashboards::{
     DashboardPlacementConfigInput, DashboardPlacementConfigState, DashboardPlacementConfigV1,
@@ -38,8 +40,9 @@ use tessara_module_contract::{
     AuthorizationGrantV3, AuthorizationValidationContextV3, ContractCompatibilityState,
     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleInstanceOwnerState,
     ModuleServicePrincipalV1, ModuleServiceRequestV1, OwnerDataState, ProviderAvailabilityState,
-    ResourceAccessState, ResourceIdentityState, ResourceLifecycleState, ResourceOwner,
-    ResourceOwnerState, ResourceResolutionV1, ResourceRevision, SignedEnvelopeV1,
+    ResourceAccessState, ResourceAuthorizationAssertionV2, ResourceIdentityState,
+    ResourceLifecycleState, ResourceOwner, ResourceOwnerState, ResourceResolutionV1,
+    ResourceRevision, ResourceTypeId, SecurityCapabilityId, SignedEnvelopeV1,
     TypedResourceReference,
 };
 use uuid::Uuid;
@@ -51,6 +54,8 @@ use crate::{
         load_mutation_replay, mutation_digest, record_mutation_replay,
     },
 };
+
+const COMPONENT_READ_CAPABILITY: &str = "components:read";
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DashboardResponseV1 {
@@ -236,12 +241,9 @@ async fn render_placement(
     )
     .await?;
     let dashboard_scope = load_dashboard_scope(&state, dashboard_id).await?;
-    let read_scope = authorized_organizations(&grant.payload, READ_CAPABILITY);
-    if dashboard_scope.is_empty()
-        || !dashboard_scope
-            .iter()
-            .any(|node_id| read_scope.contains(node_id))
-    {
+    let authorized_dashboard_scope =
+        authorized_dashboard_scope(&grant.payload, READ_CAPABILITY, &dashboard_scope);
+    if !canonical_nonempty_scope(&authorized_dashboard_scope) {
         return Err(DashboardModuleError::Forbidden);
     }
     let row = sqlx::query(
@@ -273,7 +275,12 @@ async fn render_placement(
         }
     };
     let authorization = authorization_header(&headers)?;
-    let attempt = resolve_component_since(&state, authorization, reference.clone(), None).await?;
+    let attempt = restrict_component_attempt_for_dashboard_projection(
+        resolve_component_since(&state, authorization, reference.clone(), None).await?,
+        &grant.payload,
+        READ_CAPABILITY,
+        &authorized_dashboard_scope,
+    );
     let resolution = crate::dependencies::project_component_resolution_for_visibility(
         &state,
         dashboard_id,
@@ -288,6 +295,11 @@ async fn render_placement(
             "render kind not found".into(),
         ));
     }
+    let resource_assertion = component_resource_assertion(
+        metadata.component_version_id,
+        metadata.authority_revision,
+        &metadata.scope_node_ids,
+    )?;
     let path = "/api/private/components/render";
     let request = ComponentRenderRequest {
         schema_version: COMPONENT_CONTRACT_SCHEMA_VERSION,
@@ -296,7 +308,7 @@ async fn render_placement(
         kind,
         resource_authority_revision: metadata.authority_revision,
         query: query.unwrap_or_default(),
-        dashboard_scope_node_ids: dashboard_scope,
+        dashboard_scope_node_ids: authorized_dashboard_scope,
     };
     let body = serde_json::to_vec(&request)
         .map_err(|_| DashboardModuleError::Unavailable("render request encoding failed".into()))?;
@@ -306,9 +318,18 @@ async fn render_placement(
         authorization,
         target_module_instance_id,
         "components.render",
+        Some(resource_assertion.clone()),
     )
     .await?
     .ok_or(DashboardModuleError::Forbidden)?;
+    if !render_authorized_on_same_governing_node(
+        &grant.payload,
+        &downstream.authorization,
+        &request.dashboard_scope_node_ids,
+        &resource_assertion.governing_organization_ids,
+    ) {
+        return Err(DashboardModuleError::Forbidden);
+    }
     let service_request = signed_service_request(&state, &downstream, "POST", path, &body)?;
     let response = state
         .service_client
@@ -333,6 +354,15 @@ async fn render_placement(
         .bytes()
         .await
         .map_err(|_| DashboardModuleError::Unavailable("Component render unavailable".into()))?;
+    if status.is_success() {
+        let response = decode_component_render_response(
+            &bytes,
+            request.kind,
+            metadata.component_id,
+            metadata.component_version_id,
+        )?;
+        return Ok(Json(response).into_response());
+    }
     let mut builder = Response::builder().status(status);
     if let Some(content_type) = content_type
         && let Ok(content_type) = content_type.to_str()
@@ -342,6 +372,23 @@ async fn render_placement(
     builder
         .body(Body::from(bytes))
         .map_err(|_| DashboardModuleError::Unavailable("Component render response failed".into()))
+}
+
+fn decode_component_render_response(
+    bytes: &[u8],
+    kind: ComponentRenderKind,
+    component_id: Uuid,
+    component_version_id: Uuid,
+) -> Result<ComponentRenderResponse, DashboardModuleError> {
+    let response: ComponentRenderResponse = serde_json::from_slice(bytes).map_err(|_| {
+        DashboardModuleError::Unavailable("Component render response is invalid".into())
+    })?;
+    response
+        .validate_for(kind, component_id, component_version_id)
+        .map_err(|_| {
+            DashboardModuleError::Unavailable("Component render response is invalid".into())
+        })?;
+    Ok(response)
 }
 
 async fn dependency_projection(
@@ -978,11 +1025,22 @@ async fn load_placements_with_authorization(
     editor: bool,
 ) -> Result<Vec<DashboardPlacementResponseV1>, DashboardModuleError> {
     let stored = load_stored_placements(state, dashboard_id).await?;
+    let inbound = validated_inbound_dashboard_authorization(state, authorization).await?;
+    let dashboard_scope = load_dashboard_scope(state, dashboard_id).await?;
+    let dashboard_capability = if editor {
+        MANAGE_CAPABILITY
+    } else {
+        READ_CAPABILITY
+    };
     let mut resolutions = BTreeMap::new();
     for placement in &stored {
-        let attempt =
+        let attempt = restrict_component_attempt_for_dashboard_projection(
             resolve_component_since(state, authorization, placement.reference.clone(), None)
-                .await?;
+                .await?,
+            &inbound.payload,
+            dashboard_capability,
+            &dashboard_scope,
+        );
         let response = crate::dependencies::project_component_resolution_for_visibility(
             state,
             dashboard_id,
@@ -1177,11 +1235,34 @@ impl ComponentResolutionAttempt {
     }
 }
 
+pub(super) fn restrict_component_attempt_for_dashboard_projection(
+    mut attempt: ComponentResolutionAttempt,
+    inbound_dashboard_grant: &AuthorizationGrantV3,
+    dashboard_capability: &str,
+    dashboard_scope_node_ids: &[Uuid],
+) -> ComponentResolutionAttempt {
+    let disjoint = attempt.response.metadata().is_some_and(|metadata| {
+        !component_visible_on_dashboard_scope(
+            inbound_dashboard_grant,
+            dashboard_capability,
+            dashboard_scope_node_ids,
+            &metadata.scope_node_ids,
+        )
+    });
+    if disjoint {
+        attempt.response = restricted_component_resolution(ResourceAccessState::Unauthorized);
+        attempt.authorization_context = None;
+        attempt.origin = ComponentResolutionOrigin::AuthorizationRestricted;
+    }
+    attempt
+}
+
 struct DownstreamAuthorization {
     encoded: String,
     installation_id: Uuid,
     caller_module_instance_id: Uuid,
     correlation_id: Uuid,
+    authorization: AuthorizationGrantV3,
     context: ComponentAuthorizationContext,
 }
 
@@ -1205,6 +1286,7 @@ pub(super) async fn resolve_component_since(
         authorization,
         target_module_instance_id,
         "components.resolve",
+        None,
     )
     .await?
     else {
@@ -1281,6 +1363,7 @@ pub(super) async fn component_authorization_context(
         authorization,
         target_module_instance_id,
         "components.resolve",
+        None,
     )
     .await?
     .map(|downstream| downstream.context))
@@ -1301,6 +1384,7 @@ async fn component_catalog(
         authorization,
         target_module_instance_id,
         "components.catalog",
+        None,
     )
     .await?
     else {
@@ -1412,12 +1496,96 @@ fn component_target_instance(
     }
 }
 
-async fn exchange_component_authorization(
+pub(super) fn canonical_nonempty_scope(scope: &[Uuid]) -> bool {
+    !scope.is_empty() && scope.windows(2).all(|pair| pair[0] < pair[1])
+}
+
+pub(super) fn authorized_dashboard_scope(
+    grant: &AuthorizationGrantV3,
+    dashboard_capability: &str,
+    stored_dashboard_scope: &[Uuid],
+) -> Vec<Uuid> {
+    let Ok(dashboard_capability) = SecurityCapabilityId::new(dashboard_capability) else {
+        return Vec::new();
+    };
+    let mut scope = stored_dashboard_scope
+        .iter()
+        .copied()
+        .filter(|node_id| grant.authorizes(&dashboard_capability, *node_id))
+        .collect::<Vec<_>>();
+    scope.sort_unstable();
+    scope.dedup();
+    scope
+}
+
+fn component_resource_assertion(
+    component_version_id: Uuid,
+    authority_revision: u64,
+    governing_organization_ids: &[Uuid],
+) -> Result<ResourceAuthorizationAssertionV2, DashboardModuleError> {
+    if component_version_id.is_nil()
+        || authority_revision == 0
+        || !canonical_nonempty_scope(governing_organization_ids)
+    {
+        return Err(DashboardModuleError::Forbidden);
+    }
+    Ok(ResourceAuthorizationAssertionV2 {
+        resource_type: ResourceTypeId::new(COMPONENT_RESOURCE_TYPE)
+            .map_err(|_| DashboardModuleError::Forbidden)?,
+        resource_id: component_version_id.to_string(),
+        authority_revision,
+        governing_organization_ids: governing_organization_ids.to_vec(),
+    })
+}
+
+fn render_authorized_on_same_governing_node(
+    inbound_dashboard_grant: &AuthorizationGrantV3,
+    downstream_component_grant: &AuthorizationGrantV3,
+    dashboard_scope_node_ids: &[Uuid],
+    component_scope_node_ids: &[Uuid],
+) -> bool {
+    if !canonical_nonempty_scope(dashboard_scope_node_ids)
+        || !canonical_nonempty_scope(component_scope_node_ids)
+    {
+        return false;
+    }
+    let Ok(dashboard_read) = SecurityCapabilityId::new(READ_CAPABILITY) else {
+        return false;
+    };
+    let Ok(component_read) = SecurityCapabilityId::new(COMPONENT_READ_CAPABILITY) else {
+        return false;
+    };
+    component_scope_node_ids.iter().any(|node_id| {
+        dashboard_scope_node_ids.binary_search(node_id).is_ok()
+            && inbound_dashboard_grant.authorizes(&dashboard_read, *node_id)
+            && downstream_component_grant.authorizes(&component_read, *node_id)
+    })
+}
+
+fn component_visible_on_dashboard_scope(
+    inbound_dashboard_grant: &AuthorizationGrantV3,
+    dashboard_capability: &str,
+    dashboard_scope_node_ids: &[Uuid],
+    component_scope_node_ids: &[Uuid],
+) -> bool {
+    if !canonical_nonempty_scope(dashboard_scope_node_ids)
+        || !canonical_nonempty_scope(component_scope_node_ids)
+    {
+        return false;
+    }
+    let Ok(dashboard_capability) = SecurityCapabilityId::new(dashboard_capability) else {
+        return false;
+    };
+    component_scope_node_ids.iter().any(|node_id| {
+        dashboard_scope_node_ids.binary_search(node_id).is_ok()
+            && inbound_dashboard_grant.authorizes(&dashboard_capability, *node_id)
+    })
+}
+
+pub(super) async fn validated_inbound_dashboard_authorization(
     state: &DashboardModuleState,
     inbound_authorization: &str,
-    target_module_instance_id: Uuid,
-    action: &str,
-) -> Result<Option<DownstreamAuthorization>, DashboardModuleError> {
+) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, DashboardModuleError> {
     let inbound: SignedEnvelopeV1<AuthorizationGrantV3> =
         decode_header_envelope(inbound_authorization)?;
     state
@@ -1448,6 +1616,20 @@ async fn exchange_component_authorization(
             now: Utc::now(),
         })
         .map_err(|_| DashboardModuleError::Forbidden)?;
+    Ok(inbound)
+}
+
+async fn exchange_component_authorization(
+    state: &DashboardModuleState,
+    inbound_authorization: &str,
+    target_module_instance_id: Uuid,
+    action: &str,
+    resource_assertion: Option<ResourceAuthorizationAssertionV2>,
+) -> Result<Option<DownstreamAuthorization>, DashboardModuleError> {
+    let inbound = validated_inbound_dashboard_authorization(state, inbound_authorization).await?;
+    let security = crate::load_security_state(&state.pool)
+        .await?
+        .ok_or_else(|| DashboardModuleError::Unavailable("security state unavailable".into()))?;
     let target = AuthorizationAudienceV1::ModuleInstance {
         module_instance_id: target_module_instance_id,
         module_definition_id: ModuleDefinitionId::new(COMPONENT_MODULE_DEFINITION_ID)
@@ -1461,7 +1643,7 @@ async fn exchange_component_authorization(
         functional_contract: FunctionalContractId::new(COMPONENT_CONTRACT_ID)
             .map_err(|_| DashboardModuleError::Forbidden)?,
         action: action.into(),
-        resource_assertion: None,
+        resource_assertion: resource_assertion.clone(),
     };
     request
         .validate()
@@ -1539,7 +1721,7 @@ async fn exchange_component_authorization(
             functional_contract: request.functional_contract,
             action: action.into(),
             operation: AuthorizationGrantOperationV1::Read,
-            resource_assertion: None,
+            resource_assertion,
             authorization_revision: security.authorization_revision as u64,
             organization_revision: security.organization_revision as u64,
             now: Utc::now(),
@@ -1549,6 +1731,7 @@ async fn exchange_component_authorization(
         return Err(DashboardModuleError::Forbidden);
     }
     let context = semantic_authorization_context(&response.authorization.payload)?;
+    let authorization_payload = response.authorization.payload.clone();
     let encoded = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&response.authorization).map_err(|_| DashboardModuleError::Forbidden)?,
     );
@@ -1557,6 +1740,7 @@ async fn exchange_component_authorization(
         installation_id: security.installation_id,
         caller_module_instance_id: security.module_instance_id,
         correlation_id: response.authorization.payload.correlation_id,
+        authorization: authorization_payload,
         context,
     }))
 }
@@ -1815,23 +1999,111 @@ fn disclosed_title(
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Utc};
+    use semver::Version;
+    use tessara_components_contract::{
+        COMPONENT_CONTRACT_ID, COMPONENT_CONTRACT_VERSION, COMPONENT_RESOURCE_TYPE,
+        ComponentLifecycleState, ComponentMetadata, ComponentPublicationState, ComponentRenderKind,
+        ComponentRenderResponse, ComponentVersionReference,
+    };
     use tessara_module_contract::{
         AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1,
         AuthorizationGrantOperationV1, AuthorizationGrantV3, CapabilityScopeBindingV1,
-        DelegationBasisV1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
-        ModuleServicePrincipalV1, ResourceAccessState, ResourceAuthorizationAssertionV2,
-        ResourceResolutionV1, ResourceTypeId, SecurityCapabilityId,
+        ContractCompatibilityState, DelegationBasisV1, DependencyBindingKey, FunctionalContractId,
+        ModuleDefinitionId, ModuleInstanceOwnerState, ModuleServicePrincipalV1, OwnerDataState,
+        ProviderAvailabilityState, ProviderContractIdentity, ResourceAccessState,
+        ResourceAuthorizationAssertionV2, ResourceIdentityState, ResourceLifecycleState,
+        ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceOwnerState,
+        ResourceResolutionV1, ResourceRevision, ResourceTypeId, SecurityCapabilityId,
+        TypedResourceReference,
     };
     use uuid::Uuid;
 
     use super::{
-        ComponentResolutionResponse, disclosed_title, reconciled_title,
-        renderable_component_metadata, semantic_authorization_context,
+        ComponentResolutionAttempt, ComponentResolutionOrigin, ComponentResolutionResponse,
+        MANAGE_CAPABILITY, READ_CAPABILITY, authorized_dashboard_scope,
+        component_resource_assertion, decode_component_render_response, disclosed_title,
+        reconciled_title, render_authorized_on_same_governing_node, renderable_component_metadata,
+        restrict_component_attempt_for_dashboard_projection, semantic_authorization_context,
         unavailable_component_catalog,
     };
 
     fn id(value: u128) -> Uuid {
         Uuid::from_u128(value)
+    }
+
+    fn table_render_response(component_id: Uuid, component_version_id: Uuid) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "component_id": component_id,
+            "component_version_id": component_version_id,
+            "component_type": "table",
+            "materialization_state": "ready",
+            "columns": [],
+            "rows": [],
+            "pagination": {
+                "page_size": 25,
+                "next_cursor": null,
+                "has_more": false
+            }
+        }))
+        .expect("table render response")
+    }
+
+    #[test]
+    fn mediated_render_accepts_only_the_exact_typed_component_response() {
+        let component_id = id(102);
+        let component_version_id = id(103);
+        let body = table_render_response(component_id, component_version_id);
+
+        assert!(matches!(
+            decode_component_render_response(
+                &body,
+                ComponentRenderKind::Table,
+                component_id,
+                component_version_id,
+            ),
+            Ok(ComponentRenderResponse::Table(_))
+        ));
+        assert!(
+            decode_component_render_response(
+                &body,
+                ComponentRenderKind::Bar,
+                component_id,
+                component_version_id,
+            )
+            .is_err()
+        );
+        assert!(
+            decode_component_render_response(
+                &body,
+                ComponentRenderKind::Table,
+                id(104),
+                component_version_id,
+            )
+            .is_err()
+        );
+        assert!(
+            decode_component_render_response(
+                &body,
+                ComponentRenderKind::Table,
+                component_id,
+                id(105),
+            )
+            .is_err()
+        );
+
+        let mut old_shape: serde_json::Value =
+            serde_json::from_slice(&body).expect("table response JSON");
+        old_shape["legacy_component_version_id"] = old_shape["component_version_id"].clone();
+        assert!(
+            decode_component_render_response(
+                &serde_json::to_vec(&old_shape).expect("old response encoding"),
+                ComponentRenderKind::Table,
+                component_id,
+                component_version_id,
+            )
+            .is_err()
+        );
     }
 
     fn authorization_grant() -> AuthorizationGrantV3 {
@@ -1890,6 +2162,216 @@ mod tests {
             issued_at: now,
             expires_at: now + Duration::seconds(30),
         }
+    }
+
+    fn grant_for(capability: &str, scope_node_id: Uuid) -> AuthorizationGrantV3 {
+        let mut grant = authorization_grant();
+        grant.capability_scope_bindings = vec![CapabilityScopeBindingV1 {
+            capability: SecurityCapabilityId::new(capability).expect("capability"),
+            organization_root_id: scope_node_id,
+            authorized_organization_ids: Vec::new(),
+        }];
+        grant.resource_assertion = None;
+        grant
+    }
+
+    fn authorized_component_attempt(scope_node_id: Uuid) -> ComponentResolutionAttempt {
+        let installation_id = id(1);
+        let module_instance_id = id(5);
+        let component_version_id = id(100);
+        let reference = ComponentVersionReference::new(
+            TypedResourceReference::new(
+                installation_id,
+                ResourceOwner::ModuleInstance {
+                    installation_id,
+                    module_instance_id,
+                },
+                ResourceTypeId::new(COMPONENT_RESOURCE_TYPE).expect("resource type"),
+                component_version_id.to_string(),
+            )
+            .expect("typed reference"),
+        )
+        .expect("Component reference");
+        let observation = ResourceObservationV1::new(
+            reference.reference().clone(),
+            ProviderContractIdentity::new(
+                FunctionalContractId::new(COMPONENT_CONTRACT_ID).expect("contract id"),
+                Version::parse(COMPONENT_CONTRACT_VERSION).expect("contract version"),
+            ),
+            ResourceObservationStrategy::LiveResolutionWithRevision,
+            ResourceRevision::new(1).expect("resource revision"),
+        );
+        let metadata = ComponentMetadata {
+            reference,
+            component_version_id,
+            component_id: id(101),
+            component_name: "Revenue".into(),
+            component_slug: "revenue".into(),
+            component_type: "table".into(),
+            version_number: 1,
+            version_label: "v1".into(),
+            publication_state: ComponentPublicationState::Published,
+            lifecycle_state: ComponentLifecycleState::Active,
+            authority_revision: 7,
+            scope_node_ids: vec![scope_node_id],
+        };
+        ComponentResolutionAttempt {
+            response: ComponentResolutionResponse::new(
+                ResourceResolutionV1::authorized(
+                    ResourceOwnerState::ModuleInstance {
+                        instance_state: ModuleInstanceOwnerState::Live,
+                        data_state: OwnerDataState::Retained,
+                    },
+                    ResourceIdentityState::Resolved,
+                    ResourceLifecycleState::ProviderDefined {
+                        state: "active".into(),
+                    },
+                    ContractCompatibilityState::Compatible,
+                    ProviderAvailabilityState::Available,
+                )
+                .expect("authorized resolution"),
+                Some(observation),
+                Some(metadata),
+                Vec::new(),
+                None,
+            )
+            .expect("Component resolution"),
+            authorization_context: None,
+            origin: ComponentResolutionOrigin::ProviderEvaluated,
+        }
+    }
+
+    #[test]
+    fn component_resource_assertions_require_exact_canonical_identity() {
+        let component_version_id = id(100);
+        let scope = [id(10), id(11)];
+        let assertion =
+            component_resource_assertion(component_version_id, 7, &scope).expect("assertion");
+
+        assert_eq!(assertion.resource_type.as_str(), COMPONENT_RESOURCE_TYPE);
+        assert_eq!(assertion.resource_id, component_version_id.to_string());
+        assert_eq!(assertion.authority_revision, 7);
+        assert_eq!(assertion.governing_organization_ids, scope);
+        assert!(component_resource_assertion(Uuid::nil(), 7, &scope).is_err());
+        assert!(component_resource_assertion(component_version_id, 0, &scope).is_err());
+        assert!(component_resource_assertion(component_version_id, 7, &[]).is_err());
+        assert!(component_resource_assertion(component_version_id, 7, &[id(11), id(10)]).is_err());
+        assert!(component_resource_assertion(component_version_id, 7, &[id(10), id(10)]).is_err());
+    }
+
+    #[test]
+    fn mediated_render_requires_one_node_across_dashboard_and_component_authority() {
+        let dashboard_a = id(10);
+        let component_b = id(11);
+        let dashboard_read_a = grant_for("dashboards:read", dashboard_a);
+        let component_read_a = grant_for("components:read", dashboard_a);
+        let component_read_b = grant_for("components:read", component_b);
+
+        assert!(render_authorized_on_same_governing_node(
+            &dashboard_read_a,
+            &component_read_a,
+            &[dashboard_a],
+            &[dashboard_a],
+        ));
+        assert!(!render_authorized_on_same_governing_node(
+            &dashboard_read_a,
+            &component_read_b,
+            &[dashboard_a],
+            &[component_b],
+        ));
+        assert!(!render_authorized_on_same_governing_node(
+            &dashboard_read_a,
+            &component_read_a,
+            &[dashboard_a],
+            &[component_b],
+        ));
+        assert!(!render_authorized_on_same_governing_node(
+            &dashboard_read_a,
+            &component_read_a,
+            &[component_b, dashboard_a],
+            &[dashboard_a],
+        ));
+    }
+
+    #[test]
+    fn mediated_render_sends_only_the_actor_authorized_dashboard_scope_intersection() {
+        let dashboard_a = id(10);
+        let dashboard_b = id(11);
+        let read_a = grant_for(READ_CAPABILITY, dashboard_a);
+
+        assert_eq!(
+            authorized_dashboard_scope(
+                &read_a,
+                READ_CAPABILITY,
+                &[dashboard_b, dashboard_a, dashboard_b],
+            ),
+            vec![dashboard_a]
+        );
+        assert!(
+            authorized_dashboard_scope(&read_a, MANAGE_CAPABILITY, &[dashboard_a, dashboard_b])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn dashboard_projection_redacts_disjoint_component_metadata() {
+        let dashboard_a = id(10);
+        let component_b = id(11);
+        let inbound = grant_for("dashboards:read", dashboard_a);
+
+        let visible = restrict_component_attempt_for_dashboard_projection(
+            authorized_component_attempt(dashboard_a),
+            &inbound,
+            READ_CAPABILITY,
+            &[dashboard_a],
+        );
+        assert!(visible.response().metadata().is_some());
+        assert_eq!(
+            visible.origin(),
+            ComponentResolutionOrigin::ProviderEvaluated
+        );
+
+        let restricted = restrict_component_attempt_for_dashboard_projection(
+            authorized_component_attempt(component_b),
+            &inbound,
+            READ_CAPABILITY,
+            &[dashboard_a],
+        );
+        assert!(restricted.response().metadata().is_none());
+        assert_eq!(
+            restricted.response().resolution().access_state(),
+            ResourceAccessState::Unauthorized
+        );
+        assert_eq!(
+            restricted.origin(),
+            ComponentResolutionOrigin::AuthorizationRestricted
+        );
+    }
+
+    #[test]
+    fn editor_and_viewer_projection_use_their_independent_dashboard_capabilities() {
+        let dashboard_a = id(10);
+        let manage_only = grant_for(MANAGE_CAPABILITY, dashboard_a);
+
+        let editor = restrict_component_attempt_for_dashboard_projection(
+            authorized_component_attempt(dashboard_a),
+            &manage_only,
+            MANAGE_CAPABILITY,
+            &[dashboard_a],
+        );
+        assert!(editor.response().metadata().is_some());
+
+        let viewer = restrict_component_attempt_for_dashboard_projection(
+            authorized_component_attempt(dashboard_a),
+            &manage_only,
+            READ_CAPABILITY,
+            &[dashboard_a],
+        );
+        assert!(viewer.response().metadata().is_none());
+        assert_eq!(
+            viewer.response().resolution().access_state(),
+            ResourceAccessState::Unauthorized
+        );
     }
 
     #[test]

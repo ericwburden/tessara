@@ -417,3 +417,138 @@ all-pass coverage was the actual enforcement gap. These tracked runner,
 self-test, acceptance, and documentation changes are candidate-affecting and
 supersede Readiness 35. A fresh complete Readiness and Candidate Rehearsal cycle
 remains required before preflight.
+
+## 2026-08-06 — Returned from Rehearsal 29 to implementation correction
+
+Validation Readiness attempt 36 passed all 15 declared checks against clean
+commit `3f7e32cb`, tree `252e651e`, and environment fingerprint
+`2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0`.
+Candidate Rehearsal attempt 29 then started against that same identity and was
+stopped by user direction before a terminal harvest. The retained snapshot is
+8 passed lane receipts, 3 failed receipts, 1 interrupted optimized lane, 20
+unexecuted checks, and 0 recorded blocked checks. The unexecuted checks are not
+retroactively treated as passes or blocks.
+
+Raw attempt and lane evidence remains under
+`artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-29-attempt.json` and
+`artifacts/sprint-8a-closeout/rehearsal/attempt-29/`:
+
+- `dashboard-source-boundaries` and `markdown-links` each retained a failed
+  `product` receipt even though its child log reported success. Diagnosis found
+  one stale parent `$LASTEXITCODE` reused after the PowerShell invocations.
+  Both receipts remain evidence, while the consolidated root classification is
+  one `harness` defect rather than two product defects.
+- `workspace-tests` retained the exact Component product-integration failure.
+  Its Table fixture declared only `label` as required while configuring both
+  `label` and `amount`; the product correctly rejected the invalid input with
+  `400 component.bad_request` before reaching the unavailable provider, so the
+  expected `503` was unreachable. The consolidated root classification is
+  `harness` with test-fixture subtype; product validation must not be weakened.
+- `optimized-resource-reference-timing` was interrupted while executing when
+  formal testing exited. It has no defect classification.
+
+The plan-to-source implementation audit also found one `product` architecture
+defect. The Component render response was untyped or privately copied across
+the Component/Dashboard boundary. The required correction makes
+`tessara-components-contract` own the exact render response DTOs and render
+kind, returns those types from Component provider and product routes, makes
+Dashboard validate and consume them directly, and removes both the direct
+Dataset-contract dependency and local Component response copies from the
+Dashboard placement renderer. The response omits the unused Dataset provider
+identity. Unknown, malformed, mixed-kind, and identity-divergent responses
+must fail closed.
+
+The one child-exit harness defect, one test-fixture harness defect, and one
+render-boundary product defect form a single return-to-implementation batch.
+Harness, fixture, contract, product source, boundary-test, acceptance, and
+documentation changes are candidate-affecting; they supersede Readiness 36 and
+the stopped Rehearsal 29 source. The corrections were completed in the
+consolidated 2026-08-07 batch below but are not yet formally verified. Formal
+testing remains paused. A new complete
+Validation Readiness and complete Candidate Rehearsal must both pass against
+the same corrected clean source and environment identity before candidate
+freeze or preflight; SIT and formal UAT remain Not Run.
+
+## 2026-08-07 — Completed the consolidated testing-entry contract correction
+
+The implementation audit continued after the three Rehearsal 29 root findings
+were classified. It found related product and acceptance defects in the same
+touched dependency cone, so they were corrected together instead of restarting
+testing after an individual narrow check:
+
+- **Render ownership and kind exactness (`product`):** the Dashboard placement
+  renderer privately modeled Component wire responses and depended directly on
+  the Dataset contract. `tessara-components-contract` now owns the one exact
+  Table/visual response and render-kind vocabulary. Component product/provider
+  routes return it, Dashboard validates it, and the renderer consumes it without
+  a Dataset-contract edge or copied DTO. Unknown fields, wrong Table/visual
+  branch, wrong kind, and visual fields or payloads belonging to another kind
+  fail closed. The unused Dataset reference was removed from render output.
+- **Persistent versus preview identity (`product`):** a persistent response now
+  requires matching non-nil Component and ComponentVersion IDs. Unsaved
+  authoring preview uses one explicit preview-only identity with both IDs nil.
+  A non-nil or partial-nil preview and any nil persistent identity are rejected.
+- **Exact signed request bytes (`product`, security-boundary subtype):**
+  Component provider, Core authorization exchange, and Core Dataset provider
+  receivers previously
+  parsed and reserialized typed JSON before comparing the service-request body
+  digest. They now retain the raw body, enforce a JSON media type, verify the
+  grant/service/correlation/body binding before typed deserialization, and
+  reject a byte-only mutation such as appended whitespace unless the request is
+  signed again. Product validation and the default body-size bound remain.
+- **Dashboard joint scope and exact assertion (`product`, security-boundary
+  subtype):** physical extraction had dropped the Sprint 7A rule that rendering
+  requires one common governing node. Dashboard now forwards only the
+  actor-authorized intersection
+  of stored Dashboard scope, exchanges an exact ComponentVersion assertion
+  containing type/id/authority revision/canonical Component scope, and checks
+  the common node against both audience grants. Component compares the
+  assertion with its authoritative row and repeats the common-node check.
+  Disjoint placements are restricted before title, Component metadata, scope,
+  Dataset identity, or data can be projected, even for an actor separately
+  authorized in both disjoint scopes.
+- **Active legacy acceptance facade (`harness` / acceptance inventory):** the
+  permissions suite's Component normalization aliases and the general smoke/UAT
+  flat `dataset_id`/`dataset_version_major` inputs could let retired Core shapes
+  survive behind first-party helpers. Active fixtures now use only the exact v3
+  Component identity and nested typed Dataset reference, and a source contract
+  rejects reintroduction. Historical versioned fixtures remain unchanged.
+- **Rehearsal exit accounting (`harness`):** each PowerShell child result is now
+  captured at its own invocation, with a stale-`$LASTEXITCODE` self-test. This
+  complements the existing dependency graph: safe independent siblings run
+  fail-late, true dependents retain exact blocked reasons, partial results stay
+  available, one diagnostic pass produces one consolidated batch, and tracked
+  correction/restart remains closed until harvesting is complete.
+
+The earlier seven-to-six Dashboard count correction remains part of this
+testing-entry lineage because it fixed the same ownership boundary. The durable
+expectation is identity-based: Core has exactly five transitions—Forms,
+Workflows, Responses, Datasets, and Migration—while Dashboard appears exactly
+once through its real Release/Instance and Manifest at reference navigation
+order 9. Components appears at 8 and Scoped Records at 7. Duplicate
+transition/release inventory or navigation presentation is rejected; no copied
+total count substitutes for those identities.
+
+The Playwright acceptance manifest advances from 74 to 75 exact identities by
+adding `Dashboard and Component scopes must share a governing node before
+disclosure or render`. The new scenario proves the shared-node positive path
+and, for a disjoint placement, metadata/title redaction and render denial. It is
+mapped to the `joint-dashboard-component-scope` assertion in UAT-8A-04, whose
+manual script now requires the same semantic outcome. This is additional
+coverage, not a renamed or weakened prior test.
+
+After the correction cone was complete, the final product source passed
+`cargo test --workspace --all-features --locked --offline` against six freshly
+reset isolated databases in 619.6 seconds. All-target/all-feature clippy with
+warnings denied, all-target/all-feature check, formatting, focused contract and
+integration checks, boundary and acceptance contracts, Markdown links, runner
+self-tests, exact 75/75 inventory, TypeScript compilation, and 75-test
+Playwright discovery also passed. Documentation-only handoff edits are covered
+by the final static audits.
+
+These results establish implementation readiness but are not formal gate
+receipts. Formal testing remains paused. The next authorized lifecycle boundary
+is a new complete Validation Readiness followed by a new complete Candidate
+Rehearsal against the same clean source and fresh six-database environment
+identity; preflight, candidate freeze, SIT, and formal UAT remain forbidden
+until both pass.

@@ -12,7 +12,7 @@ use icons::{
 use leptos::{ev, prelude::*};
 use tessara_components_contract::ComponentVersionReference;
 use tessara_dashboard_placement_renderer::{
-    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
+    ComponentRenderKind, ComponentVersionExecutionContent, ComponentVersionTarget,
     ComponentViewerMode,
 };
 use tessara_dashboards::{
@@ -1526,7 +1526,7 @@ fn SelectedPlacementPreview(
             {move || preview_open.get().then(|| selected_placement().and_then(|editor| {
                     let component = editor.placement.component?;
                     let version_id = editor.replace_with.unwrap_or(component.component_version_id);
-                    let kind = ComponentVersionKind::from_api_kind(&component.component_type)?;
+                    let kind = ComponentRenderKind::from_api_kind(&component.component_type)?;
                     let target = ComponentVersionTarget::new(component.component_slug, version_id, kind);
                     Some(view! { <ComponentVersionExecutionContent target mode=ComponentViewerMode::Full/> })
                 }).map(IntoAny::into_any).unwrap_or_else(|| view! {

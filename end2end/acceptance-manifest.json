@@ -1,12 +1,13 @@
 {
   "schema_version": 2,
-  "expected_total": 74,
+  "expected_total": 75,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
       "tests": [
         "Sprint 7A scoped analytics boundary › source-exact reference inventory exposes the canonical Dataset Components and Dashboard",
         "Sprint 7A scoped analytics boundary › real Dashboard mediation renders exact stat and table results",
+        "Sprint 7A scoped analytics boundary › Dashboard and Component scopes must share a governing node before disclosure or render",
         "Sprint 7A scoped analytics boundary › private compatibility endpoints reject browser authority without disclosing resources",
         "Sprint 7A scoped analytics boundary › mixed-scope Component lookups make known blocked and random identities indistinguishable"
       ]

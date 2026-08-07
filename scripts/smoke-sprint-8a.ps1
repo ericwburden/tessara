@@ -93,10 +93,10 @@ foreach ($render in @(
 $componentExecution = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/components/sprint-8a-record-table/table" -Token $token
 Assert-Sprint7A (
     $componentExecution.status -eq 200 -and
-    $componentExecution.body.Contains('"dataset_reference":') -and
+    -not $componentExecution.body.Contains('"dataset_reference":') -and
     -not $componentExecution.body.Contains('"dataset_id":') -and
     $componentExecution.body.Contains('"materialization_state":"ready"')
-) "component_execution_contract" "Component-owned stable execution route returns the typed Dataset reference contract" $checks
+) "component_execution_contract" "Component-owned stable execution route returns only the Component render contract" $checks
 $oldPayload = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/admin/components" -Method POST -Token $token -Body @{
     name = "Obsolete payload"
     slug = "obsolete-payload"

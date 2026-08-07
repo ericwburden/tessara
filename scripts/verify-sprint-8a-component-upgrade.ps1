@@ -334,7 +334,8 @@ function Get-UnrelatedSnapshot {
 
 function Get-StageSnapshot([string]$Stage, [string]$ExpectedRelease, [string]$ExpectedImageDigest) {
     & (Join-Path $PSScriptRoot "smoke-sprint-8a.ps1") -BaseUrl $BaseUrl -SupervisorUrl $SupervisorUrl | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "$Stage Sprint 8A smoke failed." }
+    $smokeSucceeded = $?
+    if (-not $smokeSucceeded) { throw "$Stage Sprint 8A smoke failed." }
     return [ordered]@{
         stage = $Stage
         captured_at = [DateTimeOffset]::UtcNow.ToString("o")

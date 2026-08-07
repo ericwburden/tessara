@@ -75,7 +75,7 @@ The codebase already includes a substantial vertical foundation:
 - Sprint 6C Dashboard runtime/data extraction: Dashboard service, database, identities, migrations, manifest, operations, APIs, SSR pages, same-origin routes, transition-only Components contract, and definition-independent Module Management controls, with root web source/build decoupling deliberately remaining for the post-closeout SDK adoption pass
 - Sprint 6D and 6E module SDK/runtime adoption: canonical module contract, runtime, UI/design-system, asset, and conformance packages plus completed Dashboard source/build independence, release-owned documents/assets, and Dashboard-only upgrade/rollback
 - Sprint 6F through 7B composition and cross-module correctness: deterministic Blueprint/lockfile/materialization operations, scoped cross-boundary authorization, typed resource lifecycle and dependency behavior, and the reusable extraction proofs that Phase 8 reruns
-- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; the post-Readiness-35 evidence-finalization correction is complete and a new full readiness/rehearsal cycle is pending
+- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; the consolidated render, exact-body authorization, joint-scope/resource-assertion, fixture, acceptance, and harness correction is implementation-level complete, while formal testing remains paused after superseded Readiness 36 and stopped Rehearsal 29
 
 ### Historical closed Sprint 6A UI baseline
 
@@ -101,13 +101,41 @@ an enrolled real Module Release/Instance. Sprint 8A applies that pathway to
 Components, which is likewise represented by its real enrollment rather than
 by a Core transition descriptor.
 
-Readiness 35 completed all 15 checks successfully but failed while publishing
-its terminal evidence because the all-pass failure inventory was empty. Its
-single `evidence-finalization` correction covers both Readiness and the same
-latent Candidate Rehearsal success path; Candidate Rehearsal 29 did not start.
-The next gap is one new source-exact Validation Readiness and Candidate
-Rehearsal cycle before preflight. The corrected Sprint 8A source now:
+Readiness 36 passed all 15 checks against clean source `3f7e32cb` and one
+verified environment, but candidate-affecting corrections now supersede that
+mutable result. Candidate Rehearsal 29 was stopped after 8 passing receipts, 3
+failed receipts, 1 interrupted optimized lane, 20 unexecuted checks, and 0
+recorded blocks. Two failed receipts were false failures from one stale
+PowerShell `$LASTEXITCODE`; the workspace failure was an invalid Component
+product-integration fixture rather than a defect in the product's correct
+invalid-input rejection. A subsequent source audit found that the Component
+render response lacked canonical typed ownership across Component and
+Dashboard, signed service receivers verified a reserialized value instead of
+exact wire bytes, the Sprint 7A common-governing-node/resource-assertion rule
+had not survived the physical extraction, and active first-party fixtures still
+normalized retired Core Component shapes. Formal testing is paused; no
+candidate, preflight, SIT, or UAT exists.
 
+The completed mutable Sprint 8A testing-entry correction now:
+
+- make the Components contract own the exact render response DTOs and
+  render-kind discriminant, return them from Component provider/product routes,
+  omit the unused Dataset provider identity, validate and consume them in
+  Dashboard, and keep the Dashboard placement renderer free of direct
+  Dataset-contract dependencies and copied response types
+- reject cross-kind visual fields and distinguish exact non-nil persistent
+  render identity from the explicit both-nil unsaved-preview identity
+- verify every affected signed Component/Core/Dataset service request against
+  its raw body before deserialization, preserving JSON media-type enforcement
+- require one common governing node across Dashboard and Component scopes and
+  grants, bind render to the exact ComponentVersion resource assertion, forward
+  only actor-authorized Dashboard scope, and redact disjoint metadata/title
+- correct the Component integration fixture's required-field declaration
+  without weakening exact product validation, and bind each PowerShell
+  child-script exit result to its own invocation
+- remove active legacy Component normalization/flat-Dataset aliases from
+  first-party permissions, smoke, and UAT inputs; keep the exact 75-scenario
+  Playwright inventory and joint-scope UAT-8A-04 mapping
 - keep Core's frozen transition catalog at exactly `tessara.forms`,
   `tessara.workflows`, `tessara.responses`, `tessara.datasets`, and
   `tessara.migration`
@@ -129,6 +157,16 @@ Rehearsal cycle before preflight. The corrected Sprint 8A source now:
   semantic authorization context
 - carry the completed pathway into the remaining Forms, Workflows, Responses,
   and Datasets extractions before broad pilot hardening
+
+The final corrected product source passed the complete all-feature workspace
+Rust suite against six freshly reset isolated databases, all-target/all-feature
+clippy with warnings denied, all-target/all-feature check, formatting, focused
+contract and integration checks, boundary and acceptance contracts, runner
+self-tests, the exact 75/75 acceptance inventory, TypeScript compilation, and
+75-test Playwright discovery. Documentation-only handoff edits are covered by
+the final static audits. These implementation results support re-entry at a new
+complete Validation Readiness; they do not authorize preflight or any later
+phase.
 
 ### Frontend transition baseline
 
@@ -1162,15 +1200,19 @@ extraction reruns the Phase 7 scope, lifecycle, outage, compatibility,
 source-ownership, package-graph, independent-image-upgrade, and rollback proofs
 against the newly physical boundary.
 
-### Sprint 8A: Component Module Separation Slice (Implementation Ready; Validation Restart Pending)
+### Sprint 8A: Component Module Separation Slice (Implementation Ready; Testing Paused)
 
-**Validation posture:** Readiness 35 retained 15 passing checks but failed
-terminal evidence publication, producing one `evidence-finalization` finding;
-Candidate Rehearsal 29 was never started. The StrictMode-safe all-pass
-classification projection supersedes that diagnostic source, including the
-same latent Rehearsal path. Start a new complete Validation Readiness and
-Candidate Rehearsal cycle against one clean source and fresh six-database
-environment identity; preflight remains closed until both pass.
+**Validation posture:** Readiness 36 passed its complete 15-check mutable gate
+against clean source `3f7e32cb`, then Rehearsal 29 was stopped with 8 passed
+receipts, 3 failed receipts, 1 interrupted lane, 20 unexecuted checks, and 0
+recorded blocks. The completed harness, fixture, render-contract, exact-body,
+authorization, acceptance-inventory, product-source, boundary-test, and
+documentation corrections are candidate-affecting and supersede Readiness 36.
+The final corrected product source passed the complete implementation-level
+suite described above. After the correction is committed cleanly, start a new
+complete Validation Readiness and a new complete Candidate Rehearsal against
+the same source and fresh six-database environment identity; preflight remains
+closed until both pass.
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 
@@ -1184,7 +1226,15 @@ environment identity; preflight remains closed until both pass.
 - create the real Component Module Release/Instance in a fresh Component database and remove the Core Component product tables, adapter, routes, and readers in the same offline cutover
 - rebuild the full disposable reference-application seed from empty through owning Core/module bootstrap contracts; create Dashboard placements directly with new Component Module Instance references and reject old `core_installation` Component references as unsupported exact-contract inputs
 - replace Component-to-Dataset database relationships with typed Core-compatibility Dataset references and versioned contracts until Dataset extraction rebuilds those references under the same Phase 8 fresh-materialization policy
-- keep Dashboard-to-Component behavior on the public contract introduced in Sprint 6C
+- keep Dashboard-to-Component behavior on the public contract introduced in
+  Sprint 6C, with exact render response DTOs and render kind owned by the
+  Components contract, returned by Component routes, and validated directly by
+  Dashboard without a renderer-to-Dataset contract edge or copied wire types;
+  enforce kind-specific fields and exact persistent/preview identity
+- bind signed Component/Core/Dataset service calls to exact raw body bytes and
+  require exact ComponentVersion resource assertion plus one common governing
+  node across Dashboard scope, Component scope, and both audience grants;
+  disjoint metadata and titles remain undisclosed
 - move Component and Dashboard seed/test ownership to their modules, rebuild all reference-application seed data in dependency order, and remove direct access to Dataset, Dashboard, or Core storage
 - add dependency outage, scope propagation, capability, and compatibility coverage
 

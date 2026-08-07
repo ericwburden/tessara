@@ -1,24 +1,35 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Candidate-affecting correction after Validation Readiness attempt 35
-failed during evidence finalization. All 15 declared checks passed with no
-blocked or skipped checks, but StrictMode rejected the empty all-pass failure
-classification projection before terminal receipt and result publication.
-Candidate Rehearsal attempt 29 never started and carried the same latent
-success-path defect. The shared classification projection and its executable
-acceptance coverage supersede attempt 35's source for authorization. Focused
-correction checks do not constitute a formal gate. A new complete Validation
-Readiness and Candidate Rehearsal cycle must use the corrected clean source and
-one shared environment identity backed by six fresh databases. No candidate
-has been frozen, and preflight, SIT, formal UAT, and closeout have not run.
+Status: Formal testing is paused by user direction. The consolidated Sprint 8A
+testing-entry correction is implemented and implementation-level verified.
+Validation Readiness attempt 36 passed all 15 checks against
+clean commit `3f7e32cb7e1948a36185a68352901b873934c0b0` and environment
+fingerprint `2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0`,
+but that mutable pass is now superseded by candidate-affecting harness,
+fixture, contract, product, and documentation corrections. Candidate Rehearsal
+attempt 29 was stopped after 8 passing receipts, 3 failed receipts, 1
+interrupted optimized lane, 20 unexecuted checks, and 0 recorded blocked
+checks. Two failed receipts were false failures produced by one stale
+`$LASTEXITCODE` harness defect; the third exposed an invalid Component
+product-integration fixture. The return-to-implementation audit then expanded
+the correction cone to canonical render-response ownership and kind/identity
+validation, exact raw-body service authorization, Dashboard/Component joint
+scope and exact resource assertion, and active first-party fixtures that still
+normalized retired Core Component shapes. Those changes join the already
+required five-entry Core transition correction and fail-late runner
+enforcement in one testing-entry implementation lineage. No current Readiness
+or Rehearsal pass exists, no candidate has been frozen, and preflight, SIT,
+formal UAT, and closeout have not run.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
 - Implementation-readiness correction input:
   `7b326838269c3b4218dd579f649a8011feba4d97`
-- Latest failed readiness diagnostic source:
-  `49c0ae73c3c82dd12b3e2fea68d53b5d497b3b74`
+- Latest superseded passing readiness and stopped rehearsal source:
+  `3f7e32cb7e1948a36185a68352901b873934c0b0`
+- Latest superseded environment fingerprint:
+  `2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Next)` and the reconciled
   Phase 8 fresh-materialization rules in `docs/roadmap.md`
@@ -206,6 +217,11 @@ Dataset reference.
 - Component exchanges the actor context through Core for the Dataset audience.
   Core authorizes the presenting Component service for the declared action;
   Dataset scope/capability checks remain provider-owned.
+- Every signed Component, Dataset-compatibility, and authorization-exchange
+  service request binds the exact transmitted body bytes. For JSON-bearing
+  calls, receivers validate the media type and verify authorization, service
+  identity, correlation, and the raw-body digest before typed deserialization.
+  Parsing and re-encoding a request is not valid signature verification.
 - Known and random unauthorized Dataset references are indistinguishable.
   Unavailable, timed out, incompatible, unauthorized/not-evaluated, missing,
   retired, and materialization-not-ready remain distinct internally and map to
@@ -240,6 +256,21 @@ Dataset reference.
   audience exchange, the configured timeout behavior at the provider boundary,
   and exact v3 contracts. Component outage remains contained to Dashboard
   placement/dependency state; unrelated routes remain healthy.
+- `tessara-components-contract` owns the one exact Table/visual render response
+  and `ComponentRenderKind`. Table and each visual kind accept only their own
+  fields and payload branch. Persistent execution requires matching non-nil
+  Component and ComponentVersion identities; unsaved preview alone uses the
+  explicit both-nil preview identity, and partial-nil identities fail closed.
+  Render output carries no unused Dataset provider reference.
+- Dashboard sends only the stored Dashboard scope authorized by its inbound
+  Dashboard grant. After resolving authorized Component metadata it exchanges
+  an exact resource assertion binding ComponentVersion type/id, authority
+  revision, and canonical Component scope. Dashboard and Component both require
+  one governing node shared by the Dashboard scope, Component scope, inbound
+  Dashboard authority, and downstream Component authority. A disjoint
+  placement is restricted before title, Component metadata, scope, or Dataset
+  identity can be projected, even for an actor separately authorized in both
+  non-overlapping scopes.
 
 ### 5. Offline fresh materialization and seed ownership
 
@@ -409,10 +440,14 @@ requires a plan amendment and user approval.
   default/range, authority, persistence, and sanitized diagnostics.
 - **AC-09:** Component stores typed Core-owned Dataset-major-line references and
   performs catalog, validation, distinct-value, compatibility, and execution
-  only through the versioned Dataset contract.
+  only through the versioned Dataset contract. Signed service-request body
+  digests are checked against the exact raw bytes before deserialization.
 - **AC-10:** Dataset scope/audience/capability, known/random nondisclosure,
   incompatible, timeout, outage, not-ready, and recovery cases pass without
-  direct database access or validation-pending writes.
+  direct database access or validation-pending writes. Dashboard-mediated
+  rendering additionally proves one common governing node across Dashboard and
+  Component scopes and grants; independent authority on disjoint scopes cannot
+  disclose or render the placement.
 - **AC-11:** Dashboard preserves Sprint 7B lifecycle/revision observation,
   findings, restricted disclosure, and recovery against Components v3. One
   executable semantic diagnostic proves three exact lifecycle findings,
@@ -443,6 +478,15 @@ requires a plan amendment and user approval.
   native/WASM/package boundaries, Playwright, source-exact materialization,
   smoke, scripted/manual UAT, failure rerun, upgrade/rollback, provenance, and
   evidence integrity pass on one frozen candidate.
+- **AC-18:** The Components contract is the sole owner of exact Table/visual
+  render responses and kind vocabulary. Wrong branch/field/kind/schema,
+  unknown fields, Dataset-provider identity, mismatched or nil persistent
+  identity, non-nil or partial-nil preview identity, and stale Component
+  resource assertions fail closed at the owning boundary.
+- **AC-19:** The active first-party clients, smoke, UAT, Playwright, and seed
+  fixtures use only exact v3 Component and typed Dataset-reference shapes. No
+  normalization helper, alias, flat Dataset-major fields, or copied-count
+  expectation preserves the retired Core payload contract.
 
 ## Traceability Matrix
 
@@ -452,6 +496,9 @@ requires a plan amendment and user approval.
 | Canonical packages; no Core/root/sibling implementation | Spec 1; AC-01/02 | 1/4 | native/WASM dependency and forbidden-source audits | UAT-8A-01/06 |
 | Module-owned admin/config/manifest/capabilities/DB/schema migrations/health/routes/assets/conformance | Specs 1–2/5; AC-01/08/12/16 | 2–6 | manifest, testkit, schema, route, asset, credential suites | UAT-8A-01/03/06 |
 | APIs/contracts/typed references only | Specs 3–4; AC-09–12 | 1/3/4 | contract, source, SQL, and credential tests | UAT-8A-04/05/06 |
+| Exact render kind/identity and raw signed bodies | Specs 3–4; AC-09/18 | 1/3/4 | contract invalid-shape matrix; raw-byte tamper; provider/consumer integration | UAT-8A-04/05/06 |
+| Joint Dashboard/Component governing scope | Spec 4; AC-10/11/18 | 3/4/6 | exact assertion, common-node, redacted projection and browser scenarios | UAT-8A-04/05 |
+| No active legacy first-party Component facade | Specs 4/7; AC-06/19 | 1/4/6 | exact source guard plus smoke/UAT/Playwright typed-reference fixtures | UAT-8A-01/04/06 |
 | Phase 8 fresh materialization and unsupported old references | Specs 5/7; AC-03–06/13 | 1/5/6 | empty bootstrap, no-op, old-input rejection, teardown/rerun | UAT-8A-02/07 |
 | Rerun scope/lifecycle/outage/compatibility/source/image/rollback | Specs 1–6; AC-10–16 | 1–6 | conformance, Playwright, smoke, upgrade/rollback | UAT-8A-04/05/06/08 |
 | Move all Component product/operational ownership | Specs 1–3/6; AC-01/02/07/08 | 2–4 | module integration and Core absence | UAT-8A-01/03 |
@@ -575,9 +622,12 @@ receipt; this implementation plan does not invent or authorize that command.
 
 Manual UAT covers eight scenarios: unchanged Component product experience;
 from-empty owner-controlled seed and new Dashboard references; configuration
-and diagnostics; Dataset contract/scope/timeout/outage; Dashboard lifecycle and
-outage behavior; source/database isolation and old-input rejection; failed
-materialization teardown plus full rerun; and Component-only upgrade/rollback.
+and diagnostics; Dataset contract/joint-scope/timeout/outage; Dashboard
+lifecycle and outage behavior; source/database isolation and old-input
+rejection; failed materialization teardown plus full rerun; and Component-only
+upgrade/rollback. The tracked Playwright acceptance inventory contains 75 exact
+scenario identities, including the shared-node success/disjoint-node redaction
+and render-denial case mapped to UAT-8A-04.
 
 ## Validation, Evidence, Freeze, Failure, And Closeout Plan
 
@@ -634,18 +684,75 @@ materialization teardown plus full rerun; and Component-only upgrade/rollback.
   deployment inputs, and implementation documentation through the ordered
   slices above.
 
-## Implementation Handoff
+## Implementation Handoff And Current Gaps
 
-All six slices, the post-attempt-28 correction, and the post-Readiness-33
-implementation completion audit are implemented on `codex/sprint-8a`. The
-handoff includes the Components v3 and Dataset v1 contracts, independent
-Component owner and store, direct Dashboard consumption, forward-only Core
-cleanup, from-empty owner seed and materialization runners, Sprint 8A
-Compose/catalog inputs, smoke contract, failure containment, Component-only
-upgrade/rollback, and the eight planned UAT scenarios.
+All six planned slices, the post-attempt-28 correction, and the
+post-Readiness-33 implementation audit had been handed to validation on
+`codex/sprint-8a`. Candidate Rehearsal 29 proved that handoff incomplete, so
+formal testing exited and the source became mutable again. The consolidated
+testing-entry correction is now implemented and implementation-level verified.
+Readiness 36 is retained as a clean prior-source pass but cannot authorize any
+downstream phase.
 
-The correction closes the source defects that repeated partial validation had
-exposed or failed to enforce:
+The consolidated testing-entry implementation correction on the mutable source
+covers:
+
+- make `tessara-components-contract` the canonical owner of the exact render
+  response DTOs and render-kind discriminant, including exact Table and Visual
+  payloads; omit the unused Dataset provider identity; and reject unknown,
+  malformed, mixed-kind, or identity-divergent responses;
+- distinguish stored execution from unsaved authoring preview: persistent
+  responses require matching non-nil Component and ComponentVersion IDs, while
+  preview alone requires both IDs to be nil; partial-nil identities are invalid;
+- return those typed responses from Component provider and product routes,
+  and make Dashboard validate and consume the same contract types directly;
+- make `tessara-dashboard-placement-renderer` depend on the Components
+  contract, with no direct Dataset-contract dependency and no private copies
+  of Component response DTOs;
+- verify the signed body digest against the exact raw request bytes before
+  deserializing Component, Core authorization-exchange, and Core Dataset
+  provider requests, while retaining explicit JSON media-type and body-size
+  enforcement;
+- restore the Sprint 7A common-governing-node rule at the physical
+  Dashboard/Component boundary: forward only actor-authorized Dashboard scope,
+  bind render exchange to the exact ComponentVersion resource assertion, make
+  Component compare it with its current row, and redact metadata/title before
+  projection when Dashboard and Component scopes are disjoint;
+- repair the Component product-integration fixture so its declared required
+  fields include every field used by its Table configuration, allowing the
+  intended provider-not-ready assertion without weakening the product's
+  correct invalid-input rejection;
+- remove active first-party Component normalization aliases and flat Dataset
+  reference fields from permissions, general smoke, and general UAT fixtures;
+  enforce exact v3 identities and typed Dataset references instead;
+- capture each PowerShell child-script result at its invocation boundary so a
+  stale `$LASTEXITCODE` cannot turn a passing boundary or Markdown audit into
+  a failed receipt, while preserving independent fail-late sibling execution,
+  exact blocked reasons, partial evidence, and one consolidated batch; and
+- retain the earlier product correction that removes Dashboard from Core's
+  canonical transition inputs: exactly five transition identities remain, and
+  Dashboard appears only through its real Release/Instance and manifest at
+  reference navigation order 9; and
+- advance boundary, integration, acceptance, and documentation expectations
+  together. The current acceptance inventory has 75 exact Playwright identities
+  and UAT-8A-04 includes the shared-node success/disjoint-node nondisclosure
+  scenario. These changes are candidate-affecting and remain formally
+  unverified until a new complete Readiness and complete Rehearsal pass on the
+  same clean source and environment identity.
+
+The final corrected product source passed the complete all-feature workspace
+Rust suite against six freshly reset isolated databases in 619.6 seconds. It
+also passed all-target/all-feature clippy with warnings denied, all-target/
+all-feature check, formatting, exact Component/Dashboard/API integration and
+contract checks, boundary and acceptance contracts, runner self-tests, 75/75
+acceptance inventory, TypeScript compilation, and 75-test Playwright discovery.
+Documentation-only handoff edits are covered by the final Markdown-link,
+boundary, acceptance-contract, formatting, and diff audits. This establishes a
+clean implementation entry point; it does not satisfy Readiness or Rehearsal
+and does not open preflight.
+
+The earlier handoff asserted the following baseline. It remains subject to the
+new complete verification cycle after the current correction batch:
 
 - Core's canonical transition inputs contain exactly `tessara.forms`,
   `tessara.workflows`, `tessara.responses`, `tessara.datasets`, and
@@ -760,20 +867,22 @@ exposed or failed to enforce:
   parameter, and exact assertion identities replace broad receipt labels.
 
 The repository-local validation protocol already stated the fail-late and
-single-batch rules. The remaining enforcement gap was executable: the rehearsal
-graph made safe static siblings depend on the fallible readiness prerequisite,
-and acceptance did not assert those independence edges. The runner now retains
-its start receipt before fallible work, keeps safe static lanes independent,
-records exact dependency reasons for genuinely blocked lanes, and permits
-correction/restart only after one consolidated harvest. Runner self-tests and
-the Sprint 8A acceptance contract enforce that graph rather than duplicating
-protocol prose.
+single-batch rules. The earlier graph correction made safe static siblings
+independent, but Rehearsal 29 exposed a separate executable gap: child
+PowerShell scripts could pass while the parent read an older native-process
+`$LASTEXITCODE`. The harness now binds each child result to its own invocation
+and retains the existing dependency graph, raw evidence, blocked-reason, and
+single-batch contracts; its executable self-test prevents the stale-exit path
+from returning.
 
-The corrected deployable and source dependency boundaries are shown in the
-two current Sprint 8A diagrams in [Tessara Architecture](../architecture.md):
-one container view and one Rust module/crate view.
+The required deployable and source dependency boundaries are shown in the two
+current Sprint 8A diagrams in [Tessara Architecture](../architecture.md): one
+container view and one Rust module/crate view. The mutable implementation and
+tracked acceptance inputs are reconciled to those contracts, but formal proof
+still starts at the next complete Readiness gate.
 
-This status authorizes only a new complete Validation Readiness run followed by
-a complete Candidate Rehearsal run against the same corrected clean source and
-environment identity. It does not assert candidate freeze, deployed
+This status authorizes implementation correction and focused diagnostic proof
+only. The next formal boundary is a new complete Validation Readiness followed
+by a new complete Candidate Rehearsal against the same corrected clean source
+and environment identity. It does not assert candidate freeze, deployed
 acceptance, preflight, SIT, formal UAT, or closeout.

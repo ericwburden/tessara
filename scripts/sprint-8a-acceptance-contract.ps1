@@ -29,6 +29,68 @@ $script:Sprint8AFixture = [ordered]@{
     }
 }
 
+function Test-Sprint8AFirstPartyComponentContractSources {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $sourceContracts = [ordered]@{
+        "end2end/tests/permissions.spec.ts" = [ordered]@{
+            forbidden = @(
+                'function\s+canonicalComponentVersionInput',
+                'function\s+canonicalComponentRequest',
+                'function\s+componentResponseAliases',
+                '(?m)^\s*dataset_version_major\s*:',
+                'versions\[0\]\s+as\s+\{\s*id:\s*string\s*\}'
+            )
+            required = @(
+                '/api/admin/components/datasets',
+                'dataset_reference: datasetReference',
+                'component_id: string;',
+                'component_version_id: string;'
+            )
+        }
+        "scripts/smoke.ps1" = [ordered]@{
+            forbidden = @(
+                '(?m)^\s*dataset_version_major\s*=',
+                '\$visualComponent\.id',
+                '\$visualVersion\.id'
+            )
+            required = @(
+                'dataset_reference = $visualDatasetReference',
+                '$visualComponent.component_id',
+                '$visualVersion.component_version_id'
+            )
+        }
+        "scripts/uat-sprint.ps1" = [ordered]@{
+            forbidden = @(
+                '(?m)^\s*dataset_version_major\s*=',
+                '\$visualCreated\.id',
+                '\$visualVersion\.id'
+            )
+            required = @(
+                'dataset_reference = $visualDatasetReference',
+                '$visualCreated.component_id',
+                '$visualVersion.component_version_id'
+            )
+        }
+    }
+    foreach ($sourcePath in $sourceContracts.Keys) {
+        $sourceText = Get-Content -LiteralPath (Join-Path $RepoRoot $sourcePath) -Raw
+        foreach ($pattern in $sourceContracts[$sourcePath].forbidden) {
+            if ($sourceText -match $pattern) {
+                throw "Sprint 8A first-party acceptance source '$sourcePath' retains a legacy Component payload or response alias matching '$pattern'."
+            }
+        }
+        foreach ($fragment in $sourceContracts[$sourcePath].required) {
+            if (-not $sourceText.Contains($fragment)) {
+                throw "Sprint 8A first-party acceptance source '$sourcePath' omits canonical Component contract fragment '$fragment'."
+            }
+        }
+    }
+}
+
 function Test-Sprint8AAcceptanceContract {
     $repoRoot = Split-Path -Parent $PSScriptRoot
     foreach ($name in @(
@@ -241,9 +303,9 @@ function Test-Sprint8AAcceptanceContract {
     $dashboardWasmText = [Text.Encoding]::ASCII.GetString(
         [IO.File]::ReadAllBytes((Join-Path $repoRoot $dashboardAssets["/dashboard.wasm"]))
     )
-    if (-not $dashboardWasmText.Contains("dataset_reference") -or
+    if ($dashboardWasmText.Contains("dataset_reference") -or
         $dashboardWasmText.Contains("dataset_version_major")) {
-        throw "Dashboard embedded WASM does not implement the canonical Components V3 Dataset reference wire contract."
+        throw "Dashboard embedded WASM retains a Dataset identity outside the canonical Component render response."
     }
     $coreIdentityRegistry = [string]$configuration.services.core.environment.TESSARA_MODULE_SERVICE_IDENTITIES | ConvertFrom-Json
     $componentIdentityRegistry = [string]$configuration.services.components.environment.TESSARA_MODULE_SERVICE_IDENTITIES | ConvertFrom-Json
@@ -354,6 +416,7 @@ function Test-Sprint8AAcceptanceContract {
             throw "Sprint 8A deployment runner '$runner' cannot bind the exact transition-catalog profile."
         }
     }
+    Test-Sprint8AFirstPartyComponentContractSources -RepoRoot $repoRoot
     $deploymentEvidenceCommonText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/sprint-6a-deployment-evidence-common.ps1") -Raw
     foreach ($requiredFragment in @(
         '$script:Sprint8ABuiltInSeedVersion = "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c"',
@@ -603,7 +666,7 @@ function Test-Sprint8AAcceptanceContract {
             "upgrade-to-candidate", "rollback-to-baseline", "restore-intended-candidate",
             "Assert-ExactDeltaPlan", "Assert-Preservation",
             "unrelated_container_image_restart_data_availability",
-            "x-tessara-module-control-key: `$moduleControlKey"
+            "x-tessara-module-control-key: `$moduleControlKey", '$smokeSucceeded = $?'
         )
     }
     foreach ($path in $upgradeContracts.Keys) {
@@ -678,6 +741,8 @@ function Test-Sprint8AAcceptanceContract {
             "Assert-RehearsalIndependentChecks", "correction_transition",
             "state/readiness failure cannot suppress useful safe evidence",
             "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
+            "Invoke-RehearsalPowerShellCheck", "Test-RehearsalPowerShellCheck",
+            "A stale native exit code falsely failed a successful PowerShell child.",
             'consumed_by_readiness.attempt -ne [int]$stateIndex.readiness.attempt',
             'consumed_by_readiness.receipt_sha256 -cne [string]$stateIndex.readiness.sha256',
             'Test-Sprint8AResultClassificationProjection',
@@ -743,6 +808,25 @@ function Test-Sprint8AAcceptanceContract {
             "Sprint8ADashboardDependencyCheckCodes", "Sprint8ADashboardDependencyActions",
             "Assert-Sprint8ADashboardDependencyEvidence", "canonical_reset_required"
         )
+        "scripts/verify-sprint-6e-boundaries.ps1" = @(
+            "tessara-dashboard-placement-renderer", "tessara-datasets-contract",
+            "pub enum ComponentRenderResponse", "pub struct ComponentTableResponse",
+            "pub struct ComponentVisualResponse", "Result<Json<ComponentRenderResponse>",
+            "serde_json::from_slice", "validate_for", "body: Bytes",
+            "require_json_content_type", "exact inbound body",
+            "ProviderResourceAssertion::Required", "ResourceAuthorizationAssertionV2",
+            "component_resource_assertion", "render_authorized_on_same_governing_node",
+            "resource_assertion_is_authorized",
+            "downstream_exchange_accepts_only_scope_authorized_resource_assertions",
+            "authorized_dashboard_scope", "dashboard_scope_node_ids: authorized_dashboard_scope",
+            "restrict_component_attempt_for_dashboard_projection",
+            "dashboard_projection_redacts_disjoint_component_metadata",
+            "editor_and_viewer_projection_use_their_independent_dashboard_capabilities",
+            "replacement_scope_must_be_nonempty_canonical_and_contained_by_dashboard_scope",
+            "Dashboard dependency refresh must apply MANAGE-capability joint-scope redaction",
+            "altered_body.body.push(b' ');",
+            "authorization must consume exact request bytes before typed JSON decoding"
+        )
         "scripts/diagnose-sprint-8a-dashboard-dependencies.ps1" = @(
             "sprint-8a-dashboard-dependency-contract.ps1",
             "Assert-Sprint8ADashboardDependencyEvidence", "harvesting_complete",
@@ -764,6 +848,18 @@ function Test-Sprint8AAcceptanceContract {
         }
     }
     $rehearsalRunnerText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/run-sprint-8a-candidate-rehearsal.ps1") -Raw
+    foreach ($powerShellChildRunner in @(
+        "scripts/run-sprint-8a-candidate-rehearsal.ps1",
+        "scripts/verify-sprint-8a-component-upgrade.ps1"
+    )) {
+        $powerShellChildRunnerText = Get-Content -LiteralPath (Join-Path $repoRoot $powerShellChildRunner) -Raw
+        if ([regex]::IsMatch(
+            $powerShellChildRunnerText,
+            '(?m)&[^\r\n]*\.ps1[^\r\n]*(?:\r?\n[ \t]*)?if[ \t]*\(\$LASTEXITCODE'
+        )) {
+            throw "Sprint 8A runner '$powerShellChildRunner' uses native LASTEXITCODE to classify a PowerShell child script."
+        }
+    }
     $attemptStartFragment = 'Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath'
     $stateLaneFragment = 'Invoke-RehearsalLane "attempt-state-prerequisite"'
     $prerequisiteLaneFragment = 'Invoke-RehearsalLane "validation-readiness-prerequisite"'

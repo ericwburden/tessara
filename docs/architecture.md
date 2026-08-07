@@ -71,7 +71,11 @@ navigation order is Scoped Records `7`, Components `8`, and Dashboard `9`.
 This view shows the current deployable and persistence boundaries. Dataset is
 still a Core-hosted transition provider; Component and Dashboard are real
 Module Releases and Module Instances and never share a database or forwarded
-module grant.
+module grant. Every signed service request binds the exact outbound body bytes.
+For JSON-bearing calls the receiver verifies the declared media type,
+authorization and service envelopes, correlation identity, and raw-body digest
+before deserializing the payload; parsing and re-encoding semantically
+equivalent JSON is not request verification.
 
 ```mermaid
 flowchart LR
@@ -117,12 +121,12 @@ flowchart LR
         gateway --> dashboards
         gateway --> scoped
 
-        dashboards -->|exchange inbound authority<br/>for Components audience| core
-        core -->|audience-bound grant| dashboards
-        dashboards -->|Component service action| components
+        dashboards -->|exchange inbound authority<br/>plus exact ComponentVersion assertion| core
+        core -->|Components-audience grant<br/>bound to resource assertion| dashboards
+        dashboards -->|exact signed body;<br/>joint governing-node scope| components
         components -->|exchange inbound authority<br/>for Dataset audience| core
         core -->|audience-bound grant| components
-        components -->|Dataset service action| dataset
+        components -->|exact signed body;<br/>Dataset service action| dataset
     end
 
     browser --> gateway
@@ -143,8 +147,18 @@ leave every unrelated container and semantic projection unchanged.
 ### Sprint 8A Rust module view
 
 Arrows are compile-time dependencies or typed contract use. In particular,
-neither extracted product depends on the root Core API or web application, and
-Dashboard does not depend on Component implementation code.
+neither extracted product depends on the root Core API or web application.
+Dashboard consumes Component implementation-neutral contracts only: its
+placement renderer uses the canonical Component execution response types from
+`tessara-components-contract`, does not depend directly on
+`tessara-datasets-contract`, and does not own copied Component response DTOs.
+The Component render envelope carries presentation data and exact Component
+identity only; it does not disclose the unused Dataset provider reference.
+Persisted execution requires non-nil Component and ComponentVersion identities
+that match the request. Unsaved authoring preview is the one explicit sentinel:
+both identities are nil and validation uses the preview-only path; a partial
+nil identity is never valid. Table and visual response branches are exact, and
+each visual kind rejects fields or payload branches owned by another kind.
 
 ```mermaid
 flowchart TB
@@ -199,7 +213,7 @@ flowchart TB
     dashboardModule --> runtime
     dashboardModule --> componentContract
     dashboardUi --> ui
-    placementRenderer --> componentContract
+    placementRenderer -->|Component execution response DTOs| componentContract
 
     composition --> contract
     testkit --> contract
@@ -307,6 +321,9 @@ Rules:
 - Core validates dependency closure, version compatibility, cycles, and explicit bindings
 - callers use generated or typed clients and stable error envelopes
 - calls carry installation, service, actor, and audience-bound scope-bound grants or Core decision receipts as appropriate
+- signed service requests digest the exact transmitted body bytes, which the
+  provider verifies before typed deserialization; a parsed-and-reserialized
+  body is not an equivalent signed request
 - commands use idempotency keys where retries are possible
 - long-running or fan-out operations expose durable job or reconciliation state
 - cross-module workflows use retry and compensation rather than distributed transactions
@@ -385,6 +402,26 @@ For browser requests, Core authenticates the server-managed session and the gate
 Core owns descendant expansion and attaches Organization and authorization revisions to grants and decisions. A module validates the relevant binding and expiry or asks Core for a fresh decision; it does not reconstruct Organization closure from product data. Short expiry bounds stale offline grants, and sensitive operations may require an online decision. Delegation, assignment ownership, and similar exceptions use explicit capability/resource-bound assertions.
 
 For service-to-service calls, modules use dedicated service identity. A context intended for one module cannot be forwarded as downstream authority: the caller exchanges it through Core for the downstream audience, preserving original actor, installation, correlation, and delegation basis while binding the presenting service and declared dependency/contract/action. Core reevaluates current role, Organization, and caller-service authority. The provider validates both the actor's scoped authority and the presenting service's permission to call that contract. Service-only grants are restricted to explicitly authorized system jobs. Modules verify all received context and enforce their own authorization.
+
+Signed service-request verification covers the exact wire body, not a typed
+round trip. For a JSON-bearing call the provider checks the media type and
+body-size boundary, verifies the authorization grant and service-request
+envelope against the raw bytes and correlation identity, and only then
+deserializes the product request. Changing whitespace, field order, or any
+other byte without issuing a matching service request therefore fails closed
+even when the JSON meaning is unchanged.
+
+Dashboard-mediated Component rendering additionally requires one common
+governing Organization node. Dashboard forwards only the intersection of the
+stored Dashboard scope and the actor's inbound Dashboard authority. Its
+Components-audience exchange carries an exact ComponentVersion resource
+assertion containing resource type, version identity, authority revision, and
+the canonical Component governing scope. Dashboard checks the common node
+against both inbound Dashboard and downstream Component grants; Component
+compares the assertion with its authoritative row and repeats the common-node
+check before Dataset execution. A disjoint Component is projected as restricted
+without title, Component metadata, scope, or Dataset identity even when the
+actor independently has authority in both non-overlapping scopes.
 
 No module receives:
 
@@ -495,6 +532,10 @@ Component currently owns:
 - versioned presentation over a Dataset major line
 - a thin Table type with last-mile projection, one saved default filter set, display labels, default sort, page size, and viewer affordances
 - chart and stat presentation types added by the current reference application
+- the exact typed Table/visual execution response, render-kind vocabulary, and
+  per-kind payload shape; persisted output carries exact non-nil Component and
+  ComponentVersion identity, while unsaved preview uses the explicit both-nil
+  preview sentinel
 
 Analytical shaping, aggregation, grouping, and bucketing remain Dataset responsibilities rather than separate table-component backends unless those module requirements are deliberately changed.
 
