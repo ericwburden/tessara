@@ -784,10 +784,10 @@ fn validate_owner_health_response(
         }
         return Ok(());
     }
-    if status != StatusCode::NO_CONTENT {
+    if status != StatusCode::OK && status != StatusCode::NO_CONTENT {
         return Err(format!("{owner} /health/ready returned HTTP {status}"));
     }
-    if !body.is_empty() {
+    if status == StatusCode::NO_CONTENT && !body.is_empty() {
         return Err(format!(
             "{owner} /health/ready did not return the exact empty body (observed {} bytes)",
             body.len()
@@ -996,10 +996,19 @@ mod tests {
     }
 
     #[test]
-    fn owner_health_contract_rejects_redirects_for_modules() {
+    fn owner_health_contract_accepts_canonical_module_readiness_responses() {
         assert!(
             validate_owner_health_response("tessara.components", StatusCode::NO_CONTENT, None, b"")
                 .is_ok()
+        );
+        assert!(
+            validate_owner_health_response(
+                "tessara.components",
+                StatusCode::OK,
+                Some("application/json"),
+                br#"{"status":"ready"}"#
+            )
+            .is_ok()
         );
         assert!(
             validate_owner_health_response(
@@ -1011,7 +1020,7 @@ mod tests {
             .is_err()
         );
         assert!(
-            validate_owner_health_response("tessara.components", StatusCode::OK, None, b"")
+            validate_owner_health_response("tessara.components", StatusCode::CREATED, None, b"")
                 .is_err()
         );
         assert!(
