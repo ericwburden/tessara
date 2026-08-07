@@ -82,6 +82,18 @@ function Test-Sprint8ARehearsalPathPattern {
     $normalizedPath -like $normalizedPattern
 }
 
+function Test-Sprint8ARehearsalDeclarationMember {
+    param(
+        [Parameter(Mandatory)]$Declaration,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($Declaration -is [Collections.IDictionary]) {
+        return ([Collections.IDictionary]$Declaration).Contains($Name)
+    }
+    return $Declaration.PSObject.Properties.Name -contains $Name
+}
+
 function Assert-Sprint8ARehearsalSchedulerDeclarations {
     param([Parameter(Mandatory)][object[]]$Checks)
 
@@ -93,12 +105,12 @@ function Assert-Sprint8ARehearsalSchedulerDeclarations {
     }
 
     foreach ($check in $Checks) {
-        if ($check.PSObject.Properties.Name -notcontains "scheduler_role" -or
+        if (-not (Test-Sprint8ARehearsalDeclarationMember -Declaration $check -Name "scheduler_role") -or
             $allowedRoles -cnotcontains [string]$check.scheduler_role) {
             throw "Candidate Rehearsal lane '$($check.name)' has an unsupported scheduler role."
         }
-        if ($check.PSObject.Properties.Name -notcontains "impact_paths" -or
-            $check.PSObject.Properties.Name -notcontains "impact_sources") {
+        if (-not (Test-Sprint8ARehearsalDeclarationMember -Declaration $check -Name "impact_paths") -or
+            -not (Test-Sprint8ARehearsalDeclarationMember -Declaration $check -Name "impact_sources")) {
             throw "Candidate Rehearsal lane '$($check.name)' omits its correction-impact contract."
         }
         $impactSources = @($check.impact_sources | ForEach-Object { [string]$_ })
@@ -875,14 +887,48 @@ function Assert-Sprint8ARehearsalTerminalAccounting {
 
 function Test-Sprint8ARehearsalTwoWaveScheduler {
     $checks = @(
-        [pscustomobject]@{ name = "lock"; depends_on = @(); command = "lock"; scheduler_role = "lifecycle"; impact_paths = @(); impact_sources = @() },
-        [pscustomobject]@{ name = "prior-pass"; depends_on = @(); command = "pass"; scheduler_role = "ordinary"; impact_paths = @("src/pass/**"); impact_sources = @() },
-        [pscustomobject]@{ name = "prior-failure"; depends_on = @("lock"); command = "fail"; scheduler_role = "ordinary"; impact_paths = @("src/fail/**"); impact_sources = @() },
-        [pscustomobject]@{ name = "impacted-dependent"; depends_on = @("prior-pass"); command = "impact"; scheduler_role = "ordinary"; impact_paths = @("src/dependent/**"); impact_sources = @() },
-        [pscustomobject]@{ name = "cleanup"; depends_on = @("lock"); command = "cleanup"; scheduler_role = "cleanup"; impact_paths = @(); impact_sources = @("environment_contract") },
-        [pscustomobject]@{ name = "cleanup-sink"; depends_on = @("cleanup"); command = "cleanup sink"; scheduler_role = "cleanup_sink"; impact_paths = @(); impact_sources = @("environment_contract") },
-        [pscustomobject]@{ name = "sink"; depends_on = @("prior-failure", "prior-pass"); command = "sink"; scheduler_role = "aggregate_sink"; impact_paths = @("src/sink/**"); impact_sources = @() }
+        [ordered]@{ name = "lock"; depends_on = @(); command = "lock"; scheduler_role = "lifecycle"; impact_paths = @(); impact_sources = @() },
+        [ordered]@{ name = "prior-pass"; depends_on = @(); command = "pass"; scheduler_role = "ordinary"; impact_paths = @("src/pass/**"); impact_sources = @() },
+        [ordered]@{ name = "prior-failure"; depends_on = @("lock"); command = "fail"; scheduler_role = "ordinary"; impact_paths = @("src/fail/**"); impact_sources = @() },
+        [ordered]@{ name = "impacted-dependent"; depends_on = @("prior-pass"); command = "impact"; scheduler_role = "ordinary"; impact_paths = @("src/dependent/**"); impact_sources = @() },
+        [ordered]@{ name = "cleanup"; depends_on = @("lock"); command = "cleanup"; scheduler_role = "cleanup"; impact_paths = @(); impact_sources = @("environment_contract") },
+        [ordered]@{ name = "cleanup-sink"; depends_on = @("cleanup"); command = "cleanup sink"; scheduler_role = "cleanup_sink"; impact_paths = @(); impact_sources = @("environment_contract") },
+        [ordered]@{ name = "sink"; depends_on = @("prior-failure", "prior-pass"); command = "sink"; scheduler_role = "aggregate_sink"; impact_paths = @("src/sink/**"); impact_sources = @() }
     )
+    if (@($checks | Where-Object { $_ -isnot [Collections.Specialized.OrderedDictionary] }).Count -gt 0) {
+        throw "Candidate Rehearsal scheduler self-test must exercise live ordered-dictionary declarations."
+    }
+    $genericDictionary = [Collections.Generic.Dictionary[string, object]]::new()
+    $genericDictionary["scheduler_role"] = "ordinary"
+    if (-not (Test-Sprint8ARehearsalDeclarationMember -Declaration $genericDictionary -Name "scheduler_role") -or
+        (Test-Sprint8ARehearsalDeclarationMember -Declaration $genericDictionary -Name "impact_paths")) {
+        throw "Candidate Rehearsal scheduler self-test must dispatch member lookup through the IDictionary interface."
+    }
+    foreach ($requiredMember in @("scheduler_role", "impact_paths", "impact_sources")) {
+        $invalidDeclaration = [ordered]@{}
+        foreach ($entry in $checks[0].GetEnumerator()) {
+            if ([string]$entry.Key -cne $requiredMember) {
+                $invalidDeclaration[[string]$entry.Key] = $entry.Value
+            }
+        }
+        $invalidChecks = @($invalidDeclaration) + @($checks | Select-Object -Skip 1)
+        $expectedFailure = if ($requiredMember -ceq "scheduler_role") {
+            "Candidate Rehearsal lane 'lock' has an unsupported scheduler role."
+        } else {
+            "Candidate Rehearsal lane 'lock' omits its correction-impact contract."
+        }
+        try {
+            Assert-Sprint8ARehearsalSchedulerDeclarations -Checks $invalidChecks
+            throw "Candidate Rehearsal scheduler self-test accepted an ordered declaration missing '$requiredMember'."
+        } catch {
+            if ($_.Exception.Message -ceq "Candidate Rehearsal scheduler self-test accepted an ordered declaration missing '$requiredMember'.") {
+                throw
+            }
+            if ($_.Exception.Message -cne $expectedFailure) {
+                throw "Candidate Rehearsal scheduler self-test rejected missing '$requiredMember' for the wrong reason: $($_.Exception.Message)"
+            }
+        }
+    }
     $priorPass = [pscustomobject]@{ path = "evidence/lanes/prior-pass.json"; sha256 = "a" * 64 }
     $source = [pscustomobject]@{
         commit = "b" * 40; tree = "c" * 40; dirty = $false; branch = "test"

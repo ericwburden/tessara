@@ -1072,6 +1072,7 @@ function Test-Sprint8AAcceptanceContract {
         )
         "scripts/sprint-8a-rehearsal-scheduler.ps1" = @(
             "Get-Sprint8ARehearsalLanePolicies", "Resolve-Sprint8ARehearsalSchedule",
+            "Test-Sprint8ARehearsalDeclarationMember", "[Collections.IDictionary]",
             "Assert-Sprint8ARehearsalScheduleContract", "Get-Sprint8AAuthenticatedRehearsalHistory",
             "Get-Sprint8ARehearsalChangedPaths", "New-Sprint8ADeferredLaneResult",
             "Get-Sprint8ARehearsalWaveBDisposition",
@@ -1079,7 +1080,9 @@ function Test-Sprint8AAcceptanceContract {
             "Test-Sprint8ARehearsalHistoryRegressionFixtures", "sprint-8a-rehearsal-history-regressions.json",
             "bounded_failure_first_two_wave", "conservative_full_harvest_fallback",
             "maximum_consecutive_deferrals_reached", "aggregate_sink_waits_for_current_attempt_prerequisites",
-            "Prior evidence is diagnostic history only"
+            "Prior evidence is diagnostic history only",
+            "scheduler self-test must exercise live ordered-dictionary declarations",
+            "scheduler self-test must dispatch member lookup through the IDictionary interface"
         )
         "scripts/materialize-sprint-8a.ps1" = @(
             '$exceptionType = $materializationError.Exception.GetType().FullName',
