@@ -1,11 +1,12 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Candidate-affecting correction after failed Validation Readiness
-attempt 34. That complete fail-late attempt retained 12 passed checks, two
-failed checks, and one blocked check: one environment-provisioning defect and
-one StrictMode materialization-harness defect. Candidate Rehearsal attempt 29
-never started. The shared property-safe Compose projection and its executable
-acceptance coverage supersede attempt 34's source for authorization. Focused
+Status: Candidate-affecting correction after Validation Readiness attempt 35
+failed during evidence finalization. All 15 declared checks passed with no
+blocked or skipped checks, but StrictMode rejected the empty all-pass failure
+classification projection before terminal receipt and result publication.
+Candidate Rehearsal attempt 29 never started and carried the same latent
+success-path defect. The shared classification projection and its executable
+acceptance coverage supersede attempt 35's source for authorization. Focused
 correction checks do not constitute a formal gate. A new complete Validation
 Readiness and Candidate Rehearsal cycle must use the corrected clean source and
 one shared environment identity backed by six fresh databases. No candidate
@@ -17,7 +18,7 @@ has been frozen, and preflight, SIT, formal UAT, and closeout have not run.
 - Implementation-readiness correction input:
   `7b326838269c3b4218dd579f649a8011feba4d97`
 - Latest failed readiness diagnostic source:
-  `c920b8a3dd1e35d5617e5f3d634eabff75499e77`
+  `49c0ae73c3c82dd12b3e2fea68d53b5d497b3b74`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Next)` and the reconciled
   Phase 8 fresh-materialization rules in `docs/roadmap.md`

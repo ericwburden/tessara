@@ -1,11 +1,12 @@
 # Sprint 8A Validation Record
 
-Status: Validation Readiness attempt 34 completed fail-late with 12 passed
-checks, two failed checks, and one blocked check. Candidate Rehearsal attempt
-29 never started. Its one consolidated environment-and-harness correction is
-candidate-affecting and supersedes attempt 34 for authorization. No current
-readiness or rehearsal pass exists, no candidate has been frozen, and
-preflight, SIT, formal UAT, and closeout remain Not Run.
+Status: Validation Readiness attempt 35 completed all 15 checks successfully
+but failed during evidence finalization before publishing a terminal receipt or
+canonical result. Candidate Rehearsal attempt 29 never started. Its one
+consolidated `evidence-finalization` correction is candidate-affecting and
+supersedes attempt 35 for authorization. No current readiness or rehearsal pass
+exists, no candidate has been frozen, and preflight, SIT, formal UAT, and
+closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -13,6 +14,53 @@ preflight, SIT, formal UAT, and closeout remain Not Run.
 - Execution contract: [Sprint 8A plan](./sprint-8a-plan.md)
 
 ## Implementation Readiness Snapshot
+
+### Validation Readiness attempt 35 evidence-finalization correction
+
+Validation Readiness attempt 35 ran against clean commit
+`49c0ae73c3c82dd12b3e2fea68d53b5d497b3b74`, tree
+`57f07e9cb39721ea994cf462c3753eb5b500b4e0`, and environment fingerprint
+`bfcbf8df8e719b581152dfd6e7ed3d74baa047417b6e1f9f10c001bd79f8efda`.
+All 15 declared checks reached terminal `passed`: zero failed, zero blocked,
+and zero skipped. The six authenticated database probes, exact 74-test
+Playwright inventory, property-safe Compose self-test, captured materializer
+WhatIf, package/metadata/link checks, and final clean-source check all passed.
+
+After the final check checkpoint, terminalization evaluated
+`$failures.classification` under StrictMode while `$failures` was empty. The
+resulting `PropertyNotFoundException` occurred before the terminal attempt
+receipt, canonical `validation-readiness-result.json`, or terminal validation
+state could be published. The last live receipt therefore remains
+non-authoritative `executing`; it is not a Readiness pass, Candidate Rehearsal
+29 remains ineligible, and preflight stays closed.
+
+The immutable start receipt SHA-256 is
+`773410def7e4e95a1fc2f5a1b3cdc6cb4e9095a8b09137b2da35b8cb7a887e7f`;
+the last live receipt SHA-256 is
+`b98435d822b14253e82638dcba907fe788c6bf01c6f824431770ba6e915f9589`.
+Every lane log, produced artifact, receipt, and state sidecar verified, and the
+attempt lock was released. The previously missing process failure is retained
+at `artifacts/sprint-8a-closeout/readiness-35/finalization-failure.log` with
+SHA-256 `55c153e41c98fa0e380573f380a035a7d50ecbefb6404ea0b32225d4057789ee`.
+
+One consolidated finding is retained at
+`artifacts/sprint-8a-closeout/attempts/readiness-35-consolidated-correction-batch.json`
+with SHA-256
+`827ffd273282c2fb149003f2625508cc27814c2c4162ad196586f1359e0ed454`.
+Its classification is `evidence-finalization`; no product assertion or product
+action failed. The bounded sibling audit found the same empty-array success
+path in Candidate Rehearsal terminalization. The correction projects nonblank
+classifications through one StrictMode-safe helper in both runners and
+self-tests empty, single, duplicate, missing, null, and multiple inputs. The
+acceptance contract enforces the helper and both runner call sites.
+
+The validation protocol already required atomic finalization and complete raw
+evidence. The enforcement gap was executable zero-failure terminalization
+coverage, so the correction belongs in runners, self-tests, and acceptance
+rather than duplicated protocol prose. Because those tracked files changed, a
+new complete Readiness result and then a complete Candidate Rehearsal result
+remain required against the same corrected clean source and environment
+identity.
 
 ### Validation Readiness attempt 34 consolidated correction
 
@@ -474,9 +522,9 @@ Additional required evidence namespaces:
 
 ## Validation Readiness
 
-- Latest completed attempt: Readiness 34 failed with 12 passed checks, two
-  failed checks, and one exact prerequisite block; its two-finding consolidated
-  correction supersedes that source for authorization.
+- Latest completed check harvest: Readiness 35 recorded 15 passes and no
+  blocks, then failed terminal evidence publication; its one
+  `evidence-finalization` correction supersedes that source for authorization.
 
 - Derived executable checklist: regenerate from the final plan, this inventory,
   source, runners, Compose profile and evidence schemas.
@@ -976,6 +1024,7 @@ Runtime chronology:
 | 2026-08-06 22:00 EDT | Readiness 34 / `compose-database-contract` | Yes | `c920b8a3` | `environment` | Fresh six-binding runner environment required; retained in the single Readiness 34 batch | Readiness 34 and all downstream phases | New complete Readiness and Rehearsal |
 | 2026-08-06 22:00 EDT | Readiness 34 / `environment-contract` | No; blocked by `compose-database-contract` | `c920b8a3` | `environment` | Exact dependency reason retained in the same batch | Readiness 34 and all downstream phases | New complete Readiness and Rehearsal |
 | 2026-08-06 22:00 EDT | Readiness 34 / `reset-dry-run` | Yes | `c920b8a3` | `harness` | Shared optional-property projection and executable self-test; retained in the same batch | Readiness 34 and all downstream phases | New complete Readiness and Rehearsal |
+| 2026-08-06 22:19 EDT | Readiness 35 / terminal evidence publication | Yes; all 15 checks passed | `49c0ae73` | `evidence-finalization` | Shared empty-result classification projection for Readiness and Rehearsal; one R35 batch | Readiness 35 and all downstream phases | New complete Readiness and Rehearsal |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.

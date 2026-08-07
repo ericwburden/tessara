@@ -130,6 +130,7 @@ Assert-Sprint8AReadinessFailLateGraph -Checks $declaredChecks
 if ($SelfTest) {
     Test-Sprint8AExclusiveValidationLock
     Test-Sprint8AAppendOnlyCorrectionConsumption
+    Test-Sprint8AResultClassificationProjection
     $simulatedState = [ordered]@{
         toolchain = "failed"
         "playwright-locked-install" = "failed"
@@ -601,6 +602,7 @@ try {
     Invoke-ReadinessCheck "runner-self-tests" "Sprint 8A validation-runner adversarial self-tests" {
         Invoke-ReadinessFailLateSubchecks -Subchecks @(
             [pscustomobject]@{ name = "compose-optional-properties"; action = { Test-Sprint8AComposeServiceProjection } }
+            [pscustomobject]@{ name = "result-classification-projection"; action = { Test-Sprint8AResultClassificationProjection } }
             [pscustomobject]@{ name = "smoke"; action = { & ./scripts/smoke-sprint-8a.ps1 -SelfTest; if (-not $?) { throw "Smoke self-test failed." } } }
             [pscustomobject]@{ name = "inventory"; action = { & ./scripts/audit-sprint-8a-deployed-inventory.ps1 -SelfTest; if (-not $?) { throw "Inventory self-test failed." } } }
             [pscustomobject]@{ name = "uat"; action = { & ./scripts/uat-sprint-8a.ps1 -SelfTest; if (-not $?) { throw "UAT self-test failed." } } }
@@ -656,7 +658,7 @@ $endedAt = [DateTimeOffset]::UtcNow
 $failures = @($checks | Where-Object state -CEQ "failed")
 $blocked = @($checks | Where-Object state -CEQ "blocked")
 $passed = $failures.Count -eq 0 -and $blocked.Count -eq 0 -and $checks.Count -eq $declaredChecks.Count
-$failureClassifications = @($failures.classification | Sort-Object -Unique)
+$failureClassifications = @(Get-Sprint8AResultClassifications -Results $failures)
 $receipt = [ordered]@{
     schema_version = 2
     sprint = "sprint-8a"

@@ -172,6 +172,7 @@ function Assert-Sprint8ANestedUatReceiptIdentity {
 if ($SelfTest) {
     Test-Sprint8AExclusiveValidationLock
     Test-RehearsalScheduler
+    Test-Sprint8AResultClassificationProjection
     $source = [pscustomobject]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "sprint-8a"
         acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
@@ -975,7 +976,7 @@ $attemptReceipt.failure_count = $failedChecks.Count
 $attemptReceipt.blocked_count = $blockedChecks.Count
 $attemptReceipt.nested_blocked_count = $nestedBlockedChecks.Count
 $attemptReceipt.nested_failure_count = $nestedFailedChecks.Count
-$failureClassifications = @(@($failedChecks.classification) + @($nestedFailedChecks.classification) | Sort-Object -Unique)
+$failureClassifications = @(Get-Sprint8AResultClassifications -Results (@($failedChecks) + @($nestedFailedChecks)))
 $attemptReceipt.classification = if ($failureClassifications.Count -eq 1) {
     [string]$failureClassifications[0]
 } else {

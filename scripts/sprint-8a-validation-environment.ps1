@@ -117,6 +117,42 @@ function Test-Sprint8AComposeServiceProjection {
     "Sprint 8A optional Compose service projection self-test passed."
 }
 
+function Get-Sprint8AResultClassifications {
+    param([AllowEmptyCollection()][object[]]$Results = @())
+
+    @($Results | ForEach-Object {
+        $classification = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_ -Name "classification"
+        if (-not [string]::IsNullOrWhiteSpace([string]$classification)) {
+            [string]$classification
+        }
+    } | Sort-Object -Unique)
+}
+
+function Test-Sprint8AResultClassificationProjection {
+    $empty = @(Get-Sprint8AResultClassifications -Results @())
+    $single = @(Get-Sprint8AResultClassifications -Results @(
+        [pscustomobject]@{ classification = "product" }
+    ))
+    $duplicates = @(Get-Sprint8AResultClassifications -Results @(
+        [pscustomobject]@{ classification = "harness" }
+        [pscustomobject]@{ classification = "harness" }
+    ))
+    $multiple = @(Get-Sprint8AResultClassifications -Results @(
+        $null
+        [pscustomobject]@{}
+        [pscustomobject]@{ classification = $null }
+        [pscustomobject]@{ classification = "product" }
+        [pscustomobject]@{ classification = "environment" }
+    ))
+    if ($empty.Count -ne 0 -or
+        ($single -join ",") -cne "product" -or
+        ($duplicates -join ",") -cne "harness" -or
+        ($multiple -join ",") -cne "environment,product") {
+        throw "Sprint 8A result-classification projection self-test failed."
+    }
+    "Sprint 8A result-classification projection self-test passed."
+}
+
 function Get-Sprint8APathSetDigest {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,

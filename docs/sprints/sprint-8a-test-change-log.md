@@ -388,3 +388,32 @@ candidate-affecting and supersede Readiness 34 for authorization. Candidate
 Rehearsal 29 remains Not Run. Focused parsing, self-test, projection, contract,
 and reset-WhatIf checks are correction evidence only; complete Readiness and
 Candidate Rehearsal gates remain required before preflight.
+
+## 2026-08-06 — Consolidated Validation Readiness 35 finalization correction
+
+Validation Readiness attempt 35 executed all 15 declared checks against clean
+commit `49c0ae73`; all 15 passed, with zero failed, blocked, or skipped checks.
+All raw logs, produced artifacts, live receipts, state bindings, and sidecars
+verified. The six-database environment, 74-test Playwright inventory, runner
+self-tests, materializer WhatIf, and final clean-source proof all passed.
+
+The gate then exited before terminal publication because StrictMode cannot
+read `.classification` from the empty all-pass failure array. The retained live
+receipt and validation state remain `executing`, and no canonical Readiness
+result was published. Candidate Rehearsal 29 did not start. The process error
+is retained at
+`artifacts/sprint-8a-closeout/readiness-35/finalization-failure.log`.
+
+One `evidence-finalization` finding, including the same latent success-path bug
+in Candidate Rehearsal, is retained at
+`artifacts/sprint-8a-closeout/attempts/readiness-35-consolidated-correction-batch.json`.
+The correction replaces empty-array member enumeration with one shared
+StrictMode-safe classification projection and adds executable empty, single,
+duplicate, missing, null, and multiple-result coverage. Readiness, Candidate
+Rehearsal, and the acceptance contract all enforce that path.
+
+The protocol already required atomic receipt finalization; missing executable
+all-pass coverage was the actual enforcement gap. These tracked runner,
+self-test, acceptance, and documentation changes are candidate-affecting and
+supersede Readiness 35. A fresh complete Readiness and Candidate Rehearsal cycle
+remains required before preflight.

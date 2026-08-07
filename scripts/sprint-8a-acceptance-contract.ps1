@@ -643,6 +643,8 @@ function Test-Sprint8AAcceptanceContract {
             "function Get-Sprint8AOptionalObjectPropertyValue",
             "function Get-Sprint8AComposeServiceProjection",
             "function Test-Sprint8AComposeServiceProjection",
+            "function Get-Sprint8AResultClassifications",
+            "function Test-Sprint8AResultClassificationProjection",
             "tessara.sprint-8a.deployment-environment-probe", "DeploymentProbe",
             "materialization_control",
             "transaction_round_trip", "canonical_server", 'identity = "$canonicalServer/',
@@ -677,7 +679,9 @@ function Test-Sprint8AAcceptanceContract {
             "state/readiness failure cannot suppress useful safe evidence",
             "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
             'consumed_by_readiness.attempt -ne [int]$stateIndex.readiness.attempt',
-            'consumed_by_readiness.receipt_sha256 -cne [string]$stateIndex.readiness.sha256'
+            'consumed_by_readiness.receipt_sha256 -cne [string]$stateIndex.readiness.sha256',
+            'Test-Sprint8AResultClassificationProjection',
+            'Get-Sprint8AResultClassifications -Results (@($failedChecks) + @($nestedFailedChecks))'
         )
         "scripts/test-sprint-validation-harvest.ps1" = @(
             "Assert-DiagnosticReceiptHeader", "Assert-MutableSourceIdentity", "Assert-EnvironmentFingerprint",
@@ -706,7 +710,9 @@ function Test-Sprint8AAcceptanceContract {
             "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
             "Publish-Sprint8AAppendOnlyJsonReceipt", '[IO.FileMode]::CreateNew',
             "candidate-rehearsal-correction-consumption", "correction_consumption_receipt",
-            '[pscustomobject]@{ name = "compose-optional-properties"; action = { Test-Sprint8AComposeServiceProjection } }'
+            '[pscustomobject]@{ name = "compose-optional-properties"; action = { Test-Sprint8AComposeServiceProjection } }',
+            '[pscustomobject]@{ name = "result-classification-projection"; action = { Test-Sprint8AResultClassificationProjection } }',
+            'Get-Sprint8AResultClassifications -Results $failures'
         )
         "scripts/uat-sprint-8a.ps1" = @(
             "MaterializationLaneReceipt", "InventoryLaneReceipt",
