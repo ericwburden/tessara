@@ -131,6 +131,13 @@ if ($SelfTest) {
     Test-Sprint8AExclusiveValidationLock
     Test-Sprint8AAppendOnlyCorrectionConsumption
     Test-Sprint8AResultClassificationProjection
+    Test-Sprint8AEnvironmentContractComparison
+    Test-Sprint8AEvidenceReferenceResolution
+    $canonicalSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    Assert-Sprint8ASourceIdentityObject -Source $canonicalSource | Out-Null
+    if ($canonicalSource.GetType().FullName -cne "System.Management.Automation.PSCustomObject") {
+        throw "Canonical Sprint 8A source identity helper did not return a PSCustomObject."
+    }
     $simulatedState = [ordered]@{
         toolchain = "failed"
         "playwright-locked-install" = "failed"
@@ -231,7 +238,7 @@ function Checkpoint-ReadinessAttempt {
     $startReceipt.predecessor_correction_authorization = $predecessorCorrectionAuthorization
     $startReceipt.correction_consumption_receipt = $correctionConsumptionReceipt
     $startReceipt.checks = @($checks)
-    $startReceipt.assertion_count = $checks.Count
+    $startReceipt.assertion_count = @($checks | Where-Object assertions_started -EQ $true).Count
     $startReceipt.failure_count = @($checks | Where-Object state -CEQ "failed").Count
     $startReceipt.blocked_count = @($checks | Where-Object state -CEQ "blocked").Count
     Publish-Sprint7AEvidence -Document $startReceipt -OutputPath $attemptPath -Overwrite | Out-Null
@@ -300,6 +307,8 @@ function Invoke-ReadinessCheck {
             command = $Command
             started_at = $null
             ended_at = [DateTimeOffset]::UtcNow.ToString("o")
+            assertions_started = $false
+            assertions_started_at = $null
             duration_ms = 0
             exit_status = $null
             state = "blocked"
@@ -323,6 +332,7 @@ function Invoke-ReadinessCheck {
         $startReceipt.assertions_started_at = $script:assertionsStartedAt.ToString("o")
     }
     $start = [DateTimeOffset]::UtcNow
+    $checkAssertionsStartedAt = $start
     $log = Join-Path $logRoot "$Name.log"
     [IO.File]::WriteAllText(
         $log,
@@ -378,6 +388,8 @@ function Invoke-ReadinessCheck {
         command = $Command
         started_at = $start.ToString("o")
         ended_at = $end.ToString("o")
+        assertions_started = $true
+        assertions_started_at = $checkAssertionsStartedAt.ToString("o")
         duration_ms = [math]::Round(($end - $start).TotalMilliseconds)
         exit_status = if ($passed) { 0 } else { 1 }
         state = if ($passed) { "passed" } else { "failed" }
@@ -425,11 +437,12 @@ try {
                     throw "The predecessor rehearsal correction authorization was already consumed; duplicate consumption is forbidden."
                 }
                 $authorizationRef = $transition.authorization
-                $authorizationPath = if ([IO.Path]::IsPathRooted([string]$authorizationRef.path)) {
-                    [IO.Path]::GetFullPath([string]$authorizationRef.path)
-                } else {
-                    [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$authorizationRef.path)))
-                }
+                $resolvedAuthorization = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$authorizationRef.path) `
+                    -AllowLegacyAbsolute
+                $authorizationPath = [string]$resolvedAuthorization.full_path
                 $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $authorizationPath
                 if ($authorizationSha -cne [string]$authorizationRef.sha256) {
                     throw "Correction authorization digest differs from the validation-state transition binding."
@@ -444,7 +457,45 @@ try {
                     [string]$authorization.predecessor_attempt_receipt.sha256 -cne [string]$script:priorState.rehearsal.sha256) {
                     throw "Correction authorization does not bind the exact failed predecessor rehearsal and one successor Readiness."
                 }
-                $relativeAuthorizationPath = [IO.Path]::GetRelativePath($repoRoot, $authorizationPath).Replace("\", "/")
+                $authorizedAttempt = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$authorization.predecessor_attempt_receipt.path) `
+                    -AllowLegacyAbsolute
+                $authorizedHarvest = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$authorization.harvest_receipt.path) `
+                    -AllowLegacyAbsolute
+                $authorizedBatch = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$authorization.defect_batch.path) `
+                    -AllowLegacyAbsolute
+                $transitionAttempt = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$transition.predecessor_rehearsal.receipt) `
+                    -AllowLegacyAbsolute
+                $transitionHarvest = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$transition.predecessor_rehearsal.harvest) `
+                    -AllowLegacyAbsolute
+                $transitionBatch = Resolve-Sprint8AEvidenceReference `
+                    -RepositoryRoot $repoRoot `
+                    -EvidenceRoot $evidenceRootPath `
+                    -Path ([string]$transition.predecessor_rehearsal.defect_batch) `
+                    -AllowLegacyAbsolute
+                if ([string]$authorizedAttempt.full_path -cne [string]$transitionAttempt.full_path -or
+                    [string]$authorizedHarvest.full_path -cne [string]$transitionHarvest.full_path -or
+                    [string]$authorizedBatch.full_path -cne [string]$transitionBatch.full_path -or
+                    (Assert-Sprint8AReceiptSidecar -Path ([string]$authorizedAttempt.full_path)) -cne [string]$authorization.predecessor_attempt_receipt.sha256 -or
+                    (Assert-Sprint8AReceiptSidecar -Path ([string]$authorizedHarvest.full_path)) -cne [string]$authorization.harvest_receipt.sha256 -or
+                    (Assert-Sprint8AReceiptSidecar -Path ([string]$authorizedBatch.full_path)) -cne [string]$authorization.defect_batch.sha256) {
+                    throw "Correction authorization prerequisite references do not match the contained failed-attempt transition and sidecars."
+                }
+                $relativeAuthorizationPath = [string]$resolvedAuthorization.path
                 $script:predecessorCorrectionAuthorization = [ordered]@{
                     path = $relativeAuthorizationPath
                     sha256 = $authorizationSha
@@ -574,6 +625,7 @@ try {
             "scripts/run-sprint-8a-failure-containment.ps1",
             "scripts/prepare-sprint-7a-uat-fixtures.ps1",
             "scripts/sprint-8a-acceptance-contract.ps1",
+            "scripts/sprint-8a-lifecycle-chain.ps1",
             "scripts/diagnose-sprint-8a-product.ps1",
             "scripts/smoke-sprint-8a.ps1",
             "scripts/audit-sprint-8a-deployed-inventory.ps1",
@@ -584,6 +636,9 @@ try {
             "scripts/run-sprint-8a-deployed-smoke.ps1",
             "scripts/run-sprint-8a-component-upgrade.ps1",
             "scripts/run-sprint-8a-candidate-rehearsal.ps1",
+            "scripts/run-sprint-8a-validation-preflight.ps1",
+            "scripts/run-sprint-8a-sit.ps1",
+            "scripts/run-sprint-8a-formal-uat.ps1",
             "scripts/validate-e2e.ps1",
             "scripts/validate-sprint-8a-readiness.ps1"
         )) {
@@ -603,6 +658,13 @@ try {
         Invoke-ReadinessFailLateSubchecks -Subchecks @(
             [pscustomobject]@{ name = "compose-optional-properties"; action = { Test-Sprint8AComposeServiceProjection } }
             [pscustomobject]@{ name = "result-classification-projection"; action = { Test-Sprint8AResultClassificationProjection } }
+            [pscustomobject]@{ name = "environment-comparison"; action = { Test-Sprint8AEnvironmentContractComparison } }
+            [pscustomobject]@{ name = "evidence-reference-containment"; action = { Test-Sprint8AEvidenceReferenceResolution } }
+            [pscustomobject]@{ name = "composition-bootstrap"; action = { & ./scripts/bootstrap-sprint-7a-composition.ps1 -SelfTest; if (-not $?) { throw "Composition bootstrap self-test failed." } } }
+            [pscustomobject]@{ name = "lifecycle-chain"; action = { . ./scripts/sprint-8a-lifecycle-chain.ps1; Test-Sprint8ALifecycleChain; if (-not $?) { throw "Lifecycle-chain self-test failed." } } }
+            [pscustomobject]@{ name = "validation-preflight"; action = { & ./scripts/run-sprint-8a-validation-preflight.ps1 -SelfTest; if (-not $?) { throw "Validation preflight self-test failed." } } }
+            [pscustomobject]@{ name = "sit"; action = { & ./scripts/run-sprint-8a-sit.ps1 -SelfTest; if (-not $?) { throw "SIT self-test failed." } } }
+            [pscustomobject]@{ name = "formal-uat"; action = { & ./scripts/run-sprint-8a-formal-uat.ps1 -SelfTest; if (-not $?) { throw "Formal UAT self-test failed." } } }
             [pscustomobject]@{ name = "smoke"; action = { & ./scripts/smoke-sprint-8a.ps1 -SelfTest; if (-not $?) { throw "Smoke self-test failed." } } }
             [pscustomobject]@{ name = "inventory"; action = { & ./scripts/audit-sprint-8a-deployed-inventory.ps1 -SelfTest; if (-not $?) { throw "Inventory self-test failed." } } }
             [pscustomobject]@{ name = "uat"; action = { & ./scripts/uat-sprint-8a.ps1 -SelfTest; if (-not $?) { throw "UAT self-test failed." } } }
@@ -689,7 +751,7 @@ $receipt = [ordered]@{
     correction_consumption_receipt = $correctionConsumptionReceipt
     declared_checks = $declaredChecks
     checks = $checks
-    assertion_count = $checks.Count
+    assertion_count = @($checks | Where-Object assertions_started -EQ $true).Count
     failure_count = $failures.Count
     blocked_count = $blocked.Count
     classification = if ($failureClassifications.Count -eq 1) { [string]$failureClassifications[0] } else { $null }

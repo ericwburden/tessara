@@ -92,6 +92,23 @@ not hide other defects. Stop dependent or destructive work whose prerequisite
 state is invalid. Retain raw logs and per-lane diagnostic receipts under a
 rehearsal namespace.
 
+Every declared lane must retain an explicit `assertions_started` boolean and,
+when true, an assertion-start timestamp. A passed lane has
+`assertions_started = true`. A failed lane records true only when its assertions
+or product actions began; a setup failure before that boundary records false
+and no assertion-start timestamp but remains failed rather than blocked. A
+blocked lane has `assertions_started = false` and no assertion-start timestamp.
+Attempt-level assertion counts count only lanes whose assertions actually
+started, never setup-only failures or terminal blocked receipts.
+
+When a retained structured child receipt provides a canonical defect
+classification, the outer lane and consolidated harvest must project that
+classification and record the structured receipt as its classification source.
+Log matching and a lane's declared default are fallbacks only; they cannot
+override a structured classification. Raw lane classifications remain
+immutable evidence even when diagnosis later consolidates several symptoms
+under one different root cause.
+
 The graph must keep every safe static or otherwise topology-independent lane
 free of the fallible state/readiness prerequisite. State, readiness, or lock
 failure blocks only work that actually requires that prerequisite or whose
@@ -124,6 +141,19 @@ every declared lane is recorded as passed, failed, or blocked with its exact
 dependency reason. A repository-owned runner or equivalent executable guard
 must reject completion, correction, and restart while any lane remains
 unaccounted for.
+
+Environment-identity comparisons must retain secret-free expected and actual
+fingerprints plus the names of changed contract sections even when comparison
+fails. A generic mismatch message by itself is not sufficient diagnostic
+evidence.
+
+New receipts persist evidence references as canonical repository-relative
+paths with forward slashes, contained by the declared evidence root. Consumers
+reject traversal and paths outside that root. To consume an already-issued
+one-use transition, a consumer may canonicalize an immutable historical
+absolute reference only when it resolves inside the same repository and
+evidence root; it must still persist every new reference canonically. This
+exception does not authorize rewriting historical evidence.
 
 After the pass, collect every discovered product, test, harness, fixture,
 acceptance-inventory, deployment, environment-contract, and evidence defect

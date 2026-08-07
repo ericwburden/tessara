@@ -1,5 +1,34 @@
 Set-StrictMode -Version Latest
 
+function ConvertTo-Sprint8ADateTimeOffset {
+    param(
+        [Parameter(Mandatory)]$Value,
+        [string]$Label = "timestamp"
+    )
+
+    if ($Value -is [DateTimeOffset]) { return [DateTimeOffset]$Value }
+    if ($Value -is [DateTime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) {
+            throw "Sprint 8A $Label has no UTC offset."
+        }
+        return [DateTimeOffset]$Value
+    }
+    $text = [string]$Value
+    if ($text -notmatch '(?:Z|[+-]\d{2}:\d{2})$') {
+        throw "Sprint 8A $Label has no UTC offset."
+    }
+    $parsed = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+        $text,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind,
+        [ref]$parsed
+    )) {
+        throw "Sprint 8A $Label is not an offset-qualified timestamp."
+    }
+    $parsed
+}
+
 function Get-Sprint8AStringSha256 {
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
 
@@ -21,6 +50,85 @@ function Get-Sprint8AFileSha256 {
         throw "Cannot hash missing Sprint 8A input '$fullPath'."
     }
     (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Resolve-Sprint8AEvidenceReference {
+    param(
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot,
+        [Parameter(Mandatory)][string]$Path,
+        [switch]$AllowLegacyAbsolute
+    )
+
+    $repository = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $evidence = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+        [IO.Path]::GetFullPath($EvidenceRoot)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repository $EvidenceRoot))
+    }
+    $candidate = if ([IO.Path]::IsPathRooted($Path)) {
+        if (-not $AllowLegacyAbsolute) {
+            throw "Sprint 8A evidence references must be repository-relative."
+        }
+        [IO.Path]::GetFullPath($Path)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repository $Path))
+    }
+    $relativeToRepository = [IO.Path]::GetRelativePath($repository, $candidate)
+    $relativeToEvidence = [IO.Path]::GetRelativePath($evidence, $candidate)
+    foreach ($relative in @($relativeToRepository, $relativeToEvidence)) {
+        if ([IO.Path]::IsPathRooted($relative) -or
+            $relative -eq ".." -or
+            $relative.StartsWith("..$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::Ordinal) -or
+            $relative.StartsWith("..$([IO.Path]::AltDirectorySeparatorChar)", [StringComparison]::Ordinal)) {
+            throw "Sprint 8A evidence reference escapes its repository evidence root."
+        }
+    }
+    [pscustomobject][ordered]@{
+        full_path = $candidate
+        path = $relativeToRepository.Replace("\", "/")
+    }
+}
+
+function Test-Sprint8AEvidenceReferenceResolution {
+    $repository = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+    $evidenceRoot = Join-Path $repository "artifacts/sprint-8a-closeout"
+    $relative = "artifacts/sprint-8a-closeout/attempts/example.json"
+    $absolute = Join-Path $repository $relative
+    $canonical = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repository `
+        -EvidenceRoot $evidenceRoot `
+        -Path $relative
+    $legacy = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repository `
+        -EvidenceRoot $evidenceRoot `
+        -Path $absolute `
+        -AllowLegacyAbsolute
+    if ([string]$canonical.path -cne $relative -or
+        [string]$legacy.path -cne $relative -or
+        [string]$canonical.full_path -cne [string]$legacy.full_path) {
+        throw "Sprint 8A canonical/legacy evidence reference resolution self-test failed."
+    }
+    foreach ($unsafe in @(
+        "../outside.json",
+        "artifacts/outside.json",
+        (Join-Path (Split-Path -Parent $repository) "outside.json")
+    )) {
+        try {
+            Resolve-Sprint8AEvidenceReference `
+                -RepositoryRoot $repository `
+                -EvidenceRoot $evidenceRoot `
+                -Path $unsafe `
+                -AllowLegacyAbsolute | Out-Null
+            throw "Evidence reference self-test accepted unsafe path '$unsafe'."
+        } catch {
+            if ($_.Exception.Message -ceq "Evidence reference self-test accepted unsafe path '$unsafe'.") { throw }
+        }
+    }
+    "Sprint 8A evidence-reference containment self-test passed."
 }
 
 function Get-Sprint8AOptionalObjectPropertyValue {
@@ -193,25 +301,51 @@ function Get-Sprint8ASourceIdentity {
     }
 
     $acceptance = Get-Sprint8APathSetDigest -RepositoryRoot $root -PathSpecs @(
-        "docs/sprints/sprint-8a-plan.md",
-        "docs/sprints/sprint-8a-verification.md",
+        ".codex/skills/tessara-sprint-validation/**",
+        ".codex/skills/tessara-validation-preflight/**",
+        ".codex/skills/tessara-sit/**",
+        ".codex/skills/tessara-uat/**",
+        "docs/sprints/sprint-8a-*.md",
         "docs/sprints/sprint-8a-uat/*.md",
-        "end2end/playwright.config.*",
-        "end2end/tests/*.spec.ts",
-        "scripts/sprint-8a-acceptance-contract.ps1",
-        "scripts/smoke-sprint-8a.ps1",
-        "scripts/uat-sprint-8a.ps1"
+        "end2end/**",
+        "crates/**/tests/**",
+        "crates/**/fixtures/**",
+        "scripts/*sprint-8a*.ps1",
+        "scripts/bootstrap-sprint-7a-composition.ps1",
+        "scripts/capture-sprint-6a-deployment-evidence.ps1",
+        "scripts/check-web-crate-boundaries.ps1",
+        "scripts/prepare-sprint-7a-uat-fixtures.ps1",
+        "scripts/run-analytics-authorization-conformance.ps1",
+        "scripts/run-module-sdk-conformance.ps1",
+        "scripts/smoke.ps1",
+        "scripts/sprint-6a-deployment-evidence-common.ps1",
+        "scripts/sprint-7a-acceptance-contract.ps1",
+        "scripts/test-sprint-validation-harvest.ps1",
+        "scripts/uat-sprint.ps1",
+        "scripts/validate-analytics-nondisclosure.ps1",
+        "scripts/validate-e2e.ps1",
+        "scripts/validate-resource-reference-nondisclosure.ps1",
+        "scripts/validate.ps1",
+        "scripts/verify-markdown-links.ps1",
+        "scripts/verify-module-sdk-*.ps1",
+        "scripts/verify-sprint-6e-boundaries.ps1"
     )
     $deployment = Get-Sprint8APathSetDigest -RepositoryRoot $root -PathSpecs @(
+        ".dockerignore",
+        "Dockerfile*",
+        "Cargo.lock",
+        "Cargo.toml",
+        "package-lock.json",
+        "package.json",
+        "tailwind.config.js",
+        "deploy/sprint-7a/**",
         "deploy/sprint-8a/**",
-        "deploy/sprint-7a/compose.yaml",
-        "deploy/sprint-7a/blueprints/**",
-        "crates/tessara-component-module/manifest.json",
-        "crates/tessara-dashboard-module/manifest.json",
-        "crates/tessara-reference-module/manifest.json"
+        "crates/*/Cargo.toml",
+        "crates/*/manifest.json",
+        "crates/*/migrations/*.sql"
     )
 
-    [ordered]@{
+    [pscustomobject][ordered]@{
         commit = $commit
         tree = $tree
         dirty = $status.Count -ne 0
@@ -219,6 +353,35 @@ function Get-Sprint8ASourceIdentity {
         acceptance_inventory_sha256 = [string]$acceptance.sha256
         deployment_inputs_sha256 = [string]$deployment.sha256
     }
+}
+
+function Assert-Sprint8ASourceIdentityObject {
+    param(
+        [Parameter(Mandatory)]$Source,
+        [switch]$RequireClean
+    )
+
+    $expectedProperties = @(
+        "commit", "tree", "dirty", "branch",
+        "acceptance_inventory_sha256", "deployment_inputs_sha256"
+    )
+    $actualProperties = @($Source.PSObject.Properties.Name | Sort-Object)
+    if (($actualProperties | ConvertTo-Json -Compress) -cne
+        (@($expectedProperties | Sort-Object) | ConvertTo-Json -Compress) -or
+        $Source.commit -isnot [string] -or [string]$Source.commit -notmatch '^[0-9a-f]{40}$' -or
+        $Source.tree -isnot [string] -or [string]$Source.tree -notmatch '^[0-9a-f]{40}$' -or
+        $Source.dirty -isnot [bool] -or
+        $Source.branch -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$Source.branch) -or
+        $Source.acceptance_inventory_sha256 -isnot [string] -or
+        [string]$Source.acceptance_inventory_sha256 -notmatch '^[0-9a-f]{64}$' -or
+        $Source.deployment_inputs_sha256 -isnot [string] -or
+        [string]$Source.deployment_inputs_sha256 -notmatch '^[0-9a-f]{64}$') {
+        throw "Sprint 8A mutable source identity has a malformed shape or value."
+    }
+    if ($RequireClean -and [bool]$Source.dirty) {
+        throw "Sprint 8A mutable source identity is dirty."
+    }
+    $Source
 }
 
 function Get-Sprint8AToolVersion {
@@ -516,10 +679,98 @@ function Get-Sprint8AEnvironmentContract {
     }
 }
 
+function Compare-Sprint8AEnvironmentContracts {
+    param(
+        [Parameter(Mandatory)]$Expected,
+        [Parameter(Mandatory)]$Actual
+    )
+
+    foreach ($candidate in @($Expected, $Actual)) {
+        if ([string]$candidate.fingerprint -notmatch '^[0-9a-f]{64}$' -or $null -eq $candidate.contract) {
+            throw "Sprint 8A environment comparison requires complete fingerprinted contracts."
+        }
+    }
+    $expectedNames = if ($Expected.contract -is [Collections.IDictionary]) {
+        @($Expected.contract.Keys | ForEach-Object { [string]$_ })
+    } else {
+        @($Expected.contract.PSObject.Properties.Name)
+    }
+    $actualNames = if ($Actual.contract -is [Collections.IDictionary]) {
+        @($Actual.contract.Keys | ForEach-Object { [string]$_ })
+    } else {
+        @($Actual.contract.PSObject.Properties.Name)
+    }
+    $sectionNames = @(@($expectedNames) + @($actualNames) | Sort-Object -Unique)
+    $sections = @($sectionNames | ForEach-Object {
+        $name = [string]$_
+        $expectedValue = if ($Expected.contract -is [Collections.IDictionary]) {
+            $Expected.contract[$name]
+        } else {
+            Get-Sprint8AOptionalObjectPropertyValue -InputObject $Expected.contract -Name $name
+        }
+        $actualValue = if ($Actual.contract -is [Collections.IDictionary]) {
+            $Actual.contract[$name]
+        } else {
+            Get-Sprint8AOptionalObjectPropertyValue -InputObject $Actual.contract -Name $name
+        }
+        $expectedSha = Get-Sprint8AStringSha256 -Text ($expectedValue | ConvertTo-Json -Depth 30 -Compress)
+        $actualSha = Get-Sprint8AStringSha256 -Text ($actualValue | ConvertTo-Json -Depth 30 -Compress)
+        [pscustomobject][ordered]@{
+            name = $name
+            expected_sha256 = $expectedSha
+            actual_sha256 = $actualSha
+            changed = $expectedSha -cne $actualSha
+        }
+    })
+    [pscustomobject][ordered]@{
+        expected_fingerprint = [string]$Expected.fingerprint
+        actual_fingerprint = [string]$Actual.fingerprint
+        matched = [string]$Expected.fingerprint -ceq [string]$Actual.fingerprint -and
+            @($sections | Where-Object changed -EQ $true).Count -eq 0
+        changed_sections = @($sections | Where-Object changed -EQ $true | ForEach-Object { [string]$_.name })
+        section_digests = $sections
+        expected_contract = $Expected.contract
+        actual_contract = $Actual.contract
+    }
+}
+
+function Test-Sprint8AEnvironmentContractComparison {
+    $expectedContract = [ordered]@{
+        schema_version = 1
+        contract = "fixture"
+        compose = [ordered]@{ normalized_config_sha256 = "a" * 64 }
+        databases = @([ordered]@{ database = "fixture" })
+    }
+    $expected = [ordered]@{
+        contract = $expectedContract
+        fingerprint = Get-Sprint8AStringSha256 -Text ($expectedContract | ConvertTo-Json -Depth 30 -Compress)
+    }
+    $equal = Compare-Sprint8AEnvironmentContracts -Expected $expected -Actual $expected
+    $changedContract = [ordered]@{
+        schema_version = 1
+        contract = "fixture"
+        compose = [ordered]@{ normalized_config_sha256 = "b" * 64 }
+        databases = @([ordered]@{ database = "fixture" })
+    }
+    $changed = [ordered]@{
+        contract = $changedContract
+        fingerprint = Get-Sprint8AStringSha256 -Text ($changedContract | ConvertTo-Json -Depth 30 -Compress)
+    }
+    $different = Compare-Sprint8AEnvironmentContracts -Expected $expected -Actual $changed
+    if (-not [bool]$equal.matched -or @($equal.changed_sections).Count -ne 0 -or
+        [bool]$different.matched -or (@($different.changed_sections) -join ",") -cne "compose") {
+        throw "Sprint 8A environment contract comparison self-test failed."
+    }
+    "Sprint 8A environment contract comparison self-test passed."
+}
+
 function Assert-Sprint8AReceiptSidecar {
     param([Parameter(Mandatory)][string]$Path)
 
     $fullPath = [IO.Path]::GetFullPath($Path)
+    if ($null -ne (Get-Command Repair-Sprint7AEvidencePublication -ErrorAction SilentlyContinue)) {
+        Repair-Sprint7AEvidencePublication -Path $fullPath
+    }
     $sidecarPath = "$fullPath.sha256"
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf) -or
         -not (Test-Path -LiteralPath $sidecarPath -PathType Leaf)) {

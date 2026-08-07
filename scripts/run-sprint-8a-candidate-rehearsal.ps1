@@ -195,20 +195,10 @@ function Assert-Sprint8ANestedUatReceiptIdentity {
         throw "Nested UAT diagnostic receipt is not the exact non-authoritative Sprint 8A receipt for this attempt/environment."
     }
 
-    $expectedSourceProperties = @(
-        "commit", "tree", "dirty", "branch",
-        "acceptance_inventory_sha256", "deployment_inputs_sha256"
-    )
     foreach ($candidate in @($Receipt.mutable_source_identity, $ExpectedSource)) {
-        $actualProperties = @($candidate.PSObject.Properties.Name | Sort-Object)
-        if (($actualProperties | ConvertTo-Json -Compress) -cne
-            (@($expectedSourceProperties | Sort-Object) | ConvertTo-Json -Compress) -or
-            $candidate.commit -isnot [string] -or [string]$candidate.commit -notmatch '^[0-9a-f]{40}$' -or
-            $candidate.tree -isnot [string] -or [string]$candidate.tree -notmatch '^[0-9a-f]{40}$' -or
-            $candidate.dirty -isnot [bool] -or $candidate.dirty -ne $false -or
-            $candidate.branch -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$candidate.branch) -or
-            $candidate.acceptance_inventory_sha256 -isnot [string] -or [string]$candidate.acceptance_inventory_sha256 -notmatch '^[0-9a-f]{64}$' -or
-            $candidate.deployment_inputs_sha256 -isnot [string] -or [string]$candidate.deployment_inputs_sha256 -notmatch '^[0-9a-f]{64}$') {
+        try {
+            Assert-Sprint8ASourceIdentityObject -Source $candidate -RequireClean | Out-Null
+        } catch {
             throw "Nested UAT diagnostic receipt carries a malformed or dirty mutable source identity."
         }
     }
@@ -218,11 +208,96 @@ function Assert-Sprint8ANestedUatReceiptIdentity {
     }
 }
 
+function Resolve-LaneClassification {
+    param(
+        [Parameter(Mandatory)][string]$Default,
+        [AllowEmptyString()][string]$Detail,
+        [AllowNull()][string]$StructuredClassification
+    )
+
+    $allowed = @(
+        "preflight/setup", "product", "harness", "environment", "flaky",
+        "evidence-finalization", "product-decision"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($StructuredClassification)) {
+        if ($allowed -cnotcontains $StructuredClassification) {
+            throw "Structured rehearsal failure classification '$StructuredClassification' is unsupported."
+        }
+        return [pscustomobject][ordered]@{
+            classification = $StructuredClassification
+            source = "structured_evidence"
+        }
+    }
+    if ($Detail -match '(?i)PropertyNotFoundException|ParameterBindingException|cannot be found that matches parameter name|malformed or dirty mutable source identity|receipt SHA-256 sidecar|Failure-containment artifact sidecar|declared digest does not match|runner .* does not parse') {
+        return [pscustomobject][ordered]@{ classification = "harness"; source = "failure_detail" }
+    }
+    if ($Detail -match '(?i)Required Sprint 8A tool .* unavailable|Docker daemon is not running|Cannot connect to the Docker daemon|Authenticated database probe failed|connection refused while probing required') {
+        return [pscustomobject][ordered]@{ classification = "environment"; source = "failure_detail" }
+    }
+    if ($allowed -cnotcontains $Default) {
+        throw "Declared rehearsal failure classification '$Default' is unsupported."
+    }
+    [pscustomobject][ordered]@{ classification = $Default; source = "declared_default" }
+}
+
+function Get-RehearsalStructuredClassification {
+    param([Parameter(Mandatory)][string]$Name)
+
+    if ($Name -ceq "failure-containment-successor-health" -and
+        (Test-Path -LiteralPath $failureContainmentResult -PathType Leaf)) {
+        $receipt = Get-Content -LiteralPath $failureContainmentResult -Raw | ConvertFrom-Json
+        return [string]$receipt.original_defect.classification
+    }
+    if ($Name -ceq "source-exact-materialization-no-op") {
+        $failureReceipt = Join-Path $attemptRoot "materialization/attempt-$Attempt/materialization-failure.json"
+        if (Test-Path -LiteralPath $failureReceipt -PathType Leaf) {
+            $receipt = Get-Content -LiteralPath $failureReceipt -Raw | ConvertFrom-Json
+            if ($receipt.failure.PSObject.Properties.Name -contains "classification") {
+                return [string]$receipt.failure.classification
+            }
+        }
+    }
+    if ($Name -ceq "uat-diagnostics" -and (Test-Path -LiteralPath $uatResult -PathType Leaf)) {
+        $receipt = Get-Content -LiteralPath $uatResult -Raw | ConvertFrom-Json
+        if ([int]$receipt.harness_failure_count -gt 0 -and [int]$receipt.semantic_failure_count -eq 0) {
+            return "harness"
+        }
+    }
+    $null
+}
+
+function Test-RehearsalClassificationResolution {
+    $structured = Resolve-LaneClassification -Default "product" -Detail "" -StructuredClassification "harness"
+    $property = Resolve-LaneClassification -Default "environment" -Detail "System.Management.Automation.PropertyNotFoundException" -StructuredClassification $null
+    $environment = Resolve-LaneClassification -Default "product" -Detail "Docker daemon is not running" -StructuredClassification $null
+    $fallback = Resolve-LaneClassification -Default "product" -Detail "ordinary assertion mismatch" -StructuredClassification $null
+    if ([string]$structured.classification -cne "harness" -or [string]$structured.source -cne "structured_evidence" -or
+        [string]$property.classification -cne "harness" -or
+        [string]$environment.classification -cne "environment" -or
+        [string]$fallback.classification -cne "product" -or [string]$fallback.source -cne "declared_default") {
+        throw "Rehearsal classification precedence self-test failed."
+    }
+    try {
+        Resolve-LaneClassification -Default "product" -Detail "" -StructuredClassification "validation_only_fault_injection" | Out-Null
+        throw "Rehearsal classification self-test accepted an unsupported structured classification."
+    } catch {
+        if ($_.Exception.Message -ceq "Rehearsal classification self-test accepted an unsupported structured classification.") { throw }
+    }
+}
+
 if ($SelfTest) {
     Test-Sprint8AExclusiveValidationLock
     Test-RehearsalScheduler
     Test-RehearsalPowerShellCheck
+    Test-RehearsalClassificationResolution
     Test-Sprint8AResultClassificationProjection
+    Test-Sprint8AEnvironmentContractComparison
+    Test-Sprint8AEvidenceReferenceResolution
+    $canonicalSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    Assert-Sprint8ASourceIdentityObject -Source $canonicalSource | Out-Null
+    if ($canonicalSource.GetType().FullName -cne "System.Management.Automation.PSCustomObject") {
+        throw "Canonical Sprint 8A source identity helper did not return a PSCustomObject."
+    }
     $source = [pscustomobject]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "sprint-8a"
         acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
@@ -316,6 +391,7 @@ $smokeSuccessor = Join-Path $attemptRoot "smoke-successor.json"
 $productDiagnosticEvidence = Join-Path $attemptRoot "product-diagnostic.json"
 $productDiagnosticRawEvidence = "$productDiagnosticEvidence.dashboard-dependencies.json"
 $uatResult = Join-Path $attemptRoot "uat-diagnostics.json"
+$finalEnvironmentEvidence = Join-Path $attemptRoot "final-environment-identity.json"
 
 $declaredChecks = @(
     [ordered]@{ name = "attempt-state-prerequisite"; depends_on = @(); command = "validate active-attempt lock and current readiness transition"; classification = "preflight/setup"; evidence_paths = @() },
@@ -348,7 +424,7 @@ $declaredChecks = @(
     [ordered]@{ name = "live-product-diagnostics"; depends_on = @("deployment-evidence", "product-smoke"); command = "diagnose-sprint-8a-product.ps1 non-acceptance semantic product diagnostic before canonical successor reset"; classification = "product"; evidence_paths = @($productDiagnosticEvidence, $productDiagnosticRawEvidence, "$productDiagnosticRawEvidence.sha256") },
     [ordered]@{ name = "uat-diagnostics"; depends_on = @("validation-readiness-prerequisite"); command = "uat-sprint-8a.ps1 project exact eight-scenario results from every terminal prerequisite receipt"; classification = "harness"; evidence_paths = @($uatResult); nested_results_path = $uatResult },
     [ordered]@{ name = "final-clean-source"; depends_on = @("validation-readiness-prerequisite"); command = "final unchanged clean source identity"; classification = "product"; evidence_paths = @() },
-    [ordered]@{ name = "final-environment-identity"; depends_on = @("validation-readiness-prerequisite"); command = "final authenticated unchanged environment identity"; classification = "environment"; evidence_paths = @() },
+    [ordered]@{ name = "final-environment-identity"; depends_on = @("validation-readiness-prerequisite"); command = "final authenticated unchanged environment identity"; classification = "environment"; evidence_paths = @($finalEnvironmentEvidence) },
     [ordered]@{ name = "final-successor-health"; depends_on = @("failure-containment-successor-health"); command = "final canonical successor gateway health"; classification = "product"; evidence_paths = @() }
 )
 Assert-RehearsalGraph -Checks $declaredChecks
@@ -372,7 +448,7 @@ $runtimeContext = [ordered]@{
     launch_authorized = $false
     source_verification_state = "unverified"
     source_verification_failure = $null
-    environment = [ordered]@{ fingerprint = "0" * 64; verified = $false; verification_state = "unverified" }
+    environment = [ordered]@{ fingerprint = "0" * 64; contract = $null; verified = $false; verification_state = "unverified" }
 }
 
 $startedAt = [DateTimeOffset]::UtcNow
@@ -414,13 +490,6 @@ $terminalChecks = [Collections.Generic.List[object]]::new()
 $terminalByName = @{}
 $assertionsStartedAt = $null
 
-function Resolve-LaneClassification {
-    param([string]$Default, [string]$Detail)
-    if ($Detail -match '(?i)Required Sprint 8A tool .* unavailable|Docker daemon is not running|Cannot connect to the Docker daemon|Authenticated database probe failed|connection refused while probing required') { return "environment" }
-    if ($Detail -match '(?i)ParameterBindingException|cannot be found that matches parameter name|receipt SHA-256 sidecar|Failure-containment artifact sidecar|declared digest does not match|runner .* does not parse') { return "harness" }
-    $Default
-}
-
 function Invoke-RehearsalLane {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -436,7 +505,8 @@ function Invoke-RehearsalLane {
         $blocked = [pscustomobject][ordered]@{
             name = $Name; depends_on = @($declaration[0].depends_on); command = [string]$declaration[0].command
             started_at = $null; ended_at = [DateTimeOffset]::UtcNow.ToString("o"); duration_ms = 0; exit_status = $null
-            state = "blocked"; classification = [string]$declaration[0].classification
+            assertions_started = $false; assertions_started_at = $null
+            state = "blocked"; classification = [string]$declaration[0].classification; classification_source = "declared_dependency_category"
             dependency_reason = "blocked by failed prerequisite(s): $($failedDependencies -join ', ')"
             evidence_path = $null; evidence_sha256 = $null; produced_evidence = @(); failure_message = $null
             nested_blocked_checks = @(); nested_failed_checks = @()
@@ -459,6 +529,7 @@ function Invoke-RehearsalLane {
         Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath -Overwrite | Out-Null
     }
     $start = [DateTimeOffset]::UtcNow
+    $laneAssertionsStartedAt = $start
     $logPath = Join-Path $logRoot "$Name.log"
     $laneReceiptPath = Join-Path $laneRoot "$Name.json"
     [IO.File]::WriteAllText(
@@ -472,7 +543,8 @@ function Invoke-RehearsalLane {
         result = [ordered]@{
             name = $Name; depends_on = @($declaration[0].depends_on); command = [string]$declaration[0].command
             started_at = $start.ToString("o"); ended_at = $null; duration_ms = $null; exit_status = $null
-            state = "executing"; classification = $null; dependency_reason = $null
+            assertions_started = $true; assertions_started_at = $laneAssertionsStartedAt.ToString("o")
+            state = "executing"; classification = $null; classification_source = $null; dependency_reason = $null
             evidence_path = [IO.Path]::GetRelativePath($repoRoot, $logPath).Replace("\", "/")
             evidence_sha256 = $null; produced_evidence = @(); failure_message = $null
             nested_blocked_checks = @(); nested_failed_checks = @()
@@ -670,11 +742,33 @@ function Invoke-RehearsalLane {
             sha256 = Get-Sprint8AFileSha256 -Path $_
         }
     })
+    $classificationResolution = $null
+    if (-not $passed) {
+        try {
+            $structuredClassification = Get-RehearsalStructuredClassification -Name $Name
+            $classificationResolution = Resolve-LaneClassification `
+                -Default ([string]$declaration[0].classification) `
+                -Detail $detailTail `
+                -StructuredClassification $structuredClassification
+        } catch {
+            [IO.File]::AppendAllText(
+                $logPath,
+                "[$([DateTimeOffset]::UtcNow.ToString('o'))] classification_projection_failure`n$($_ | Out-String)`n",
+                [Text.UTF8Encoding]::new($false)
+            )
+            $classificationResolution = [pscustomobject][ordered]@{
+                classification = "harness"
+                source = "classification_projection_failure"
+            }
+        }
+    }
     $entry = [pscustomobject][ordered]@{
         name = $Name; depends_on = @($declaration[0].depends_on); command = [string]$declaration[0].command
         started_at = $start.ToString("o"); ended_at = $end.ToString("o"); duration_ms = [math]::Round(($end - $start).TotalMilliseconds)
+        assertions_started = $true; assertions_started_at = $laneAssertionsStartedAt.ToString("o")
         exit_status = if ($passed) { 0 } else { 1 }; state = if ($passed) { "passed" } else { "failed" }
-        classification = if ($passed) { $null } else { Resolve-LaneClassification -Default ([string]$declaration[0].classification) -Detail $detailTail }
+        classification = if ($passed) { $null } else { [string]$classificationResolution.classification }
+        classification_source = if ($passed) { $null } else { [string]$classificationResolution.source }
         dependency_reason = $null
         evidence_path = [IO.Path]::GetRelativePath($repoRoot, $logPath).Replace("\", "/")
         evidence_sha256 = Get-Sprint8AFileSha256 -Path $logPath
@@ -835,6 +929,7 @@ try {
         $runtimeContext.readiness = $validatedReadiness
         $runtimeContext.readiness_sha256 = $validatedReadinessSha
         $runtimeContext.environment.fingerprint = [string]$validatedEnvironment.fingerprint
+        $runtimeContext.environment.contract = $validatedEnvironment
         $runtimeContext.environment.verified = $true
         $runtimeContext.environment.verification_state = "verified"
         $attemptReceipt.mutable_source_identity = $source
@@ -1002,11 +1097,38 @@ try {
         $finalSource | ConvertTo-Json -Depth 10
     }
     Invoke-RehearsalLane "final-environment-identity" {
-        $finalEnvironment = Get-Sprint8AEnvironmentContract -RepositoryRoot $repoRoot -EvidenceRoot $EvidenceRoot -ProbeDatabases
-        if ([string]$finalEnvironment.fingerprint -cne [string]$runtimeContext.environment.fingerprint) {
-            throw "Candidate rehearsal changed the canonical environment fingerprint."
+        try {
+            $finalEnvironment = Get-Sprint8AEnvironmentContract -RepositoryRoot $repoRoot -EvidenceRoot $EvidenceRoot -ProbeDatabases
+            $comparison = Compare-Sprint8AEnvironmentContracts `
+                -Expected $runtimeContext.environment.contract `
+                -Actual $finalEnvironment
+            $comparisonReceipt = [ordered]@{
+                schema_version = 1
+                sprint = "sprint-8a"
+                phase = "candidate-rehearsal-final-environment"
+                attempt = $Attempt
+                authoritative = $false
+                recomputation_error = $null
+                comparison = $comparison
+            }
+            Publish-Sprint7AEvidence -Document $comparisonReceipt -OutputPath $finalEnvironmentEvidence | Out-Null
+        } catch {
+            $comparisonReceipt = [ordered]@{
+                schema_version = 1
+                sprint = "sprint-8a"
+                phase = "candidate-rehearsal-final-environment"
+                attempt = $Attempt
+                authoritative = $false
+                recomputation_error = $_.Exception.Message
+                comparison = $null
+            }
+            Publish-Sprint7AEvidence -Document $comparisonReceipt -OutputPath $finalEnvironmentEvidence | Out-Null
+            throw
         }
-        [ordered]@{ environment_fingerprint = $finalEnvironment.fingerprint } | ConvertTo-Json -Depth 10
+        if (-not [bool]$comparison.matched) {
+            throw "Candidate rehearsal changed the canonical environment fingerprint from $($comparison.expected_fingerprint) to $($comparison.actual_fingerprint); changed sections: $(@($comparison.changed_sections) -join ', ')."
+        }
+        $comparison | ConvertTo-Json -Depth 30
     }
     Invoke-RehearsalLane "final-successor-health" {
         $health = Invoke-RestMethod -Uri "http://127.0.0.1:8088/health" -Method Get
@@ -1029,7 +1151,7 @@ $passed = $terminalChecks.Count -eq $declaredChecks.Count -and
     $nestedFailedChecks.Count -eq 0
 $attemptReceipt.state = if ($passed) { "passed" } else { "failed" }
 $attemptReceipt.ended_at = $endedAt.ToString("o")
-$attemptReceipt.assertion_count = $terminalChecks.Count
+$attemptReceipt.assertion_count = @($terminalChecks | Where-Object assertions_started -EQ $true).Count
 $attemptReceipt.failure_count = $failedChecks.Count
 $attemptReceipt.blocked_count = $blockedChecks.Count
 $attemptReceipt.nested_blocked_count = $nestedBlockedChecks.Count
@@ -1147,7 +1269,12 @@ if (-not $passed) {
         if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }
         throw "Sprint 8A Candidate Rehearsal launch was rejected by the active-attempt/state prerequisite. Safe independent evidence and one consolidated batch were retained, but no correction authorization was issued and validation-state was not overwritten."
     }
-    & (Join-Path $PSScriptRoot "test-sprint-validation-harvest.ps1") -AttemptPath $attemptPath -HarvestPath $harvestPath -DefectBatchPath $batchPath -CorrectionAuthorizationPath $correctionAuthorizationPath
+    & (Join-Path $PSScriptRoot "test-sprint-validation-harvest.ps1") `
+        -AttemptPath $attemptPath `
+        -HarvestPath $harvestPath `
+        -DefectBatchPath $batchPath `
+        -CorrectionAuthorizationPath $correctionAuthorizationPath `
+        -EvidenceRoot $evidenceRootPath
     if (-not $?) { throw "Candidate rehearsal harvesting could not authorize the consolidated correction batch." }
     $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $correctionAuthorizationPath
     $correctionTransition = [ordered]@{
@@ -1182,7 +1309,7 @@ $result = [ordered]@{
     mutable_source_identity = $source; environment_fingerprint = [string]$runtimeContext.environment.fingerprint
     prerequisite_receipts = @([ordered]@{ path = [IO.Path]::GetRelativePath($repoRoot, $readinessPath).Replace("\", "/"); sha256 = [string]$runtimeContext.readiness_sha256 })
     attempt_receipt = [ordered]@{ path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/"); sha256 = $attemptSha }
-    checks = $terminalChecks; assertion_count = $terminalChecks.Count; failure_count = 0; blocked_count = 0; nested_blocked_count = 0; nested_failure_count = 0
+    checks = $terminalChecks; assertion_count = @($terminalChecks | Where-Object assertions_started -EQ $true).Count; failure_count = 0; blocked_count = 0; nested_blocked_count = 0; nested_failure_count = 0
     classification = $null; invalidation_decision = "none"; cleanup_restoration = $attemptReceipt.cleanup_restoration
 }
 Publish-Sprint7AEvidence -Document $result -OutputPath $resultPath -Overwrite | Out-Null

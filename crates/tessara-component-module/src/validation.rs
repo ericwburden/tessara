@@ -28,7 +28,6 @@ impl ConfigFinding {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ComponentFilterConfig {
-    #[serde(alias = "field")]
     field_key: String,
     operator: String,
     #[serde(default)]
@@ -44,28 +43,10 @@ struct ComponentSortConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(untagged)]
-enum ComponentFieldRef {
-    Key(String),
-    FieldKey { field_key: String },
-    ObjectKey { key: String },
-}
-
-impl ComponentFieldRef {
-    fn field_key(&self) -> &str {
-        match self {
-            Self::Key(key) => key,
-            Self::FieldKey { field_key } => field_key,
-            Self::ObjectKey { key } => key,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TableComponentConfig {
     #[serde(default)]
-    visible_columns: Vec<ComponentFieldRef>,
+    visible_columns: Vec<String>,
     #[serde(default)]
     filters: Vec<ComponentFilterConfig>,
     #[serde(default)]
@@ -268,12 +249,7 @@ pub(super) fn required_field_keys(component_type: &str, config: &Value) -> BTree
             let Ok(config) = serde_json::from_value::<TableComponentConfig>(config.clone()) else {
                 return keys;
             };
-            keys.extend(
-                config
-                    .visible_columns
-                    .iter()
-                    .map(|field| field.field_key().to_string()),
-            );
+            keys.extend(config.visible_columns.iter().cloned());
             keys.extend(config.filters.iter().map(|filter| filter.field_key.clone()));
             keys.extend(config.search_fields);
             if let Some(sort) = config.default_sort {
@@ -380,20 +356,12 @@ fn validate_table(value: &Value, fields: &[DatasetFieldContract]) -> Vec<ConfigF
     let known = field_map(fields);
     let mut visible = BTreeSet::new();
     for column in &config.visible_columns {
-        require_field(
-            &known,
-            column.field_key(),
-            "config.visible_columns",
-            &mut findings,
-        );
-        if !visible.insert(column.field_key()) {
+        require_field(&known, column, "config.visible_columns", &mut findings);
+        if !visible.insert(column.as_str()) {
             findings.push(ConfigFinding::new(
                 "config.field.duplicate",
                 Some("config.visible_columns".into()),
-                format!(
-                    "Dataset field '{}' is selected more than once",
-                    column.field_key()
-                ),
+                format!("Dataset field '{}' is selected more than once", column),
             ));
         }
     }
@@ -847,6 +815,18 @@ mod tests {
             .iter()
             .any(|finding| finding.code == "config.page_size.out_of_range")
         );
+        for retired_alias in [
+            json!({"visible_columns":[{"key":"label"}]}),
+            json!({"visible_columns":[{"field_key":"label"}]}),
+            json!({"visible_columns":["label"],"filters":[{"field":"label","operator":"equals","value":"example"}]}),
+        ] {
+            assert!(
+                validate_component_config("table", &retired_alias, &fields())
+                    .iter()
+                    .any(|finding| finding.code == "config.invalid"),
+                "retired configuration alias was accepted: {retired_alias}"
+            );
+        }
     }
 
     #[test]

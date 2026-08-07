@@ -17,7 +17,7 @@
         "platform": "linux",
         "architecture": "amd64",
         "command": [
-          "/app/dashboard-module",
+          "/usr/local/bin/dashboard-module",
           "serve"
         ]
       },
@@ -27,7 +27,7 @@
         "platform": "linux",
         "architecture": "amd64",
         "command": [
-          "/app/dashboard-module",
+          "/usr/local/bin/dashboard-module",
           "migrate"
         ]
       },

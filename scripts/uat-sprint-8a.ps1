@@ -24,6 +24,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-acceptance-contract.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-dashboard-dependency-contract.ps1")
 
 $scenarioDependencies = [ordered]@{
@@ -318,20 +319,10 @@ function Assert-LaneReceiptObject {
         [string]$Receipt.result.name -cne $ExpectedName) {
         throw "Lane '$ExpectedName' is not one terminal receipt for this rehearsal attempt/environment."
     }
-    $expectedSourceProperties = @(
-        "commit", "tree", "dirty", "branch",
-        "acceptance_inventory_sha256", "deployment_inputs_sha256"
-    )
     foreach ($candidate in @($Receipt.mutable_source_identity, $ExpectedSource)) {
-        $actualProperties = @($candidate.PSObject.Properties.Name | Sort-Object)
-        if (($actualProperties | ConvertTo-Json -Compress) -cne
-            (@($expectedSourceProperties | Sort-Object) | ConvertTo-Json -Compress) -or
-            $candidate.commit -isnot [string] -or [string]$candidate.commit -notmatch '^[0-9a-f]{40}$' -or
-            $candidate.tree -isnot [string] -or [string]$candidate.tree -notmatch '^[0-9a-f]{40}$' -or
-            $candidate.dirty -isnot [bool] -or $candidate.dirty -ne $false -or
-            $candidate.branch -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$candidate.branch) -or
-            $candidate.acceptance_inventory_sha256 -isnot [string] -or [string]$candidate.acceptance_inventory_sha256 -notmatch '^[0-9a-f]{64}$' -or
-            $candidate.deployment_inputs_sha256 -isnot [string] -or [string]$candidate.deployment_inputs_sha256 -notmatch '^[0-9a-f]{64}$') {
+        try {
+            Assert-Sprint8ASourceIdentityObject -Source $candidate -RequireClean | Out-Null
+        } catch {
             throw "Lane '$ExpectedName' carries a malformed or dirty mutable source identity."
         }
     }
@@ -340,16 +331,29 @@ function Assert-LaneReceiptObject {
         throw "Lane '$ExpectedName' is not bound to the current clean source identity."
     }
     $state = [string]$Receipt.result.state
-    $ended = [DateTimeOffset]::Parse([string]$Receipt.result.ended_at)
+    if ($Receipt.result.PSObject.Properties.Name -notcontains "assertions_started" -or
+        $Receipt.result.assertions_started -isnot [bool] -or
+        $Receipt.result.PSObject.Properties.Name -notcontains "assertions_started_at") {
+        throw "Lane '$ExpectedName' omits its assertion-start boundary."
+    }
+    $ended = ConvertTo-Sprint8ADateTimeOffset -Value $Receipt.result.ended_at -Label "UAT prerequisite end"
     if ($state -ceq "blocked") {
         if ($null -ne $Receipt.result.exit_status -or
             -not [string]::IsNullOrWhiteSpace([string]$Receipt.result.started_at) -or
+            [bool]$Receipt.result.assertions_started -or
+            -not [string]::IsNullOrWhiteSpace([string]$Receipt.result.assertions_started_at) -or
             [string]::IsNullOrWhiteSpace([string]$Receipt.result.dependency_reason)) {
             throw "Blocked lane '$ExpectedName' does not retain its exact dependency reason."
         }
     } elseif ($state -in @("passed", "failed")) {
-        $started = [DateTimeOffset]::Parse([string]$Receipt.result.started_at)
-        if ($ended -lt $started -or
+        $started = ConvertTo-Sprint8ADateTimeOffset -Value $Receipt.result.started_at -Label "UAT prerequisite start"
+        $assertionsStarted = ConvertTo-Sprint8ADateTimeOffset `
+            -Value $Receipt.result.assertions_started_at `
+            -Label "UAT prerequisite assertion start"
+        if (-not [bool]$Receipt.result.assertions_started -or
+            $ended -lt $started -or
+            $assertionsStarted -lt $started -or
+            $assertionsStarted -gt $ended -or
             ($state -ceq "passed" -and [int]$Receipt.result.exit_status -ne 0) -or
             ($state -ceq "failed" -and [int]$Receipt.result.exit_status -eq 0)) {
             throw "Executed lane '$ExpectedName' lacks valid chronology or status."
@@ -619,8 +623,8 @@ function Assert-UatMaterializationPredicate {
                     $boundary.document.public_probe_before.available -ne $false -or
                     [int]$boundary.document.public_probe_before.status -ne 0 -or
                     [int]$boundary.document.start.exit_code -ne 0 -or
-                    [DateTimeOffset]::Parse([string]$boundary.document.public_ready_at) -lt
-                        [DateTimeOffset]::Parse([string]$boundary.document.owner_materialization_completed_at)) {
+                    (ConvertTo-Sprint8ADateTimeOffset -Value $boundary.document.public_ready_at -Label "public readiness") -lt
+                        (ConvertTo-Sprint8ADateTimeOffset -Value $boundary.document.owner_materialization_completed_at -Label "owner materialization completion")) {
                     throw "Public gateway evidence does not prove the offline owner-materialization boundary."
                 }
                 $evidence.Add($boundary.evidence)
@@ -971,6 +975,11 @@ function Assert-ProductDiagnosticReceiptFile {
 Assert-DiagnosticInventory
 if ($SelfTest) {
     Assert-RepositoryDiagnosticContract
+    $canonicalSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    Assert-Sprint8ASourceIdentityObject -Source $canonicalSource | Out-Null
+    if ($canonicalSource.GetType().FullName -cne "System.Management.Automation.PSCustomObject") {
+        throw "Canonical Sprint 8A source identity helper did not return a PSCustomObject."
+    }
     function Invoke-ExpectedLaneGuardFailure {
         param([Parameter(Mandatory)][scriptblock]$Action, [Parameter(Mandatory)][string]$Label)
         try {
@@ -988,6 +997,7 @@ if ($SelfTest) {
         result = [pscustomobject]@{
             name = "successor-product-smoke"; state = "passed"; exit_status = 0
             started_at = "2026-01-01T00:00:00Z"; ended_at = "2026-01-01T00:00:01Z"
+            assertions_started = $true; assertions_started_at = "2026-01-01T00:00:00Z"
             dependency_reason = $null
             produced_evidence = @([pscustomobject]@{ path = "fixture"; sha256 = "f" * 64 })
         }
@@ -1138,8 +1148,8 @@ if ([string]$prerequisiteByName["live-product-diagnostics"].state -ceq "passed")
 }
 if ($prerequisiteByName["failure-containment-successor-health"].state -ceq "passed" -and
     $prerequisiteByName["source-exact-materialization-no-op"].state -ceq "passed" -and
-    [DateTimeOffset]::Parse([string]$prerequisiteByName["failure-containment-successor-health"].ended_at) -lt
-    [DateTimeOffset]::Parse([string]$prerequisiteByName["source-exact-materialization-no-op"].ended_at)) {
+    (ConvertTo-Sprint8ADateTimeOffset -Value $prerequisiteByName["failure-containment-successor-health"].ended_at -Label "successor health end") -lt
+    (ConvertTo-Sprint8ADateTimeOffset -Value $prerequisiteByName["source-exact-materialization-no-op"].ended_at -Label "materialization no-op end")) {
     $failures.Add([pscustomobject]@{ name = "failure-containment-chronology"; state = "failed"; reason = "Failure containment predates the materialization it supersedes." })
 }
 

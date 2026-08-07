@@ -19,7 +19,8 @@ param(
     [string[]]$AdditionalExpectedNavigationHrefs = @(),
     [switch]$SkipLegacySeed,
     [switch]$SemanticNoOp,
-    [switch]$ExcludePublicGateway
+    [switch]$ExcludePublicGateway,
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -50,6 +51,163 @@ $lockfilePath = Join-Path $runtimeDirectory "lockfile.json"
 $authorizationPath = Join-Path $runtimeDirectory "authorization.json"
 $signedAuthorizationPath = Join-Path $runtimeDirectory "authorization.signed.json"
 $receiptPath = Join-Path $runtimeDirectory "apply-response.json"
+$processEnvironmentVariableNames = @(
+    "TESSARA_SOURCE_COMMIT",
+    "TESSARA_SOURCE_TREE",
+    "TESSARA_SOURCE_DIRTY",
+    "TESSARA_INSTALLATION_ID",
+    "TESSARA_SIGNING_ISSUER",
+    "TESSARA_SIGNING_KEY_ID",
+    "TESSARA_SIGNING_SECRET_HEX"
+)
+
+function Get-Sprint7AProcessEnvironmentSnapshot {
+    param([Parameter(Mandatory)][string[]]$Names)
+
+    $current = [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process)
+    $snapshot = [ordered]@{}
+    foreach ($name in $Names) {
+        $snapshot[$name] = [pscustomobject][ordered]@{
+            present = $current.Contains($name)
+            value = [Environment]::GetEnvironmentVariable($name, [EnvironmentVariableTarget]::Process)
+        }
+    }
+    $snapshot
+}
+
+function Restore-Sprint7AProcessEnvironmentSnapshot {
+    param([Parameter(Mandatory)]$Snapshot)
+
+    foreach ($name in @($Snapshot.Keys)) {
+        $entry = $Snapshot[$name]
+        if ([bool]$entry.present) {
+            [Environment]::SetEnvironmentVariable(
+                [string]$name,
+                [string]$entry.value,
+                [EnvironmentVariableTarget]::Process
+            )
+        } else {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function ConvertTo-Sprint7ABootstrapDateTimeOffset {
+    param(
+        [Parameter(Mandatory)]$Value,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    if ($Value -is [DateTimeOffset]) {
+        return $Value
+    }
+    if ($Value -is [DateTime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) {
+            throw "$Label has no UTC offset."
+        }
+        return [DateTimeOffset]::new($Value)
+    }
+    $text = [string]$Value
+    if ($text -notmatch '(?:Z|[+-]\d{2}:\d{2})$') {
+        throw "$Label has no UTC offset."
+    }
+    $parsed = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+        $text,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind,
+        [ref]$parsed
+    )) {
+        throw "$Label is not a valid round-trip timestamp."
+    }
+    $parsed
+}
+
+function Get-Sprint7AApprovedEffects {
+    param([AllowEmptyCollection()][object[]]$Actions = @())
+
+    @($Actions | ForEach-Object {
+        $action = $_
+        switch ([string]$action.action) {
+            "acquire_image" { "install" }
+            "provision_database" { "install" }
+            "migrate" { "upgrade" }
+            "switch_traffic" { "upgrade" }
+            "configure" { "configure" }
+            "bootstrap" { "bootstrap" }
+            "set_enablement" { if ([bool]$action.enabled) { "enable" } else { "disable" } }
+        }
+    } | Sort-Object -Unique)
+}
+
+function Test-Sprint7ABootstrapHelpers {
+    $effects = @(Get-Sprint7AApprovedEffects -Actions @(
+        [pscustomobject]@{ action = "acquire_image" },
+        [pscustomobject]@{ action = "provision_database" },
+        [pscustomobject]@{ action = "migrate" },
+        [pscustomobject]@{ action = "switch_traffic" },
+        [pscustomobject]@{ action = "configure" },
+        [pscustomobject]@{ action = "bootstrap" },
+        [pscustomobject]@{ action = "set_enablement"; enabled = $true },
+        [pscustomobject]@{ action = "set_enablement"; enabled = $false }
+    ))
+    $expectedEffects = @("bootstrap", "configure", "disable", "enable", "install", "upgrade")
+    if (($effects | ConvertTo-Json -Compress) -cne ($expectedEffects | ConvertTo-Json -Compress)) {
+        throw "Sprint 7A approved-effect projection self-test failed."
+    }
+
+    $roundTripTimestamp = (@{ expires_at = "2031-02-03T04:05:06.1234567+00:00" } |
+        ConvertTo-Json |
+        ConvertFrom-Json).expires_at
+    $parsedTimestamp = ConvertTo-Sprint7ABootstrapDateTimeOffset `
+        -Value $roundTripTimestamp `
+        -Label "Bootstrap timestamp self-test"
+    if ($parsedTimestamp.UtcDateTime.Ticks -ne
+        [DateTimeOffset]::Parse("2031-02-03T04:05:06.1234567+00:00").UtcDateTime.Ticks) {
+        throw "Sprint 7A bootstrap timestamp self-test failed."
+    }
+    try {
+        ConvertTo-Sprint7ABootstrapDateTimeOffset `
+            -Value "2031-02-03T04:05:06" `
+            -Label "Bootstrap offsetless timestamp self-test" | Out-Null
+        throw "Sprint 7A bootstrap timestamp self-test accepted an offsetless value."
+    } catch {
+        if ($_.Exception.Message -notmatch "has no UTC offset") { throw }
+    }
+
+    $original = Get-Sprint7AProcessEnvironmentSnapshot -Names $processEnvironmentVariableNames
+    try {
+        foreach ($name in $processEnvironmentVariableNames) {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+        }
+        [Environment]::SetEnvironmentVariable(
+            "TESSARA_SOURCE_COMMIT",
+            "caller-value",
+            [EnvironmentVariableTarget]::Process
+        )
+        $caller = Get-Sprint7AProcessEnvironmentSnapshot -Names $processEnvironmentVariableNames
+        [Environment]::SetEnvironmentVariable(
+            "TESSARA_SOURCE_COMMIT",
+            "bootstrap-value",
+            [EnvironmentVariableTarget]::Process
+        )
+        [Environment]::SetEnvironmentVariable(
+            "TESSARA_SOURCE_TREE",
+            "introduced-value",
+            [EnvironmentVariableTarget]::Process
+        )
+        Restore-Sprint7AProcessEnvironmentSnapshot -Snapshot $caller
+        $restored = [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process)
+        if ([Environment]::GetEnvironmentVariable("TESSARA_SOURCE_COMMIT", [EnvironmentVariableTarget]::Process) -cne "caller-value" -or
+            $restored.Contains("TESSARA_SOURCE_TREE")) {
+            throw "Sprint 7A caller process-environment restoration self-test failed."
+        }
+    } finally {
+        Restore-Sprint7AProcessEnvironmentSnapshot -Snapshot $original
+    }
+
+    Write-Host "Sprint 7A bootstrap action projection and caller-environment restoration self-test passed."
+}
 
 function Resolve-RepositoryPath([string]$Path) {
     if ([IO.Path]::IsPathRooted($Path)) {
@@ -71,11 +229,17 @@ function Prepare-Sprint7AUatFixtures {
     }
 }
 
+if ($SelfTest) {
+    Test-Sprint7ABootstrapHelpers
+    return
+}
+
 if (-not (Test-Path -LiteralPath $composePath)) { throw "Compose file not found: $composePath" }
 if (-not (Test-Path -LiteralPath $resolvedBlueprintPath -PathType Leaf)) {
     throw "Blueprint not found: $resolvedBlueprintPath"
 }
 [IO.Directory]::CreateDirectory($runtimeDirectory) | Out-Null
+$processEnvironmentSnapshot = Get-Sprint7AProcessEnvironmentSnapshot -Names $processEnvironmentVariableNames
 
 Push-Location $repoRoot
 try {
@@ -269,17 +433,7 @@ try {
     }
 
     $lockfile = Get-Content -LiteralPath $lockfilePath -Raw | ConvertFrom-Json
-    $approvedEffects = @($lockfile.materialization_plan.actions | ForEach-Object {
-        switch ([string]$_.action) {
-            "acquire_image" { "install" }
-            "provision_database" { "install" }
-            "migrate" { "upgrade" }
-            "switch_traffic" { "upgrade" }
-            "configure" { "configure" }
-            "bootstrap" { "bootstrap" }
-            "set_enablement" { if ([bool]$_.enabled) { "enable" } else { "disable" } }
-        }
-    } | Sort-Object -Unique)
+    $approvedEffects = @(Get-Sprint7AApprovedEffects -Actions @($lockfile.materialization_plan.actions))
 
     # Persist the same desired state and explicit approval through Core before
     # the operator-authorized Supervisor apply. This keeps Core read-back
@@ -346,7 +500,9 @@ try {
     if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
         $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
         if ($pendingAuthorization.payload.target_plan_digest -eq $lockfile.materialization_plan_digest -and `
-            [DateTimeOffset]::Parse($pendingAuthorization.payload.expires_at) -gt $now) {
+            (ConvertTo-Sprint7ABootstrapDateTimeOffset `
+                -Value $pendingAuthorization.payload.expires_at `
+                -Label "Pending authorization expiry") -gt $now) {
             $recoveredResponse = & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
                 apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
             if ($LASTEXITCODE -eq 0) {
@@ -383,7 +539,9 @@ try {
             [uint64]$existingAuthorization.payload.desired_revision -eq [uint64]$lockfile.blueprint_revision -and `
             [uint64]$existingAuthorization.payload.apply_sequence -eq $applySequence -and `
             $baseMatches -and `
-            [DateTimeOffset]::Parse($existingAuthorization.payload.expires_at) -gt $now.AddMinutes(1)
+            (ConvertTo-Sprint7ABootstrapDateTimeOffset `
+                -Value $existingAuthorization.payload.expires_at `
+                -Label "Existing authorization expiry") -gt $now.AddMinutes(1)
     }
     if (-not $reuseAuthorization) {
         $authorization = [ordered]@{
@@ -463,5 +621,9 @@ try {
     Write-Host "$RuntimeLabel $Composition composition materialized."
     Write-Host "Receipt: $receiptPath"
 } finally {
-    Pop-Location
+    try {
+        Pop-Location
+    } finally {
+        Restore-Sprint7AProcessEnvironmentSnapshot -Snapshot $processEnvironmentSnapshot
+    }
 }

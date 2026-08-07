@@ -272,8 +272,7 @@ pub(super) fn execution_request(
         .flatten()
         .map(|filter| -> Result<DatasetFilter, ComponentModuleError> {
             let field_key = filter
-                .get("field")
-                .or_else(|| filter.get("field_key"))
+                .get("field_key")
                 .and_then(Value::as_str)
                 .ok_or_else(|| {
                     ComponentModuleError::BadRequest("Component filter field is invalid".into())
@@ -305,12 +304,7 @@ pub(super) fn execution_request(
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .filter_map(|item| {
-                item.as_str()
-                    .or_else(|| item.get("key").and_then(Value::as_str))
-                    .or_else(|| item.get("field").and_then(Value::as_str))
-                    .or_else(|| item.get("field_key").and_then(Value::as_str))
-            })
+            .filter_map(Value::as_str)
             .map(str::to_string)
             .collect();
         projection = parameters
@@ -1557,7 +1551,7 @@ mod tests {
 
     #[test]
     fn table_execution_projects_only_configured_columns() {
-        let config = json!({"visible_columns":["participant", {"key":"status"}]});
+        let config = json!({"visible_columns":["participant", "status"]});
         let request = execution_request(dataset_reference(), "table", &config, "page_size=250")
             .expect("table request");
         assert_eq!(request.projection, ["participant", "status"]);

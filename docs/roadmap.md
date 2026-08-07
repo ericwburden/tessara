@@ -70,12 +70,12 @@ The codebase already includes a substantial vertical foundation:
 - UI Overhaul 2.0 detour work: approved shell navigation posture, access-denied redirect plus transient feedback, sidebar footer account/scope/theme context, queue-first home posture, explorer-oriented organization work, section-oriented form-builder UI, and section description/column-count persistence
 - Sprint 4A Dataset Catalog and Thin Table Components: searchable Dataset tags, Dataset provenance lineage, one thin Table Component over Dataset major-line outputs with last-mile projection/filter defaults, edit-screen component versioning/publishing, and shared interactive table rendering for Dataset previews and Component viewers
 - Sprint 5A Dashboard Composition: native directory/detail/editor/viewer flows over stable `ComponentVersion` identities, revisioned placement composition, bounded execution, and scoped redaction
-- Sprint 6A Module Contract and Core Control Plane: one stable Application Installation and Core runtime observation; exact Manifest, Feature Declaration, contract, semantic-destination, typed-reference, and real Release/Instance public types; seven versioned transition descriptors with six active in-process contributions and retired Migration; Core-owned module inventory/provenance APIs and native Module Management UI; and revisioned band-restricted navigation policy, without Release/Instance persistence, installation, execution, or mutation
+- Sprint 6A Module Contract and Core Control Plane, as the then-current baseline later superseded by extraction: one stable Application Installation and Core runtime observation; exact Manifest, Feature Declaration, contract, semantic-destination, typed-reference, and real Release/Instance public types; seven versioned transition descriptors with six active in-process contributions and retired Migration; Core-owned module inventory/provenance APIs and native Module Management UI; and revisioned band-restricted navigation policy, without Release/Instance persistence, installation, execution, or mutation
 - Sprint 6A-UI through 6B2: configuration-driven navigation and reusable Module Management; persisted Module Releases/Instances; same-origin gateway and installation-control services; per-module databases and identities; secure Shell Context, authorization, configuration, health, diagnostics, enablement, enrollment, upgrade, and rollback foundations; and independently deployed Scoped Records
 - Sprint 6C Dashboard runtime/data extraction: Dashboard service, database, identities, migrations, manifest, operations, APIs, SSR pages, same-origin routes, transition-only Components contract, and definition-independent Module Management controls, with root web source/build decoupling deliberately remaining for the post-closeout SDK adoption pass
 - Sprint 6D and 6E module SDK/runtime adoption: canonical module contract, runtime, UI/design-system, asset, and conformance packages plus completed Dashboard source/build independence, release-owned documents/assets, and Dashboard-only upgrade/rollback
 - Sprint 6F through 7B composition and cross-module correctness: deterministic Blueprint/lockfile/materialization operations, scoped cross-boundary authorization, typed resource lifecycle and dependency behavior, and the reusable extraction proofs that Phase 8 reruns
-- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; the consolidated render, exact-body authorization, joint-scope/resource-assertion, fixture, acceptance, and harness correction is implementation-level complete, while formal testing remains paused after superseded Readiness 36 and stopped Rehearsal 29
+- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; Readiness 37 passed and Rehearsal 30 completed its fail-late harvest with 18 passed, 4 raw failed, and 10 blocked lanes, and formal testing has exited for one consolidated three-root harness/evidence correction before fresh complete gates
 
 ### Historical closed Sprint 6A UI baseline
 
@@ -101,22 +101,18 @@ an enrolled real Module Release/Instance. Sprint 8A applies that pathway to
 Components, which is likewise represented by its real enrollment rather than
 by a Core transition descriptor.
 
-Readiness 36 passed all 15 checks against clean source `3f7e32cb` and one
-verified environment, but candidate-affecting corrections now supersede that
-mutable result. Candidate Rehearsal 29 was stopped after 8 passing receipts, 3
-failed receipts, 1 interrupted optimized lane, 20 unexecuted checks, and 0
-recorded blocks. Two failed receipts were false failures from one stale
-PowerShell `$LASTEXITCODE`; the workspace failure was an invalid Component
-product-integration fixture rather than a defect in the product's correct
-invalid-input rejection. A subsequent source audit found that the Component
-render response lacked canonical typed ownership across Component and
-Dashboard, signed service receivers verified a reserialized value instead of
-exact wire bytes, the Sprint 7A common-governing-node/resource-assertion rule
-had not survived the physical extraction, and active first-party fixtures still
-normalized retired Core Component shapes. Formal testing is paused; no
-candidate, preflight, SIT, or UAT exists.
+Readiness 37 passed all 15 checks against clean commit `84964c7b`, tree
+`4f39cb71`, and environment `96c2a32e...`. Candidate Rehearsal 30 then
+completed all 32 declared lanes: 18 passed, 4 raw lanes failed, and 10 were
+blocked by exact failed prerequisites. The raw classifications remain two
+`environment`, one `product`, and one `harness`; diagnosis consolidates the
+symptoms under three harness roots: bootstrap action-object rebinding, an
+ordered-dictionary source identity rejected by UAT receipt guards, and seven
+bootstrap-owned process variables not restored before final environment
+comparison. Formal testing has exited for the candidate-affecting consolidated
+correction. No rehearsal pass, candidate, preflight, SIT, or UAT exists.
 
-The completed mutable Sprint 8A testing-entry correction now:
+The Sprint 8A implementation lineage now:
 
 - make the Components contract own the exact render response DTOs and
   render-kind discriminant, return them from Component provider/product routes,
@@ -157,16 +153,34 @@ The completed mutable Sprint 8A testing-entry correction now:
   semantic authorization context
 - carry the completed pathway into the remaining Forms, Workflows, Responses,
   and Datasets extractions before broad pilot hardening
+- retain the full R30 fail-late result rather than restarting after the first
+  failure, and correct its three diagnosed harness roots as one batch
+- mark assertions per lane, prefer structured child classification, retain
+  comparable environment-mismatch detail, and canonicalize new evidence paths
+  so the next harvest is both terminally complete and diagnostically exact
+- enter downstream validation only through the repository-owned ten-check
+  preflight runner, four-lane staged SIT runner, and staged formal-UAT runner;
+  their receipts bind the normalized Compose configuration digest in addition
+  to tracked deployment inputs
+- hold one evidence-root execution lease throughout each manual UAT scenario,
+  commit its receipt/completion pair through an immutable prepared-publication
+  checkpoint, reject an authoritative pass after process-lineage resume,
+  continue safe scenarios as non-authoritative diagnostic harvest after a
+  scripted or manual defect, pause on a product decision, and permit a
+  finalization-only publication retry only from a durable completed
+  scripted/manual/restoration checkpoint
 
-The final corrected product source passed the complete all-feature workspace
-Rust suite against six freshly reset isolated databases, all-target/all-feature
-clippy with warnings denied, all-target/all-feature check, formatting, focused
-contract and integration checks, boundary and acceptance contracts, runner
-self-tests, the exact 75/75 acceptance inventory, TypeScript compilation, and
-75-test Playwright discovery. Documentation-only handoff edits are covered by
-the final static audits. These implementation results support re-entry at a new
-complete Validation Readiness; they do not authorize preflight or any later
-phase.
+Before R37/R30, the corrected product source passed the complete all-feature
+workspace Rust suite against six freshly reset isolated databases,
+all-target/all-feature clippy with warnings denied, all-target/all-feature
+check, formatting, focused contract and integration checks, boundary and
+acceptance contracts, runner self-tests, the exact 75/75 acceptance inventory,
+TypeScript compilation, and 75-test Playwright discovery. Documentation-only
+handoff edits are covered by the final static audits. Those implementation
+results remain useful history, but the current runner, evidence, and
+documentation correction requires focused verification and then one successor
+complete Validation Readiness that consumes the exact R30 authorization. It
+does not authorize preflight or a later phase.
 
 ### Frontend transition baseline
 
@@ -1200,19 +1214,20 @@ extraction reruns the Phase 7 scope, lifecycle, outage, compatibility,
 source-ownership, package-graph, independent-image-upgrade, and rollback proofs
 against the newly physical boundary.
 
-### Sprint 8A: Component Module Separation Slice (Implementation Ready; Testing Paused)
+### Sprint 8A: Component Module Separation Slice (Implementation Correction)
 
-**Validation posture:** Readiness 36 passed its complete 15-check mutable gate
-against clean source `3f7e32cb`, then Rehearsal 29 was stopped with 8 passed
-receipts, 3 failed receipts, 1 interrupted lane, 20 unexecuted checks, and 0
-recorded blocks. The completed harness, fixture, render-contract, exact-body,
-authorization, acceptance-inventory, product-source, boundary-test, and
-documentation corrections are candidate-affecting and supersede Readiness 36.
-The final corrected product source passed the complete implementation-level
-suite described above. After the correction is committed cleanly, start a new
-complete Validation Readiness and a new complete Candidate Rehearsal against
-the same source and fresh six-database environment identity; preflight remains
-closed until both pass.
+**Validation posture:** Readiness 37 passed all 15 checks against clean source
+`84964c7b`, but Rehearsal 30 completed with 18 passed, 4 raw failed, and 10
+blocked lanes. One immutable harvest, one four-symptom defect batch, and one
+unconsumed successor-Readiness authorization are retained. Diagnosis reduces
+the symptoms to three harness roots—action projection, source-identity object
+shape, and process-environment restoration—plus directly related assertion,
+classification, mismatch-evidence, and reference-canonicalization enforcement.
+The correction is candidate-affecting and supersedes Readiness 37. After it is
+verified and committed cleanly, one successor complete Readiness must consume
+the R30 authorization and one complete Rehearsal must pass against that same
+source and fresh six-database environment identity. Preflight remains closed
+until both pass.
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 

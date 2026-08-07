@@ -1,21 +1,16 @@
 # Sprint 8A Validation Record
 
-Status: Formal testing is paused by user direction. The consolidated Sprint 8A
-testing-entry correction is implemented and implementation-level verified on
-mutable source. Validation Readiness attempt 36 passed all 15 checks against
-one clean source and verified environment, but it is superseded by that
-candidate-affecting correction. Candidate Rehearsal attempt 29
-was stopped with 8 passed lane receipts, 3 failed receipts, 1 interrupted
-optimized lane, 20 unexecuted checks, and 0 recorded blocked checks. The three
-failed receipts resolve to one stale-`$LASTEXITCODE` harness defect that
-created two false failures and one Component product-integration fixture
-defect. The return-to-implementation audit expanded the consolidated correction
-to render-response ownership/kind/identity, exact raw-body service
-authorization, Dashboard/Component joint scope and resource assertion, and
-active first-party legacy fixture normalization. These candidate-affecting
-changes also retain the earlier five-entry Core transition and fail-late runner
-corrections. No current Readiness or Rehearsal pass exists, no candidate has
-been frozen, and preflight, SIT, formal UAT, and closeout remain Not Run.
+Status: Formal testing has exited for a consolidated Readiness 37/Rehearsal 30
+implementation correction. Readiness 37 passed all 15 checks against clean
+commit `84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`, tree
+`4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`, and environment fingerprint
+`96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`.
+Rehearsal 30 completed all 32 terminal lanes with 18 passed, 4 raw failed, and
+10 blocked. Its immutable raw labels are two `environment`, one `product`, and
+one `harness`; diagnosis consolidates them under three harness root causes.
+Readiness 37 is superseded by the candidate-affecting correction. No rehearsal
+pass or candidate exists, and preflight, SIT, formal UAT, and closeout remain
+Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -24,14 +19,94 @@ been frozen, and preflight, SIT, formal UAT, and closeout remain Not Run.
 
 ## Implementation Readiness Snapshot
 
-### User-directed return from Readiness 36 and Rehearsal 29
+### Readiness 37 and Rehearsal 30 consolidated correction
+
+Validation Readiness 37 passed its complete 15-check graph with zero failures
+and zero blocks. Its result is retained at
+`artifacts/sprint-8a-closeout/validation-readiness-result.json`, SHA-256
+`a4ab361af6606ff94eaef8c5be5ca3e864dc90cb41efabdcb3aba73014eacf9b`.
+Because runners, acceptance contracts, validation references, and Sprint
+documentation now change, that mutable result is superseded and cannot
+authorize preflight.
+
+Candidate Rehearsal 30 ran against that exact source and environment and
+completed the full fail-late terminal graph: 18 lanes passed, 4 raw lanes
+failed, and 10 were blocked by failed prerequisites. Cleanup/restoration was
+`not_proven`, and no `candidate-rehearsal-result.json` was written. The raw
+failed lanes remain immutable evidence:
+
+- `source-exact-materialization-no-op` — `environment`;
+- `failure-containment-successor-health` — `product`;
+- `uat-diagnostics` — `harness`; and
+- `final-environment-identity` — `environment`.
+
+The ten blocked lanes retain their exact dependency reasons:
+
+- `deployed-inventory-navigation-audit`, `deployment-evidence`,
+  `product-smoke`, and `component-upgrade-rollback` depend on
+  `source-exact-materialization-no-op`;
+- `playwright-execution` depends on `source-exact-materialization-no-op` and
+  `deployment-evidence`;
+- `live-product-diagnostics` depends on `deployment-evidence` and
+  `product-smoke`; and
+- `successor-inventory-navigation-audit`, `successor-deployment-evidence`,
+  `successor-product-smoke`, and `final-successor-health` depend on
+  `failure-containment-successor-health`.
+
+Diagnosis consolidates the four raw symptoms under three `harness` roots:
+
+1. Bootstrap action dispatch passed a string from `switch` where
+   `set_enablement` required the complete action object's `enabled` field. This
+   caused both materialization symptoms and the failure-containment cascade.
+2. Source identity was returned as an ordered dictionary rather than the exact
+   object shape required by automated-UAT receipt guards, producing 12 false
+   prerequisite failures and 8 blocked scenarios.
+3. Bootstrap did not restore seven process environment variables used for
+   signing, source identity, and installation identity. A fresh external
+   environment recomputation after process exit matched R37 exactly, proving
+   harness leakage rather than persistent environment drift.
+
+The same audit found four evidence-enforcement gaps: blocked terminal receipts
+were counted as assertions, structured child classification could lose to a
+lane default, final environment mismatch evidence omitted expected/actual
+comparison detail, and already-retained authorization paths were not uniformly
+canonical. The correction adds exact per-lane assertion-start evidence,
+structured-classification precedence with a named source, secret-free compared
+fingerprints and changed sections, and contained repository-relative paths for
+new evidence. The immutable in-root R30 authorization remains consumable once
+without rewriting it or permitting an outside-root reference.
+
+The retained evidence is:
+
+- attempt: `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-attempt.json`,
+  SHA-256
+  `9ce1bba709b0b4bf1eee23cd0eea406fd49f16152cd25d45ea9dc3dac98617b5`;
+- harvest: `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-harvest.json`,
+  SHA-256
+  `6167ab682922e7cfe582c9b461f38e31f4260c6259fffd3c3877eef7b62e3d13`;
+- defect batch:
+  `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-defect-batch.json`,
+  SHA-256
+  `397260d3b4382ddc4731a2c8f7bcc3341ed5f6bc3b77d3dcaf8b03cf3cb36291`;
+  and
+- correction authorization:
+  `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-correction-authorization.json`,
+  SHA-256
+  `efed4d4c53d84454372936067a5a9c454457cf2f42419afe331fc89a8d154792`.
+
+The authorization is unconsumed and permits exactly one successor Readiness
+start. That complete gate must consume and bind the R30 authorization before a
+new complete Rehearsal can run. Both gates must pass against the same corrected
+clean source and fresh six-database environment before preflight.
+
+### Prior user-directed return from Readiness 36 and Rehearsal 29
 
 Validation Readiness attempt 36 passed its complete 15-check graph against
 clean commit `3f7e32cb7e1948a36185a68352901b873934c0b0`, tree
 `252e651e0d031c04d61547b6d6eac964bb04f84f`, and environment fingerprint
 `2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0`.
 It recorded zero failures and zero blocks. Its mutable result is retained at
-`artifacts/sprint-8a-closeout/validation-readiness-result.json` with SHA-256
+`artifacts/sprint-8a-closeout/attempts/readiness-36.json` with SHA-256
 `f10f4c63d96e8bf484f9a19084359e58cf81858adcfb5e4bf3cb49b84c716710`.
 That pass describes only the prior clean source. The harness, fixture,
 contract, product, boundary, test, and documentation changes required below
@@ -592,11 +667,18 @@ browser execution result.
 
 | Artifact | Producer | Required before | Status |
 |---|---|---|---|
-| `validation-readiness-result.json` | Validation coordinator | Rehearsal | Not Run |
+| `validation-readiness-result.json` | Validation coordinator | Rehearsal | R37 passed, now superseded; successor Not Run |
 | `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not Run |
+| `attempts/preflight-<n>.json` | Preflight | Preflight terminal decision | Not Run |
 | `preflight-result.json` | Preflight | Candidate freeze | Not Run |
 | `candidate.json` | Preflight | SIT | Not Run |
+| `attempts/sit-<n>-start.json`, `attempts/sit-<n>.json`, and `sit/attempts/<lane>-<n>.json` | SIT | SIT terminal decision | Not Run |
 | `sit-result.json` | SIT | UAT | Not Run |
+| `attempts/uat-<n>.json` and `attempts/uat-<n>-manual-checkpoint.json` | UAT | Formal UAT finalization | Not Run |
+| `uat/attempt-<n>/manual-leases/uat-8a-<nn>-start.json`, optional `-resume.json`, `-publication-prepared.json`, and `-complete.json` | UAT manual publisher | Each manual receipt / Finalize | Not Run |
+| `uat/attempt-<n>/finalizations/run-<nnn>/finalization-completion-checkpoint.json` | UAT Finalize | Canonical UAT publication or finalization-only retry | Not Run |
+| `uat/attempt-<n>/finalizations/run-<nnn>/result-commit.json` | UAT Finalize | Canonical UAT publication | Not Run |
+| `uat/attempt-<n>/finalizations/run-<nnn>/publication-retry-checkpoint.json` and `uat/attempt-<n>/publication-retries/run-<nnn>/` | UAT Finalize | Publication-only retry, when triggered | Planned / Conditional |
 | `uat-result.json` | UAT | Authorization | Not Run |
 | `uat-defect-harvest.json` | UAT/coordinator | Correction batch, when triggered | Planned / Conditional |
 | `defect-batch.json` | Coordinator | Impact assessment, when triggered | Planned / Conditional |
@@ -617,8 +699,20 @@ Additional required evidence namespaces:
 - `sit/`: lane receipts, raw logs, deployment/provenance, empty baseline,
   first/no-op bootstrap, old-input rejection, outage/recovery,
   upgrade/rollback and final convergence.
-- `uat/manual/`: UAT-8A-01 through UAT-8A-08 receipts, screenshots/traces and
-  reviewer sign-off.
+- `uat/attempt-<n>/`: scripted inventory/smoke logs, final source-exact
+  materialization/no-op, canonical inventory/smoke restoration, and final
+  health evidence.
+- `uat/attempt-<n>/manual/`: UAT-8A-01 through UAT-8A-08 receipts,
+  screenshots/traces and reviewer sign-off, all bound to the exact formal-UAT
+  attempt.
+- `uat/attempt-<n>/manual-leases/`: one authenticated start/completion pair and
+  immutable prepared-publication checkpoint per scenario, plus an authenticated
+  process-lineage resume marker only when interruption requires it. The
+  evidence-root lock is held from lease start through transactional receipt and
+  completion publication; an open or interrupted lease blocks Finalize.
+- `uat/attempt-<n>/finalizations/` and `publication-retries/`: append-only
+  canonical-restoration runs, durable completion checkpoints, result commits,
+  retained publication failures, and any authorized publication-only retry.
 - `materialization/`: resolved destructive targets, empty baseline,
   owner-bootstrap order/read-back, first/no-op results, induced failed attempt,
   teardown proof and successor from-empty result.
@@ -633,8 +727,12 @@ Additional required evidence namespaces:
 - Candidate fingerprint: Not issued.
 - Acceptance-inventory identity: SHA-256 of this record plus tracked acceptance
   runners, tests, fixtures, seeds, manifests, bootstrap and deployment inputs.
-- Deployment profile/configuration digest: planned
-  `deploy/sprint-8a/compose.yaml`, override and normalized environment contract.
+- Deployment identity: one digest covers the tracked Sprint 8A deployment
+  profile and manifests; a separate
+  `normalized_deployment_configuration_sha256` is the SHA-256 of the exact live
+  normalized `docker compose ... config` output retained by the environment
+  contract. Candidate, preflight, SIT, and UAT receipts must bind that same
+  normalized digest rather than re-hashing YAML as a substitute.
 - Schema/baseline identity: empty Core, Component, Dashboard, Supervisor and
   selected-module schema migration digests plus bootstrap/seed contract
   versions. No legacy populated-data baseline exists.
@@ -645,10 +743,10 @@ Additional required evidence namespaces:
 
 ## Validation Readiness
 
-- Latest completed check harvest: Readiness 36 passed all 15 checks with no
-  failures or blocks against clean source `3f7e32cb` and environment
-  `2e235b07...`. The current candidate-affecting implementation correction
-  supersedes that mutable pass; it is retained as prior-source evidence only.
+- Latest completed check harvest: Readiness 37 passed all 15 checks with no
+  failures or blocks against clean source `84964c7b`, tree `4f39cb71`, and
+  environment `96c2a32e...`. The R30 correction supersedes that mutable pass;
+  it is retained as prior-source evidence only.
 
 - Derived executable checklist: regenerate from the final plan, this inventory,
   source, runners, Compose profile and evidence schemas.
@@ -692,11 +790,12 @@ Additional required evidence namespaces:
 
 ## Candidate Rehearsal
 
-Attempt 29 was stopped by user direction and may not resume. It retained 8
-passes, 3 failed receipts, 1 interrupted executing lane, 20 unexecuted checks,
-and 0 recorded blocks against the now-superseded Readiness 36 source and
-environment. A successor attempt requires a new passing Readiness receipt for
-the corrected clean source and environment identity.
+Attempt 30 is terminal and may not resume. It retained 18 passes, 4 raw failed
+lanes, and 10 exact dependency blocks against the now-superseded Readiness 37
+source and environment. One complete harvest, one consolidated four-symptom
+batch, and one unconsumed correction authorization were issued. A successor
+attempt requires one successor passing Readiness that consumes that exact
+authorization and binds the corrected clean source and environment identity.
 
 Sprint 8A rehearsal uses the dependency-aware inventory below. The attempt
 receipt declares this graph before assertions. After any failure the attempt is
@@ -721,7 +820,17 @@ passed so the consolidated batch contains one defect per failed predicate and
 no generic outer duplicate. Wrapper or parsing failures remain separate harness
 defects, and blocked scenarios retain their exact dependency reasons.
 
-| Diagnostic lane | Planned command/evidence | Assertions | Result | Defect batch |
+Every next-attempt lane records whether assertions actually started and the
+aggregate counts only those executed lanes. Structured child classification is
+canonical when present and carries its source into the outer receipt and
+harvest. Final environment comparison retains expected and actual fingerprints
+plus changed contract sections, and every newly persisted evidence reference is
+canonical, repository-relative, and contained by the evidence root.
+
+The following table is the planned lane summary for the next successor
+Candidate Rehearsal, not a restatement of R30's terminal results.
+
+| Diagnostic lane | Planned command/evidence | Assertions | Successor result | Defect batch |
 |---|---|---|---|---|
 | Static and boundaries | fmt/check/Clippy, manifests, links, native/WASM graphs, source/image audits | zero warnings; no forbidden owner/dependency/route/storage/legacy edge; exact-body and joint-scope enforcement present | Not Run | |
 | Full Rust | `cargo test --workspace --locked` plus targeted contract/schema/authorization tests | all pass, including render kind/identity, raw-body tamper, exact assertion and same-node matrix | Not Run | |
@@ -777,27 +886,24 @@ Component module, API enrollment, and Installation Control. A database
 identity used by one owner integration target is not reused by another target
 in the same rehearsal.
 
-- Mutable source/environment identity: Attempt 29 verified clean commit
-  `3f7e32cb7e1948a36185a68352901b873934c0b0`, tree
-  `252e651e0d031c04d61547b6d6eac964bb04f84f`, and environment fingerprint
-  `2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0`;
+- Mutable source/environment identity: Attempt 30 verified clean commit
+  `84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`, tree
+  `4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`, and environment fingerprint
+  `96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`;
   all are superseded by the current candidate-affecting correction.
-- Passing readiness prerequisite: Readiness 36 passed for Attempt 29's prior
+- Passing readiness prerequisite: Readiness 37 passed for Attempt 30's prior
   source and environment; no passing prerequisite exists for the next attempt.
-- Current consolidated defects and correction batch: Attempt 29 retained two
-  false failed receipts caused by one stale-`$LASTEXITCODE` harness defect and
-  one failed workspace receipt caused by an invalid Component integration-test
-  fixture. The return-to-implementation audit expanded that batch to exact
-  Component render ownership/kind/persistent-preview identity; raw-byte service
-  verification; Dashboard authorized-scope intersection, exact resource
-  assertion, same-node authorization and disjoint projection redaction; and
-  removal of the active legacy first-party fixture facade. The corrected source
-  retains the earlier exact five-transition Dashboard ownership and fail-late
-  one-batch runner enforcement. The optimized timing lane was interrupted, 20
-  checks remained unexecuted, and none was recorded blocked before the phase
-  exit. Harness, fixture, contract, source, acceptance inventory, boundary-test,
-  and documentation corrections are candidate-affecting and remain formally
-  unverified.
+  Its result SHA-256 is
+  `a4ab361af6606ff94eaef8c5be5ca3e864dc90cb41efabdcb3aba73014eacf9b`.
+- Current consolidated defects and correction batch: Attempt 30 retained 18
+  passes, raw failures in materialization, containment, UAT projection, and
+  final environment identity, and 10 dependency blocks. Those four raw labels
+  remain exact while three harness roots are corrected together: action-object
+  projection, source-identity object shape, and bootstrap process-environment
+  restoration. Assertion-start accounting, structured classification
+  precedence, comparable mismatch evidence, and canonical reference handling
+  close the related evidence gaps. The correction is candidate-affecting and
+  remains formally unverified until complete successor gates pass.
 - Historical consolidated defects and correction batches: Attempt 15 retained six
   Playwright findings in one fail-late batch after 10 independent checks
   passed. Four acceptance-inventory defects used the former Core Component
@@ -1003,12 +1109,17 @@ in the same rehearsal.
   they do not convert their partial evidence into a rehearsal result.
 - Readiness 36 subsequently passed its complete mutable gate, and Rehearsal 29
   began against that exact clean source/environment pair. Rehearsal 29 was
-  stopped during harvesting under the current user-directed return to
+  stopped during harvesting under that user-directed return to
   implementation; its 8 passes, 3 failed receipts, 1 interrupted lane, 20
   unexecuted checks, and 0 recorded blocks remain diagnostic evidence only.
-  The attempt may not resume, and the current candidate-affecting correction
-  supersedes Readiness 36.
-- Complete-cycle repetitions: 0.
+  The attempt may not resume, and the then-current candidate-affecting
+  correction superseded Readiness 36.
+- Readiness 37 then passed against `84964c7b`/`4f39cb71` and environment
+  `96c2a32e...`. Rehearsal 30 completed its terminal graph with 18 passes, 4
+  raw failures, and 10 blocks, retained one harvest/batch/authorization chain,
+  and returned to implementation for the three-root harness correction. It may
+  not resume, and the correction supersedes Readiness 37.
+- Complete-cycle repetitions after the current correction: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
 Rehearsal is mutable, diagnostic and non-authoritative. Any correction requires
@@ -1016,7 +1127,9 @@ complete readiness and complete rehearsal to repeat before freeze.
 
 ## Environment Contract
 
-- Environment fingerprint: Not issued.
+- Corrected successor environment fingerprint: Not issued. The superseded
+  R37/R30 fingerprint is
+  `96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`.
 - Intended gateway: `http://127.0.0.1:8088`; intended Supervisor endpoint:
   `http://127.0.0.1:8098`.
 - Compose project/profile: `tessara-sprint-8a`,
@@ -1042,17 +1155,22 @@ complete readiness and complete rehearsal to repeat before freeze.
   SHA-256 fingerprint. Every rehearsal lane, raw artifact, UAT diagnostic, and
   aggregate result must match that fingerprint and the same source identity.
 
-## Planned Commands
+## Next Authorized Commands
 
-The validation coordinator enters through exactly these two top-level commands.
-The runners own the complete check inventory, dependency graph, evidence paths,
-and all subordinate commands; manually assembling lane commands is not a
-Candidate Rehearsal and cannot authorize preflight.
+The mutable-build coordinator enters Readiness and Rehearsal through exactly
+these two top-level commands. Those runners own the complete check inventory,
+dependency graph, evidence paths, and all subordinate commands; manually
+assembling lane commands is not a Candidate Rehearsal and cannot authorize
+preflight.
 
 ```powershell
 .\scripts\validate-sprint-8a-readiness.ps1 -Attempt <n>
 .\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt <n> -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
+
+Neither command has passed for the corrected source. Preflight, candidate
+freeze, SIT, and formal UAT remain closed until both complete commands pass
+against the same source and environment identity.
 
 Readiness requires and authenticates the six declared disposable database
 URLs, proves their identities are pairwise distinct, records the normalized
@@ -1082,44 +1200,293 @@ formal-UAT-owned.
 - Freeze output: `candidate.json` binds one immutable fingerprint; no validation
   result exists before it.
 
+After the successor complete Readiness and Rehearsal pass, run only the tracked
+top-level preflight command:
+
+```powershell
+.\scripts\run-sprint-8a-validation-preflight.ps1 -Attempt <n> -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json" -RehearsalReceipt "artifacts/sprint-8a-closeout/candidate-rehearsal-result.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -ExpectedBranch "codex/sprint-8a" -HandoffUrl "http://127.0.0.1:8088"
+```
+
+The runner, rather than operator-assembled helper calls, retains one terminal
+result for each exact check identity below:
+
+| Check identity | Depends on | Explicit retained check |
+|---|---|---|
+| `receipt-chain` | — | Parse and hash the exact passing Readiness and Rehearsal receipts; prove their source/environment and prerequisite binding. |
+| `repository-scope` | — | Reconfirm repository instructions, worktree, branch, sprint scope, and one clean implementation commit. |
+| `clean-source` | `receipt-chain`, `repository-scope` | Recompute commit, tree, dirty state, acceptance-inventory digest, and deployment-input digest and compare them exactly with Rehearsal. |
+| `acceptance-traceability` | `receipt-chain`, `repository-scope` | Reconcile every roadmap exit and acceptance clause with the frozen 75-scenario browser inventory, smoke proof, and UAT-8A-01 through UAT-8A-08. |
+| `environment-contract` | `receipt-chain`, `repository-scope` | Revalidate the secret-free fingerprint, tools, ports, Compose project/profile, handoff URL, reset authorization, and output-path forms. |
+| `database-contract` | `environment-contract` | Revalidate all six named database variables, pairwise-distinct disposable identities, authenticated reachability, and migration-ledger tables. |
+| `deployment-contract` | `clean-source`, `environment-contract` | Validate Compose/configuration, exact provenance label keys, bootstrap/no-op/teardown/recovery commands, active slot, and canonical restoration command without building product images. |
+| `downstream-command-contract` | `repository-scope` | Parse the exact four SIT command sets and staged formal-UAT interface recorded below; reject a missing argument or obsolete runner contract. |
+| `evidence-path-contract` | `repository-scope` | Reject unsupported absolute, traversal, and outside-root inputs; normalize contained repository-relative inputs; and prove no required path collides with immutable prior evidence. The only absolute-path exception is canonical consumption of the already-issued in-root R30 authorization. |
+| `evidence-inventory` | `acceptance-traceability`, `deployment-contract`, `downstream-command-contract`, `evidence-path-contract` | Create the complete SIT/UAT/failure/manifest inventory before freeze and retain every mandatory output path. |
+
+Before authenticating either prerequisite, write
+`attempts/preflight-<n>.json` in `preparing` state with unverified claimed
+source/environment identity, the ten declared check identities and their
+dependencies, and `assertions_started = false`. Advance legally through
+`executing`, optional failure `harvesting`, and `finalizing`; checkpoint every terminal check with exact
+command, timestamps/duration, exit status, assertion-start marker,
+classification, and hashed raw evidence. After a failure, continue every safe
+independent check fail-late, mark true dependents `blocked` with the exact
+failed prerequisite, and publish the terminal failed attempt without
+`preflight-result.json` or `candidate.json`. Preserve and mark superseded
+attempts; never reuse or merge their evidence.
+
+After all ten results pass, the runner calls the lifecycle helper to publish
+`preflight-result.json`, computes candidate identity from the exact source,
+tracked deployment inputs, and live normalized Compose configuration digest,
+and publishes `candidate.json`. The helper validates exact inventories, hashes,
+prerequisite chain, source/environment identity, and candidate fingerprint; it
+does not execute, checkpoint, or fabricate a missing check. The runner then
+initializes the evidence manifest from all evidence that exists at freeze,
+while its preflight inventory declares every future SIT/UAT and conditional-
+failure path.
+
 ## SIT
+
+SIT is authorized only by the passing preflight/candidate pair and enters
+through the staged repository runner:
+
+```powershell
+.\scripts\run-sprint-8a-sit.ps1 -Stage Run -Attempt <n> -PreflightReceipt "artifacts/sprint-8a-closeout/preflight-result.json" -CandidateReceipt "artifacts/sprint-8a-closeout/candidate.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/sit-result.json" -BaseUrl "http://127.0.0.1:8088" -AuthorizeDisposableReset
+```
+
+Do not run the subordinate command sets independently. `Run` authenticates the
+frozen identity, holds the evidence-root lock, executes all four lanes, retains
+safe siblings fail-late, records exact dependency blocks, restores the
+canonical topology, and publishes the aggregate only after a complete pass.
 
 | Lane | Prepare receipt | Command/evidence | Assertions | Result | Duration |
 |---|---|---|---|---|---|
-| Static and boundaries | `sit/attempts/static-<n>.json` | fmt/check/Clippy, manifest/link/schema, native/WASM/package/source/image/legacy audits | zero warnings and no forbidden edge | Not Run | |
-| Rust workspace | `sit/attempts/rust-<n>.json` | `cargo test --workspace --locked` plus targeted contract/schema/authorization suites | all pass on frozen candidate | Not Run | |
-| Playwright | `sit/attempts/playwright-<n>.json` | `npm --prefix .\end2end test` | complete inventory; UI/config/auth/outage/old-input cases pass | Not Run | |
-| Deployed acceptance smoke | `sit/attempts/deployed-smoke-<n>.json` | source-exact reset/materialization, first/no-op, old rejection, outage/recovery, failure rerun and upgrade/rollback | exact candidate; receipts complete; current topology healthy | Not Run | |
+| `static-and-boundaries` | `sit/attempts/static-and-boundaries-<n>.json` | exact static command set below | zero warnings and no forbidden edge | Not Run | |
+| `rust-workspace` | `sit/attempts/rust-workspace-<n>.json` | exact database-bound Rust command set below | all pass on frozen candidate | Not Run | |
+| `playwright` | `sit/attempts/playwright-<n>.json` | exact source/evidence-bound `validate-e2e.ps1` invocation below | complete inventory; UI/config/auth/outage/old-input cases pass | Not Run | |
+| `deployed-acceptance-smoke` | `sit/attempts/deployed-acceptance-smoke-<n>.json` | exact materialization/smoke/recovery command set below | exact candidate; receipts complete; canonical topology restored | Not Run | |
+
+Before authenticating preflight/candidate, write the phase start receipt at
+`attempts/sit-<n>.json` in `preparing` state with the four declared lane
+identities, unverified claimed candidate/environment identity, and
+`assertions_started = false`. Each lane then owns a separate receipt and moves
+through `preparing -> executing -> finalizing -> passed|failed|blocked`. Write
+the lane start before expensive work, append logs and long-command heartbeats,
+and retain every exact command, start/end/duration, exit status,
+assertion-start marker, classification, raw evidence hash, and cleanup result.
+Within each lane, continue safe independent checks fail-late; stop only true
+dependents or unsafe destructive work and record the exact block reason.
+Serialize the Playwright and deployed-smoke topology mutations even though each
+owns its own source-exact preparation and evidence namespace.
+
+After any failure, finish every safe lane, publish the terminal failed phase
+attempt, and withhold `sit-result.json`; the coordinator owns classification
+and invalidation. Preserve and mark superseded attempts rather than reusing a
+number or merging evidence. Only after all four lanes pass and the canonical
+topology is independently restored may the phase enter `finalizing`, publish
+the aggregate SIT receipt through the helper, and immediately update and hash
+the evidence manifest. A manifest/finalization failure remains retained and
+blocks UAT even when the four raw lane results are intact.
+
+The runner's static lane uses the following frozen command set and retains each
+result:
+
+```powershell
+cargo fmt --all -- --check
+cargo check --workspace --all-features --locked --offline
+cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings
+docker compose -f .\deploy\sprint-8a\compose.yaml --profile reference config --quiet
+. .\scripts\sprint-8a-acceptance-contract.ps1
+Test-Sprint8AAcceptanceContract
+.\scripts\check-web-crate-boundaries.ps1
+.\scripts\verify-module-sdk-boundaries.ps1
+.\scripts\verify-sprint-6e-boundaries.ps1
+.\scripts\verify-markdown-links.ps1
+```
+
+After resetting the six exact preflight-approved database identities, the
+runner executes the Rust lane serially in one Cargo target directory:
+
+```powershell
+cargo test --workspace --all-features --locked --offline
+cargo test -p tessara-api --test modules --release --locked --offline resource_reference_restricted_known_random_latency_profile -- --exact --nocapture
+cargo test --locked --offline -p tessara-components-contract
+cargo test --locked --offline -p tessara-dashboard-module
+cargo test --locked --offline -p tessara-component-module
+cargo test --locked --offline -p tessara-module-testkit
+```
+
+The runner invokes Playwright through the source/evidence-aware repository
+wrapper, never a bare development-default command. Its lane prepares and proves its own
+source-exact canonical topology, so it is not silently coupled to a sibling
+lane receipt:
+
+```powershell
+.\scripts\materialize-sprint-8a.ps1 -Attempt <n> -EvidenceRoot "artifacts/sprint-8a-closeout/sit/playwright-<n>" -EnvironmentFingerprint <environment-fingerprint> -AuthorizeDisposableReset -Confirm:$false -VerifyNoOp
+.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/playwright-<n>/deployment.json"
+.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/playwright-<n>/deployment.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -EvidencePath "artifacts/sprint-8a-closeout/sit/playwright-<n>/playwright.json" -FailureEvidenceDirectory "artifacts/sprint-8a-closeout/sit/playwright-<n>/failures"
+```
+
+The runner's deployed lane uses a new attempt namespace and the exact frozen
+environment fingerprint. It retains first/no-op materialization, initial
+inventory/provenance/product smoke, release transition, induced failure,
+empty-successor recovery, and final canonical read-back:
+
+```powershell
+.\scripts\materialize-sprint-8a.ps1 -Attempt <n> -EvidenceRoot "artifacts/sprint-8a-closeout/sit/attempt-<n>" -EnvironmentFingerprint <environment-fingerprint> -AuthorizeDisposableReset -Confirm:$false -VerifyNoOp
+.\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/initial-inventory.json"
+.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/attempt-<n>/initial-deployment.json"
+.\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/initial-smoke.json"
+.\scripts\run-sprint-8a-component-upgrade.ps1 -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/component-upgrade.json"
+.\scripts\run-sprint-8a-failure-containment.ps1 -Attempt <n> -EvidenceRoot "artifacts/sprint-8a-closeout/sit/attempt-<n>" -EnvironmentFingerprint <environment-fingerprint> -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/failure-containment.json" -AuthorizeDisposableReset -SkipBuild
+.\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/restored-inventory.json"
+.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/attempt-<n>/restored-deployment.json"
+.\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/restored-smoke.json"
+```
 
 - SIT result receipt: `artifacts/sprint-8a-closeout/sit-result.json`.
 - Canonical topology restoration: current Sprint 8A Component release active;
   all services healthy; canonical fresh seed; only v3 Component references;
   no old reader, open failure or partial topology.
+- Receipt publication: the SIT runner calls `Publish-Sprint8ALifecycleReceipt`
+  with phase `sit`, the exact preflight and candidate references,
+  candidate/environment/normalized-Compose identity, all four terminal results,
+  and hashed `canonical_topology_verified` restoration evidence. The helper
+  rejects a missing/renamed lane, another candidate, stale evidence, or
+  incomplete restoration before writing `sit-result.json`; it does not execute
+  or checkpoint the lanes.
+- Finalization-only recovery: only an exact `evidence-finalization` failure at
+  `publication-failed`, with the immutable raw-terminal checkpoint proving all
+  four lanes passed and identity unchanged, may run:
+
+```powershell
+.\scripts\run-sprint-8a-sit.ps1 -Stage Finalize -Attempt <same-n> -PreflightReceipt "artifacts/sprint-8a-closeout/preflight-result.json" -CandidateReceipt "artifacts/sprint-8a-closeout/candidate.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/sit-result.json" -BaseUrl "http://127.0.0.1:8088" -AuthorizeDisposableReset
+```
+
+`Finalize` never reruns a raw SIT lane. It reauthenticates the exact source,
+candidate, environment, normalized Compose digest, and checkpoint, restores
+canonical topology, and retries aggregate/manifest publication. Any other
+failure returns to the coordinator-selected invalidation boundary.
 
 ## UAT
 
 ### Scripted UAT
 
-- Command: Not authorized in implementation or rehearsal. The specialized UAT
-  workflow must bind the exact `candidate.json`, preflight receipt, passing SIT
-  receipt, environment fingerprint, `http://127.0.0.1:8088` endpoint, and
-  attempt-scoped evidence target before fixing the formal command.
+- Tracked staged command interface (implemented; not run):
+
+```powershell
+.\scripts\run-sprint-8a-formal-uat.ps1 -Stage Start -Attempt <n> -PreflightReceipt "artifacts/sprint-8a-closeout/preflight-result.json" -CandidateReceipt "artifacts/sprint-8a-closeout/candidate.json" -SitReceipt "artifacts/sprint-8a-closeout/sit-result.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/uat-result.json" -BaseUrl "http://127.0.0.1:8088"
+# Acquire, hold, execute, and publish UAT-8A-01 through UAT-8A-08 one at a time.
+.\scripts\run-sprint-8a-formal-uat.ps1 -Stage Finalize -Attempt <same-n> -PreflightReceipt "artifacts/sprint-8a-closeout/preflight-result.json" -CandidateReceipt "artifacts/sprint-8a-closeout/candidate.json" -SitReceipt "artifacts/sprint-8a-closeout/sit-result.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/uat-result.json" -BaseUrl "http://127.0.0.1:8088" -AuthorizeDisposableReset
+```
+
+Readiness/preflight validates this interface without starting UAT by running
+`.\scripts\run-sprint-8a-formal-uat.ps1 -SelfTest`.
+
+- `Start` writes the attempt before fallible work, authenticates the exact
+  preflight/candidate/SIT chain, recomputes clean source, candidate, and
+  environment and normalized Compose identities, and runs fresh
+  inventory/navigation plus Sprint 8A product smoke. It writes immutable
+  `attempts/uat-<n>-manual-checkpoint.json` before manual execution.
+- If scripted checks pass, manual scenarios are authoritative. If one or more
+  scripted product/harness/environment assertions fail while identity remains
+  trustworthy, the attempt enters `diagnostic-manual`: execute every safe
+  independent manual scenario as non-authoritative diagnostic evidence and
+  record true dependents blocked with exact reasons. Do not correct or restart
+  until all eight scenarios have terminal receipts and Finalize consolidates
+  the diagnostic pass. A source/candidate/environment identity failure blocks
+  manual work. A `product-decision` blocks manual work and pauses for user
+  direction rather than becoming a test failure.
+- Manual receipts are exactly
+  `uat/attempt-<n>/manual/uat-8a-01.json` through
+  `uat/attempt-<n>/manual/uat-8a-08.json`. The attempt number is part of each
+  typed receipt and its immutable path; a later attempt cannot reuse or
+  supersede an earlier attempt's evidence. One scenario at a time must use the
+  following held-lease sequence; the live lease spans all human actions and is
+  consumed by receipt publication:
+
+```powershell
+. .\scripts\sprint-8a-lifecycle-chain.ps1
+$scenario = "UAT-8A-<nn>"
+$startedAt = [DateTimeOffset]::UtcNow
+$contract = Get-Sprint8AManualUatScenarioContract -Scenario $scenario
+$executionLease = Open-Sprint8AManualUatScenarioLease -Scenario $scenario -Attempt <uat-n> -CandidateFingerprint <candidate-fingerprint> -EnvironmentFingerprint <environment-fingerprint> -StartedAt $startedAt -Authoritative $true -Diagnostic $false -RepositoryRoot (Get-Location).Path -EvidenceRoot "artifacts/sprint-8a-closeout"
+# While $executionLease remains live, execute every exact step in
+# docs/sprints/sprint-8a-uat/uat-8a-<nn>.md and retain hashed evidence.
+$actions = @($contract.steps | ForEach-Object { [pscustomobject][ordered]@{ step = [int]$_.step; action = [string]$_.action; expected_result = [string]$_.expected_result; actual_result = "<observed result>"; state = "passed" } })
+$evidence = @([pscustomobject][ordered]@{ step = 1; path = "artifacts/sprint-8a-closeout/uat/attempt-<uat-n>/raw/<scenario-step-1>"; sha256 = "<sha256>" }) # include every canonical step when passed
+$cleanupEvidence = @([pscustomobject][ordered]@{ kind = "canonical-restoration"; path = "artifacts/sprint-8a-closeout/uat/attempt-<uat-n>/raw/<restoration-evidence>"; sha256 = "<sha256>" })
+$endedAt = [DateTimeOffset]::UtcNow
+Publish-Sprint8AManualUatReceipt -Scenario $scenario -Attempt <uat-n> -CandidateFingerprint <candidate-fingerprint> -EnvironmentFingerprint <environment-fingerprint> -State passed -Authoritative $true -Diagnostic $false -AssertionsStarted $true -Role $contract.role -StartingState "<observed exact starting state>" -Actions $actions -ExpectedResult "Every canonical step expectation in $scenario is satisfied." -ActualResult "<observed scenario result>" -Evidence $evidence -CleanupEvidence $cleanupEvidence -StartedAt $startedAt -EndedAt $endedAt -RepositoryRoot (Get-Location).Path -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/uat/attempt-<uat-n>/manual/uat-8a-<nn>.json" -ExecutionLease $executionLease
+```
+
+For `diagnostic-manual`, both lease and receipt use
+`-Authoritative $false -Diagnostic $true`. A failed receipt supplies an
+allowed `-Classification` and `-FailureMessage`; a blocked receipt uses
+`-AssertionsStarted $false` and an exact `-BlockedReason`. After one
+authoritative manual defect, every later safe scenario is diagnostic. A manual
+`product-decision` pauses later scenarios. If execution is interrupted, reopen
+only the exact same lease binding and start time with `-Resume`; do not create a
+replacement scenario identity. Finalize rejects every open or interrupted
+start lease. Resume writes an authenticated marker bound to the original and
+current process IDs. A resumed execution can retain a terminal failed or
+blocked receipt, but it cannot establish an authoritative pass; a passing
+scenario must be observed without a process-lineage break.
+- `Publish-Sprint8AManualUatReceipt` validates the Markdown-derived exact role,
+  ordered step/action/expected-result identities, observed results, terminal
+  state, assertion boundary, candidate/environment/checkpoint binding, evidence
+  digest per step, canonical-restoration evidence, and the matching execution-
+  lease start/completion pair. Before publishing either terminal file it writes
+  an immutable prepared checkpoint containing the exact receipt and completion
+  bytes; retry repairs only that bound publication transaction and never
+  reruns the human scenario. Finalization can pass only with all eight exact
+  authoritative, non-diagnostic passing receipts. An explicit
+  `-ManualReceiptDirectory`, when supplied to the staged runner, must resolve
+  to that same attempt-scoped canonical directory.
+- `Finalize` requires the unchanged Start checkpoint and all eight exact manual
+  receipts, revalidates source/environment, frozen endpoints, and the
+  prerequisite chain, and requires explicit disposable-reset authorization. It
+  then performs source-exact from-empty materialization plus semantic no-op,
+  inventory/navigation audit, and Sprint 8A smoke with the frozen gateway,
+  materialization-control, and Supervisor endpoints. The runner merges the
+  prepared UAT result commitment and every retained artifact into the existing
+  preflight/SIT evidence manifest. After scripted, manual, and restoration
+  checks all pass, it writes and hashes a durable
+  `finalization-completion-checkpoint.json`, then commits and publishes the
+  canonical UAT JSON/sidecar pair. It does not consume or relabel rehearsal's
+  `uat-sprint-8a.ps1` diagnostics.
+- If publication alone fails after that completion checkpoint, rerun the same
+  `Finalize` command. It reauthenticates the completion and retry checkpoints,
+  source, candidate, environment, normalized Compose digest, endpoints,
+  prerequisites, and passing SIT receipt, then executes only the publication
+  tail; it does not rerun manual validation or destructive restoration.
+  Canonical pair recovery recognizes exactly four states: `absent` publishes
+  the committed JSON and sidecar; `json-only` authenticates JSON and writes only
+  the committed sidecar; `sidecar-only` authenticates the sidecar and writes
+  only the committed JSON; `complete` authenticates both without rewriting
+  them. Mismatched or malformed partial bytes remain a retained
+  `evidence-finalization` failure and are never blessed.
 - Start rule: only after authoritative SIT passes on the same fingerprint.
 - Result: Not Run.
-- Evidence: `artifacts/sprint-8a-closeout/uat/scripted/`.
+- Evidence: `artifacts/sprint-8a-closeout/uat/attempt-<n>/`,
+  `artifacts/sprint-8a-closeout/attempts/uat-<n>.json`, the immutable
+  `attempts/uat-<n>-manual-checkpoint.json`, eight manual receipts and eight
+  execution-lease pairs, finalization completion/result-commit evidence, any
+  retained publication-retry evidence, `uat-result.json`, and
+  `evidence-manifest.json`.
 
 ### Manual UAT
 
 | Scenario | Role/start state | Actions | Expected | Result | Evidence |
 |---|---|---|---|---|---|
-| UAT-8A-01 unchanged Component experience | Component manager/reader; fresh canonical seed | Browse, create/edit/publish/version, exercise lifecycle and every kind; capture light/dark at 1280/768/390, keyboard, 200% zoom, no-JS SSR, hydration and console | Same accepted product behavior and canonical vocabulary; module owns documents/assets; responsive/theme/accessibility evidence complete; disposal succeeds | Not Run | `uat/manual/uat-8a-01.json` plus named screenshots/trace/console record |
-| UAT-8A-02 from-empty seed and new references | Operator; explicitly authorized empty Sprint 8A databases | Run source-exact materialization, inspect exact owner read-back, rerun unchanged, open seeded Dashboard | Exactly 7 Component shells, 8 versions and 7 placements; predecessor/successor/action fixtures correct; only selected Component instance/v3; second run no-op | Not Run | `uat/manual/uat-8a-02.json` |
-| UAT-8A-03 configuration and diagnostics | Global Module Management manager/reader | Set label and valid timeout; try blank/long label, 0/31 timeout, unknown field/version; inspect navigation/admin/product headings/diagnostics | Manifest defaults are Components/5; label/range/authority correct; binding/provider/contract/compatibility/health/result diagnostics are sanitized | Not Run | `uat/manual/uat-8a-03.json` plus screenshots |
-| UAT-8A-04 Dataset contract, joint scope and outage | Component manager plus scoped/out-of-scope actors; Dataset and mixed Dashboard fixtures | Author/preview/execute; prove shared-node Dashboard render; inspect/attempt a disjoint placement while authorized on both scopes; compare known/random restriction; stop/timeout/recover Dataset provider; retry preserved editor | Typed reference only; shared-node path works; disjoint title/metadata/identity/data stay undisclosed and render is denied; known/random outcomes match; outage is read-only with no pending write; recovery succeeds | Not Run | `uat/manual/uat-8a-04.json` plus screenshots |
-| UAT-8A-05 Dashboard lifecycle and outages | Component manager, Dashboard manager/reader; exact predecessor-bound action placements | Refresh exact findings; Defer then Upgrade; independently Replace and Remove; verify blocked nondisclosure; stop/recover Component | Three lifecycle findings and all four actions are exact; blocked placement absent; outage covers exact five authorized remaining placements; recovery has zero findings | Not Run | `uat/manual/uat-8a-05.json` plus structured semantic receipt/screenshots |
-| UAT-8A-06 isolation and unsupported old inputs | Operator plus authorized/restricted actors | Inspect images/graphs/credentials/Core absence; submit V1/V2, old owner/type and old payload requests | No forbidden source/storage edge; old inputs fail exact normal contract with nondisclosure; no adapter/ledger/fallback | Not Run | `uat/manual/uat-8a-06.json` |
-| UAT-8A-07 failed materialization rerun | Operator; disposable authorized topology; induced owner-bootstrap failure | Run failing attempt, inspect evidence, verify exact teardown, remove fault and rerun | Failure retained; partial project/volumes absent; successor begins empty and reaches canonical health | Not Run | `uat/manual/uat-8a-07.json` |
-| UAT-8A-08 Component-only upgrade/rollback | Operator/reviewer; healthy `1.0.0` current release plus source-built `0.9.0` fixture | Establish `0.9.0`, upgrade to `1.0.0`, roll back, restore `1.0.0` through Supervisor/Compose; compare snapshots | Exact one-owner health-gated deltas; distinct release/binary identities; Component state retained; unrelated identities/restarts unchanged; final topology healthy | Not Run | `uat/manual/uat-8a-08.json` plus upgrade receipt |
+| UAT-8A-01 unchanged Component experience | Component manager/reader; fresh canonical seed | Browse, create/edit/publish/version, exercise lifecycle and every kind; capture light/dark at 1280/768/390, keyboard, 200% zoom, no-JS SSR, hydration and console | Same accepted product behavior and canonical vocabulary; module owns documents/assets; responsive/theme/accessibility evidence complete; disposal succeeds | Not Run | `uat/attempt-<n>/manual/uat-8a-01.json` plus named screenshots/trace/console record |
+| UAT-8A-02 from-empty seed and new references | Operator; explicitly authorized empty Sprint 8A databases | Run source-exact materialization, inspect exact owner read-back, rerun unchanged, open seeded Dashboard | Exactly 7 Component shells, 8 versions and 7 placements; predecessor/successor/action fixtures correct; only selected Component instance/v3; second run no-op | Not Run | `uat/attempt-<n>/manual/uat-8a-02.json` |
+| UAT-8A-03 configuration and diagnostics | Global Module Management manager/reader | Set label and valid timeout; try blank/long label, 0/31 timeout, unknown field/version; inspect navigation/admin/product headings/diagnostics | Manifest defaults are Components/5; label/range/authority correct; binding/provider/contract/compatibility/health/result diagnostics are sanitized | Not Run | `uat/attempt-<n>/manual/uat-8a-03.json` plus screenshots |
+| UAT-8A-04 Dataset contract, joint scope and outage | Component manager plus scoped/out-of-scope actors; Dataset and mixed Dashboard fixtures | Author/preview/execute; prove shared-node Dashboard render; inspect/attempt a disjoint placement while authorized on both scopes; compare known/random restriction; stop/timeout/recover Dataset provider; retry preserved editor | Typed reference only; shared-node path works; disjoint title/metadata/identity/data stay undisclosed and render is denied; known/random outcomes match; outage is read-only with no pending write; recovery succeeds | Not Run | `uat/attempt-<n>/manual/uat-8a-04.json` plus screenshots |
+| UAT-8A-05 Dashboard lifecycle and outages | Component manager, Dashboard manager/reader; exact predecessor-bound action placements | Refresh exact findings; Defer then Upgrade; independently Replace and Remove; verify blocked nondisclosure; stop/recover Component | Three lifecycle findings and all four actions are exact; blocked placement absent; outage covers exact five authorized remaining placements; recovery has zero findings | Not Run | `uat/attempt-<n>/manual/uat-8a-05.json` plus structured semantic receipt/screenshots |
+| UAT-8A-06 isolation and unsupported old inputs | Operator plus authorized/restricted actors | Inspect images/graphs/credentials/Core absence; submit V1/V2, old owner/type and old payload requests | No forbidden source/storage edge; old inputs fail exact normal contract with nondisclosure; no adapter/ledger/fallback | Not Run | `uat/attempt-<n>/manual/uat-8a-06.json` |
+| UAT-8A-07 failed materialization rerun | Operator; disposable authorized topology; induced owner-bootstrap failure | Run failing attempt, inspect evidence, verify exact teardown, remove fault and rerun | Failure retained; partial project/volumes absent; successor begins empty and reaches canonical health | Not Run | `uat/attempt-<n>/manual/uat-8a-07.json` |
+| UAT-8A-08 Component-only upgrade/rollback | Operator/reviewer; healthy `1.0.0` current release plus source-built `0.9.0` fixture | Establish `0.9.0`, upgrade to `1.0.0`, roll back, restore `1.0.0` through Supervisor/Compose; compare snapshots | Exact one-owner health-gated deltas; distinct release/binary identities; Component state retained; unrelated identities/restarts unchanged; final topology healthy | Not Run | `uat/attempt-<n>/manual/uat-8a-08.json` plus upgrade receipt |
 
 - UAT result receipt: `artifacts/sprint-8a-closeout/uat-result.json`.
 - Final topology restoration: intended Sprint 8A route/slot and current
@@ -1128,7 +1495,7 @@ formal-UAT-owned.
 
 ## Changed Integration Contracts
 
-| Boundary | Planned change | Required negative proof |
+| Boundary | Implemented change (formal proof pending) | Required negative proof |
 |---|---|---|
 | Component public contract | exact-current `3.0.0`, Module Instance owner and `tessara.components.component_version` | old/mixed/wrong-instance/cross-installation/malformed/unauthorized inputs fail closed |
 | Component render response | Components-owned exact Table/visual DTOs and render kind; non-nil exact persistent identity; explicit both-nil preview identity | unknown/cross-kind fields, wrong branch/kind/schema, Dataset identity, mismatched/nil persistent identity, and non-nil/partial-nil preview fail closed |
@@ -1192,6 +1559,12 @@ Runtime chronology:
 | 2026-08-07 | Implementation audit / active legacy acceptance facade | Source audit started | mutable successor | `harness` | Remove normalization aliases and flat Dataset-major fixtures; enforce exact v3 typed inputs; advance manifest to 75 exact scenarios | Readiness 36, Rehearsal 29, and all downstream phases | Correct consolidated batch, then new complete Readiness and Rehearsal |
 | 2026-08-07 | Intermediate implementation diagnostics | Yes; narrow and workspace assertions ran | mutable successor identities | N/A — later superseded | Focused checks and one 684.9-second all-feature workspace pass completed before final preview/joint-scope edits | No gate or downstream phase authorized | Rerun final implementation checks, then complete Readiness and Rehearsal |
 | 2026-08-07 | Final implementation-entry verification | Yes; complete workspace and static implementation suites ran | final corrected mutable product source | N/A — implementation checks passed | Six isolated databases reset; 619.6-second all-feature workspace suite, warnings-denied clippy, check, formatting, focused integrations, boundary/acceptance/link/runner audits, 75/75 inventory, TypeScript, and Playwright discovery passed | No formal gate or downstream phase authorized | Commit cleanly, then run complete Readiness and Rehearsal |
+| 2026-08-07 01:38 EDT | Readiness 37 / complete gate | Yes; all 15 checks passed | `84964c7b` / `4f39cb71`, environment `96c2a32e...` | N/A — passed, later superseded | Complete receipt retained with SHA-256 `a4ab361a...` | Readiness 37 and all downstream phases after R30 correction | Successor complete Readiness consuming R30 authorization, then complete Rehearsal |
+| 2026-08-07 01:39–02:52 EDT | Rehearsal 30 / four raw failed lanes | Yes in fact; R30 omitted the required per-lane marker | `84964c7b` | Raw: two `environment`, one `product`, one `harness`; diagnosed: three `harness` roots | Action-object projection, source-identity shape, and process-environment restoration corrected as one batch; raw receipts unchanged | Rehearsal 30, Readiness 37, and all downstream phases | Successor complete Readiness and complete Rehearsal |
+| 2026-08-07 01:39–02:52 EDT | Rehearsal 30 / ten blocked lanes | No in fact; R30 omitted the required per-lane marker | `84964c7b` | N/A — exact dependency blocks | Ten exact blocked reasons retained; assertion counts corrected to exclude blocked terminal receipts | Rehearsal 30 and all downstream phases | Successor complete Readiness and complete Rehearsal |
+| 2026-08-07 02:52 EDT | Rehearsal 30 / harvest and correction authorization | No product assertions | `84964c7b` | Four raw symptoms; three diagnosed `harness` roots | One immutable harvest, one consolidated batch, and one unconsumed one-use successor-Readiness authorization retained | Correction is candidate-affecting; no freeze | Correct batch, consume authorization in successor Readiness, then complete Rehearsal |
+| 2026-08-07 after user-directed testing exit | Implementation audit / Dashboard executable identity | Source audit started | mutable successor | `product` | Current runtime/migration commands now name `/usr/local/bin/dashboard-module`, the executable installed by the image; exact Manifest/Dockerfile assertions and canonical catalog digest advanced together | Readiness 37, Rehearsal 30, and all downstream phases | Commit the consolidated implementation correction, then successor complete Readiness and Rehearsal |
+| 2026-08-07 after user-directed testing exit | Implementation audit / Component exact-current configuration | Source audit started | mutable successor | `product` | Removed retired object-shaped `visible_columns` and filter `field` readers from validation, provider and browser; added rejection/source guards and advanced asset/Manifest/catalog digests together | Readiness 37, Rehearsal 30, and all downstream phases | Commit the consolidated implementation correction, then successor complete Readiness and Rehearsal |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
@@ -1235,15 +1608,16 @@ immutable fingerprint covers all authoritative SIT and UAT evidence.
 - SIT passed: No.
 - UAT passed: No.
 - Acceptance mapping complete: Planned, not executed.
-- Invalidation decisions satisfied: N/A before execution.
+- Invalidation decisions satisfied: No — successor Readiness and Rehearsal are
+  pending after the candidate-affecting R30 correction.
 - Unresolved product decisions: None.
 - Intended active route/slot: source-exact Sprint 8A gateway with current
   Component release and canonical fresh seed.
-- Application health: Not evaluated during planning.
+- Application health: Not proven after R30; cleanup/restoration was not proven.
 - Evidence source commit: Not frozen.
 - Documentation commit: Not created.
 - Authorization timestamp: None.
 
 Closeout is forbidden until the validation coordinator verifies the complete
-hashed chain and writes authorization. This planned record implies no candidate,
-deployment, SIT, UAT or product result.
+hashed chain and writes authorization. This record implies no authoritative
+frozen-candidate deployment, SIT, formal-UAT, or acceptance result.

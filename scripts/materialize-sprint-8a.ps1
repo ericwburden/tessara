@@ -930,6 +930,16 @@ try {
                 Get-Sprint8AArtifact -Path $runtimeArtifactPath
             }
         }
+        $exceptionType = $materializationError.Exception.GetType().FullName
+        $failureClassification = if ($expectedFaultObserved -eq $true) {
+            "harness"
+        } elseif ($exceptionType -match '^System\.Management\.Automation\.(PropertyNotFoundException|ParameterBindingException|CommandNotFoundException|ParseException)$') {
+            "harness"
+        } elseif ($materializationMessage -match '(?i)Docker daemon is not running|Cannot connect to the Docker daemon|connection refused|timed out while waiting for .* health') {
+            "environment"
+        } else {
+            "product"
+        }
         $failure = [ordered]@{
             schema_version = 2
             contract = "tessara.sprint-8a.materialization-failure"
@@ -954,8 +964,9 @@ try {
                 }
             } else { $null }
             failure = [ordered]@{
+                classification = $failureClassification
                 message = $materializationMessage
-                exception_type = $materializationError.Exception.GetType().FullName
+                exception_type = $exceptionType
                 script_stack_trace = $materializationError.ScriptStackTrace
                 service_log_exit_code = $serviceLogExitCode
             }

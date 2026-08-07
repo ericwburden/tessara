@@ -4,6 +4,7 @@ param(
     [string]$HarvestPath,
     [string]$DefectBatchPath,
     [string]$CorrectionAuthorizationPath,
+    [string]$EvidenceRoot = "artifacts/sprint-8a-closeout",
     [switch]$SelfTest
 )
 
@@ -176,6 +177,11 @@ function Assert-TerminalCheckEvidence {
     if (@("passed", "failed", "blocked") -cnotcontains $state) {
         throw "Check '$($Declared.name)' is not passed, failed, or blocked."
     }
+    if ($Result.PSObject.Properties.Name -notcontains "assertions_started" -or
+        $Result.assertions_started -isnot [bool] -or
+        $Result.PSObject.Properties.Name -notcontains "assertions_started_at") {
+        throw "Check '$($Declared.name)' omits its exact assertion-start boundary."
+    }
     if ($state -ceq "blocked") {
         $failedDependencies = @($Declared.depends_on | Where-Object {
             $dependencyName = [string]$_
@@ -190,7 +196,10 @@ function Assert-TerminalCheckEvidence {
             @($failedDependencies | Where-Object { -not $reason.Contains([string]$_) }).Count -gt 0) {
             throw "Blocked check '$($Declared.name)' lacks its exact failed prerequisite names."
         }
-        if ($null -ne $Result.exit_status -or -not [string]::IsNullOrWhiteSpace([string]$Result.started_at)) {
+        if ($null -ne $Result.exit_status -or
+            -not [string]::IsNullOrWhiteSpace([string]$Result.started_at) -or
+            [bool]$Result.assertions_started -or
+            -not [string]::IsNullOrWhiteSpace([string]$Result.assertions_started_at)) {
             throw "Blocked check '$($Declared.name)' must not claim command execution."
         }
         return
@@ -201,9 +210,19 @@ function Assert-TerminalCheckEvidence {
         [string]::IsNullOrWhiteSpace([string]$Result.ended_at)) {
         throw "Executed check '$($Declared.name)' lacks command or timestamps."
     }
-    $started = [DateTimeOffset]::Parse([string]$Result.started_at)
-    $ended = [DateTimeOffset]::Parse([string]$Result.ended_at)
-    if ($ended -lt $started -or [double]$Result.duration_ms -lt 0) {
+    $started = ConvertTo-Sprint8ADateTimeOffset -Value $Result.started_at -Label "harvest check start"
+    $ended = ConvertTo-Sprint8ADateTimeOffset -Value $Result.ended_at -Label "harvest check end"
+    if (-not [bool]$Result.assertions_started -or
+        [string]::IsNullOrWhiteSpace([string]$Result.assertions_started_at)) {
+        throw "Executed check '$($Declared.name)' does not prove that assertions started."
+    }
+    $assertionsStarted = ConvertTo-Sprint8ADateTimeOffset `
+        -Value $Result.assertions_started_at `
+        -Label "harvest assertion start"
+    if ($ended -lt $started -or
+        $assertionsStarted -lt $started -or
+        $assertionsStarted -gt $ended -or
+        [double]$Result.duration_ms -lt 0) {
         throw "Executed check '$($Declared.name)' has invalid chronology."
     }
     if (($state -ceq "passed" -and [int]$Result.exit_status -ne 0) -or
@@ -288,6 +307,7 @@ function Assert-HarvestComplete {
     $failedTerminal = @($terminal | Where-Object state -CEQ "failed")
     $blockedTerminal = @($terminal | Where-Object state -CEQ "blocked")
     $passedTerminal = @($terminal | Where-Object state -CEQ "passed")
+    $assertionBearingTerminal = @($terminal | Where-Object assertions_started -EQ $true)
     if (([string]$Attempt.source_identity_verification_state -cne "verified" -or
             [bool]$Attempt.mutable_source_identity.dirty) -and
         @($failedTerminal | Where-Object name -CEQ "validation-readiness-prerequisite").Count -ne 1) {
@@ -370,7 +390,7 @@ function Assert-HarvestComplete {
             throw "Harvest receipt omits exact '$field' accounting."
         }
     }
-    if ([int]$Attempt.assertion_count -ne $declared.Count -or
+    if ([int]$Attempt.assertion_count -ne $assertionBearingTerminal.Count -or
         [int]$Attempt.failure_count -ne $failedTerminal.Count -or
         [int]$Attempt.blocked_count -ne $blockedTerminal.Count -or
         [int]$Attempt.nested_blocked_count -ne $nestedBlocked.Count -or
@@ -502,6 +522,7 @@ function Invoke-ExpectedGuardFailure {
 }
 
 if ($SelfTest) {
+    Test-Sprint8AEvidenceReferenceResolution | Out-Null
     $source = [pscustomobject]@{ commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "sprint-8a"; acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64 }
     $attempt = [pscustomobject]@{
         schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal"; authoritative = $false
@@ -509,7 +530,7 @@ if ($SelfTest) {
         assertions_started_at = "2026-01-01T00:00:00Z"; mutable_source_identity = $source; environment_fingerprint = "e" * 64
         source_identity_verification_state = "verified"
         environment_identity = [pscustomobject]@{ verification_state = "verified" }
-        assertion_count = 3; failure_count = 1; blocked_count = 1; nested_blocked_count = 1; nested_failure_count = 1
+        assertion_count = 2; failure_count = 1; blocked_count = 1; nested_blocked_count = 1; nested_failure_count = 1
         checks = @(
             [pscustomobject]@{ name = "independent"; depends_on = @(); command = "fail" },
             [pscustomobject]@{ name = "uat-diagnostics"; depends_on = @(); command = "pass" },
@@ -523,9 +544,9 @@ if ($SelfTest) {
         attempt_receipt = [pscustomobject]@{ path = "attempts/attempt.json"; sha256 = "d" * 64 }
         failed_count = 1; blocked_count = 1; passed_count = 1; nested_blocked_count = 1; nested_failed_count = 1
         checks = @(
-            [pscustomobject]@{ name = "independent"; command = "fail"; state = "failed"; classification = "harness"; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 1000; exit_status = 1; evidence_path = "raw/fail.log"; evidence_sha256 = "f" * 64; produced_evidence = @(); nested_blocked_checks = @(); nested_failed_checks = @() },
-            [pscustomobject]@{ name = "uat-diagnostics"; command = "pass"; state = "passed"; classification = $null; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 1000; exit_status = 0; evidence_path = "raw/pass.log"; evidence_sha256 = "a" * 64; produced_evidence = @(); nested_blocked_checks = @([pscustomobject]@{ name = "uat-diagnostics/UAT-8A-01"; parent_check = "uat-diagnostics"; blocked_by = @("independent"); dependency_reason = "blocked by invalid prerequisite(s): independent" }); nested_failed_checks = @([pscustomobject]@{ name = "uat-diagnostics/UAT-8A-02/semantic-proof"; parent_check = "uat-diagnostics"; scenario = "UAT-8A-02"; assertion_id = "semantic-proof"; classification = "product"; failure_reason = "semantic mismatch"; raw_evidence = @([pscustomobject]@{ path = "raw/semantic.json"; sha256 = "b" * 64 }) }) },
-            [pscustomobject]@{ name = "dependent"; command = "blocked"; state = "blocked"; classification = "harness"; dependency_reason = "independent failed"; started_at = $null; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 0; exit_status = $null; evidence_path = $null; evidence_sha256 = $null; nested_blocked_checks = @(); nested_failed_checks = @() }
+            [pscustomobject]@{ name = "independent"; command = "fail"; state = "failed"; classification = "harness"; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; assertions_started = $true; assertions_started_at = "2026-01-01T00:00:01Z"; duration_ms = 1000; exit_status = 1; evidence_path = "raw/fail.log"; evidence_sha256 = "f" * 64; produced_evidence = @(); nested_blocked_checks = @(); nested_failed_checks = @() },
+            [pscustomobject]@{ name = "uat-diagnostics"; command = "pass"; state = "passed"; classification = $null; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; assertions_started = $true; assertions_started_at = "2026-01-01T00:00:01Z"; duration_ms = 1000; exit_status = 0; evidence_path = "raw/pass.log"; evidence_sha256 = "a" * 64; produced_evidence = @(); nested_blocked_checks = @([pscustomobject]@{ name = "uat-diagnostics/UAT-8A-01"; parent_check = "uat-diagnostics"; blocked_by = @("independent"); dependency_reason = "blocked by invalid prerequisite(s): independent" }); nested_failed_checks = @([pscustomobject]@{ name = "uat-diagnostics/UAT-8A-02/semantic-proof"; parent_check = "uat-diagnostics"; scenario = "UAT-8A-02"; assertion_id = "semantic-proof"; classification = "product"; failure_reason = "semantic mismatch"; raw_evidence = @([pscustomobject]@{ path = "raw/semantic.json"; sha256 = "b" * 64 }) }) },
+            [pscustomobject]@{ name = "dependent"; command = "blocked"; state = "blocked"; classification = "harness"; dependency_reason = "independent failed"; started_at = $null; ended_at = "2026-01-01T00:00:02Z"; assertions_started = $false; assertions_started_at = $null; duration_ms = 0; exit_status = $null; evidence_path = $null; evidence_sha256 = $null; nested_blocked_checks = @(); nested_failed_checks = @() }
         )
     }
     $batch = [pscustomobject]@{
@@ -632,6 +653,26 @@ foreach ($path in @($AttemptPath, $HarvestPath, $DefectBatchPath)) {
 if ([string]::IsNullOrWhiteSpace($CorrectionAuthorizationPath)) {
     throw "CorrectionAuthorizationPath is required; correction cannot be authorized implicitly."
 }
+$attemptReference = Resolve-Sprint8AEvidenceReference `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $EvidenceRoot `
+    -Path $AttemptPath `
+    -AllowLegacyAbsolute
+$harvestReference = Resolve-Sprint8AEvidenceReference `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $EvidenceRoot `
+    -Path $HarvestPath `
+    -AllowLegacyAbsolute
+$batchReference = Resolve-Sprint8AEvidenceReference `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $EvidenceRoot `
+    -Path $DefectBatchPath `
+    -AllowLegacyAbsolute
+$authorizationReference = Resolve-Sprint8AEvidenceReference `
+    -RepositoryRoot $repoRoot `
+    -EvidenceRoot $EvidenceRoot `
+    -Path $CorrectionAuthorizationPath `
+    -AllowLegacyAbsolute
 $attemptSha = Assert-Sprint8AReceiptSidecar -Path $AttemptPath
 $harvestSha = Assert-Sprint8AReceiptSidecar -Path $HarvestPath
 $batchSha = Assert-Sprint8AReceiptSidecar -Path $DefectBatchPath
@@ -671,10 +712,10 @@ $authorization = [ordered]@{
     generated_at = [DateTimeOffset]::UtcNow.ToString("o")
     mutable_source_identity = $attempt.mutable_source_identity
     environment_fingerprint = [string]$attempt.environment_fingerprint
-    predecessor_attempt_receipt = [ordered]@{ path = $AttemptPath; sha256 = $attemptSha }
-    harvest_receipt = [ordered]@{ path = $HarvestPath; sha256 = $harvestSha }
-    defect_batch = [ordered]@{ path = $DefectBatchPath; sha256 = $batchSha }
+    predecessor_attempt_receipt = [ordered]@{ path = [string]$attemptReference.path; sha256 = $attemptSha }
+    harvest_receipt = [ordered]@{ path = [string]$harvestReference.path; sha256 = $harvestSha }
+    defect_batch = [ordered]@{ path = [string]$batchReference.path; sha256 = $batchSha }
     authorization = "tracked correction and one successor readiness attempt are permitted for this consolidated batch"
 }
-Publish-Sprint7AEvidence -Document $authorization -OutputPath $CorrectionAuthorizationPath | Out-Null
+Publish-Sprint7AEvidence -Document $authorization -OutputPath ([string]$authorizationReference.full_path) | Out-Null
 Write-Host "Validation harvest is complete; one consolidated correction/restart is authorized."

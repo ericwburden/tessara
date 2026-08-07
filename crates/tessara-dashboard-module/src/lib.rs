@@ -1028,6 +1028,26 @@ mod tests {
         let tessara_module_contract::DeploymentProfile::TessaraOciV1(deployment) =
             &manifest.deployment;
         assert_eq!(deployment.listen.port, 8091);
+        assert_eq!(
+            deployment
+                .runtime_image
+                .command
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["/usr/local/bin/dashboard-module", "serve"]
+        );
+        assert_eq!(
+            deployment
+                .migration_image
+                .as_ref()
+                .expect("Dashboard declares a migration image")
+                .command
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["/usr/local/bin/dashboard-module", "migrate"]
+        );
         assert_eq!(manifest.dependencies.len(), 1);
         assert_eq!(
             manifest.dependencies[0].binding_key.as_str(),

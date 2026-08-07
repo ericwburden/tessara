@@ -552,3 +552,153 @@ is a new complete Validation Readiness followed by a new complete Candidate
 Rehearsal against the same clean source and fresh six-database environment
 identity; preflight, candidate freeze, SIT, and formal UAT remain forbidden
 until both pass.
+
+## 2026-08-07 — Consolidated Readiness 37/Rehearsal 30 correction
+
+Validation Readiness 37 passed all 15 checks against clean commit
+`84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`, tree
+`4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`, and environment fingerprint
+`96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`.
+Its retained result SHA-256 is
+`a4ab361af6606ff94eaef8c5be5ca3e864dc90cb41efabdcb3aba73014eacf9b`.
+The subsequent candidate-affecting correction supersedes that mutable pass.
+
+Candidate Rehearsal 30 completed its declared 32-lane graph and terminal
+fail-late harvest against the same identity. Eighteen lanes passed, four raw
+lanes failed, and ten were blocked. Cleanup/restoration was not proven, so no
+`candidate-rehearsal-result.json` was issued. The four immutable raw failures
+are retained exactly as observed:
+
+- `source-exact-materialization-no-op` — `environment`;
+- `failure-containment-successor-health` — `product`;
+- `uat-diagnostics` — `harness`; and
+- `final-environment-identity` — `environment`.
+
+Diagnosis consolidates those four symptoms under three `harness` roots without
+rewriting the raw lane classifications:
+
+- bootstrap action dispatch rebound the current pipeline object to an action
+  string before `set_enablement` read `enabled`; retaining the action object
+  corrects both the materialization failure and failure-containment cascade;
+- source identity was returned as an ordered dictionary instead of the exact
+  object shape required by UAT receipt guards, producing 12 false prerequisite
+  failures and 8 internally blocked automated-UAT scenarios; and
+- bootstrap left seven signing, source, and installation process variables set,
+  changing normalized Compose identity in the same process. An external
+  recomputation after exit matched R37 exactly, so this is harness leakage and
+  not persistent environment drift.
+
+The ten blocked lanes and their exact dependencies are retained:
+
+- `deployed-inventory-navigation-audit`, `deployment-evidence`,
+  `product-smoke`, and `component-upgrade-rollback` were blocked by
+  `source-exact-materialization-no-op`;
+- `playwright-execution` was blocked by
+  `source-exact-materialization-no-op` and `deployment-evidence`;
+- `live-product-diagnostics` was blocked by `deployment-evidence` and
+  `product-smoke`; and
+- `successor-inventory-navigation-audit`, `successor-deployment-evidence`,
+  `successor-product-smoke`, and `final-successor-health` were blocked by
+  `failure-containment-successor-health`.
+
+R30 also exposed four repository-owned evidence enforcement gaps. The
+correction gives every terminal lane exact assertion-start evidence and counts
+only executed lanes; gives a structured child classification precedence over
+log/default inference while naming its source; retains secret-free expected,
+actual, and changed-section environment identity evidence; and persists new
+evidence references as contained repository-relative paths. The immutable R30
+authorization's already-retained in-root absolute references may be
+canonicalized for its single consumption, but are not rewritten or generalized
+into support for outside-root paths.
+
+The immutable evidence is retained at:
+
+- `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-attempt.json`,
+  SHA-256
+  `9ce1bba709b0b4bf1eee23cd0eea406fd49f16152cd25d45ea9dc3dac98617b5`;
+- `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-harvest.json`,
+  SHA-256
+  `6167ab682922e7cfe582c9b461f38e31f4260c6259fffd3c3877eef7b62e3d13`;
+- `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-defect-batch.json`,
+  SHA-256
+  `397260d3b4382ddc4731a2c8f7bcc3341ed5f6bc3b77d3dcaf8b03cf3cb36291`;
+  and
+- `artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-30-correction-authorization.json`,
+  SHA-256
+  `efed4d4c53d84454372936067a5a9c454457cf2f42419afe331fc89a8d154792`.
+
+The authorization remains unconsumed and permits exactly one successor
+Validation Readiness start. The tracked harness, acceptance, runner,
+validation-reference, and Sprint documentation corrections are
+candidate-affecting. Complete successor Readiness and complete Candidate
+Rehearsal must both pass against the same corrected source and environment
+identity before preflight, candidate freeze, SIT, or formal UAT.
+
+The downstream handoff is now executable through three repository-owned
+interfaces: `run-sprint-8a-validation-preflight.ps1` owns ten exact checks and
+candidate freeze, `run-sprint-8a-sit.ps1 -Stage Run|Finalize` owns four exact
+lanes and evidence-only recovery, and
+`run-sprint-8a-formal-uat.ps1 -Stage Start|Finalize` owns the complete UAT state
+machine. `scripts/sprint-8a-lifecycle-chain.ps1` validates their exact identities
+and publications. All bind the live normalized Compose configuration digest in
+addition to tracked deployment inputs.
+
+Formal UAT now holds the evidence-root lock through each human scenario with a
+typed execution lease. The manual publisher requires that live lease and writes
+an authenticated start/completion pair bound to the exact scenario receipt.
+Scripted or manual defects retain safe remaining scenarios as
+non-authoritative diagnostic evidence and exact dependency blocks; a product
+decision pauses. Finalize refuses open leases, requires all eight terminal
+receipts, and writes a durable completed scripted/manual/restoration checkpoint
+before result publication. An exact evidence-finalization failure may consume
+that checkpoint for publication-only retry without repeating manual work or
+restoration. Canonical UAT recovery handles only authenticated `absent`,
+`json-only`, `sidecar-only`, or `complete` JSON/sidecar states.
+
+Readiness and the Sprint acceptance contract now parse and self-test the new
+lifecycle, preflight, SIT, and formal-UAT runners and pin normalized-Compose,
+manifest-replacement, execution-lease, fail-late, completion-checkpoint, retry,
+and canonical-pair interfaces. Focused parser/self-tests and the combined
+acceptance contract passed while source remained mutable. These are
+implementation checks, not formal receipts: no corrected-source Readiness,
+Rehearsal, preflight, candidate, SIT, or formal UAT has run.
+
+## 2026-08-07 — Implementation-exit product contract correction
+
+The user-directed exit from testing triggered a fresh comparison of product
+source with the Sprint 8A plan and the validation contracts. That audit found
+two P1 product defects that would have prevented a clean testing entry. They
+are corrected together while the candidate remains mutable:
+
+- **Dashboard executable identity (`product` / deployment):** the current
+  Dashboard Manifest declared `/app/dashboard-module`, while the Dashboard
+  image installs only `/usr/local/bin/dashboard-module`. Runtime and migration
+  commands now use the installed path. The authoritative Dashboard manifest
+  test and Sprint acceptance contract bind both exact command vectors to the
+  Dockerfile copy/entrypoint contract. The current Dashboard canonical
+  manifest digest and Sprint 8A release catalog were advanced together. The
+  immutable Sprint 6E baseline remains historical evidence and is unchanged.
+- **Component configuration generation (`product` / exact-current input):**
+  server validation, provider execution, and browser editor code still read
+  retired object-shaped `visible_columns` entries and the retired filter
+  `field` alias. Fresh-only Sprint 8A accepts only `visible_columns: string[]`
+  and filter `field_key`. Rust negatives reject both object variants and the
+  old filter key; provider/browser readers and the acceptance source guard no
+  longer normalize them. The Component JavaScript, embedded asset constant,
+  Manifest asset digest, canonical Manifest digest, and Sprint 8A catalog were
+  updated as one derived-input cone.
+
+The same audit reconfirmed the independent-module correction by exact identity:
+Core contains only Forms, Workflows, Responses, Datasets, and Migration;
+Dashboard and Components appear only through real Module Releases/Instances;
+navigation remains Scoped Records 7, Components 8, Dashboard 9; and no
+duplicate Dashboard inventory or navigation presentation remains.
+
+Focused implementation proof includes formatting, the Component validation
+negative matrix, canonical provider projection, embedded asset/digest pinning,
+the Dashboard authoritative-manifest test, both API catalog/manifest digest
+tests, PowerShell parsing, the Sprint acceptance contract, and lifecycle-runner
+self-tests. These checks do not issue a gate receipt. All earlier mutable
+Readiness/Rehearsal evidence is superseded; the next testing boundary remains a
+complete successor Validation Readiness followed by a complete Candidate
+Rehearsal against the same corrected source and environment identity.

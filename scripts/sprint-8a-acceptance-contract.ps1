@@ -268,8 +268,50 @@ function Test-Sprint8AAcceptanceContract {
             throw "Component image contract omits '$fragment'."
         }
     }
+    $componentValidationText = Get-Content -LiteralPath `
+        (Join-Path $repoRoot "crates/tessara-component-module/src/validation.rs") -Raw
+    $componentProviderText = Get-Content -LiteralPath `
+        (Join-Path $repoRoot "crates/tessara-component-module/src/provider.rs") -Raw
+    $componentJavaScriptText = Get-Content -LiteralPath `
+        (Join-Path $repoRoot "crates/tessara-component-module/assets/component.js") -Raw
+    foreach ($retiredReader in @(
+        [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = '#[serde(alias = "field")]' },
+        [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "enum ComponentFieldRef" },
+        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("field")' },
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "item.field_key || item.key || item.field" },
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "filter.field_key || filter.field" }
+    )) {
+        if ($retiredReader.text.Contains($retiredReader.fragment)) {
+            throw "Component $($retiredReader.source) source retains retired configuration reader '$($retiredReader.fragment)'."
+        }
+    }
+    foreach ($canonicalReader in @(
+        [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "visible_columns: Vec<String>" },
+        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("field_key")' },
+        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = 'const storedField = filter.field_key || "";' }
+    )) {
+        if (-not $canonicalReader.text.Contains($canonicalReader.fragment)) {
+            throw "Component $($canonicalReader.source) source omits canonical configuration reader '$($canonicalReader.fragment)'."
+        }
+    }
 
     $dashboardManifest = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-dashboard-module/manifest.json") -Raw | ConvertFrom-Json
+    if ((@($dashboardManifest.deployment.declaration.runtime_image.command) -join "|") -cne
+            "/usr/local/bin/dashboard-module|serve" -or
+        (@($dashboardManifest.deployment.declaration.migration_image.command) -join "|") -cne
+            "/usr/local/bin/dashboard-module|migrate") {
+        throw "Dashboard Manifest runtime and migration commands must name the exact image-installed executable."
+    }
+    $dashboardDockerfile = Get-Content -LiteralPath (Join-Path $repoRoot "Dockerfile.dashboard") -Raw
+    foreach ($fragment in @(
+        "cargo build --release -p tessara-dashboard-module",
+        'COPY --from=builder /tmp/dashboard-module /usr/local/bin/dashboard-module',
+        'ENTRYPOINT ["dashboard-module"]'
+    )) {
+        if (-not $dashboardDockerfile.Contains($fragment)) {
+            throw "Dashboard image contract omits '$fragment'."
+        }
+    }
     $expectedDashboardConsumedActions = @("components.catalog", "components.render", "components.resolve")
     $actualDashboardConsumedActions = @(
         $dashboardManifest.consumed_service_actions | ForEach-Object {
@@ -560,11 +602,48 @@ function Test-Sprint8AAcceptanceContract {
         '$resolvedBlueprintPath',
         '[switch]$SemanticNoOp',
         'Unchanged desired state did not resolve to the exact semantic no-op read-back plan.',
-        '$approvedEffects = @($lockfile.materialization_plan.actions'
+        '[switch]$SelfTest',
+        'function Get-Sprint7AApprovedEffects',
+        '$action = $_',
+        '[bool]$action.enabled',
+        'function Get-Sprint7AProcessEnvironmentSnapshot',
+        'function Restore-Sprint7AProcessEnvironmentSnapshot',
+        'Restore-Sprint7AProcessEnvironmentSnapshot -Snapshot $processEnvironmentSnapshot',
+        'Get-Sprint7AApprovedEffects -Actions @($lockfile.materialization_plan.actions)'
     )) {
         if (-not $compositionBootstrapText.Contains($requiredFragment)) {
             throw "Sprint 8A composition bootstrap omits harness override '$requiredFragment'."
         }
+    }
+    & (Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1") -SelfTest | Out-Null
+    $bootstrapTokens = $null
+    $bootstrapParseErrors = $null
+    $bootstrapAst = [Management.Automation.Language.Parser]::ParseFile(
+        (Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1"),
+        [ref]$bootstrapTokens,
+        [ref]$bootstrapParseErrors
+    )
+    $bootstrapExecutionTries = @($bootstrapAst.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.TryStatementAst] -and
+            $node.Body.Extent.Text.Contains('$env:TESSARA_SOURCE_COMMIT =') -and
+            $node.Body.Extent.Text.Contains('$env:TESSARA_SIGNING_ISSUER =')
+    }, $true))
+    $bootstrapCleanupTries = @()
+    if ($bootstrapExecutionTries.Count -eq 1 -and
+        $null -ne $bootstrapExecutionTries[0].Finally) {
+        $bootstrapCleanupTries = @($bootstrapExecutionTries[0].Finally.FindAll({
+            param($node)
+            $node -is [Management.Automation.Language.TryStatementAst] -and
+                $node.Body.Extent.Text.Contains('Pop-Location') -and
+                $null -ne $node.Finally -and
+                $node.Finally.Extent.Text.Contains('Restore-Sprint7AProcessEnvironmentSnapshot -Snapshot $processEnvironmentSnapshot')
+        }, $true))
+    }
+    if (@($bootstrapParseErrors).Count -ne 0 -or
+        $bootstrapExecutionTries.Count -ne 1 -or
+        $bootstrapCleanupTries.Count -ne 1) {
+        throw "Sprint 8A composition bootstrap must restore the caller process environment in a nested finally even when location cleanup fails."
     }
     $dashboardAcceptanceText = Get-Content -LiteralPath (Join-Path $repoRoot "end2end/tests/dashboards.spec.ts") -Raw
     if (-not $dashboardAcceptanceText.Contains('option.component_slug === "sprint-8a-record-table"')) {
@@ -703,15 +782,39 @@ function Test-Sprint8AAcceptanceContract {
             "TEST_API_ENROLLMENT_DATABASE_URL",
             "TEST_INSTALLATION_CONTROL_DATABASE_URL", "Invoke-Sprint8ADatabaseProbe",
             "Get-Sprint8ADeploymentEnvironmentProbe", "Get-Sprint8AToolchainEnvironmentContract",
+            "function Resolve-Sprint8AEvidenceReference",
+            "function Test-Sprint8AEvidenceReferenceResolution",
+            "function Compare-Sprint8AEnvironmentContracts",
+            "function Test-Sprint8AEnvironmentContractComparison",
             "function Get-Sprint8AOptionalObjectPropertyValue",
             "function Get-Sprint8AComposeServiceProjection",
             "function Test-Sprint8AComposeServiceProjection",
             "function Get-Sprint8AResultClassifications",
             "function Test-Sprint8AResultClassificationProjection",
+            "function Assert-Sprint8ASourceIdentityObject",
+            '[pscustomobject][ordered]@{',
+            '".codex/skills/tessara-sprint-validation/**"',
+            '"docs/sprints/sprint-8a-*.md"',
+            '"end2end/**"',
+            '"scripts/*sprint-8a*.ps1"',
+            '"scripts/test-sprint-validation-harvest.ps1"',
+            '"deploy/sprint-7a/**"',
+            '"deploy/sprint-8a/**"',
+            '"crates/*/manifest.json"',
+            '"crates/*/migrations/*.sql"',
             "tessara.sprint-8a.deployment-environment-probe", "DeploymentProbe",
             "materialization_control",
             "transaction_round_trip", "canonical_server", 'identity = "$canonicalServer/',
             "environment", "fingerprint"
+        )
+        "scripts/materialize-sprint-8a.ps1" = @(
+            '$exceptionType = $materializationError.Exception.GetType().FullName',
+            '$failureClassification = if ($expectedFaultObserved -eq $true)',
+            'PropertyNotFoundException|ParameterBindingException|CommandNotFoundException|ParseException',
+            'Docker daemon is not running|Cannot connect to the Docker daemon|connection refused|timed out while waiting for .* health',
+            'failure = [ordered]@{',
+            'classification = $failureClassification',
+            'exception_type = $exceptionType'
         )
         "scripts/run-sprint-8a-candidate-rehearsal.ps1" = @(
             "attempt-state-prerequisite", "validation-readiness-prerequisite", "formatting", "workspace-check",
@@ -745,6 +848,14 @@ function Test-Sprint8AAcceptanceContract {
             "A stale native exit code falsely failed a successful PowerShell child.",
             'consumed_by_readiness.attempt -ne [int]$stateIndex.readiness.attempt',
             'consumed_by_readiness.receipt_sha256 -cne [string]$stateIndex.readiness.sha256',
+            "function Resolve-LaneClassification",
+            '[AllowNull()][string]$StructuredClassification',
+            'source = "structured_evidence"',
+            "function Get-RehearsalStructuredClassification",
+            "function Test-RehearsalClassificationResolution",
+            "classification_source", "assertions_started", "assertions_started_at",
+            "final-environment-identity.json", "Compare-Sprint8AEnvironmentContracts",
+            "changed_sections",
             'Test-Sprint8AResultClassificationProjection',
             'Get-Sprint8AResultClassifications -Results (@($failedChecks) + @($nestedFailedChecks))'
         )
@@ -754,7 +865,11 @@ function Test-Sprint8AAcceptanceContract {
             "Assert-HashedFileEvidence", "produced_evidence", "raw_evidence",
             "harvest_complete", "exactly one open batch", "CorrectionAuthorizationPath",
             "nested_blocked_count", "nested_failed_count", "nested_assertion",
-            "consumption_state", "allowed_successor_count", "blocked-check inventory", "passed_count"
+            "consumption_state", "allowed_successor_count", "blocked-check inventory", "passed_count",
+            '$allowedClassifications = @(', "assertions_started", "assertions_started_at",
+            '$assertionBearingTerminal = @($terminal | Where-Object assertions_started -EQ $true)',
+            'Passed check', 'must not retain a failure classification',
+            "Resolve-Sprint8AEvidenceReference"
         )
         "scripts/validate-e2e.ps1" = @(
             "InventoryOnly", "ActualIdentities", "Independent Playwright discovery",
@@ -777,6 +892,12 @@ function Test-Sprint8AAcceptanceContract {
             "candidate-rehearsal-correction-consumption", "correction_consumption_receipt",
             '[pscustomobject]@{ name = "compose-optional-properties"; action = { Test-Sprint8AComposeServiceProjection } }',
             '[pscustomobject]@{ name = "result-classification-projection"; action = { Test-Sprint8AResultClassificationProjection } }',
+            '[pscustomobject]@{ name = "environment-comparison"; action = { Test-Sprint8AEnvironmentContractComparison } }',
+            '[pscustomobject]@{ name = "evidence-reference-containment"; action = { Test-Sprint8AEvidenceReferenceResolution } }',
+            '[pscustomobject]@{ name = "composition-bootstrap"; action = { & ./scripts/bootstrap-sprint-7a-composition.ps1 -SelfTest',
+            "assertions_started", "assertions_started_at",
+            '$startReceipt.assertion_count = @($checks | Where-Object assertions_started -EQ $true).Count',
+            "Resolve-Sprint8AEvidenceReference",
             'Get-Sprint8AResultClassifications -Results $failures'
         )
         "scripts/uat-sprint-8a.ps1" = @(
@@ -799,10 +920,155 @@ function Test-Sprint8AAcceptanceContract {
             "playwright-acceptance.json", "assertion_ids",
             "semantic_predicate_registry_version", "semantic_failure_count",
             "harness_failure_count", 'classification = "product"', "Get-UatSemanticFailureEvidence",
+            "Assert-Sprint8ASourceIdentityObject", "assertions_started", "assertions_started_at",
             "an assertion label without an executable semantic predicate",
             "exact viewport and theme matrix preserves directory editor detail and viewer usability",
             "Dataset provider outage retains unsaved editor state and one retry mutation",
             "Components configuration enforces exact schema authority projection and sanitized diagnostics"
+        )
+        "scripts/sprint-8a-lifecycle-chain.ps1" = @(
+            "function Get-Sprint8APreflightCheckNames",
+            '"receipt-chain"', '"repository-scope"', '"clean-source"',
+            '"acceptance-traceability"', '"environment-contract"', '"database-contract"',
+            '"deployment-contract"', '"downstream-command-contract"',
+            '"evidence-path-contract"', '"evidence-inventory"',
+            "function Get-Sprint8ASitLaneNames",
+            '"static-and-boundaries"', '"rust-workspace"', '"playwright"', '"deployed-acceptance-smoke"',
+            "function Get-Sprint8AManualUatScenarioNames", '"UAT-8A-{0:d2}"',
+            "function Get-Sprint8AManualUatScenarioContract", "step_count", "scenario_contract",
+            "function Assert-Sprint8AExactTerminalIdentities",
+            "assertions_started", "command", "exit_status", "evidence",
+            "function Get-Sprint8ACandidateIdentity",
+            '[string]$NormalizedDeploymentConfigurationSha256',
+            "acceptance_inventory_sha256", "deployment_inputs_sha256",
+            "deployment_profile_sha256", "normalized_deployment_configuration_sha256", "migration_baseline_sha256", "expected_provenance",
+            '"crates/tessara-component-module/manifest.json"',
+            '"crates/tessara-dashboard-module/manifest.json"',
+            '"crates/tessara-reference-module-sdk/manifest.json"',
+            '"crates/tessara-reference-scoped-records/manifest.json"',
+            "function Assert-Sprint8ALifecyclePrerequisite",
+            "Resolve-Sprint8AEvidenceReference", "Assert-Sprint8AReceiptSidecar",
+            "function Assert-Sprint8ALifecyclePrerequisiteSet",
+            "function Publish-Sprint8ALifecycleReceipt",
+            "function Assert-Sprint8AManualUatReceipt",
+            "function Assert-Sprint8AManualUatExecutionLeasePair",
+            "function Assert-Sprint8AManualUatResumeMarker",
+            "function Open-Sprint8AManualUatScenarioLease",
+            "function Assert-Sprint8ANoOpenManualUatLeases",
+            "function Assert-Sprint8AManualUatPreparedPublicationCheckpoint",
+            "function Repair-Sprint8AManualUatPreparedPublication",
+            "function Repair-Sprint8AManualUatPreparedPublications",
+            '[switch]$AllowMissingCanonicalUatCommitment',
+            "function Publish-Sprint8AManualUatReceipt",
+            '[Parameter(Mandatory)]$ExecutionLease', "uat-manual-execution-lease",
+            'uat/attempt-$Attempt/manual', 'uat/attempt-$Attempt/manual-leases',
+            'uat-manual-execution-resume', 'publication-prepared.json',
+            "diagnostic", "duration_ms", "execution_lease", "execution_resume",
+            "original_process_id", "current_process_id",
+            "cannot publish an authoritative pass after execution resume",
+            "function Get-Sprint8AEvidenceFileManifestEntries",
+            "function Assert-Sprint8AEvidenceManifestCompleteness",
+            "function Repair-Sprint8AEvidenceRootPublications",
+            "unresolved publisher control file(s)",
+            "function Get-Sprint8AEvidenceManifestReplacementPaths",
+            '[string]$existing.sha256 -cne [string]$entry.sha256',
+            '[string]$existing.phase -cne [string]$entry.phase',
+            '$existing.authoritative -isnot [bool]',
+            '[string]$existing.status -cne [string]$entry.status',
+            "function Publish-Sprint8AEvidenceManifest", 'status -cne "committed"', '[switch]$Merge',
+            '[AllowEmptyCollection()][string[]]$AuthorizedReplacementPaths = @()',
+            '-AuthorizedReplacementPaths', 'without exact replacement authorization',
+            'replacement authorization was not consumed by an exact metadata or digest change',
+            '[switch]$PrepareOnly', '"$evidenceRootRelative/uat-result.json"',
+            "function Test-Sprint8AEvidenceManifestContract",
+            "function Test-Sprint8AManualUatAttemptAuthority",
+            "function Test-Sprint8ALifecycleChain"
+        )
+        "scripts/run-sprint-8a-validation-preflight.ps1" = @(
+            '[ValidateRange(1, 9999)][int]$Attempt', '[switch]$SelfTest',
+            "function Get-Sprint8APreflightDeclarations",
+            '"receipt-chain"', '"repository-scope"', '"clean-source"',
+            '"acceptance-traceability"', '"environment-contract"', '"database-contract"',
+            '"deployment-contract"', '"downstream-command-contract"',
+            '"evidence-path-contract"', '"evidence-inventory"',
+            "Open-Sprint8AValidationAttemptLock", "validation-attempt.lock",
+            "function Invoke-Sprint8APreflightCheck", 'state = "harvesting"',
+            "blocked by failed prerequisite(s)",
+            "function Get-Sprint8APlannedEvidenceInventory",
+            'attempts/sit-{attempt}-start.json',
+            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-start.json',
+            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-resume.json',
+            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-publication-prepared.json',
+            'uat/attempt-{attempt}/manual-leases/uat-8a-{01..08}-complete.json',
+            'uat/attempt-{attempt}/finalizations/run-{n}/finalization-completion-checkpoint.json',
+            'uat/attempt-{attempt}/finalizations/run-{n}/result-commit.json',
+            'uat/attempt-{attempt}/finalizations/run-{n}/publication-retry-checkpoint.json',
+            'uat/attempt-{attempt}/publication-retries/run-{n}/result-commit.json',
+            "run-sprint-8a-sit.ps1", "run-sprint-8a-formal-uat.ps1",
+            "Get-Sprint8ACandidateIdentity", "Publish-Sprint8ALifecycleReceipt",
+            "-NormalizedDeploymentConfigurationSha256",
+            "Publish-Sprint8AEvidenceManifest",
+            'mutable_attempt_checkpoints_are_overwritten_only_by_the_owning_runner',
+            'immutable_snapshots_and_terminal_receipts_are_never_overwritten',
+            'attempt lock was not acquired before evidence-root mutation',
+            "function Test-Sprint8AValidationPreflightRunner"
+        )
+        "scripts/run-sprint-8a-sit.ps1" = @(
+            '[ValidateSet("Run", "Finalize")]', '[switch]$SelfTest',
+            "function Get-Sprint8ASitLaneContracts", "Get-Sprint8ASitLaneNames",
+            '"static-and-boundaries"', '"rust-workspace"', '"playwright"', '"deployed-acceptance-smoke"',
+            "Open-Sprint8AValidationAttemptLock", "validation-attempt.lock",
+            "exclusive evidence-root lock acquired before mutation",
+            "function Set-Sprint8ASitAttemptState", '"harvesting"',
+            "function Get-Sprint8ASitDefectBatch", "harvest_complete = `$true",
+            "function Assert-Sprint8ASitRawResultsForFinalization",
+            "finalization_only_retry_permitted_if_identity_remains_exact",
+            "Publish-Sprint8ALifecycleReceipt", "-NormalizedDeploymentConfigurationSha256",
+            "Get-Sprint8AEvidenceManifestReplacementPaths",
+            "Publish-Sprint8AEvidenceManifest", "-AuthorizedReplacementPaths",
+            "function Test-Sprint8ASitRunner"
+        )
+        "scripts/run-sprint-8a-formal-uat.ps1" = @(
+            '[ValidateSet("Start", "Finalize")]', "[switch]`$SelfTest",
+            'sprint-8a-lifecycle-chain.ps1',
+            "function Get-Sprint8AFormalUatReference",
+            "function Set-Sprint8AFormalUatAttemptState",
+            "function Resolve-Sprint8AFormalUatFailureClassification",
+            "function Publish-Sprint8AFormalUatResultCommit",
+            "function Assert-Sprint8AFormalUatResultCommit",
+            "function Publish-Sprint8AFormalUatFinalizationFailure",
+            "function Invoke-Sprint8AFormalUatCatchHarvest",
+            "function Assert-Sprint8AFormalUatReceiptBinding",
+            "function Invoke-Sprint8AFormalUatCheck",
+            "assertions_started", "assertions_started_at",
+            "Test-Sprint8ALifecycleChain",
+            'ExpectedPhase "validation-preflight"', 'ExpectedPhase "candidate-freeze"', 'ExpectedPhase "sit"',
+            "Assert-Sprint8AExactTerminalIdentities", "Get-Sprint8ASitLaneNames",
+            "Assert-Sprint8ASourceIdentityObject", "Get-Sprint8ACandidateIdentity",
+            "Get-Sprint8AEnvironmentContract", '-State "executing" -Stage "manual"',
+            '-State "executing" -Stage "diagnostic-manual"',
+            '-State "finalizing" -Stage "canonical-restoration"',
+            '-State "passed" -Stage "result-committed"',
+            "Get-Sprint8AManualUatScenarioNames", "Assert-Sprint8AManualUatReceipt",
+            "Assert-Sprint8ANoOpenManualUatLeases",
+            "Repair-Sprint8AManualUatPreparedPublications",
+            "Resolve-Sprint8AEvidenceReference", "Publish-Sprint8ALifecycleReceipt",
+            "Get-Sprint8AEvidenceManifestReplacementPaths",
+            "Publish-Sprint8AEvidenceManifest", "-AuthorizedReplacementPaths",
+            '-NormalizedDeploymentConfigurationSha256', 'result = "canonical_topology_verified"',
+            '[switch]$AuthorizeDisposableReset', 'attempts/uat-$Attempt.json',
+            'uat/attempt-$Attempt', '-PrepareOnly', '-Merge',
+            'materialize-sprint-8a.ps1', 'diagnostic-harvest-complete',
+            "function Get-Sprint8AFormalUatCanonicalPairState",
+            '"complete"', '"json-only"', '"sidecar-only"', '"absent"',
+            "function Complete-Sprint8AFormalUatCanonicalPair",
+            "function Assert-Sprint8AFormalUatFinalizationCompletionCheckpoint",
+            "uat-finalization-completion", "finalization_completion_checkpoint",
+            "finalization-completion-checkpoint.json", "publication-retry-checkpoint.json",
+            'Join-Path $attemptRoot "publication-retries"',
+            "function Invoke-Sprint8AFormalUatPublicationTail",
+            "uat-finalization-retry", "finalization_retry", "consumed_at",
+            "finalization-only publication retry passed without re-running manual validation or restoration"
         )
         "scripts/sprint-8a-dashboard-dependency-contract.ps1" = @(
             "Sprint8ADashboardDependencyCheckCodes", "Sprint8ADashboardDependencyActions",
@@ -846,7 +1112,63 @@ function Test-Sprint8AAcceptanceContract {
                 throw "Sprint 8A validation contract '$runner' omits '$fragment'."
             }
         }
+        $runnerTokens = $null
+        $runnerParseErrors = $null
+        [void][Management.Automation.Language.Parser]::ParseFile(
+            $runnerPath,
+            [ref]$runnerTokens,
+            [ref]$runnerParseErrors
+        )
+        if (@($runnerParseErrors).Count -ne 0) {
+            throw "Sprint 8A validation contract runner '$runner' does not parse: $($runnerParseErrors.Message -join '; ')."
+        }
     }
+    . (Join-Path $repoRoot "scripts/sprint-8a-lifecycle-chain.ps1")
+    foreach ($contract in @(
+        [pscustomobject]@{ command = "Get-Sprint8ACandidateIdentity"; parameter = "NormalizedDeploymentConfigurationSha256" },
+        [pscustomobject]@{ command = "Assert-Sprint8ALifecyclePrerequisiteSet"; parameter = "NormalizedDeploymentConfigurationSha256" },
+        [pscustomobject]@{ command = "Publish-Sprint8ALifecycleReceipt"; parameter = "NormalizedDeploymentConfigurationSha256" },
+        [pscustomobject]@{ command = "Publish-Sprint8AEvidenceManifest"; parameter = "AuthorizedReplacementPaths" },
+        [pscustomobject]@{ command = "Publish-Sprint8AManualUatReceipt"; parameter = "ExecutionLease" },
+        [pscustomobject]@{ command = "Repair-Sprint8AManualUatPreparedPublications"; parameter = "Attempt" },
+        [pscustomobject]@{ command = "Repair-Sprint8AManualUatPreparedPublications"; parameter = "AllowMissingCanonicalUatCommitment" }
+    )) {
+        if (-not (Get-Command $contract.command).Parameters.ContainsKey($contract.parameter)) {
+            throw "Sprint 8A lifecycle command '$($contract.command)' omits required parameter '$($contract.parameter)'."
+        }
+    }
+    Test-Sprint8ALifecycleChain | Out-Null
+    & (Join-Path $repoRoot "scripts/run-sprint-8a-validation-preflight.ps1") -SelfTest | Out-Null
+    & (Join-Path $repoRoot "scripts/run-sprint-8a-sit.ps1") -SelfTest | Out-Null
+    $lifecycleChainText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/sprint-8a-lifecycle-chain.ps1") -Raw
+    if ($lifecycleChainText.Contains('"crates/tessara-reference-module/manifest.json"')) {
+        throw "Sprint 8A candidate identity must bind the complete real tracked Module Manifest inventory."
+    }
+    $formalUatText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/run-sprint-8a-formal-uat.ps1") -Raw
+    if ($formalUatText.Contains('$candidateReceiptObject.mutable_source_identity') -or
+        -not $formalUatText.Contains('$candidateReceiptObject.source_identity')) {
+        throw "Formal UAT must compare source against the canonical candidate lifecycle source_identity."
+    }
+    $rehearsalUatPhase = "candidate-rehearsal-" + "uat-diagnostics"
+    $diagnosticUatRunner = "uat-sprint-" + "8a.ps1"
+    if ($formalUatText.Contains($rehearsalUatPhase) -or $formalUatText.Contains($diagnosticUatRunner)) {
+        throw "Formal UAT must not consume or relabel Candidate Rehearsal diagnostic UAT evidence."
+    }
+    foreach ($requiredCall in @(
+        "Assert-Sprint8AFormalUatFinalizationCompletionCheckpoint",
+        "Invoke-Sprint8AFormalUatPublicationTail",
+        "Invoke-Sprint8AFormalUatCatchHarvest"
+    )) {
+        if ([regex]::Matches($formalUatText, [regex]::Escape($requiredCall)).Count -lt 2) {
+            throw "Formal UAT declares '$requiredCall' but does not consume it from executable orchestration."
+        }
+    }
+    foreach ($pairState in @("complete", "json-only", "sidecar-only", "absent")) {
+        if (-not $formalUatText.Contains('"' + $pairState + '"')) {
+            throw "Formal UAT canonical result recovery omits '$pairState'."
+        }
+    }
+    & (Join-Path $repoRoot "scripts/run-sprint-8a-formal-uat.ps1") -SelfTest | Out-Null
     $rehearsalRunnerText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/run-sprint-8a-candidate-rehearsal.ps1") -Raw
     foreach ($powerShellChildRunner in @(
         "scripts/run-sprint-8a-candidate-rehearsal.ps1",
@@ -884,7 +1206,11 @@ function Test-Sprint8AAcceptanceContract {
             throw "Candidate Rehearsal must keep safe diagnostic lane '$independentLane' independent of fallible readiness prerequisites."
         }
     }
-    $preStartText = $rehearsalRunnerText.Substring(0, $attemptStartIndex)
+    $executionStartIndex = $rehearsalRunnerText.IndexOf('if ($Attempt -lt 1)', [StringComparison]::Ordinal)
+    if ($executionStartIndex -lt 0 -or $executionStartIndex -ge $attemptStartIndex) {
+        throw "Candidate Rehearsal does not expose a distinct post-self-test execution boundary."
+    }
+    $preStartText = $rehearsalRunnerText.Substring($executionStartIndex, $attemptStartIndex - $executionStartIndex)
     if ($preStartText.Contains('Assert-Sprint8AReceiptSidecar -Path $readinessPath') -or
         $preStartText.Contains('-ProbeDatabases') -or
         $preStartText.Contains('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot') -or
@@ -934,13 +1260,24 @@ function Test-Sprint8AAcceptanceContract {
     $readinessRunner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/validate-sprint-8a-readiness.ps1") -Raw
     $readinessStartIndex = $readinessRunner.IndexOf('Publish-Sprint7AEvidence -Document $startReceipt -OutputPath $attemptPath', [StringComparison]::Ordinal)
     $readinessStateLaneIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "attempt-state-prerequisite"', [StringComparison]::Ordinal)
-    $readinessSourceIndex = $readinessRunner.IndexOf('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot', [StringComparison]::Ordinal)
+    $readinessSourceIndex = $readinessRunner.IndexOf(
+        'Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot',
+        $readinessStartIndex,
+        [StringComparison]::Ordinal
+    )
     if ($readinessStartIndex -lt 0 -or $readinessStateLaneIndex -le $readinessStartIndex -or
         $readinessSourceIndex -le $readinessStartIndex -or
         [regex]::Matches($readinessRunner, 'Checkpoint-ReadinessAttempt').Count -lt 3) {
         throw "Validation Readiness must publish an unverified start receipt before state/source work and hash-checkpoint every terminal result."
     }
-    $readinessPreStartText = $readinessRunner.Substring(0, $readinessStartIndex)
+    $readinessExecutionStartIndex = $readinessRunner.IndexOf('if ($Attempt -lt 1)', [StringComparison]::Ordinal)
+    if ($readinessExecutionStartIndex -lt 0 -or $readinessExecutionStartIndex -ge $readinessStartIndex) {
+        throw "Validation Readiness does not expose a distinct post-self-test execution boundary."
+    }
+    $readinessPreStartText = $readinessRunner.Substring(
+        $readinessExecutionStartIndex,
+        $readinessStartIndex - $readinessExecutionStartIndex
+    )
     if ($readinessPreStartText.Contains('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot') -or
         $readinessPreStartText.Contains('Get-Content -LiteralPath $statePath')) {
         throw "Validation Readiness reads source or validation-state before its start receipt."

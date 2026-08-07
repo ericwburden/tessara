@@ -606,8 +606,8 @@ function fillFieldControls(form, config, selectAll = false) {
     }
     if (fields.some((field) => field.key === prior)) select.value = prior;
   }
-  const visible = new Set((config.visible_columns || []).map((item) =>
-    typeof item === "string" ? item : item.field_key || item.key || item.field));
+  const visible = new Set((config.visible_columns || []).filter((item) =>
+    typeof item === "string"));
   const searchable = new Set(config.search_fields || []);
   const visibleHost = form.querySelector("[data-component-visible-fields]");
   const searchHost = form.querySelector("[data-component-search-fields]");
@@ -647,7 +647,7 @@ function addFilterRow(form, filter = {}) {
     option.dataset.fieldType = item.field_type;
     field.append(option);
   }
-  const storedField = filter.field_key || filter.field || "";
+  const storedField = filter.field_key || "";
   if (storedField && !fields.some((item) => item.key === storedField)) {
     field.append(new Option(`${storedField} (stored field)`, storedField));
   }
@@ -1246,8 +1246,8 @@ function initializeEditor(root, bootstrap, signal) {
   }
   const isCreate = !form.dataset.componentId;
   form.__tableDisplayLabels = { ...(storedConfig.display_labels || {}) };
-  form.__visibleColumnOrder = (storedConfig.visible_columns || []).map((item) =>
-    typeof item === "string" ? item : item.field_key || item.key || item.field);
+  form.__visibleColumnOrder = (storedConfig.visible_columns || []).filter((item) =>
+    typeof item === "string");
   prepareCategoryOverrides(form, storedConfig);
   fillFieldControls(form, storedConfig, isCreate && !(storedConfig.visible_columns || []).length);
   applyStoredConfig(form, storedConfig);

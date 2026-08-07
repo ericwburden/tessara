@@ -1,37 +1,36 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Formal testing is paused by user direction. The consolidated Sprint 8A
-testing-entry correction is implemented and implementation-level verified.
-Validation Readiness attempt 36 passed all 15 checks against
-clean commit `3f7e32cb7e1948a36185a68352901b873934c0b0` and environment
-fingerprint `2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0`,
-but that mutable pass is now superseded by candidate-affecting harness,
-fixture, contract, product, and documentation corrections. Candidate Rehearsal
-attempt 29 was stopped after 8 passing receipts, 3 failed receipts, 1
-interrupted optimized lane, 20 unexecuted checks, and 0 recorded blocked
-checks. Two failed receipts were false failures produced by one stale
-`$LASTEXITCODE` harness defect; the third exposed an invalid Component
-product-integration fixture. The return-to-implementation audit then expanded
-the correction cone to canonical render-response ownership and kind/identity
-validation, exact raw-body service authorization, Dashboard/Component joint
-scope and exact resource assertion, and active first-party fixtures that still
-normalized retired Core Component shapes. Those changes join the already
-required five-entry Core transition correction and fail-late runner
-enforcement in one testing-entry implementation lineage. No current Readiness
-or Rehearsal pass exists, no candidate has been frozen, and preflight, SIT,
-formal UAT, and closeout have not run.
+Status: Formal testing has exited and Sprint 8A is mutable for one consolidated
+Readiness 37/Rehearsal 30 implementation correction. Validation Readiness 37
+passed all 15 checks against clean commit
+`84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`, tree
+`4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`, and environment fingerprint
+`96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`.
+Candidate Rehearsal 30 completed its full fail-late terminal harvest against
+that identity with 18 passed lanes, 4 raw failed lanes, and 10 blocked lanes.
+The four immutable raw lane classifications are two `environment`, one
+`product`, and one `harness`; diagnosis consolidates them under three harness
+root causes in action projection, source-identity shape, and process-environment
+restoration. Readiness 37 is superseded by the candidate-affecting correction.
+No rehearsal pass or candidate exists, and preflight, SIT, formal UAT, and
+closeout remain forbidden until one successor complete Readiness consumes the
+R30 correction authorization and both complete gates pass against the same
+corrected source and environment identity.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
 - Implementation-readiness correction input:
   `7b326838269c3b4218dd579f649a8011feba4d97`
-- Latest superseded passing readiness and stopped rehearsal source:
-  `3f7e32cb7e1948a36185a68352901b873934c0b0`
+- Latest superseded passing readiness and failed rehearsal source:
+  `84964c7bdb6b5d4705a2e4899a1fe2c98ee77183`
+- Latest superseded source tree:
+  `4f39cb7126dbe6f24db77f4d644593fb5ef9f0ca`
 - Latest superseded environment fingerprint:
-  `2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0`
+  `96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3`
 - Roadmap authority:
-  `Sprint 8A: Component Module Separation Slice (Next)` and the reconciled
+  `Sprint 8A: Component Module Separation Slice (Implementation Correction)`
+  and the reconciled
   Phase 8 fresh-materialization rules in `docs/roadmap.md`
 - Planned evidence root: `artifacts/sprint-8a-closeout/`
 - Validation record: [Sprint 8A verification](./sprint-8a-verification.md)
@@ -109,7 +108,11 @@ payloads. Supported import and legacy mapping remain Phase 9 work.
 - Multi-instance selection, external module repositories, or package
   publishing.
 
-## Current-State Findings And Affected Components
+## Pre-Implementation Findings And Affected Components
+
+The findings below are the baseline that governed the extraction. They are
+retained as decision history; the implementation handoff later in this plan
+records the resulting current ownership.
 
 - Core `tessara-api` owns Component routes, DTOs, execution, lifecycle, and
   persistence, and its squashed baseline contains Component tables with direct
@@ -136,10 +139,10 @@ payloads. Supported import and legacy mapping remain Phase 9 work.
 - The retained Sprint 7A deployment profile is immutable. Sprint 8A requires a
   new profile and explicit disposable-scope reset authorization.
 
-Expected future implementation touchpoints include new Component module/UI
-ownership, Components/Dataset contract packages, Dashboard dependency and
-seed ownership, Core removal, generic gateway/composition registration, a
-Sprint 8A deployment/bootstrap path, end-to-end tests, and acceptance runners.
+The implementation touched Component module/UI ownership,
+Components/Dataset contract packages, Dashboard dependency and seed ownership,
+Core removal, generic gateway/composition registration, the Sprint 8A
+deployment/bootstrap path, end-to-end tests, and acceptance runners.
 
 ## Specifications
 
@@ -513,7 +516,11 @@ requires a plan amendment and user approval.
 | Exit: Component execution through Dataset contracts | Spec 3; AC-09/10 | 3/5/6 | real-boundary smoke and credential denial | UAT-8A-04 |
 | Exit: Dashboard consumption and coherent degradation | Spec 4; AC-11 | 4–6 | Dashboard deployed outage/recovery lane | UAT-8A-05 |
 
-## Ordered Implementation Slices
+## Implemented Ordered Slices
+
+The slice order is retained as the governing implementation history. All six
+slices are represented in the current mutable source; formal acceptance still
+depends on the successor complete Readiness and Rehearsal gates.
 
 ### Slice 1 — exact contracts and failing ownership boundaries
 
@@ -596,29 +603,38 @@ requires a plan amendment and user approval.
 
 ## Verification And UAT Plan
 
-Future command baseline:
+Focused implementation verification uses the all-feature, offline, warnings-
+denied command set recorded in the verification record. It is not a formal
+gate. The next formal commands remain forbidden until the mutable source is
+committed cleanly and the successor complete Readiness consumes the exact R30
+authorization:
 
 ```powershell
-cargo fmt --all -- --check
-cargo check --workspace --all-features --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --locked
-cargo test --locked -p tessara-components-contract
-cargo test --locked -p tessara-component-module
-cargo test --locked -p tessara-dashboard-module
-npm --prefix .\end2end test
-# Deployed smoke and formal UAT remain lifecycle-owned. Their exact commands
-# are authorized only after rehearsal/preflight and SIT bind a frozen candidate.
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt <readiness-n>
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt <rehearsal-n> -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
 
-Sprint-specific contract, boundary, old-input rejection, fresh bootstrap,
-failure teardown/rerun, nondisclosure, smoke, and upgrade/rollback commands are
-fixed with Slice 1/5 implementation and recorded before readiness.
-`local-launch.ps1` remains a root-profile regression check and cannot replace
-source-exact Sprint 8A materialization evidence. Deployed acceptance smoke runs
-inside SIT. Formal UAT is run only by the specialized UAT workflow after the
-same frozen candidate and environment have an authoritative passing SIT
-receipt; this implementation plan does not invent or authorize that command.
+Only when both complete gates pass against the same source and environment
+identity may the coordinator run the tracked downstream lifecycle:
+
+```powershell
+.\scripts\run-sprint-8a-validation-preflight.ps1 -Attempt <preflight-n> -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json" -RehearsalReceipt "artifacts/sprint-8a-closeout/candidate-rehearsal-result.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -ExpectedBranch "codex/sprint-8a" -HandoffUrl "http://127.0.0.1:8088"
+.\scripts\run-sprint-8a-sit.ps1 -Stage Run -Attempt <sit-n> -PreflightReceipt "artifacts/sprint-8a-closeout/preflight-result.json" -CandidateReceipt "artifacts/sprint-8a-closeout/candidate.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/sit-result.json" -BaseUrl "http://127.0.0.1:8088" -AuthorizeDisposableReset
+.\scripts\run-sprint-8a-formal-uat.ps1 -Stage Start -Attempt <uat-n> -PreflightReceipt "artifacts/sprint-8a-closeout/preflight-result.json" -CandidateReceipt "artifacts/sprint-8a-closeout/candidate.json" -SitReceipt "artifacts/sprint-8a-closeout/sit-result.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/uat-result.json" -BaseUrl "http://127.0.0.1:8088"
+# Acquire and hold one manual scenario execution lease, execute and publish
+# UAT-8A-01 through UAT-8A-08 one at a time, as specified in the verification record.
+.\scripts\run-sprint-8a-formal-uat.ps1 -Stage Finalize -Attempt <same-uat-n> -PreflightReceipt "artifacts/sprint-8a-closeout/preflight-result.json" -CandidateReceipt "artifacts/sprint-8a-closeout/candidate.json" -SitReceipt "artifacts/sprint-8a-closeout/sit-result.json" -EvidenceRoot "artifacts/sprint-8a-closeout" -OutputPath "artifacts/sprint-8a-closeout/uat-result.json" -BaseUrl "http://127.0.0.1:8088" -AuthorizeDisposableReset
+```
+
+The preflight runner owns all ten declared checks and freezes a candidate only
+after they pass. The SIT runner owns all four lanes, safe fail-late harvesting,
+canonical restoration, and aggregate publication. The formal-UAT runner owns
+the Start/manual-lease/Finalize state machine. A scripted defect changes manual
+work to non-authoritative diagnostic harvesting; a product decision pauses it.
+After scripted, manual, and restoration evidence is durably complete, an
+evidence-finalization failure may retry publication only, without rerunning
+manual validation or restoration. `local-launch.ps1` remains a root-profile
+regression check and cannot replace any source-exact lifecycle evidence.
 
 Manual UAT covers eight scenarios: unchanged Component product experience;
 from-empty owner-controlled seed and new Dashboard references; configuration
@@ -679,23 +695,23 @@ and render-denial case mapped to UAT-8A-04.
   bootstrap changes are paired in dependency-valid slices.
 - Roles, topology, commands, data, evidence root, freeze boundary, receipts, and
   invalidation behavior agree with the verification record.
-- The planning reconciliation changed documentation only. The subsequent
-  implementation goal advances product code, contracts, tests, fixtures,
-  deployment inputs, and implementation documentation through the ordered
-  slices above.
+- The initial planning reconciliation changed documentation only. The
+  subsequent implementation advanced product code, contracts, tests, fixtures,
+  deployment inputs, validation runners, and implementation documentation
+  through the ordered slices above. Those candidate-affecting changes remain
+  mutable and formally unverified after R30.
 
 ## Implementation Handoff And Current Gaps
 
-All six planned slices, the post-attempt-28 correction, and the
-post-Readiness-33 implementation audit had been handed to validation on
-`codex/sprint-8a`. Candidate Rehearsal 29 proved that handoff incomplete, so
-formal testing exited and the source became mutable again. The consolidated
-testing-entry correction is now implemented and implementation-level verified.
-Readiness 36 is retained as a clean prior-source pass but cannot authorize any
-downstream phase.
+The correction following Rehearsal 29 was committed and handed back to formal
+validation. Readiness 37 passed all 15 checks, but Rehearsal 30 failed after a
+complete fail-late harvest: 18 lanes passed, 4 failed, and 10 were blocked by
+exact failed prerequisites. Its raw evidence, one harvest, one consolidated
+defect batch, and one unconsumed successor-Readiness authorization are retained.
+Formal testing has exited again so the source can correct that complete batch.
+Readiness 37 cannot authorize a downstream phase.
 
-The consolidated testing-entry implementation correction on the mutable source
-covers:
+The implementation lineage that produced the R37/R30 source covers:
 
 - make `tessara-components-contract` the canonical owner of the exact render
   response DTOs and render-kind discriminant, including exact Table and Visual
@@ -740,16 +756,56 @@ covers:
   unverified until a new complete Readiness and complete Rehearsal pass on the
   same clean source and environment identity.
 
-The final corrected product source passed the complete all-feature workspace
-Rust suite against six freshly reset isolated databases in 619.6 seconds. It
-also passed all-target/all-feature clippy with warnings denied, all-target/
+The R30 correction adds three harness root causes and the directly related
+evidence-enforcement gaps as one batch:
+
+- preserve the complete bootstrap action object before dispatch so
+  `set_enablement` reads its declared `enabled` field rather than a `switch`
+  pipeline string; this one defect caused both materialization symptoms and the
+  failure-containment cascade;
+- return source identity as the exact object shape required by UAT receipt
+  guards, eliminating the 12 false prerequisite failures and 8 internally
+  blocked UAT scenarios without weakening their semantic predicates;
+- snapshot and restore all seven bootstrap-owned process environment variables
+  so same-process normalized Compose comparison is stable; the post-process
+  recomputation matched R37 and proves this was harness leakage, not persistent
+  environment drift;
+- project a retained structured child classification before log/default
+  fallbacks, record its classification source, and preserve the four raw R30
+  labels while consolidating the three diagnosed root causes;
+- add per-lane assertion-start markers and count only the 22 executed R30 lanes,
+  not the 10 blocked terminal receipts;
+- retain secret-free expected/actual fingerprint and changed-section evidence
+  for environment mismatches; and
+- canonicalize new evidence references to contained repository-relative paths,
+  while allowing the immutable in-root R30 authorization to be consumed once
+  without rewriting it;
+- freeze the source-accurate downstream interfaces: a repository-owned
+  ten-check preflight runner, a repository-owned four-lane `Run`/`Finalize` SIT
+  runner, and the formal-UAT `Start`/manual execution lease/`Finalize` runner.
+  All bind the live normalized Compose digest. Manual execution retains exact
+  start/completion lease pairs and an immutable prepared-publication
+  checkpoint. An interrupted lease may resume only with an authenticated
+  process-lineage marker and cannot produce an authoritative pass; scripted or
+  manual defects harvest safe siblings diagnostically, while product decisions
+  pause. Finalize requires
+  explicit disposable-reset authorization, durably checkpoints completed
+  scripted/manual/restoration evidence, commits the manifest, and publishes
+  the UAT JSON/sidecar pair from the exact committed bytes. An evidence-only
+  failure may consume that checkpoint for publication-only retry. None may run
+  until corrected successor Readiness and Rehearsal both pass.
+
+Before R37/R30, the corrected product source passed the complete all-feature
+workspace Rust suite against six freshly reset isolated databases in 619.6
+seconds. It also passed all-target/all-feature clippy with warnings denied, all-target/
 all-feature check, formatting, exact Component/Dashboard/API integration and
 contract checks, boundary and acceptance contracts, runner self-tests, 75/75
 acceptance inventory, TypeScript compilation, and 75-test Playwright discovery.
-Documentation-only handoff edits are covered by the final Markdown-link,
-boundary, acceptance-contract, formatting, and diff audits. This establishes a
-clean implementation entry point; it does not satisfy Readiness or Rehearsal
-and does not open preflight.
+Documentation-only handoff edits were covered by the final Markdown-link,
+boundary, acceptance-contract, formatting, and diff audits. Those results are
+retained implementation history; the current runner, evidence, and
+documentation correction is candidate-affecting and requires fresh focused
+verification before the successor full gates.
 
 The earlier handoff asserted the following baseline. It remains subject to the
 new complete verification cycle after the current correction batch:
@@ -867,13 +923,14 @@ new complete verification cycle after the current correction batch:
   parameter, and exact assertion identities replace broad receipt labels.
 
 The repository-local validation protocol already stated the fail-late and
-single-batch rules. The earlier graph correction made safe static siblings
-independent, but Rehearsal 29 exposed a separate executable gap: child
-PowerShell scripts could pass while the parent read an older native-process
-`$LASTEXITCODE`. The harness now binds each child result to its own invocation
-and retains the existing dependency graph, raw evidence, blocked-reason, and
-single-batch contracts; its executable self-test prevents the stale-exit path
-from returning.
+single-batch rules. Rehearsal 29 closed stale child-exit accounting. R30 proved
+that the remaining enforcement gap was evidence precision: lane receipts did
+not distinguish executed assertions from terminal blocks, structured child
+classification could lose to defaults, mismatch evidence omitted the compared
+identity sections, and new references were not uniformly canonical. The
+current correction makes those obligations executable while preserving the
+existing dependency graph, raw evidence, exact blocked reasons, and one-batch
+harvest contract.
 
 The required deployable and source dependency boundaries are shown in the two
 current Sprint 8A diagrams in [Tessara Architecture](../architecture.md): one
@@ -882,7 +939,8 @@ tracked acceptance inputs are reconciled to those contracts, but formal proof
 still starts at the next complete Readiness gate.
 
 This status authorizes implementation correction and focused diagnostic proof
-only. The next formal boundary is a new complete Validation Readiness followed
-by a new complete Candidate Rehearsal against the same corrected clean source
-and environment identity. It does not assert candidate freeze, deployed
-acceptance, preflight, SIT, formal UAT, or closeout.
+only. The next formal boundary is one successor complete Validation Readiness
+that consumes the exact R30 authorization, followed by one complete Candidate
+Rehearsal against the same corrected clean source and environment identity. It
+does not assert candidate freeze, deployed acceptance, preflight, SIT, formal
+UAT, or closeout.
