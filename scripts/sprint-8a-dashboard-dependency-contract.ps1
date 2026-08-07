@@ -643,6 +643,12 @@ function Assert-Sprint8ADashboardDependencyEvidenceRejected {
 
 function Test-Sprint8ADashboardDependencyEvidenceContract {
     $valid = New-Sprint8ADashboardDependencySelfTestEvidence
+    if ($null -eq $valid.final_health.visible_finding_placements -or
+        $null -eq $valid.final_health.isolated_visible_finding_placements -or
+        @($valid.final_health.visible_finding_placements).Count -ne 0 -or
+        @($valid.final_health.isolated_visible_finding_placements).Count -ne 0) {
+        throw "Sprint 8A Dashboard dependency self-test did not preserve exact empty recovery arrays through JSON serialization."
+    }
     Assert-Sprint8ADashboardDependencyEvidence -Evidence $valid
 
     $invalid = ConvertTo-Sprint8ADashboardDependencyContractDocument -Value $valid

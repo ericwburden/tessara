@@ -1150,6 +1150,14 @@ $blockedChecks = @($checkRows | Where-Object { [string]$_.state -ceq "blocked" }
 $passed = $fatalErrors.Count -eq 0 -and $duplicateCodes.Count -eq 0 -and
     $failedChecks.Count -eq 0 -and $blockedChecks.Count -eq 0 -and
     $checks.Count -eq $script:Sprint8ADashboardDependencyCheckCodes.Count
+$visibleFindingPlacements = @()
+if ($null -ne $recovered) {
+    $visibleFindingPlacements = @($recovered.findings | ForEach-Object { [string]$_.placement_id } | Sort-Object)
+}
+$isolatedVisibleFindingPlacements = @()
+if ($null -ne $isolatedRecovered) {
+    $isolatedVisibleFindingPlacements = @($isolatedRecovered.findings | ForEach-Object { [string]$_.placement_id } | Sort-Object)
+}
 $evidence = [ordered]@{
     schema_version = 3
     evidence_kind = "tessara.sprint-8a.dashboard-dependency-semantic-diagnostic"
@@ -1168,11 +1176,11 @@ $evidence = [ordered]@{
         health = if ($null -eq $recovered) { "not_proven" } else { [string]$recovered.health }
         open_count = if ($null -eq $recovered) { -1 } else { [long]$recovered.open_count }
         deferred_count = if ($null -eq $recovered) { -1 } else { [long]$recovered.deferred_count }
-        visible_finding_placements = if ($null -eq $recovered) { @() } else { @($recovered.findings | ForEach-Object { [string]$_.placement_id } | Sort-Object) }
+        visible_finding_placements = $visibleFindingPlacements
         isolated_health = if ($null -eq $isolatedRecovered) { "not_proven" } else { [string]$isolatedRecovered.health }
         isolated_open_count = if ($null -eq $isolatedRecovered) { -1 } else { [long]$isolatedRecovered.open_count }
         isolated_deferred_count = if ($null -eq $isolatedRecovered) { -1 } else { [long]$isolatedRecovered.deferred_count }
-        isolated_visible_finding_placements = if ($null -eq $isolatedRecovered) { @() } else { @($isolatedRecovered.findings | ForEach-Object { [string]$_.placement_id } | Sort-Object) }
+        isolated_visible_finding_placements = $isolatedVisibleFindingPlacements
     }
     failure_count = $failedChecks.Count + $fatalErrors.Count
     blocked_count = $blockedChecks.Count
