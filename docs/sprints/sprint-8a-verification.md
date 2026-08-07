@@ -1,12 +1,12 @@
 # Sprint 8A Validation Record
 
-Status: Validation was explicitly exited during incomplete Candidate Rehearsal
-attempts 27 and 28 so implementation readiness could be re-established.
-Neither attempt may be completed or used as a prerequisite. The consolidated
-candidate-affecting correction below invalidates every earlier readiness and
-rehearsal result. This record is an implementation handoff: no current
-readiness or rehearsal pass exists, no candidate has been frozen, and
-preflight, SIT, formal UAT, and closeout remain Not Run.
+Status: Validation was explicitly exited after failed Validation Readiness
+attempt 33 so implementation completeness could be re-established. Candidate
+Rehearsal attempt 29 never started. The consolidated candidate-affecting
+correction below invalidates every earlier readiness and rehearsal result. This
+record is an implementation handoff: no current readiness or rehearsal pass
+exists, no candidate has been frozen, and preflight, SIT, formal UAT, and
+closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -14,6 +14,87 @@ preflight, SIT, formal UAT, and closeout remain Not Run.
 - Execution contract: [Sprint 8A plan](./sprint-8a-plan.md)
 
 ## Implementation Readiness Snapshot
+
+### Post-Readiness-33 implementation completion audit
+
+The user stopped the testing phase after Readiness 33 and required a fresh
+plan-to-product review before another testing entry. No formal lifecycle gate
+was run during this audit. It found one consolidated candidate-affecting batch
+that crossed product, contracts, baseline schemas, deployment, fixtures,
+acceptance tests, UAT evidence, and runner enforcement:
+
+- the public gateway could be available while owner materialization was still
+  mutating the disposable topology;
+- Component bootstrap validated only local shape and could persist before the
+  Core-owned Dataset provider evaluated the exact references and compatibility;
+- normal Component create did not express Component type requirements in the
+  provider compatibility request and did not honor an already-successful
+  idempotent replay during a later provider outage;
+- malformed configuration shape was projected as provider unavailability, and
+  Module Management discarded the module's sanitized diagnostic details;
+- Dashboard's composition surfaces could project a synthetic outage as
+  provider-unavailable without a matching current disclosure basis, while
+  finding/action/recovery episodes were insufficiently isolated by semantic
+  actor, scope, authorization revision, organization revision, and expiry;
+- the shared UAT fixture path could still write owner-controlled product tables,
+  automated UAT could evaluate an embedded summary instead of authenticated raw
+  evidence, and exact browser configuration/outage/responsive scenarios were
+  absent from the acceptance inventory; and
+- Candidate Rehearsal's nominally safe static lanes still depended on the
+  fallible readiness prerequisite despite the protocol's fail-late rule.
+
+The implementation now keeps the gateway offline until owner completion; uses
+an exact locked-Manifest-derived, apply-bound, one-time signed bootstrap
+authorization for real Dataset validation; performs provider compatibility and
+exact-reference, materialization-readiness, and scope checks before Component
+writes; preserves authoritative mutation replays;
+projects configuration failures and sanitized diagnostics correctly; and binds
+Dashboard disclosure, findings, actions, recovery, and repeat outages to the
+exact unexpired semantic authorization context. Owner-controlled fixture
+boundaries are AST-enforced, UAT predicates compare authenticated raw evidence,
+the acceptance inventory carries exact browser and placement identities, and
+the rehearsal graph keeps safe static siblings independent.
+
+These changes supersede the mutable source exercised by Readiness 33. Focused
+formatting, parsing, contract self-tests, discovery, compile, Clippy, and narrow
+owner integration checks are implementation evidence only. A new complete
+Validation Readiness result and complete Candidate Rehearsal result must both
+pass against the same clean source and environment identity before preflight.
+
+### Validation Readiness attempt 33 diagnostic correction
+
+The first complete gate against implementation commit
+`0cf7dfa0fda3f30cca2b1c1c7f2181ca0ad43045`, tree
+`490da6f62b41eb26dfd6458dc76e51fe2bc23ca0`, and environment fingerprint
+`6d8b4753386ca703037a49e08758044d9720f86145bb82c644aff81d3b698de8`
+finished fail-late with 12 passed checks, two failed checks, and no blocked
+checks. Its source-bound receipt and raw logs remain under
+`artifacts/sprint-8a-closeout/attempts/readiness-33.json` and
+`artifacts/sprint-8a-closeout/readiness-33/`. Candidate Rehearsal attempt 29
+did not start.
+
+The two failed checks exposed three harness defects: the readiness runner
+called the Component baseline builder and upgrade verifier through removed
+parameter contracts, and the materialization safety guard treated Compose's
+optional `external` network property as mandatory under strict mode. The
+complete bounded runner audit found two additional enforcement defects before
+correction: Candidate Rehearsal could fail prerequisite validation before
+publishing its start receipt, and its declared lanes omitted the required
+release-only known/random resource-reference timing proof. The controlling
+five-finding consolidated batch is retained at
+`artifacts/sprint-8a-closeout/attempts/readiness-33-consolidated-correction-batch.json`;
+all findings are classified `harness`.
+
+The correction advances every caller to the current upgrade self-test
+contracts, treats an omitted Compose `external` property as `false`, moves
+readiness/source/environment verification inside the receipt-governed
+prerequisite lane, and adds an independent
+`optimized-resource-reference-timing` lane using the exact release-mode test.
+The acceptance contract and runner self-test enforce the new lane and the
+start-receipt boundary. These tracked harness and documentation changes are
+candidate-affecting, so attempt 33 is superseded for authorization. A complete
+unused Validation Readiness attempt and then a complete Candidate Rehearsal
+remain required before preflight.
 
 ### Post-attempt-28 implementation correction
 
@@ -164,15 +245,16 @@ Focused implementation checks for this batch passed at handoff:
   Component library tests, Dataset-contract tests, and exact Core catalog,
   navigation, manifest-digest, restricted-reference, and Dataset-major
   boundary tests;
-- parsing for all 25 changed PowerShell scripts and all seven changed JSON
+- parsing for all 15 changed PowerShell scripts and all four changed JSON
   documents, local Markdown-link validation, and Sprint 8A Compose
   configuration rendering;
 - the acceptance contract plus Dashboard semantic, product diagnostic,
   readiness graph, candidate graph, harvest guard, and automated-UAT runner
   self-tests; and
-- exact acceptance-manifest discovery of 71 Playwright scenarios, including
-  the four Sprint 8A Component scenarios. This was inventory discovery only;
-  no browser or deployed-system execution occurred.
+- exact acceptance-manifest discovery of 74 Playwright scenarios, including
+  six Sprint 8A Component UI scenarios and the exact Module configuration and
+  diagnostic-authority scenario. This was inventory discovery only; no browser
+  or deployed-system execution occurred.
 
 These focused checks do not constitute Validation Readiness or Candidate
 Rehearsal. Database-backed integration, live deployment, full Playwright,
@@ -271,6 +353,7 @@ validation and UAT workflows.
 | Module owns configuration, manifest, capabilities, database/schema migrations, health, documents and assets | Incomplete extraction | manifest, configuration, capability, schema, probe, document and asset conformance | generic Module Management plus every product/operational route | UAT-8A-01/03 |
 | APIs/contracts/typed references only | Cross-database or private DTO coupling | source/SQL/credential and exact-contract integration tests | deny cross-database credentials while product flow passes | UAT-8A-04/06 |
 | Phase 8 fresh materialization from empty | Partial/stale transition state | reset-target, empty-baseline, owner-order, semantic seed and no-op tests | first source-exact bootstrap plus unchanged second run | UAT-8A-02 |
+| Lockfile-owned bootstrap dependency validation | Product branching, payload reinterpretation, replay, or pre-validation writes | Manifest/lockfile/JSON-Pointer resolution; exact signed-binding and negative replay/mismatch tests; zero-write assertions | Component materialization invokes real Dataset validation before owner bootstrap | UAT-8A-02/04 |
 | Failed fresh materialization destroys and reruns | Partial topology reused | induced failure, exact teardown, volume absence and complete rerun assertions | retained failed receipt followed by new from-empty healthy attempt | UAT-8A-07 |
 | Old transition references and payloads unsupported | Hidden legacy compatibility | historical fixture integrity plus old owner/type/version/payload rejection | old inputs rejected; no adapter, ledger, reader or live old reference | UAT-8A-06 |
 | Rerun Phase 7 scope/lifecycle/outage/compatibility | Logical behavior changes at physical boundary | contract, lifecycle, nondisclosure, scope, timeout, compatibility and outage suites | real Component/Dataset/Dashboard process-boundary smoke | UAT-8A-04/05 |
@@ -376,6 +459,17 @@ Additional required evidence namespaces:
 - Runner/output/receipt/hash/finalization self-tests: safe disposable probes for
   every argument/output path, atomic completion, SHA-256, failure/supersession,
   heartbeat, teardown and completion sentinel.
+- Attempt lifecycle: publish an `unverified` live receipt plus immutable hashed
+  start snapshot before probing source, environment, or prior state; acquire the
+  evidence-root OS-exclusive attempt lock in the first declared check; and
+  publish a sidecar-verified attempt/state checkpoint after every terminal pass,
+  failure, or block.
+- Correction transition: after one complete failed-rehearsal harvest and batch,
+  permit exactly one successor Readiness start through an append-only
+  consumption receipt bound to the predecessor and successor start snapshot.
+  Reject duplicate consumption, active attempts, used attempt identities, and
+  any Readiness receipt other than the exact path/hash currently named by
+  validation state.
 - Acceptance mapping: every inventory row maps to SIT, smoke and UAT evidence.
 - Clean repository and source-exact inputs: required before rehearsal.
 - Result receipt: `artifacts/sprint-8a-closeout/validation-readiness-result.json`.
@@ -391,18 +485,32 @@ account for every row. `scripts/test-sprint-validation-harvest.ps1` enforces the
 terminal-state and single-batch contract; materialization retains failed apply
 responses and service logs before exact teardown.
 
+The start receipt initially carries unverified source/environment identities.
+The first lane acquires the evidence-root OS-exclusive lock and checks that the
+supplied passing Readiness path and SHA-256 exactly equal the current validation
+state, including any one-use predecessor-correction consumption. Safe static
+lanes remain independent of those fallible prerequisites; only true dependents
+or unsafe destructive work are blocked.
+
+The automated-UAT lane projects each failed semantic predicate as its exact
+`UAT-8A-xx/assertion-id` identity with classification, reason, and hashed raw
+evidence. If only nested semantics fail, the outer projection lane remains
+passed so the consolidated batch contains one defect per failed predicate and
+no generic outer duplicate. Wrapper or parsing failures remain separate harness
+defects, and blocked scenarios retain their exact dependency reasons.
+
 | Diagnostic lane | Planned command/evidence | Assertions | Result | Defect batch |
 |---|---|---|---|---|
 | Static and boundaries | fmt/check/Clippy, manifests, links, native/WASM graphs, source/image audits | zero warnings; no forbidden owner/dependency/route/storage/legacy edge | Not Run | |
 | Full Rust | `cargo test --workspace --locked` plus targeted contract/schema/authorization tests | all pass | Not Run | |
-| Source-exact materialization | authorized reset, empty schemas, first/no-op owner bootstrap | exact provenance, healthy topology, semantic seed, exact no-op | Not Run | |
+| Source-exact materialization | authorized reset, empty schemas, first/no-op owner bootstrap | exact provenance, healthy topology, semantic seed, exact no-op; manifest-declared target and canonical opaque payload; request-bound one-use authorization; provider-owned result; no product-specific Core/Supervisor branch; zero writes on mismatch, expiry, replay, incompatibility, or outage | Not Run | |
 | Playwright | `scripts/validate-e2e.ps1` with exact gateway, deployment receipt, fresh-state, Sprint 8A profile, and evidence bindings | complete inventory; zero unexpected skip/retry/flake; retained outputs | Not Run | |
 | Conformance and nondisclosure | module testkit plus Components/Dataset/Dashboard matrix | owner/version/scope/audience/known-random/timing/lifecycle cases pass | Not Run | |
 | Deployed smoke | general and Sprint 8A smoke in rehearsal namespace | real boundaries, fixtures, old-input rejection, outage/recovery and final health | Not Run | |
 | Live product diagnostics | attempt-bound product receipt plus raw structured Dashboard dependency JSON/SHA sidecar | exact predecessor/successor placements; Defer/Upgrade/Replace/Remove; blocked nondisclosure; five-placement Component outage; zero-finding recovery; partial evidence retained on failure | Not Run | |
 | Component release transition | source-built `0.9.0` metadata plus Supervisor/Compose apply receipts and stage snapshots | exact one-owner `0.9.0`/`1.0.0` upgrade, rollback and restoration; Component preservation; unrelated identity stability | Not Run | |
 | Failure teardown/rerun | induced partial materialization failure | evidence retained; exact topology/volumes removed; new empty rerun healthy | Not Run | |
-| Automated UAT diagnostics | automated equivalents of UAT-01 through UAT-08, including the structured live-product receipt | every precondition and expected semantic state reproducible; UAT-8A-05 cannot pass from lane labels alone | Not Run | |
+| Automated UAT diagnostics | automated equivalents of UAT-01 through UAT-08, including the structured live-product receipt | every precondition and expected semantic state reproducible; failed nested predicates retain exact identity/classification/reason/raw hash without outer double count; UAT-8A-05 cannot pass from lane labels alone | Not Run | |
 
 The first two lanes are independent of a deployed topology. Playwright locked
 installation/discovery, runner self-tests, and acceptance-inventory checks are
@@ -779,7 +887,7 @@ formal-UAT-owned.
 | Core Dataset compatibility | typed Dataset-major-line reference and versioned catalog/schema/distinct/execution/compatibility operations | no private DTO/SQL/credential; wrong audience/scope/version and outage do not disclose or fall back |
 | Module configuration and diagnostics | Manifest schema v1 defaults `Components`/`5`; real image command paths; selected Dataset binding compatibility/health observation | unknown schema/field, invalid label, 0/31 timeout and wrong authority rejected; no raw references/secrets; command paths exist in image |
 | Dashboard dependency | v3 provider binding; exact predecessor/successor and action placements; structured semantic evidence | no old owner/type or blocked-scope disclosure; Defer/Upgrade/Replace/Remove and Component outage/recovery cannot pass from broad labels |
-| Fresh bootstrap | destructive full reset and owner-ordered exact 7-shell/8-version/7-placement idempotent seed | ambiguous target rejected; no cross-owner writes; exact predecessor/successor/action identities; second run no-op; failed partial topology never reused |
+| Fresh bootstrap | destructive owner-ordered seed plus generic lockfile-owned dependency validation and exact 7-shell/8-version/7-placement idempotent seed | ambiguous or mismatched target, altered payload/request/apply/owner/audience, expiry, and replay rejected; no cross-owner or pre-validation writes; exact predecessor/successor/action identities; second run no-op; failed partial topology never reused |
 | Component release transition | source-built compatible `0.9.0` and candidate `1.0.0`; exact Supervisor/Compose one-owner deltas | candidate relabel rejected; release/binary identities distinct; unrelated owners absent from plan and unchanged in snapshots |
 | Core ownership | generic platform integration only | Component product storage/code/routes/adapter/readers absent |
 

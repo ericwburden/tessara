@@ -21,6 +21,7 @@ const PASSWORD = "tessara-dev-modules";
 const FORMS_DEFINITION = "tessara.forms";
 const RESPONSES_DEFINITION = "tessara.responses";
 const MIGRATION_DEFINITION = "tessara.migration";
+const COMPONENTS_DEFINITION = "tessara.components";
 const DASHBOARDS_DEFINITION = "tessara.dashboards";
 const SCOPED_RECORDS_DEFINITION = "tessara.reference.scoped-records";
 const SDK_REFERENCE_DEFINITION = "tessara.reference.module-sdk";
@@ -131,6 +132,17 @@ type IndependentModuleInventoryEntry = {
     enabled: boolean;
     healthy: boolean;
   };
+  configuration: {
+    declared: boolean;
+    valid: boolean;
+    values: Record<string, unknown>;
+  };
+  diagnostics: {
+    readiness_path: string;
+    liveness_path: string;
+    public_route: string;
+    details: Record<string, unknown>;
+  };
   manifest: Record<string, unknown> | null;
   findings: ModuleFinding[];
 };
@@ -197,6 +209,58 @@ type NavigationPolicyResponse = {
   groups: NavigationPolicyGroup[];
   destinations: NavigationPolicyDestination[];
 };
+type ComponentConfiguration = {
+  schema_version: 1;
+  display_label: string;
+  dataset_request_timeout_seconds: number;
+};
+type ModuleConfigurationValidation = {
+  schema_version: 1;
+  valid: boolean;
+  normalized: ComponentConfiguration | null;
+  findings: Array<{ code: string; field: string; message: string }>;
+};
+type ComponentDatasetCatalog = {
+  datasets: Array<{
+    dataset_name: string;
+    reference: {
+      reference: {
+        resource_id: string;
+      };
+    };
+    fields: Array<{ key: string }>;
+  }>;
+};
+type ComponentDiagnostics = {
+  schema_version: number;
+  module: string;
+  release: string;
+  manifest_schema: number;
+  contracts: {
+    components: string;
+    dataset_dependency: string;
+  };
+  configuration: ComponentConfiguration;
+  dataset_dependency: {
+    selected_binding: {
+      binding_key: string;
+      provider_owner: { kind: string; installation_id: string };
+      functional_contract: { id: string; version: string };
+    };
+    health: {
+      status: string;
+      failure_code: string | null;
+      result_code: string;
+      observed_at: string | null;
+      compatibility: {
+        status: string;
+        failure_code: string | null;
+        compatible: boolean | null;
+        observed_at: string | null;
+      };
+    };
+  };
+};
 type FixtureState = {
   admin: APIRequestContext;
   reader: Actor;
@@ -243,6 +307,67 @@ async function putJson<T>(
   data: Record<string, unknown>,
 ) {
   return expectJson<T>(await context.put(url, { data }));
+}
+
+async function independentModuleDetail(
+  context: APIRequestContext,
+  definitionId: string,
+) {
+  const detail = await getJson<ModuleDetailResponse>(
+    context,
+    `/api/admin/modules/${definitionId}`,
+  );
+  expect(detail.entry.kind).toBe("independently_deployed");
+  return detail as ModuleDetailResponse & {
+    entry: IndependentModuleInventoryEntry;
+  };
+}
+
+async function expectComponentConfiguration(
+  context: APIRequestContext,
+  expected: ComponentConfiguration,
+) {
+  const detail = await independentModuleDetail(context, COMPONENTS_DEFINITION);
+  expect(detail.entry.configuration).toEqual({
+    declared: true,
+    valid: true,
+    values: expected,
+  });
+  return detail;
+}
+
+function expectExactPropertySet(
+  value: Record<string, unknown>,
+  expected: string[],
+  label: string,
+) {
+  expect(Object.keys(value).sort(), `${label} property set`).toEqual(
+    [...expected].sort(),
+  );
+}
+
+function propertyNames(value: unknown): Set<string> {
+  const names = new Set<string>();
+  const visit = (candidate: unknown) => {
+    if (Array.isArray(candidate)) {
+      for (const item of candidate) visit(item);
+      return;
+    }
+    if (candidate === null || typeof candidate !== "object") return;
+    for (const [name, child] of Object.entries(candidate)) {
+      names.add(name);
+      visit(child);
+    }
+  };
+  visit(value);
+  return names;
+}
+
+function expectRfc3339(value: string | null, label: string) {
+  expect(value, `${label} should be present`).not.toBeNull();
+  expect(Number.isNaN(Date.parse(value!)), `${label} should be RFC 3339`).toBe(
+    false,
+  );
 }
 
 async function ensureDemoSeed(admin: APIRequestContext) {
@@ -1993,5 +2118,345 @@ test.describe.serial("Sprint 6A Module Management", () => {
       "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/module-shell.js",
     );
     expect(asset.status()).toBe(404);
+  });
+});
+
+test.describe.serial("Sprint 8A Module Management", () => {
+  test("Components configuration enforces exact schema authority projection and sanitized diagnostics", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    cleanupPlaywrightEntities();
+    const admin = await request.newContext({ baseURL: BASE_URL });
+    let reader: Actor | undefined;
+    let componentManager: Actor | undefined;
+    let instanceId: string | undefined;
+    let originalConfiguration: ComponentConfiguration | undefined;
+    const temporaryConfiguration: ComponentConfiguration = {
+      schema_version: 1,
+      display_label: "Visual Parts",
+      dataset_request_timeout_seconds: 6,
+    };
+
+    try {
+      await signIn(admin, "admin@tessara.local", "tessara-dev-admin");
+      await ensureDemoSeed(admin);
+      const initial = await independentModuleDetail(admin, COMPONENTS_DEFINITION);
+      instanceId = initial.entry.instance.id;
+      originalConfiguration = initial.entry.configuration
+        .values as ComponentConfiguration;
+      expect(originalConfiguration).toEqual({
+        schema_version: 1,
+        display_label: "Components",
+        dataset_request_timeout_seconds: 5,
+      });
+      expect(initial.entry.manifest?.configuration_schema).toEqual({
+        type: "object",
+        properties: {
+          display_label: {
+            type: "string",
+            minLength: 1,
+            maxLength: 80,
+            default: "Components",
+          },
+          dataset_request_timeout_seconds: {
+            type: "integer",
+            minimum: 1,
+            maximum: 30,
+            default: 5,
+          },
+        },
+        required: ["display_label", "dataset_request_timeout_seconds"],
+        additionalProperties: false,
+      });
+
+      const configurationPath =
+        `/api/modules/instances/${instanceId}/configuration`;
+      const temporaryValidation = await expectJson<ModuleConfigurationValidation>(
+        await admin.put(configurationPath, { data: temporaryConfiguration }),
+      );
+      expect(temporaryValidation).toEqual({
+        schema_version: 1,
+        valid: true,
+        normalized: temporaryConfiguration,
+        findings: [],
+      });
+      await expectComponentConfiguration(admin, temporaryConfiguration);
+
+      await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+      await gotoHydrated(
+        page,
+        `/administration/modules/${COMPONENTS_DEFINITION}#configuration`,
+      );
+      await expect(
+        page.getByRole("heading", {
+          level: 1,
+          name: "Visual Parts",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.locator('.sidebar a[href="/components"] .sidebar-link__label'),
+      ).toHaveText("Visual Parts");
+      const configurationCard = page.locator(".module-configuration-card");
+      await expect(
+        configurationCard.locator("dl > div").filter({ hasText: "Display label" }),
+      ).toContainText("Visual Parts");
+      await expect(
+        configurationCard
+          .locator("dl > div")
+          .filter({ hasText: "Dataset request timeout seconds" }),
+      ).toContainText("6");
+
+      await page.goto("/components");
+      await expect(page.locator("#module-content")).toHaveAttribute(
+        "data-hydration",
+        "ready",
+      );
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Components", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.locator('.sidebar a[href="/components"] .sidebar-link__label'),
+      ).toHaveText("Visual Parts");
+      await page.goto("/components/new");
+      await expect(
+        page.getByRole("heading", {
+          level: 1,
+          name: "Create Component",
+          exact: true,
+        }),
+      ).toBeVisible();
+
+      const rejectedConfigurations: Array<{
+        name: string;
+        payload: Record<string, unknown>;
+        finding: ModuleConfigurationValidation["findings"][number];
+      }> = [
+        {
+          name: "blank display label",
+          payload: { ...temporaryConfiguration, display_label: "   " },
+          finding: {
+            code: "configuration.display_label.required",
+            field: "display_label",
+            message: "Display label is required.",
+          },
+        },
+        {
+          name: "81 character display label",
+          payload: { ...temporaryConfiguration, display_label: "x".repeat(81) },
+          finding: {
+            code: "configuration.display_label.too_long",
+            field: "display_label",
+            message: "Display label must contain at most 80 characters.",
+          },
+        },
+        {
+          name: "zero second timeout",
+          payload: {
+            ...temporaryConfiguration,
+            dataset_request_timeout_seconds: 0,
+          },
+          finding: {
+            code: "configuration.dataset_request_timeout_seconds.out_of_range",
+            field: "dataset_request_timeout_seconds",
+            message: "Dataset request timeout must be between 1 and 30 seconds.",
+          },
+        },
+        {
+          name: "31 second timeout",
+          payload: {
+            ...temporaryConfiguration,
+            dataset_request_timeout_seconds: 31,
+          },
+          finding: {
+            code: "configuration.dataset_request_timeout_seconds.out_of_range",
+            field: "dataset_request_timeout_seconds",
+            message: "Dataset request timeout must be between 1 and 30 seconds.",
+          },
+        },
+        {
+          name: "unsupported schema",
+          payload: { ...temporaryConfiguration, schema_version: 2 },
+          finding: {
+            code: "configuration.schema_version.unsupported",
+            field: "schema_version",
+            message: "Only Component configuration schema v1 is supported.",
+          },
+        },
+      ];
+      for (const rejected of rejectedConfigurations) {
+        await test.step(`reject ${rejected.name} without partial save`, async () => {
+          const response = await admin.put(configurationPath, {
+            data: rejected.payload,
+          });
+          expect(response.status()).toBe(200);
+          expect(JSON.parse(await response.text())).toEqual({
+            schema_version: 1,
+            valid: false,
+            normalized: null,
+            findings: [rejected.finding],
+          });
+          await expectComponentConfiguration(admin, temporaryConfiguration);
+        });
+      }
+
+      const unknownField = await admin.put(configurationPath, {
+        data: {
+          ...temporaryConfiguration,
+          core_only_override: "forbidden",
+        },
+      });
+      expect(unknownField.status()).toBe(400);
+      await expectComponentConfiguration(admin, temporaryConfiguration);
+
+      reader = await createActor(admin, "sprint-8a-reader", ["modules:read"]);
+      componentManager = await createActor(admin, "sprint-8a-component-manager", [
+        "components:manage",
+      ]);
+      await independentModuleDetail(reader.context, COMPONENTS_DEFINITION);
+      for (const actor of [reader, componentManager]) {
+        const denied = await actor.context.put(configurationPath, {
+          data: {
+            ...temporaryConfiguration,
+            display_label: `Denied ${actor.email}`,
+          },
+        });
+        expect(denied.status(), `${actor.email} must not configure modules`).toBe(
+          403,
+        );
+        await expectComponentConfiguration(admin, temporaryConfiguration);
+      }
+
+      const catalog = await getJson<ComponentDatasetCatalog>(
+        admin,
+        "/api/admin/components/datasets",
+      );
+      const dataset = catalog.datasets.find((candidate) => candidate.fields.length > 0);
+      expect(
+        dataset,
+        "Components diagnostics require one Dataset compatibility observation",
+      ).toBeTruthy();
+      const fieldKey = dataset!.fields[0].key;
+      const componentValidation = await postJson<{ valid: boolean; findings: unknown[] }>(
+        admin,
+        "/api/admin/components/validate",
+        {
+          dataset_reference: dataset!.reference,
+          component_type: "table",
+          config: {
+            visible_columns: [fieldKey],
+            search_fields: [fieldKey],
+            page_size: 25,
+          },
+          version_note: "Module diagnostics compatibility observation",
+        },
+      );
+      expect(componentValidation).toEqual({
+        schema_version: 1,
+        valid: true,
+        findings: [],
+      });
+
+      const observed = await independentModuleDetail(admin, COMPONENTS_DEFINITION);
+      const diagnostics = observed.entry.diagnostics
+        .details as unknown as ComponentDiagnostics;
+      expect(diagnostics).toMatchObject({
+        schema_version: 1,
+        module: COMPONENTS_DEFINITION,
+        release: "1.0.0",
+        manifest_schema: 3,
+        contracts: {
+          components: "3.0.0",
+          dataset_dependency: "1.0.0",
+        },
+        configuration: temporaryConfiguration,
+      });
+      const binding = diagnostics.dataset_dependency.selected_binding;
+      expectExactPropertySet(
+        binding as unknown as Record<string, unknown>,
+        ["binding_key", "provider_owner", "functional_contract"],
+        "Dataset binding diagnostics",
+      );
+      expect(binding.binding_key).toBe("tessara.components.dataset-major-line");
+      expect(binding.provider_owner).toEqual({
+        kind: "core_installation",
+        installation_id: observed.installation_id,
+      });
+      expect(binding.functional_contract).toEqual({
+        id: "tessara.datasets.dataset-major-line",
+        version: "1.0.0",
+      });
+
+      const health = diagnostics.dataset_dependency.health;
+      expectExactPropertySet(
+        health as unknown as Record<string, unknown>,
+        [
+          "status",
+          "failure_code",
+          "result_code",
+          "observed_at",
+          "compatibility",
+        ],
+        "Dataset health diagnostics",
+      );
+      expect(health.status).toBe("available");
+      expect(health.failure_code).toBeNull();
+      expect(health.result_code).toBe("dataset.request_succeeded");
+      expectRfc3339(health.observed_at, "Dataset health observation time");
+      expectExactPropertySet(
+        health.compatibility as unknown as Record<string, unknown>,
+        ["status", "failure_code", "compatible", "observed_at"],
+        "Dataset compatibility diagnostics",
+      );
+      expect(health.compatibility.status).toBe("compatible");
+      expect(health.compatibility.failure_code).toBeNull();
+      expect(health.compatibility.compatible).toBe(true);
+      expectRfc3339(
+        health.compatibility.observed_at,
+        "Dataset compatibility observation time",
+      );
+
+      const diagnosticProperties = propertyNames(diagnostics);
+      for (const forbidden of [
+        "resource_id",
+        "resource_reference",
+        "dataset_reference",
+        "rows",
+        "row_count",
+        "record_count",
+        "product_count",
+        "password",
+        "secret",
+        "credential",
+        "token",
+        "bearer",
+      ]) {
+        expect(
+          diagnosticProperties.has(forbidden),
+          `diagnostics must not expose ${forbidden}`,
+        ).toBe(false);
+      }
+      const diagnosticText = JSON.stringify(diagnostics);
+      expect(diagnosticText).not.toContain(dataset!.reference.reference.resource_id);
+      expect(diagnosticText).not.toContain(dataset!.dataset_name);
+      expect(diagnosticText).not.toContain(fieldKey);
+      expect(diagnosticText).not.toMatch(/password|secret|credential|bearer/i);
+    } finally {
+      if (instanceId !== undefined && originalConfiguration !== undefined) {
+        const restored = await admin.put(
+          `/api/modules/instances/${instanceId}/configuration`,
+          { data: originalConfiguration },
+        );
+        expect(restored.status(), await restored.text()).toBe(200);
+        await expectComponentConfiguration(admin, originalConfiguration);
+      }
+      await Promise.all(
+        [reader?.context, componentManager?.context, admin]
+          .filter((context): context is APIRequestContext => context !== undefined)
+          .map((context) => context.dispose()),
+      );
+      cleanupPlaywrightEntities();
+    }
   });
 });

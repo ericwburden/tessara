@@ -185,6 +185,97 @@ SELECT json_build_object(
     [ordered]@{ contract = $contract; core = $core; dashboard = $dashboard }
 }
 
+function Test-IsInsideOwnerControlledSeedExclusion {
+    param([Parameter(Mandatory)][System.Management.Automation.Language.Ast]$Ast)
+
+    $ancestor = $Ast
+    while ($null -ne $ancestor) {
+        if ($ancestor -is [System.Management.Automation.Language.StatementBlockAst] -and
+            $ancestor.Parent -is [System.Management.Automation.Language.IfStatementAst]) {
+            foreach ($clause in $ancestor.Parent.Clauses) {
+                if ($clause.Item2.Extent.StartOffset -ne $ancestor.Extent.StartOffset -or
+                    $clause.Item2.Extent.EndOffset -ne $ancestor.Extent.EndOffset) {
+                    continue
+                }
+                $unaryExpressions = @($clause.Item1.FindAll({
+                    param($candidate)
+                    $candidate -is [System.Management.Automation.Language.UnaryExpressionAst]
+                }, $true))
+                $variables = @($clause.Item1.FindAll({
+                    param($candidate)
+                    $candidate -is [System.Management.Automation.Language.VariableExpressionAst]
+                }, $true))
+                if ($unaryExpressions.Count -eq 1 -and
+                    $variables.Count -eq 1 -and
+                    $unaryExpressions[0].TokenKind -eq [System.Management.Automation.Language.TokenKind]::Not -and
+                    $unaryExpressions[0].Child -eq $variables[0] -and
+                    $variables[0].VariablePath.UserPath -ceq 'OwnerControlledSeed' -and
+                    $clause.Item1.Extent.StartOffset -eq $unaryExpressions[0].Extent.StartOffset -and
+                    $clause.Item1.Extent.EndOffset -eq $unaryExpressions[0].Extent.EndOffset) {
+                    return $true
+                }
+            }
+        }
+        $ancestor = $ancestor.Parent
+    }
+    $false
+}
+
+function Test-Sprint8AOwnerControlledSeedBoundary {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+        (Resolve-Path -LiteralPath $Path).Path,
+        [ref]$tokens,
+        [ref]$parseErrors
+    )
+    if (@($parseErrors).Count -ne 0) {
+        throw "The owner-controlled fixture boundary cannot be audited because '$Path' does not parse."
+    }
+
+    $productMutationPattern = '(?im)\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|CREATE\s+TABLE)\s+(?:nodes|datasets|dataset_scope_nodes|dataset_revisions|dataset_major_materializations|dataset_materialized\.[A-Za-z0-9_.$()]+|components|component_versions|component_version_change_events|dashboard_organization_nodes|dashboards|dashboard_scope_nodes|dashboard_placements)\b'
+    $productMutationStrings = @($ast.FindAll({
+        param($candidate)
+        ($candidate -is [System.Management.Automation.Language.StringConstantExpressionAst] -or
+            $candidate -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) -and
+        $candidate.Extent.Text -match $productMutationPattern
+    }, $true))
+    if ($productMutationStrings.Count -eq 0) {
+        throw 'The shared Sprint 7A fixture product setup disappeared instead of remaining behind its legacy-only boundary.'
+    }
+    $unguardedLines = @($productMutationStrings | Where-Object {
+        -not (Test-IsInsideOwnerControlledSeedExclusion -Ast $_)
+    } | ForEach-Object { $_.Extent.StartLineNumber })
+    if ($unguardedLines.Count -ne 0) {
+        throw "Sprint 8A OwnerControlledSeed can reach product-table mutation text at line(s) $($unguardedLines -join ', ')."
+    }
+
+    $securityMutationStrings = @($ast.FindAll({
+        param($candidate)
+        ($candidate -is [System.Management.Automation.Language.StringConstantExpressionAst] -or
+            $candidate -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) -and
+        $candidate.Extent.Text -match '(?im)\b(?:DELETE\s+FROM|INSERT\s+INTO)\s+role_assignments\b'
+    }, $true))
+    if ($securityMutationStrings.Count -ne 1 -or
+        (Test-IsInsideOwnerControlledSeedExclusion -Ast $securityMutationStrings[0])) {
+        throw 'Owner-controlled fixture preparation must retain one Core role-assignment reconciliation outside the legacy product boundary.'
+    }
+
+    $readBackCommands = @($ast.FindAll({
+        param($candidate)
+        $candidate -is [System.Management.Automation.Language.CommandAst] -and
+        $candidate.GetCommandName() -in @('Get-LiveInventory', 'Assert-LiveInventory')
+    }, $true))
+    foreach ($commandName in @('Get-LiveInventory', 'Assert-LiveInventory')) {
+        $commands = @($readBackCommands | Where-Object { $_.GetCommandName() -ceq $commandName })
+        if ($commands.Count -ne 1 -or (Test-IsInsideOwnerControlledSeedExclusion -Ast $commands[0])) {
+            throw "Owner-controlled fixture verification must execute exactly one unguarded '$commandName' read-back command."
+        }
+    }
+}
+
 function Assert-LiveInventory([object]$Inventory) {
     $contract = $Inventory.contract
     foreach ($email in @($contract.actors.administrator, $contract.actors.scoped_operator, $contract.actors.mixed_scope_operator, $contract.actors.no_analytics_actor)) {
@@ -245,6 +336,7 @@ if ($SelfTest) {
         $source -cnotmatch "resource_type='tessara.components.component_version'") {
         throw "The shared fixture preparer must preserve independently owned Component storage and references for Sprint 8A."
     }
+    Test-Sprint8AOwnerControlledSeedBoundary -Path $PSCommandPath
     Write-Host "Sprint 7A UAT fixture preparation self-test passed."
     return
 }
@@ -274,13 +366,15 @@ if (-not $VerifyOnly) {
         }
     }
     foreach ($value in @($scopedId,$mixedId,$restrictedId,$scopedRole,$mixedBaseRole,$mixedTierRole,$noAnalyticsRole)) { $null = Assert-Uuid $value "Prepared identity" }
+    $roleQuote = '$role$'
 
+    # Sprint 8A product state comes from signed owner bootstraps. This branch is
+    # retained only for the Sprint 7A fixture topology.
     if (-not $OwnerControlledSeed) {
     $referenceRevision = Invoke-Postgres -Container $container -Database tessara_core -Json -Sql "SELECT json_build_object('id',id,'table',materialized_table) FROM dataset_revisions WHERE dataset_id='$($contract.datasets.four_tier)'::uuid AND status='published'"
     $referenceTable = [string]$referenceRevision.table
     if ($referenceTable -notmatch '^dataset_[0-9a-f]{32}$') { throw "Reference Dataset materialized table identity is invalid." }
     $sqlQuote = '$uat$'
-    $roleQuote = '$role$'
     $blockedNode = Invoke-Postgres -Container $container -Database tessara_core -Json -Sql "SELECT COALESCE((SELECT json_build_object('name',name) FROM nodes WHERE id='$($contract.scope_nodes.subtree_b)'::uuid),'null'::json)"
     $nodeSql = if ($null -eq $blockedNode -or [string]$blockedNode.name -CNE 'Tessara UAT Blocked Organization') {
 @"
@@ -362,26 +456,6 @@ VALUES('$($contract.datasets.blocked)'::uuid,1,'dataset_materialized','dataset_m
 ON CONFLICT(dataset_id,version_major) DO UPDATE SET materialized_row_count=1,materialized_at=now(),rebuild_status='ready';
 
 $legacyComponentSql
-
-DO ${roleQuote}
-BEGIN
-  IF (SELECT jsonb_agg(jsonb_build_array(account_id,role_id,node_id) ORDER BY account_id,role_id,node_id)
-      FROM role_assignments WHERE account_id IN ('$scopedId'::uuid,'$mixedId'::uuid,'$restrictedId'::uuid))
-     IS DISTINCT FROM (SELECT jsonb_agg(jsonb_build_array(account_id,role_id,node_id) ORDER BY account_id,role_id,node_id) FROM (VALUES
-       ('$scopedId'::uuid,'$scopedRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
-       ('$mixedId'::uuid,'$mixedBaseRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
-       ('$mixedId'::uuid,'$mixedTierRole'::uuid,'$($contract.scope_nodes.subtree_b)'::uuid),
-       ('$restrictedId'::uuid,'$noAnalyticsRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid)
-     ) expected(account_id,role_id,node_id)) THEN
-    DELETE FROM role_assignments WHERE account_id IN ('$scopedId'::uuid,'$mixedId'::uuid,'$restrictedId'::uuid);
-    INSERT INTO role_assignments(account_id,role_id,node_id) VALUES
-      ('$scopedId'::uuid,'$scopedRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
-      ('$mixedId'::uuid,'$mixedBaseRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
-      ('$mixedId'::uuid,'$mixedTierRole'::uuid,'$($contract.scope_nodes.subtree_b)'::uuid),
-      ('$restrictedId'::uuid,'$noAnalyticsRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid);
-  END IF;
-END
-${roleQuote};
 COMMIT;
 "@
     $null = Invoke-Postgres -Container $container -Database tessara_core -Sql $coreSql
@@ -444,6 +518,33 @@ COMMIT;
 "@
     $null = Invoke-Postgres -Container $container -Database tessara_module_dashboards -Sql $dashboardSql
     }
+    # These scoped role assignments are Core security fixtures, not product
+    # seed. They remain active for both Sprint 7A and Sprint 8A.
+    $securitySql = @"
+BEGIN;
+SET LOCAL client_min_messages TO warning;
+DO ${roleQuote}
+BEGIN
+  IF (SELECT jsonb_agg(jsonb_build_array(account_id,role_id,node_id) ORDER BY account_id,role_id,node_id)
+      FROM role_assignments WHERE account_id IN ('$scopedId'::uuid,'$mixedId'::uuid,'$restrictedId'::uuid))
+     IS DISTINCT FROM (SELECT jsonb_agg(jsonb_build_array(account_id,role_id,node_id) ORDER BY account_id,role_id,node_id) FROM (VALUES
+       ('$scopedId'::uuid,'$scopedRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
+       ('$mixedId'::uuid,'$mixedBaseRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
+       ('$mixedId'::uuid,'$mixedTierRole'::uuid,'$($contract.scope_nodes.subtree_b)'::uuid),
+       ('$restrictedId'::uuid,'$noAnalyticsRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid)
+     ) expected(account_id,role_id,node_id)) THEN
+    DELETE FROM role_assignments WHERE account_id IN ('$scopedId'::uuid,'$mixedId'::uuid,'$restrictedId'::uuid);
+    INSERT INTO role_assignments(account_id,role_id,node_id) VALUES
+      ('$scopedId'::uuid,'$scopedRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
+      ('$mixedId'::uuid,'$mixedBaseRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid),
+      ('$mixedId'::uuid,'$mixedTierRole'::uuid,'$($contract.scope_nodes.subtree_b)'::uuid),
+      ('$restrictedId'::uuid,'$noAnalyticsRole'::uuid,'$($contract.scope_nodes.subtree_a)'::uuid);
+  END IF;
+END
+${roleQuote};
+COMMIT;
+"@
+    $null = Invoke-Postgres -Container $container -Database tessara_core -Sql $securitySql
     $logout = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/auth/logout" -Method DELETE -Token $token
     if ($logout.status -notin 200,204) { throw "Administrator fixture session cleanup returned HTTP $($logout.status)." }
 }

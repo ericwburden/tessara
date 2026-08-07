@@ -15,6 +15,9 @@ pub const DATASET_CONTRACT_VERSION: &str = "1.0.0";
 pub const DATASET_CONTRACT_ID: &str = "tessara.datasets.dataset-major-line";
 pub const DATASET_BINDING_KEY: &str = "tessara.components.dataset-major-line";
 pub const DATASET_RESOURCE_TYPE: &str = "tessara.transition.dataset_major_line";
+pub const DATASET_BOOTSTRAP_VALIDATION_ACTION: &str = "datasets.bootstrap_validate";
+pub const DATASET_BOOTSTRAP_VALIDATION_PATH: &str = "/api/private/datasets/bootstrap-validation";
+pub const DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY: &str = "materialization_not_ready";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DatasetMajorLineReference {
@@ -137,6 +140,7 @@ pub enum DatasetAction {
     DistinctValues,
     CheckCompatibility,
     Execute,
+    ValidateBootstrap,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -255,6 +259,38 @@ pub struct DatasetCompatibilityResponse {
     pub schema_version: u16,
     pub compatible: bool,
     pub findings: Vec<DatasetCompatibilityFinding>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetBootstrapValidationItem {
+    pub validation_key: String,
+    pub reference: DatasetMajorLineReference,
+    pub required_fields: Vec<DatasetFieldRequirement>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetBootstrapValidationBatch {
+    #[serde(deserialize_with = "deserialize_schema_version")]
+    pub schema_version: u16,
+    pub items: Vec<DatasetBootstrapValidationItem>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetBootstrapValidationResult {
+    pub validation_key: String,
+    pub metadata: DatasetMajorLineMetadata,
+    pub compatibility: DatasetCompatibilityResponse,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetBootstrapValidationResponse {
+    #[serde(deserialize_with = "deserialize_schema_version")]
+    pub schema_version: u16,
+    pub results: Vec<DatasetBootstrapValidationResult>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

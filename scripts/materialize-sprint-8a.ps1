@@ -3,6 +3,7 @@ param(
     [string]$ComposeFile = "deploy/sprint-8a/compose.yaml",
     [string]$BlueprintPath = "deploy/sprint-8a/blueprints/reference.json",
     [string]$CoreUrl = "http://127.0.0.1:8088",
+    [string]$ControlUrl = "http://127.0.0.1:18088",
     [string]$SupervisorUrl = "http://127.0.0.1:8098",
     [ValidateRange(1, 2147483647)]
     [int]$Attempt = 1,
@@ -75,6 +76,12 @@ function Get-Sprint8ADisplayPath {
         return $fullPath.Substring($rootPrefix.Length).Replace("\", "/")
     }
     $fullPath.Replace("\", "/")
+}
+
+function Test-Sprint8AComposeResourceExternal {
+    param([Parameter(Mandatory)]$Resource)
+    $externalProperty = $Resource.PSObject.Properties["external"]
+    return $null -ne $externalProperty -and [bool]$externalProperty.Value
 }
 
 function Get-Sprint8AArtifact {
@@ -411,10 +418,96 @@ function Get-Sprint8AFinalHealth {
     }
 }
 
+function Start-Sprint8APublicGateway {
+    param(
+        [Parameter(Mandatory)][string]$ComposePath,
+        [Parameter(Mandatory)][string]$RawLogPath
+    )
+
+    $servicesBefore = @(Get-Sprint8AComposeServiceState -ComposePath $ComposePath)
+    $gatewayBefore = @($servicesBefore | Where-Object service -CEQ "gateway")
+    if (@($gatewayBefore | Where-Object state -CEQ "running").Count -ne 0) {
+        throw "Sprint 8A public gateway became available before owner materialization completed."
+    }
+    $probeBefore = try {
+        $unexpected = Invoke-Sprint7ARequest -BaseUrl $CoreUrl -Path "/health/ready"
+        [ordered]@{
+            available = $true
+            status = [int]$unexpected.status
+            observed_at = [DateTimeOffset]::UtcNow.ToString("o")
+        }
+    } catch {
+        [ordered]@{
+            available = $false
+            status = $null
+            observed_at = [DateTimeOffset]::UtcNow.ToString("o")
+            failure_category = [string]$_.CategoryInfo.Category
+        }
+    }
+    if ([bool]$probeBefore.available) {
+        throw "Sprint 8A public gateway endpoint responded before owner materialization completed."
+    }
+
+    $offlineUntil = [DateTimeOffset]::UtcNow
+    $output = @(& docker compose -f $ComposePath --profile reference up -d --no-build gateway 2>&1)
+    $exitCode = $LASTEXITCODE
+    $rawLog = Write-Sprint8ARawLines -Lines $output -Path $RawLogPath
+    if ($exitCode -ne 0) {
+        throw "Sprint 8A public gateway startup failed after owner materialization."
+    }
+
+    $ready = $null
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        try {
+            $candidate = Invoke-Sprint7ARequest -BaseUrl $CoreUrl -Path "/health/ready"
+            if ([int]$candidate.status -eq 200) {
+                $ready = $candidate
+                break
+            }
+        } catch {
+            if ($attempt -eq 60) { throw }
+        }
+        Start-Sleep -Seconds 1
+    }
+    if ($null -eq $ready) {
+        throw "Sprint 8A public gateway did not become ready after owner materialization."
+    }
+    $servicesAfter = @(Get-Sprint8AComposeServiceState -ComposePath $ComposePath)
+    $gatewayAfter = @($servicesAfter | Where-Object service -CEQ "gateway")
+    if ($gatewayAfter.Count -ne 1 -or $gatewayAfter[0].state -cne "running") {
+        throw "Sprint 8A public gateway is not uniquely running after the offline boundary opened."
+    }
+
+    [ordered]@{
+        schema_version = 1
+        contract = "tessara.sprint-8a.public-gateway-boundary"
+        public_gateway_url = $CoreUrl
+        materialization_control_url = $ControlUrl
+        gateway_service_before = $gatewayBefore
+        public_probe_before = $probeBefore
+        owner_materialization_completed_at = $offlineUntil.ToString("o")
+        start = [ordered]@{
+            command = "docker compose -f <resolved-compose> --profile reference up -d --no-build gateway"
+            exit_code = $exitCode
+            raw_log = $rawLog
+        }
+        public_ready_at = [DateTimeOffset]::UtcNow.ToString("o")
+        public_ready = [ordered]@{
+            status = [int]$ready.status
+            content_type = [string]$ready.content_type
+            body_sha256 = [string]$ready.body_sha256
+            body_utf8_length = [long]$ready.body_utf8_length
+        }
+        gateway_service_after = $gatewayAfter[0]
+        passed = $true
+    }
+}
+
 if (-not $AuthorizeDisposableReset) {
     throw "Sprint 8A materialization is destructive. Re-run with -AuthorizeDisposableReset only for the disposable tessara-sprint-8a project."
 }
 Assert-Sprint8ADestructiveEndpoint -Value $CoreUrl -Name "CoreUrl" -ExpectedPort 8088
+Assert-Sprint8ADestructiveEndpoint -Value $ControlUrl -Name "ControlUrl" -ExpectedPort 18088
 Assert-Sprint8ADestructiveEndpoint -Value $SupervisorUrl -Name "SupervisorUrl" -ExpectedPort 8098
 if (-not [string]::IsNullOrWhiteSpace($EnvironmentFingerprint) -and
     $EnvironmentFingerprint -notmatch '^[0-9a-fA-F]{64}$') {
@@ -464,7 +557,7 @@ try {
     }
     $unexpectedNetworks = @($configuration.networks.PSObject.Properties | Where-Object {
         $name = if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
-        -not [bool]$_.Value.external -and
+        -not (Test-Sprint8AComposeResourceExternal -Resource $_.Value) -and
             -not $name.StartsWith("$expectedProject`_", [StringComparison]::Ordinal)
     })
     if ($unexpectedNetworks.Count -gt 0) {
@@ -474,7 +567,7 @@ try {
         if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
     } | Sort-Object)
     $resolvedNetworkNames = @($configuration.networks.PSObject.Properties | Where-Object {
-        -not [bool]$_.Value.external
+        -not (Test-Sprint8AComposeResourceExternal -Resource $_.Value)
     } | ForEach-Object {
         if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
     } | Sort-Object)
@@ -560,6 +653,7 @@ try {
         normalized_compose_sha256 = Get-Sprint7ASha256 -Text $configurationText
         postgres_init_sha256 = Get-Sprint7AFileSha256 -Path $expectedPostgresInit
         core_url = $CoreUrl
+        control_url = $ControlUrl
         supervisor_url = $SupervisorUrl
         services = $serviceTargets
         volumes = $resolvedVolumeNames
@@ -657,7 +751,7 @@ try {
             -ComposeFile $ComposeFile `
             -BlueprintPath $resolvedBlueprintPath `
             -RuntimeDirectory $runtimeDirectory `
-            -CoreUrl $CoreUrl `
+            -CoreUrl $ControlUrl `
             -SupervisorUrl $SupervisorUrl `
             -DeploymentDirectory "sprint-8a" `
             -ExpectedProject $expectedProject `
@@ -665,6 +759,7 @@ try {
             -RuntimeLabel "sprint-8a" `
             -AdditionalBuildServices @("components") `
             -AdditionalExpectedNavigationHrefs @("/components") `
+            -ExcludePublicGateway `
             -SkipBuild:$SkipBuild `
             -Confirm:$false
 
@@ -692,7 +787,7 @@ try {
                 -BlueprintPath $resolvedBlueprintPath `
                 -RuntimeDirectory $runtimeDirectory `
                 -ReleaseCatalogEnvelope $firstCatalogEnvelope `
-                -CoreUrl $CoreUrl `
+                -CoreUrl $ControlUrl `
                 -SupervisorUrl $SupervisorUrl `
                 -DeploymentDirectory "sprint-8a" `
                 -ExpectedProject $expectedProject `
@@ -700,6 +795,7 @@ try {
                 -RuntimeLabel "sprint-8a" `
                 -AdditionalBuildServices @("components") `
                 -AdditionalExpectedNavigationHrefs @("/components") `
+                -ExcludePublicGateway `
                 -SemanticNoOp `
                 -SkipBuild `
                 -Confirm:$false
@@ -721,6 +817,12 @@ try {
                 -Blueprint $blueprint
             Assert-Sprint8ANoOpMatchesFirst -First $first -NoOp $noOp
         }
+
+        $gatewayBoundaryPublication = Publish-Sprint7AEvidence `
+            -Document (Start-Sprint8APublicGateway `
+                -ComposePath $composePath `
+                -RawLogPath (Join-Path $attemptDirectory "public-gateway-start.log")) `
+            -OutputPath (Join-Path $attemptDirectory "public-gateway-boundary.json")
 
         $finalHealth = Get-Sprint8AFinalHealth -ComposePath $composePath
         $finalHealthPublication = Publish-Sprint7AEvidence `
@@ -758,6 +860,7 @@ try {
                 lockfile = Get-Sprint8AArtifact -Path (Join-Path $runtimeDirectory "lockfile.json")
                 first_apply_response = $firstRaw
                 no_op_apply_response = $noOpRaw
+                public_gateway_boundary = Get-Sprint8AArtifact -Path $gatewayBoundaryPublication.path
                 final_health = Get-Sprint8AArtifact -Path $finalHealthPublication.path
             }
             first_apply = $first

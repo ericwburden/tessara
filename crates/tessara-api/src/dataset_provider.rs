@@ -5,21 +5,32 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::{Postgres, QueryBuilder, Row};
+use tessara_composition::{
+    BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+    BootstrapDependencyValidationAuthorizationV1, BootstrapDependencyValidationContextV1,
+    BootstrapDependencyValidationRequestV1, canonical_digest,
+};
 use tessara_datasets_contract::{
-    DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction, DatasetAggregateFunction,
-    DatasetCatalogRequest, DatasetCatalogResponse, DatasetCompatibilityFinding,
-    DatasetCompatibilityRequest, DatasetCompatibilityResponse, DatasetDistinctValuesRequest,
-    DatasetDistinctValuesResponse, DatasetExecutionRequest, DatasetExecutionResponse,
-    DatasetExecutionRow, DatasetFieldContract, DatasetFilterOperator, DatasetMajorLineMetadata,
-    DatasetMajorLineReference, DatasetMissingPolicy, DatasetProvenanceSummary,
-    DatasetSchemaRequest, DatasetSortDirection,
+    DATASET_BINDING_KEY, DATASET_BOOTSTRAP_VALIDATION_ACTION, DATASET_BOOTSTRAP_VALIDATION_PATH,
+    DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY, DATASET_CONTRACT_ID,
+    DATASET_CONTRACT_SCHEMA_VERSION, DATASET_CONTRACT_VERSION, DatasetAction,
+    DatasetAggregateFunction, DatasetBootstrapValidationBatch, DatasetBootstrapValidationResponse,
+    DatasetBootstrapValidationResult, DatasetCatalogRequest, DatasetCatalogResponse,
+    DatasetCompatibilityFinding, DatasetCompatibilityRequest, DatasetCompatibilityResponse,
+    DatasetDistinctValuesRequest, DatasetDistinctValuesResponse, DatasetExecutionRequest,
+    DatasetExecutionResponse, DatasetExecutionRow, DatasetFieldContract, DatasetFieldRequirement,
+    DatasetFilterOperator, DatasetMajorLineMetadata, DatasetMajorLineReference,
+    DatasetMissingPolicy, DatasetProvenanceSummary, DatasetSchemaRequest, DatasetSortDirection,
 };
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantV3, AuthorizationValidationContextV3,
-    ModuleServicePrincipalV1, ServiceActionMethod, SignedEnvelopeV1,
+    ModuleDefinitionId, ModuleServicePrincipalV1, ProtocolSignaturePurposeV1, ServiceActionMethod,
+    SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -40,6 +51,7 @@ pub(crate) fn routes() -> Router<AppState> {
             post(distinct_values),
         )
         .route("/api/private/datasets/compatibility", post(compatibility))
+        .route(DATASET_BOOTSTRAP_VALIDATION_PATH, post(validate_bootstrap))
         .route("/api/private/datasets/execute", post(execute))
 }
 
@@ -295,8 +307,31 @@ async fn compatibility(
         .iter()
         .map(|field| (field.key.as_str(), field.field_type.as_str()))
         .collect::<BTreeMap<_, _>>();
+    let findings = compatibility_findings(
+        &metadata.materialization_state,
+        &fields,
+        request.required_fields,
+    );
+    Ok(Json(DatasetCompatibilityResponse {
+        schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+        compatible: findings.is_empty(),
+        findings,
+    }))
+}
+
+fn compatibility_findings(
+    materialization_state: &str,
+    fields: &BTreeMap<&str, &str>,
+    requirements: Vec<DatasetFieldRequirement>,
+) -> Vec<DatasetCompatibilityFinding> {
+    if materialization_state != "ready" {
+        return vec![DatasetCompatibilityFinding {
+            code: DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY.into(),
+            field_key: "materialization_state".into(),
+        }];
+    }
     let mut findings = Vec::new();
-    for requirement in request.required_fields {
+    for requirement in requirements {
         match fields.get(requirement.field_key.as_str()) {
             None => findings.push(DatasetCompatibilityFinding {
                 code: "field_missing".into(),
@@ -316,11 +351,138 @@ async fn compatibility(
             Some(_) => {}
         }
     }
-    Ok(Json(DatasetCompatibilityResponse {
+    findings
+}
+
+async fn validate_bootstrap(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<BootstrapDependencyValidationRequestV1>,
+) -> ApiResult<Json<DatasetBootstrapValidationResponse>> {
+    if request.schema_version != BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1
+        || request.desired_revision == 0
+        || request.apply_sequence == 0
+    {
+        return Err(restricted());
+    }
+    let encoded = headers
+        .get("x-tessara-bootstrap-validation-authorization")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(restricted)?;
+    let bytes = URL_SAFE_NO_PAD.decode(encoded).map_err(|_| restricted())?;
+    let authorization: SignedEnvelopeV1<BootstrapDependencyValidationAuthorizationV1> =
+        serde_json::from_slice(&bytes).map_err(|_| restricted())?;
+    crate::core_security::protocol_signer(
+        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
+    )?
+    .verifier()
+    .verify(&authorization)
+    .map_err(|_| restricted())?;
+    let principal = ModuleServicePrincipalV1::ModuleInstance {
+        module_instance_id: authorization.payload.module_instance_id,
+        module_definition_id: ModuleDefinitionId::new(&authorization.payload.module_definition_id)
+            .map_err(|_| restricted())?,
+    };
+    validate_bootstrap_request_authorization(&authorization.payload, &request, Utc::now())?;
+    let body = serde_json::to_vec(&request).map_err(|error| ApiError::Internal(error.into()))?;
+    crate::module_service_requests::validate_materializing_principal_with_authorization(
+        &state,
+        &headers,
+        authorization.payload.installation_id,
+        authorization.payload.correlation_id,
+        encoded,
+        crate::module_service_requests::ModuleServiceRequestExpectation {
+            principal: &principal,
+            grant_consumption:
+                crate::module_service_requests::AuthorizationGrantConsumption::OneTimeProviderAudience(
+                    authorization.payload.jti,
+                ),
+            method: "POST",
+            path: DATASET_BOOTSTRAP_VALIDATION_PATH,
+            body: &body,
+        },
+    )
+    .await?;
+
+    let batch: DatasetBootstrapValidationBatch =
+        serde_json::from_value(request.payload).map_err(|_| restricted())?;
+    if batch.schema_version != DATASET_CONTRACT_SCHEMA_VERSION || batch.items.is_empty() {
+        return Err(restricted());
+    }
+
+    let mut validation_keys = BTreeSet::new();
+    let mut results = Vec::with_capacity(batch.items.len());
+    for item in batch.items {
+        if item.validation_key.trim().is_empty()
+            || !validation_keys.insert(item.validation_key.clone())
+            || item.reference.reference().installation_id() != authorization.payload.installation_id
+        {
+            return Err(restricted());
+        }
+        let metadata = load_metadata(
+            &state,
+            authorization.payload.installation_id,
+            &item.reference,
+        )
+        .await?;
+        let fields = metadata
+            .fields
+            .iter()
+            .map(|field| (field.key.as_str(), field.field_type.as_str()))
+            .collect::<BTreeMap<_, _>>();
+        let findings = compatibility_findings(
+            &metadata.materialization_state,
+            &fields,
+            item.required_fields,
+        );
+        results.push(DatasetBootstrapValidationResult {
+            validation_key: item.validation_key,
+            metadata,
+            compatibility: DatasetCompatibilityResponse {
+                schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+                compatible: findings.is_empty(),
+                findings,
+            },
+        });
+    }
+    Ok(Json(DatasetBootstrapValidationResponse {
         schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
-        compatible: findings.is_empty(),
-        findings,
+        results,
     }))
+}
+
+fn validate_bootstrap_request_authorization(
+    authorization: &BootstrapDependencyValidationAuthorizationV1,
+    request: &BootstrapDependencyValidationRequestV1,
+    now: chrono::DateTime<Utc>,
+) -> ApiResult<()> {
+    let audience = AuthorizationAudienceV1::CoreInstallation {
+        installation_id: authorization.installation_id,
+    };
+    let contract_version = DATASET_CONTRACT_VERSION
+        .parse()
+        .expect("static Dataset contract version");
+    let request_digest = canonical_digest(request).map_err(|_| restricted())?;
+    authorization
+        .validate_for(&BootstrapDependencyValidationContextV1 {
+            installation_id: authorization.installation_id,
+            module_instance_id: authorization.module_instance_id,
+            module_definition_id: authorization.module_definition_id.as_str(),
+            input_digest: &request.input_digest,
+            desired_revision: request.desired_revision,
+            apply_sequence: request.apply_sequence,
+            target_plan_digest: &request.target_plan_digest,
+            dependency_binding: DATASET_BINDING_KEY,
+            functional_contract: DATASET_CONTRACT_ID,
+            functional_contract_version: &contract_version,
+            action: DATASET_BOOTSTRAP_VALIDATION_ACTION,
+            method: ServiceActionMethod::Post,
+            path: DATASET_BOOTSTRAP_VALIDATION_PATH,
+            audience: &audience,
+            request_digest: &request_digest,
+            now,
+        })
+        .map_err(|_| restricted())
 }
 
 async fn execute(
@@ -444,6 +606,37 @@ async fn load_authorized_metadata(
     if !boundary_allows(&boundary, &scope_node_ids) {
         return Err(restricted());
     }
+    load_metadata_with_scope(
+        state,
+        inbound.payload.installation_id,
+        reference,
+        scope_node_ids,
+    )
+    .await
+}
+
+async fn load_metadata(
+    state: &AppState,
+    installation_id: Uuid,
+    reference: &DatasetMajorLineReference,
+) -> ApiResult<DatasetMajorLineMetadata> {
+    if reference.reference().installation_id() != installation_id {
+        return Err(restricted());
+    }
+    let scope_node_ids =
+        crate::datasets::load_dataset_scope_node_ids(&state.pool, reference.dataset_id())
+            .await
+            .map_err(|_| restricted())?;
+    load_metadata_with_scope(state, installation_id, reference, scope_node_ids).await
+}
+
+async fn load_metadata_with_scope(
+    state: &AppState,
+    installation_id: Uuid,
+    reference: &DatasetMajorLineReference,
+    scope_node_ids: Vec<Uuid>,
+) -> ApiResult<DatasetMajorLineMetadata> {
+    let dataset_id = reference.dataset_id();
     let row = sqlx::query(
         "SELECT d.name,d.slug,d.grain,r.output_fields,
                 COALESCE(m.rebuild_status,'unavailable') AS materialization_state
@@ -472,7 +665,7 @@ async fn load_authorized_metadata(
         .remove(&dataset_id)
         .unwrap_or_default();
     metadata_from_row(MetadataRow {
-        installation_id: inbound.payload.installation_id,
+        installation_id,
         dataset_id,
         dataset_name: row.try_get("name")?,
         dataset_slug: row.try_get("slug")?,
@@ -1152,18 +1345,131 @@ fn restricted() -> ApiError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use sqlx::{Execute, Postgres, QueryBuilder};
     use tessara_datasets_contract::{
-        DatasetAggregateFunction, DatasetFilterOperator, DatasetMissingPolicy,
-        DatasetProvenanceItem, DatasetProvenanceSummary,
+        DatasetAggregateFunction, DatasetBootstrapValidationBatch, DatasetBootstrapValidationItem,
+        DatasetCompatibilityFinding, DatasetFieldRequirement, DatasetFilterOperator,
+        DatasetMajorLineReference, DatasetMissingPolicy, DatasetProvenanceItem,
+        DatasetProvenanceSummary,
     };
+    use tessara_module_contract::{AuthorizationAudienceV1, ServiceActionMethod};
     use uuid::Uuid;
 
     use super::{
-        MAX_DATASET_EXECUTION_OFFSET, MetadataRow, aggregate_function_supported, execution_offset,
-        filter_operator_supported, metadata_from_row, push_group_expression,
-        push_numeric_aggregate_operand,
+        MAX_DATASET_EXECUTION_OFFSET, MetadataRow, aggregate_function_supported,
+        compatibility_findings, execution_offset, filter_operator_supported, metadata_from_row,
+        push_group_expression, push_numeric_aggregate_operand,
+        validate_bootstrap_request_authorization,
     };
+
+    #[test]
+    fn compatibility_marks_non_ready_materialization_before_field_evaluation() {
+        let fields = BTreeMap::from([("label", "text")]);
+        let findings = compatibility_findings(
+            "rebuilding",
+            &fields,
+            vec![
+                DatasetFieldRequirement {
+                    field_key: "missing".into(),
+                    accepted_types: vec!["text".into()],
+                },
+                DatasetFieldRequirement {
+                    field_key: "label".into(),
+                    accepted_types: vec!["number".into()],
+                },
+            ],
+        );
+
+        assert_eq!(
+            findings,
+            vec![DatasetCompatibilityFinding {
+                code: tessara_datasets_contract::DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY
+                    .into(),
+                field_key: "materialization_state".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn core_provider_rejects_known_and_random_bootstrap_item_substitution_before_lookup() {
+        let now = chrono::Utc::now();
+        let installation_id = Uuid::from_u128(1);
+        let module_instance_id = Uuid::from_u128(2);
+        let input_digest =
+            tessara_module_contract::ArtifactDigest::new(format!("sha256:{}", "1".repeat(64)))
+                .expect("input digest");
+        let plan_digest =
+            tessara_module_contract::ArtifactDigest::new(format!("sha256:{}", "2".repeat(64)))
+                .expect("plan digest");
+        let reference = |dataset_id| {
+            DatasetMajorLineReference::from_parts(installation_id, dataset_id, 1)
+                .expect("Dataset reference")
+        };
+        let request_for =
+            |dataset_id| tessara_composition::BootstrapDependencyValidationRequestV1 {
+                schema_version:
+                    tessara_composition::BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+                input_digest: input_digest.clone(),
+                desired_revision: 8,
+                apply_sequence: 3,
+                target_plan_digest: plan_digest.clone(),
+                payload: serde_json::to_value(DatasetBootstrapValidationBatch {
+                    schema_version: tessara_datasets_contract::DATASET_CONTRACT_SCHEMA_VERSION,
+                    items: vec![DatasetBootstrapValidationItem {
+                        validation_key: "locked-item".into(),
+                        reference: reference(dataset_id),
+                        required_fields: Vec::new(),
+                    }],
+                })
+                .expect("validation batch"),
+            };
+        let locked_request = request_for(Uuid::from_u128(10));
+        let request_digest =
+            tessara_composition::canonical_digest(&locked_request).expect("locked request digest");
+        let authorization = tessara_composition::BootstrapDependencyValidationAuthorizationV1 {
+            schema_version:
+                tessara_composition::BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
+            installation_id,
+            module_instance_id,
+            module_definition_id: "tessara.components".into(),
+            input_digest: input_digest.clone(),
+            desired_revision: 8,
+            apply_sequence: 3,
+            target_plan_digest: plan_digest.clone(),
+            dependency_binding: tessara_datasets_contract::DATASET_BINDING_KEY.into(),
+            functional_contract: tessara_datasets_contract::DATASET_CONTRACT_ID.into(),
+            functional_contract_version: tessara_datasets_contract::DATASET_CONTRACT_VERSION
+                .parse()
+                .expect("Dataset contract version"),
+            action: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_ACTION.into(),
+            method: ServiceActionMethod::Post,
+            path: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_PATH.into(),
+            audience: AuthorizationAudienceV1::CoreInstallation { installation_id },
+            request_digest,
+            correlation_id: Uuid::from_u128(3),
+            jti: Uuid::from_u128(4),
+            issued_at: now,
+            expires_at: now + chrono::Duration::seconds(30),
+        };
+        assert!(
+            validate_bootstrap_request_authorization(&authorization, &locked_request, now).is_ok()
+        );
+
+        for substituted in [
+            request_for(Uuid::from_u128(11)),
+            request_for(Uuid::new_v4()),
+        ] {
+            let error = validate_bootstrap_request_authorization(&authorization, &substituted, now)
+                .expect_err("substituted validation item must fail before provider lookup");
+            assert!(matches!(
+                error,
+                crate::error::ApiError::Forbidden(message)
+                    if message == "dataset action unavailable"
+            ));
+        }
+    }
 
     #[test]
     fn major_line_mapping_exposes_the_complete_picker_metadata() {

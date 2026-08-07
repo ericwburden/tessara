@@ -48,6 +48,7 @@ foreach ($component in $components) {
     Assert-Sprint7A (
         $reference.installation_id -ceq $script:Sprint8AFixture.installation_id -and
         $reference.owner.kind -ceq "module_instance" -and
+        $reference.owner.installation_id -ceq $script:Sprint8AFixture.installation_id -and
         $reference.owner.module_instance_id -ceq $script:Sprint8AFixture.component_module_instance_id -and
         $reference.resource_type -ceq $script:Sprint8AFixture.component_resource_type
     ) "component_reference_$($component.slug)" "Component uses the selected v3 module owner/type" $checks
@@ -61,26 +62,24 @@ Assert-Sprint7A ($componentDocument.status -eq 200 -and $componentDocument.body.
 $dashboardResponse = Invoke-Sprint7ARequest -BaseUrl $BaseUrl -Path "/api/dashboards/$($script:Sprint8AFixture.dashboard_id)" -Token $token
 Assert-Sprint7A ($dashboardResponse.status -eq 200) "dashboard_status" "HTTP $($dashboardResponse.status)" $checks
 $dashboard = $dashboardResponse.body | ConvertFrom-Json
-$expectedPlacementIds = @(
-    "01980000-0003-7000-8000-000000000002",
-    "01980000-0003-7000-8000-000000000003",
-    "01980000-0003-7000-8000-000000000004",
-    "01980000-0003-7000-8000-000000000005",
-    "01980000-0003-7000-8000-000000000006",
-    "01980000-0003-7000-8000-000000000007",
-    "01980000-0003-7000-8000-000000000008"
-) | Sort-Object
+$expectedPlacementIds = @($script:Sprint8AFixture.dashboard_placements.Keys | Sort-Object)
 $actualPlacementIds = @($dashboard.placements | ForEach-Object { [string]$_.placement_id } | Sort-Object)
 Assert-Sprint7A (
     ($actualPlacementIds -join ",") -ceq ($expectedPlacementIds -join ",")
 ) "dashboard_placement_inventory" "Dashboard owner returned the exact seven receipt-bound placements" $checks
 foreach ($placement in @($dashboard.placements)) {
+    $expectedPlacement = $script:Sprint8AFixture.dashboard_placements[[string]$placement.placement_id]
     $reference = $placement.component.reference.reference
     Assert-Sprint7A (
+        $null -ne $expectedPlacement -and
+        [string]$placement.placement_key -ceq [string]$expectedPlacement.placement_key -and
+        $reference.installation_id -ceq $script:Sprint8AFixture.installation_id -and
         $reference.owner.kind -ceq "module_instance" -and
+        $reference.owner.installation_id -ceq $script:Sprint8AFixture.installation_id -and
         $reference.owner.module_instance_id -ceq $script:Sprint8AFixture.component_module_instance_id -and
-        $reference.resource_type -ceq $script:Sprint8AFixture.component_resource_type
-    ) "dashboard_reference_$($placement.placement_id)" "Dashboard placement uses Components v3" $checks
+        $reference.resource_type -ceq $script:Sprint8AFixture.component_resource_type -and
+        $reference.resource_id -ceq [string]$expectedPlacement.component_version_id
+    ) "dashboard_reference_$($placement.placement_id)" "Dashboard placement uses its exact receipt-bound Components v3 reference" $checks
 }
 
 foreach ($render in @(

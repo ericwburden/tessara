@@ -408,6 +408,7 @@ pub(crate) struct IndependentModuleReadModel {
     pub(crate) enabled: bool,
     pub(crate) healthy: bool,
     pub(crate) observed_at: DateTime<Utc>,
+    pub(crate) diagnostic_details: sqlx::types::Json<BTreeMap<String, Value>>,
 }
 
 #[derive(Clone, Debug)]
@@ -1827,7 +1828,8 @@ async fn load_module_inventory_in_transaction(
             instances.ready,
             instances.enabled,
             instances.healthy,
-            instances.last_observed_at AS observed_at
+            instances.last_observed_at AS observed_at,
+            '{}'::jsonb AS diagnostic_details
         FROM module_instances instances
         JOIN module_releases releases ON releases.id = instances.release_id
         JOIN module_definition_reservations definitions
@@ -2882,7 +2884,7 @@ mod tests {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "ef38ef307cf6fe44185b558522ad68e5a34841dec3e8d3442245ba5441ede26a"
+            "49d1b2af75c5a31335e5cc855a615e571c05d7b352a3e0de96b4aa6829ff8926"
         );
     }
 

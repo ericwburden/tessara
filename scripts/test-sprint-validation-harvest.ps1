@@ -55,7 +55,10 @@ function Assert-DiagnosticReceiptHeader {
 }
 
 function Assert-MutableSourceIdentity {
-    param([Parameter(Mandatory)]$Source)
+    param(
+        [Parameter(Mandatory)]$Source,
+        [Parameter(Mandatory)][string]$VerificationState
+    )
     $expectedProperties = @(
         "commit", "tree", "dirty", "branch",
         "acceptance_inventory_sha256", "deployment_inputs_sha256"
@@ -68,14 +71,28 @@ function Assert-MutableSourceIdentity {
         $Source.tree -isnot [string] -or
         [string]$Source.tree -notmatch '^[0-9a-f]{40}$' -or
         $Source.dirty -isnot [bool] -or
-        $Source.dirty -ne $false -or
         $Source.branch -isnot [string] -or
         [string]::IsNullOrWhiteSpace([string]$Source.branch) -or
         $Source.acceptance_inventory_sha256 -isnot [string] -or
         [string]$Source.acceptance_inventory_sha256 -notmatch '^[0-9a-f]{64}$' -or
         $Source.deployment_inputs_sha256 -isnot [string] -or
         [string]$Source.deployment_inputs_sha256 -notmatch '^[0-9a-f]{64}$') {
-        throw "The attempt mutable source identity is malformed or dirty."
+        throw "The attempt mutable source identity claim is malformed."
+    }
+    if ($VerificationState -ceq "verified") {
+        if ([string]$Source.branch -ceq "unverified" -or
+            [string]$Source.commit -ceq ("0" * 40) -or [string]$Source.tree -ceq ("0" * 40)) {
+            throw "A verified mutable source identity still carries placeholder claims."
+        }
+    } elseif ($VerificationState -in @("unverified", "failed")) {
+        if ($Source.dirty -ne $false -or [string]$Source.branch -cne "unverified" -or
+            [string]$Source.commit -cne ("0" * 40) -or [string]$Source.tree -cne ("0" * 40) -or
+            [string]$Source.acceptance_inventory_sha256 -cne ("0" * 64) -or
+            [string]$Source.deployment_inputs_sha256 -cne ("0" * 64)) {
+            throw "An unverified mutable source claim must remain the exact explicit placeholder identity."
+        }
+    } else {
+        throw "The attempt omits an explicit source identity verification state."
     }
 }
 
@@ -223,7 +240,15 @@ function Assert-HarvestComplete {
     Assert-DiagnosticReceiptHeader -Document $Attempt -SchemaVersion 2 -Phase "candidate-rehearsal" -Label "Attempt"
     Assert-DiagnosticReceiptHeader -Document $Harvest -SchemaVersion 1 -Phase "candidate-rehearsal-harvest" -Label "Harvest"
     Assert-DiagnosticReceiptHeader -Document $Batch -SchemaVersion 1 -Phase "candidate-rehearsal-defect-batch" -Label "Defect batch"
-    Assert-MutableSourceIdentity -Source $Attempt.mutable_source_identity
+    if ($Attempt.PSObject.Properties.Name -notcontains "source_identity_verification_state") {
+        throw "Attempt omits explicit mutable-source verification state."
+    }
+    if ($Attempt.PSObject.Properties.Name -notcontains "environment_identity" -or
+        $Attempt.environment_identity.PSObject.Properties.Name -notcontains "verification_state" -or
+        @("verified", "unverified", "failed") -cnotcontains [string]$Attempt.environment_identity.verification_state) {
+        throw "Attempt omits explicit environment verification state."
+    }
+    Assert-MutableSourceIdentity -Source $Attempt.mutable_source_identity -VerificationState ([string]$Attempt.source_identity_verification_state)
     Assert-EnvironmentFingerprint -Document $Attempt -Label "Attempt"
     Assert-EnvironmentFingerprint -Document $Harvest -Label "Harvest"
     Assert-EnvironmentFingerprint -Document $Batch -Label "Defect batch"
@@ -263,10 +288,22 @@ function Assert-HarvestComplete {
     $failedTerminal = @($terminal | Where-Object state -CEQ "failed")
     $blockedTerminal = @($terminal | Where-Object state -CEQ "blocked")
     $passedTerminal = @($terminal | Where-Object state -CEQ "passed")
+    if (([string]$Attempt.source_identity_verification_state -cne "verified" -or
+            [bool]$Attempt.mutable_source_identity.dirty) -and
+        @($failedTerminal | Where-Object name -CEQ "validation-readiness-prerequisite").Count -ne 1) {
+        throw "Unverified or dirty source claims are harvestable only when the declared source/readiness collection lane failed."
+    }
+    if (([string]$Attempt.environment_identity.verification_state -cne "verified" -or
+            [string]$Attempt.environment_fingerprint -ceq ("0" * 64)) -and
+        @($failedTerminal | Where-Object name -CEQ "validation-readiness-prerequisite").Count -ne 1) {
+        throw "Unverified environment claims are harvestable only when the readiness/environment authentication lane failed."
+    }
     $nestedBlocked = [Collections.Generic.List[object]]::new()
+    $nestedFailed = [Collections.Generic.List[object]]::new()
     foreach ($result in $terminal) {
-        if ($result.PSObject.Properties.Name -notcontains "nested_blocked_checks") {
-            throw "Terminal check '$($result.name)' omits its nested-blocked-check inventory."
+        if ($result.PSObject.Properties.Name -notcontains "nested_blocked_checks" -or
+            $result.PSObject.Properties.Name -notcontains "nested_failed_checks") {
+            throw "Terminal check '$($result.name)' omits its nested UAT terminal inventories."
         }
         $nested = @($result.nested_blocked_checks)
         if ($nested.Count -gt 0 -and [string]$result.name -cne "uat-diagnostics") {
@@ -291,17 +328,44 @@ function Assert-HarvestComplete {
             }
             $nestedBlocked.Add($blockedScenario)
         }
+        $nestedFailures = @($result.nested_failed_checks)
+        if ($nestedFailures.Count -gt 0 -and [string]$result.name -cne "uat-diagnostics") {
+            throw "Only the UAT diagnostic projection may report nested failed semantic assertions."
+        }
+        if ($nestedFailures.Count -gt 0 -and [string]$result.state -cne "passed") {
+            throw "Nested semantic assertion failures must not double count the outer UAT projection lane as failed."
+        }
+        foreach ($semanticFailure in $nestedFailures) {
+            $expectedName = "uat-diagnostics/$([string]$semanticFailure.scenario)/$([string]$semanticFailure.assertion_id)"
+            if ([string]$semanticFailure.name -cne $expectedName -or
+                [string]$semanticFailure.scenario -notmatch '^UAT-8A-[0-9]{2}$' -or
+                [string]$semanticFailure.assertion_id -notmatch '^[a-z0-9-]+$' -or
+                [string]$semanticFailure.parent_check -cne "uat-diagnostics" -or
+                $allowedClassifications -cnotcontains [string]$semanticFailure.classification -or
+                [string]::IsNullOrWhiteSpace([string]$semanticFailure.failure_reason) -or
+                @($semanticFailure.raw_evidence).Count -lt 1) {
+                throw "Nested failed UAT semantic assertions require exact identity, reason, evidence, parent, and allowed classification."
+            }
+            foreach ($evidence in @($semanticFailure.raw_evidence)) {
+                Assert-HashedFileEvidence -Evidence $evidence -Label "Nested semantic failure '$expectedName' raw evidence" -SkipFileEvidence:$SkipFileEvidence
+            }
+            $nestedFailed.Add($semanticFailure)
+        }
     }
     $nestedNames = @($nestedBlocked | ForEach-Object { [string]$_.name })
     if (@($nestedNames | Sort-Object -Unique).Count -ne $nestedNames.Count) {
         throw "Nested blocked UAT scenario identities must be unique."
     }
-    foreach ($field in @("assertion_count", "failure_count", "blocked_count", "nested_blocked_count")) {
+    $nestedFailedNames = @($nestedFailed | ForEach-Object { [string]$_.name })
+    if (@($nestedFailedNames | Sort-Object -Unique).Count -ne $nestedFailedNames.Count) {
+        throw "Nested failed UAT semantic assertion identities must be unique."
+    }
+    foreach ($field in @("assertion_count", "failure_count", "blocked_count", "nested_blocked_count", "nested_failure_count")) {
         if ($Attempt.PSObject.Properties.Name -notcontains $field) {
             throw "Attempt receipt omits exact '$field' accounting."
         }
     }
-    foreach ($field in @("failed_count", "blocked_count", "passed_count", "nested_blocked_count")) {
+    foreach ($field in @("failed_count", "blocked_count", "passed_count", "nested_blocked_count", "nested_failed_count")) {
         if ($Harvest.PSObject.Properties.Name -notcontains $field) {
             throw "Harvest receipt omits exact '$field' accounting."
         }
@@ -310,10 +374,12 @@ function Assert-HarvestComplete {
         [int]$Attempt.failure_count -ne $failedTerminal.Count -or
         [int]$Attempt.blocked_count -ne $blockedTerminal.Count -or
         [int]$Attempt.nested_blocked_count -ne $nestedBlocked.Count -or
+        [int]$Attempt.nested_failure_count -ne $nestedFailed.Count -or
         [int]$Harvest.failed_count -ne $failedTerminal.Count -or
         [int]$Harvest.blocked_count -ne $blockedTerminal.Count -or
         [int]$Harvest.passed_count -ne $passedTerminal.Count -or
-        [int]$Harvest.nested_blocked_count -ne $nestedBlocked.Count) {
+        [int]$Harvest.nested_blocked_count -ne $nestedBlocked.Count -or
+        [int]$Harvest.nested_failed_count -ne $nestedFailed.Count) {
         throw "Attempt/harvest pass, fail, block, or nested-block counts do not match terminal evidence."
     }
 
@@ -368,18 +434,20 @@ function Assert-HarvestComplete {
         throw "The consolidated batch contains missing or duplicate defect identities."
     }
     foreach ($defect in $defects) {
+        $checkNames = @($defect.check_names)
+        $nestedAssertion = if ($defect.PSObject.Properties.Name -contains "nested_assertion") { [string]$defect.nested_assertion } else { "" }
         if ($allowedClassifications -cnotcontains [string]$defect.classification -or
             [string]::IsNullOrWhiteSpace([string]$defect.summary) -or
-            @($defect.check_names).Count -eq 0) {
-            throw "Defect '$($defect.id)' lacks an exact classification, summary, or check binding."
+            (($checkNames.Count -eq 0) -eq [string]::IsNullOrWhiteSpace($nestedAssertion))) {
+            throw "Defect '$($defect.id)' must bind exactly one failed lane set or one nested semantic assertion."
         }
-        foreach ($checkName in @($defect.check_names)) {
+        foreach ($checkName in $checkNames) {
             $result = @($terminal | Where-Object name -CEQ ([string]$checkName))
             if ($result.Count -ne 1 -or [string]$result[0].state -cne "failed") {
                 throw "Defect '$($defect.id)' binds nonfailed or unknown check '$checkName'."
             }
         }
-        $expectedRawEvidence = @($defect.check_names | ForEach-Object {
+        $expectedRawEvidence = @($checkNames | ForEach-Object {
             $result = @($terminal | Where-Object name -CEQ ([string]$_))[0]
             [pscustomobject]@{
                 path = [string]$result.evidence_path
@@ -389,6 +457,15 @@ function Assert-HarvestComplete {
                 @($result.produced_evidence)
             }
         })
+        if (-not [string]::IsNullOrWhiteSpace($nestedAssertion)) {
+            $nestedResult = @($nestedFailed | Where-Object name -CEQ $nestedAssertion)
+            if ($nestedResult.Count -ne 1 -or
+                [string]$nestedResult[0].classification -cne [string]$defect.classification -or
+                [string]$nestedResult[0].failure_reason -cne [string]$defect.summary) {
+                throw "Defect '$($defect.id)' does not bind the exact nested failed semantic assertion."
+            }
+            $expectedRawEvidence = @($nestedResult[0].raw_evidence)
+        }
         $actualRawEvidence = @($defect.raw_evidence)
         $expectedKeys = @($expectedRawEvidence | ForEach-Object { "$([string]$_.path)|$([string]$_.sha256)" } | Sort-Object -Unique)
         $actualKeys = @($actualRawEvidence | ForEach-Object {
@@ -403,6 +480,14 @@ function Assert-HarvestComplete {
         if (@($defects | Where-Object { @($_.check_names) -ccontains [string]$failed.name }).Count -eq 0) {
             throw "Failed check '$($failed.name)' is absent from the consolidated defect batch."
         }
+    }
+    foreach ($nestedFailure in $nestedFailed) {
+        if (@($defects | Where-Object { [string]$_.nested_assertion -ceq [string]$nestedFailure.name }).Count -ne 1) {
+            throw "Nested semantic failure '$($nestedFailure.name)' is absent from or duplicated in the consolidated defect batch."
+        }
+    }
+    if ($defects.Count -ne ($failedTerminal.Count + $nestedFailed.Count)) {
+        throw "The consolidated batch double counts or omits lane and nested semantic failures."
     }
 }
 
@@ -422,7 +507,9 @@ if ($SelfTest) {
         schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal"; authoritative = $false
         attempt = 1; state = "harvesting"; assertions_started = $true
         assertions_started_at = "2026-01-01T00:00:00Z"; mutable_source_identity = $source; environment_fingerprint = "e" * 64
-        assertion_count = 3; failure_count = 1; blocked_count = 1; nested_blocked_count = 1
+        source_identity_verification_state = "verified"
+        environment_identity = [pscustomobject]@{ verification_state = "verified" }
+        assertion_count = 3; failure_count = 1; blocked_count = 1; nested_blocked_count = 1; nested_failure_count = 1
         checks = @(
             [pscustomobject]@{ name = "independent"; depends_on = @(); command = "fail" },
             [pscustomobject]@{ name = "uat-diagnostics"; depends_on = @(); command = "pass" },
@@ -434,24 +521,35 @@ if ($SelfTest) {
         attempt = 1; state = "harvest_complete"; receipt_path = "attempts/harvest.json"
         mutable_source_identity = $source; environment_fingerprint = "e" * 64
         attempt_receipt = [pscustomobject]@{ path = "attempts/attempt.json"; sha256 = "d" * 64 }
-        failed_count = 1; blocked_count = 1; passed_count = 1; nested_blocked_count = 1
+        failed_count = 1; blocked_count = 1; passed_count = 1; nested_blocked_count = 1; nested_failed_count = 1
         checks = @(
-            [pscustomobject]@{ name = "independent"; command = "fail"; state = "failed"; classification = "harness"; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 1000; exit_status = 1; evidence_path = "raw/fail.log"; evidence_sha256 = "f" * 64; produced_evidence = @(); nested_blocked_checks = @() },
-            [pscustomobject]@{ name = "uat-diagnostics"; command = "pass"; state = "passed"; classification = $null; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 1000; exit_status = 0; evidence_path = "raw/pass.log"; evidence_sha256 = "a" * 64; produced_evidence = @(); nested_blocked_checks = @([pscustomobject]@{ name = "uat-diagnostics/UAT-8A-01"; parent_check = "uat-diagnostics"; blocked_by = @("independent"); dependency_reason = "blocked by invalid prerequisite(s): independent" }) },
-            [pscustomobject]@{ name = "dependent"; command = "blocked"; state = "blocked"; classification = "harness"; dependency_reason = "independent failed"; started_at = $null; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 0; exit_status = $null; evidence_path = $null; evidence_sha256 = $null; nested_blocked_checks = @() }
+            [pscustomobject]@{ name = "independent"; command = "fail"; state = "failed"; classification = "harness"; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 1000; exit_status = 1; evidence_path = "raw/fail.log"; evidence_sha256 = "f" * 64; produced_evidence = @(); nested_blocked_checks = @(); nested_failed_checks = @() },
+            [pscustomobject]@{ name = "uat-diagnostics"; command = "pass"; state = "passed"; classification = $null; dependency_reason = $null; started_at = "2026-01-01T00:00:01Z"; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 1000; exit_status = 0; evidence_path = "raw/pass.log"; evidence_sha256 = "a" * 64; produced_evidence = @(); nested_blocked_checks = @([pscustomobject]@{ name = "uat-diagnostics/UAT-8A-01"; parent_check = "uat-diagnostics"; blocked_by = @("independent"); dependency_reason = "blocked by invalid prerequisite(s): independent" }); nested_failed_checks = @([pscustomobject]@{ name = "uat-diagnostics/UAT-8A-02/semantic-proof"; parent_check = "uat-diagnostics"; scenario = "UAT-8A-02"; assertion_id = "semantic-proof"; classification = "product"; failure_reason = "semantic mismatch"; raw_evidence = @([pscustomobject]@{ path = "raw/semantic.json"; sha256 = "b" * 64 }) }) },
+            [pscustomobject]@{ name = "dependent"; command = "blocked"; state = "blocked"; classification = "harness"; dependency_reason = "independent failed"; started_at = $null; ended_at = "2026-01-01T00:00:02Z"; duration_ms = 0; exit_status = $null; evidence_path = $null; evidence_sha256 = $null; nested_blocked_checks = @(); nested_failed_checks = @() }
         )
     }
     $batch = [pscustomobject]@{
         schema_version = 1; sprint = "sprint-8a"; phase = "candidate-rehearsal-defect-batch"; authoritative = $false
         attempt = 1; batch = 1; state = "open"; mutable_source_identity = $source; environment_fingerprint = "e" * 64
         harvest_receipt = [pscustomobject]@{ path = "attempts/harvest.json"; sha256 = "e" * 64 }
-        defect_count = 1; defects = @([pscustomobject]@{ id = "R1"; classification = "harness"; summary = "failure"; check_names = @("independent"); raw_evidence = @([pscustomobject]@{ path = "raw/fail.log"; sha256 = "f" * 64 }) })
+        defect_count = 2; defects = @(
+            [pscustomobject]@{ id = "R1"; classification = "harness"; summary = "failure"; check_names = @("independent"); nested_assertion = $null; raw_evidence = @([pscustomobject]@{ path = "raw/fail.log"; sha256 = "f" * 64 }) },
+            [pscustomobject]@{ id = "R2"; classification = "product"; summary = "semantic mismatch"; check_names = @(); nested_assertion = "uat-diagnostics/UAT-8A-02/semantic-proof"; raw_evidence = @([pscustomobject]@{ path = "raw/semantic.json"; sha256 = "b" * 64 }) }
+        )
         blocked_checks = @(
             [pscustomobject]@{ scope = "lane"; name = "dependent"; parent_check = $null; dependency_reason = "independent failed" },
             [pscustomobject]@{ scope = "scenario"; name = "uat-diagnostics/UAT-8A-01"; parent_check = "uat-diagnostics"; blocked_by = @("independent"); dependency_reason = "blocked by invalid prerequisite(s): independent" }
         )
     }
     Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence
+    $placeholderSource = [pscustomobject]@{
+        commit = "0" * 40; tree = "0" * 40; dirty = $false; branch = "unverified"
+        acceptance_inventory_sha256 = "0" * 64; deployment_inputs_sha256 = "0" * 64
+    }
+    Assert-MutableSourceIdentity -Source $placeholderSource -VerificationState "failed"
+    Invoke-ExpectedGuardFailure {
+        Assert-MutableSourceIdentity -Source $placeholderSource -VerificationState "verified"
+    } "a placeholder source claim marked verified"
 
     $attempt.schema_version = "2"
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a string-coerced attempt schema"
@@ -482,9 +580,9 @@ if ($SelfTest) {
     $batch.defects[0].classification = "test"
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "an unsupported classification"
     $batch.defects[0].classification = "harness"
-    $batch.defect_count = 2
+    $batch.defect_count = 3
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a false defect count"
-    $batch.defect_count = 1
+    $batch.defect_count = 2
     $batch.defects[0].raw_evidence = @()
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a defect that drops retained raw evidence"
     $batch.defects[0].raw_evidence = @([pscustomobject]@{ path = "raw/fail.log"; sha256 = "f" * 64 })
@@ -507,6 +605,19 @@ if ($SelfTest) {
     $harvest.checks[1].nested_blocked_checks[0].blocked_by = @("uat-diagnostics")
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a nested block attributed to a passing prerequisite"
     $harvest.checks[1].nested_blocked_checks[0].blocked_by = @("independent")
+    $harvest.checks[1].nested_failed_checks[0].classification = "test"
+    Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a nested semantic failure with an unsupported classification"
+    $harvest.checks[1].nested_failed_checks[0].classification = "product"
+    $harvest.checks[1].nested_failed_checks[0].raw_evidence = @()
+    Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a nested semantic failure without raw evidence"
+    $harvest.checks[1].nested_failed_checks[0].raw_evidence = @([pscustomobject]@{ path = "raw/semantic.json"; sha256 = "b" * 64 })
+    $savedNestedDefect = $batch.defects[1]
+    $batch.defects = @($batch.defects[0]); $batch.defect_count = 1
+    Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a batch that drops a nested semantic failure"
+    $batch.defects = @($batch.defects[0], $savedNestedDefect); $batch.defect_count = 2
+    $harvest.checks[1].state = "failed"; $harvest.checks[1].classification = "harness"; $harvest.checks[1].exit_status = 1
+    Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "double counting a nested semantic failure as the outer UAT lane"
+    $harvest.checks[1].state = "passed"; $harvest.checks[1].classification = $null; $harvest.checks[1].exit_status = 0
     $harvest.mutable_source_identity = [pscustomobject]@{ commit = "wrong" }
     Invoke-ExpectedGuardFailure { Assert-HarvestComplete -Attempt $attempt -Harvest $harvest -Batch $batch -SkipFileEvidence } "a mismatched source identity"
     Write-Host "Sprint validation harvest guard adversarial self-test passed."
@@ -554,9 +665,13 @@ $authorization = [ordered]@{
     attempt = [int]$attempt.attempt
     authoritative = $false
     state = "authorized"
+    consumption_state = "unconsumed"
+    allowed_successor_phase = "validation-readiness"
+    allowed_successor_count = 1
     generated_at = [DateTimeOffset]::UtcNow.ToString("o")
     mutable_source_identity = $attempt.mutable_source_identity
     environment_fingerprint = [string]$attempt.environment_fingerprint
+    predecessor_attempt_receipt = [ordered]@{ path = $AttemptPath; sha256 = $attemptSha }
     harvest_receipt = [ordered]@{ path = $HarvestPath; sha256 = $harvestSha }
     defect_batch = [ordered]@{ path = $DefectBatchPath; sha256 = $batchSha }
     authorization = "tracked correction and one successor readiness attempt are permitted for this consolidated batch"

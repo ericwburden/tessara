@@ -560,65 +560,65 @@ mod tests {
         }
     }
 
-    fn default_contributions() -> Vec<ContributedNavigationItem> {
+    fn synthetic_contributions() -> Vec<ContributedNavigationItem> {
         vec![
             contributed_item(
-                "tessara.forms.navigation",
-                "forms",
-                "Forms",
+                "example.alpha.navigation",
+                "alpha",
+                "Alpha",
                 NavigationSection::Main,
                 NavigationBand::MainBetweenOrganizationAndOperations,
                 0,
-                &["forms:read", "forms:manage"],
+                &["example.alpha:read", "example.alpha:manage"],
             ),
             contributed_item(
-                "tessara.workflows.navigation",
-                "workflows",
-                "Workflows",
+                "example.beta.navigation",
+                "beta",
+                "Beta",
                 NavigationSection::Main,
                 NavigationBand::MainBetweenOrganizationAndOperations,
                 1,
-                &["workflows:read", "workflows:manage"],
+                &["example.beta:read", "example.beta:manage"],
             ),
             contributed_item(
-                "tessara.responses.navigation",
-                "responses",
-                "Responses",
+                "example.gamma.navigation",
+                "gamma",
+                "Gamma",
                 NavigationSection::Main,
                 NavigationBand::MainBetweenOrganizationAndOperations,
                 2,
                 &[
-                    "submissions:read_own",
-                    "submissions:respond",
-                    "submissions:manage",
+                    "example.gamma:read_own",
+                    "example.gamma:respond",
+                    "example.gamma:manage",
                 ],
             ),
             contributed_item(
-                "tessara.components.navigation",
-                "components",
-                "Components",
+                "example.delta.navigation",
+                "delta",
+                "Delta",
                 NavigationSection::Main,
                 NavigationBand::MainAfterOperations,
                 0,
-                &["components:read", "components:manage"],
+                &["example.delta:read", "example.delta:manage"],
             ),
             contributed_item(
-                "tessara.dashboards.navigation",
-                "dashboards",
-                "Dashboards",
+                "example.epsilon.navigation",
+                "epsilon",
+                "Epsilon",
                 NavigationSection::Main,
                 NavigationBand::MainAfterOperations,
                 1,
-                &["dashboards:read"],
+                &["example.epsilon:read"],
             ),
             contributed_item(
-                "tessara.datasets.navigation",
-                "datasets",
-                "Datasets",
+                "example.zeta.navigation",
+                "zeta",
+                "Zeta",
                 NavigationSection::Admin,
                 NavigationBand::AdminBetweenAdministrationAndModuleManagement,
                 0,
-                &["datasets:read", "datasets:manage"],
+                &["example.zeta:read", "example.zeta:manage"],
             ),
         ]
     }
@@ -655,8 +655,8 @@ mod tests {
     }
 
     #[test]
-    fn default_dynamic_composition_preserves_every_old_item_and_appends_module_management() {
-        let contributions = default_contributions();
+    fn generic_dynamic_composition_preserves_exact_owner_and_band_order() {
+        let contributions = synthetic_contributions();
         let navigation = resolve_defaults(&contributions, &["admin:all".to_string()]);
 
         assert_eq!(navigation.unavailable, None);
@@ -665,17 +665,17 @@ mod tests {
             [
                 "home",
                 "organization",
-                "forms",
-                "workflows",
-                "responses",
+                "alpha",
+                "beta",
+                "gamma",
                 "operations",
-                "components",
-                "dashboards",
+                "delta",
+                "epsilon",
             ]
         );
         assert_eq!(
             resolved_keys(&navigation, NavigationSection::Admin),
-            ["administration", "datasets", "module_management"]
+            ["administration", "zeta", "module_management"]
         );
 
         let actual = navigation
@@ -709,23 +709,23 @@ mod tests {
                     NavigationItemOwner::Core,
                 ),
                 (
-                    "forms",
-                    "/forms",
-                    "Forms",
+                    "alpha",
+                    "/alpha",
+                    "Alpha",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
                 (
-                    "workflows",
-                    "/workflows",
-                    "Workflows",
+                    "beta",
+                    "/beta",
+                    "Beta",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
                 (
-                    "responses",
-                    "/responses",
-                    "Responses",
+                    "gamma",
+                    "/gamma",
+                    "Gamma",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
@@ -737,16 +737,16 @@ mod tests {
                     NavigationItemOwner::Core,
                 ),
                 (
-                    "components",
-                    "/components",
-                    "Components",
+                    "delta",
+                    "/delta",
+                    "Delta",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
                 (
-                    "dashboards",
-                    "/dashboards",
-                    "Dashboards",
+                    "epsilon",
+                    "/epsilon",
+                    "Epsilon",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
@@ -758,9 +758,9 @@ mod tests {
                     NavigationItemOwner::Core,
                 ),
                 (
-                    "datasets",
-                    "/datasets",
-                    "Datasets",
+                    "zeta",
+                    "/zeta",
+                    "Zeta",
                     NavigationSection::Admin,
                     NavigationItemOwner::Contribution,
                 ),
@@ -809,15 +809,15 @@ mod tests {
 
     #[test]
     fn policy_reorders_only_within_each_core_assigned_band() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let mut policy = default_policy(&contributions);
         for entry in &mut policy.entries {
             entry.order = match entry.contribution_id.as_str() {
-                "tessara.responses.navigation" | "tessara.dashboards.navigation" => 0,
-                "tessara.workflows.navigation" | "tessara.components.navigation" => 1,
-                "tessara.forms.navigation" => 2,
-                "tessara.datasets.navigation" => 0,
-                _ => unreachable!("known default contribution"),
+                "example.gamma.navigation" | "example.epsilon.navigation" => 0,
+                "example.beta.navigation" | "example.delta.navigation" => 1,
+                "example.alpha.navigation" => 2,
+                "example.zeta.navigation" => 0,
+                _ => unreachable!("known synthetic contribution"),
             };
         }
 
@@ -829,23 +829,23 @@ mod tests {
             [
                 "home",
                 "organization",
-                "responses",
-                "workflows",
-                "forms",
+                "gamma",
+                "beta",
+                "alpha",
                 "operations",
-                "dashboards",
-                "components",
+                "epsilon",
+                "delta",
             ]
         );
         assert_eq!(
             resolved_keys(&navigation, NavigationSection::Admin),
-            ["administration", "datasets", "module_management"]
+            ["administration", "zeta", "module_management"]
         );
     }
 
     #[test]
     fn equal_policy_orders_use_contribution_id_as_a_deterministic_tie_breaker() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let mut policy = default_policy(&contributions);
         for entry in &mut policy.entries {
             entry.order = 0;
@@ -859,91 +859,91 @@ mod tests {
             [
                 "home",
                 "organization",
-                "forms",
-                "responses",
-                "workflows",
+                "alpha",
+                "beta",
+                "gamma",
                 "operations",
-                "components",
-                "dashboards",
+                "delta",
+                "epsilon",
             ]
         );
     }
 
     #[test]
-    fn dynamic_actor_filtering_preserves_product_and_dashboard_display_rules() {
-        let contributions = default_contributions();
+    fn dynamic_actor_filtering_uses_each_contribution_capability_contract() {
+        let contributions = synthetic_contributions();
         let cases = [
             NavigationActorCase {
-                name: "operator",
+                name: "all_contributions",
                 capabilities: &[
                     "hierarchy:read",
-                    "forms:read",
-                    "workflows:manage",
-                    "submissions:respond",
+                    "example.alpha:read",
+                    "example.beta:manage",
+                    "example.gamma:respond",
                     "operations:view",
-                    "components:read",
-                    "dashboards:read",
-                    "datasets:read",
+                    "example.delta:read",
+                    "example.epsilon:read",
+                    "example.zeta:read",
                 ],
                 main: &[
                     "home",
                     "organization",
-                    "forms",
-                    "workflows",
-                    "responses",
+                    "alpha",
+                    "beta",
+                    "gamma",
                     "operations",
-                    "components",
-                    "dashboards",
+                    "delta",
+                    "epsilon",
                 ],
-                admin: &["datasets"],
+                admin: &["zeta"],
             },
             NavigationActorCase {
-                name: "respondent",
-                capabilities: &["submissions:read_own", "submissions:respond"],
-                main: &["home", "responses"],
+                name: "gamma_reader",
+                capabilities: &["example.gamma:read_own", "example.gamma:respond"],
+                main: &["home", "gamma"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "forms_manage_only",
-                capabilities: &["forms:manage"],
-                main: &["home", "forms"],
+                name: "alpha_manage_only",
+                capabilities: &["example.alpha:manage"],
+                main: &["home", "alpha"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "workflows_manage_only",
-                capabilities: &["workflows:manage"],
-                main: &["home", "workflows"],
+                name: "beta_manage_only",
+                capabilities: &["example.beta:manage"],
+                main: &["home", "beta"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "submissions_manage_only",
-                capabilities: &["submissions:manage"],
-                main: &["home", "responses"],
+                name: "gamma_manage_only",
+                capabilities: &["example.gamma:manage"],
+                main: &["home", "gamma"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "components_manage_only",
-                capabilities: &["components:manage"],
-                main: &["home", "components"],
+                name: "delta_manage_only",
+                capabilities: &["example.delta:manage"],
+                main: &["home", "delta"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "dashboards_manage_only",
-                capabilities: &["dashboards:manage"],
+                name: "epsilon_manage_only",
+                capabilities: &["example.epsilon:manage"],
                 main: &["home"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "datasets_manage_only",
-                capabilities: &["datasets:manage"],
+                name: "zeta_manage_only",
+                capabilities: &["example.zeta:manage"],
                 main: &["home"],
-                admin: &["datasets"],
+                admin: &["zeta"],
             },
             NavigationActorCase {
-                name: "unrelated_product",
-                capabilities: &["datasets:read"],
+                name: "zeta_read_only",
+                capabilities: &["example.zeta:read"],
                 main: &["home"],
-                admin: &["datasets"],
+                admin: &["zeta"],
             },
             NavigationActorCase {
                 name: "no_access",
@@ -973,36 +973,40 @@ mod tests {
 
     #[test]
     fn contribution_requires_module_availability_policy_visibility_and_actor_capability() {
-        let mut contributions = default_contributions();
+        let mut contributions = synthetic_contributions();
         contributions
             .iter_mut()
-            .find(|contribution| contribution.key == "forms")
-            .expect("Forms contribution")
+            .find(|contribution| contribution.key == "alpha")
+            .expect("Alpha contribution")
             .module_availability = ModuleNavigationAvailability::Unavailable;
         let mut policy = default_policy(&contributions);
         policy
             .entries
             .iter_mut()
-            .find(|entry| entry.contribution_id == "tessara.workflows.navigation")
-            .expect("Workflows policy")
+            .find(|entry| entry.contribution_id == "example.beta.navigation")
+            .expect("Beta policy")
             .visible = false;
 
         let navigation = resolve_navigation(
             &contributions,
             Some(&policy),
-            &owned_capabilities(&["forms:read", "workflows:read", "submissions:read_own"]),
+            &owned_capabilities(&[
+                "example.alpha:read",
+                "example.beta:read",
+                "example.gamma:read_own",
+            ]),
         );
 
         assert_eq!(
             resolved_keys(&navigation, NavigationSection::Main),
-            ["home", "responses"]
+            ["home", "gamma"]
         );
         assert_eq!(navigation.unavailable, None);
     }
 
     #[test]
     fn manage_navigation_implies_module_read_without_implying_administration() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
 
         for capability in ["modules:read", "modules:manage_navigation"] {
             let navigation = resolve_defaults(&contributions, &[capability.to_string()]);
@@ -1013,7 +1017,7 @@ mod tests {
             );
         }
 
-        let product_only = resolve_defaults(&contributions, &["forms:read".to_string()]);
+        let product_only = resolve_defaults(&contributions, &["example.alpha:read".to_string()]);
         assert!(
             !resolved_keys(&product_only, NavigationSection::Admin).contains(&"module_management")
         );
@@ -1021,13 +1025,13 @@ mod tests {
         let admin = resolve_defaults(&contributions, &["admin:all".to_string()]);
         assert_eq!(
             resolved_keys(&admin, NavigationSection::Admin),
-            ["administration", "datasets", "module_management"]
+            ["administration", "zeta", "module_management"]
         );
     }
 
     #[test]
     fn policy_cannot_target_or_displace_any_fixed_core_item() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
 
         for core_key in [
             "home",
@@ -1072,7 +1076,7 @@ mod tests {
 
     #[test]
     fn missing_policy_for_a_non_empty_catalog_fails_closed() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let navigation = resolve_navigation(&contributions, None, &["admin:all".to_string()]);
 
         assert_eq!(
@@ -1091,7 +1095,7 @@ mod tests {
 
     #[test]
     fn supplied_policy_must_be_a_complete_unique_known_collection() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let mut partial = default_policy(&contributions);
         let missing = partial.entries.pop().expect("policy member");
         let navigation =
@@ -1117,7 +1121,7 @@ mod tests {
 
         let mut unknown = default_policy(&contributions);
         unknown.entries.push(NavigationPolicyEntry {
-            contribution_id: "tessara.unknown.navigation".to_string(),
+            contribution_id: "example.unknown.navigation".to_string(),
             visible: true,
             order: 0,
         });
@@ -1126,18 +1130,18 @@ mod tests {
         assert_eq!(
             navigation.unavailable,
             Some(NavigationCompositionError::UnknownPolicyContribution {
-                contribution_id: "tessara.unknown.navigation".to_string(),
+                contribution_id: "example.unknown.navigation".to_string(),
             })
         );
     }
 
     #[test]
     fn malformed_or_core_colliding_contributions_fail_closed_as_a_collection() {
-        let baseline = default_contributions();
+        let baseline = synthetic_contributions();
         let mut malformed_cases = Vec::new();
 
         let mut malformed_id = baseline.clone();
-        malformed_id[0].contribution_id = "Tessara.Forms".to_string();
+        malformed_id[0].contribution_id = "Example.Alpha".to_string();
         malformed_cases.push(malformed_id);
 
         let mut wrong_band = baseline.clone();
@@ -1149,16 +1153,16 @@ mod tests {
         malformed_cases.push(no_capability);
 
         let mut deployment_url = baseline.clone();
-        deployment_url[0].href = "https://forms.example.invalid/forms".to_string();
+        deployment_url[0].href = "https://alpha.example.invalid/alpha".to_string();
         malformed_cases.push(deployment_url);
 
         let mut padded_label = baseline.clone();
-        padded_label[0].label = " Forms ".to_string();
+        padded_label[0].label = " Alpha ".to_string();
         malformed_cases.push(padded_label);
 
         let mut core_key_collision = baseline.clone();
         core_key_collision[0].key = "home".to_string();
-        core_key_collision[0].href = "/forms".to_string();
+        core_key_collision[0].href = "/alpha".to_string();
         malformed_cases.push(core_key_collision);
 
         let mut core_href_collision = baseline.clone();

@@ -1745,6 +1745,33 @@ pub struct ConsumedServiceActionDeclaration {
     pub authorization_action: String,
 }
 
+/// Selects how the exact runtime audience for a bootstrap validation is
+/// resolved. The manifest declares only the policy-neutral resolution rule;
+/// the lockfile supplies the installation- or instance-scoped identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BootstrapValidationAudienceDeclaration {
+    ResolvedDependencyProvider,
+}
+
+/// One optional, source-exact dependency validation performed before an owner
+/// may materialize bootstrap product state. The payload remains opaque to the
+/// platform and is selected from the locked inline bootstrap document by JSON
+/// Pointer. Its functional owner interprets that payload at the declared
+/// provider boundary.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BootstrapDependencyValidationDeclaration {
+    pub dependency_binding: DependencyBindingKey,
+    pub functional_contract: FunctionalContractId,
+    pub contract_version: Version,
+    pub authorization_action: String,
+    pub method: ServiceActionMethod,
+    pub path: String,
+    pub audience: BootstrapValidationAudienceDeclaration,
+    pub payload_pointer: String,
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PublicApiIdempotency {
@@ -1816,6 +1843,8 @@ pub struct ModuleManifest {
     pub provided_service_actions: Vec<ProvidedServiceActionDeclaration>,
     #[serde(default)]
     pub consumed_service_actions: Vec<ConsumedServiceActionDeclaration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bootstrap_dependency_validation: Option<BootstrapDependencyValidationDeclaration>,
     #[serde(default)]
     pub control_projections: Vec<ControlProjectionDeclaration>,
     #[serde(default)]
@@ -2970,6 +2999,66 @@ fn validate_manifest_links(manifest: &ModuleManifest, findings: &mut Vec<Validat
             findings,
         );
     }
+    if let Some(validation) = manifest.bootstrap_dependency_validation.as_ref() {
+        let base = "bootstrap_dependency_validation";
+        let dependency = manifest
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.binding_key == validation.dependency_binding);
+        match dependency {
+            None => findings.push(ValidationFinding {
+                code: "unresolved_bootstrap_validation_dependency".into(),
+                path: format!("{base}.dependency_binding"),
+                message: "bootstrap validation must name a declared dependency binding".into(),
+            }),
+            Some(dependency)
+                if dependency.contract_id != validation.functional_contract
+                    || !dependency
+                        .version_requirement
+                        .matches(&validation.contract_version) =>
+            {
+                findings.push(ValidationFinding {
+                    code: "mismatched_bootstrap_validation_contract".into(),
+                    path: format!("{base}.functional_contract"),
+                    message:
+                        "bootstrap validation contract/version must match the declared dependency"
+                            .into(),
+                });
+            }
+            Some(_) => {}
+        }
+        if !manifest.consumed_service_actions.iter().any(|action| {
+            action.dependency_binding == validation.dependency_binding
+                && action.functional_contract == validation.functional_contract
+                && action.authorization_action == validation.authorization_action
+        }) {
+            findings.push(ValidationFinding {
+                code: "unresolved_bootstrap_validation_action".into(),
+                path: format!("{base}.authorization_action"),
+                message: "bootstrap validation must name an exact consumed service action".into(),
+            });
+        }
+        if !validation.path.starts_with("/api/private/") || validation.path.contains("..") {
+            findings.push(ValidationFinding {
+                code: "invalid_bootstrap_validation_path".into(),
+                path: format!("{base}.path"),
+                message: "bootstrap validation requires a local /api/private path".into(),
+            });
+        }
+        if !validation.payload_pointer.starts_with('/') || validation.payload_pointer.contains("//")
+        {
+            findings.push(ValidationFinding {
+                code: "invalid_bootstrap_validation_payload_pointer".into(),
+                path: format!("{base}.payload_pointer"),
+                message: "bootstrap validation requires a non-empty JSON Pointer".into(),
+            });
+        }
+        require_text(
+            &format!("{base}.authorization_action"),
+            &validation.authorization_action,
+            findings,
+        );
+    }
     let mut projection_kinds = BTreeSet::new();
     for (index, projection) in manifest.control_projections.iter().enumerate() {
         let base = format!("control_projections[{index}]");
@@ -3545,6 +3634,7 @@ mod tests {
             public_api_routes: Vec::new(),
             provided_service_actions: Vec::new(),
             consumed_service_actions: Vec::new(),
+            bootstrap_dependency_validation: None,
             control_projections: Vec::new(),
             assets: Vec::new(),
             navigation: transition.navigation,

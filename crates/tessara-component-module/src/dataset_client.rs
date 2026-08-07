@@ -4,8 +4,10 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
+use tessara_composition::BootstrapDependencyValidationInvocationV1;
 use tessara_datasets_contract::{
     DATASET_BINDING_KEY, DATASET_CONTRACT_ID, DATASET_CONTRACT_VERSION,
+    DatasetBootstrapValidationResponse,
 };
 use tessara_module_contract::{
     AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2, AuthorizationAudienceV1,
@@ -217,6 +219,73 @@ where
             None,
         );
         ComponentModuleError::Unavailable("Dataset provider response is invalid".into())
+    })
+}
+
+pub(super) async fn post_bootstrap_validation(
+    state: &ComponentModuleState,
+    invocation: &BootstrapDependencyValidationInvocationV1,
+) -> Result<DatasetBootstrapValidationResponse, ComponentModuleError> {
+    let body = serde_json::to_vec(&invocation.request)
+        .map_err(|error| ComponentModuleError::Internal(error.to_string()))?;
+    let encoded = URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&invocation.authorization)
+            .map_err(|error| ComponentModuleError::Internal(error.to_string()))?,
+    );
+    let security = load_security_state(&state.pool).await?.ok_or_else(|| {
+        ComponentModuleError::Unavailable("Component security state is unavailable".into())
+    })?;
+    let service_request = signed_service_request_for_instance(
+        state,
+        &encoded,
+        &invocation.target.path,
+        &body,
+        security.installation_id,
+        security.module_instance_id,
+        invocation.authorization.payload.correlation_id,
+    )?;
+    let timeout_seconds: i32 = sqlx::query_scalar(
+        "SELECT dataset_request_timeout_seconds FROM component_configuration WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    let response = state
+        .dataset_client
+        .post(format!(
+            "{}{}",
+            state.core_internal_url, invocation.target.path
+        ))
+        .timeout(Duration::from_secs(timeout_seconds as u64))
+        .header("content-type", "application/json")
+        .header("x-tessara-bootstrap-validation-authorization", encoded)
+        .header("x-tessara-module-service-request", service_request)
+        .header(
+            "x-tessara-correlation-id",
+            invocation.authorization.payload.correlation_id.to_string(),
+        )
+        .body(body)
+        .send()
+        .await
+        .map_err(|error| {
+            if error.is_timeout() {
+                ComponentModuleError::Unavailable(
+                    "Dataset bootstrap validation timed out; retry materialization".into(),
+                )
+            } else {
+                ComponentModuleError::Unavailable(
+                    "Dataset bootstrap validation is unavailable".into(),
+                )
+            }
+        })?;
+    if !response.status().is_success() {
+        return Err(if response.status().is_server_error() {
+            ComponentModuleError::Unavailable("Dataset bootstrap validation is unavailable".into())
+        } else {
+            ComponentModuleError::BadRequest("Component bootstrap Dataset validation failed".into())
+        });
+    }
+    response.json().await.map_err(|_| {
+        ComponentModuleError::Unavailable("Dataset bootstrap validation response is invalid".into())
     })
 }
 

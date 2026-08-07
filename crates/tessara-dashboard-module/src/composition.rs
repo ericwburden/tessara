@@ -15,9 +15,9 @@ use axum::{
     routing::get,
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_components_contract::{
@@ -273,7 +273,15 @@ async fn render_placement(
         }
     };
     let authorization = authorization_header(&headers)?;
-    let resolution = resolve_component(&state, authorization, reference.clone()).await?;
+    let attempt = resolve_component_since(&state, authorization, reference.clone(), None).await?;
+    let resolution = crate::dependencies::project_component_resolution_for_visibility(
+        &state,
+        dashboard_id,
+        placement_id,
+        reference.reference(),
+        &attempt,
+    )
+    .await?;
     let metadata = renderable_component_metadata(&resolution)?;
     if metadata.component_type != kind.component_type() {
         return Err(DashboardModuleError::NotFound(
@@ -972,7 +980,17 @@ async fn load_placements_with_authorization(
     let stored = load_stored_placements(state, dashboard_id).await?;
     let mut resolutions = BTreeMap::new();
     for placement in &stored {
-        let response = resolve_component(state, authorization, placement.reference.clone()).await?;
+        let attempt =
+            resolve_component_since(state, authorization, placement.reference.clone(), None)
+                .await?;
+        let response = crate::dependencies::project_component_resolution_for_visibility(
+            state,
+            dashboard_id,
+            placement.id,
+            placement.reference.reference(),
+            &attempt,
+        )
+        .await?;
         resolutions.insert(placement.id, response);
     }
     let policy = DashboardPlacementSizePolicy::new();
@@ -1096,7 +1114,67 @@ async fn resolve_component(
     authorization: &str,
     reference: ComponentVersionReference,
 ) -> Result<ComponentResolutionResponse, DashboardModuleError> {
-    resolve_component_since(state, authorization, reference, None).await
+    let attempt = resolve_component_since(state, authorization, reference, None).await?;
+    if attempt.origin == ComponentResolutionOrigin::SyntheticUnavailable {
+        return Err(DashboardModuleError::Unavailable(
+            "Component provider unavailable".into(),
+        ));
+    }
+    Ok(attempt.response)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ComponentAuthorizationContext {
+    digest: String,
+    expires_at: DateTime<Utc>,
+}
+
+impl ComponentAuthorizationContext {
+    pub(super) fn digest(&self) -> &str {
+        &self.digest
+    }
+
+    pub(super) const fn expires_at(&self) -> DateTime<Utc> {
+        self.expires_at
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ComponentResolutionOrigin {
+    ProviderEvaluated,
+    SyntheticUnavailable,
+    AuthorizationRestricted,
+}
+
+impl ComponentResolutionOrigin {
+    pub(super) const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProviderEvaluated => "provider_evaluated",
+            Self::SyntheticUnavailable => "synthetic_unavailable",
+            Self::AuthorizationRestricted => "authorization_restricted",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct ComponentResolutionAttempt {
+    response: ComponentResolutionResponse,
+    authorization_context: Option<ComponentAuthorizationContext>,
+    origin: ComponentResolutionOrigin,
+}
+
+impl ComponentResolutionAttempt {
+    pub(super) const fn response(&self) -> &ComponentResolutionResponse {
+        &self.response
+    }
+
+    pub(super) const fn authorization_context(&self) -> Option<&ComponentAuthorizationContext> {
+        self.authorization_context.as_ref()
+    }
+
+    pub(super) const fn origin(&self) -> ComponentResolutionOrigin {
+        self.origin
+    }
 }
 
 struct DownstreamAuthorization {
@@ -1104,6 +1182,7 @@ struct DownstreamAuthorization {
     installation_id: Uuid,
     caller_module_instance_id: Uuid,
     correlation_id: Uuid,
+    context: ComponentAuthorizationContext,
 }
 
 pub(super) async fn resolve_component_since(
@@ -1111,7 +1190,7 @@ pub(super) async fn resolve_component_since(
     authorization: &str,
     reference: ComponentVersionReference,
     changes_since_revision: Option<ResourceRevision>,
-) -> Result<ComponentResolutionResponse, DashboardModuleError> {
+) -> Result<ComponentResolutionAttempt, DashboardModuleError> {
     let path = "/api/private/components/resolve";
     let target_module_instance_id = component_target_instance(authorization, &reference)?;
     let request = ComponentResolutionRequest::new(
@@ -1129,7 +1208,11 @@ pub(super) async fn resolve_component_since(
     )
     .await?
     else {
-        return Ok(restricted_component_resolution());
+        return Ok(ComponentResolutionAttempt {
+            response: restricted_component_resolution(ResourceAccessState::Unauthorized),
+            authorization_context: None,
+            origin: ComponentResolutionOrigin::AuthorizationRestricted,
+        });
     };
     let service_request = signed_service_request(state, &downstream, "POST", path, &body)?;
     let response = state
@@ -1147,24 +1230,60 @@ pub(super) async fn resolve_component_since(
         .await;
     let Ok(response) = response else {
         tracing::warn!("Components provider could not be reached; degrading Dashboard placement");
-        return Ok(provider_unavailable_resolution());
+        return Ok(ComponentResolutionAttempt {
+            response: restricted_component_resolution(ResourceAccessState::NotEvaluated),
+            authorization_context: Some(downstream.context),
+            origin: ComponentResolutionOrigin::SyntheticUnavailable,
+        });
     };
     if response.status() == reqwest::StatusCode::FORBIDDEN {
-        return Ok(restricted_component_resolution());
+        return Ok(ComponentResolutionAttempt {
+            response: restricted_component_resolution(ResourceAccessState::Unauthorized),
+            authorization_context: Some(downstream.context),
+            origin: ComponentResolutionOrigin::ProviderEvaluated,
+        });
     }
     let Ok(response) = response.error_for_status() else {
         tracing::warn!("Components provider rejected resolution; degrading Dashboard placement");
-        return Ok(provider_unavailable_resolution());
+        return Ok(ComponentResolutionAttempt {
+            response: restricted_component_resolution(ResourceAccessState::NotEvaluated),
+            authorization_context: Some(downstream.context),
+            origin: ComponentResolutionOrigin::SyntheticUnavailable,
+        });
     };
     match response.json().await {
-        Ok(resolution) => Ok(resolution),
+        Ok(resolution) => Ok(ComponentResolutionAttempt {
+            response: resolution,
+            authorization_context: Some(downstream.context),
+            origin: ComponentResolutionOrigin::ProviderEvaluated,
+        }),
         Err(_) => {
             tracing::warn!(
                 "Components provider returned invalid resolution; degrading Dashboard placement"
             );
-            Ok(provider_unavailable_resolution())
+            Ok(ComponentResolutionAttempt {
+                response: restricted_component_resolution(ResourceAccessState::NotEvaluated),
+                authorization_context: Some(downstream.context),
+                origin: ComponentResolutionOrigin::SyntheticUnavailable,
+            })
         }
     }
+}
+
+pub(super) async fn component_authorization_context(
+    state: &DashboardModuleState,
+    authorization: &str,
+    reference: &ComponentVersionReference,
+) -> Result<Option<ComponentAuthorizationContext>, DashboardModuleError> {
+    let target_module_instance_id = component_target_instance(authorization, reference)?;
+    Ok(exchange_component_authorization(
+        state,
+        authorization,
+        target_module_instance_id,
+        "components.resolve",
+    )
+    .await?
+    .map(|downstream| downstream.context))
 }
 
 async fn component_catalog(
@@ -1429,6 +1548,7 @@ async fn exchange_component_authorization(
     if response.authorization.payload.original_actor_id != inbound.payload.original_actor_id {
         return Err(DashboardModuleError::Forbidden);
     }
+    let context = semantic_authorization_context(&response.authorization.payload)?;
     let encoded = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&response.authorization).map_err(|_| DashboardModuleError::Forbidden)?,
     );
@@ -1437,7 +1557,54 @@ async fn exchange_component_authorization(
         installation_id: security.installation_id,
         caller_module_instance_id: security.module_instance_id,
         correlation_id: response.authorization.payload.correlation_id,
+        context,
     }))
+}
+
+fn semantic_authorization_context(
+    grant: &AuthorizationGrantV3,
+) -> Result<ComponentAuthorizationContext, DashboardModuleError> {
+    let mut capability_scope_bindings = grant.capability_scope_bindings.clone();
+    for binding in &mut capability_scope_bindings {
+        binding.authorized_organization_ids.sort_unstable();
+    }
+    capability_scope_bindings.sort_by_cached_key(|binding| {
+        serde_json::to_string(binding).unwrap_or_else(|_| format!("{binding:?}"))
+    });
+
+    let mut delegation_basis = grant.delegation_basis.clone();
+    delegation_basis.sort_by_cached_key(|basis| {
+        serde_json::to_string(basis).unwrap_or_else(|_| format!("{basis:?}"))
+    });
+
+    let mut resource_assertion = grant.resource_assertion.clone();
+    if let Some(assertion) = &mut resource_assertion {
+        assertion.governing_organization_ids.sort_unstable();
+    }
+
+    let projection = json!({
+        "schema_version": grant.schema_version,
+        "installation_id": grant.installation_id,
+        "original_actor_id": grant.original_actor_id,
+        "presenting_service": grant.presenting_service,
+        "audience": grant.audience,
+        "dependency_binding": grant.dependency_binding,
+        "functional_contract": grant.functional_contract,
+        "action": grant.action,
+        "operation": grant.operation,
+        "capability_scope_bindings": capability_scope_bindings,
+        "resource_assertion": resource_assertion,
+        "delegation_basis": delegation_basis,
+        "authorization_revision": grant.authorization_revision,
+        "organization_revision": grant.organization_revision,
+    });
+    let bytes = serde_json::to_vec(&projection).map_err(|_| {
+        DashboardModuleError::Unavailable("Component authorization context encoding failed".into())
+    })?;
+    Ok(ComponentAuthorizationContext {
+        digest: format!("sha256:{}", sha256_hex(&bytes)),
+        expires_at: grant.expires_at,
+    })
 }
 
 fn decode_header_envelope<T: serde::de::DeserializeOwned>(
@@ -1456,30 +1623,11 @@ fn sha256_hex(value: &[u8]) -> String {
         .collect()
 }
 
-fn provider_unavailable_resolution() -> ComponentResolutionResponse {
+fn restricted_component_resolution(
+    access_state: ResourceAccessState,
+) -> ComponentResolutionResponse {
     ComponentResolutionResponse::new(
-        ResourceResolutionV1::authorized(
-            ResourceOwnerState::ModuleInstance {
-                instance_state: ModuleInstanceOwnerState::Live,
-                data_state: OwnerDataState::Retained,
-            },
-            ResourceIdentityState::NotEvaluated,
-            ResourceLifecycleState::NotEvaluated,
-            ContractCompatibilityState::Compatible,
-            ProviderAvailabilityState::Unavailable,
-        )
-        .expect("provider-unavailable resolution is valid"),
-        None,
-        None,
-        Vec::new(),
-        None,
-    )
-    .expect("provider-unavailable Dashboard response is metadata-free")
-}
-
-fn restricted_component_resolution() -> ComponentResolutionResponse {
-    ComponentResolutionResponse::new(
-        ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized)
+        ResourceResolutionV1::restricted(access_state)
             .expect("restricted Component resolution is valid"),
         None,
         None,
@@ -1666,13 +1814,83 @@ fn disclosed_title(
 
 #[cfg(test)]
 mod tests {
-    use tessara_module_contract::{ResourceAccessState, ResourceResolutionV1};
+    use chrono::{Duration, Utc};
+    use tessara_module_contract::{
+        AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1,
+        AuthorizationGrantOperationV1, AuthorizationGrantV3, CapabilityScopeBindingV1,
+        DelegationBasisV1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
+        ModuleServicePrincipalV1, ResourceAccessState, ResourceAuthorizationAssertionV2,
+        ResourceResolutionV1, ResourceTypeId, SecurityCapabilityId,
+    };
+    use uuid::Uuid;
 
     use super::{
-        ComponentResolutionResponse, disclosed_title, provider_unavailable_resolution,
-        reconciled_title, renderable_component_metadata, resolution_state,
+        ComponentResolutionResponse, disclosed_title, reconciled_title,
+        renderable_component_metadata, semantic_authorization_context,
         unavailable_component_catalog,
     };
+
+    fn id(value: u128) -> Uuid {
+        Uuid::from_u128(value)
+    }
+
+    fn authorization_grant() -> AuthorizationGrantV3 {
+        let now = Utc::now();
+        AuthorizationGrantV3 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
+            installation_id: id(1),
+            original_actor_id: id(2),
+            correlation_id: id(3),
+            presenting_service: ModuleServicePrincipalV1::ModuleInstance {
+                module_instance_id: id(4),
+                module_definition_id: ModuleDefinitionId::new("tessara.dashboards")
+                    .expect("module definition"),
+            },
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: id(5),
+                module_definition_id: ModuleDefinitionId::new("tessara.components")
+                    .expect("module definition"),
+            },
+            dependency_binding: DependencyBindingKey::new("tessara.dashboards.component-version")
+                .expect("dependency binding"),
+            functional_contract: FunctionalContractId::new(
+                "tessara.components.component-resolution",
+            )
+            .expect("functional contract"),
+            action: "components.resolve".into(),
+            operation: AuthorizationGrantOperationV1::Read,
+            capability_scope_bindings: vec![
+                CapabilityScopeBindingV1 {
+                    capability: SecurityCapabilityId::new("components:read").expect("capability"),
+                    organization_root_id: id(10),
+                    authorized_organization_ids: vec![id(11), id(12)],
+                },
+                CapabilityScopeBindingV1 {
+                    capability: SecurityCapabilityId::new("datasets:read").expect("capability"),
+                    organization_root_id: id(20),
+                    authorized_organization_ids: vec![id(21)],
+                },
+            ],
+            resource_assertion: Some(ResourceAuthorizationAssertionV2 {
+                resource_type: ResourceTypeId::new("tessara.components.component_version")
+                    .expect("resource type"),
+                resource_id: id(30).to_string(),
+                authority_revision: 7,
+                governing_organization_ids: vec![id(10), id(11)],
+            }),
+            delegation_basis: vec![DelegationBasisV1 {
+                delegation_id: id(40),
+                delegated_by_actor_id: id(41),
+                capability: SecurityCapabilityId::new("components:read").expect("capability"),
+                organization_root_id: id(10),
+            }],
+            authorization_revision: 42,
+            organization_revision: 17,
+            jti: id(50),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        }
+    }
 
     #[test]
     fn omitted_title_is_retained_and_explicit_blank_title_is_cleared() {
@@ -1689,18 +1907,7 @@ mod tests {
 
     #[test]
     fn approved_resolution_states_have_stable_ui_vocabulary() {
-        let unavailable = provider_unavailable_resolution();
-        assert_eq!(
-            resolution_state(unavailable.resolution()),
-            "provider_unavailable"
-        );
-        assert!(unavailable.metadata().is_none());
         assert!(unavailable_component_catalog().components.is_empty());
-        assert!(matches!(
-            renderable_component_metadata(&unavailable),
-            Err(crate::DashboardModuleError::Unavailable(message))
-                if message == "Component provider unavailable"
-        ));
         let restricted = ComponentResolutionResponse::new(
             ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized)
                 .expect("valid restricted resolution"),
@@ -1715,10 +1922,6 @@ mod tests {
             Err(crate::DashboardModuleError::Forbidden)
         ));
         assert_eq!(
-            disclosed_title(unavailable.resolution(), &Some("Partner Profile".into())),
-            Some("Partner Profile".into())
-        );
-        assert_eq!(
             disclosed_title(
                 &ResourceResolutionV1::restricted(ResourceAccessState::Unauthorized)
                     .expect("valid restricted resolution"),
@@ -1726,5 +1929,77 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn authorization_context_binds_semantics_but_not_per_request_fields() {
+        let grant = authorization_grant();
+        let baseline = semantic_authorization_context(&grant).expect("authorization context");
+
+        let mut per_request = grant.clone();
+        per_request.correlation_id = id(51);
+        per_request.jti = id(52);
+        per_request.issued_at += Duration::seconds(1);
+        per_request.expires_at += Duration::seconds(5);
+        let renewed = semantic_authorization_context(&per_request).expect("renewed context");
+        assert_eq!(baseline.digest(), renewed.digest());
+        assert_ne!(baseline.expires_at(), renewed.expires_at());
+
+        let mut reordered = grant.clone();
+        reordered.capability_scope_bindings.reverse();
+        reordered.capability_scope_bindings[1]
+            .authorized_organization_ids
+            .reverse();
+        assert_eq!(
+            baseline.digest(),
+            semantic_authorization_context(&reordered)
+                .expect("reordered semantic context")
+                .digest()
+        );
+
+        let mut variants = Vec::new();
+        let mut actor = grant.clone();
+        actor.original_actor_id = id(60);
+        variants.push(actor);
+        let mut scope = grant.clone();
+        scope.capability_scope_bindings[0]
+            .authorized_organization_ids
+            .push(id(13));
+        variants.push(scope);
+        let mut delegation = grant.clone();
+        delegation.delegation_basis[0].delegated_by_actor_id = id(61);
+        variants.push(delegation);
+        let mut resource = grant.clone();
+        resource
+            .resource_assertion
+            .as_mut()
+            .expect("resource assertion")
+            .resource_id = id(62).to_string();
+        variants.push(resource);
+        let mut authorization_revision = grant.clone();
+        authorization_revision.authorization_revision += 1;
+        variants.push(authorization_revision);
+        let mut organization_revision = grant.clone();
+        organization_revision.organization_revision += 1;
+        variants.push(organization_revision);
+        let mut action = grant.clone();
+        action.action = "components.render".into();
+        variants.push(action);
+        let mut audience = grant;
+        audience.audience = AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: id(63),
+            module_definition_id: ModuleDefinitionId::new("tessara.components")
+                .expect("module definition"),
+        };
+        variants.push(audience);
+
+        for semantic_variant in variants {
+            assert_ne!(
+                baseline.digest(),
+                semantic_authorization_context(&semantic_variant)
+                    .expect("semantic variant")
+                    .digest()
+            );
+        }
     }
 }

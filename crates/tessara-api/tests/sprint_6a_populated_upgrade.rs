@@ -32,6 +32,19 @@ const DASHBOARD_CAPACITY: &[u8] =
 const POPULATED_SPRINT_5A: &str = include_str!("fixtures/sprint_5a_populated.sql");
 const POPULATED_SPRINT_5A_SHA256: &str =
     "29db015ddcd7206a548c5839b958a937c03aab78d2c53047a55483a7aef31172";
+const CURRENT_CORE_TRANSITION_DEFINITION_IDS: [&str; 5] = [
+    "tessara.datasets",
+    "tessara.forms",
+    "tessara.migration",
+    "tessara.responses",
+    "tessara.workflows",
+];
+const CURRENT_CORE_TRANSITION_NAVIGATION_IDS: [&str; 4] = [
+    "tessara.datasets.navigation",
+    "tessara.forms.navigation",
+    "tessara.responses.navigation",
+    "tessara.workflows.navigation",
+];
 const PRODUCT_TABLES: &[&str] = &[
     "node_types",
     "node_type_relationships",
@@ -1168,23 +1181,6 @@ async fn assert_control_plane_shape(pool: &PgPool) {
             "installations",
             count(pool, "application_installations").await,
         ),
-        (
-            "reservations",
-            count(pool, "module_definition_reservations").await,
-        ),
-        (
-            "sources",
-            count(pool, "transition_descriptor_sources").await,
-        ),
-        (
-            "projections",
-            count(pool, "transition_catalog_projections").await,
-        ),
-        ("current", count(pool, "transition_catalog_current").await),
-        (
-            "navigation_contributions",
-            count(pool, "module_navigation_contributions").await,
-        ),
         ("policies", count(pool, "navigation_policies").await),
         (
             "policy_entries",
@@ -1201,16 +1197,64 @@ async fn assert_control_plane_shape(pool: &PgPool) {
         ),
     ]);
     assert_eq!(counts["installations"], 1);
-    assert_eq!(counts["reservations"], 5);
-    assert_eq!(counts["sources"], 5);
-    assert_eq!(counts["projections"], 5);
-    assert_eq!(counts["current"], 5);
-    assert_eq!(counts["navigation_contributions"], 4);
     assert_eq!(counts["policies"], 1);
     assert_eq!(counts["policy_entries"], 4);
     assert_eq!(counts["groups"], 2);
     assert_eq!(counts["placements"], 13);
     assert_eq!(counts["sync_audits"], 2);
+
+    let expected_transition_ids = CURRENT_CORE_TRANSITION_DEFINITION_IDS
+        .iter()
+        .map(|definition_id| (*definition_id).to_string())
+        .collect::<Vec<_>>();
+    let reservations: Vec<String> = sqlx::query_scalar(
+        "SELECT definition_id FROM module_definition_reservations ORDER BY definition_id",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("module definition reservation identities should be readable");
+    assert_eq!(reservations, expected_transition_ids);
+
+    let sources: Vec<String> = sqlx::query_scalar(
+        "SELECT definition_id FROM transition_descriptor_sources ORDER BY definition_id",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("transition source identities should be readable");
+    assert_eq!(sources, expected_transition_ids);
+
+    let projections: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT sources.definition_id
+        FROM transition_catalog_projections AS projections
+        JOIN transition_descriptor_sources AS sources ON sources.id = projections.source_id
+        ORDER BY sources.definition_id
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .expect("transition projection identities should be readable");
+    assert_eq!(projections, expected_transition_ids);
+
+    let current: Vec<String> = sqlx::query_scalar(
+        "SELECT definition_id FROM transition_catalog_current ORDER BY definition_id",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("current transition identities should be readable");
+    assert_eq!(current, expected_transition_ids);
+
+    let expected_navigation_ids = CURRENT_CORE_TRANSITION_NAVIGATION_IDS
+        .iter()
+        .map(|contribution_id| (*contribution_id).to_string())
+        .collect::<Vec<_>>();
+    let navigation: Vec<String> = sqlx::query_scalar(
+        "SELECT contribution_id FROM module_navigation_contributions ORDER BY contribution_id",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("transition navigation identities should be readable");
+    assert_eq!(navigation, expected_navigation_ids);
 
     let module_capabilities: Vec<(String, String)> = sqlx::query_as(
         r#"

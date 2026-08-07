@@ -99,10 +99,30 @@ Every receipt includes at least:
 - classification, correction, narrow proof, and invalidation decision
 - cleanup/restoration result
 
-Write a start receipt before expensive work. Append logs continuously. Write
-completion through a temporary sibling and atomic rename when repository
-automation supports it. Inspect receipts and logs before rerunning a command
-whose controlling tool session disappeared.
+Write a start receipt before any fallible phase prerequisite is authenticated
+or probed, not only before expensive assertions. The start receipt may mark a
+claimed source/environment identity `unverified`; the prerequisite lane updates
+it only after exact receipt, source, and environment checks pass. A missing,
+malformed, stale, or mismatched prerequisite must therefore finish as one
+retained failed lane and block only its declared dependents. Append logs
+continuously. Write completion through a temporary sibling and atomic rename
+when repository automation supports it. Inspect receipts and logs before
+rerunning a command whose controlling tool session disappeared.
+
+For mutable readiness and rehearsal, retain the declared graph in that initial
+receipt. Readiness additionally writes a hashed, create-once start snapshot
+before its live attempt receipt can be checkpointed. Its live attempt receipt
+and SHA-256 sidecar are rewritten after every terminal pass, failure, or block,
+and the validation-state index names the exact current checkpoint hash. This
+preserves an immutable launch boundary while making an interrupted partial gate
+harvestable.
+
+The first declared attempt-state prerequisite acquires an operating-system
+exclusive file handle for the sprint evidence root and holds it through final
+attempt and validation-state publication. The persistent lock path is not proof
+of ownership; exclusivity comes from the open handle. Lock contention is a
+retained prerequisite failure, while safe independent checks still run
+fail-late and destructive or dependent checks remain blocked.
 
 ## Result collection
 
@@ -120,6 +140,22 @@ whose controlling tool session disappeared.
   whole diagnostic pass and invalidate from that batch.
 - Preserve partial results and raw logs append-only. A narrow reproducer adds
   evidence to the active batch and never closes harvesting by itself.
+- A completed failed rehearsal may authorize exactly one successor Readiness
+  start only after its harvest and consolidated batch pass the executable
+  harvest guard. That Readiness consumes the authorization through a
+  create-once, hashed receipt bound to the failed predecessor receipt and its
+  own immutable start snapshot. Duplicate consumption or a different successor
+  is forbidden.
+- Maintain one validation-state index naming the sole current Readiness receipt
+  path and SHA-256. Rehearsal requires exact equality with that path and digest,
+  including any predecessor authorization and consumption receipt; an older
+  passing Readiness or a used attempt number cannot be selected again.
+- When an automated UAT diagnostic projects nested semantic assertions, retain
+  each failed assertion under its exact scenario/assertion identity with its
+  allowed classification, failure reason, and hashed raw evidence. A healthy
+  outer projection lane stays passed when only nested semantics fail, so the
+  consolidated batch records each semantic defect once. Fail the outer lane
+  separately only for an independent wrapper or harness defect.
 - A phase passes only when every required check passes.
 - A narrow reproducer diagnoses; it never replaces the authoritative command.
 

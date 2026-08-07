@@ -636,6 +636,9 @@ pub fn signature_purpose_name(purpose: ProtocolSignaturePurposeV1) -> &'static s
         ProtocolSignaturePurposeV1::ReleaseCatalog => "release_catalog",
         ProtocolSignaturePurposeV1::ResolvedComposition => "resolved_composition",
         ProtocolSignaturePurposeV1::ApplyAuthorization => "apply_authorization",
+        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization => {
+            "bootstrap_validation_authorization"
+        }
         ProtocolSignaturePurposeV1::SupervisorRequest => "supervisor_request",
         ProtocolSignaturePurposeV1::SupervisorResponse => "supervisor_response",
         ProtocolSignaturePurposeV1::InstallationReceipt => "installation_receipt",

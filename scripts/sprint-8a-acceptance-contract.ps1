@@ -9,6 +9,7 @@ $script:Sprint8AFixture = [ordered]@{
     table_placement_id = "01980000-0003-7000-8000-000000000003"
     stat_placement_id = "01980000-0003-7000-8000-000000000002"
     inactive_stat_card_version_id = "01980000-0001-7000-8000-000000000001"
+    blocked_component_version_id = "01980000-0001-7000-8000-000000000004"
     component_versions = [ordered]@{
         table = "01980000-0001-7000-8000-000000000002"
         bar = "01980000-0001-7000-8000-000000000003"
@@ -16,6 +17,15 @@ $script:Sprint8AFixture = [ordered]@{
         pie = "01980000-0001-7000-8000-000000000013"
         donut = "01980000-0001-7000-8000-000000000014"
         stat_card = "01980000-0001-7000-8000-000000000011"
+    }
+    dashboard_placements = [ordered]@{
+        "01980000-0003-7000-8000-000000000002" = [ordered]@{ placement_key = "row-count"; resource_key = "sprint-8a-row-count"; component_version_id = "01980000-0001-7000-8000-000000000011" }
+        "01980000-0003-7000-8000-000000000003" = [ordered]@{ placement_key = "records"; resource_key = "sprint-8a-record-table"; component_version_id = "01980000-0001-7000-8000-000000000002" }
+        "01980000-0003-7000-8000-000000000004" = [ordered]@{ placement_key = "tier-chart"; resource_key = "sprint-8a-label-bar"; component_version_id = "01980000-0001-7000-8000-000000000003" }
+        "01980000-0003-7000-8000-000000000005" = [ordered]@{ placement_key = "blocked-scope"; resource_key = "sprint-8a-blocked-component"; component_version_id = "01980000-0001-7000-8000-000000000004" }
+        "01980000-0003-7000-8000-000000000006" = [ordered]@{ placement_key = "lifecycle-upgrade"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001" }
+        "01980000-0003-7000-8000-000000000007" = [ordered]@{ placement_key = "lifecycle-replace"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001" }
+        "01980000-0003-7000-8000-000000000008" = [ordered]@{ placement_key = "lifecycle-remove"; resource_key = "sprint-8a-row-count-inactive"; component_version_id = "01980000-0001-7000-8000-000000000001" }
     }
 }
 
@@ -28,7 +38,8 @@ function Test-Sprint8AAcceptanceContract {
         "dashboard_id",
         "table_placement_id",
         "stat_placement_id",
-        "inactive_stat_card_version_id"
+        "inactive_stat_card_version_id",
+        "blocked_component_version_id"
     )) {
         try {
             $null = [guid]::ParseExact([string]$script:Sprint8AFixture[$name], "D")
@@ -46,6 +57,22 @@ function Test-Sprint8AAcceptanceContract {
             $null = [guid]::ParseExact([string]$versionId, "D")
         } catch {
             throw "Sprint 8A ComponentVersion fixture '$versionId' is not a canonical UUID."
+        }
+    }
+    if ($script:Sprint8AFixture.dashboard_placements.Count -ne 7) {
+        throw "Sprint 8A acceptance fixture must define the exact seven Dashboard placement identities."
+    }
+    foreach ($placementId in $script:Sprint8AFixture.dashboard_placements.Keys) {
+        $placement = $script:Sprint8AFixture.dashboard_placements[$placementId]
+        try {
+            $null = [guid]::ParseExact([string]$placementId, "D")
+            $null = [guid]::ParseExact([string]$placement.component_version_id, "D")
+        } catch {
+            throw "Sprint 8A Dashboard placement fixture '$placementId' is not canonical."
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$placement.placement_key) -or
+            [string]::IsNullOrWhiteSpace([string]$placement.resource_key)) {
+            throw "Sprint 8A Dashboard placement fixture '$placementId' lacks exact owner binding identities."
         }
     }
     if ($script:Sprint8AFixture.component_resource_type -cne "tessara.components.component_version") {
@@ -89,8 +116,8 @@ function Test-Sprint8AAcceptanceContract {
         } | Sort-Object
     )
     $expectedComponentConsumedActions = @(
-        "datasets.catalog", "datasets.compatibility", "datasets.distinct_values",
-        "datasets.execute", "datasets.schema"
+        "datasets.bootstrap_validate", "datasets.catalog", "datasets.compatibility",
+        "datasets.distinct_values", "datasets.execute", "datasets.schema"
     ) | Sort-Object
     $actualComponentConsumedActions = @(
         $componentManifest.consumed_service_actions | ForEach-Object {
@@ -104,6 +131,27 @@ function Test-Sprint8AAcceptanceContract {
     if (($actualComponentProvidedActions -join ",") -cne ($expectedComponentProvidedActions -join ",") -or
         ($actualComponentConsumedActions -join ",") -cne ($expectedComponentConsumedActions -join ",")) {
         throw "Component Manifest service-action declarations differ from the exact Sprint 8A boundary."
+    }
+    $bootstrapValidation = $componentManifest.bootstrap_dependency_validation
+    if ($null -eq $bootstrapValidation -or
+        [string]$bootstrapValidation.dependency_binding -cne "tessara.components.dataset-major-line" -or
+        [string]$bootstrapValidation.functional_contract -cne "tessara.datasets.dataset-major-line" -or
+        [string]$bootstrapValidation.contract_version -cne "1.0.0" -or
+        [string]$bootstrapValidation.authorization_action -cne "datasets.bootstrap_validate" -or
+        [string]$bootstrapValidation.method -cne "POST" -or
+        [string]$bootstrapValidation.path -cne "/api/private/datasets/bootstrap-validation" -or
+        [string]$bootstrapValidation.audience -cne "resolved_dependency_provider" -or
+        [string]$bootstrapValidation.payload_pointer -cne "/dependency_validation") {
+        throw "Component Manifest does not declare the exact lockfile-owned Dataset bootstrap validation target."
+    }
+    foreach ($manifestPath in @(
+        "crates/tessara-dashboard-module/manifest.json",
+        "crates/tessara-reference-scoped-records/manifest.json"
+    )) {
+        $manifest = Get-Content -LiteralPath (Join-Path $repoRoot $manifestPath) -Raw | ConvertFrom-Json
+        if ($null -ne $manifest.PSObject.Properties["bootstrap_dependency_validation"]) {
+            throw "Module Manifest '$manifestPath' opts into bootstrap dependency validation without a Sprint 8A requirement."
+        }
     }
     $componentAssets = [ordered]@{
         "/component.css" = @(
@@ -220,10 +268,37 @@ function Test-Sprint8AAcceptanceContract {
     $exchangeSource = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-api/src/module_authorization_exchange.rs") -Raw
     $serviceRequestSource = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-api/src/module_service_requests.rs") -Raw
     $datasetProviderSource = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-api/src/dataset_provider.rs") -Raw
+    $componentProductSource = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-component-module/src/product.rs") -Raw
+    $componentBootstrapSource = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-component-module/src/lib.rs") -Raw
+    $componentIntegrationSource = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-component-module/tests/product_integration.rs") -Raw
     foreach ($forbidden in @("tessara.components", "tessara.dashboards", "TESSARA_COMPONENT_", "TESSARA_DASHBOARD_")) {
         if ($exchangeSource.Contains($forbidden) -or $serviceRequestSource.Contains($forbidden)) {
             throw "Generic Core authorization source contains module-specific identity '$forbidden'."
         }
+    }
+    foreach ($genericSourcePath in @(
+        "crates/tessara-api/src/composition/mod.rs",
+        "crates/tessara-supervisor/src/main.rs"
+    )) {
+        $genericSource = Get-Content -LiteralPath (Join-Path $repoRoot $genericSourcePath) -Raw
+        $testBoundary = $genericSource.IndexOf("#[cfg(test)]", [StringComparison]::Ordinal)
+        $productionSource = if ($testBoundary -ge 0) {
+            $genericSource.Substring(0, $testBoundary)
+        } else {
+            $genericSource
+        }
+        foreach ($forbidden in @(
+            "tessara.components", "tessara.dashboards", "tessara.datasets",
+            "tessara_datasets_contract", "DATASET_BOOTSTRAP_VALIDATION"
+        )) {
+            if ($productionSource.Contains($forbidden)) {
+                throw "Generic composition source '$genericSourcePath' contains product-specific identity '$forbidden'."
+            }
+        }
+    }
+    $supervisorManifest = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-supervisor/Cargo.toml") -Raw
+    if ($supervisorManifest.Contains("tessara-datasets-contract")) {
+        throw "Generic Supervisor depends directly on the Dataset product contract."
     }
     $coreBaselineSource = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-api/migrations/001_baseline.sql") -Raw
     if ($coreBaselineSource -notmatch '(?s)CREATE TABLE consumed_module_service_nonces \(.*?authorization_jti UUID UNIQUE') {
@@ -236,6 +311,27 @@ function Test-Sprint8AAcceptanceContract {
         $datasetProviderSource -match 'AuthorizationGrantConsumption::ReusableExchange' -or
         $datasetProviderSource -notmatch 'AuthorizationGrantConsumption::OneTimeProviderAudience') {
         throw "Core exchange and Dataset provider grant-consumption modes are not explicitly separated."
+    }
+    foreach ($requiredFragment in @(
+        'DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY',
+        'compatibility_marks_non_ready_materialization_before_field_evaluation'
+    )) {
+        if (-not $datasetProviderSource.Contains($requiredFragment)) {
+            throw "Dataset provider omits non-ready compatibility proof '$requiredFragment'."
+        }
+    }
+    if (-not $componentProductSource.Contains('require_ready_dataset_metadata(&metadata, &input.dataset_reference)') -or
+        -not $componentBootstrapSource.Contains('bootstrap_rejects_non_ready_and_mismatched_dataset_metadata')) {
+        throw "Component pre-write validation does not enforce exact ready Dataset metadata for mutation and bootstrap."
+    }
+    foreach ($requiredFragment in @(
+        'component-create-non-ready-metadata',
+        'component-create-mismatched-metadata',
+        'assert_component_product_empty(&pool).await'
+    )) {
+        if (-not $componentIntegrationSource.Contains($requiredFragment)) {
+            throw "Component integration coverage omits zero-write Dataset guard '$requiredFragment'."
+        }
     }
     if (Test-Path -LiteralPath (Join-Path $repoRoot "crates/tessara-api/src/dataset_components_adapter.rs")) {
         throw "Core retains the consumer-named Component Dataset adapter."
@@ -292,18 +388,23 @@ function Test-Sprint8AAcceptanceContract {
         '[string]$EvidenceRoot',
         '[string]$EnvironmentFingerprint',
         '[string]$BlueprintPath',
+        '[string]$ControlUrl',
         '"materialization/attempt-$Attempt"',
         '"resolved-targets.json"',
         '"empty-baseline.json"',
         '"first-apply-response.json"',
         '"no-op-apply-response.json"',
         '"failure-teardown.json"',
+        '"public-gateway-boundary.json"',
         '"final-health.json"',
         '"materialization-result.json"',
         'Assert-Sprint8ADestructiveEndpoint',
         'ExpectedPort 8088',
+        'ExpectedPort 18088',
         'ExpectedPort 8098',
         '$unexpectedNetworks',
+        'Start-Sprint8APublicGateway',
+        '-ExcludePublicGateway',
         '-SemanticNoOp',
         'verify_read_back',
         'zero approved effects',
@@ -311,6 +412,18 @@ function Test-Sprint8AAcceptanceContract {
     )) {
         if (-not $materializationText.Contains($requiredFragment)) {
             throw "Sprint 8A materialization omits canonical evidence contract fragment '$requiredFragment'."
+        }
+    }
+    $compositionBootstrapText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1") -Raw
+    foreach ($requiredFragment in @(
+        '[switch]$ExcludePublicGateway',
+        '$startupServices',
+        '[string]$_ -cne "gateway"',
+        'ps --status running -q gateway',
+        'public gateway must remain stopped during owner materialization'
+    )) {
+        if (-not $compositionBootstrapText.Contains($requiredFragment)) {
+            throw "Sprint 8A owner materialization does not enforce its offline public-gateway boundary fragment '$requiredFragment'."
         }
     }
     $failureContainmentPath = Join-Path $repoRoot "scripts/run-sprint-8a-failure-containment.ps1"
@@ -357,18 +470,21 @@ function Test-Sprint8AAcceptanceContract {
         $failureContainmentText.Contains('final_health = $successorReceipt.evidence.final_health')) {
         throw "Sprint 8A containment result must publish verified actual-file and sidecar identities, not unverified receipt declarations."
     }
-    $semanticFixtureText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/prepare-sprint-7a-uat-fixtures.ps1") -Raw
+    $semanticFixturePath = Join-Path $repoRoot "scripts/prepare-sprint-7a-uat-fixtures.ps1"
+    $semanticFixtureText = Get-Content -LiteralPath $semanticFixturePath -Raw
     foreach ($requiredFragment in @(
         'tessara_module_components',
         'SplitComponentOwnership',
         "kind='module_instance'",
-        "resource_type='tessara.components.component_version'",
-        'if (-not $OwnerControlledSeed)'
+        "resource_type='tessara.components.component_version'"
     )) {
         if (-not $semanticFixtureText.Contains($requiredFragment)) {
             throw "Sprint 8A semantic fixtures do not preserve the extracted Component ownership contract ('$requiredFragment')."
         }
     }
+    # The fixture self-test parses its AST and rejects product mutations outside
+    # the Sprint 7A-only exclusion branch.
+    & $semanticFixturePath -SelfTest | Out-Null
     $compositionBootstrapText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1") -Raw
     if (-not $compositionBootstrapText.Contains('-OwnerControlledSeed:($RuntimeLabel -ceq "sprint-8a")')) {
         throw "Sprint 8A composition must keep product seed writes inside each owning bootstrap API."
@@ -523,14 +639,17 @@ function Test-Sprint8AAcceptanceContract {
             "TEST_INSTALLATION_CONTROL_DATABASE_URL", "Invoke-Sprint8ADatabaseProbe",
             "Get-Sprint8ADeploymentEnvironmentProbe", "Get-Sprint8AToolchainEnvironmentContract",
             "tessara.sprint-8a.deployment-environment-probe", "DeploymentProbe",
+            "materialization_control",
             "transaction_round_trip", "canonical_server", 'identity = "$canonicalServer/',
             "environment", "fingerprint"
         )
         "scripts/run-sprint-8a-candidate-rehearsal.ps1" = @(
-            "validation-readiness-prerequisite", "formatting", "workspace-check",
+            "attempt-state-prerequisite", "validation-readiness-prerequisite", "formatting", "workspace-check",
             "workspace-clippy", "compose-manifest-schema-contract",
             "web-native-wasm-source-boundaries", "module-sdk-boundaries",
             "dashboard-source-boundaries", "markdown-links", "workspace-tests",
+            "optimized-resource-reference-timing",
+            "resource_reference_restricted_known_random_latency_profile",
             "components-contract-tests", "dashboard-module-tests",
             "component-conformance-nondisclosure", "module-testkit-conformance",
             "playwright-discovery", "source-exact-materialization-no-op",
@@ -542,18 +661,26 @@ function Test-Sprint8AAcceptanceContract {
             "harvest_complete", "candidate-rehearsal-result.json",
             "test-sprint-validation-harvest.ps1", "validation-state.json",
             "nested_results_path", "nested_blocked_checks", "nested_blocked_count",
+            "nested_failed_checks", "nested_failure_count", "harness_failure_count",
             "Assert-Sprint8ANestedUatReceiptIdentity", '[long]$schema -ne 2',
             '$Receipt.authoritative -isnot [bool]', "numerically coerced nested UAT authority",
+            "nested semantic assertion", "does not retain its exact semantic assertion inventory",
             "playwright-acceptance.discovery.json", "playwright-acceptance.xml", "playwright-acceptance.summary.json",
             "productDiagnosticRawEvidence", "acceptance-manifest inventory",
             "evidence_roots", "produced_evidence", "raw_evidence", 'state = "executing"', '[switch]$SelfTest'
+            "Assert-RehearsalIndependentChecks", "correction_transition",
+            "state/readiness failure cannot suppress useful safe evidence",
+            "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
+            'consumed_by_readiness.attempt -ne [int]$stateIndex.readiness.attempt',
+            'consumed_by_readiness.receipt_sha256 -cne [string]$stateIndex.readiness.sha256'
         )
         "scripts/test-sprint-validation-harvest.ps1" = @(
             "Assert-DiagnosticReceiptHeader", "Assert-MutableSourceIdentity", "Assert-EnvironmentFingerprint",
             '$authoritative -isnot [bool]', "a string-coerced attempt schema", "an uppercase environment fingerprint",
             "Assert-HashedFileEvidence", "produced_evidence", "raw_evidence",
             "harvest_complete", "exactly one open batch", "CorrectionAuthorizationPath",
-            "nested_blocked_count", "blocked-check inventory", "passed_count"
+            "nested_blocked_count", "nested_failed_count", "nested_assertion",
+            "consumption_state", "allowed_successor_count", "blocked-check inventory", "passed_count"
         )
         "scripts/validate-e2e.ps1" = @(
             "InventoryOnly", "ActualIdentities", "Independent Playwright discovery",
@@ -561,13 +688,19 @@ function Test-Sprint8AAcceptanceContract {
             "failure-summary.json", "test-results", "Refusing to overwrite retained Playwright failure evidence"
         )
         "scripts/validate-sprint-8a-readiness.ps1" = @(
-            "compose-database-contract", "Get-Sprint8ADeploymentEnvironmentProbe",
+            "attempt-state-prerequisite", "compose-database-contract", "Get-Sprint8ADeploymentEnvironmentProbe",
             '-DeploymentProbe $script:deploymentProbe', "Assert-Sprint8AReadinessFailLateGraph",
             "authenticated six-database transaction probes", '$databaseProbes.Count -ne 6', '[switch]$SelfTest',
             "TEST_ALIAS_A_DATABASE_URL", "equivalent loopback host aliases",
             "validate-e2e.ps1 -InventoryOnly exact acceptance-manifest identity",
             "-InventoryOnly -EvidencePath `$playwrightInventoryPath",
-            "playwright-inventory.json", "produced_evidence"
+            "playwright-inventory.json", "produced_evidence", "Checkpoint-ReadinessAttempt",
+            "source_identity_verification_state", "predecessor_correction_authorization",
+            "duplicate consumption is forbidden", "consumed_by_readiness",
+            "a different Readiness attempt cannot reuse it",
+            "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
+            "Publish-Sprint8AAppendOnlyJsonReceipt", '[IO.FileMode]::CreateNew',
+            "candidate-rehearsal-correction-consumption", "correction_consumption_receipt"
         )
         "scripts/uat-sprint-8a.ps1" = @(
             "MaterializationLaneReceipt", "InventoryLaneReceipt",
@@ -579,9 +712,20 @@ function Test-Sprint8AAcceptanceContract {
             '$Receipt.authoritative -isnot [bool]', "numerically coerced prerequisite authority flag",
             "string-coerced prerequisite schema", "malformed environment identity",
             "failure-containment-successor-health", "semantic_assertions",
-            "ProductDiagnosticEvidence", "sprint-8a-dashboard-dependency-contract.ps1",
+            "sprint-8a-dashboard-dependency-contract.ps1",
             "Assert-Sprint8ADashboardDependencyEvidence",
-            "prerequisite_receipts"
+            "prerequisite_receipts", "semanticPredicateRegistry",
+            "Invoke-Sprint8AUatPredicate", "Read-UatLaneJsonEvidence",
+            "Read-UatReferencedJsonEvidence", "Assert-UatDashboardDependencyEvidenceMatches",
+            "canonicalProductDiagnostic", "Get-UatLaneEvidence",
+            "diverge from the authenticated raw evidence",
+            "playwright-acceptance.json", "assertion_ids",
+            "semantic_predicate_registry_version", "semantic_failure_count",
+            "harness_failure_count", 'classification = "product"', "Get-UatSemanticFailureEvidence",
+            "an assertion label without an executable semantic predicate",
+            "exact viewport and theme matrix preserves directory editor detail and viewer usability",
+            "Dataset provider outage retains unsaved editor state and one retry mutation",
+            "Components configuration enforces exact schema authority projection and sanitized diagnostics"
         )
         "scripts/sprint-8a-dashboard-dependency-contract.ps1" = @(
             "Sprint8ADashboardDependencyCheckCodes", "Sprint8ADashboardDependencyActions",
@@ -605,6 +749,51 @@ function Test-Sprint8AAcceptanceContract {
             if (-not $runnerText.Contains($fragment)) {
                 throw "Sprint 8A validation contract '$runner' omits '$fragment'."
             }
+        }
+    }
+    $rehearsalRunnerText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/run-sprint-8a-candidate-rehearsal.ps1") -Raw
+    $attemptStartFragment = 'Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath'
+    $stateLaneFragment = 'Invoke-RehearsalLane "attempt-state-prerequisite"'
+    $prerequisiteLaneFragment = 'Invoke-RehearsalLane "validation-readiness-prerequisite"'
+    $attemptStartIndex = $rehearsalRunnerText.IndexOf($attemptStartFragment, [StringComparison]::Ordinal)
+    $stateLaneIndex = $rehearsalRunnerText.IndexOf($stateLaneFragment, [StringComparison]::Ordinal)
+    $prerequisiteLaneIndex = $rehearsalRunnerText.IndexOf($prerequisiteLaneFragment, [StringComparison]::Ordinal)
+    if ([regex]::Matches($rehearsalRunnerText, '(?m)^\$declaredChecks\s*=\s*@\(').Count -ne 1 -or
+        $attemptStartIndex -lt 0 -or $stateLaneIndex -le $attemptStartIndex -or
+        $prerequisiteLaneIndex -le $attemptStartIndex) {
+        throw "Candidate Rehearsal must declare one check graph and publish its attempt-start receipt before validating readiness prerequisites."
+    }
+    foreach ($independentLane in @(
+        "attempt-state-prerequisite", "validation-readiness-prerequisite",
+        "formatting", "workspace-check", "workspace-clippy", "compose-manifest-schema-contract",
+        "web-native-wasm-source-boundaries", "module-sdk-boundaries", "dashboard-source-boundaries",
+        "markdown-links", "workspace-tests", "optimized-resource-reference-timing",
+        "components-contract-tests", "dashboard-module-tests", "component-conformance-nondisclosure",
+        "module-testkit-conformance", "playwright-discovery"
+    )) {
+        $independentPattern = '(?s)name\s*=\s*"' + [regex]::Escape($independentLane) + '";\s*depends_on\s*=\s*@\(\)'
+        if ($rehearsalRunnerText -notmatch $independentPattern) {
+            throw "Candidate Rehearsal must keep safe diagnostic lane '$independentLane' independent of fallible readiness prerequisites."
+        }
+    }
+    $preStartText = $rehearsalRunnerText.Substring(0, $attemptStartIndex)
+    if ($preStartText.Contains('Assert-Sprint8AReceiptSidecar -Path $readinessPath') -or
+        $preStartText.Contains('-ProbeDatabases') -or
+        $preStartText.Contains('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot') -or
+        $preStartText.Contains('Get-Content -LiteralPath $statePath')) {
+        throw "Candidate Rehearsal validates source, state, readiness, or environment before retaining its unverified attempt-start receipt."
+    }
+    $readinessLaneExtent = $rehearsalRunnerText.Substring(
+        $prerequisiteLaneIndex,
+        $rehearsalRunnerText.IndexOf('Invoke-RehearsalLane "formatting"', $prerequisiteLaneIndex, [StringComparison]::Ordinal) - $prerequisiteLaneIndex
+    )
+    if ($readinessLaneExtent.Contains('runtimeContext.validation_state')) {
+        throw "The independent readiness/source/environment lane must not consume state-lane runtime context."
+    }
+    foreach ($destructiveLane in @("source-exact-materialization-no-op", "failure-containment-successor-health")) {
+        $destructivePattern = '(?s)name\s*=\s*"' + [regex]::Escape($destructiveLane) + '";\s*depends_on\s*=\s*@\("attempt-state-prerequisite",\s*"validation-readiness-prerequisite"\)'
+        if ($rehearsalRunnerText -notmatch $destructivePattern) {
+            throw "Candidate Rehearsal destructive lane '$destructiveLane' must depend on both state-lock and readiness authentication."
         }
     }
     $productDiagnosticRunner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/diagnose-sprint-8a-product.ps1") -Raw
@@ -635,6 +824,19 @@ function Test-Sprint8AAcceptanceContract {
         throw "Candidate rehearsal must validate Compose quietly so normalized runtime secrets never enter retained logs."
     }
     $readinessRunner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/validate-sprint-8a-readiness.ps1") -Raw
+    $readinessStartIndex = $readinessRunner.IndexOf('Publish-Sprint7AEvidence -Document $startReceipt -OutputPath $attemptPath', [StringComparison]::Ordinal)
+    $readinessStateLaneIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "attempt-state-prerequisite"', [StringComparison]::Ordinal)
+    $readinessSourceIndex = $readinessRunner.IndexOf('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot', [StringComparison]::Ordinal)
+    if ($readinessStartIndex -lt 0 -or $readinessStateLaneIndex -le $readinessStartIndex -or
+        $readinessSourceIndex -le $readinessStartIndex -or
+        [regex]::Matches($readinessRunner, 'Checkpoint-ReadinessAttempt').Count -lt 3) {
+        throw "Validation Readiness must publish an unverified start receipt before state/source work and hash-checkpoint every terminal result."
+    }
+    $readinessPreStartText = $readinessRunner.Substring(0, $readinessStartIndex)
+    if ($readinessPreStartText.Contains('Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot') -or
+        $readinessPreStartText.Contains('Get-Content -LiteralPath $statePath')) {
+        throw "Validation Readiness reads source or validation-state before its start receipt."
+    }
     $composeProbeInvocationIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "compose-database-contract"', [StringComparison]::Ordinal)
     $toolchainInvocationIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "toolchain"', [StringComparison]::Ordinal)
     $npmInvocationIndex = $readinessRunner.IndexOf('Invoke-ReadinessCheck "playwright-locked-install"', [StringComparison]::Ordinal)
@@ -775,6 +977,24 @@ function Test-Sprint8AAcceptanceContract {
         ($actualComponentKeys -join ',') -cne ($expectedComponentKeys -join ',')) {
         throw "Sprint 8A Component bootstrap does not own the exact canonical Component seed inventory."
     }
+    $componentVersionKeys = @(
+        $componentBootstrap.components | ForEach-Object { @($_.versions).resource_key }
+    ) | Sort-Object
+    $validationItems = @($componentBootstrap.dependency_validation.items)
+    $validationKeys = @($validationItems.validation_key | Sort-Object)
+    if ([int]$componentBootstrap.dependency_validation.schema_version -ne 1 -or
+        $validationItems.Count -ne 8 -or
+        ($validationKeys -join ',') -cne ($componentVersionKeys -join ',')) {
+        throw "Component bootstrap dependency validation must name every exact ComponentVersion seed once."
+    }
+    foreach ($version in @($componentBootstrap.components.versions)) {
+        $validationItem = @($validationItems | Where-Object validation_key -CEQ $version.resource_key)
+        if ($validationItem.Count -ne 1 -or
+            ($validationItem[0].reference | ConvertTo-Json -Compress -Depth 20) -cne
+            ($version.dataset_reference | ConvertTo-Json -Compress -Depth 20)) {
+            throw "Component bootstrap validation '$($version.resource_key)' is not bound to its exact locked Dataset reference."
+        }
+    }
     $expectedVersionByKey = [ordered]@{
         'sprint-8a-record-table' = $script:Sprint8AFixture.component_versions.table
         'sprint-8a-label-bar' = $script:Sprint8AFixture.component_versions.bar
@@ -806,9 +1026,10 @@ function Test-Sprint8AAcceptanceContract {
         throw "Sprint 8A Component lifecycle seed must retain the exact inactive predecessor and current successor identities."
     }
     $dashboardBootstrap = @($blueprint.modules | Where-Object definition_id -CEQ 'tessara.dashboards')[0].bootstrap.value
+    $expectedPlacementIds = @($script:Sprint8AFixture.dashboard_placements.Keys | Sort-Object)
     if (@($dashboardBootstrap.placements).Count -ne 7 -or
         (@($dashboardBootstrap.placements.placement_id | Sort-Object) -join ',') -cne
-        (@('01980000-0003-7000-8000-000000000002','01980000-0003-7000-8000-000000000003','01980000-0003-7000-8000-000000000004','01980000-0003-7000-8000-000000000005','01980000-0003-7000-8000-000000000006','01980000-0003-7000-8000-000000000007','01980000-0003-7000-8000-000000000008') -join ',')) {
+        ($expectedPlacementIds -join ',')) {
         throw "Sprint 8A Dashboard bootstrap must own the exact seven-placement acceptance inventory."
     }
     if (@($dashboardBootstrap.placements | Where-Object { $null -ne $_.component_reference }).Count -ne 0) {
@@ -816,24 +1037,35 @@ function Test-Sprint8AAcceptanceContract {
     }
     $dashboardModuleBootstrap = @($blueprint.modules | Where-Object definition_id -CEQ 'tessara.dashboards')[0].bootstrap
     $expectedReceiptBindings = [ordered]@{
-        "/placements/0/component_reference" = "sprint-8a-row-count"
-        "/placements/1/component_reference" = "sprint-8a-record-table"
-        "/placements/2/component_reference" = "sprint-8a-label-bar"
-        "/placements/3/component_reference" = "sprint-8a-blocked-component"
-        "/placements/4/component_reference" = "sprint-8a-row-count-inactive"
-        "/placements/5/component_reference" = "sprint-8a-row-count-inactive"
-        "/placements/6/component_reference" = "sprint-8a-row-count-inactive"
+        "/placements/0/component_reference" = [string]$script:Sprint8AFixture.dashboard_placements[[string]$dashboardBootstrap.placements[0].placement_id].resource_key
+        "/placements/1/component_reference" = [string]$script:Sprint8AFixture.dashboard_placements[[string]$dashboardBootstrap.placements[1].placement_id].resource_key
+        "/placements/2/component_reference" = [string]$script:Sprint8AFixture.dashboard_placements[[string]$dashboardBootstrap.placements[2].placement_id].resource_key
+        "/placements/3/component_reference" = [string]$script:Sprint8AFixture.dashboard_placements[[string]$dashboardBootstrap.placements[3].placement_id].resource_key
+        "/placements/4/component_reference" = [string]$script:Sprint8AFixture.dashboard_placements[[string]$dashboardBootstrap.placements[4].placement_id].resource_key
+        "/placements/5/component_reference" = [string]$script:Sprint8AFixture.dashboard_placements[[string]$dashboardBootstrap.placements[5].placement_id].resource_key
+        "/placements/6/component_reference" = [string]$script:Sprint8AFixture.dashboard_placements[[string]$dashboardBootstrap.placements[6].placement_id].resource_key
     }
     if (@($dashboardModuleBootstrap.receipt_bindings).Count -ne $expectedReceiptBindings.Count) {
         throw "Sprint 8A Dashboard bootstrap must declare exactly seven Component receipt bindings."
     }
     foreach ($targetPointer in $expectedReceiptBindings.Keys) {
+        $placementIndex = [int]([regex]::Match($targetPointer, '^/placements/(?<index>\d+)/component_reference$').Groups['index'].Value)
+        $placementInput = $dashboardBootstrap.placements[$placementIndex]
+        $expectedPlacement = $script:Sprint8AFixture.dashboard_placements[[string]$placementInput.placement_id]
         $binding = @($dashboardModuleBootstrap.receipt_bindings | Where-Object target_pointer -CEQ $targetPointer)
         if ($binding.Count -ne 1 -or
+            [string]$placementInput.placement_key -cne [string]$expectedPlacement.placement_key -or
             [string]$binding[0].source_owner -cne "tessara.components" -or
             [string]$binding[0].resource_key -cne [string]$expectedReceiptBindings[$targetPointer] -or
             [string]$binding[0].value_encoding -cne "json") {
             throw "Sprint 8A Dashboard receipt binding '$targetPointer' differs from the exact owner read-back contract."
+        }
+        $ownerVersions = @($componentBootstrap.components | ForEach-Object { @($_.versions) } | Where-Object {
+            [string]$_.resource_key -ceq [string]$expectedPlacement.resource_key
+        })
+        if ($ownerVersions.Count -ne 1 -or
+            [string]$ownerVersions[0].component_version_id -cne [string]$expectedPlacement.component_version_id) {
+            throw "Sprint 8A Dashboard placement '$($placementInput.placement_id)' is not bound to its exact owner-produced ComponentVersion."
         }
     }
     $expectedNavigation = [ordered]@{

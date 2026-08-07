@@ -329,6 +329,8 @@ pub(super) async fn refresh_module_observations(inventory: &mut ModuleInventoryR
     else {
         return;
     };
+    let control_key = std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
+        .unwrap_or_else(|_| "development-module-control-only".into());
 
     for module in &mut inventory.modules {
         let Some(endpoint) = endpoints.get(&module.definition_id) else {
@@ -346,17 +348,52 @@ pub(super) async fn refresh_module_observations(inventory: &mut ModuleInventoryR
         let base_url = endpoint.trim_end_matches('/');
         let readiness_url = format!("{base_url}{readiness_path}");
         let liveness_url = format!("{base_url}{liveness_path}");
-        let (ready, healthy) = tokio::join!(
+        let diagnostics_url = format!("{base_url}/api/diagnostics");
+        let (ready, healthy, diagnostic_details) = tokio::join!(
             module_probe_passes(&client, &readiness_url),
             module_probe_passes(&client, &liveness_url),
+            module_diagnostic_details(&client, &diagnostics_url, &control_key),
         );
         let state_changed = module.ready != ready || module.healthy != healthy;
         module.ready = ready;
         module.healthy = healthy;
+        module.diagnostic_details.0 = diagnostic_details;
         if state_changed {
             module.observed_at = Utc::now();
         }
     }
+}
+
+async fn module_diagnostic_details(
+    client: &reqwest::Client,
+    url: &str,
+    control_key: &str,
+) -> BTreeMap<String, serde_json::Value> {
+    let Ok(response) = client
+        .get(url)
+        .header("x-tessara-module-control-key", control_key)
+        .send()
+        .await
+    else {
+        return BTreeMap::new();
+    };
+    if !response.status().is_success() {
+        return BTreeMap::new();
+    }
+    response
+        .json::<serde_json::Value>()
+        .await
+        .ok()
+        .and_then(module_diagnostic_object)
+        .unwrap_or_default()
+}
+
+fn module_diagnostic_object(
+    value: serde_json::Value,
+) -> Option<BTreeMap<String, serde_json::Value>> {
+    value
+        .as_object()
+        .map(|details| details.clone().into_iter().collect())
 }
 
 async fn module_probe_passes(client: &reqwest::Client, url: &str) -> bool {
@@ -809,7 +846,7 @@ pub(super) fn independent_entry_value(
             readiness_path,
             liveness_path,
             public_route: module.route_prefix.unwrap_or_else(|| "Not reported".into()),
-            details: Default::default(),
+            details: module.diagnostic_details.0,
         },
         manifest,
         findings,
@@ -966,11 +1003,12 @@ fn immutable_core_items() -> Vec<ImmutableCoreNavigationItemV1> {
 #[cfg(test)]
 mod tests {
     use axum::http::StatusCode;
+    use serde_json::json;
     use uuid::Uuid;
 
     use super::{
         band_anchors, if_none_match_matches, immutable_core_items, map_policy_error,
-        navigation_policy_response, parse_module_control_endpoints,
+        module_diagnostic_object, navigation_policy_response, parse_module_control_endpoints,
     };
     use crate::auth::{AccountContext, AuthenticatedRequest, CapabilityScope, SessionContext};
     use crate::modules::{
@@ -1000,6 +1038,43 @@ mod tests {
             &digest.parse().expect("syntactically representable header"),
             digest
         ));
+    }
+
+    #[test]
+    fn module_owned_diagnostics_preserve_sanitized_dataset_observation() {
+        let details = module_diagnostic_object(json!({
+            "schema_version": 1,
+            "dataset_dependency": {
+                "selected_binding": {
+                    "binding_key": "tessara.components.dataset-major-line",
+                    "functional_contract": {
+                        "id": "tessara.datasets.dataset-major-line",
+                        "version": "1.0.0"
+                    }
+                },
+                "health": {
+                    "status": "available",
+                    "result_code": "dataset.request_succeeded"
+                }
+            }
+        }))
+        .expect("object diagnostics");
+
+        assert_eq!(
+            details
+                .get("dataset_dependency")
+                .and_then(|value| value.pointer("/selected_binding/binding_key"))
+                .and_then(serde_json::Value::as_str),
+            Some("tessara.components.dataset-major-line")
+        );
+        assert_eq!(
+            details
+                .get("dataset_dependency")
+                .and_then(|value| value.pointer("/health/result_code"))
+                .and_then(serde_json::Value::as_str),
+            Some("dataset.request_succeeded")
+        );
+        assert!(module_diagnostic_object(json!([])).is_none());
     }
 
     #[test]

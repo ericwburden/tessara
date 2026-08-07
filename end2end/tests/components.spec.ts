@@ -3,6 +3,12 @@ import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 
 const RUN_ID = `pw-components-${Date.now()}`;
 const TWO_HUNDRED_PERCENT_ZOOM_VIEWPORT = { width: 640, height: 450 };
+const COMPONENT_VIEWPORT_MATRIX = [
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "tablet", width: 768, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+] as const;
+const COMPONENT_SURFACES = ["directory", "editor", "detail", "viewer"] as const;
 const RENDERED_COMPONENT_CONTENT = [
   ".component-table-viewer__table",
   ".component-d3-chart__surface",
@@ -61,6 +67,7 @@ type ComponentDefinition = {
   component_id: string;
   name: string;
   slug: string;
+  description?: string | null;
   versions: ComponentVersion[];
 };
 
@@ -343,6 +350,41 @@ async function expectHorizontalContainment(
     outOfBounds,
     `${description} should remain within the layout viewport`,
   ).toEqual([]);
+}
+
+async function expectViewportContainment(
+  page: Page,
+  selector: string,
+  expectedWidth: number,
+  description: string,
+) {
+  const target = page.locator(selector).first();
+  await expect(
+    target,
+    `${description} should expose its canonical surface`,
+  ).toBeVisible();
+  const metrics = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    innerWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(metrics.innerWidth, `${description} should use the requested viewport`).toBe(
+    expectedWidth,
+  );
+  expect(
+    metrics.scrollWidth <= metrics.clientWidth + 1,
+    `${description} should not create document-level horizontal overflow`,
+  ).toBe(true);
+  const bounds = await target.boundingBox();
+  expect(bounds, `${description} should have measurable bounds`).not.toBeNull();
+  expect(
+    bounds!.x,
+    `${description} should not escape the left viewport edge`,
+  ).toBeGreaterThanOrEqual(-1);
+  expect(
+    bounds!.x + bounds!.width,
+    `${description} should not escape the right viewport edge`,
+  ).toBeLessThanOrEqual(expectedWidth + 1);
 }
 
 async function selectDatasetMajorLine(page: Page, dataset: DatasetOption) {
@@ -1179,6 +1221,278 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       [rawCategory!]: semanticWarning,
     });
     assertNoConsoleErrors();
+  });
+
+  test("exact viewport and theme matrix preserves directory editor detail and viewer usability", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const assertNoConsoleErrors = attachConsoleGuard(page);
+    await signInAsAdmin(page);
+    await ensureDemoSeed(page);
+
+    const components = await expectJson<ComponentSummary[]>(
+      await page.request.get("/api/components"),
+    );
+    const component = components.find(
+      (candidate) =>
+        candidate.current_version.publication_state === "published" &&
+        candidate.current_version.lifecycle_state === "active",
+    );
+    expect(
+      component,
+      "the viewport matrix requires one active published Component",
+    ).toBeTruthy();
+
+    const paths: Record<(typeof COMPONENT_SURFACES)[number], string> = {
+      directory: "/components",
+      editor: `/components/${component!.slug}/edit`,
+      detail: `/components/${component!.slug}`,
+      viewer: `/components/${component!.slug}/view`,
+    };
+    const containmentTargets: Record<
+      (typeof COMPONENT_SURFACES)[number],
+      string
+    > = {
+      directory: ".components-page[data-component-directory]",
+      editor: "[data-component-editor-root]",
+      detail: ".components-page",
+      viewer: ".components-page",
+    };
+
+    for (const viewport of COMPONENT_VIEWPORT_MATRIX) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const theme of ["light", "dark"] as const) {
+        for (const surface of COMPONENT_SURFACES) {
+          await test.step(`${surface} at ${viewport.width}px in ${theme}`, async () => {
+            await page.goto(paths[surface]);
+            await expect(page.locator("#module-content")).toHaveAttribute(
+              "data-hydration",
+              "ready",
+            );
+            await chooseThemeWithKeyboard(page, theme);
+
+            const heading =
+              surface === "directory"
+                ? "Components"
+                : surface === "editor"
+                  ? "Edit Component"
+                  : component!.name;
+            await expect(
+              page.getByRole("heading", { level: 1, name: heading, exact: true }),
+            ).toBeVisible();
+
+            const requiredAction =
+              surface === "directory"
+                ? page.getByRole("link", { name: "Create Component", exact: true })
+                : surface === "editor"
+                  ? page.getByRole("button", { name: "Save Draft", exact: true })
+                  : surface === "detail"
+                    ? page.getByRole("link", { name: "Edit", exact: true })
+                    : page.getByRole("link", { name: "Versions", exact: true });
+            await expect(requiredAction).toBeVisible();
+            await requiredAction.focus();
+            await expect(requiredAction).toBeFocused();
+
+            if (surface === "viewer") {
+              await expect(
+                page.locator(RENDERED_COMPONENT_CONTENT).first(),
+              ).toBeVisible({ timeout: 15_000 });
+            }
+            await expectViewportContainment(
+              page,
+              containmentTargets[surface],
+              viewport.width,
+              `${surface} at ${viewport.width}px in ${theme}`,
+            );
+          });
+        }
+      }
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/components");
+    await chooseThemeWithKeyboard(page, "light");
+    const createAction = page.getByRole("link", {
+      name: "Create Component",
+      exact: true,
+    });
+    await createAction.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/components\/new$/);
+    const nameInput = page.getByRole("textbox", { name: "Name", exact: true });
+    const slugInput = page.getByRole("textbox", { name: "Slug", exact: true });
+    await nameInput.focus();
+    await page.keyboard.press("Tab");
+    await expect(slugInput).toBeFocused();
+    assertNoConsoleErrors();
+  });
+
+  test("Dataset provider outage retains unsaved editor state and one retry mutation", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await signInAsAdmin(page);
+    await ensureDemoSeed(page);
+    const dataset = await datasetOption(page);
+    const definition = await createComponent(
+      page,
+      dataset,
+      "table",
+      tableConfig(dataset),
+      "outage-retry",
+    );
+    await publish(page, definition, "publish-outage-retry");
+
+    await page.goto(`/components/${definition.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    await expect(page.locator(".component-editor-preview__badge")).toHaveText(
+      "Valid config",
+    );
+
+    let providerUnavailable = true;
+    let interceptedProviderFailures = 0;
+    let saveRequests = 0;
+    let successfulSaveResponses = 0;
+    // Intercept only the browser-visible preview boundary. The recovered save
+    // still reaches the real module backend; product_integration's
+    // extracted_component_product_owns_crud_versions_lifecycle_render_and_nondisclosure
+    // test retains authoritative atomicity, replay, and nondisclosure proof.
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/api/admin/components/save"
+      ) {
+        saveRequests += 1;
+      }
+    });
+    page.on("response", (response) => {
+      if (
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/admin/components/save" &&
+        response.ok()
+      ) {
+        successfulSaveResponses += 1;
+      }
+    });
+    await page.route("**/api/admin/components/preview", async (route) => {
+      if (!providerUnavailable) {
+        await route.continue();
+        return;
+      }
+      interceptedProviderFailures += 1;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "component.dependency_unavailable",
+          message: "Dataset provider unavailable for deterministic acceptance.",
+          retryable: true,
+        }),
+      });
+    });
+
+    const unsavedName = `${definition.name} unsaved`;
+    const unsavedDescription = `Unsaved outage description ${RUN_ID}`;
+    const unsavedVersionNote = `Unsaved outage note ${RUN_ID}`;
+    await page
+      .getByRole("textbox", { name: "Name", exact: true })
+      .fill(unsavedName);
+    await page
+      .getByRole("textbox", { name: "Description", exact: true })
+      .fill(unsavedDescription);
+    await page
+      .getByRole("textbox", { name: "Version note", exact: true })
+      .fill(unsavedVersionNote);
+
+    const outage = page.locator("[data-component-dataset-outage]");
+    await expect(outage).toBeVisible();
+    await expect(outage).toContainText(
+      "Dataset metadata is temporarily unavailable. Your unsaved Component changes are preserved.",
+    );
+    expect(interceptedProviderFailures).toBeGreaterThan(0);
+    await expect(
+      page.getByRole("textbox", { name: "Name", exact: true }),
+    ).toHaveValue(unsavedName);
+    await expect(
+      page.getByRole("textbox", { name: "Description", exact: true }),
+    ).toHaveValue(unsavedDescription);
+    await expect(
+      page.getByRole("textbox", { name: "Version note", exact: true }),
+    ).toHaveValue(unsavedVersionNote);
+
+    const dependentMutations = page.locator(
+      "[data-component-save-action], [data-component-open-consumer-review]",
+    );
+    expect(await dependentMutations.count()).toBeGreaterThan(0);
+    for (const mutation of await dependentMutations.all()) {
+      await expect(mutation).toBeDisabled();
+    }
+    await dependentMutations.evaluateAll((elements) => {
+      for (const element of elements) (element as HTMLButtonElement).click();
+    });
+    expect(saveRequests).toBe(0);
+    expect(successfulSaveResponses).toBe(0);
+
+    const duringOutage = await expectJson<ComponentDefinition>(
+      await page.request.get(`/api/admin/components/${definition.slug}`),
+    );
+    expect(duringOutage.name).toBe(definition.name);
+    expect(duringOutage.description).toBe(
+      "Extracted Component module acceptance fixture.",
+    );
+
+    providerUnavailable = false;
+    const recoveredPreview = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/admin/components/preview" &&
+        response.ok(),
+    );
+    await outage
+      .getByRole("button", { name: "Retry Dataset metadata", exact: true })
+      .click();
+    await recoveredPreview;
+    await expect(outage).toBeHidden();
+    await expect(
+      page.getByRole("textbox", { name: "Name", exact: true }),
+    ).toHaveValue(unsavedName);
+    await expect(
+      page.getByRole("textbox", { name: "Description", exact: true }),
+    ).toHaveValue(unsavedDescription);
+    await expect(
+      page.getByRole("textbox", { name: "Version note", exact: true }),
+    ).toHaveValue(unsavedVersionNote);
+    await expect(
+      page.getByRole("button", { name: "Save Draft", exact: true }),
+    ).toBeEnabled();
+
+    const successfulMutation = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/admin/components/save" &&
+        response.ok(),
+    );
+    await page
+      .getByRole("button", { name: "Save Draft", exact: true })
+      .click();
+    await successfulMutation;
+    expect(saveRequests).toBe(1);
+    expect(successfulSaveResponses).toBe(1);
+
+    const saved = await expectJson<ComponentDefinition>(
+      await page.request.get(`/api/admin/components/${definition.slug}`),
+    );
+    expect(saved.name).toBe(unsavedName);
+    expect(saved.description).toBe(unsavedDescription);
+    expect(
+      saved.versions.find((version) => version.publication_state === "draft")
+        ?.version_note,
+    ).toBe(unsavedVersionNote);
+    await page.unroute("**/api/admin/components/preview");
   });
 
   test("component editor remains contained and uses an accessible mobile preview dialog", async ({

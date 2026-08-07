@@ -528,7 +528,7 @@ mod tests {
 
     #[test]
     fn sprint_8a_core_fresh_baseline_excludes_component_product_storage() {
-        assert_eq!(fnv1a(BASELINE), 0xc1fc_2418_69d6_9950);
+        assert_eq!(fnv1a(BASELINE), 0x0d13_468c_0638_877f);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(!baseline.contains("CREATE TABLE components ("));
         assert!(!baseline.contains("CREATE TABLE component_versions ("));
@@ -540,7 +540,7 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "ef38ef307cf6fe44185b558522ad68e5a34841dec3e8d3442245ba5441ede26a"
+            "49d1b2af75c5a31335e5cc855a615e571c05d7b352a3e0de96b4aa6829ff8926"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));
@@ -554,6 +554,7 @@ mod tests {
         assert!(baseline.contains("CREATE TABLE core_security_revisions"));
         assert!(baseline.contains("CREATE TABLE administrator_enrollment_handoffs"));
         assert!(baseline.contains("CREATE TABLE core_module_action_declarations"));
+        assert!(baseline.contains("CREATE TABLE consumed_bootstrap_validation_authorizations"));
         assert!(baseline.contains("manifest JSONB"));
     }
 

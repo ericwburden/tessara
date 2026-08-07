@@ -695,7 +695,7 @@ mod tests {
     };
 
     #[test]
-    fn sprint_8a_bootstrap_owns_four_exact_module_component_placements() {
+    fn sprint_8a_bootstrap_owns_seven_exact_receipt_bound_component_placements() {
         let blueprint: tessara_composition::ApplicationBlueprintV1 =
             serde_json::from_str(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -823,17 +823,56 @@ mod tests {
             ]
             .map(|value| uuid::Uuid::parse_str(value).expect("placement UUID"))
         );
-        assert!(bootstrap.placements.iter().all(|placement| {
-            matches!(
-                placement.component_reference.reference().owner(),
-                ResourceOwner::ModuleInstance { .. }
-            ) && placement
-                .component_reference
-                .reference()
-                .resource_type()
-                .as_str()
-                == "tessara.components.component_version"
-        }));
+        let expected_resources = std::collections::BTreeMap::from([
+            (
+                "01980000-0003-7000-8000-000000000002",
+                "01980000-0001-7000-8000-000000000011",
+            ),
+            (
+                "01980000-0003-7000-8000-000000000003",
+                "01980000-0001-7000-8000-000000000002",
+            ),
+            (
+                "01980000-0003-7000-8000-000000000004",
+                "01980000-0001-7000-8000-000000000003",
+            ),
+            (
+                "01980000-0003-7000-8000-000000000005",
+                "01980000-0001-7000-8000-000000000004",
+            ),
+            (
+                "01980000-0003-7000-8000-000000000006",
+                "01980000-0001-7000-8000-000000000001",
+            ),
+            (
+                "01980000-0003-7000-8000-000000000007",
+                "01980000-0001-7000-8000-000000000001",
+            ),
+            (
+                "01980000-0003-7000-8000-000000000008",
+                "01980000-0001-7000-8000-000000000001",
+            ),
+        ]);
+        for placement in &bootstrap.placements {
+            let reference = placement.component_reference.reference();
+            assert_eq!(reference.installation_id(), blueprint.installation_id);
+            assert_eq!(
+                reference.owner(),
+                &ResourceOwner::ModuleInstance {
+                    installation_id: blueprint.installation_id,
+                    module_instance_id: component_instance_id,
+                }
+            );
+            assert_eq!(
+                reference.resource_type().as_str(),
+                "tessara.components.component_version"
+            );
+            let placement_id = placement.placement_id.to_string();
+            assert_eq!(
+                Some(reference.resource_id()),
+                expected_resources.get(placement_id.as_str()).copied()
+            );
+        }
     }
 
     fn bootstrap_placement_wire(
@@ -1034,12 +1073,15 @@ mod tests {
         let baseline = include_bytes!("../migrations/001_dashboard_module.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "4740cc72ae3d1e622c0caf80b095c5488931929c4d34fa0fe269ac98339dacdc"
+            "da0b935b9f19f960d2d15422ca8f423d975f933ffd764353d9ad1f812df83d45"
         );
         let baseline = std::str::from_utf8(baseline).expect("baseline is UTF-8");
         assert!(baseline.contains("CREATE TABLE dashboard_dependency_observations"));
         assert!(baseline.contains("CREATE TABLE dashboard_dependency_findings"));
         assert!(baseline.contains("CREATE TABLE dashboard_dependency_action_receipts"));
+        assert!(baseline.contains("authorization_context_digest TEXT NOT NULL"));
+        assert!(baseline.contains("authorization_expires_at TIMESTAMPTZ NOT NULL"));
+        assert!(baseline.contains("resolution_origin TEXT NOT NULL"));
         assert!(baseline.contains("tessara.components.component_version"));
         assert!(baseline.contains("module_instance"));
     }

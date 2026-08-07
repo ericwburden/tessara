@@ -83,15 +83,8 @@ function Get-RetainedDiagnosticArtifact {
 }
 
 if ($SelfTest) {
-    $semanticFixture = [pscustomobject][ordered]@{
-        schema_version = 1
-        evidence_kind = "tessara.sprint-8a.dashboard-dependency-semantic-diagnostic"
-        checks = @($script:Sprint8ADashboardDependencyCheckCodes | ForEach-Object { [pscustomobject]@{ code = $_; passed = $true; detail = "self-test" } })
-        actions = @("defer", "upgrade", "replace", "remove" | ForEach-Object { [pscustomobject]@{ action = $_ } })
-        final_health = [pscustomobject]@{ health = "healthy"; open_count = 0; deferred_count = 0 }
-        canonical_reset_required = $true
-        passed = $true
-    }
+    Test-Sprint8ADashboardDependencyEvidenceContract
+    $semanticFixture = New-Sprint8ADashboardDependencySelfTestEvidence
     Assert-Sprint8ADashboardDependencyEvidence -Evidence $semanticFixture
     $diagnosticFixture = @(
         [pscustomobject]@{ name = "broad-product-behavior"; state = "passed"; reason = $null },

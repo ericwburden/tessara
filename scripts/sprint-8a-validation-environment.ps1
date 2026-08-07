@@ -297,6 +297,7 @@ function Get-Sprint8ADeploymentEnvironmentProbe {
         }
         endpoints = [ordered]@{
             gateway = "http://127.0.0.1:8088"
+            materialization_control = "http://127.0.0.1:18088"
             supervisor = "http://127.0.0.1:8098"
         }
         fixture_identities = @(

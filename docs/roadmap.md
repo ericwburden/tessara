@@ -101,9 +101,10 @@ an enrolled real Module Release/Instance. Sprint 8A applies that pathway to
 Components, which is likewise represented by its real enrollment rather than
 by a Core transition descriptor.
 
-The implementation-readiness reconciliation is complete. The next gap is one
-new source-exact Validation Readiness and Candidate Rehearsal cycle before
-preflight. The corrected Sprint 8A source now:
+The post-Readiness-33 implementation reconciliation is complete. Readiness 33
+remains a failed diagnostic and Candidate Rehearsal 29 did not start. The next
+gap is one new source-exact Validation Readiness and Candidate Rehearsal cycle
+before preflight. The corrected Sprint 8A source now:
 
 - keep Core's frozen transition catalog at exactly `tessara.forms`,
   `tessara.workflows`, `tessara.responses`, `tessara.datasets`, and
@@ -120,6 +121,10 @@ preflight. The corrected Sprint 8A source now:
 - align the implementation, tests, fixtures, acceptance inventory, deployment
   inputs, runners, and governing documentation before re-entering complete
   validation readiness and candidate rehearsal
+- keep the public gateway offline through owner materialization, validate
+  Component bootstrap and authoring against the real Dataset contract before
+  writes, and bind Dashboard outage disclosure/actions to the exact current
+  semantic authorization context
 - carry the completed pathway into the remaining Forms, Workflows, Responses,
   and Datasets extractions before broad pilot hardening
 
@@ -1158,9 +1163,10 @@ against the newly physical boundary.
 ### Sprint 8A: Component Module Separation Slice (Implementation Ready; Validation Restart Pending)
 
 **Validation posture:** implementation, acceptance inventory, deployment
-inputs, runners, and governing contracts are reconciled. Start a new complete
-Validation Readiness and Candidate Rehearsal cycle against one clean source and
-environment identity; preflight remains closed until both pass.
+inputs, runners, and governing contracts are reconciled after failed Readiness
+33; Candidate Rehearsal 29 was never started. Start a new complete Validation
+Readiness and Candidate Rehearsal cycle against one clean source and environment
+identity; preflight remains closed until both pass.
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 

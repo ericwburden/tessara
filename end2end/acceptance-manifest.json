@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 71,
+  "expected_total": 74,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
@@ -34,6 +34,8 @@
       "tests": [
         "Sprint 8A extracted Component UI parity › admin can create, update, publish, and view a major-line table component",
         "Sprint 8A extracted Component UI parity › admin can author, publish, and view visual components",
+        "Sprint 8A extracted Component UI parity › exact viewport and theme matrix preserves directory editor detail and viewer usability",
+        "Sprint 8A extracted Component UI parity › Dataset provider outage retains unsaved editor state and one retry mutation",
         "Sprint 8A extracted Component UI parity › component editor remains contained and uses an accessible mobile preview dialog",
         "Sprint 8A extracted Component UI parity › Component and Dashboard visuals stay contained at 200% zoom in light and dark themes"
       ]
@@ -76,7 +78,8 @@
         "Sprint 6A Module Management › scoped module authority, product-only authority, and no access stay hidden and restricted",
         "Sprint 6A Module Management › keyboard group and placement edits retain focus and persist in desktop and mobile shells",
         "Sprint 6A Module Management › native directory and detail remain useful without JavaScript or bridge requests",
-        "Sprint 6A Module Management › undeployed SDK reference stays absent from inventory, routes, and assets"
+        "Sprint 6A Module Management › undeployed SDK reference stays absent from inventory, routes, and assets",
+        "Sprint 8A Module Management › Components configuration enforces exact schema authority projection and sanitized diagnostics"
       ]
     },
     {

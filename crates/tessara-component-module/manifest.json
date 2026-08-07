@@ -171,12 +171,23 @@
     {"path":"/api/private/components/render","method":"POST","authorization_action":"components.render","operation":"read","required_capability":"components:read","functional_contract":"tessara.components.component-version"}
   ],
   "consumed_service_actions": [
+    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.bootstrap_validate"},
     {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.catalog"},
     {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.schema"},
     {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.distinct_values"},
     {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.compatibility"},
     {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.execute"}
   ],
+  "bootstrap_dependency_validation": {
+    "dependency_binding":"tessara.components.dataset-major-line",
+    "functional_contract":"tessara.datasets.dataset-major-line",
+    "contract_version":"1.0.0",
+    "authorization_action":"datasets.bootstrap_validate",
+    "method":"POST",
+    "path":"/api/private/datasets/bootstrap-validation",
+    "audience":"resolved_dependency_provider",
+    "payload_pointer":"/dependency_validation"
+  },
   "control_projections": [
     {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"}
   ],

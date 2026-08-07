@@ -1910,7 +1910,7 @@ async fn persist_module_configuration(
             .await?
             .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
     let base_url = module_control_url(&definition)?;
-    let validation: Value = reqwest::Client::new()
+    let response = reqwest::Client::new()
         .post(format!("{base_url}/api/configuration/validate"))
         .header(
             "x-tessara-module-control-key",
@@ -1922,11 +1922,9 @@ async fn persist_module_configuration(
         .await
         .map_err(|_| {
             ApiError::ServiceUnavailable("module configuration validator unavailable".into())
-        })?
-        .error_for_status()
-        .map_err(|_| {
-            ApiError::ServiceUnavailable("module configuration validator unavailable".into())
-        })?
+        })?;
+    require_module_configuration_validation_status(response.status())?;
+    let validation: Value = response
         .json()
         .await
         .map_err(|error| ApiError::Internal(error.into()))?;
@@ -1971,6 +1969,23 @@ async fn persist_module_configuration(
         .await?;
     }
     Ok(validation)
+}
+
+fn require_module_configuration_validation_status(status: StatusCode) -> ApiResult<()> {
+    if status.is_success() {
+        return Ok(());
+    }
+    if matches!(
+        status,
+        StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY
+    ) {
+        return Err(ApiError::BadRequest(
+            "module configuration shape is invalid".into(),
+        ));
+    }
+    Err(ApiError::ServiceUnavailable(
+        "module configuration validator unavailable".into(),
+    ))
 }
 
 fn configuration_form_payload(
@@ -2646,6 +2661,20 @@ mod tests {
                 .to_string()
                 .contains("unknown module configuration fields")
         );
+    }
+
+    #[test]
+    fn module_configuration_shape_rejection_is_a_validation_error() {
+        for status in [StatusCode::BAD_REQUEST, StatusCode::UNPROCESSABLE_ENTITY] {
+            assert!(matches!(
+                require_module_configuration_validation_status(status),
+                Err(ApiError::BadRequest(_))
+            ));
+        }
+        assert!(matches!(
+            require_module_configuration_validation_status(StatusCode::INTERNAL_SERVER_ERROR),
+            Err(ApiError::ServiceUnavailable(_))
+        ));
     }
 
     #[test]

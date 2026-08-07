@@ -10,9 +10,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tessara_composition::{
-    ApplicationLockfileV1, ApplyAuthorizationV1, BootstrapInputV1, BootstrapReceiptV1,
-    CompositionFindingV1, CompositionOperationV1, FindingSeverityV1, InstallationReceiptV1,
-    MaterializationActionV1, MaterializationPlanV1, OwnerBootstrapRequestV1,
+    ApplicationLockfileV1, ApplyAuthorizationV1,
+    BootstrapDependencyValidationAuthorizationIssueRequestV1,
+    BootstrapDependencyValidationAuthorizationIssueResponseV1, BootstrapInputV1,
+    BootstrapReceiptV1, CompositionFindingV1, CompositionOperationV1, FindingSeverityV1,
+    InstallationReceiptV1, MaterializationActionV1, MaterializationPlanV1, OwnerBootstrapRequestV1,
     OwnerBootstrapResponseV1,
 };
 use tessara_module_contract::{ArtifactDigest, ProtocolSignaturePurposeV1, SignedEnvelopeV1};
@@ -243,22 +245,23 @@ async fn apply_inner(state: &AppState, request: ApplyRequestV1) -> anyhow::Resul
         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     }
     let lockfile_digest: ArtifactDigest = tessara_composition::canonical_digest(&request.lockfile)?;
-    let mut adapter = match OwnerHttpAdapter::prepare(state, &request.lockfile).await {
-        Ok(adapter) => adapter,
-        Err(error) => {
-            state.ledger.fail_operation(
-                accepted.operation_id,
-                CompositionFindingV1 {
-                    code: "owner_adapter_prepare_failed".into(),
-                    severity: FindingSeverityV1::Error,
-                    path: "/materialization".into(),
-                    message: error.to_string(),
-                },
-                chrono::Utc::now(),
-            )?;
-            return Err(error);
-        }
-    };
+    let mut adapter =
+        match OwnerHttpAdapter::prepare(state, &request.lockfile, &request.authorization).await {
+            Ok(adapter) => adapter,
+            Err(error) => {
+                state.ledger.fail_operation(
+                    accepted.operation_id,
+                    CompositionFindingV1 {
+                        code: "owner_adapter_prepare_failed".into(),
+                        severity: FindingSeverityV1::Error,
+                        path: "/materialization".into(),
+                        message: error.to_string(),
+                    },
+                    chrono::Utc::now(),
+                )?;
+                return Err(error);
+            }
+        };
     let receipt = state.ledger.execute(
         accepted.operation_id,
         lockfile_digest,
@@ -304,7 +307,11 @@ struct OwnerHttpAdapter {
 }
 
 impl OwnerHttpAdapter {
-    async fn prepare(state: &AppState, lockfile: &ApplicationLockfileV1) -> anyhow::Result<Self> {
+    async fn prepare(
+        state: &AppState,
+        lockfile: &ApplicationLockfileV1,
+        apply_authorization: &SignedEnvelopeV1<ApplyAuthorizationV1>,
+    ) -> anyhow::Result<Self> {
         let mut available_bootstrap_receipts = state
             .ledger
             .current_receipt()?
@@ -379,6 +386,7 @@ impl OwnerHttpAdapter {
                     let receipt = invoke_bootstrap(
                         state,
                         lockfile,
+                        apply_authorization,
                         owner,
                         input,
                         &available_bootstrap_receipts,
@@ -563,18 +571,34 @@ impl MaterializationAdapter for OwnerHttpAdapter {
 async fn invoke_bootstrap(
     state: &AppState,
     lockfile: &ApplicationLockfileV1,
+    apply_authorization: &SignedEnvelopeV1<ApplyAuthorizationV1>,
     owner: &str,
     input: &BootstrapInputV1,
     prior_receipts: &BTreeMap<String, BootstrapReceiptV1>,
 ) -> anyhow::Result<BootstrapReceiptV1> {
-    let request = prepare_bootstrap_request(
-        lockfile.installation_id,
-        lockfile.blueprint_revision,
+    let mut request = prepare_bootstrap_request(
+        BootstrapRequestContext {
+            installation_id: lockfile.installation_id,
+            desired_revision: lockfile.blueprint_revision,
+            apply_sequence: apply_authorization.payload.apply_sequence,
+            target_plan_digest: apply_authorization.payload.target_plan_digest.clone(),
+        },
         owner,
         input,
         prior_receipts,
         &state.local_cas_root,
     )?;
+    if owner != "core" {
+        request.dependency_validation = issue_bootstrap_dependency_authorization(
+            state,
+            owner,
+            &request.input_digest,
+            request.desired_revision,
+            request.apply_sequence,
+            apply_authorization,
+        )
+        .await?;
+    }
     let (url, header_name, header_value) = if owner == "core" {
         (
             format!(
@@ -621,9 +645,53 @@ async fn invoke_bootstrap(
     Ok(response.receipt)
 }
 
-fn prepare_bootstrap_request(
+async fn issue_bootstrap_dependency_authorization(
+    state: &AppState,
+    owner: &str,
+    input_digest: &ArtifactDigest,
+    desired_revision: u64,
+    apply_sequence: u64,
+    apply_authorization: &SignedEnvelopeV1<ApplyAuthorizationV1>,
+) -> anyhow::Result<Option<tessara_composition::BootstrapDependencyValidationInvocationV1>> {
+    let response = state
+        .client
+        .post(format!(
+            "{}/api/internal/composition/bootstrap/dependency-authorization",
+            state.core_url.trim_end_matches('/')
+        ))
+        .header("x-tessara-supervisor-token", &state.projection_token)
+        .json(&BootstrapDependencyValidationAuthorizationIssueRequestV1 {
+            installation_id: apply_authorization.payload.installation_id,
+            owner_definition_id: owner.to_string(),
+            input_digest: input_digest.clone(),
+            desired_revision,
+            apply_sequence,
+            apply_authorization: apply_authorization.clone(),
+        })
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.bytes().await?;
+    anyhow::ensure!(
+        status.is_success(),
+        "{owner} bootstrap dependency authorization failed with HTTP {status}: {}",
+        String::from_utf8_lossy(&body)
+    );
+    Ok(
+        serde_json::from_slice::<BootstrapDependencyValidationAuthorizationIssueResponseV1>(&body)?
+            .validation,
+    )
+}
+
+struct BootstrapRequestContext {
     installation_id: Uuid,
     desired_revision: u64,
+    apply_sequence: u64,
+    target_plan_digest: ArtifactDigest,
+}
+
+fn prepare_bootstrap_request(
+    context: BootstrapRequestContext,
     owner: &str,
     input: &BootstrapInputV1,
     prior_receipts: &BTreeMap<String, BootstrapReceiptV1>,
@@ -645,13 +713,16 @@ fn prepare_bootstrap_request(
     )?;
     let input_digest = tessara_composition::canonical_digest(&input_value)?;
     Ok(OwnerBootstrapRequestV1 {
-        installation_id,
-        desired_revision,
+        installation_id: context.installation_id,
+        desired_revision: context.desired_revision,
+        apply_sequence: context.apply_sequence,
+        target_plan_digest: context.target_plan_digest,
         idempotency_key: format!(
-            "composition:{installation_id}:{owner}:r{}:{input_digest}",
-            desired_revision
+            "composition:{}:{owner}:r{}:{input_digest}",
+            context.installation_id, context.desired_revision
         ),
         input_digest,
+        dependency_validation: None,
         input: input_value,
     })
 }
@@ -825,8 +896,12 @@ mod tests {
         };
         let installation_id = Uuid::parse_str("01980000-0000-7000-8000-00000000008a").unwrap();
         let first = prepare_bootstrap_request(
-            installation_id,
-            1,
+            BootstrapRequestContext {
+                installation_id,
+                desired_revision: 1,
+                apply_sequence: 1,
+                target_plan_digest: digest('9'),
+            },
             "tessara.dashboards",
             &input,
             &BTreeMap::from([("tessara.components".into(), component_receipt(true))]),
@@ -834,8 +909,12 @@ mod tests {
         )
         .unwrap();
         let replay = prepare_bootstrap_request(
-            installation_id,
-            1,
+            BootstrapRequestContext {
+                installation_id,
+                desired_revision: 1,
+                apply_sequence: 1,
+                target_plan_digest: digest('9'),
+            },
             "tessara.dashboards",
             &input,
             &BTreeMap::from([("tessara.components".into(), component_receipt(false))]),
@@ -847,8 +926,12 @@ mod tests {
         assert_eq!(first.input_digest, replay.input_digest);
         assert_eq!(first.idempotency_key, replay.idempotency_key);
         let other_installation = prepare_bootstrap_request(
-            Uuid::new_v4(),
-            1,
+            BootstrapRequestContext {
+                installation_id: Uuid::new_v4(),
+                desired_revision: 1,
+                apply_sequence: 1,
+                target_plan_digest: digest('9'),
+            },
             "tessara.dashboards",
             &input,
             &BTreeMap::from([("tessara.components".into(), component_receipt(false))]),

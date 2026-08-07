@@ -39,6 +39,12 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::AuthorizationGrant,
         core_public_key,
     )?;
+    let bootstrap_validation_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
+        "tessara.core",
+        "core-development-v1",
+        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
+        core_public_key,
+    )?;
     let shell_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
         "tessara.core",
         "core-development-v1",
@@ -71,6 +77,7 @@ async fn main() -> Result<()> {
     let app = router(ComponentModuleState::new(
         pool,
         authorization_verifier,
+        bootstrap_validation_verifier,
         shell_verifier,
         service_identity_registry,
         service_request_signer,

@@ -15,12 +15,19 @@ use serde_json::Value;
 use sqlx::{Postgres, Row, Transaction};
 use tessara_composition::{
     AUTHORIZATION_API_V1, ActorEvidenceV1, ApplicationBlueprintV1, ApplicationLockfileV1,
-    ApplyAuthorizationV1, ApplyOperationKindV1, ApprovedEffectV1, CompositionError,
-    CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1,
-    ReleaseCatalogV1, canonical_digest, required_effects, resolve_against,
+    ApplyAuthorizationV1, ApplyOperationKindV1, ApprovedEffectV1,
+    BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
+    BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+    BootstrapDependencyValidationAuthorizationIssueRequestV1,
+    BootstrapDependencyValidationAuthorizationIssueResponseV1,
+    BootstrapDependencyValidationAuthorizationV1, BootstrapDependencyValidationInvocationV1,
+    BootstrapDependencyValidationRequestV1, CompositionError, CompositionOperationV1,
+    InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1, ReleaseCatalogV1,
+    canonical_digest, required_effects, resolve_against, resolve_bootstrap_dependency_validation,
 };
 use tessara_module_contract::{
-    ModuleManifest, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
+    ArtifactDigest, AuthorizationAudienceV1, ModuleManifest, ProtocolSignaturePurposeV1,
+    PurposeBoundSigningKeyV1,
 };
 use uuid::Uuid;
 
@@ -60,6 +67,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route(
             "/api/internal/composition/bootstrap/core",
             post(apply_core_bootstrap),
+        )
+        .route(
+            "/api/internal/composition/bootstrap/dependency-authorization",
+            post(issue_bootstrap_dependency_authorization),
         )
         .route(
             "/api/admin/composition/drift/{finding_id}/adopt",
@@ -598,15 +609,7 @@ async fn apply_blueprint(
         approved_effects,
         reason: Some("Approved through Application Composition".into()),
     };
-    let signer = PurposeBoundSigningKeyV1::from_secret_bytes(
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER")
-            .unwrap_or_else(|_| "tessara.local.sprint-6f".into()),
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID")
-            .unwrap_or_else(|_| "apply-dev-v1".into()),
-        ProtocolSignaturePurposeV1::ApplyAuthorization,
-        decode_secret_hex("TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX")?,
-    )
-    .map_err(|error| ApiError::Internal(error.into()))?;
+    let signer = apply_authorization_signer()?;
     let signed = signer
         .sign(authorization)
         .map_err(|error| ApiError::Internal(error.into()))?;
@@ -646,6 +649,18 @@ fn decode_secret_hex(name: &str) -> ApiResult<[u8; 32]> {
             .map_err(|_| ApiError::Internal(anyhow::anyhow!("{name} is not hexadecimal")))?;
     }
     Ok(bytes)
+}
+
+fn apply_authorization_signer() -> ApiResult<PurposeBoundSigningKeyV1> {
+    PurposeBoundSigningKeyV1::from_secret_bytes(
+        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER")
+            .unwrap_or_else(|_| "tessara.local.sprint-6f".into()),
+        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID")
+            .unwrap_or_else(|_| "apply-dev-v1".into()),
+        ProtocolSignaturePurposeV1::ApplyAuthorization,
+        decode_secret_hex("TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX")?,
+    )
+    .map_err(|error| ApiError::Internal(error.into()))
 }
 
 async fn operation(
@@ -821,6 +836,258 @@ fn is_constrained_emergency_lockfile(
     Ok(&expected == projected)
 }
 
+async fn issue_bootstrap_dependency_authorization(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<BootstrapDependencyValidationAuthorizationIssueRequestV1>,
+) -> ApiResult<Json<BootstrapDependencyValidationAuthorizationIssueResponseV1>> {
+    require_projection_token(&headers)?;
+    apply_authorization_signer()?
+        .verifier()
+        .verify(&request.apply_authorization)
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+
+    let lockfile_value: Value = sqlx::query_scalar(
+        "SELECT document FROM composition_lockfiles
+         WHERE installation_id=$1 AND blueprint_revision=$2",
+    )
+    .bind(request.installation_id)
+    .bind(request.desired_revision as i64)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| {
+        ApiError::BadRequest("Bootstrap authorization lockfile is unavailable".into())
+    })?;
+    let lockfile: ApplicationLockfileV1 =
+        serde_json::from_value(lockfile_value).map_err(|error| ApiError::Internal(error.into()))?;
+    let current_receipt_digest = sqlx::query_scalar::<_, String>(
+        "SELECT digest FROM composition_receipt_projections
+         WHERE installation_id=$1 ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(request.installation_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .map(ArtifactDigest::new)
+    .transpose()
+    .map_err(|error| ApiError::Internal(error.into()))?;
+    let now = Utc::now();
+    request
+        .apply_authorization
+        .payload
+        .validate_for(
+            &lockfile.materialization_plan,
+            &lockfile.materialization_plan_digest,
+            current_receipt_digest.as_ref(),
+            now,
+        )
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    if request.apply_authorization.payload.operation != ApplyOperationKindV1::Materialize
+        || !request
+            .apply_authorization
+            .payload
+            .approved_effects
+            .contains(&ApprovedEffectV1::Bootstrap)
+        || request.installation_id != lockfile.installation_id
+        || request.desired_revision != lockfile.blueprint_revision
+        || request.apply_sequence != request.apply_authorization.payload.apply_sequence
+        || request.desired_revision != request.apply_authorization.payload.desired_revision
+        || !lockfile.materialization_plan.actions.iter().any(|action| {
+            matches!(action, MaterializationActionV1::Bootstrap { owner, .. }
+                if owner == &request.owner_definition_id)
+        })
+    {
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
+
+    let module = lockfile
+        .modules
+        .iter()
+        .find(|module| module.definition_id == request.owner_definition_id && module.enabled)
+        .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let module_instance_id = tessara_composition::module_instance_id(
+        request.installation_id,
+        &request.owner_definition_id,
+    );
+    let endpoint = module_control_endpoints()?
+        .remove(&request.owner_definition_id)
+        .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let manifest = reqwest::Client::new()
+        .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+        .header("x-tessara-module-control-key", module_control_key()?)
+        .send()
+        .await
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
+        .error_for_status()
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
+        .json::<ModuleManifest>()
+        .await
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let validation = resolve_bootstrap_dependency_validation(&lockfile, module, &manifest)
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let Some(validation) = validation else {
+        return Ok(Json(
+            BootstrapDependencyValidationAuthorizationIssueResponseV1 { validation: None },
+        ));
+    };
+    require_bootstrap_validation_provider_target(&lockfile, &validation.target).await?;
+    if canonical_digest(
+        module
+            .bootstrap
+            .as_ref()
+            .and_then(|bootstrap| match bootstrap {
+                tessara_composition::BootstrapInputV1::Inline { value, .. } => Some(value),
+                tessara_composition::BootstrapInputV1::LocalCas { .. } => None,
+            })
+            .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?,
+    )
+    .map_err(|error| ApiError::Internal(error.into()))?
+        != request.input_digest
+        || crate::module_service_requests::configured_registry()
+            .map_err(ApiError::Internal)?
+            .and_then(|registry| registry.identity(&manifest.definition_id).cloned())
+            .is_none()
+    {
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
+    let expires_at = std::cmp::min(
+        now + Duration::seconds(30),
+        request.apply_authorization.payload.expires_at,
+    );
+    if expires_at <= now {
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
+    let validation_request = BootstrapDependencyValidationRequestV1 {
+        schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+        input_digest: request.input_digest.clone(),
+        desired_revision: request.desired_revision,
+        apply_sequence: request.apply_sequence,
+        target_plan_digest: request
+            .apply_authorization
+            .payload
+            .target_plan_digest
+            .clone(),
+        payload: validation.payload,
+    };
+    let request_digest =
+        canonical_digest(&validation_request).map_err(|error| ApiError::Internal(error.into()))?;
+    let authorization = crate::core_security::protocol_signer(
+        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
+    )?
+    .sign(BootstrapDependencyValidationAuthorizationV1 {
+        schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
+        installation_id: request.installation_id,
+        module_instance_id,
+        module_definition_id: request.owner_definition_id,
+        input_digest: request.input_digest,
+        desired_revision: request.desired_revision,
+        apply_sequence: request.apply_sequence,
+        target_plan_digest: validation_request.target_plan_digest.clone(),
+        dependency_binding: validation.target.dependency_binding.clone(),
+        functional_contract: validation.target.functional_contract.clone(),
+        functional_contract_version: validation.target.functional_contract_version.clone(),
+        action: validation.target.action.clone(),
+        method: validation.target.method,
+        path: validation.target.path.clone(),
+        audience: validation.target.audience.clone(),
+        request_digest,
+        correlation_id: Uuid::new_v4(),
+        jti: Uuid::new_v4(),
+        issued_at: now,
+        expires_at,
+    })
+    .map_err(|error| ApiError::Internal(error.into()))?;
+    Ok(Json(
+        BootstrapDependencyValidationAuthorizationIssueResponseV1 {
+            validation: Some(BootstrapDependencyValidationInvocationV1 {
+                target: validation.target,
+                request: validation_request,
+                authorization,
+            }),
+        },
+    ))
+}
+
+async fn require_bootstrap_validation_provider_target(
+    lockfile: &ApplicationLockfileV1,
+    target: &tessara_composition::BootstrapDependencyValidationTargetV1,
+) -> ApiResult<()> {
+    let invalid = || ApiError::Forbidden("bootstrap:authorize".into());
+    match &target.audience {
+        AuthorizationAudienceV1::CoreInstallation { installation_id } => {
+            if *installation_id != lockfile.installation_id {
+                return Err(invalid());
+            }
+            let action = crate::core_service_providers::resolve_service_action(
+                &target.functional_contract,
+                &target.action,
+            )
+            .ok_or_else(invalid)?;
+            let contract_version =
+                crate::core_service_providers::contract_version(&target.functional_contract)
+                    .ok_or_else(invalid)?;
+            if action.path != target.path
+                || action.method != target.method
+                || action.functional_contract != target.functional_contract
+                || contract_version != target.functional_contract_version
+            {
+                return Err(invalid());
+            }
+        }
+        AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id,
+            module_definition_id,
+        } => {
+            let provider = lockfile
+                .modules
+                .iter()
+                .find(|module| {
+                    module.enabled && module.definition_id == module_definition_id.as_str()
+                })
+                .ok_or_else(invalid)?;
+            if *module_instance_id
+                != tessara_composition::module_instance_id(
+                    lockfile.installation_id,
+                    &provider.definition_id,
+                )
+            {
+                return Err(invalid());
+            }
+            let endpoint = module_control_endpoints()?
+                .remove(&provider.definition_id)
+                .ok_or_else(invalid)?;
+            let manifest = reqwest::Client::new()
+                .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+                .header("x-tessara-module-control-key", module_control_key()?)
+                .send()
+                .await
+                .map_err(|_| invalid())?
+                .error_for_status()
+                .map_err(|_| invalid())?
+                .json::<ModuleManifest>()
+                .await
+                .map_err(|_| invalid())?;
+            if manifest.definition_id != *module_definition_id
+                || manifest.release_version != provider.version
+                || canonical_digest(&manifest).map_err(|error| ApiError::Internal(error.into()))?
+                    != provider.manifest_digest
+                || !manifest.provided_contracts.iter().any(|contract| {
+                    contract.id.as_str() == target.functional_contract
+                        && contract.version == target.functional_contract_version
+                })
+                || !manifest.provided_service_actions.iter().any(|action| {
+                    action.functional_contract.as_str() == target.functional_contract
+                        && action.authorization_action == target.action
+                        && action.method == target.method
+                        && action.path == target.path
+                })
+            {
+                return Err(invalid());
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn apply_core_bootstrap(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -828,6 +1095,8 @@ async fn apply_core_bootstrap(
 ) -> ApiResult<Json<tessara_composition::OwnerBootstrapResponseV1>> {
     require_projection_token(&headers)?;
     if request.input.schema_version != "tessara.io/core-bootstrap/v1"
+        || request.apply_sequence == 0
+        || request.dependency_validation.is_some()
         || request.idempotency_key.trim().is_empty()
         || !request
             .validate_input_digest()
@@ -1226,15 +1495,7 @@ async fn emergency_disable(
         approved_effects: BTreeSet::from([ApprovedEffectV1::Disable]),
         reason: Some(request.reason.trim().into()),
     };
-    let signer = PurposeBoundSigningKeyV1::from_secret_bytes(
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER")
-            .unwrap_or_else(|_| "tessara.local.sprint-6f".into()),
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID")
-            .unwrap_or_else(|_| "apply-dev-v1".into()),
-        ProtocolSignaturePurposeV1::ApplyAuthorization,
-        decode_secret_hex("TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX")?,
-    )
-    .map_err(|error| ApiError::Internal(error.into()))?;
+    let signer = apply_authorization_signer()?;
     let signed = signer
         .sign(authorization)
         .map_err(|error| ApiError::Internal(error.into()))?;

@@ -1073,6 +1073,20 @@ CREATE TABLE consumed_module_service_nonces (
     PRIMARY KEY (module_instance_id, nonce)
 );
 
+-- Materialization-time service requests precede final Module Instance
+-- enrollment. Their apply-bound authorization is replay protected without
+-- creating provisional release or instance rows.
+CREATE TABLE consumed_bootstrap_validation_authorizations (
+    authorization_jti UUID PRIMARY KEY,
+    installation_id UUID NOT NULL REFERENCES application_installations(id) ON DELETE CASCADE,
+    module_instance_id UUID NOT NULL,
+    service_nonce UUID NOT NULL,
+    correlation_id UUID NOT NULL,
+    issued_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (module_instance_id, service_nonce)
+);
+
 CREATE TABLE deployment_receipts (
     installation_id UUID NOT NULL REFERENCES application_installations(id) ON DELETE RESTRICT,
     revision BIGINT NOT NULL CHECK (revision > 0),

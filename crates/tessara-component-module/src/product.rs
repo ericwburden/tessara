@@ -14,10 +14,11 @@ use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, Postgres, Row, Transaction};
 use tessara_components_contract::{COMPONENT_RESOURCE_TYPE, ComponentVersionReference};
 use tessara_datasets_contract::{
-    DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction, DatasetCatalogRequest, DatasetCatalogResponse,
-    DatasetCompatibilityRequest, DatasetCompatibilityResponse, DatasetDistinctValuesRequest,
-    DatasetDistinctValuesResponse, DatasetExecutionResponse, DatasetFieldRequirement,
-    DatasetMajorLineMetadata, DatasetMajorLineReference, DatasetSchemaRequest,
+    DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY, DATASET_CONTRACT_SCHEMA_VERSION,
+    DatasetAction, DatasetCatalogRequest, DatasetCatalogResponse, DatasetCompatibilityRequest,
+    DatasetCompatibilityResponse, DatasetDistinctValuesRequest, DatasetDistinctValuesResponse,
+    DatasetExecutionResponse, DatasetMajorLineMetadata, DatasetMajorLineReference,
+    DatasetSchemaRequest,
 };
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
@@ -363,19 +364,33 @@ async fn create_component(
             "Component create request is invalid".into(),
         ));
     }
-    let authorization = authorization_header(&headers)?;
-    let metadata: DatasetMajorLineMetadata = dataset_client::post(
-        &state,
-        authorization,
-        "/api/private/datasets/schema",
-        &DatasetSchemaRequest {
-            schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
-            action: DatasetAction::ResolveSchema,
-            reference: request.version.dataset_reference.clone(),
-        },
+    let payload_digest = mutation_digest("components.create", &[], &request)?;
+
+    // A committed create result remains authoritative if the Dataset provider
+    // is unavailable when the caller retries. Take the same advisory lock used
+    // by the write transaction, then release this read-only preflight before
+    // any provider I/O.
+    let mut replay_transaction = state.pool.begin().await?;
+    if let Some(response) = load_mutation_replay(
+        &mut replay_transaction,
+        &grant.payload,
+        "components.create",
+        idempotency_key,
+        &payload_digest,
     )
-    .await?;
-    let findings = component_input_findings(&request.version, &metadata);
+    .await?
+    {
+        replay_transaction.rollback().await?;
+        return Ok(Json(response));
+    }
+    replay_transaction.rollback().await?;
+
+    // Both versioned Dataset checks finish before the Component write
+    // transaction begins, so incompatibility or provider outage cannot leave a
+    // partial Component definition, version, or replay record.
+    let authorization = authorization_header(&headers)?;
+    let (metadata, findings) =
+        validate_version_input(&state, authorization, &grant.payload, &request.version).await?;
     if !findings.is_empty() {
         return Err(ComponentModuleError::BadRequest(
             findings
@@ -385,40 +400,27 @@ async fn create_component(
                 .join("; "),
         ));
     }
-    require_scope(&grant.payload, MANAGE_CAPABILITY, &metadata.scope_node_ids)?;
     let mut scope_node_ids = metadata.scope_node_ids;
     scope_node_ids.sort_unstable();
     scope_node_ids.dedup();
-    let payload_digest = format!(
-        "sha256:{:x}",
-        Sha256::digest(
-            serde_json::to_vec(&request)
-                .map_err(|error| ComponentModuleError::Internal(error.to_string()))?
-        )
-    );
     let security = load_security_state(&state.pool).await?.ok_or_else(|| {
         ComponentModuleError::Unavailable("Component security state is unavailable".into())
     })?;
     let component_id = Uuid::new_v4();
     let version_id = Uuid::new_v4();
     let mut transaction = state.pool.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
-        .bind(idempotency_key)
-        .execute(&mut *transaction)
-        .await?;
-    if let Some((actor_id, action, stored_digest, result)) = sqlx::query_as::<_, (Uuid, String, String, Value)>(
-        "SELECT original_actor_id,action,payload_digest,result FROM component_mutation_replays WHERE idempotency_key=$1",
+    // A concurrent original request may have committed while provider
+    // validation ran; recheck under the transaction lock before writing.
+    if let Some(response) = load_mutation_replay(
+        &mut transaction,
+        &grant.payload,
+        "components.create",
+        idempotency_key,
+        &payload_digest,
     )
-    .bind(idempotency_key)
-    .fetch_optional(&mut *transaction)
     .await?
     {
-        if actor_id != grant.payload.original_actor_id || action != "components.create" || stored_digest != payload_digest {
-            return Err(ComponentModuleError::Conflict("Component idempotency key was reused with different input".into()));
-        }
-        return serde_json::from_value(result)
-            .map(Json)
-            .map_err(|error| ComponentModuleError::Internal(error.to_string()));
+        return Ok(Json(response));
     }
     sqlx::query("INSERT INTO components(id,name,slug,description) VALUES($1,$2,$3,$4)")
         .bind(component_id)
@@ -488,15 +490,15 @@ async fn create_component(
             config: request.version.config.clone(),
         }],
     };
-    sqlx::query("INSERT INTO component_mutation_replays(jti,original_actor_id,action,payload_digest,idempotency_key,result) VALUES($1,$2,$3,$4,$5,$6)")
-        .bind(grant.payload.jti)
-        .bind(grant.payload.original_actor_id)
-        .bind("components.create")
-        .bind(&payload_digest)
-        .bind(idempotency_key)
-        .bind(serde_json::to_value(&response).map_err(|error| ComponentModuleError::Internal(error.to_string()))?)
-        .execute(&mut *transaction)
-        .await?;
+    record_mutation_replay(
+        &mut transaction,
+        &grant.payload,
+        "components.create",
+        idempotency_key,
+        &payload_digest,
+        &response,
+    )
+    .await?;
     transaction.commit().await?;
     Ok(Json(response))
 }
@@ -1547,34 +1549,10 @@ async fn validate_version_input(
         },
     )
     .await?;
+    crate::require_ready_dataset_metadata(&metadata, &input.dataset_reference)?;
     require_scope(grant, MANAGE_CAPABILITY, &metadata.scope_node_ids)?;
-    let field_types = metadata
-        .fields
-        .iter()
-        .map(|field| (field.key.as_str(), field.field_type.as_str()))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let required_fields = validation::required_field_keys(&input.component_type, &input.config)
-        .into_iter()
-        .map(|field_key| DatasetFieldRequirement {
-            accepted_types: field_types.get(field_key.as_str()).map_or_else(
-                || {
-                    [
-                        "boolean",
-                        "date",
-                        "multi_choice",
-                        "number",
-                        "single_choice",
-                        "text",
-                    ]
-                    .into_iter()
-                    .map(str::to_string)
-                    .collect()
-                },
-                |field_type| vec![(*field_type).to_string()],
-            ),
-            field_key,
-        })
-        .collect();
+    let required_fields =
+        validation::required_field_requirements(&input.component_type, &input.config);
     let compatibility: DatasetCompatibilityResponse = dataset_client::post(
         state,
         authorization,
@@ -1590,6 +1568,15 @@ async fn validate_version_input(
     if compatibility.schema_version != DATASET_CONTRACT_SCHEMA_VERSION {
         return Err(ComponentModuleError::Unavailable(
             "Dataset compatibility response uses an unsupported schema".into(),
+        ));
+    }
+    if compatibility
+        .findings
+        .iter()
+        .any(|finding| finding.code == DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY)
+    {
+        return Err(ComponentModuleError::Unavailable(
+            "Dataset materialization is not ready; retry the request".into(),
         ));
     }
     let mut findings = component_input_findings(input, &metadata);

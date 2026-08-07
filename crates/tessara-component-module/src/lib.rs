@@ -18,6 +18,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool};
+use tessara_datasets_contract::{DatasetMajorLineMetadata, DatasetMajorLineReference};
 use tessara_module_contract::{
     ModuleDefinitionId, ModuleManifest, ModuleServiceIdentityRegistryV1, PurposeBoundSigningKeyV1,
     PurposeBoundVerifyingKeyV1, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
@@ -42,6 +43,7 @@ pub const MANAGE_CAPABILITY: &str = "components:manage";
 pub struct ComponentModuleState {
     pub pool: PgPool,
     pub core_authorization_verifier: PurposeBoundVerifyingKeyV1,
+    pub core_bootstrap_validation_verifier: PurposeBoundVerifyingKeyV1,
     pub core_shell_verifier: PurposeBoundVerifyingKeyV1,
     pub service_identity_registry: ModuleServiceIdentityRegistryV1,
     pub service_request_signer: Arc<PurposeBoundSigningKeyV1>,
@@ -94,6 +96,7 @@ impl ComponentModuleState {
     pub fn new(
         pool: PgPool,
         core_authorization_verifier: PurposeBoundVerifyingKeyV1,
+        core_bootstrap_validation_verifier: PurposeBoundVerifyingKeyV1,
         core_shell_verifier: PurposeBoundVerifyingKeyV1,
         service_identity_registry: ModuleServiceIdentityRegistryV1,
         service_request_signer: Arc<PurposeBoundSigningKeyV1>,
@@ -102,6 +105,7 @@ impl ComponentModuleState {
         Ok(Self {
             pool,
             core_authorization_verifier,
+            core_bootstrap_validation_verifier,
             core_shell_verifier,
             service_identity_registry,
             service_request_signer,
@@ -422,6 +426,7 @@ async fn update_security_state(
 #[serde(deny_unknown_fields)]
 struct ComponentBootstrapV1 {
     schema_version: String,
+    dependency_validation: tessara_datasets_contract::DatasetBootstrapValidationBatch,
     components: Vec<ComponentBootstrapItemV1>,
 }
 
@@ -495,7 +500,6 @@ fn component_bootstrap_is_valid(bootstrap: &ComponentBootstrapV1, installation_i
                     .any(|node_id| !scope.insert(*node_id))
                 || version.dataset_reference.reference().installation_id() != installation_id
                 || !version.config.is_object()
-                || !bootstrap_config_is_valid(&version.component_type, &version.config)
                 || !matches!(
                     version.component_type.as_str(),
                     "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
@@ -528,7 +532,7 @@ fn component_bootstrap_is_valid(bootstrap: &ComponentBootstrapV1, installation_i
                 version_owners.get(&successor_id) == Some(&component.component_id)
             })
         })
-    })
+    }) && bootstrap.dependency_validation == component_bootstrap_dataset_validation_batch(bootstrap)
 }
 
 async fn apply_bootstrap(
@@ -538,6 +542,7 @@ async fn apply_bootstrap(
 ) -> Result<Json<tessara_composition::OwnerBootstrapResponseV1>, ComponentModuleError> {
     require_control_key(&headers)?;
     if request.input.schema_version != "tessara.io/component-bootstrap/v1"
+        || request.apply_sequence == 0
         || request.idempotency_key.trim().is_empty()
         || !request
             .validate_input_digest()
@@ -555,6 +560,83 @@ async fn apply_bootstrap(
             "Component bootstrap belongs to another installation".into(),
         ));
     }
+    let validation_invocation = request
+        .dependency_validation
+        .as_ref()
+        .ok_or(ComponentModuleError::Forbidden)?;
+    state
+        .core_bootstrap_validation_verifier
+        .verify(&validation_invocation.authorization)
+        .map_err(|_| ComponentModuleError::Forbidden)?;
+    let expected_audience = tessara_module_contract::AuthorizationAudienceV1::CoreInstallation {
+        installation_id: request.installation_id,
+    };
+    if validation_invocation.target.dependency_binding
+        != tessara_datasets_contract::DATASET_BINDING_KEY
+        || validation_invocation.target.functional_contract
+            != tessara_datasets_contract::DATASET_CONTRACT_ID
+        || validation_invocation
+            .target
+            .functional_contract_version
+            .to_string()
+            != tessara_datasets_contract::DATASET_CONTRACT_VERSION
+        || validation_invocation.target.action
+            != tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_ACTION
+        || validation_invocation.target.method != tessara_module_contract::ServiceActionMethod::Post
+        || validation_invocation.target.path
+            != tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_PATH
+        || validation_invocation.target.audience != expected_audience
+        || validation_invocation.request.schema_version
+            != tessara_composition::BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1
+        || validation_invocation.request.input_digest != request.input_digest
+        || validation_invocation.request.desired_revision != request.desired_revision
+        || validation_invocation.request.apply_sequence != request.apply_sequence
+        || validation_invocation.request.target_plan_digest != request.target_plan_digest
+    {
+        return Err(ComponentModuleError::Forbidden);
+    }
+    let request_digest = tessara_composition::canonical_digest(&validation_invocation.request)
+        .map_err(|error| ComponentModuleError::BadRequest(error.to_string()))?;
+    validation_invocation
+        .authorization
+        .payload
+        .validate_for(
+            &tessara_composition::BootstrapDependencyValidationContextV1 {
+                installation_id: request.installation_id,
+                module_instance_id: security.module_instance_id,
+                module_definition_id: MODULE_DEFINITION_ID,
+                input_digest: &request.input_digest,
+                desired_revision: request.desired_revision,
+                apply_sequence: request.apply_sequence,
+                target_plan_digest: &request.target_plan_digest,
+                dependency_binding: tessara_datasets_contract::DATASET_BINDING_KEY,
+                functional_contract: tessara_datasets_contract::DATASET_CONTRACT_ID,
+                functional_contract_version: &validation_invocation
+                    .target
+                    .functional_contract_version,
+                action: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_ACTION,
+                method: tessara_module_contract::ServiceActionMethod::Post,
+                path: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_PATH,
+                audience: &expected_audience,
+                request_digest: &request_digest,
+                now: Utc::now(),
+            },
+        )
+        .map_err(|_| ComponentModuleError::Forbidden)?;
+    if !component_bootstrap_is_valid(&request.input, request.installation_id) {
+        return Err(ComponentModuleError::BadRequest(
+            "Component bootstrap input is invalid".into(),
+        ));
+    }
+    let locked_batch: tessara_datasets_contract::DatasetBootstrapValidationBatch =
+        serde_json::from_value(validation_invocation.request.payload.clone())
+            .map_err(|_| ComponentModuleError::Forbidden)?;
+    if locked_batch != request.input.dependency_validation {
+        return Err(ComponentModuleError::Forbidden);
+    }
+    let validation_response =
+        dataset_client::post_bootstrap_validation(&state, validation_invocation).await?;
+    validate_component_bootstrap_datasets(&request.input, validation_response)?;
     if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
         "SELECT input_digest,receipt FROM component_bootstrap_receipts WHERE idempotency_key=$1",
     )
@@ -572,11 +654,6 @@ async fn apply_bootstrap(
                 .map_err(|error| ComponentModuleError::Internal(error.to_string()))?;
         response.receipt.changed = false;
         return Ok(Json(response));
-    }
-    if !component_bootstrap_is_valid(&request.input, request.installation_id) {
-        return Err(ComponentModuleError::BadRequest(
-            "Component bootstrap input is invalid".into(),
-        ));
     }
     let mut transaction = state.pool.begin().await?;
     let mut resource_ids = std::collections::BTreeMap::new();
@@ -672,46 +749,105 @@ async fn apply_bootstrap(
     Ok(Json(response))
 }
 
-fn bootstrap_config_is_valid(component_type: &str, config: &Value) -> bool {
-    let mut keys = std::collections::BTreeSet::new();
-    for key in [
-        "summary_field",
-        "category_field",
-        "comparison_field",
-        "x_field",
-    ] {
-        if let Some(value) = config
-            .get(key)
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
+fn component_bootstrap_dataset_validation_batch(
+    bootstrap: &ComponentBootstrapV1,
+) -> tessara_datasets_contract::DatasetBootstrapValidationBatch {
+    let items = bootstrap
+        .components
+        .iter()
+        .flat_map(|component| &component.versions)
+        .map(
+            |version| tessara_datasets_contract::DatasetBootstrapValidationItem {
+                validation_key: version.resource_key.clone(),
+                reference: version.dataset_reference.clone(),
+                required_fields: validation::required_field_requirements(
+                    &version.component_type,
+                    &version.config,
+                ),
+            },
+        )
+        .collect();
+    tessara_datasets_contract::DatasetBootstrapValidationBatch {
+        schema_version: tessara_datasets_contract::DATASET_CONTRACT_SCHEMA_VERSION,
+        items,
+    }
+}
+
+fn validate_component_bootstrap_datasets(
+    bootstrap: &ComponentBootstrapV1,
+    response: tessara_datasets_contract::DatasetBootstrapValidationResponse,
+) -> Result<(), ComponentModuleError> {
+    if response.schema_version != tessara_datasets_contract::DATASET_CONTRACT_SCHEMA_VERSION {
+        return Err(ComponentModuleError::BadRequest(
+            "Component bootstrap Dataset validation failed".into(),
+        ));
+    }
+    let mut results = std::collections::BTreeMap::new();
+    for result in response.results {
+        if results
+            .insert(result.validation_key.clone(), result)
+            .is_some()
         {
-            keys.insert(value.to_string());
+            return Err(ComponentModuleError::BadRequest(
+                "Component bootstrap Dataset validation failed".into(),
+            ));
         }
     }
-    for key in config
-        .get("visible_columns")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|value| {
-            value
-                .as_str()
-                .or_else(|| value.get("key").and_then(Value::as_str))
-                .or_else(|| value.get("field_key").and_then(Value::as_str))
-        })
+    for version in bootstrap
+        .components
+        .iter()
+        .flat_map(|component| &component.versions)
     {
-        keys.insert(key.to_string());
+        let Some(result) = results.remove(&version.resource_key) else {
+            return Err(ComponentModuleError::BadRequest(
+                "Component bootstrap Dataset validation failed".into(),
+            ));
+        };
+        require_ready_dataset_metadata(&result.metadata, &version.dataset_reference)?;
+        let mut expected_scope = version.dataset_scope_node_ids.clone();
+        expected_scope.sort_unstable();
+        let mut actual_scope = result.metadata.scope_node_ids.clone();
+        actual_scope.sort_unstable();
+        if expected_scope != actual_scope
+            || result.compatibility.schema_version
+                != tessara_datasets_contract::DATASET_CONTRACT_SCHEMA_VERSION
+            || !result.compatibility.compatible
+            || !result.compatibility.findings.is_empty()
+            || !validation::validate_component_config(
+                &version.component_type,
+                &version.config,
+                &result.metadata.fields,
+            )
+            .is_empty()
+        {
+            return Err(ComponentModuleError::BadRequest(
+                "Component bootstrap Dataset validation failed".into(),
+            ));
+        }
     }
-    let fields = keys
-        .into_iter()
-        .map(|key| tessara_datasets_contract::DatasetFieldContract {
-            label: key.clone(),
-            key,
-            field_type: "text".into(),
-            restriction_tier: "provider_enforced".into(),
-        })
-        .collect::<Vec<_>>();
-    validation::validate_component_config(component_type, config, &fields).is_empty()
+    if !results.is_empty() {
+        return Err(ComponentModuleError::BadRequest(
+            "Component bootstrap Dataset validation failed".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn require_ready_dataset_metadata(
+    metadata: &DatasetMajorLineMetadata,
+    requested_reference: &DatasetMajorLineReference,
+) -> Result<(), ComponentModuleError> {
+    if &metadata.reference != requested_reference {
+        return Err(ComponentModuleError::Unavailable(
+            "Dataset provider returned metadata for another reference".into(),
+        ));
+    }
+    if metadata.materialization_state != "ready" {
+        return Err(ComponentModuleError::Unavailable(
+            "Dataset materialization is not ready; retry the request".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn component_reference(
@@ -986,9 +1122,7 @@ mod tests {
                 "sprint-8a-row-count-inactive",
             ])
         );
-        assert!(versions.iter().all(|version| {
-            bootstrap_config_is_valid(&version.component_type, &version.config)
-        }));
+        assert!(versions.iter().all(|version| version.config.is_object()));
         let predecessor = versions
             .iter()
             .find(|version| version.resource_key == "sprint-8a-row-count-inactive")
@@ -1016,6 +1150,85 @@ mod tests {
         assert!(!component_bootstrap_is_valid(
             &cross_component_successor,
             Uuid::parse_str("01980000-0000-7000-8000-00000000008a").unwrap()
+        ));
+    }
+
+    #[test]
+    fn bootstrap_rejects_non_ready_and_mismatched_dataset_metadata() {
+        let blueprint: tessara_composition::ApplicationBlueprintV1 =
+            serde_json::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../deploy/sprint-8a/blueprints/reference.json"
+            )))
+            .expect("valid Sprint 8A Blueprint");
+        let module = blueprint
+            .modules
+            .into_iter()
+            .find(|module| module.definition_id == MODULE_DEFINITION_ID)
+            .expect("Component selection");
+        let tessara_composition::BootstrapInputV1::Inline { value, .. } =
+            module.bootstrap.expect("Component bootstrap")
+        else {
+            panic!("Sprint 8A Component bootstrap must be inline");
+        };
+        let bootstrap: ComponentBootstrapV1 =
+            serde_json::from_value(value).expect("typed Component bootstrap");
+        let version = &bootstrap.components[0].versions[0];
+        let metadata = |reference, materialization_state: &str| DatasetMajorLineMetadata {
+            reference,
+            dataset_name: "Validation Dataset".into(),
+            dataset_slug: "validation-dataset".into(),
+            grain: "record".into(),
+            tags: Vec::new(),
+            provenance: tessara_datasets_contract::DatasetProvenanceSummary {
+                forms: Vec::new(),
+                datasets: Vec::new(),
+            },
+            materialization_state: materialization_state.into(),
+            fields: Vec::new(),
+            scope_node_ids: version.dataset_scope_node_ids.clone(),
+        };
+        let response = |metadata| tessara_datasets_contract::DatasetBootstrapValidationResponse {
+            schema_version: tessara_datasets_contract::DATASET_CONTRACT_SCHEMA_VERSION,
+            results: vec![
+                tessara_datasets_contract::DatasetBootstrapValidationResult {
+                    validation_key: version.resource_key.clone(),
+                    metadata,
+                    compatibility: tessara_datasets_contract::DatasetCompatibilityResponse {
+                        schema_version: tessara_datasets_contract::DATASET_CONTRACT_SCHEMA_VERSION,
+                        compatible: true,
+                        findings: Vec::new(),
+                    },
+                },
+            ],
+        };
+
+        let non_ready = validate_component_bootstrap_datasets(
+            &bootstrap,
+            response(metadata(version.dataset_reference.clone(), "rebuilding")),
+        )
+        .expect_err("non-ready Dataset metadata must block Component bootstrap");
+        assert!(matches!(
+            non_ready,
+            ComponentModuleError::Unavailable(message)
+                if message == "Dataset materialization is not ready; retry the request"
+        ));
+
+        let mismatched_reference = DatasetMajorLineReference::from_parts(
+            version.dataset_reference.reference().installation_id(),
+            Uuid::new_v4(),
+            version.dataset_reference.major(),
+        )
+        .expect("different valid Dataset reference");
+        let mismatched = validate_component_bootstrap_datasets(
+            &bootstrap,
+            response(metadata(mismatched_reference, "ready")),
+        )
+        .expect_err("mismatched Dataset metadata must block Component bootstrap");
+        assert!(matches!(
+            mismatched,
+            ComponentModuleError::Unavailable(message)
+                if message == "Dataset provider returned metadata for another reference"
         ));
     }
 

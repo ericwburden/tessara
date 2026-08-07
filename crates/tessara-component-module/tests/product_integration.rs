@@ -25,22 +25,29 @@ use tessara_components_contract::{
     ComponentVersionReference,
 };
 use tessara_datasets_contract::{
-    DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction, DatasetCompatibilityFinding,
-    DatasetCompatibilityRequest, DatasetCompatibilityResponse, DatasetExecutionRequest,
-    DatasetExecutionResponse, DatasetExecutionRow, DatasetFieldContract, DatasetMajorLineMetadata,
-    DatasetMajorLineReference, DatasetSchemaRequest,
+    DATASET_BOOTSTRAP_VALIDATION_PATH, DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction,
+    DatasetBootstrapValidationBatch, DatasetBootstrapValidationResponse,
+    DatasetBootstrapValidationResult, DatasetCompatibilityFinding, DatasetCompatibilityRequest,
+    DatasetCompatibilityResponse, DatasetExecutionRequest, DatasetExecutionResponse,
+    DatasetExecutionRow, DatasetFieldContract, DatasetMajorLineMetadata, DatasetMajorLineReference,
+    DatasetSchemaRequest,
 };
 use tessara_module_contract::{
     AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2, AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
-    AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1, AuthorizationExchangeRequestV2,
-    AuthorizationExchangeResponseV2, AuthorizationGrantOperationV1, AuthorizationGrantV2,
-    AuthorizationGrantV3, CapabilityScopeBindingV1, DependencyBindingKey, FunctionalContractId,
-    ModuleDefinitionId, ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1,
-    ModuleServiceRequestV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, ResourceOwner,
-    SecurityCapabilityId, SignedEnvelopeV1, TypedResourceReference,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, ArtifactDigest, AuthorizationAudienceV1,
+    AuthorizationExchangeRequestV2, AuthorizationExchangeResponseV2, AuthorizationGrantOperationV1,
+    AuthorizationGrantV2, AuthorizationGrantV3, CapabilityScopeBindingV1, DependencyBindingKey,
+    FunctionalContractId, ModuleDefinitionId, ModuleServiceIdentityRegistryV1,
+    ModuleServicePrincipalV1, ModuleServiceRequestV1, ProtocolSignaturePurposeV1,
+    PurposeBoundSigningKeyV1, ResourceOwner, SecurityCapabilityId, SignedEnvelopeV1,
+    TypedResourceReference,
 };
 use tower::ServiceExt;
 use uuid::Uuid;
+
+const DATASET_METADATA_RESPONSE_READY: usize = 0;
+const DATASET_METADATA_RESPONSE_REBUILDING: usize = 1;
+const DATASET_METADATA_RESPONSE_MISMATCHED_REFERENCE: usize = 2;
 
 #[tokio::test]
 async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_nondisclosure() {
@@ -109,6 +116,10 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
                         "/api/private/datasets/compatibility",
                         post(dataset_compatibility),
                     )
+                    .route(
+                        DATASET_BOOTSTRAP_VALIDATION_PATH,
+                        post(dataset_bootstrap_validation),
+                    )
                     .route("/api/private/datasets/execute", post(dataset_execute))
                     .route(
                         "/api/private/module-authorization/exchange",
@@ -126,6 +137,12 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         "component-product-test",
         ProtocolSignaturePurposeV1::AuthorizationGrant,
         81,
+    );
+    let bootstrap_validation_signer = signing_key(
+        "tessara.core",
+        "component-bootstrap-validation-test",
+        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
+        85,
     );
     let shell_signer = signing_key(
         "tessara.core",
@@ -164,6 +181,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         ComponentModuleState::new(
             pool.clone(),
             core_signer.verifier(),
+            bootstrap_validation_signer.verifier(),
             shell_signer.verifier(),
             service_identity_registry,
             component_service_signer,
@@ -171,6 +189,228 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         )
         .expect("Component module state"),
     );
+
+    let valid_bootstrap_input = component_bootstrap_input(
+        &dataset_reference,
+        allowed_scope,
+        json!({
+            "visible_columns": ["label", "amount"],
+            "search_fields": ["label"],
+            "default_sort": {"field_key": "label", "direction": "asc"},
+            "page_size": 25,
+            "display_labels": {"amount": "Total"}
+        }),
+    );
+    let valid_bootstrap_digest = tessara_composition::canonical_digest(&valid_bootstrap_input)
+        .expect("valid bootstrap digest");
+    let missing_authorization = control_request(
+        &app,
+        "/api/private/bootstrap",
+        bootstrap_control_body(
+            installation_id,
+            valid_bootstrap_digest.clone(),
+            "bootstrap-missing-authorization",
+            valid_bootstrap_input.clone(),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(missing_authorization.status, StatusCode::FORBIDDEN);
+    assert_component_product_empty(&pool).await;
+    assert_eq!(
+        dataset.bootstrap_validation_calls.load(Ordering::Relaxed),
+        0,
+        "missing authorization must fail before provider validation"
+    );
+
+    let wrong_digest_authorization = signed_bootstrap_validation_authorization(
+        &bootstrap_validation_signer,
+        installation_id,
+        module_instance_id,
+        tessara_composition::canonical_digest(&json!({"different": "bootstrap"}))
+            .expect("different bootstrap digest"),
+        &valid_bootstrap_input,
+    );
+    let wrong_digest = control_request(
+        &app,
+        "/api/private/bootstrap",
+        bootstrap_control_body(
+            installation_id,
+            valid_bootstrap_digest.clone(),
+            "bootstrap-wrong-authorization-digest",
+            valid_bootstrap_input.clone(),
+            Some(wrong_digest_authorization),
+        ),
+    )
+    .await;
+    assert_eq!(wrong_digest.status, StatusCode::FORBIDDEN);
+    assert_component_product_empty(&pool).await;
+    assert_eq!(
+        dataset.bootstrap_validation_calls.load(Ordering::Relaxed),
+        0,
+        "wrong-digest authorization must fail before provider validation"
+    );
+
+    dataset
+        .metadata_response_mode
+        .store(DATASET_METADATA_RESPONSE_REBUILDING, Ordering::Relaxed);
+    let non_ready_bootstrap_calls = dataset.bootstrap_validation_calls.load(Ordering::Relaxed);
+    let non_ready_validation = signed_bootstrap_validation_authorization(
+        &bootstrap_validation_signer,
+        installation_id,
+        module_instance_id,
+        valid_bootstrap_digest.clone(),
+        &valid_bootstrap_input,
+    );
+    let non_ready_bootstrap = control_request(
+        &app,
+        "/api/private/bootstrap",
+        bootstrap_control_body(
+            installation_id,
+            valid_bootstrap_digest.clone(),
+            "bootstrap-non-ready-dataset",
+            valid_bootstrap_input.clone(),
+            Some(non_ready_validation),
+        ),
+    )
+    .await;
+    assert_eq!(
+        non_ready_bootstrap.status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "{}",
+        non_ready_bootstrap.body
+    );
+    assert_eq!(
+        non_ready_bootstrap.body["code"],
+        "component.dependency_unavailable"
+    );
+    assert_component_product_empty(&pool).await;
+    assert_eq!(
+        dataset.bootstrap_validation_calls.load(Ordering::Relaxed),
+        non_ready_bootstrap_calls + 1,
+        "non-ready bootstrap must fail from the provider-owned validation result"
+    );
+
+    dataset.metadata_response_mode.store(
+        DATASET_METADATA_RESPONSE_MISMATCHED_REFERENCE,
+        Ordering::Relaxed,
+    );
+    let mismatched_bootstrap_calls = dataset.bootstrap_validation_calls.load(Ordering::Relaxed);
+    let mismatched_validation = signed_bootstrap_validation_authorization(
+        &bootstrap_validation_signer,
+        installation_id,
+        module_instance_id,
+        valid_bootstrap_digest.clone(),
+        &valid_bootstrap_input,
+    );
+    let mismatched_bootstrap = control_request(
+        &app,
+        "/api/private/bootstrap",
+        bootstrap_control_body(
+            installation_id,
+            valid_bootstrap_digest.clone(),
+            "bootstrap-mismatched-dataset-metadata",
+            valid_bootstrap_input.clone(),
+            Some(mismatched_validation),
+        ),
+    )
+    .await;
+    assert_eq!(
+        mismatched_bootstrap.status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "{}",
+        mismatched_bootstrap.body
+    );
+    assert_eq!(
+        mismatched_bootstrap.body["code"],
+        "component.dependency_unavailable"
+    );
+    assert_component_product_empty(&pool).await;
+    assert_eq!(
+        dataset.bootstrap_validation_calls.load(Ordering::Relaxed),
+        mismatched_bootstrap_calls + 1,
+        "mismatched echoed metadata must fail before Component bootstrap writes"
+    );
+    dataset
+        .metadata_response_mode
+        .store(DATASET_METADATA_RESPONSE_READY, Ordering::Relaxed);
+
+    let nonexistent_input = component_bootstrap_input(
+        &DatasetMajorLineReference::from_parts(installation_id, Uuid::new_v4(), 1)
+            .expect("nonexistent Dataset major-line reference"),
+        allowed_scope,
+        json!({"visible_columns": ["label"]}),
+    );
+    let nonexistent_digest = tessara_composition::canonical_digest(&nonexistent_input)
+        .expect("nonexistent-reference bootstrap digest");
+    let nonexistent_validation = signed_bootstrap_validation_authorization(
+        &bootstrap_validation_signer,
+        installation_id,
+        module_instance_id,
+        nonexistent_digest.clone(),
+        &nonexistent_input,
+    );
+    let nonexistent_bootstrap_calls = dataset.bootstrap_validation_calls.load(Ordering::Relaxed);
+    let nonexistent_reference = control_request(
+        &app,
+        "/api/private/bootstrap",
+        bootstrap_control_body(
+            installation_id,
+            nonexistent_digest.clone(),
+            "bootstrap-nonexistent-dataset",
+            nonexistent_input,
+            Some(nonexistent_validation),
+        ),
+    )
+    .await;
+    assert_eq!(nonexistent_reference.status, StatusCode::BAD_REQUEST);
+    assert_component_product_empty(&pool).await;
+    assert_eq!(
+        dataset.bootstrap_validation_calls.load(Ordering::Relaxed),
+        nonexistent_bootstrap_calls + 1,
+        "the provider must own nonexistent-reference rejection"
+    );
+
+    let incompatible_input = component_bootstrap_input_for_kind(
+        &dataset_reference,
+        allowed_scope,
+        "stat_card",
+        json!({
+            "summary_field": "label",
+            "summary_type": "average",
+            "label": "Average label"
+        }),
+    );
+    let incompatible_digest = tessara_composition::canonical_digest(&incompatible_input)
+        .expect("incompatible bootstrap digest");
+    let incompatible_validation = signed_bootstrap_validation_authorization(
+        &bootstrap_validation_signer,
+        installation_id,
+        module_instance_id,
+        incompatible_digest.clone(),
+        &incompatible_input,
+    );
+    let incompatible_bootstrap_calls = dataset.bootstrap_validation_calls.load(Ordering::Relaxed);
+    let incompatible_reference = control_request(
+        &app,
+        "/api/private/bootstrap",
+        bootstrap_control_body(
+            installation_id,
+            incompatible_digest.clone(),
+            "bootstrap-incompatible-dataset",
+            incompatible_input,
+            Some(incompatible_validation),
+        ),
+    )
+    .await;
+    assert_eq!(incompatible_reference.status, StatusCode::BAD_REQUEST);
+    assert_component_product_empty(&pool).await;
+    assert_eq!(
+        dataset.bootstrap_validation_calls.load(Ordering::Relaxed),
+        incompatible_bootstrap_calls + 1,
+        "the provider must reject a present field whose type is incompatible with Component semantics"
+    );
+
     let grants = GrantContext {
         installation_id,
         module_instance_id,
@@ -213,6 +453,8 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         json!({
             "installation_id": Uuid::new_v4(),
             "desired_revision": 1,
+            "apply_sequence": 1,
+            "target_plan_digest": bootstrap_target_plan_digest(),
             "idempotency_key": "cross-installation-replay",
             "input_digest": cached_bootstrap_digest,
             "input": cached_bootstrap_input
@@ -233,6 +475,201 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         "display_labels": {"amount": "Total"}
     });
 
+    let guarded_create_body = json!({
+        "schema_version": 1,
+        "name": "Guarded Component",
+        "slug": "guarded-component",
+        "description": null,
+        "version": {
+            "dataset_reference": dataset_reference,
+            "component_type": "table",
+            "config": table_config,
+            "version_note": "Must not persist"
+        }
+    });
+    dataset
+        .metadata_response_mode
+        .store(DATASET_METADATA_RESPONSE_REBUILDING, Ordering::Relaxed);
+    let non_ready_schema_calls = dataset.schema_calls.load(Ordering::Relaxed);
+    let non_ready_compatibility_calls = dataset.compatibility_calls.load(Ordering::Relaxed);
+    let non_ready_create = module_request(
+        &app,
+        &core_signer,
+        &grants,
+        GrantSpec::mutation("components.create", MANAGE_CAPABILITY, allowed_scope),
+        "POST",
+        "/api/admin/components",
+        Some("component-create-non-ready-metadata"),
+        guarded_create_body.clone(),
+    )
+    .await;
+    assert_eq!(
+        non_ready_create.status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "{}",
+        non_ready_create.body
+    );
+    assert_eq!(
+        non_ready_create.body["code"],
+        "component.dependency_unavailable"
+    );
+    assert_eq!(
+        dataset.schema_calls.load(Ordering::Relaxed),
+        non_ready_schema_calls + 1
+    );
+    assert_eq!(
+        dataset.compatibility_calls.load(Ordering::Relaxed),
+        non_ready_compatibility_calls,
+        "non-ready schema metadata must fail before scope or compatibility evaluation"
+    );
+    assert_component_product_empty(&pool).await;
+
+    dataset.metadata_response_mode.store(
+        DATASET_METADATA_RESPONSE_MISMATCHED_REFERENCE,
+        Ordering::Relaxed,
+    );
+    let mismatched_schema_calls = dataset.schema_calls.load(Ordering::Relaxed);
+    let mismatched_compatibility_calls = dataset.compatibility_calls.load(Ordering::Relaxed);
+    let mismatched_create = module_request(
+        &app,
+        &core_signer,
+        &grants,
+        GrantSpec::mutation("components.create", MANAGE_CAPABILITY, allowed_scope),
+        "POST",
+        "/api/admin/components",
+        Some("component-create-mismatched-metadata"),
+        guarded_create_body.clone(),
+    )
+    .await;
+    assert_eq!(
+        mismatched_create.status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "{}",
+        mismatched_create.body
+    );
+    assert_eq!(
+        mismatched_create.body["code"],
+        "component.dependency_unavailable"
+    );
+    assert_eq!(
+        dataset.schema_calls.load(Ordering::Relaxed),
+        mismatched_schema_calls + 1
+    );
+    assert_eq!(
+        dataset.compatibility_calls.load(Ordering::Relaxed),
+        mismatched_compatibility_calls,
+        "mismatched echoed reference must fail before scope or compatibility evaluation"
+    );
+    assert_component_product_empty(&pool).await;
+    dataset
+        .metadata_response_mode
+        .store(DATASET_METADATA_RESPONSE_READY, Ordering::Relaxed);
+
+    dataset
+        .compatibility_response_mode
+        .store(DATASET_METADATA_RESPONSE_REBUILDING, Ordering::Relaxed);
+    let compatibility_race_schema_calls = dataset.schema_calls.load(Ordering::Relaxed);
+    let compatibility_race_calls = dataset.compatibility_calls.load(Ordering::Relaxed);
+    let compatibility_race_create = module_request(
+        &app,
+        &core_signer,
+        &grants,
+        GrantSpec::mutation("components.create", MANAGE_CAPABILITY, allowed_scope),
+        "POST",
+        "/api/admin/components",
+        Some("component-create-compatibility-became-non-ready"),
+        guarded_create_body,
+    )
+    .await;
+    assert_eq!(
+        compatibility_race_create.status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "{}",
+        compatibility_race_create.body
+    );
+    assert_eq!(
+        compatibility_race_create.body["code"],
+        "component.dependency_unavailable"
+    );
+    assert_eq!(
+        dataset.schema_calls.load(Ordering::Relaxed),
+        compatibility_race_schema_calls + 1
+    );
+    assert_eq!(
+        dataset.compatibility_calls.load(Ordering::Relaxed),
+        compatibility_race_calls + 1,
+        "provider-owned compatibility must surface a state change after schema resolution"
+    );
+    assert_component_product_empty(&pool).await;
+    dataset
+        .compatibility_response_mode
+        .store(DATASET_METADATA_RESPONSE_READY, Ordering::Relaxed);
+
+    let compatibility_before_incompatible_create =
+        dataset.compatibility_calls.load(Ordering::Relaxed);
+    let incompatible_create = module_request(
+        &app,
+        &core_signer,
+        &grants,
+        GrantSpec::mutation("components.create", MANAGE_CAPABILITY, allowed_scope),
+        "POST",
+        "/api/admin/components",
+        Some("component-create-incompatible-type"),
+        json!({
+            "schema_version": 1,
+            "name": "Invalid summary",
+            "slug": "invalid-summary",
+            "description": null,
+            "version": {
+                "dataset_reference": dataset_reference,
+                "component_type": "stat_card",
+                "config": {
+                    "summary_field": "label",
+                    "summary_type": "average",
+                    "label": "Average label"
+                },
+                "version_note": "Must not persist"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(
+        incompatible_create.status,
+        StatusCode::BAD_REQUEST,
+        "{}",
+        incompatible_create.body
+    );
+    assert_eq!(
+        dataset.compatibility_calls.load(Ordering::Relaxed),
+        compatibility_before_incompatible_create + 1,
+        "create must use the Dataset compatibility contract for present-but-incompatible fields"
+    );
+    let incompatible_create_writes: i64 = sqlx::query_scalar(
+        "SELECT
+            (SELECT COUNT(*) FROM components)
+          + (SELECT COUNT(*) FROM component_versions)
+          + (SELECT COUNT(*) FROM component_mutation_replays)",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Component create-owned tables are readable");
+    assert_eq!(
+        incompatible_create_writes, 0,
+        "incompatible create validation must complete before every product write"
+    );
+
+    let create_body = json!({
+        "schema_version": 1,
+        "name": "Revenue table",
+        "slug": "revenue-table",
+        "description": "Extracted Component product coverage.",
+        "version": {
+            "dataset_reference": dataset_reference,
+            "component_type": "table",
+            "config": table_config,
+            "version_note": "Initial draft"
+        }
+    });
     let created = module_request(
         &app,
         &core_signer,
@@ -241,18 +678,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         "POST",
         "/api/admin/components",
         Some("component-create-1"),
-        json!({
-            "schema_version": 1,
-            "name": "Revenue table",
-            "slug": "revenue-table",
-            "description": "Extracted Component product coverage.",
-            "version": {
-                "dataset_reference": dataset_reference,
-                "component_type": "table",
-                "config": table_config,
-                "version_note": "Initial draft"
-            }
-        }),
+        create_body.clone(),
     )
     .await;
     assert_eq!(created.status, StatusCode::OK, "{}", created.body);
@@ -1088,17 +1514,33 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         "Revenue table atomically saved"
     );
 
-    assert_eq!(dataset.schema_calls.load(Ordering::Relaxed), 8);
-    assert!(
-        (1..=dataset.schema_calls.load(Ordering::Relaxed))
-            .contains(&dataset.compatibility_calls.load(Ordering::Relaxed))
-    );
+    assert_eq!(dataset.schema_calls.load(Ordering::Relaxed), 12);
+    assert_eq!(dataset.compatibility_calls.load(Ordering::Relaxed), 10);
     assert_eq!(dataset.execute_calls.load(Ordering::Relaxed), 4);
     dataset_server.abort();
     let _ = dataset_server.await;
 
-    // Simulate a committed response being lost: an exact retry must replay
-    // before any Dataset call and therefore still succeed during the outage.
+    // Simulate committed create and save responses being lost: exact retries
+    // must replay before any Dataset call and therefore succeed during outage.
+    let create_replay = module_request(
+        &app,
+        &core_signer,
+        &grants,
+        GrantSpec::mutation("components.create", MANAGE_CAPABILITY, allowed_scope),
+        "POST",
+        "/api/admin/components",
+        Some("component-create-1"),
+        create_body,
+    )
+    .await;
+    assert_eq!(
+        create_replay.status,
+        StatusCode::OK,
+        "{}",
+        create_replay.body
+    );
+    assert_eq!(create_replay.body, created.body);
+
     let replay = module_request(
         &app,
         &core_signer,
@@ -1112,6 +1554,43 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     .await;
     assert_eq!(replay.status, StatusCode::OK, "{}", replay.body);
     assert_eq!(replay.body, canonical_save.body);
+
+    let failed_create = module_request(
+        &app,
+        &core_signer,
+        &grants,
+        GrantSpec::mutation("components.create", MANAGE_CAPABILITY, allowed_scope),
+        "POST",
+        "/api/admin/components",
+        Some("component-create-provider-outage"),
+        json!({
+            "schema_version": 1,
+            "name": "Must not persist",
+            "slug": "must-not-persist-provider-outage",
+            "description": null,
+            "version": {
+                "dataset_reference": dataset.metadata.reference.clone(),
+                "component_type": "table",
+                "config": {"visible_columns": ["label"]},
+                "version_note": "Must not persist"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(failed_create.status, StatusCode::SERVICE_UNAVAILABLE);
+    let failed_create_writes: i64 = sqlx::query_scalar(
+        "SELECT
+            (SELECT COUNT(*) FROM components WHERE slug='must-not-persist-provider-outage')
+          + (SELECT COUNT(*) FROM component_mutation_replays
+             WHERE idempotency_key='component-create-provider-outage')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("failed create write set is readable");
+    assert_eq!(
+        failed_create_writes, 0,
+        "provider outage must fail create before every product write"
+    );
 
     // A new mutation identity cannot reach provider validation, and neither
     // shell metadata nor the version payload may be partially changed.
@@ -1181,6 +1660,9 @@ struct DatasetStub {
     metadata: DatasetMajorLineMetadata,
     execution: DatasetExecutionResponse,
     core_authorization_signer: Arc<PurposeBoundSigningKeyV1>,
+    metadata_response_mode: Arc<AtomicUsize>,
+    compatibility_response_mode: Arc<AtomicUsize>,
+    bootstrap_validation_calls: Arc<AtomicUsize>,
     schema_calls: Arc<AtomicUsize>,
     compatibility_calls: Arc<AtomicUsize>,
     execute_calls: Arc<AtomicUsize>,
@@ -1240,11 +1722,127 @@ impl DatasetStub {
                 next_cursor: None,
             },
             core_authorization_signer,
+            metadata_response_mode: Arc::new(AtomicUsize::new(DATASET_METADATA_RESPONSE_READY)),
+            compatibility_response_mode: Arc::new(AtomicUsize::new(
+                DATASET_METADATA_RESPONSE_READY,
+            )),
+            bootstrap_validation_calls: Arc::new(AtomicUsize::new(0)),
             schema_calls: Arc::new(AtomicUsize::new(0)),
             compatibility_calls: Arc::new(AtomicUsize::new(0)),
             execute_calls: Arc::new(AtomicUsize::new(0)),
         }
     }
+
+    fn metadata_response(&self) -> DatasetMajorLineMetadata {
+        let mut metadata = self.metadata.clone();
+        match self.metadata_response_mode.load(Ordering::Relaxed) {
+            DATASET_METADATA_RESPONSE_READY => {}
+            DATASET_METADATA_RESPONSE_REBUILDING => {
+                metadata.materialization_state = "rebuilding".into();
+            }
+            DATASET_METADATA_RESPONSE_MISMATCHED_REFERENCE => {
+                metadata.reference = DatasetMajorLineReference::from_parts(
+                    metadata.reference.reference().installation_id(),
+                    Uuid::from_u128(metadata.reference.dataset_id().as_u128() ^ 1),
+                    metadata.reference.major(),
+                )
+                .expect("mismatched Dataset metadata reference");
+            }
+            mode => panic!("unsupported Dataset metadata response mode {mode}"),
+        }
+        metadata
+    }
+
+    fn compatibility_metadata_response(&self) -> DatasetMajorLineMetadata {
+        let mut metadata = self.metadata_response();
+        match self.compatibility_response_mode.load(Ordering::Relaxed) {
+            DATASET_METADATA_RESPONSE_READY => {}
+            DATASET_METADATA_RESPONSE_REBUILDING => {
+                metadata.materialization_state = "rebuilding".into();
+            }
+            mode => panic!("unsupported Dataset compatibility response mode {mode}"),
+        }
+        metadata
+    }
+}
+
+async fn dataset_bootstrap_validation(
+    State(state): State<DatasetStub>,
+    headers: HeaderMap,
+    Json(request): Json<tessara_composition::BootstrapDependencyValidationRequestV1>,
+) -> Result<Json<DatasetBootstrapValidationResponse>, StatusCode> {
+    require_bootstrap_contract_headers(&headers)?;
+    if request.schema_version
+        != tessara_composition::BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1
+        || request.desired_revision == 0
+        || request.apply_sequence == 0
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let batch: DatasetBootstrapValidationBatch =
+        serde_json::from_value(request.payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+    if batch.schema_version != DATASET_CONTRACT_SCHEMA_VERSION || batch.items.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let metadata = state.metadata_response();
+    let fields = metadata
+        .fields
+        .iter()
+        .map(|field| (field.key.as_str(), field.field_type.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    state
+        .bootstrap_validation_calls
+        .fetch_add(1, Ordering::Relaxed);
+    let mut results = Vec::with_capacity(batch.items.len());
+    for item in batch.items {
+        if item.reference != state.metadata.reference {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        let findings = if metadata.materialization_state == "ready" {
+            item.required_fields
+                .into_iter()
+                .filter_map(
+                    |requirement| match fields.get(requirement.field_key.as_str()) {
+                        None => Some(DatasetCompatibilityFinding {
+                            code: "field_missing".into(),
+                            field_key: requirement.field_key,
+                        }),
+                        Some(actual)
+                            if !requirement
+                                .accepted_types
+                                .iter()
+                                .any(|field_type| field_type == actual) =>
+                        {
+                            Some(DatasetCompatibilityFinding {
+                                code: "field_type_incompatible".into(),
+                                field_key: requirement.field_key,
+                            })
+                        }
+                        Some(_) => None,
+                    },
+                )
+                .collect::<Vec<_>>()
+        } else {
+            vec![DatasetCompatibilityFinding {
+                code: tessara_datasets_contract::DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY
+                    .into(),
+                field_key: "materialization_state".into(),
+            }]
+        };
+        results.push(DatasetBootstrapValidationResult {
+            validation_key: item.validation_key,
+            metadata: metadata.clone(),
+            compatibility: DatasetCompatibilityResponse {
+                schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+                compatible: findings.is_empty(),
+                findings,
+            },
+        });
+    }
+    Ok(Json(DatasetBootstrapValidationResponse {
+        schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+        results,
+    }))
 }
 
 async fn dataset_schema(
@@ -1260,7 +1858,7 @@ async fn dataset_schema(
         return Err(StatusCode::BAD_REQUEST);
     }
     state.schema_calls.fetch_add(1, Ordering::Relaxed);
-    Ok(Json(state.metadata))
+    Ok(Json(state.metadata_response()))
 }
 
 async fn dataset_execute(
@@ -1291,36 +1889,43 @@ async fn dataset_compatibility(
     {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let fields = state
-        .metadata
+    let metadata = state.compatibility_metadata_response();
+    let fields = metadata
         .fields
         .iter()
         .map(|field| (field.key.as_str(), field.field_type.as_str()))
         .collect::<BTreeMap<_, _>>();
-    let findings = request
-        .required_fields
-        .into_iter()
-        .filter_map(
-            |requirement| match fields.get(requirement.field_key.as_str()) {
-                None => Some(DatasetCompatibilityFinding {
-                    code: "field_missing".into(),
-                    field_key: requirement.field_key,
-                }),
-                Some(actual)
-                    if !requirement
-                        .accepted_types
-                        .iter()
-                        .any(|field_type| field_type == actual) =>
-                {
-                    Some(DatasetCompatibilityFinding {
-                        code: "field_type_incompatible".into(),
+    let findings = if metadata.materialization_state == "ready" {
+        request
+            .required_fields
+            .into_iter()
+            .filter_map(
+                |requirement| match fields.get(requirement.field_key.as_str()) {
+                    None => Some(DatasetCompatibilityFinding {
+                        code: "field_missing".into(),
                         field_key: requirement.field_key,
-                    })
-                }
-                Some(_) => None,
-            },
-        )
-        .collect::<Vec<_>>();
+                    }),
+                    Some(actual)
+                        if !requirement
+                            .accepted_types
+                            .iter()
+                            .any(|field_type| field_type == actual) =>
+                    {
+                        Some(DatasetCompatibilityFinding {
+                            code: "field_type_incompatible".into(),
+                            field_key: requirement.field_key,
+                        })
+                    }
+                    Some(_) => None,
+                },
+            )
+            .collect::<Vec<_>>()
+    } else {
+        vec![DatasetCompatibilityFinding {
+            code: tessara_datasets_contract::DATASET_COMPATIBILITY_MATERIALIZATION_NOT_READY.into(),
+            field_key: "materialization_state".into(),
+        }]
+    };
     state.compatibility_calls.fetch_add(1, Ordering::Relaxed);
     Ok(Json(DatasetCompatibilityResponse {
         schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
@@ -1396,6 +2001,23 @@ async fn core_authorization_exchange(
         schema_version: AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2,
         authorization,
     }))
+}
+
+fn require_bootstrap_contract_headers(headers: &HeaderMap) -> Result<(), StatusCode> {
+    for name in [
+        "x-tessara-bootstrap-validation-authorization",
+        "x-tessara-module-service-request",
+        "x-tessara-correlation-id",
+    ] {
+        if headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .is_none_or(str::is_empty)
+        {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+    Ok(())
 }
 
 fn require_forwarded_contract_headers(headers: &HeaderMap) -> Result<(), StatusCode> {
@@ -1949,6 +2571,166 @@ fn signing_key(
 ) -> PurposeBoundSigningKeyV1 {
     PurposeBoundSigningKeyV1::from_secret_bytes(issuer, key_id, purpose, [byte; 32])
         .expect("fixed signing key")
+}
+
+fn component_bootstrap_input(
+    dataset_reference: &DatasetMajorLineReference,
+    dataset_scope_node_id: Uuid,
+    config: Value,
+) -> Value {
+    component_bootstrap_input_for_kind(dataset_reference, dataset_scope_node_id, "table", config)
+}
+
+fn component_bootstrap_input_for_kind(
+    dataset_reference: &DatasetMajorLineReference,
+    dataset_scope_node_id: Uuid,
+    component_type: &str,
+    config: Value,
+) -> Value {
+    let required_fields = if component_type == "stat_card" {
+        vec![json!({"field_key":"label","accepted_types":["number"]})]
+    } else {
+        vec![json!({
+            "field_key":"label",
+            "accepted_types":["boolean","date","multi_choice","number","single_choice","text"]
+        })]
+    };
+    json!({
+        "schema_version": "tessara.io/component-bootstrap/v1",
+        "dependency_validation": {
+            "schema_version": 1,
+            "items": [{
+                "validation_key": "bootstrap-validation-component-v1",
+                "reference": dataset_reference,
+                "required_fields": required_fields
+            }]
+        },
+        "components": [{
+            "external_key": "bootstrap-validation-component",
+            "component_id": Uuid::new_v4(),
+            "name": "Bootstrap validation component",
+            "slug": "bootstrap-validation-component",
+            "description": "Exercises Dataset-owned bootstrap validation.",
+            "versions": [{
+                "resource_key": "bootstrap-validation-component-v1",
+                "component_version_id": Uuid::new_v4(),
+                "component_type": component_type,
+                "dataset_reference": dataset_reference,
+                "dataset_scope_node_ids": [dataset_scope_node_id],
+                "status": "published",
+                "lifecycle_state": "active",
+                "resource_revision": 1,
+                "authority_revision": 1,
+                "successor_version_id": null,
+                "version_number": 1,
+                "version_label": "v1",
+                "version_note": "Bootstrap validation fixture",
+                "config": config
+            }]
+        }]
+    })
+}
+
+fn signed_bootstrap_validation_authorization(
+    signer: &PurposeBoundSigningKeyV1,
+    installation_id: Uuid,
+    module_instance_id: Uuid,
+    input_digest: ArtifactDigest,
+    input: &Value,
+) -> tessara_composition::BootstrapDependencyValidationInvocationV1 {
+    let now = Utc::now();
+    let target = tessara_composition::BootstrapDependencyValidationTargetV1 {
+        dependency_binding: tessara_datasets_contract::DATASET_BINDING_KEY.into(),
+        functional_contract: tessara_datasets_contract::DATASET_CONTRACT_ID.into(),
+        functional_contract_version: tessara_datasets_contract::DATASET_CONTRACT_VERSION
+            .parse()
+            .expect("Dataset contract version"),
+        action: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_ACTION.into(),
+        method: tessara_module_contract::ServiceActionMethod::Post,
+        path: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_PATH.into(),
+        audience: AuthorizationAudienceV1::CoreInstallation { installation_id },
+        payload_pointer: "/dependency_validation".into(),
+    };
+    let request = tessara_composition::BootstrapDependencyValidationRequestV1 {
+        schema_version:
+            tessara_composition::BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+        input_digest: input_digest.clone(),
+        desired_revision: 1,
+        apply_sequence: 1,
+        target_plan_digest: bootstrap_target_plan_digest(),
+        payload: input["dependency_validation"].clone(),
+    };
+    let request_digest = tessara_composition::canonical_digest(&request)
+        .expect("bootstrap validation request digest");
+    let authorization = signer
+        .sign(
+            tessara_composition::BootstrapDependencyValidationAuthorizationV1 {
+                schema_version: tessara_composition::BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
+                installation_id,
+                module_instance_id,
+                module_definition_id: "tessara.components".into(),
+                input_digest,
+                desired_revision: 1,
+                apply_sequence: 1,
+                target_plan_digest: bootstrap_target_plan_digest(),
+                dependency_binding: target.dependency_binding.clone(),
+                functional_contract: target.functional_contract.clone(),
+                functional_contract_version: target.functional_contract_version.clone(),
+                action: target.action.clone(),
+                method: target.method,
+                path: target.path.clone(),
+                audience: target.audience.clone(),
+                request_digest,
+                correlation_id: Uuid::new_v4(),
+                jti: Uuid::new_v4(),
+                issued_at: now,
+                expires_at: now + Duration::seconds(30),
+            },
+        )
+        .expect("signed bootstrap validation authorization");
+    tessara_composition::BootstrapDependencyValidationInvocationV1 {
+        target,
+        request,
+        authorization,
+    }
+}
+
+fn bootstrap_target_plan_digest() -> ArtifactDigest {
+    ArtifactDigest::new(format!("sha256:{}", "1".repeat(64))).expect("target plan digest")
+}
+
+fn bootstrap_control_body(
+    installation_id: Uuid,
+    input_digest: ArtifactDigest,
+    idempotency_key: &str,
+    input: Value,
+    validation: Option<tessara_composition::BootstrapDependencyValidationInvocationV1>,
+) -> Value {
+    json!({
+        "installation_id": installation_id,
+        "desired_revision": 1,
+        "apply_sequence": 1,
+        "target_plan_digest": bootstrap_target_plan_digest(),
+        "idempotency_key": idempotency_key,
+        "input_digest": input_digest,
+        "dependency_validation": validation,
+        "input": input
+    })
+}
+
+async fn assert_component_product_empty(pool: &PgPool) {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT
+            (SELECT COUNT(*) FROM components)
+          + (SELECT COUNT(*) FROM component_versions)
+          + (SELECT COUNT(*) FROM component_version_change_events)
+          + (SELECT COUNT(*) FROM component_bootstrap_receipts)
+          + (SELECT COUNT(*) FROM component_mutation_replays)",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("Component bootstrap-owned tables are readable");
+    assert_eq!(count, 0, "failed Component validation must be atomic");
 }
 
 async fn reset_component_product(pool: &PgPool) {

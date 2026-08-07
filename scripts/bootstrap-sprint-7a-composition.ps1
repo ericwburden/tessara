@@ -18,7 +18,8 @@ param(
     [string[]]$AdditionalBuildServices = @(),
     [string[]]$AdditionalExpectedNavigationHrefs = @(),
     [switch]$SkipLegacySeed,
-    [switch]$SemanticNoOp
+    [switch]$SemanticNoOp,
+    [switch]$ExcludePublicGateway
 )
 
 Set-StrictMode -Version Latest
@@ -111,8 +112,26 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel $service image build failed." }
         }
     }
-    & docker @composeArguments up -d --no-build
+    if ($ExcludePublicGateway) {
+        $startupServices = @($composeConfiguration.services.PSObject.Properties.Name |
+            Where-Object { [string]$_ -cne "gateway" } |
+            Sort-Object)
+        if ($startupServices.Count -eq 0) {
+            throw "$RuntimeLabel did not resolve any non-gateway startup services."
+        }
+        & docker @composeArguments up -d --no-build @startupServices
+    } else {
+        & docker @composeArguments up -d --no-build
+    }
     if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel service startup failed." }
+    if ($ExcludePublicGateway) {
+        $runningGateway = @(& docker @composeArguments ps --status running -q gateway 2>&1 |
+            ForEach-Object { ([string]$_).Trim() } |
+            Where-Object { $_ })
+        if ($LASTEXITCODE -ne 0 -or $runningGateway.Count -ne 0) {
+            throw "$RuntimeLabel public gateway must remain stopped during owner materialization."
+        }
+    }
 
     $coreSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
     $coreReady = $false
@@ -137,8 +156,9 @@ try {
     if (-not $coreReady) { throw "$RuntimeLabel Core did not become ready." }
 
     # The reference acceptance suite builds on the established UAT demo data.
-    # Seed through the installation's canonical same-origin gateway. A no-op
-    # rerun skips seeding only when the expected fixture is present.
+    # Seed through Core's owning API boundary. Sprint 8A binds that boundary to
+    # a loopback-only control port so public ingress can remain unavailable.
+    # A no-op rerun skips seeding only when the expected fixture is present.
     if ($Composition -eq "reference" -and -not $SkipLegacySeed) {
         $nodeTypes = Invoke-RestMethod `
             -Uri "$CoreUrl/api/admin/node-types" `

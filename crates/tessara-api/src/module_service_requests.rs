@@ -121,6 +121,25 @@ pub(crate) async fn validate_for_principal(
     inbound: &SignedEnvelopeV1<AuthorizationGrantV3>,
     expectation: ModuleServiceRequestExpectation<'_>,
 ) -> ApiResult<()> {
+    validate_for_principal_with_authorization(
+        state,
+        headers,
+        inbound.payload.installation_id,
+        inbound.payload.correlation_id,
+        authorization_header(headers)?,
+        expectation,
+    )
+    .await
+}
+
+pub(crate) async fn validate_for_principal_with_authorization(
+    state: &AppState,
+    headers: &HeaderMap,
+    installation_id: uuid::Uuid,
+    correlation_id: uuid::Uuid,
+    encoded_authorization: &str,
+    expectation: ModuleServiceRequestExpectation<'_>,
+) -> ApiResult<()> {
     let ModuleServicePrincipalV1::ModuleInstance {
         module_instance_id,
         module_definition_id,
@@ -128,7 +147,7 @@ pub(crate) async fn validate_for_principal(
     else {
         return Err(restricted_authorization());
     };
-    let correlation_id = verified_correlation_header(headers, inbound.payload.correlation_id)?;
+    let correlation_id = verified_correlation_header(headers, correlation_id)?;
     let encoded = headers
         .get("x-tessara-module-service-request")
         .and_then(|value| value.to_str().ok())
@@ -148,12 +167,12 @@ pub(crate) async fn validate_for_principal(
            AND instance.installation_id=$3
            AND instance.definition_id=identity.module_definition_id
            AND instance.identity_state='live' AND instance.installed=true
-           AND instance.deployed=true AND instance.configured=true
-           AND instance.ready=true AND instance.enabled=true AND instance.healthy=true",
+           AND instance.deployed=true AND instance.configured=true AND instance.enabled=true
+           AND instance.ready=true AND instance.healthy=true",
     )
     .bind(module_instance_id)
     .bind(module_definition_id.as_str())
-    .bind(inbound.payload.installation_id)
+    .bind(installation_id)
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(restricted_authorization)?;
@@ -182,13 +201,13 @@ pub(crate) async fn validate_for_principal(
     envelope
         .payload
         .validate_for(&ModuleServiceRequestValidationContextV1 {
-            installation_id: inbound.payload.installation_id,
+            installation_id,
             module_instance_id: *module_instance_id,
             module_definition_id: module_definition_id.clone(),
             method: expectation.method.into(),
             path: expectation.path.into(),
             canonical_body_digest: sha256_hex(expectation.body),
-            inbound_grant_digest: sha256_hex(authorization_header(headers)?.as_bytes()),
+            inbound_grant_digest: sha256_hex(encoded_authorization.as_bytes()),
             correlation_id: correlation_id.to_string(),
             now: Utc::now(),
         })
@@ -212,6 +231,99 @@ pub(crate) async fn validate_for_principal(
     }
     transaction.commit().await?;
     Ok(())
+}
+
+/// Verifies an apply-bound request from the exact lockfile-selected Module
+/// Instance before final enrollment exists. The configured service registry
+/// supplies only public verification material; the signed bootstrap
+/// authorization supplies the narrow operation authority.
+pub(crate) async fn validate_materializing_principal_with_authorization(
+    state: &AppState,
+    headers: &HeaderMap,
+    installation_id: uuid::Uuid,
+    correlation_id: uuid::Uuid,
+    encoded_authorization: &str,
+    expectation: ModuleServiceRequestExpectation<'_>,
+) -> ApiResult<()> {
+    let ModuleServicePrincipalV1::ModuleInstance {
+        module_instance_id,
+        module_definition_id,
+    } = expectation.principal
+    else {
+        return Err(restricted_authorization());
+    };
+    if !materializing_instance_is_selected(
+        installation_id,
+        module_definition_id,
+        *module_instance_id,
+    ) {
+        return Err(restricted_authorization());
+    }
+    let authorization_jti = expectation
+        .grant_consumption
+        .authorization_jti()
+        .ok_or_else(restricted_authorization)?;
+    let registry = configured_registry()
+        .map_err(|_| restricted_authorization())?
+        .ok_or_else(restricted_authorization)?;
+    let verifier = registry
+        .module_service_verifier(module_definition_id)
+        .map_err(|_| restricted_authorization())?;
+    let correlation_id = verified_correlation_header(headers, correlation_id)?;
+    let encoded = headers
+        .get("x-tessara-module-service-request")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(restricted_authorization)?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded)
+        .map_err(|_| restricted_authorization())?;
+    let envelope: SignedEnvelopeV1<ModuleServiceRequestV1> =
+        serde_json::from_slice(&bytes).map_err(|_| restricted_authorization())?;
+    verifier
+        .verify(&envelope)
+        .map_err(|_| restricted_authorization())?;
+    envelope
+        .payload
+        .validate_for(&ModuleServiceRequestValidationContextV1 {
+            installation_id,
+            module_instance_id: *module_instance_id,
+            module_definition_id: module_definition_id.clone(),
+            method: expectation.method.into(),
+            path: expectation.path.into(),
+            canonical_body_digest: sha256_hex(expectation.body),
+            inbound_grant_digest: sha256_hex(encoded_authorization.as_bytes()),
+            correlation_id: correlation_id.to_string(),
+            now: Utc::now(),
+        })
+        .map_err(|_| restricted_authorization())?;
+
+    let consumed = sqlx::query(
+        "INSERT INTO consumed_bootstrap_validation_authorizations
+           (authorization_jti,installation_id,module_instance_id,service_nonce,
+            correlation_id,issued_at)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
+    )
+    .bind(authorization_jti)
+    .bind(installation_id)
+    .bind(envelope.payload.module_instance_id)
+    .bind(envelope.payload.nonce)
+    .bind(correlation_id)
+    .bind(envelope.payload.issued_at)
+    .execute(&state.pool)
+    .await?;
+    if consumed.rows_affected() != 1 {
+        return Err(restricted_authorization());
+    }
+    Ok(())
+}
+
+fn materializing_instance_is_selected(
+    installation_id: uuid::Uuid,
+    module_definition_id: &tessara_module_contract::ModuleDefinitionId,
+    module_instance_id: uuid::Uuid,
+) -> bool {
+    module_instance_id
+        == tessara_composition::module_instance_id(installation_id, module_definition_id.as_str())
 }
 
 fn verified_correlation_header(
@@ -251,7 +363,10 @@ mod tests {
 
     use axum::http::{HeaderMap, HeaderValue};
 
-    use super::{AuthorizationGrantConsumption, verified_correlation_header};
+    use super::{
+        AuthorizationGrantConsumption, materializing_instance_is_selected,
+        verified_correlation_header,
+    };
 
     #[test]
     fn correlation_header_must_match_the_inbound_grant_exactly() {
@@ -311,5 +426,24 @@ mod tests {
             ),
             "a fresh service nonce cannot replay a consumed provider-audience grant"
         );
+    }
+
+    #[test]
+    fn materializing_service_identity_is_bound_to_the_selected_instance() {
+        let installation_id = uuid::Uuid::new_v4();
+        let definition = tessara_module_contract::ModuleDefinitionId::new("example.materializer")
+            .expect("materializing module definition");
+        let selected =
+            tessara_composition::module_instance_id(installation_id, definition.as_str());
+        assert!(materializing_instance_is_selected(
+            installation_id,
+            &definition,
+            selected
+        ));
+        assert!(!materializing_instance_is_selected(
+            installation_id,
+            &definition,
+            uuid::Uuid::new_v4()
+        ));
     }
 }

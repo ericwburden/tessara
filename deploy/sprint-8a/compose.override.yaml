@@ -19,6 +19,10 @@ services:
 
   core:
     image: tessara-sprint-8a-core
+    # The loopback-only control port lets destructive materialization use Core's
+    # owning APIs while the public gateway container remains stopped. It is not
+    # a product ingress endpoint and is bound only for the disposable profile.
+    ports: !override ["127.0.0.1:${TESSARA_CORE_CONTROL_PORT:-18088}:8080"]
     environment:
       TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008a}
       TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER: ${TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER:-tessara.local.sprint-8a}

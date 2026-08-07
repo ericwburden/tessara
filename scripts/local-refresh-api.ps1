@@ -77,10 +77,7 @@ SELECT
   + (SELECT COUNT(*) FROM workflows)
   + (SELECT COUNT(*) FROM workflow_versions)
   + (SELECT COUNT(*) FROM datasets)
-  + (SELECT COUNT(*) FROM dataset_revisions)
-  + (SELECT COUNT(*) FROM components)
-  + (SELECT COUNT(*) FROM component_versions)
-  + (SELECT COUNT(*) FROM dashboards);
+  + (SELECT COUNT(*) FROM dataset_revisions);
 "@
 
     $rawCount = docker compose exec -T postgres psql -U tessara -d tessara -Atc $sql

@@ -8,7 +8,6 @@ import {
   type Page,
 } from "@playwright/test";
 import { invokeDemoSeedEndpoint } from "./support/demo-seed";
-import { runPlaywrightSql } from "./support/postgres";
 import {
   attachNativeRouteGuard,
   expectHydratedNativeRouteDirectLoadAndRefresh,
@@ -866,114 +865,6 @@ async function setupFixtures(): Promise<FixtureState> {
     outOfScopeOwnerAssignmentId: outOfScopeOwnerAssignment.id,
     delegateAssignmentId: delegateAssignment.id,
   };
-}
-
-function cleanupPlaywrightEntities() {
-  const sql = `
-CREATE TEMP TABLE pw_cleanup_accounts AS
-SELECT id FROM accounts
-  WHERE email LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-     OR display_name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-CREATE TEMP TABLE pw_cleanup_forms AS
-SELECT id FROM forms
-  WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-     OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-CREATE TEMP TABLE pw_cleanup_workflows AS
-SELECT id FROM workflows
-  WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-     OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-CREATE TEMP TABLE pw_cleanup_components AS
-SELECT id FROM components
-  WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-     OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-CREATE TEMP TABLE pw_cleanup_workflow_versions AS
-SELECT workflow_versions.id
-  FROM workflow_versions
-  JOIN pw_cleanup_workflows ON pw_cleanup_workflows.id = workflow_versions.workflow_id;
-
-CREATE TEMP TABLE pw_cleanup_workflow_assignments AS
-SELECT workflow_assignments.id
-  FROM workflow_assignments
-  LEFT JOIN pw_cleanup_accounts account_scope ON account_scope.id = workflow_assignments.account_id
-  LEFT JOIN pw_cleanup_accounts assigner_scope ON assigner_scope.id = workflow_assignments.assigned_by_account_id
-  LEFT JOIN pw_cleanup_workflow_versions ON pw_cleanup_workflow_versions.id = workflow_assignments.workflow_version_id
-  WHERE account_scope.id IS NOT NULL
-     OR assigner_scope.id IS NOT NULL
-     OR pw_cleanup_workflow_versions.id IS NOT NULL;
-
-CREATE TEMP TABLE pw_cleanup_workflow_instances AS
-SELECT workflow_instances.id
-  FROM workflow_instances
-  LEFT JOIN pw_cleanup_workflow_assignments ON pw_cleanup_workflow_assignments.id = workflow_instances.workflow_assignment_id
-  LEFT JOIN pw_cleanup_accounts assignee_scope ON assignee_scope.id = workflow_instances.assignee_account_id
-  LEFT JOIN pw_cleanup_accounts starter_scope ON starter_scope.id = workflow_instances.started_by_account_id
-  WHERE pw_cleanup_workflow_assignments.id IS NOT NULL
-     OR assignee_scope.id IS NOT NULL
-     OR starter_scope.id IS NOT NULL;
-
-CREATE TEMP TABLE pw_cleanup_submissions AS
-SELECT submissions.id
-  FROM submissions
-  LEFT JOIN pw_cleanup_workflow_assignments ON pw_cleanup_workflow_assignments.id = submissions.workflow_assignment_id
-  LEFT JOIN pw_cleanup_workflow_instances ON pw_cleanup_workflow_instances.id = submissions.workflow_instance_id
-  LEFT JOIN form_versions ON form_versions.id = submissions.form_version_id
-  LEFT JOIN pw_cleanup_forms ON pw_cleanup_forms.id = form_versions.form_id
-  WHERE pw_cleanup_workflow_assignments.id IS NOT NULL
-     OR pw_cleanup_workflow_instances.id IS NOT NULL
-     OR pw_cleanup_forms.id IS NOT NULL;
-
-DELETE FROM analytics.submission_value_fact
-WHERE submission_id IN (SELECT id FROM pw_cleanup_submissions);
-
-DELETE FROM analytics.submission_fact
-WHERE submission_id IN (SELECT id FROM pw_cleanup_submissions);
-
-DELETE FROM submissions
-WHERE id IN (SELECT id FROM pw_cleanup_submissions);
-
-DELETE FROM workflow_instances
-WHERE id IN (SELECT id FROM pw_cleanup_workflow_instances);
-
-DELETE FROM workflow_assignments
-WHERE id IN (SELECT id FROM pw_cleanup_workflow_assignments);
-
-DELETE FROM component_version_change_events
-WHERE component_version_id IN (
-  SELECT id FROM component_versions
-  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
-);
-
-DELETE FROM component_versions
-WHERE component_id IN (SELECT id FROM pw_cleanup_components);
-
-DELETE FROM components
-WHERE id IN (SELECT id FROM pw_cleanup_components);
-
-DELETE FROM workflows
-WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-   OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-DELETE FROM forms
-WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-   OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-DELETE FROM node_types
-WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-   OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-DELETE FROM accounts
-WHERE email LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
-   OR display_name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-
-DELETE FROM roles
-WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
-`;
-
-  runPlaywrightSql(sql);
 }
 
 async function cleanupPlaywrightDashboards(admin: APIRequestContext) {

@@ -261,3 +261,103 @@ out-of-range identities.
 These are candidate-affecting test, runner, evidence, and environment-contract
 changes. They are implementation corrections only; no formal validation phase
 was run.
+
+## 2026-08-06 — Closed Readiness 33 harness and rehearsal-enforcement gaps
+
+Validation Readiness attempt 33 ran its complete fail-late graph against clean
+commit `0cf7dfa0`, retaining 12 passes, two failed checks, and zero blocked
+checks. The failed runner-self-test log contains two independent parameter
+contract failures: readiness still passed removed image arguments to the
+source-built Component baseline and upgrade-verifier self-tests. The reset
+dry-run also failed because the materializer accessed Compose's optional
+network `external` property directly under strict mode.
+
+One consolidated audit retained those three observed failures and found two
+related protocol-enforcement gaps before source correction. Candidate
+Rehearsal performed prerequisite and authenticated environment validation
+before writing its start receipt, so a setup failure could consume an attempt
+without terminal evidence or harvest. It also lacked the required optimized
+known/random resource-reference latency proof; the debug workspace lane cannot
+execute that release-only test.
+
+The correction uses the current baseline-metadata/self-test contracts, handles
+an omitted Compose `external` property as non-external in both safety
+projections, makes the readiness prerequisite a receipt-governed terminal
+lane, and declares the independent exact release-mode timing lane. Runner
+self-tests and the Sprint 8A acceptance contract now enforce both protocol
+properties. The five findings are classified `harness`; Candidate Rehearsal
+29 remained Not Run. Because runners, acceptance enforcement, and validation
+documentation changed, a fresh complete Readiness gate and complete Rehearsal
+are required against the corrected commit and one shared environment identity.
+
+## 2026-08-06 — Returned from testing for implementation completion
+
+Testing was explicitly stopped after failed Validation Readiness attempt 33;
+Candidate Rehearsal 29 did not start. A new plan-to-source audit treated the
+stalled testing entry as an implementation problem and consolidated the
+remaining corrections instead of continuing the lifecycle:
+
+- Sprint 8A materialization keeps the public gateway stopped through first
+  apply and semantic no-op, uses a loopback-only Core owner-control binding,
+  and retains the exact boundary evidence before opening public ingress.
+- The exact locked Component Manifest now declares bootstrap Dataset
+  validation through the generic lockfile-owned seam: exact Manifest target and
+  JSON Pointer, opaque canonical-inline payload selection, complete signed
+  request binding, provider-owned Dataset semantics, one-use consumption, and
+  no Component/Dataset branching in Core or Supervisor. Negative proof rejects
+  missing or mismatched target/payload/apply/owner/audience/request, expiry,
+  replay, incompatibility, and outage before any Component row or receipt is
+  written.
+- Component create uses the same authoritative idempotent replay behavior as
+  save. Fresh create/save and bootstrap require the Dataset provider to echo
+  the exact requested major-line reference and report a `ready`
+  materialization; provider compatibility emits the distinct
+  `materialization_not_ready` result before field evaluation. Mismatched,
+  non-ready, incompatible, and unavailable Dataset paths leave zero Component
+  rows, versions, mutation receipts, bootstrap receipts, or validation-pending
+  drafts.
+- Invalid configuration shapes remain validation failures; Module Management
+  carries the module's sanitized Dataset dependency diagnostic instead of
+  silently discarding it.
+- Dashboard outage projection no longer invents disclosure authority. Provider
+  observations, findings, action lookup, recovery, and repeat-outage reopening
+  are isolated by the exact unexpired semantic authorization context so one
+  actor/scope/revision episode cannot expose or mutate another.
+- The Sprint 8A fixture path performs Core identity/RBAC setup but cannot write
+  Dataset, Component, or Dashboard product tables. Its exclusion is enforced
+  structurally from the PowerShell AST, and the unused Core-era Playwright SQL
+  cleanup was removed.
+- UAT semantic predicates evaluate authenticated raw JSON and reject divergence
+  from embedded summaries. The product diagnostic is resolved from its
+  authenticated lane, exact Dashboard placement-to-ComponentVersion identities
+  are shared by smoke and tests, and Playwright inventory now includes the
+  responsive/theme matrix, unsaved-state outage retry, and configuration/
+  diagnostic authority scenarios.
+- Readiness and Candidate Rehearsal publish unverified start evidence before
+  fallible state/source/environment work and serialize attempts with an
+  evidence-root OS-exclusive file handle. Readiness retains an immutable hashed
+  start snapshot and checkpoints its live receipt, sidecar, and validation-state
+  hash after every terminal check or block.
+- Safe static rehearsal lanes remain independent of the fallible state and
+  Readiness prerequisites. Failed rehearsal harvesting still produces exactly
+  one batch; its correction authorization now permits one successor Readiness
+  only, and that successor records append-only consumption bound to the failed
+  predecessor and its own immutable start. Candidate Rehearsal accepts only the
+  exact current Readiness path/hash and rejects prior-result or attempt reuse.
+- Nested UAT semantic failures are projected with exact scenario/assertion
+  identity, allowed classification, failure reason, and hashed raw evidence.
+  Semantic-only failures do not also fail the outer projection lane, preventing
+  one predicate from becoming both a product defect and a generic harness
+  defect; an independent wrapper failure remains separately classifiable.
+
+The governing protocol already required safe fail-late harvesting, exact
+blocked reasons, and one consolidated batch. The closed enforcement gap was the
+runner-owned state transition and evidence model: it previously lacked an
+exclusive attempt lease, immutable/checkpointed Readiness evidence, executable
+one-time correction consumption/current-Readiness selection, and exact nested
+semantic defect projection.
+
+All of these files are candidate-affecting and invalidate the Readiness 33
+source. Only focused implementation checks are recorded for this batch. No new
+Validation Readiness, Candidate Rehearsal, preflight, SIT, deployed Playwright,
+or formal UAT result is claimed.

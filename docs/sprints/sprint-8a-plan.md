@@ -1,19 +1,24 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Implementation handoff after validation was explicitly exited during
-incomplete Candidate Rehearsal attempts 27 and 28. The candidate-affecting
-source, test, fixture, deployment, and validation-runner correction invalidates
-every earlier readiness and rehearsal result. Focused implementation checks do
-not constitute either formal gate. A new complete Validation Readiness and
-Candidate Rehearsal cycle must start from the corrected clean commit and use
-one shared environment identity. No candidate has been frozen, and preflight,
-SIT, formal UAT, and closeout have not run.
+Status: Implementation handoff after validation was explicitly exited again
+following failed Validation Readiness attempt 33. That attempt completed its
+fail-late graph with 12 passed checks, two failed checks, and no blocked checks;
+its five consolidated findings remain diagnostic evidence. Candidate Rehearsal
+attempt 29 never started. The resulting product, contract, fixture, deployment,
+test, UAT-evidence, and validation-runner correction invalidates every earlier
+readiness and rehearsal result. Focused implementation checks do not constitute
+either formal gate. A new complete Validation Readiness and Candidate Rehearsal
+cycle must start from the corrected clean commit and use one shared environment
+identity. No candidate has been frozen, and preflight, SIT, formal UAT, and
+closeout have not run.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
 - Implementation-readiness correction input:
   `7b326838269c3b4218dd579f649a8011feba4d97`
+- Latest failed readiness diagnostic source:
+  `0cf7dfa0fda3f30cca2b1c1c7f2181ca0ad43045`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Next)` and the reconciled
   Phase 8 fresh-materialization rules in `docs/roadmap.md`
@@ -256,6 +261,13 @@ Dataset reference.
      Component read-back.
 - Orchestration may pass typed IDs and content-addressed seed inputs between
   owners, but it cannot write product tables or use another owner's credentials.
+- Component's locked Manifest declares Dataset bootstrap validation and selects
+  `/dependency_validation` from its canonical inline input. The generic
+  lockfile path resolves the exact target, binds the complete request to a
+  one-use authorization, and leaves Dataset semantics with the provider; Core
+  and Supervisor contain no Component/Dataset product branch. Any target,
+  payload, apply, owner, audience, signature, expiry, or replay failure occurs
+  before Component writes.
 - A successful seed exposes recognizable fixtures for every Component kind,
   lifecycle/authorization/outage case, and Dashboard dependency action. Exact
   counts, where contractual, come from one shared acceptance source of truth.
@@ -375,7 +387,11 @@ requires a plan amendment and user approval.
   source-exact materialization produces a healthy complete reference
   application and owner-controlled canonical seed in the declared order:
   exactly seven Component shells, eight ComponentVersions, and seven Dashboard
-  placements.
+  placements. Component seed is accepted only after its exact locked
+  Manifest/lockfile target and opaque inline payload pass provider-owned
+  Dataset validation under the exact one-use signed request; altered or
+  replayed invocations are non-disclosing and leave zero Component rows or
+  receipts.
 - **AC-04:** An unchanged second bootstrap is a semantic no-op with no duplicate
   data, references, revisions, roles, configuration, or receipts.
 - **AC-05:** Dashboard seed creates every placement directly with a Component
@@ -620,13 +636,13 @@ materialization teardown plus full rerun; and Component-only upgrade/rollback.
 
 ## Implementation Handoff
 
-All six slices and the post-attempt-28 implementation-readiness correction are
-implemented on `codex/sprint-8a`. The handoff includes the Components v3 and
-Dataset v1 contracts, independent Component owner and store, direct Dashboard
-consumption, forward-only Core cleanup, from-empty owner seed and
-materialization runners, Sprint 8A Compose/catalog inputs, smoke contract,
-failure containment, Component-only upgrade/rollback, and the eight planned
-UAT scenarios.
+All six slices, the post-attempt-28 correction, and the post-Readiness-33
+implementation completion audit are implemented on `codex/sprint-8a`. The
+handoff includes the Components v3 and Dataset v1 contracts, independent
+Component owner and store, direct Dashboard consumption, forward-only Core
+cleanup, from-empty owner seed and materialization runners, Sprint 8A
+Compose/catalog inputs, smoke contract, failure containment, Component-only
+upgrade/rollback, and the eight planned UAT scenarios.
 
 The correction closes the source defects that repeated partial validation had
 exposed or failed to enforce:
@@ -710,12 +726,48 @@ exposed or failed to enforce:
   evidence-hash-bound receipts. Failed browser runs retain raw reports, traces,
   logs, and error context; stale prior-source UAT evidence cannot pass by file
   existence.
+- The public gateway remains stopped through first materialization and the
+  semantic no-op. A loopback-only Core control binding is used for owner APIs,
+  and a retained boundary receipt proves the gateway starts only after every
+  owner completes.
+- The generic bootstrap dependency-validation path resolves Component's exact
+  Manifest declaration and opaque `/dependency_validation` payload from the
+  lockfile. Its short-lived one-use authorization binds the full request,
+  apply, owner, dependency, contract/version, action, method/path, and resolved
+  audience without a Component/Dataset branch in Core or Supervisor. The
+  Dataset provider verifies the selected Component service, consumes the grant
+  once, and alone interprets the payload. Component bootstrap and normal
+  create/save mutations complete scope and Component-semantic compatibility
+  checks before opening a write transaction; an unavailable or incompatible
+  Dataset cannot leave a shell, version, receipt, or validation-pending draft.
+- Configuration shape failures project as validation errors instead of
+  provider outages, and Module Management retains the module-owned sanitized
+  diagnostic projection. Exact browser acceptance covers configuration
+  authority, schema, diagnostics, the viewport/theme matrix, and unsaved-state
+  preservation with one retry mutation during Dataset outage.
+- Dashboard distinguishes provider-evaluated resolution from synthetic outage
+  projection. Outage presentation, observations, findings, actions, recovery,
+  and repeat-outage reopening are bound to the exact unexpired semantic
+  authorization context, so an outage cannot create disclosure authority and
+  one actor/scope/revision context cannot read or mutate another's episode.
+- Sprint 8A fixture preparation performs only Core identity/RBAC setup and
+  verification outside the owner-controlled seed. An AST-enforced exclusion
+  keeps Dataset, Component, and Dashboard product writes in the legacy Sprint
+  7A path; Sprint 8A product state is created only through owner bootstrap.
+- Automated UAT predicates evaluate their authenticated raw JSON evidence and
+  reject divergence from embedded summaries. The product diagnostic is derived
+  from its authenticated lane rather than accepted through an independent file
+  parameter, and exact assertion identities replace broad receipt labels.
 
 The repository-local validation protocol already stated the fail-late and
-single-batch rules completely. The actual enforcement gap was the absence of a
-complete repository-owned rehearsal graph plus executable readiness checks, so
-the correction strengthens runners and acceptance-contract self-tests without
-duplicating the protocol prose.
+single-batch rules. The remaining enforcement gap was executable: the rehearsal
+graph made safe static siblings depend on the fallible readiness prerequisite,
+and acceptance did not assert those independence edges. The runner now retains
+its start receipt before fallible work, keeps safe static lanes independent,
+records exact dependency reasons for genuinely blocked lanes, and permits
+correction/restart only after one consolidated harvest. Runner self-tests and
+the Sprint 8A acceptance contract enforce that graph rather than duplicating
+protocol prose.
 
 The corrected deployable and source dependency boundaries are shown in the
 two current Sprint 8A diagrams in [Tessara Architecture](../architecture.md):

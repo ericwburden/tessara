@@ -23,6 +23,19 @@ use support::{
 use support::{cookie_authenticated_request, login_cookie_for};
 
 const PASSWORD: &str = "tessara-test-password-123";
+const CORE_TRANSITION_DEFINITION_IDS: [&str; 5] = [
+    "tessara.datasets",
+    "tessara.forms",
+    "tessara.migration",
+    "tessara.responses",
+    "tessara.workflows",
+];
+const ACTIVE_CORE_TRANSITION_DEFINITION_IDS: [&str; 4] = [
+    "tessara.datasets",
+    "tessara.forms",
+    "tessara.responses",
+    "tessara.workflows",
+];
 const FORMS_DEFINITION: &str = "tessara.forms";
 const RESPONSES_DEFINITION: &str = "tessara.responses";
 const MIGRATION_DEFINITION: &str = "tessara.migration";
@@ -209,10 +222,6 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert_eq!(reader_inventory, admin_inventory);
     assert_eq!(reader_inventory["schema_version"], 1);
     assert_eq!(
-        reader_inventory["entries"].as_array().map(Vec::len),
-        Some(5)
-    );
-    assert_eq!(
         reader_inventory["core_runtime"]["provenance"],
         "development_unresolved"
     );
@@ -225,28 +234,12 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
         .as_array()
         .expect("module inventory entries should be an array");
     assert_eq!(
-        entries
-            .iter()
-            .map(|entry| {
-                entry["descriptor"]["reserved_definition_id"]
-                    .as_str()
-                    .expect("every transition entry has a definition identity")
-            })
-            .collect::<BTreeSet<_>>(),
-        BTreeSet::from([
-            "tessara.datasets",
-            "tessara.forms",
-            "tessara.migration",
-            "tessara.responses",
-            "tessara.workflows",
-        ])
+        transition_definition_ids(entries),
+        CORE_TRANSITION_DEFINITION_IDS.to_vec()
     );
     assert_eq!(
-        entries
-            .iter()
-            .filter(|entry| entry["descriptor"]["availability"] == "active_in_process")
-            .count(),
-        4
+        transition_definition_ids_with_availability(entries, "active_in_process"),
+        ACTIVE_CORE_TRANSITION_DEFINITION_IDS.to_vec()
     );
     let migration = inventory_entry(entries, MIGRATION_DEFINITION);
     assert_eq!(migration["kind"], "transitional_in_process");
@@ -1626,7 +1619,6 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
     assert_eq!(reader_status, StatusCode::OK);
     assert_private_native_headers(&reader_headers);
     assert!(reader_html.contains("<title>Tessara Module Management</title>"));
-    assert!(reader_html.contains("5 definitions"));
     assert!(reader_html.contains("Transitional — not independently deployable"));
     assert!(reader_html.contains("No Module Release"));
     assert!(reader_html.contains("No Module Instance"));
@@ -1639,11 +1631,12 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
     assert_eq!(reader_bootstrap["route"], "directory");
     assert_eq!(reader_bootstrap["access"]["can_read"], true);
     assert_eq!(reader_bootstrap["access"]["can_manage_navigation"], false);
+    let reader_entries = reader_bootstrap["inventory"]["entries"]
+        .as_array()
+        .expect("native Module Management bootstrap entries should be an array");
     assert_eq!(
-        reader_bootstrap["inventory"]["entries"]
-            .as_array()
-            .map(Vec::len),
-        Some(5)
+        transition_definition_ids(reader_entries),
+        CORE_TRANSITION_DEFINITION_IDS.to_vec()
     );
     assert_eq!(
         reader_bootstrap["navigation_policy"]["policy"]["can_manage_navigation"],
@@ -1946,6 +1939,34 @@ fn inventory_entry<'a>(entries: &'a [Value], definition_id: &str) -> &'a Value {
         .iter()
         .find(|entry| entry["descriptor"]["reserved_definition_id"] == definition_id)
         .unwrap_or_else(|| panic!("missing module inventory entry {definition_id}"))
+}
+
+fn transition_definition_ids(entries: &[Value]) -> Vec<&str> {
+    let mut definition_ids = entries
+        .iter()
+        .map(transition_definition_id)
+        .collect::<Vec<_>>();
+    definition_ids.sort_unstable();
+    definition_ids
+}
+
+fn transition_definition_ids_with_availability<'a>(
+    entries: &'a [Value],
+    availability: &str,
+) -> Vec<&'a str> {
+    let mut definition_ids = entries
+        .iter()
+        .filter(|entry| entry["descriptor"]["availability"] == availability)
+        .map(transition_definition_id)
+        .collect::<Vec<_>>();
+    definition_ids.sort_unstable();
+    definition_ids
+}
+
+fn transition_definition_id(entry: &Value) -> &str {
+    entry["descriptor"]["reserved_definition_id"]
+        .as_str()
+        .expect("every transition entry has a definition identity")
 }
 
 fn shell_item<'a>(shell: &'a Value, key: &str) -> Option<&'a Value> {

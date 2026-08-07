@@ -157,23 +157,36 @@ CREATE TABLE dashboard_dependency_observations (
     reference_digest TEXT NOT NULL CHECK (reference_digest ~ '^sha256:[0-9a-f]{64}$'),
     provider_contract_id TEXT NOT NULL CHECK (btrim(provider_contract_id) <> ''),
     provider_contract_version TEXT NOT NULL CHECK (btrim(provider_contract_version) <> ''),
+    authorization_context_digest TEXT NOT NULL
+        CHECK (authorization_context_digest ~ '^sha256:[0-9a-f]{64}$'),
+    authorization_expires_at TIMESTAMPTZ NOT NULL,
+    resolution_origin TEXT NOT NULL
+        CHECK (resolution_origin IN ('provider_evaluated', 'synthetic_unavailable')),
     resource_revision BIGINT CHECK (resource_revision > 0),
     observation_fingerprint TEXT NOT NULL CHECK (observation_fingerprint ~ '^sha256:[0-9a-f]{64}$'),
     resolution JSONB NOT NULL CHECK (jsonb_typeof(resolution) = 'object'),
     provider_detail JSONB CHECK (provider_detail IS NULL OR jsonb_typeof(provider_detail) = 'object'),
     observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (placement_id, observation_fingerprint)
+    CHECK (authorization_expires_at > observed_at),
+    CHECK (resolution_origin = 'provider_evaluated' OR provider_detail IS NULL),
+    UNIQUE (id, authorization_context_digest)
 );
 
 CREATE INDEX dashboard_dependency_observations_dashboard_observed_idx
     ON dashboard_dependency_observations (dashboard_id, observed_at DESC, id);
 
+CREATE INDEX dashboard_dependency_observations_access_context_idx
+    ON dashboard_dependency_observations
+       (dashboard_id, placement_id, reference_digest, authorization_context_digest,
+        resolution_origin, authorization_expires_at DESC, observed_at DESC, id);
+
 CREATE TABLE dashboard_dependency_findings (
     id UUID PRIMARY KEY,
     dashboard_id UUID NOT NULL,
     placement_id UUID NOT NULL,
-    observation_id UUID NOT NULL
-        REFERENCES dashboard_dependency_observations(id) ON DELETE RESTRICT,
+    observation_id UUID NOT NULL,
+    authorization_context_digest TEXT NOT NULL
+        CHECK (authorization_context_digest ~ '^sha256:[0-9a-f]{64}$'),
     saved_reference JSONB NOT NULL CHECK (jsonb_typeof(saved_reference) = 'object'),
     reference_digest TEXT NOT NULL CHECK (reference_digest ~ '^sha256:[0-9a-f]{64}$'),
     observed_resource_revision BIGINT NOT NULL CHECK (observed_resource_revision >= 0),
@@ -187,7 +200,11 @@ CREATE TABLE dashboard_dependency_findings (
     resolved_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (placement_id, reference_digest, observed_resource_revision, finding_code),
+    UNIQUE (placement_id, reference_digest, authorization_context_digest,
+            observed_resource_revision, finding_code),
+    FOREIGN KEY (observation_id, authorization_context_digest)
+        REFERENCES dashboard_dependency_observations(id, authorization_context_digest)
+        ON DELETE RESTRICT,
     CHECK (
         (disposition = 'open' AND deferred_by IS NULL AND deferred_at IS NULL AND resolved_at IS NULL)
         OR (disposition = 'deferred' AND deferred_by IS NOT NULL AND deferred_at IS NOT NULL AND resolved_at IS NULL)
@@ -196,7 +213,8 @@ CREATE TABLE dashboard_dependency_findings (
 );
 
 CREATE INDEX dashboard_dependency_findings_dashboard_disposition_idx
-    ON dashboard_dependency_findings (dashboard_id, disposition, updated_at DESC, id);
+    ON dashboard_dependency_findings
+       (dashboard_id, authorization_context_digest, disposition, updated_at DESC, id);
 
 CREATE TABLE dashboard_dependency_action_receipts (
     idempotency_key TEXT PRIMARY KEY CHECK (btrim(idempotency_key) <> ''),
@@ -205,6 +223,8 @@ CREATE TABLE dashboard_dependency_action_receipts (
     placement_id UUID NOT NULL,
     finding_id UUID NOT NULL REFERENCES dashboard_dependency_findings(id) ON DELETE RESTRICT,
     actor_id UUID NOT NULL,
+    authorization_context_digest TEXT NOT NULL
+        CHECK (authorization_context_digest ~ '^sha256:[0-9a-f]{64}$'),
     action TEXT NOT NULL CHECK (action IN ('defer','upgrade','replace','remove')),
     expected_finding_revision BIGINT NOT NULL CHECK (expected_finding_revision > 0),
     result JSONB NOT NULL CHECK (jsonb_typeof(result) = 'object'),

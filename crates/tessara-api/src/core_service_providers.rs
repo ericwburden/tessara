@@ -17,7 +17,15 @@ pub(crate) struct CoreServiceAction {
     pub(crate) functional_contract: &'static str,
 }
 
-const DATASET_ACTIONS: [CoreServiceAction; 5] = [
+const DATASET_ACTIONS: [CoreServiceAction; 6] = [
+    CoreServiceAction {
+        path: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_PATH,
+        method: ServiceActionMethod::Post,
+        authorization_action: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_ACTION,
+        operation: AuthorizationGrantOperationV1::Read,
+        required_capability: "datasets:read",
+        functional_contract: DATASET_MAJOR_LINE_CONTRACT,
+    },
     CoreServiceAction {
         path: "/api/private/datasets/catalog",
         method: ServiceActionMethod::Post,
@@ -95,6 +103,12 @@ mod tests {
         assert_eq!(
             identities,
             vec![
+                (
+                    tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_PATH,
+                    tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_ACTION,
+                    AuthorizationGrantOperationV1::Read,
+                    "datasets:read"
+                ),
                 (
                     "/api/private/datasets/catalog",
                     "datasets.catalog",

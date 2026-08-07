@@ -33,6 +33,7 @@ pub enum ProtocolSignaturePurposeV1 {
     ReleaseCatalog,
     ResolvedComposition,
     ApplyAuthorization,
+    BootstrapValidationAuthorization,
     SupervisorRequest,
     SupervisorResponse,
     InstallationReceipt,

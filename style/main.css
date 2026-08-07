@@ -53,32 +53,6 @@
   --color-table-row: rgb(15 23 42 / 18%);
   --color-scrim: rgb(15 23 42 / 64%);
   --color-soft-row: rgb(20 184 166 / 10%);
-  --component-soft-surface-start: color-mix(
-    in srgb,
-    var(--color-panel) 84%,
-    var(--color-control)
-  );
-  --component-soft-surface-end: color-mix(
-    in srgb,
-    var(--color-panel) 78%,
-    var(--semantic-primary)
-  );
-  --component-soft-surface-opacity: 50%;
-  /* Mix the gradient stops with transparency instead of lowering element opacity,
-     so charts, labels, Table controls, and rows remain fully opaque. */
-  --component-soft-surface: linear-gradient(
-    135deg,
-    color-mix(
-      in srgb,
-      var(--component-soft-surface-start) var(--component-soft-surface-opacity),
-      transparent
-    ),
-    color-mix(
-      in srgb,
-      var(--component-soft-surface-end) var(--component-soft-surface-opacity),
-      transparent
-    )
-  );
 }
 
 .module-deployment-ledger {

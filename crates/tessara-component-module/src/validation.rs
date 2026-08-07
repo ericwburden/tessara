@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 use serde_json::Value;
-use tessara_datasets_contract::DatasetFieldContract;
+use tessara_datasets_contract::{DatasetFieldContract, DatasetFieldRequirement};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ConfigFinding {
@@ -307,6 +307,50 @@ pub(super) fn required_field_keys(component_type: &str, config: &Value) -> BTree
     }
     keys.retain(|key| !key.trim().is_empty());
     keys
+}
+
+pub(super) fn required_field_requirements(
+    component_type: &str,
+    config: &Value,
+) -> Vec<DatasetFieldRequirement> {
+    let numeric_summary_field = match component_type {
+        "bar" | "line" | "pie" | "donut" | "stat_card" => {
+            VisualComponentConfig::parse(component_type, config)
+                .ok()
+                .and_then(|config| {
+                    let shared = config.shared();
+                    matches!(
+                        shared.summary_type.as_str(),
+                        "sum" | "average" | "median" | "none"
+                    )
+                    .then(|| shared.summary_field.trim().to_string())
+                    .filter(|field| !field.is_empty())
+                })
+        }
+        _ => None,
+    };
+    let supported_existence_types = [
+        "boolean",
+        "date",
+        "multi_choice",
+        "number",
+        "single_choice",
+        "text",
+    ];
+    required_field_keys(component_type, config)
+        .into_iter()
+        .map(|field_key| DatasetFieldRequirement {
+            accepted_types: if numeric_summary_field.as_deref() == Some(field_key.as_str()) {
+                vec!["number".into()]
+            } else {
+                supported_existence_types
+                    .iter()
+                    .map(|field_type| (*field_type).into())
+                    .collect()
+            },
+            field_key,
+        })
+        .collect()
 }
 
 pub(super) fn validate_version_note(note: &str) -> Vec<ConfigFinding> {
@@ -758,7 +802,7 @@ fn validate_filters(
 mod tests {
     use serde_json::json;
 
-    use super::{validate_component_config, validate_version_note};
+    use super::{required_field_requirements, validate_component_config, validate_version_note};
     use tessara_datasets_contract::DatasetFieldContract;
 
     fn fields() -> Vec<DatasetFieldContract> {
@@ -853,6 +897,36 @@ mod tests {
         assert_eq!(
             validate_version_note(&"x".repeat(2_001))[0].code,
             "version_note.too_long"
+        );
+    }
+
+    #[test]
+    fn compatibility_requirements_come_from_component_semantics() {
+        let requirements = required_field_requirements(
+            "bar",
+            &json!({
+                "mode": "summary",
+                "summary_field": "amount",
+                "summary_type": "average",
+                "category_field": "label"
+            }),
+        );
+        let by_field = requirements
+            .into_iter()
+            .map(|requirement| (requirement.field_key, requirement.accepted_types))
+            .collect::<std::collections::BTreeMap<_, _>>();
+
+        assert_eq!(by_field["amount"], ["number"]);
+        assert_eq!(
+            by_field["label"],
+            [
+                "boolean",
+                "date",
+                "multi_choice",
+                "number",
+                "single_choice",
+                "text",
+            ]
         );
     }
 }
