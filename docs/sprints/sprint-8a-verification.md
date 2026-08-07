@@ -4,16 +4,18 @@ Status: Validation Readiness 40 passed its complete 15-check graph against clean
 commit `b4f1581e5c60522eab86da23301d92f9e1c36cf0`, tree
 `af0ab5cf246ede958e94521766226e609e818ec1`, and environment fingerprint
 `6967aa2c0f9edad2e52c18f54d3faaec6b7459f89f22586d01ceef6aa784f105`.
-The requested Candidate Rehearsal 32 launch was then rejected before immutable
-start publication, attempt publication, lane registration, assertions, or
-product actions because scheduler declaration validation did not recognize the
-runner's canonical ordered-dictionary declarations. No Candidate Rehearsal 32
-attempt exists and the attempt number remains unused. The raw launch log, one
-typed pre-start failure, and one consolidated one-defect `harness` batch are
-retained without rewriting R40 or any historical receipt. This candidate-
-affecting correction supersedes R40. The clean pre-rehearsal boundary
-authorizes complete Readiness 41 followed by the still-unused Rehearsal 32; no
-candidate exists, and preflight, SIT, formal UAT, and closeout remain Not Run.
+Candidate Rehearsal 32 then rejected before start because its scheduler did not
+recognize the runner's ordered-dictionary declarations. That correction was
+committed as `231bd8d9ea1889870653d991b2cbaa9531074522`, but the requested
+Readiness 41 launch exposed two further pre-start `harness` defects: correction-
+lineage authentication rejected R40's current schema-3 terminal, and the clean
+pre-rehearsal path could not preserve an already-consumed lineage without
+treating it as duplicate consumption. R41 rejected before reservation,
+immutable start, check registration, assertions, or product actions. No R41
+attempt or normal namespace exists, and R41 and R32 both remain unused. The
+tracked lineage/rerun correction supersedes `231bd8d9`; complete R41 followed
+by complete R32 remain the next coordinator-controlled gates. No candidate
+exists, and preflight, SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -21,6 +23,65 @@ candidate exists, and preflight, SIT, formal UAT, and closeout remain Not Run.
 - Execution contract: [Sprint 8A plan](./sprint-8a-plan.md)
 
 ## Implementation Readiness Snapshot
+
+### Readiness 41 pre-start rejection and lineage-preserving correction
+
+The R41 launcher evaluated clean source
+`231bd8d9ea1889870653d991b2cbaa9531074522`, tree
+`359789b12ec3769e8a3b7cce43101d7b924acc11`, against the sidecar-bound R40
+state at SHA-256
+`2face70ef797e33aa597292c0c60de61949557d4edc4ba1c37e87ff6e6aa1ccb`,
+then rejected during pre-start correction-lineage authentication. The retained
+evidence is:
+
+- launch log
+  `artifacts/sprint-8a-closeout/attempts/readiness-41-prestart-launch.log`,
+  SHA-256
+  `886992e57ebcdfb18301b153a25f7397f06544d3e3cd7c6bcc0ec0cc40e3aa73`;
+- diagnostic log
+  `artifacts/sprint-8a-closeout/attempts/readiness-41-prestart-diagnostic.log`,
+  SHA-256
+  `cd6e080ea2b3c1eb982cc17f0e303f0b805d800d39c112348124358996c8bb9c`;
+- typed failure
+  `artifacts/sprint-8a-closeout/attempts/readiness-41-prestart-failure.json`,
+  SHA-256
+  `8e5b6dcb01dc58b55f2cada5a08279cb5fad62cebfd0b06c5fc6a0329b081a2c`;
+  and
+- consolidated two-defect batch
+  `artifacts/sprint-8a-closeout/attempts/readiness-41-prestart-defect-batch.json`,
+  SHA-256
+  `3c9279fab557470212a11957fabc018927f6e7a6277332ad87dddbe90e4f4426`.
+
+The first defect is exact schema enforcement that recognizes historical
+schema-2 Readiness terminals but not R40's schema-3 terminal. The second is the
+missing lineage-preserving clean supersession path: clean rerun admission was
+evaluated only when no correction lineage existed, while R40 is the legitimate
+consumer at the tip of a complete three-link lineage. Corrected R41 must keep
+that lineage and R40's consumption immutable, carry the unchanged lineage in
+both its immutable start and terminal, create no new correction link or
+consumption, and name immutable R40 through the exact sequential clean-
+pre-rehearsal Readiness prerequisite edge. Downstream lineage authentication
+may reach current R41 through that clean edge without relabeling R41 as the
+authorization consumer. R41's own `predecessor_correction_authorization` and
+`correction_consumption_receipt` remain null.
+
+The sidecar-bound validation state remains the passing R40 state, with
+Rehearsal ineligible and `preflight_eligible=false`. There is no
+`readiness-41-start.json`, `readiness-41.json`, `readiness-41/` evidence
+directory, or R41 correction consumption. The pre-start records do not rewrite
+R40 or any historical receipt. The final tracked correction bytes passed the
+Readiness, Candidate Rehearsal, Validation Preflight, and complete Sprint 8A
+acceptance-contract self-tests; a file-backed supersession regression proves
+one- and two-edge chains plus the failed-descendant and adversarial rejection
+cases. PowerShell parsing, retained R40 admission, Markdown links, formatting,
+all-target/all-feature compilation, and warnings-denied Clippy also passed.
+The receipt projection also keeps lineage null for a Readiness that directly
+consumes a pending authorization, so validation state can bind the final
+terminal hash without embedding a stale self-reference; only clean successors
+carry the already-complete preserved lineage.
+
+After the clean correction commit, the coordinator may authorize the same
+unused R41 identity; only a passing R41 may issue the still-unused R32 schedule.
 
 ### Readiness 40 pass and Rehearsal 32 pre-start rejection
 
@@ -274,8 +335,9 @@ The authorization permitted exactly one successor Readiness start. Readiness
 append-only lineage link authorized only Readiness 39; R39 consumed it and
 passed. Rehearsal 31 then failed and issued the authorization later consumed
 exactly once by passing R40. R40 is now superseded by the retained R32
-pre-start correction. Readiness and Rehearsal must both pass against the same
-corrected clean source and fresh six-database environment before preflight.
+pre-start correction and the subsequent retained R41 pre-start lineage/rerun
+correction. Readiness and Rehearsal must both pass against the same corrected
+clean source and fresh six-database environment before preflight.
 
 ### Prior user-directed return from Readiness 36 and Rehearsal 29
 
@@ -358,9 +420,11 @@ redaction and render-denial scenario mapped to UAT-8A-04. That correction was
 exercised by the implementation-level checks below and subsequently reached
 Readiness 38, whose terminal failure and completed correction are recorded at
 the top of this file as historical context. R38 was finalized, R39 passed, R31
-failed, and R40 passed before the R32 pre-start rejection exposed the current
-harness defect. The next boundary is the coordinator-authorized corrected
-Readiness 41/Rehearsal 32 cycle described below.
+failed, and R40 passed before the R32 pre-start rejection exposed its
+declaration-shape harness defect. The corrected R41 launch then rejected before
+reservation on the two lineage/rerun harness defects retained above. The next
+boundary remains the coordinator-authorized corrected Readiness 41/Rehearsal 32
+cycle described below; both attempt identities are unused.
 
 Implementation-level verification then reset and recreated all six isolated
 readiness databases and passed on the final corrected product source:
@@ -859,8 +923,9 @@ retrofitted.
 | `attempts/candidate-rehearsal-31-attempt.json`, `-harvest.json`, `-defect-batch.json`, and `-correction-authorization.json` | Validation coordinator | Readiness 40 | Complete failed chain; 19 pass, 3 fail, 10 block; one-use authorization consumed exactly once by R40 |
 | `attempts/readiness-40.json` and `validation-readiness-result.json` | Validation coordinator | Rehearsal 32 | Passed all 15 checks for `b4f1581e` / `af0ab5cf` / `6967aa2c...`; superseded by the pre-start harness correction |
 | `attempts/candidate-rehearsal-32-prestart-launch.log`, `attempts/candidate-rehearsal-32-prestart-failure.json`, and `attempts/candidate-rehearsal-32-prestart-defect-batch.json` | Validation coordinator | Corrected R41 | Retained one pre-start `harness` defect; no attempt or lane assertions began; R32 remains unused |
+| `attempts/readiness-41-prestart-launch.log`, `attempts/readiness-41-prestart-diagnostic.log`, `attempts/readiness-41-prestart-failure.json`, and `attempts/readiness-41-prestart-defect-batch.json` | Validation coordinator | Corrected R41 | Retained two pre-start `harness` defects; no reservation, namespace, attempt, check, assertion, or product action began; R41 remains unused |
 | `attempts/candidate-rehearsal-32-start.json` | Validation coordinator | Rehearsal 32 assertions | Not created; corrected launch requires a passing R41-issued schedule |
-| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not created; R31 failed and R32 has no attempt |
+| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not created; R31 failed, R41 has not passed, and R32 has no attempt |
 | `attempts/preflight-<n>.json` | Preflight | Preflight terminal decision | Not Run |
 | `preflight-result.json` | Preflight | Candidate freeze | Not Run |
 | `candidate.json` | Preflight | SIT | Not Run |
@@ -939,9 +1004,12 @@ Additional required evidence namespaces:
 - Latest completed check graph: Readiness 40 passed all 15 checks against clean
   source `b4f1581e`, tree `af0ab5cf`, and environment `6967aa2c...`. The R32
   launcher then exposed the pre-start scheduler declaration-shape defect before
-  creating an attempt. The tracked scheduler/self-test/acceptance/documentation
-  correction supersedes R40. R41 is the next complete Readiness after the
-  correction is committed and all six databases are recreated empty.
+  creating an attempt. Its correction at `231bd8d9` superseded R40. The R41
+  launcher subsequently exposed the schema-3 lineage-terminal and consumed-
+  lineage clean-supersession defects before reservation. The current tracked
+  lineage/runner/acceptance/documentation correction supersedes `231bd8d9`.
+  R41 remains the next complete Readiness after that correction is committed
+  and all six databases are recreated empty.
 
 - Derived executable checklist: regenerate from the final plan, this inventory,
   source, runners, Compose profile and evidence schemas.
@@ -980,11 +1048,21 @@ Additional required evidence namespaces:
   Reject duplicate consumption, active attempts, used attempt identities, and
   any Readiness receipt other than the exact path/hash currently named by
   validation state.
+- Clean pre-rehearsal supersession: when current Readiness passed, Rehearsal is
+  still ineligible, and preflight is false, admit only the exact sequential next
+  unused Readiness. Its immutable start and terminal name immutable R40 as the
+  sole Readiness prerequisite, carry the existing consumed `correction_lineage`
+  value semantically unchanged, leave their own predecessor-authorization and
+  correction-consumption fields null, and create no new lineage link or
+  consumption. Current-lineage validation must reach R41 through that exact
+  clean edge and reject a gap, tampered hash, skipped attempt, changed lineage,
+  or non-clean state before creating the namespace.
 - Rehearsal schedule: R40 authenticated the exact R31 history, correction
   identity, and next attempt number and selected the conservative full-Wave-A
-  fallback. Because the tracked correction changes the scheduler and its
-  acceptance proof before R32 starts, R41 must recompute and bind R32's
-  deterministic schedule to the corrected source/environment identity.
+  fallback. Because both retained pre-start correction batches change the
+  validation harness and its acceptance proof before R32 starts, R41 must
+  recompute and bind R32's deterministic schedule to the corrected source and
+  environment identity.
 - Acceptance mapping: every inventory row maps to SIT, smoke and UAT evidence.
 - Clean repository and source-exact inputs: required before rehearsal.
 - Result receipt: `artifacts/sprint-8a-closeout/validation-readiness-result.json`.
@@ -996,9 +1074,10 @@ lanes, 10 exact lane blocks, and 8 nested automated-UAT dependency blocks
 against the passing R39 source/environment pair. Its complete harvest and
 three-defect batch are named above; R40 consumed its authorization exactly once
 and passed. Candidate Rehearsal 32 did not begin because its first launch was
-rejected at scheduler declaration validation. It cannot start until the
-tracked correction is committed, R41 passes, and the coordinator authorizes
-the formal cycle.
+rejected at scheduler declaration validation. The corrected R41 launch then
+rejected before reservation, so it issued no R32 schedule. R32 cannot start
+until the current tracked correction is committed, the still-unused R41 passes,
+and the coordinator authorizes the formal cycle.
 
 Sprint 8A rehearsal uses the dependency-aware inventory below. A create-once
 start receipt declares the graph, exact Wave A/cleanup/Wave B/aggregate-sink/
@@ -1121,17 +1200,26 @@ in the same rehearsal.
   `b4f1581e5c60522eab86da23301d92f9e1c36cf0`, tree
   `af0ab5cf246ede958e94521766226e609e818ec1`, and environment fingerprint
   `6967aa2c0f9edad2e52c18f54d3faaec6b7459f89f22586d01ceef6aa784f105`;
-  all are superseded by the current candidate-affecting correction.
+  the first pre-start correction produced clean `231bd8d9` / `359789b1`, and
+  both source identities are superseded by the current candidate-affecting
+  correction.
 - Passing readiness prerequisite: Readiness 40 passed, but its result SHA-256
   `f4fd1745606a0094f648aa92b8fdca97bdc5e0101e2b74179f274e5614e1b939`
   is superseded by the scheduler/self-test correction and cannot serve R32;
   R41 must pass first.
-- Current consolidated defects and correction batch: the rejected R32 launch
-  retained one `harness` defect before an attempt existed. The correction makes
-  declaration-member validation representation-aware and executes adversarial
-  ordered-dictionary fixtures matching the live runner. It is candidate-
-  affecting and remains formally unverified until complete successor gates
-  pass.
+- Current consolidated defects and correction batch: the rejected R41 launch
+  retained two `harness` defects before reservation or an attempt existed. The
+  correction authenticates schema-2 historical and schema-3 current Readiness
+  terminals, and represents a clean pre-rehearsal Readiness as an exact
+  immutable prerequisite edge that preserves a consumed lineage without a new
+  link or consumption. It is candidate-affecting and remains formally
+  unverified until complete successor gates pass.
+- Preceding pre-start correction: the rejected R32 launch retained one
+  `harness` defect before an attempt existed. Commit `231bd8d9` made
+  declaration-member validation representation-aware and added adversarial
+  ordered-dictionary fixtures matching the live runner. The subsequent R41
+  pre-start rejection superseded that source but did not invalidate its retained
+  diagnostic history.
 - Preceding consolidated correction: Attempt 31 retained 19 passes, 3 raw
   failures, 10 dependency blocks, and 8 nested UAT blocks. Its correction
   advanced fresh-database readiness, Supervisor target enrollment, normalized
@@ -1361,7 +1449,13 @@ in the same rehearsal.
   `6967aa2c...`. The requested R32 launch was rejected before an immutable start
   or attempt receipt because the scheduler validator did not recognize the
   runner's ordered-dictionary declarations. R32 remains unused; the retained
-  pre-start batch requires corrected R41 before another launch.
+  pre-start batch required corrected R41 before another launch.
+- The first corrected R41 launch against `231bd8d9`/`359789b1` rejected before
+  reservation because correction-lineage validation required every successor
+  terminal to be schema 2 and clean rerun admission was unreachable for an
+  already-consumed lineage. Two `harness` defects and all reachable pre-start
+  diagnostics are retained. R41 remains unused; the current correction must
+  pass focused verification before another coordinator-authorized launch.
 - Complete-cycle repetitions after the current correction: 0.
 - Result receipt: `artifacts/sprint-8a-closeout/candidate-rehearsal-result.json`.
 
@@ -1422,12 +1516,14 @@ preflight.
 .\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 32 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
 ```
 
-R41 is the clean-pre-rehearsal successor to superseded passing R40 and must bind
-R32's corrected conservative full-Wave-A schedule. R32 cannot rely on any
-legacy pass or deferral counter. If its Wave A succeeds, the same attempt
-continues through every remaining lane; only an all-passing, zero-deferred
-result can enter preflight. Neither gate has run for the corrected source, so
-candidate freeze, SIT, and formal UAT remain closed.
+R41 is the clean-pre-rehearsal successor to superseded passing R40. It must name
+immutable R40 as its sole Readiness prerequisite, preserve the existing
+consumed correction lineage without a new link or consumption, and bind R32's
+corrected conservative full-Wave-A schedule. R32 cannot rely on any legacy pass
+or deferral counter. If its Wave A succeeds, the same attempt continues through
+every remaining lane; only an all-passing, zero-deferred result can enter
+preflight. Neither gate has run for the corrected source, so candidate freeze,
+SIT, and formal UAT remain closed.
 
 Readiness requires and authenticates the six declared disposable database
 URLs, proves their identities are pairwise distinct, records the normalized
@@ -1924,6 +2020,7 @@ Runtime chronology:
 | 2026-08-07 12:27–12:32 EDT | Readiness 40 / complete gate | Yes; all 15 checks passed | `b4f1581e` / `af0ab5cf`, environment `6967aa2c...` | N/A — passed, later superseded | Exact immutable receipt and canonical alias retained with SHA-256 `f4fd1745...`; R32 conservative schedule SHA-256 `7b09c1b3...` | R40 and all downstream phases after the pre-start correction | Complete corrected Readiness 41, then still-unused R32 |
 | 2026-08-07 12:35 EDT | Rehearsal 32 / rejected pre-start launch | No; no immutable start, attempt receipt, lane registration, assertions, or product actions | `b4f1581e` / `af0ab5cf`, environment `6967aa2c...` | One `harness` defect | Ordered-dictionary declarations were rejected by PSObject-only member validation; raw log, typed failure, and one consolidated pre-start batch retained; authenticated empty reservation residue removed | R40 and every downstream phase; R32 remains unused | Correct representation-aware validation and live-shape self-test together; commit; complete R41; then R32 |
 | 2026-08-07 after R32 pre-start rejection | Ordered-dictionary scheduler correction / focused implementation verification | Focused self-tests and static checks only; no lifecycle attempt | mutable correction source | N/A — focused implementation proof passed | Candidate Rehearsal and Readiness self-tests, complete Sprint 8A acceptance contract, PowerShell parsing, Markdown links, formatting, workspace check, and all-target/all-feature warnings-denied Clippy passed; missing scheduler role/impact members fail closed on the live declaration shape | No formal receipt, candidate, or downstream phase authorized | Clean commit; coordinator-authorized R41 then still-unused R32 |
+| 2026-08-07 12:58–13:00 EDT | Readiness 41 / rejected pre-start launch and diagnostic harvest | No; no reservation, immutable start, attempt receipt, check registration, assertion, or product action | `231bd8d9` / `359789b1`; current retained environment `6967aa2c...` | Two `harness` defects | R40's schema-3 terminal was rejected by schema-2-only lineage validation; the same diagnostic pass proved clean rerun admission could not preserve an already-consumed lineage. Launch log, diagnostic log, typed failure, and one two-defect pre-start batch are retained; no R41 namespace exists. | `231bd8d9`, R40, and every downstream phase; R41 and R32 remain unused | Correct lineage-terminal schema enforcement and exact clean-pre-rehearsal supersession together; focused verification and clean commit; coordinator-authorized R41 then R32 |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
@@ -1968,9 +2065,10 @@ immutable fingerprint covers all authoritative SIT and UAT evidence.
 - UAT passed: No.
 - Acceptance mapping complete: Planned, not executed.
 - Invalidation decisions satisfied: No — the rejected R32 pre-start launch has
-  one retained mutable `harness` correction; complete Readiness 41 and the
-  still-unused Candidate Rehearsal 32 remain required after the clean commit
-  and fresh database generations.
+  one retained historical `harness` correction, and the rejected R41 pre-start
+  launch has the current two-defect `harness` correction. Complete Readiness 41
+  and the still-unused Candidate Rehearsal 32 remain required after the clean
+  commit and fresh database generations.
 - Unresolved product decisions: None.
 - Intended active route/slot: source-exact Sprint 8A gateway with current
   Component release and canonical fresh seed.

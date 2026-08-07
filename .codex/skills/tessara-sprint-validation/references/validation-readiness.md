@@ -88,11 +88,33 @@ the harvest, batch, or authorization so retry remains deterministic. The
 finalizer branch returns before normal-attempt evidence directories are
 created; finalization does not launch or partially materialize its successor.
 
-A passing Readiness may be rerun without correction lineage only at the narrow
-clean pre-rehearsal boundary: rehearsal remains ineligible and preflight is
-false. Any failed predecessor requires one pending authenticated correction
-link. A consumed corrected Readiness cannot be silently rerun because doing so
-would orphan the retained lineage.
+A passing Readiness may be superseded without a new correction-lineage link or
+consumption only at the narrow clean pre-rehearsal boundary: rehearsal remains
+ineligible, preflight is false, and the requested Readiness number is the exact
+sequential next unused attempt. Authenticate that boundary under the retained
+lock before namespace creation. The superseding immutable start and terminal
+receipts name the immediately preceding immutable passing Readiness as their
+exact prerequisite. If the predecessor is already the terminal of a consumed
+correction lineage, both successor receipts carry that complete
+`correction_lineage` value with its authorization and consumption bindings
+unchanged. The original Readiness remains the sole authorization consumer; the
+clean successor does not
+append a correction link, retarget the consumed tip, or write another
+consumption receipt. The clean successor's own
+`predecessor_correction_authorization` and `correction_consumption_receipt`
+fields remain null. The current Readiness may be reached from that tip only
+through a complete canonical, hashed, sequential chain of clean-pre-rehearsal
+supersession edges. Any gap, altered predecessor, reused attempt, non-clean
+boundary, or changed lineage binding rejects launch before namespace creation.
+Any failed predecessor still requires one pending authenticated correction
+link.
+
+A Readiness that directly consumes a pending correction authorization leaves
+the receipt-level `correction_lineage` null. Its direct authorization and
+consumption fields plus validation state bind the completed terminal after the
+terminal SHA-256 exists; embedding that mutable lineage would create a stale or
+self-referential digest. Receipt-level lineage is reserved for a clean
+supersession carrying an already-complete lineage unchanged.
 
 Reserve the requested attempt number before its canonical receipt, start
 snapshot, sidecars, or `readiness-N/` directory exists. Under the exclusive
@@ -106,8 +128,9 @@ Readiness 38 was the sole legacy failed-Readiness finalizer recovery. Its
 complete terminal receipt/raw evidence and documented consolidated defect set
 were frozen before this finalizer existed. It was finalized once without
 rerunning checks after the user-directed testing exit, and R39 subsequently
-passed. Do not generalize or repeat this exception. Sprint 8A's current
-coordinator-authorized boundary is R40 followed by Candidate Rehearsal 32.
+passed. Do not generalize or repeat this exception. The sprint verification
+record and sidecar-bound validation state, not this reusable reference, retain
+the coordinator-authorized live attempt boundary.
 
 ## Gate 2: Candidate Rehearsal
 
@@ -321,16 +344,19 @@ authenticated append-only references, including any intervening failed
 Readiness attempts. Every non-final link is consumed exactly once, only the
 final link may be pending, and each failed-Readiness successor is the exact
 attempt named by its authorization. Rehearsal and preflight validate the whole
-lineage and require its tip to terminate at the exact current passing
-Readiness.
+lineage and require its tip either to terminate at the exact current passing
+Readiness or to reach it through the complete authenticated clean-pre-rehearsal
+supersession chain.
 
 Each consumed lineage link terminates at immutable
 `attempts/readiness-N.json`. `validation-readiness-result.json` is only the
 current passing alias and must have the same JSON document and SHA-256 as that
 attempt's immutable receipt. Historical links never point at the alias. When a
 later passing Readiness replaces the alias, earlier links remain valid through
-their immutable terminals and only the latest tip may match the current
-alias/counterpart pair.
+their immutable terminals. The current alias/counterpart pair must be either
+the consumed tip itself or a clean-pre-rehearsal successor connected to it by
+the exact sequential immutable prerequisite chain; the clean edge never
+rewrites the historical terminal or consumption.
 
 Validate topology from the root. A root candidate has one immutable passing
 Readiness prerequisite and no prefix; a root failed Readiness has no prior

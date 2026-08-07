@@ -1204,6 +1204,11 @@ function Test-Sprint8AValidationPreflightRunner {
             attempt = 3
             authoritative = $false
             state = "passed"
+            assertions_started = $true
+            prerequisite_receipts = @()
+            predecessor_correction_authorization = $null
+            correction_consumption_receipt = $null
+            correction_lineage = $null
             next_candidate_rehearsal = [pscustomobject][ordered]@{
                 attempt = $startAttempt
                 schedule_sha256 = $startScheduleSha256
@@ -2005,12 +2010,10 @@ function Assert-Sprint8APreflightReceiptChain {
 
     $lineageProperty = $state.PSObject.Properties["correction_lineage"]
     $lineage = if ($null -eq $lineageProperty) { $null } else { $lineageProperty.Value }
-    if ($null -eq $lineage) {
-        if ($null -ne $readiness.predecessor_correction_authorization -or
-            $null -ne $readiness.correction_consumption_receipt) {
-            throw "Readiness names correction authorization without one canonical validation-state lineage."
-        }
-    } else {
+    Assert-Sprint8AReadinessCorrectionLineagePresence `
+        -StateLineage $lineage `
+        -ReadinessDocument $readiness
+    if ($null -ne $lineage) {
         $lineageValidation = Assert-Sprint8ACorrectionLineage `
             -Lineage $lineage `
             -RepositoryRoot $repoRoot `
@@ -2024,10 +2027,20 @@ function Assert-Sprint8APreflightReceiptChain {
             -RequireConsumedTip
         $tip = $lineageValidation.tip
         $consumptionReference = $tip.consumed_by_readiness.consumption_receipt
-        if ([string]$readiness.predecessor_correction_authorization.sha256 -cne [string]$tip.authorization.sha256 -or
-            [string]$readiness.correction_consumption_receipt.path -cne [string]$consumptionReference.path -or
-            [string]$readiness.correction_consumption_receipt.sha256 -cne [string]$consumptionReference.sha256) {
-            throw "Passing Readiness does not bind the exact correction-lineage tip."
+        $currentReadinessBinding = $lineageValidation.current_readiness_binding
+        if ([string]$currentReadinessBinding.kind -ceq "direct_correction_consumption") {
+            if ([string]$readiness.predecessor_correction_authorization.sha256 -cne [string]$tip.authorization.sha256 -or
+                [string]$readiness.correction_consumption_receipt.path -cne [string]$consumptionReference.path -or
+                [string]$readiness.correction_consumption_receipt.sha256 -cne [string]$consumptionReference.sha256) {
+                throw "Directly consumed passing Readiness does not bind the exact correction-lineage tip."
+            }
+        } elseif ([string]$currentReadinessBinding.kind -ceq "clean_pre_rehearsal_supersession") {
+            if ($null -ne $readiness.predecessor_correction_authorization -or
+                $null -ne $readiness.correction_consumption_receipt) {
+                throw "Clean Readiness supersession must not copy or consume the correction-lineage tip again."
+            }
+        } else {
+            throw "Passing Readiness lacks one authenticated correction-lineage binding."
         }
         $authorizationReference = Get-Sprint8APreflightReceiptReference -Path ([string]$tip.authorization.path) -AllowInRootAbsolute
         $script:runtimeContext.correction_authorization_reference = [pscustomobject][ordered]@{
@@ -2960,7 +2973,7 @@ function Assert-Sprint8APreflightEvidencePaths {
     $legacyException = $null
     if ($null -ne $script:runtimeContext.correction_authorization_reference) {
         $legacyException = [pscustomobject][ordered]@{
-            kind = "canonical_consumption_of_current_correction_lineage_tip"
+            kind = "canonical_current_correction_lineage_authority"
             path = [string]$script:runtimeContext.correction_authorization_reference.path
             sha256 = [string]$script:runtimeContext.correction_authorization_reference.sha256
             authenticated = $true

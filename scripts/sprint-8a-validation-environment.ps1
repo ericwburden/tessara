@@ -909,9 +909,20 @@ function Assert-Sprint8ACurrentReadinessReference {
         throw "Current Readiness state digest differs from its canonical receipt."
     }
     $currentDocument = Get-Content -LiteralPath ([string]$currentReference.full_path) -Raw | ConvertFrom-Json
-    if ([string]$currentDocument.phase -cne "validation-readiness" -or
+    if (($currentDocument.schema_version -isnot [int] -and $currentDocument.schema_version -isnot [long]) -or
+        @(2, 3) -notcontains [int]$currentDocument.schema_version -or
+        [string]$currentDocument.sprint -cne "sprint-8a" -or
+        [string]$currentDocument.phase -cne "validation-readiness" -or
+        ($currentDocument.attempt -isnot [int] -and $currentDocument.attempt -isnot [long]) -or
         [int]$currentDocument.attempt -ne $attempt -or
-        [string]$currentDocument.state -cne [string]$StateReadiness.state) {
+        [string]$currentDocument.state -cne [string]$StateReadiness.state -or
+        $currentDocument.PSObject.Properties.Name -notcontains "prerequisite_receipts" -or
+        $currentDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
+        $currentDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
+        $currentDocument.authoritative -isnot [bool] -or
+        $currentDocument.authoritative -ne $false -or
+        $currentDocument.assertions_started -isnot [bool] -or
+        ([string]$currentDocument.state -ceq "passed" -and $currentDocument.assertions_started -ne $true)) {
         throw "Current Readiness state does not authenticate its exact attempt document."
     }
 
@@ -922,9 +933,20 @@ function Assert-Sprint8ACurrentReadinessReference {
     $immutableSha = Assert-Sprint8AReceiptSidecar -Path ([string]$immutableReference.full_path)
     $immutableDocument = Get-Content -LiteralPath ([string]$immutableReference.full_path) -Raw | ConvertFrom-Json
     if ($immutableSha -cne $currentSha -or
+        ($immutableDocument.schema_version -isnot [int] -and $immutableDocument.schema_version -isnot [long]) -or
+        @(2, 3) -notcontains [int]$immutableDocument.schema_version -or
+        [string]$immutableDocument.sprint -cne "sprint-8a" -or
         [string]$immutableDocument.phase -cne "validation-readiness" -or
+        ($immutableDocument.attempt -isnot [int] -and $immutableDocument.attempt -isnot [long]) -or
         [int]$immutableDocument.attempt -ne $attempt -or
         [string]$immutableDocument.state -cne [string]$StateReadiness.state -or
+        $immutableDocument.PSObject.Properties.Name -notcontains "prerequisite_receipts" -or
+        $immutableDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
+        $immutableDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
+        $immutableDocument.authoritative -isnot [bool] -or
+        $immutableDocument.authoritative -ne $false -or
+        $immutableDocument.assertions_started -isnot [bool] -or
+        ([string]$immutableDocument.state -ceq "passed" -and $immutableDocument.assertions_started -ne $true) -or
         (($immutableDocument | ConvertTo-Json -Depth 100 -Compress) -cne
             ($currentDocument | ConvertTo-Json -Depth 100 -Compress))) {
         throw "Current Readiness canonical alias does not have one exact immutable attempt counterpart."
@@ -945,6 +967,225 @@ function Assert-Sprint8ACurrentReadinessReference {
             sha256 = $immutableSha
             document = $immutableDocument
         }
+    }
+}
+
+function Assert-Sprint8AReadinessCorrectionLineagePresence {
+    param(
+        [AllowNull()]$StateLineage,
+        [Parameter(Mandatory)]$ReadinessDocument
+    )
+
+    $documentAuthorization = Get-Sprint8AOptionalObjectPropertyValue `
+        -InputObject $ReadinessDocument `
+        -Name "predecessor_correction_authorization"
+    $documentConsumption = Get-Sprint8AOptionalObjectPropertyValue `
+        -InputObject $ReadinessDocument `
+        -Name "correction_consumption_receipt"
+    $documentLineage = Get-Sprint8AOptionalObjectPropertyValue `
+        -InputObject $ReadinessDocument `
+        -Name "correction_lineage"
+    if ($null -eq $StateLineage) {
+        if ($null -ne $documentAuthorization -or
+            $null -ne $documentConsumption -or
+            $null -ne $documentLineage) {
+            throw "Readiness names a correction transition or preserved lineage without canonical validation-state lineage."
+        }
+        return
+    }
+    if ($null -ne $documentLineage -and
+        (($documentLineage | ConvertTo-Json -Depth 100 -Compress) -cne
+            ($StateLineage | ConvertTo-Json -Depth 100 -Compress))) {
+        throw "Readiness and validation-state retain different correction lineage values."
+    }
+}
+
+function Assert-Sprint8AReadinessSupersessionChain {
+    param(
+        [Parameter(Mandatory)]$DescendantReference,
+        [Parameter(Mandatory)]$AncestorReference,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot
+    )
+
+    function Resolve-ReadinessTerminalReference {
+        param($Reference, [string]$Label)
+
+        if ($null -eq $Reference -or
+            [string]::IsNullOrWhiteSpace([string]$Reference.path) -or
+            [string]$Reference.sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "$Label lacks one exact immutable Readiness path and SHA-256."
+        }
+        $resolved = Resolve-Sprint8AEvidenceReference `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -Path ([string]$Reference.path)
+        $sha = Assert-Sprint8AReceiptSidecar -Path ([string]$resolved.full_path)
+        if ($sha -cne [string]$Reference.sha256) {
+            throw "$Label digest differs from its retained immutable receipt."
+        }
+        $document = Get-Content -LiteralPath ([string]$resolved.full_path) -Raw | ConvertFrom-Json
+        if (($document.schema_version -isnot [int] -and $document.schema_version -isnot [long]) -or
+            @(2, 3) -notcontains [int]$document.schema_version -or
+            [string]$document.sprint -cne "sprint-8a" -or
+            [string]$document.phase -cne "validation-readiness" -or
+            ($document.attempt -isnot [int] -and $document.attempt -isnot [long]) -or
+            [int]$document.attempt -lt 1 -or
+            @("passed", "failed") -cnotcontains [string]$document.state -or
+            $document.authoritative -isnot [bool] -or
+            $document.authoritative -ne $false -or
+            $document.assertions_started -isnot [bool] -or
+            ([string]$document.state -ceq "passed" -and $document.assertions_started -ne $true)) {
+            throw "$Label is not one supported terminal Readiness receipt."
+        }
+        $expectedPath = Get-Sprint8AEvidenceRelativePath `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -RelativePath "attempts/readiness-$([int]$document.attempt).json"
+        if ([string]$resolved.path -cne $expectedPath) {
+            throw "$Label substitutes a noncanonical immutable Readiness path."
+        }
+        if ($Reference.PSObject.Properties.Name -contains "attempt" -and
+            [int]$Reference.attempt -ne [int]$document.attempt) {
+            throw "$Label attempt differs from its retained immutable receipt."
+        }
+        if ($Reference.PSObject.Properties.Name -contains "state" -and
+            [string]$Reference.state -cne [string]$document.state) {
+            throw "$Label state differs from its retained immutable receipt."
+        }
+        [pscustomobject][ordered]@{
+            path = [string]$resolved.path
+            full_path = [string]$resolved.full_path
+            sha256 = $sha
+            document = $document
+        }
+    }
+
+    function Assert-ExactReadinessPrerequisite {
+        param($Reference, $Expected, [string]$Label)
+
+        $names = @($Reference.PSObject.Properties.Name | Sort-Object)
+        if ($null -eq $Reference -or
+            ($names | ConvertTo-Json -Compress) -cne (@("path", "sha256") | ConvertTo-Json -Compress) -or
+            [string]$Reference.path -cne [string]$Expected.path -or
+            [string]$Reference.sha256 -cne [string]$Expected.sha256) {
+            throw "$Label does not name its exact immutable predecessor Readiness."
+        }
+    }
+
+    $descendant = Resolve-ReadinessTerminalReference $DescendantReference "Readiness supersession descendant"
+    $ancestor = Resolve-ReadinessTerminalReference $AncestorReference "Readiness supersession ancestor"
+    $references = [Collections.Generic.List[object]]::new()
+    $references.Add($descendant)
+    if ([string]$descendant.path -ceq [string]$ancestor.path -and
+        [string]$descendant.sha256 -ceq [string]$ancestor.sha256) {
+        return [pscustomobject][ordered]@{
+            kind = "direct_correction_consumption"
+            depth = 0
+            descendant = $descendant
+            ancestor = $ancestor
+            references = @($references)
+        }
+    }
+    if ([string]$ancestor.document.state -cne "passed" -or
+        [int]$descendant.document.attempt -le [int]$ancestor.document.attempt) {
+        throw "Clean Readiness supersession requires a later descendant of one passing ancestor."
+    }
+
+    $seen = @{}
+    $cursor = $descendant
+    $depth = 0
+    while ([string]$cursor.path -cne [string]$ancestor.path -or
+        [string]$cursor.sha256 -cne [string]$ancestor.sha256) {
+        if ($seen.ContainsKey([string]$cursor.path)) {
+            throw "Clean Readiness supersession contains a loop."
+        }
+        $seen[[string]$cursor.path] = $true
+        $depth++
+        if ($depth -gt 9999) { throw "Clean Readiness supersession exceeds the supported attempt range." }
+
+        $cursorDocument = $cursor.document
+        $prerequisites = @($cursorDocument.prerequisite_receipts)
+        if ([int]$cursorDocument.schema_version -ne 3 -or
+            $prerequisites.Count -ne 1 -or
+            $cursorDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
+            $cursorDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
+            $null -ne (Get-Sprint8AOptionalObjectPropertyValue -InputObject $cursorDocument -Name "predecessor_correction_authorization") -or
+            $null -ne (Get-Sprint8AOptionalObjectPropertyValue -InputObject $cursorDocument -Name "correction_consumption_receipt")) {
+            throw "Clean Readiness supersession terminal must be schema 3, name one predecessor, and carry no direct correction consumption."
+        }
+
+        $predecessor = Resolve-ReadinessTerminalReference $prerequisites[0] "Readiness supersession predecessor"
+        Assert-ExactReadinessPrerequisite $prerequisites[0] $predecessor "Readiness supersession terminal prerequisite"
+        if ([string]$predecessor.document.state -cne "passed" -or
+            [int]$cursorDocument.attempt -ne ([int]$predecessor.document.attempt + 1)) {
+            throw "Clean Readiness supersession must be contiguous and may supersede only a passing predecessor."
+        }
+        $predecessorIsAncestor = [string]$predecessor.path -ceq [string]$ancestor.path -and
+            [string]$predecessor.sha256 -ceq [string]$ancestor.sha256
+        if (-not $predecessorIsAncestor) {
+            $cursorLineage = Get-Sprint8AOptionalObjectPropertyValue -InputObject $cursorDocument -Name "correction_lineage"
+            $predecessorLineage = Get-Sprint8AOptionalObjectPropertyValue -InputObject $predecessor.document -Name "correction_lineage"
+            if (($cursorLineage | ConvertTo-Json -Depth 100 -Compress) -cne
+                ($predecessorLineage | ConvertTo-Json -Depth 100 -Compress)) {
+                throw "Clean Readiness supersession changed correction lineage between sequential clean edges."
+            }
+        }
+
+        $startPath = Get-Sprint8AEvidenceRelativePath `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -RelativePath "attempts/readiness-$([int]$cursorDocument.attempt)-start.json"
+        $startResolved = Resolve-Sprint8AEvidenceReference `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -Path $startPath
+        $startSha = Assert-Sprint8AReceiptSidecar -Path ([string]$startResolved.full_path)
+        $startDocument = Get-Content -LiteralPath ([string]$startResolved.full_path) -Raw | ConvertFrom-Json
+        $startPrerequisites = @($startDocument.prerequisite_receipts)
+        $startLineage = Get-Sprint8AOptionalObjectPropertyValue -InputObject $startDocument -Name "correction_lineage"
+        $terminalLineage = Get-Sprint8AOptionalObjectPropertyValue -InputObject $cursorDocument -Name "correction_lineage"
+        if (($startDocument.schema_version -isnot [int] -and $startDocument.schema_version -isnot [long]) -or
+            [int]$startDocument.schema_version -ne 2 -or
+            [string]$startDocument.sprint -cne "sprint-8a" -or
+            [string]$startDocument.phase -cne "validation-readiness" -or
+            ($startDocument.attempt -isnot [int] -and $startDocument.attempt -isnot [long]) -or
+            [int]$startDocument.attempt -ne [int]$cursorDocument.attempt -or
+            [string]$startDocument.state -cne "preparing" -or
+            $startDocument.assertions_started -isnot [bool] -or
+            $startDocument.assertions_started -ne $false -or
+            $startDocument.authoritative -isnot [bool] -or
+            $startDocument.authoritative -ne $false -or
+            @($startDocument.checks).Count -ne 0 -or
+            $startPrerequisites.Count -ne 1 -or
+            $startDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
+            $startDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
+            $null -ne (Get-Sprint8AOptionalObjectPropertyValue -InputObject $startDocument -Name "predecessor_correction_authorization") -or
+            $null -ne (Get-Sprint8AOptionalObjectPropertyValue -InputObject $startDocument -Name "correction_consumption_receipt") -or
+            (($startLineage | ConvertTo-Json -Depth 100 -Compress) -cne
+                ($terminalLineage | ConvertTo-Json -Depth 100 -Compress))) {
+            throw "Clean Readiness supersession immutable start does not preserve the exact pre-assertion schema."
+        }
+        Assert-ExactReadinessPrerequisite $startPrerequisites[0] $predecessor "Readiness supersession start prerequisite"
+        $references.Add([pscustomobject][ordered]@{
+            path = [string]$startResolved.path
+            full_path = [string]$startResolved.full_path
+            sha256 = $startSha
+            document = $startDocument
+        })
+        $references.Add($predecessor)
+        $cursor = $predecessor
+        if ([int]$cursor.document.attempt -lt [int]$ancestor.document.attempt) {
+            throw "Clean Readiness supersession does not terminate at its authenticated ancestor."
+        }
+    }
+
+    [pscustomobject][ordered]@{
+        kind = "clean_pre_rehearsal_supersession"
+        depth = $depth
+        descendant = $descendant
+        ancestor = $ancestor
+        references = @($references)
     }
 }
 
@@ -1135,7 +1376,9 @@ function Assert-Sprint8ACorrectionIdentityContinuity {
 function Assert-Sprint8ACorrectionLineageTopology {
     param(
         [Parameter(Mandatory)][object[]]$Links,
-        [Parameter(Mandatory)][object[]]$PredecessorDocuments
+        [Parameter(Mandatory)][object[]]$PredecessorDocuments,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot
     )
 
     if ($Links.Count -ne $PredecessorDocuments.Count) {
@@ -1172,30 +1415,41 @@ function Assert-Sprint8ACorrectionLineageTopology {
             throw "Correction lineage contains a gap after an unconsumed authorization."
         }
         if ($phase -ceq "validation-readiness") {
-            if ([string]$priorConsumed.receipt.state -cne "failed" -or
-                [string]$link.predecessor.receipt.path -cne [string]$priorConsumed.receipt.path -or
-                [string]$link.predecessor.receipt.sha256 -cne [string]$priorConsumed.receipt.sha256) {
-                throw "Correction lineage contains a gap or fork between failed Readiness attempts."
-            }
+            $readinessBinding = Assert-Sprint8AReadinessSupersessionChain `
+                -DescendantReference $link.predecessor.receipt `
+                -AncestorReference $priorConsumed.receipt `
+                -RepositoryRoot $RepositoryRoot `
+                -EvidenceRoot $EvidenceRoot
             $predecessorAuthorization = Get-Sprint8AOptionalObjectPropertyValue -InputObject $predecessorDocument -Name "predecessor_correction_authorization"
             $predecessorConsumption = Get-Sprint8AOptionalObjectPropertyValue -InputObject $predecessorDocument -Name "correction_consumption_receipt"
-            if ($null -eq $predecessorAuthorization -or $null -eq $predecessorConsumption -or
+            $directBindingInvalid = [string]$readinessBinding.kind -ceq "direct_correction_consumption" -and (
+                $null -eq $predecessorAuthorization -or $null -eq $predecessorConsumption -or
                 [string]$predecessorAuthorization.path -cne [string]$Links[$index - 1].authorization.path -or
                 [string]$predecessorAuthorization.sha256 -cne [string]$Links[$index - 1].authorization.sha256 -or
                 [string]$predecessorConsumption.path -cne [string]$priorConsumed.consumption_receipt.path -or
-                [string]$predecessorConsumption.sha256 -cne [string]$priorConsumed.consumption_receipt.sha256) {
+                [string]$predecessorConsumption.sha256 -cne [string]$priorConsumed.consumption_receipt.sha256)
+            $supersessionBindingInvalid = [string]$readinessBinding.kind -ceq "clean_pre_rehearsal_supersession" -and (
+                $null -ne $predecessorAuthorization -or $null -ne $predecessorConsumption -or
+                $predecessorDocument.PSObject.Properties.Name -notcontains "correction_lineage" -or
+                (($predecessorDocument.correction_lineage | ConvertTo-Json -Depth 100 -Compress) -cne
+                    ([ordered]@{ schema_version = 1; links = @($Links[0..($index - 1)]) } |
+                        ConvertTo-Json -Depth 100 -Compress)))
+            if ([string]$predecessorDocument.state -cne "failed" -or
+                ($directBindingInvalid -or $supersessionBindingInvalid)) {
                 throw "Failed Readiness suffix does not authenticate the complete preceding correction link."
             }
             continue
         }
 
         $prerequisites = @($predecessorDocument.prerequisite_receipts)
-        if ([string]$priorConsumed.receipt.state -cne "passed" -or
-            $prerequisites.Count -ne 1 -or
-            [string]$prerequisites[0].path -cne [string]$priorConsumed.receipt.path -or
-            [string]$prerequisites[0].sha256 -cne [string]$priorConsumed.receipt.sha256) {
+        if ($prerequisites.Count -ne 1) {
             throw "Correction lineage candidate rehearsal does not name the exact preceding passing Readiness as its sole prerequisite."
         }
+        [void](Assert-Sprint8AReadinessSupersessionChain `
+            -DescendantReference $prerequisites[0] `
+            -AncestorReference $priorConsumed.receipt `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot)
         if ($predecessorDocument.PSObject.Properties.Name -notcontains "correction_lineage" -or
             $null -eq $predecessorDocument.correction_lineage -or
             [int]$predecessorDocument.correction_lineage.schema_version -ne 1) {
@@ -1225,7 +1479,12 @@ function Assert-Sprint8ACorrectionLineage {
         if ($RequireConsumedTip -or $null -ne $ExpectedCurrentReadiness) {
             throw "Validation-state omits the required correction lineage."
         }
-        return [pscustomobject][ordered]@{ links = @(); tip = $null; references = @() }
+        return [pscustomobject][ordered]@{
+            links = @()
+            tip = $null
+            current_readiness_binding = $null
+            references = @()
+        }
     }
     if (($Lineage.schema_version -isnot [int] -and $Lineage.schema_version -isnot [long]) -or
         [int]$Lineage.schema_version -ne 1) {
@@ -1300,10 +1559,19 @@ function Assert-Sprint8ACorrectionLineage {
         $expectedHarvestPhase = "$phase-harvest"
         $expectedBatchPhase = "$phase-defect-batch"
         $expectedAuthorizationPhase = "$phase-correction-authorization"
+        $predecessorReadinessSchemaInvalid = $phase -ceq "validation-readiness" -and (
+            ($receiptRef.document.schema_version -isnot [int] -and $receiptRef.document.schema_version -isnot [long]) -or
+            @(2, 3) -notcontains [int]$receiptRef.document.schema_version -or
+            $receiptRef.document.assertions_started -isnot [bool] -or
+            ([string]$receiptRef.document.state -ceq "passed" -and $receiptRef.document.assertions_started -ne $true))
         $authorizedAttemptPath = (Resolve-Sprint8AEvidenceReference -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Path ([string]$authorizationRef.document.predecessor_attempt_receipt.path) -AllowLegacyAbsolute).path
         $authorizedHarvestPath = (Resolve-Sprint8AEvidenceReference -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Path ([string]$authorizationRef.document.harvest_receipt.path) -AllowLegacyAbsolute).path
         $authorizedBatchPath = (Resolve-Sprint8AEvidenceReference -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Path ([string]$authorizationRef.document.defect_batch.path) -AllowLegacyAbsolute).path
-        if ([string]$receiptRef.document.phase -cne $phase -or
+        if ($predecessorReadinessSchemaInvalid -or
+            [string]$receiptRef.document.sprint -cne "sprint-8a" -or
+            $receiptRef.document.authoritative -isnot [bool] -or
+            $receiptRef.document.authoritative -ne $false -or
+            [string]$receiptRef.document.phase -cne $phase -or
             [string]$receiptRef.document.state -cne "failed" -or
             [int]$receiptRef.document.attempt -ne $attempt -or
             [string]$harvestRef.document.phase -cne $expectedHarvestPhase -or
@@ -1341,8 +1609,13 @@ function Assert-Sprint8ACorrectionLineage {
                     sha256 = [string]$rootPrerequisite.sha256
                 }) "Historical R30 immutable Readiness prerequisite"
                 if ([string]$legacyImmutableRef.document.phase -cne "validation-readiness" -or
+                    [string]$legacyImmutableRef.document.sprint -cne "sprint-8a" -or
                     [int]$legacyImmutableRef.document.attempt -ne 37 -or
-                    [string]$legacyImmutableRef.document.state -cne "passed") {
+                    [string]$legacyImmutableRef.document.state -cne "passed" -or
+                    $legacyImmutableRef.document.authoritative -isnot [bool] -or
+                    $legacyImmutableRef.document.authoritative -ne $false -or
+                    $legacyImmutableRef.document.assertions_started -isnot [bool] -or
+                    $legacyImmutableRef.document.assertions_started -ne $true) {
                     throw "Historical R30 prerequisite does not resolve to exact immutable passing Readiness 37."
                 }
                 $references.Add($legacyImmutableRef)
@@ -1351,8 +1624,15 @@ function Assert-Sprint8ACorrectionLineage {
                 $rootPrerequisiteAttempt = [int]$rootPrerequisiteRef.document.attempt
                 $expectedRootPrerequisitePath = Get-Sprint8AEvidenceRelativePath -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -RelativePath "attempts/readiness-$rootPrerequisiteAttempt.json"
                 if ([string]$rootPrerequisiteRef.path -cne $expectedRootPrerequisitePath -or
+                    ($rootPrerequisiteRef.document.schema_version -isnot [int] -and $rootPrerequisiteRef.document.schema_version -isnot [long]) -or
+                    @(2, 3) -notcontains [int]$rootPrerequisiteRef.document.schema_version -or
+                    [string]$rootPrerequisiteRef.document.sprint -cne "sprint-8a" -or
                     [string]$rootPrerequisiteRef.document.phase -cne "validation-readiness" -or
                     [string]$rootPrerequisiteRef.document.state -cne "passed" -or
+                    $rootPrerequisiteRef.document.authoritative -isnot [bool] -or
+                    $rootPrerequisiteRef.document.authoritative -ne $false -or
+                    $rootPrerequisiteRef.document.assertions_started -isnot [bool] -or
+                    $rootPrerequisiteRef.document.assertions_started -ne $true -or
                     $rootPrerequisiteAttempt -lt 1) {
                     throw "Root candidate does not authenticate one immutable passing-Readiness prerequisite."
                 }
@@ -1421,19 +1701,33 @@ function Assert-Sprint8ACorrectionLineage {
             [string]$consumptionRef.document.successor_readiness.start_receipt_sha256 -cne [string]$startRef.sha256 -or
             ($startRef.document.schema_version -isnot [int] -and $startRef.document.schema_version -isnot [long]) -or
             [int]$startRef.document.schema_version -ne 2 -or
+            [string]$startRef.document.sprint -cne "sprint-8a" -or
             [string]$startRef.document.phase -cne "validation-readiness" -or
+            ($startRef.document.attempt -isnot [int] -and $startRef.document.attempt -isnot [long]) -or
             [int]$startRef.document.attempt -ne $successorAttempt -or
             [string]$startRef.document.state -cne "preparing" -or
             $startRef.document.assertions_started -isnot [bool] -or
             $startRef.document.assertions_started -ne $false -or
+            $startRef.document.authoritative -isnot [bool] -or
+            $startRef.document.authoritative -ne $false -or
             @($startRef.document.checks).Count -ne 0 -or
+            @($startRef.document.prerequisite_receipts).Count -ne 0 -or
+            $startRef.document.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
+            $startRef.document.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
             $null -ne (Get-Sprint8AOptionalObjectPropertyValue -InputObject $startRef.document -Name "predecessor_correction_authorization") -or
             $null -ne (Get-Sprint8AOptionalObjectPropertyValue -InputObject $startRef.document -Name "correction_consumption_receipt") -or
             ($terminalRef.document.schema_version -isnot [int] -and $terminalRef.document.schema_version -isnot [long]) -or
-            [int]$terminalRef.document.schema_version -ne 2 -or
+            @(2, 3) -notcontains [int]$terminalRef.document.schema_version -or
+            [string]$terminalRef.document.sprint -cne "sprint-8a" -or
             [string]$terminalRef.document.phase -cne "validation-readiness" -or
+            ($terminalRef.document.attempt -isnot [int] -and $terminalRef.document.attempt -isnot [long]) -or
             [int]$terminalRef.document.attempt -ne $successorAttempt -or
             [string]$terminalRef.document.state -cne [string]$consumed.receipt.state -or
+            $terminalRef.document.authoritative -isnot [bool] -or
+            $terminalRef.document.authoritative -ne $false -or
+            $terminalRef.document.assertions_started -isnot [bool] -or
+            ([string]$terminalRef.document.state -ceq "passed" -and $terminalRef.document.assertions_started -ne $true) -or
+            @($terminalRef.document.prerequisite_receipts).Count -ne 0 -or
             $null -eq $terminalAuthorization -or
             [string]$terminalAuthorization.path -cne [string]$authorizationRef.path -or
             [string]$terminalAuthorization.sha256 -cne [string]$authorizationRef.sha256 -or
@@ -1446,27 +1740,60 @@ function Assert-Sprint8ACorrectionLineage {
 
     Assert-Sprint8ACorrectionLineageTopology `
         -Links $links `
-        -PredecessorDocuments @($predecessorDocuments)
+        -PredecessorDocuments @($predecessorDocuments) `
+        -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $EvidenceRoot
 
     $tip = $links[-1]
     if ($RequireConsumedTip -and $null -eq $tip.consumed_by_readiness) {
         throw "Correction lineage tip has not been consumed by Readiness."
     }
+    $currentReadinessBinding = $null
     if ($null -ne $ExpectedCurrentReadiness) {
         $currentReadinessValidation = Assert-Sprint8ACurrentReadinessReference `
             -StateReadiness $ExpectedCurrentReadiness `
             -RepositoryRoot $RepositoryRoot `
             -EvidenceRoot $EvidenceRoot
-        if ($null -eq $tip.consumed_by_readiness -or
-            [int]$tip.consumed_by_readiness.attempt -ne [int]$currentReadinessValidation.attempt -or
-            [string]$tip.consumed_by_readiness.receipt.path -cne [string]$currentReadinessValidation.immutable.path -or
-            [string]$tip.consumed_by_readiness.receipt.sha256 -cne [string]$currentReadinessValidation.immutable.sha256 -or
-            [string]$tip.consumed_by_readiness.receipt.state -cne [string]$currentReadinessValidation.state) {
-            throw "Correction lineage tip does not terminate at the exact current Readiness receipt."
+        if ($null -eq $tip.consumed_by_readiness) {
+            throw "Correction lineage tip has no consumed Readiness authority for the current Readiness."
         }
+        $currentReadinessBinding = Assert-Sprint8AReadinessSupersessionChain `
+            -DescendantReference ([pscustomobject]@{
+                attempt = [int]$currentReadinessValidation.attempt
+                path = [string]$currentReadinessValidation.immutable.path
+                sha256 = [string]$currentReadinessValidation.immutable.sha256
+                state = [string]$currentReadinessValidation.state
+            }) `
+            -AncestorReference $tip.consumed_by_readiness.receipt `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot
+        if ([string]$currentReadinessBinding.kind -ceq "clean_pre_rehearsal_supersession") {
+            $retainedCurrentLineage = Get-Sprint8AOptionalObjectPropertyValue `
+                -InputObject $currentReadinessValidation.immutable.document `
+                -Name "correction_lineage"
+            if (($retainedCurrentLineage | ConvertTo-Json -Depth 100 -Compress) -cne
+                ($Lineage | ConvertTo-Json -Depth 100 -Compress)) {
+                throw "Clean Readiness supersession does not preserve the exact current correction lineage."
+            }
+        }
+        foreach ($reference in @($currentReadinessBinding.references)) { $references.Add($reference) }
         if ([string]$currentReadinessValidation.current.path -cne [string]$currentReadinessValidation.immutable.path) {
             $references.Add($currentReadinessValidation.current)
         }
     }
-    [pscustomobject][ordered]@{ links = @($links); tip = $tip; references = @($references) }
+    $uniqueReferences = [Collections.Generic.List[object]]::new()
+    $seenReferences = @{}
+    foreach ($reference in @($references)) {
+        $key = "$([string]$reference.path)|$([string]$reference.sha256)"
+        if (-not $seenReferences.ContainsKey($key)) {
+            $seenReferences[$key] = $true
+            $uniqueReferences.Add($reference)
+        }
+    }
+    [pscustomobject][ordered]@{
+        links = @($links)
+        tip = $tip
+        current_readiness_binding = $currentReadinessBinding
+        references = @($uniqueReferences)
+    }
 }

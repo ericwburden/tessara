@@ -1384,10 +1384,14 @@ try {
             sha256 = [string]$stateReadinessValidation.immutable.sha256
         })
         $runtimeContext.readiness_immutable_reference = $stateReadinessValidation.immutable
-        if ($stateIndex.PSObject.Properties.Name -contains "correction_lineage" -and
-            $null -ne $stateIndex.correction_lineage) {
+        $stateLineageProperty = $stateIndex.PSObject.Properties["correction_lineage"]
+        $stateCorrectionLineage = if ($null -eq $stateLineageProperty) { $null } else { $stateLineageProperty.Value }
+        Assert-Sprint8AReadinessCorrectionLineagePresence `
+            -StateLineage $stateCorrectionLineage `
+            -ReadinessDocument $stateReadinessDocument
+        if ($null -ne $stateCorrectionLineage) {
             $lineageValidation = Assert-Sprint8ACorrectionLineage `
-                -Lineage $stateIndex.correction_lineage `
+                -Lineage $stateCorrectionLineage `
                 -RepositoryRoot $repoRoot `
                 -EvidenceRoot $evidenceRootPath `
                 -ExpectedCurrentReadiness ([pscustomobject]@{
@@ -1399,19 +1403,26 @@ try {
                 -RequireConsumedTip
             $tip = $lineageValidation.tip
             $consumptionRef = $tip.consumed_by_readiness.consumption_receipt
-            if ($stateReadinessDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
-                $null -eq $stateReadinessDocument.predecessor_correction_authorization -or
-                [string]$stateReadinessDocument.predecessor_correction_authorization.sha256 -cne [string]$tip.authorization.sha256 -or
-                $stateReadinessDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
-                [string]$stateReadinessDocument.correction_consumption_receipt.path -cne [string]$consumptionRef.path -or
-                [string]$stateReadinessDocument.correction_consumption_receipt.sha256 -cne [string]$consumptionRef.sha256) {
-                throw "Current passing Readiness does not bind the correction-lineage tip authorization and consumption."
+            $currentReadinessBinding = $lineageValidation.current_readiness_binding
+            if ([string]$currentReadinessBinding.kind -ceq "direct_correction_consumption") {
+                if ($stateReadinessDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization" -or
+                    $null -eq $stateReadinessDocument.predecessor_correction_authorization -or
+                    [string]$stateReadinessDocument.predecessor_correction_authorization.sha256 -cne [string]$tip.authorization.sha256 -or
+                    $stateReadinessDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt" -or
+                    [string]$stateReadinessDocument.correction_consumption_receipt.path -cne [string]$consumptionRef.path -or
+                    [string]$stateReadinessDocument.correction_consumption_receipt.sha256 -cne [string]$consumptionRef.sha256) {
+                    throw "Directly consumed passing Readiness does not bind the correction-lineage tip authorization and consumption."
+                }
+            } elseif ([string]$currentReadinessBinding.kind -ceq "clean_pre_rehearsal_supersession") {
+                if ($null -ne $stateReadinessDocument.predecessor_correction_authorization -or
+                    $null -ne $stateReadinessDocument.correction_consumption_receipt) {
+                    throw "Clean Readiness supersession must not copy or consume the correction-lineage tip again."
+                }
+            } else {
+                throw "Current passing Readiness lacks one authenticated correction-lineage binding."
             }
-            $runtimeContext.correction_lineage = $stateIndex.correction_lineage
-            $attemptReceipt.correction_lineage = $stateIndex.correction_lineage
-        } elseif ($null -ne $stateReadinessDocument.predecessor_correction_authorization -or
-            $null -ne $stateReadinessDocument.correction_consumption_receipt) {
-            throw "Current passing Readiness names a correction transition without canonical lineage."
+            $runtimeContext.correction_lineage = $stateCorrectionLineage
+            $attemptReceipt.correction_lineage = $stateCorrectionLineage
         }
         $runtimeContext.validation_state = $stateIndex
         $runtimeContext.launch_authorized = $true

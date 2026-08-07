@@ -260,13 +260,38 @@ SIT, UAT, closeout, or any claim that rehearsal passed.
   authorization for the exact next Readiness attempt. This finalization may be
   recovered without starting the successor. The successor alone creates the
   append-only consumption receipt bound to its immutable start snapshot.
+- A passing Readiness may be superseded without a new correction-lineage link
+  or consumption only at the clean pre-rehearsal boundary: rehearsal is still
+  ineligible, preflight is false, and the requested Readiness number is the
+  exact sequential next unused attempt. Authenticate that boundary under the
+  retained lock before namespace creation. The superseding immutable start and
+  terminal receipts name the immediately preceding immutable passing Readiness
+  as their exact prerequisite. When the predecessor is already the terminal of
+  a consumed correction lineage, both receipts carry that complete
+  `correction_lineage` value with its authorization and consumption bindings
+  unchanged. The original Readiness remains the one authorization consumer;
+  never drop or retarget the lineage
+  and never create a second consumption. The clean successor's own
+  `predecessor_correction_authorization` and `correction_consumption_receipt`
+  fields remain null. Validation may reach the current
+  Readiness from the consumed tip only through a complete chain of canonical,
+  hashed, sequential clean-pre-rehearsal supersession edges. Any gap, altered
+  predecessor, reused attempt, non-clean boundary, or changed lineage binding
+  rejects the launch before its namespace is created.
+- A Readiness that directly consumes a pending correction authorization does
+  not embed the in-progress `correction_lineage` object in its immutable start
+  or terminal receipt. Its direct authorization/consumption fields and the
+  validation-state lineage bind that terminal after its SHA-256 exists. This
+  avoids a self-referential terminal hash. Only a clean supersession carries an
+  already-complete, byte-semantically unchanged lineage in its receipts.
 - The sole failed-Readiness finalizer recovery exception was the already-terminal
   Sprint 8A Readiness 38 attempt. Its complete immutable receipt, raw evidence,
   two failures, one exact block, and documented consolidated correction set were
   frozen before the finalizer existed and before the user-directed testing exit.
   R38 was finalized once without rerunning its checks, and R39 subsequently
-  passed. No later attempt may use this ordering exception. Sprint 8A's current
-  coordinator-authorized boundary is R40 followed by Candidate Rehearsal 32.
+  passed. No later attempt may use this ordering exception. The sprint
+  verification record and sidecar-bound validation state, not this reusable
+  reference, retain the coordinator-authorized live attempt boundary.
 - Preserve every rehearsal-to-Readiness and failed-Readiness-to-Readiness link
   in one authenticated correction lineage. Each link binds its failed receipt,
   harvest, batch, authorization, consumption, immutable successor start, and
@@ -284,8 +309,9 @@ SIT, UAT, closeout, or any claim that rehearsal passed.
   must have the same SHA-256 and JSON document as its immutable counterpart.
   Never retain the mutable alias as a historical lineage terminal. An alias
   rollover leaves each earlier epoch authenticatable through its immutable
-  terminal while the current lineage tip accepts only the new alias/counterpart
-  pair.
+  terminal. The current alias/counterpart pair must be either the consumed
+  lineage tip itself or the terminal of the authenticated clean-pre-rehearsal
+  supersession chain rooted at that tip.
 - Enforce the complete lineage topology, not a valid-looking suffix. A root
   candidate has exactly one immutable passing-Readiness prerequisite and no
   prior lineage; a root failed Readiness has no predecessor correction
@@ -305,8 +331,9 @@ SIT, UAT, closeout, or any claim that rehearsal passed.
 - Maintain one validation-state index naming the sole current Readiness receipt
   path and SHA-256. Rehearsal requires exact equality with that path and digest
   and validates the complete correction lineage through the current passing
-  Readiness; an older passing Readiness, an incomplete lineage, or a used
-  attempt number cannot be selected again.
+  Readiness, either directly or through its exact clean-pre-rehearsal
+  supersession chain. An older passing Readiness cannot be selected as current,
+  an incomplete lineage is invalid, and a used attempt number cannot be reused.
 - Readiness, Candidate Rehearsal, and Validation Preflight authenticate the
   validation-state sidecar and exact attempt numbers before consuming its
   references. Preflight also authenticates the passing rehearsal's immutable

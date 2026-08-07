@@ -1042,11 +1042,23 @@ function Test-Sprint8AAcceptanceContract {
             "function ConvertTo-Sprint8ACorrectionLineage",
             "function Get-Sprint8AEvidenceRelativePath",
             "function Assert-Sprint8ACurrentReadinessReference",
+            "function Assert-Sprint8AReadinessCorrectionLineagePresence",
             "function Add-Sprint8ACorrectionLineageLink",
             "function Assert-Sprint8ACorrectionIdentityContinuity",
             "function Assert-Sprint8ACorrectionLineageTopology",
             "function Assert-Sprint8ACorrectionLineage",
-            "Correction lineage contains a gap or fork",
+            "function Assert-Sprint8AReadinessSupersessionChain",
+            "current_readiness_binding", "direct_correction_consumption",
+            "clean_pre_rehearsal_supersession",
+            '($currentDocument.schema_version -isnot [int] -and $currentDocument.schema_version -isnot [long])',
+            '($immutableDocument.schema_version -isnot [int] -and $immutableDocument.schema_version -isnot [long])',
+            '@(2, 3) -notcontains [int]$currentDocument.schema_version',
+            '@(2, 3) -notcontains [int]$immutableDocument.schema_version',
+            '[int]$startRef.document.schema_version -ne 2',
+            '($startRef.document.schema_version -isnot [int] -and $startRef.document.schema_version -isnot [long])',
+            '@(2, 3) -notcontains [int]$terminalRef.document.schema_version',
+            '($terminalRef.document.schema_version -isnot [int] -and $terminalRef.document.schema_version -isnot [long])',
+            '$terminalRef.document.assertions_started -ne $true',
             "Root failed-Readiness correction link cannot be a truncated consumed suffix",
             "Historical R30 immutable Readiness prerequisite",
             'RelativePath "attempts/readiness-37.json"',
@@ -1128,6 +1140,8 @@ function Test-Sprint8AAcceptanceContract {
             "Invoke-RehearsalPowerShellCheck", "Test-RehearsalPowerShellCheck",
             "A stale native exit code falsely failed a successful PowerShell child.",
             "Assert-Sprint8ACorrectionLineage",
+            "current_readiness_binding", "direct_correction_consumption",
+            "clean_pre_rehearsal_supersession",
             "Assert-Sprint8ACurrentReadinessReference",
             "Assert-Sprint8AReceiptSidecar -Path `$statePath",
             "ExpectedCurrentReadiness", "RequireConsumedTip",
@@ -1137,7 +1151,8 @@ function Test-Sprint8AAcceptanceContract {
             'sha256 = [string]$runtimeContext.readiness_immutable_reference.sha256',
             "Test-Sprint8AFirstRehearsalCorrectionLink",
             '-ComponentsContractLaneReceipt (Join-Path $laneRoot "components-contract-tests.json")',
-            '$attemptReceipt.correction_lineage = $stateIndex.correction_lineage',
+            'Assert-Sprint8AReadinessCorrectionLineagePresence',
+            '$attemptReceipt.correction_lineage = $stateCorrectionLineage',
             "function Resolve-LaneClassification",
             '[AllowNull()][string]$StructuredClassification',
             'source = "structured_evidence"',
@@ -1187,9 +1202,16 @@ function Test-Sprint8AAcceptanceContract {
             "correction_lineage", "consumed_by_readiness",
             "duplicate or alternate Readiness consumption is forbidden",
             "FinalizeFailedAttempt", "Complete-Sprint8AFailedReadinessHarvest",
-            "Test-Sprint8AAlternatingCorrectionEpochs", "Test-Sprint8AFailedReadinessFinalization",
+            "Test-Sprint8AReadinessSupersessionContract", "Test-Sprint8AFailedReadinessFinalization",
             "Test-Sprint8ACorrectionIdentityContinuity", "Assert-Sprint8ANoReadinessSuccessorCollision",
             "Test-Sprint8ACleanReadinessRerunState", "Add-Sprint8ACorrectionLineageLink",
+            "Get-Sprint8AReadinessReceiptCorrectionLineage",
+            "clean_rerun", "lineage_validation", "preserved_correction_lineage", "prerequisite_receipts",
+            '$readinessPrerequisiteReceipts',
+            '$cleanRerunReservation = Get-Sprint8AReadinessAttemptReservation',
+            '$cleanRerunPrerequisites.Count -ne 1',
+            "without a second consumption", "noncontiguous successor attempt",
+            "orphaned consumed correction transition",
             'receipt = $relativeAttemptPath',
             "CurrentReadinessReference", 'path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath)',
             "New-Sprint8ANextCandidateRehearsalPlan", "next_candidate_rehearsal",
@@ -1302,6 +1324,9 @@ function Test-Sprint8AAcceptanceContract {
             '"evidence-path-contract"', '"evidence-inventory"',
             "Open-Sprint8AValidationAttemptLock", "validation-attempt.lock",
             "Assert-Sprint8ACorrectionLineage", "correction_lineage",
+            "Assert-Sprint8AReadinessCorrectionLineagePresence",
+            "current_readiness_binding", "direct_correction_consumption",
+            "clean_pre_rehearsal_supersession",
             "Assert-Sprint8ACurrentReadinessReference",
             "function Assert-Sprint8APreflightRehearsalAttemptReceipt",
             '"attempts/candidate-rehearsal-$attempt-attempt.json"',
@@ -1312,7 +1337,7 @@ function Test-Sprint8AAcceptanceContract {
             '[int]$state.readiness.attempt -ne [int]$readiness.attempt',
             '[int]$state.rehearsal.attempt -ne [int]$rehearsal.attempt',
             "ExpectedCurrentReadiness", "RequireConsumedTip", 'receipt = [string]$readinessReference.path',
-            "canonical_consumption_of_current_correction_lineage_tip",
+            "canonical_current_correction_lineage_authority",
             "function Invoke-Sprint8APreflightCheck", 'state = "harvesting"',
             "blocked by failed prerequisite(s)",
             "function Get-Sprint8APlannedEvidenceInventory",
@@ -1445,6 +1470,67 @@ function Test-Sprint8AAcceptanceContract {
         )
         if (@($runnerParseErrors).Count -ne 0) {
             throw "Sprint 8A validation contract runner '$runner' does not parse: $($runnerParseErrors.Message -join '; ')."
+        }
+    }
+    $validationEnvironmentText = Get-Content -LiteralPath (
+        Join-Path $repoRoot "scripts/sprint-8a-validation-environment.ps1"
+    ) -Raw
+    $supersessionHelperIndex = $validationEnvironmentText.IndexOf(
+        'function Assert-Sprint8AReadinessSupersessionChain',
+        [StringComparison]::Ordinal
+    )
+    $supersessionHelperEndIndex = $validationEnvironmentText.IndexOf(
+        'function ConvertTo-Sprint8ACorrectionLineage',
+        $supersessionHelperIndex,
+        [StringComparison]::Ordinal
+    )
+    if ($supersessionHelperIndex -lt 0 -or $supersessionHelperEndIndex -le $supersessionHelperIndex) {
+        throw "Sprint 8A validation must have one central Readiness supersession verifier."
+    }
+    $supersessionHelper = $validationEnvironmentText.Substring(
+        $supersessionHelperIndex,
+        $supersessionHelperEndIndex - $supersessionHelperIndex
+    )
+    foreach ($fragment in @(
+        '($document.schema_version -isnot [int] -and $document.schema_version -isnot [long])',
+        '@(2, 3) -notcontains [int]$document.schema_version',
+        '[string]$document.sprint -cne "sprint-8a"',
+        '$document.authoritative -ne $false',
+        '$document.assertions_started -ne $true',
+        '($startDocument.schema_version -isnot [int] -and $startDocument.schema_version -isnot [long])',
+        '[int]$startDocument.schema_version -ne 2',
+        '$prerequisites.Count -ne 1',
+        '$startPrerequisites.Count -ne 1',
+        '$cursorDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization"',
+        '$cursorDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt"',
+        '$startDocument.PSObject.Properties.Name -notcontains "predecessor_correction_authorization"',
+        '$startDocument.PSObject.Properties.Name -notcontains "correction_consumption_receipt"',
+        'predecessor_correction_authorization',
+        'correction_consumption_receipt',
+        'direct_correction_consumption',
+        'clean_pre_rehearsal_supersession',
+        '[int]$cursorDocument.attempt -ne ([int]$predecessor.document.attempt + 1)',
+        'changed correction lineage between sequential clean edges'
+    )) {
+        if (-not $supersessionHelper.Contains($fragment)) {
+            throw "Central Readiness supersession verification omits '$fragment'."
+        }
+    }
+    foreach ($runner in @(
+        "scripts/run-sprint-8a-candidate-rehearsal.ps1",
+        "scripts/run-sprint-8a-validation-preflight.ps1"
+    )) {
+        $runnerText = Get-Content -LiteralPath (Join-Path $repoRoot $runner) -Raw
+        foreach ($fragment in @(
+            'Assert-Sprint8AReadinessCorrectionLineagePresence',
+            '-ExpectedCurrentReadiness',
+            '$currentReadinessBinding = $lineageValidation.current_readiness_binding',
+            'if ([string]$currentReadinessBinding.kind -ceq "direct_correction_consumption")',
+            '} elseif ([string]$currentReadinessBinding.kind -ceq "clean_pre_rehearsal_supersession")'
+        )) {
+            if (-not $runnerText.Contains($fragment)) {
+                throw "Sprint 8A runner '$runner' does not consume the central current-Readiness lineage binding through '$fragment'."
+            }
         }
     }
     . (Join-Path $repoRoot "scripts/sprint-8a-lifecycle-chain.ps1")
@@ -1615,6 +1701,107 @@ function Test-Sprint8AAcceptanceContract {
         throw "Candidate rehearsal must validate Compose quietly so normalized runtime secrets never enter retained logs."
     }
     $readinessRunner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/validate-sprint-8a-readiness.ps1") -Raw
+    $readinessSelfTestIndex = $readinessRunner.IndexOf('if ($SelfTest)', [StringComparison]::Ordinal)
+    $readinessSelfTestEndIndex = $readinessRunner.IndexOf(
+        'if ($Attempt -lt 1)',
+        $readinessSelfTestIndex,
+        [StringComparison]::Ordinal
+    )
+    if ($readinessSelfTestIndex -lt 0 -or $readinessSelfTestEndIndex -le $readinessSelfTestIndex) {
+        throw "Validation Readiness must retain one bounded no-attempt self-test branch."
+    }
+    $readinessSelfTestBlock = $readinessRunner.Substring(
+        $readinessSelfTestIndex,
+        $readinessSelfTestEndIndex - $readinessSelfTestIndex
+    )
+    foreach ($requiredSelfTestCall in @(
+        'Test-Sprint8AReadinessSupersessionContract',
+        'Test-Sprint8AFailedReadinessFinalization'
+    )) {
+        if (-not $readinessSelfTestBlock.Contains($requiredSelfTestCall)) {
+            throw "Validation Readiness self-test branch does not invoke '$requiredSelfTestCall'."
+        }
+    }
+    $readinessStartReceiptIndex = $readinessRunner.IndexOf('$startReceipt = [ordered]@{', [StringComparison]::Ordinal)
+    $readinessTerminalReceiptIndex = $readinessRunner.IndexOf('$receipt = [ordered]@{', [StringComparison]::Ordinal)
+    if ($readinessStartReceiptIndex -lt 0 -or $readinessTerminalReceiptIndex -le $readinessStartReceiptIndex) {
+        throw "Validation Readiness must retain distinct immutable-start and terminal receipt producers."
+    }
+    $readinessStartReceiptBlock = $readinessRunner.Substring(
+        $readinessStartReceiptIndex,
+        [Math]::Min(320, $readinessRunner.Length - $readinessStartReceiptIndex)
+    )
+    $readinessTerminalReceiptBlock = $readinessRunner.Substring(
+        $readinessTerminalReceiptIndex,
+        [Math]::Min(320, $readinessRunner.Length - $readinessTerminalReceiptIndex)
+    )
+    if ($readinessStartReceiptBlock -notmatch '(?m)^\s*schema_version\s*=\s*2\s*$' -or
+        $readinessTerminalReceiptBlock -notmatch '(?m)^\s*schema_version\s*=\s*3\s*$') {
+        throw "Validation Readiness must publish an exact schema-2 immutable start and the current schema-3 terminal receipt."
+    }
+    if ([regex]::Matches(
+            $readinessRunner,
+            [regex]::Escape('prerequisite_receipts = @($readinessPrerequisiteReceipts)')
+        ).Count -lt 2) {
+        throw "Validation Readiness clean reruns must retain the same reserved immutable predecessor in both start and terminal receipts."
+    }
+    if (-not $readinessRunner.Contains('$startReceipt.prerequisite_receipts = @($readinessPrerequisiteReceipts)')) {
+        throw "Validation Readiness checkpoints must retain the reserved immutable predecessor."
+    }
+    if ([regex]::Matches(
+            $readinessRunner,
+            [regex]::Escape('correction_lineage = $receiptCorrectionLineage')
+        ).Count -lt 2 -or
+        -not $readinessRunner.Contains('$startReceipt.correction_lineage = $receiptCorrectionLineage')) {
+        throw "Validation Readiness clean start, checkpoint, and terminal receipts must retain only the reserved correction lineage."
+    }
+    foreach ($fragment in @(
+        '$correctionLineage = $launchReservation.preserved_correction_lineage',
+        '$receiptCorrectionLineage = Get-Sprint8AReadinessReceiptCorrectionLineage -Reservation $launchReservation',
+        '$readinessPrerequisiteReceipts = @($launchReservation.prerequisite_receipts)'
+    )) {
+        if (-not $readinessRunner.Contains($fragment)) {
+            throw "Validation Readiness does not initialize clean-rerun receipt state from its locked reservation through '$fragment'."
+        }
+    }
+    $attemptStateCheckIndex = $readinessRunner.IndexOf(
+        'Invoke-ReadinessCheck "attempt-state-prerequisite"',
+        [StringComparison]::Ordinal
+    )
+    $cleanRerunBranchIndex = $readinessRunner.IndexOf(
+        'if ([bool]$launchReservation.clean_rerun)',
+        $attemptStateCheckIndex,
+        [StringComparison]::Ordinal
+    )
+    $cleanRerunBranchEndIndex = $readinessRunner.IndexOf(
+        '$lineageValidation = $launchReservation.lineage_validation',
+        $cleanRerunBranchIndex,
+        [StringComparison]::Ordinal
+    )
+    if ($attemptStateCheckIndex -lt 0 -or $cleanRerunBranchIndex -lt 0 -or
+        $cleanRerunBranchEndIndex -le $cleanRerunBranchIndex) {
+        throw "Validation Readiness must expose a bounded clean-rerun branch before correction consumption."
+    }
+    $cleanRerunBranch = $readinessRunner.Substring(
+        $cleanRerunBranchIndex,
+        $cleanRerunBranchEndIndex - $cleanRerunBranchIndex
+    )
+    foreach ($fragment in @(
+        '@($script:readinessPrerequisiteReceipts).Count -ne 1',
+        '$null -ne $script:predecessorCorrectionAuthorization',
+        '$null -ne $script:correctionConsumptionReceipt',
+        '$launchReservation.preserved_correction_lineage',
+        'return'
+    )) {
+        if (-not $cleanRerunBranch.Contains($fragment)) {
+            throw "Validation Readiness clean-rerun branch omits '$fragment'."
+        }
+    }
+    if ($cleanRerunBranch.Contains('Publish-Sprint8AAppendOnlyJsonReceipt') -or
+        $cleanRerunBranch.Contains('consumptionDocument =') -or
+        $cleanRerunBranch.Contains('consumed_by_readiness =')) {
+        throw "A clean Readiness supersession must not create another correction consumption."
+    }
     $readinessReservationHelperIndex = $readinessRunner.IndexOf(
         'function Open-Sprint8AReadinessAttemptReservation',
         [StringComparison]::Ordinal
