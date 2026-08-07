@@ -187,7 +187,13 @@ function Test-Sprint8AHealthObservation {
         $exceptionType = Get-Sprint8AHealthMemberValue -InputObject $transportError -Name "exception_type"
         $message = Get-Sprint8AHealthMemberValue -InputObject $transportError -Name "sanitized_message"
         [ordered]@{
-            kind = if (-not $received) { "transport" } else { "contract" }
+            kind = if (-not $received) {
+                "transport"
+            } elseif ($null -ne $transportError) {
+                "evidence_capture"
+            } else {
+                "contract"
+            }
             codes = $codes
             exception_type = if ($null -eq $exceptionType) { $null } else { [string]$exceptionType }
             sanitized_message = if ($null -eq $message) { $null } else { [string]$message }
@@ -290,11 +296,6 @@ function Invoke-Sprint8AHealthProbe {
     try {
         $httpResponse = $client.GetAsync($uri).GetAwaiter().GetResult()
         try {
-            $bytes = if ($null -eq $httpResponse.Content) {
-                [byte[]]@()
-            } else {
-                [byte[]]$httpResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
-            }
             $contentTypeHeader = if ($null -eq $httpResponse.Content) { $null } else { $httpResponse.Content.Headers.ContentType }
             $responseEvidence.received = $true
             $responseEvidence.uri = [string]$httpResponse.RequestMessage.RequestUri.AbsoluteUri
@@ -311,9 +312,13 @@ function Invoke-Sprint8AHealthProbe {
                 ([string]$contentTypeHeader.CharSet).Trim('"').ToLowerInvariant()
             }
             $responseEvidence.location = if ($null -eq $httpResponse.Headers.Location) { $null } else { [string]$httpResponse.Headers.Location }
+            $responseEvidence.redirects_followed = 0
+            [byte[]]$bytes = [byte[]]::new(0)
+            if ($null -ne $httpResponse.Content) {
+                $bytes = $httpResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+            }
             $responseEvidence.body_utf8_length = [long]$bytes.LongLength
             $responseEvidence.body_sha256 = Get-Sprint8AHealthBytesSha256 -Bytes $bytes
-            $responseEvidence.redirects_followed = 0
         } finally {
             $httpResponse.Dispose()
         }
@@ -399,7 +404,11 @@ function Assert-Sprint8AHealthPassed {
     $transportMessage = [string](Get-Sprint8AHealthMemberValue -InputObject $failure -Name "sanitized_message")
     $suffix = if ([string]::IsNullOrWhiteSpace($transportMessage)) { "" } else { " ($transportMessage)" }
     $exception = [InvalidOperationException]::new("$Context failed: $($codes -join ', ').$suffix")
-    $exception.Data["TessaraFailureClassification"] = if ($kind -ceq "transport") { "environment" } else { "product" }
+    $exception.Data["TessaraFailureClassification"] = switch ($kind) {
+        "transport" { "environment" }
+        "evidence_capture" { "harness" }
+        default { "product" }
+    }
     throw $exception
 }
 
@@ -433,6 +442,11 @@ function Test-Sprint8AHealthContract {
     if (-not [bool]$validCore.passed -or -not [bool]$validSupervisor.passed) {
         throw "Sprint 8A health self-test rejected a canonical Core or Supervisor response."
     }
+    [byte[]]$emptyBody = [byte[]]::new(0)
+    if ($emptyBody.LongLength -ne 0 -or
+        (Get-Sprint8AHealthBytesSha256 -Bytes $emptyBody) -cne $emptyHash) {
+        throw "Sprint 8A health self-test could not preserve an exact empty response body."
+    }
 
     $redirect = Test-Sprint8AHealthObservation -Observation ([ordered]@{
         target = "gateway_core"
@@ -456,6 +470,30 @@ function Test-Sprint8AHealthContract {
         @($redirect.failure.codes) -cnotcontains "unexpected_status" -or
         [bool]$wrongSupervisorStatus.passed -or @($wrongSupervisorStatus.failure.codes) -cnotcontains "unexpected_status") {
         throw "Sprint 8A health self-test accepted a redirect or the wrong Supervisor status."
+    }
+    $captureFailure = Test-Sprint8AHealthObservation -Observation ([ordered]@{
+        target = "supervisor"
+        request = $validSupervisor.request
+        response = [ordered]@{
+            received = $true; uri = "http://127.0.0.1:8098/health/ready"; status = 204
+            content_type = $null; media_type = $null; charset = $null; location = $null
+            body_utf8_length = $null; body_sha256 = $null; redirects_followed = 0
+        }
+        transport_error = [ordered]@{
+            exception_type = "System.Management.Automation.PropertyNotFoundException"
+            sanitized_message = "synthetic response evidence capture failure"
+        }
+    })
+    if ([bool]$captureFailure.passed -or [string]$captureFailure.failure.kind -cne "evidence_capture") {
+        throw "Sprint 8A health self-test did not distinguish response evidence capture from a product contract failure."
+    }
+    try {
+        Assert-Sprint8AHealthPassed -Observation $captureFailure -Context "synthetic health capture"
+        throw "Sprint 8A health self-test accepted incomplete response evidence."
+    } catch {
+        if ([string]$_.Exception.Data["TessaraFailureClassification"] -cne "harness") {
+            throw "Sprint 8A health self-test did not classify response evidence capture as harness."
+        }
     }
 
     $fixturePath = Join-Path $PSScriptRoot "fixtures/sprint-8a-health-contract-regressions.json"
