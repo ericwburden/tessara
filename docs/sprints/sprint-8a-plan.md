@@ -1,16 +1,15 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Implementation handoff after validation was explicitly exited again
-following failed Validation Readiness attempt 33. That attempt completed its
-fail-late graph with 12 passed checks, two failed checks, and no blocked checks;
-its five consolidated findings remain diagnostic evidence. Candidate Rehearsal
-attempt 29 never started. The resulting product, contract, fixture, deployment,
-test, UAT-evidence, and validation-runner correction invalidates every earlier
-readiness and rehearsal result. Focused implementation checks do not constitute
-either formal gate. A new complete Validation Readiness and Candidate Rehearsal
-cycle must start from the corrected clean commit and use one shared environment
-identity. No candidate has been frozen, and preflight, SIT, formal UAT, and
-closeout have not run.
+Status: Candidate-affecting correction after failed Validation Readiness
+attempt 34. That complete fail-late attempt retained 12 passed checks, two
+failed checks, and one blocked check: one environment-provisioning defect and
+one StrictMode materialization-harness defect. Candidate Rehearsal attempt 29
+never started. The shared property-safe Compose projection and its executable
+acceptance coverage supersede attempt 34's source for authorization. Focused
+correction checks do not constitute a formal gate. A new complete Validation
+Readiness and Candidate Rehearsal cycle must use the corrected clean source and
+one shared environment identity backed by six fresh databases. No candidate
+has been frozen, and preflight, SIT, formal UAT, and closeout have not run.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
@@ -18,7 +17,7 @@ closeout have not run.
 - Implementation-readiness correction input:
   `7b326838269c3b4218dd579f649a8011feba4d97`
 - Latest failed readiness diagnostic source:
-  `0cf7dfa0fda3f30cca2b1c1c7f2181ca0ad43045`
+  `c920b8a3dd1e35d5617e5f3d634eabff75499e77`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Next)` and the reconciled
   Phase 8 fresh-materialization rules in `docs/roadmap.md`

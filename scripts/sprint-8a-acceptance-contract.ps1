@@ -403,6 +403,8 @@ function Test-Sprint8AAcceptanceContract {
         'ExpectedPort 18088',
         'ExpectedPort 8098',
         '$unexpectedNetworks',
+        '. (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")',
+        'Get-Sprint8AComposeServiceProjection -Services $configuration.services',
         'Start-Sprint8APublicGateway',
         '-ExcludePublicGateway',
         '-SemanticNoOp',
@@ -638,6 +640,9 @@ function Test-Sprint8AAcceptanceContract {
             "TEST_API_ENROLLMENT_DATABASE_URL",
             "TEST_INSTALLATION_CONTROL_DATABASE_URL", "Invoke-Sprint8ADatabaseProbe",
             "Get-Sprint8ADeploymentEnvironmentProbe", "Get-Sprint8AToolchainEnvironmentContract",
+            "function Get-Sprint8AOptionalObjectPropertyValue",
+            "function Get-Sprint8AComposeServiceProjection",
+            "function Test-Sprint8AComposeServiceProjection",
             "tessara.sprint-8a.deployment-environment-probe", "DeploymentProbe",
             "materialization_control",
             "transaction_round_trip", "canonical_server", 'identity = "$canonicalServer/',
@@ -700,7 +705,8 @@ function Test-Sprint8AAcceptanceContract {
             "a different Readiness attempt cannot reuse it",
             "validation-attempt.lock", "Open-Sprint8AValidationAttemptLock", '[IO.FileShare]::None',
             "Publish-Sprint8AAppendOnlyJsonReceipt", '[IO.FileMode]::CreateNew',
-            "candidate-rehearsal-correction-consumption", "correction_consumption_receipt"
+            "candidate-rehearsal-correction-consumption", "correction_consumption_receipt",
+            '[pscustomobject]@{ name = "compose-optional-properties"; action = { Test-Sprint8AComposeServiceProjection } }'
         )
         "scripts/uat-sprint-8a.ps1" = @(
             "MaterializationLaneReceipt", "InventoryLaneReceipt",

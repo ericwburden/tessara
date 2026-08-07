@@ -23,6 +23,100 @@ function Get-Sprint8AFileSha256 {
     (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Get-Sprint8AOptionalObjectPropertyValue {
+    param(
+        [AllowNull()]$InputObject,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+    $property.Value
+}
+
+function Get-Sprint8AComposeServiceProjection {
+    param([Parameter(Mandatory)]$Services)
+
+    $ports = @($Services.PSObject.Properties | ForEach-Object {
+        $serviceName = [string]$_.Name
+        $servicePorts = @(Get-Sprint8AOptionalObjectPropertyValue -InputObject $_.Value -Name "ports")
+        @($servicePorts | ForEach-Object {
+            $published = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_ -Name "published"
+            if ($null -ne $published) {
+                $target = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_ -Name "target"
+                if ($null -eq $target) {
+                    throw "Normalized Compose service '$serviceName' publishes a port without a target."
+                }
+                $hostIp = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_ -Name "host_ip"
+                $protocol = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_ -Name "protocol"
+                [pscustomobject][ordered]@{
+                    service = $serviceName
+                    host_ip = if ($null -eq $hostIp) { "" } else { [string]$hostIp }
+                    published = [int]$published
+                    target = [int]$target
+                    protocol = if ($null -eq $protocol) { "tcp" } else { [string]$protocol }
+                }
+            }
+        })
+    } | Sort-Object service, published)
+    $databaseBindings = @($Services.PSObject.Properties | ForEach-Object {
+        $serviceName = [string]$_.Name
+        $environment = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_.Value -Name "environment"
+        if ($null -ne $environment) {
+            @($environment.PSObject.Properties | Where-Object { $_.Name -match 'DATABASE_URL$' } | ForEach-Object {
+                $uri = [Uri][string]$_.Value
+                [pscustomobject][ordered]@{
+                    service = $serviceName
+                    variable = [string]$_.Name
+                    host = $uri.Host
+                    port = if ($uri.IsDefaultPort) { 5432 } else { $uri.Port }
+                    database = [Uri]::UnescapeDataString($uri.AbsolutePath.TrimStart('/'))
+                    role = [Uri]::UnescapeDataString(($uri.UserInfo.Split(':', 2))[0])
+                }
+            })
+        }
+    } | Sort-Object database, role, service)
+
+    [pscustomobject][ordered]@{
+        ports = $ports
+        database_bindings = $databaseBindings
+    }
+}
+
+function Test-Sprint8AComposeServiceProjection {
+    $services = [pscustomobject][ordered]@{
+        components = [pscustomobject][ordered]@{
+            environment = [pscustomobject][ordered]@{
+                DATABASE_URL = "postgres://components_runtime@postgres:5432/tessara_module_components"
+            }
+        }
+        gateway = [pscustomobject][ordered]@{
+            ports = @([pscustomobject][ordered]@{
+                host_ip = "127.0.0.1"
+                published = 8088
+                target = 8080
+                protocol = "tcp"
+            })
+        }
+        worker = [pscustomobject][ordered]@{}
+    }
+    $projection = Get-Sprint8AComposeServiceProjection -Services $services
+    if (@($projection.ports).Count -ne 1 -or
+        [string]$projection.ports[0].service -cne "gateway" -or
+        [int]$projection.ports[0].published -ne 8088 -or
+        @($projection.database_bindings).Count -ne 1 -or
+        [string]$projection.database_bindings[0].service -cne "components" -or
+        [string]$projection.database_bindings[0].database -cne "tessara_module_components") {
+        throw "Sprint 8A optional Compose service projection self-test failed."
+    }
+    "Sprint 8A optional Compose service projection self-test passed."
+}
+
 function Get-Sprint8APathSetDigest {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,

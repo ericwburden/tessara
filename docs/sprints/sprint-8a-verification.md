@@ -1,12 +1,11 @@
 # Sprint 8A Validation Record
 
-Status: Validation was explicitly exited after failed Validation Readiness
-attempt 33 so implementation completeness could be re-established. Candidate
-Rehearsal attempt 29 never started. The consolidated candidate-affecting
-correction below invalidates every earlier readiness and rehearsal result. This
-record is an implementation handoff: no current readiness or rehearsal pass
-exists, no candidate has been frozen, and preflight, SIT, formal UAT, and
-closeout remain Not Run.
+Status: Validation Readiness attempt 34 completed fail-late with 12 passed
+checks, two failed checks, and one blocked check. Candidate Rehearsal attempt
+29 never started. Its one consolidated environment-and-harness correction is
+candidate-affecting and supersedes attempt 34 for authorization. No current
+readiness or rehearsal pass exists, no candidate has been frozen, and
+preflight, SIT, formal UAT, and closeout remain Not Run.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -14,6 +13,47 @@ closeout remain Not Run.
 - Execution contract: [Sprint 8A plan](./sprint-8a-plan.md)
 
 ## Implementation Readiness Snapshot
+
+### Validation Readiness attempt 34 consolidated correction
+
+Validation Readiness attempt 34 ran against clean commit
+`c920b8a3dd1e35d5617e5f3d634eabff75499e77`, tree
+`ba5c5f764d7d4b49d15417a1edd08cfdab16e0b1`. All 15 declared checks reached a
+terminal state: 12 passed, `compose-database-contract` and `reset-dry-run`
+failed, and `environment-contract` was blocked exactly by the failed
+prerequisite: `blocked by failed prerequisite(s):
+compose-database-contract`. Candidate Rehearsal 29 did not start.
+
+The terminal receipt is retained at
+`artifacts/sprint-8a-closeout/attempts/readiness-34.json` with SHA-256
+`f2b377e4a1fee943d5940fed25d4c6d03f807820001ea429a14711a5b516867c`.
+Raw evidence remains at
+`artifacts/sprint-8a-closeout/readiness-34/compose-database-contract.log` and
+`artifacts/sprint-8a-closeout/readiness-34/reset-dry-run.log`. Start, terminal,
+state, raw-evidence, and Playwright-inventory hashes all verified; the attempt
+lock was released. No product or destructive database action began in either
+failed lane.
+
+The complete harvest produced one two-finding correction batch at
+`artifacts/sprint-8a-closeout/attempts/readiness-34-consolidated-correction-batch.json`
+with SHA-256
+`dd8ffbdb742e184c76fb448fb58ddb720bb01efcfe0919a4bbfdf0d2360efa58`:
+
+- `environment`: the attempt process lacked all six pairwise-distinct test
+  database URLs, the exact disposable-reset acknowledgement, and its inspected
+  PostgreSQL client container identity;
+- `harness`: the materializer read normalized Compose's optional `ports`
+  property as mandatory under StrictMode; the same bounded audit found the
+  latent optional `environment` and resource-name assumptions.
+
+The correction centralizes optional-property handling and normalized service
+projection, covers services without ports or environment in an executable
+runner self-test, and binds those helpers in the acceptance contract. The next
+attempt must receive six fresh loopback databases and the exact reset/client
+contract in the same PowerShell process. These tracked runner, contract, and
+documentation changes invalidate attempt 34 as an authorization source; a new
+complete Readiness result and then a complete Candidate Rehearsal result remain
+required against the same clean source and environment identity.
 
 ### Post-Readiness-33 implementation completion audit
 
@@ -434,6 +474,10 @@ Additional required evidence namespaces:
 
 ## Validation Readiness
 
+- Latest completed attempt: Readiness 34 failed with 12 passed checks, two
+  failed checks, and one exact prerequisite block; its two-finding consolidated
+  correction supersedes that source for authorization.
+
 - Derived executable checklist: regenerate from the final plan, this inventory,
   source, runners, Compose profile and evidence schemas.
 - Environment variables and reset acknowledgements: enumerate exact Sprint 8A
@@ -475,6 +519,9 @@ Additional required evidence namespaces:
 - Result receipt: `artifacts/sprint-8a-closeout/validation-readiness-result.json`.
 
 ## Candidate Rehearsal
+
+Attempt 29 has not started and requires a passing successor Readiness receipt
+for the corrected clean source and environment identity.
 
 Sprint 8A rehearsal uses the dependency-aware inventory below. The attempt
 receipt declares this graph before assertions. After any failure the attempt is
@@ -922,11 +969,13 @@ formal-UAT-owned.
 | Product defect corrected | Refreeze after complete readiness/rehearsal, then all SIT and UAT |
 | Missing acceptance assertion discovered | Update inventory/candidate, then all SIT and UAT |
 
-Runtime chronology, initially empty:
+Runtime chronology:
 
 | Time | Phase/lane/stage | Assertions started | Candidate | Classification | Correction/narrow proof | Invalidation scope | Authoritative replacement |
 |---|---|---|---|---|---|---|---|
-| | | | | | | | |
+| 2026-08-06 22:00 EDT | Readiness 34 / `compose-database-contract` | Yes | `c920b8a3` | `environment` | Fresh six-binding runner environment required; retained in the single Readiness 34 batch | Readiness 34 and all downstream phases | New complete Readiness and Rehearsal |
+| 2026-08-06 22:00 EDT | Readiness 34 / `environment-contract` | No; blocked by `compose-database-contract` | `c920b8a3` | `environment` | Exact dependency reason retained in the same batch | Readiness 34 and all downstream phases | New complete Readiness and Rehearsal |
+| 2026-08-06 22:00 EDT | Readiness 34 / `reset-dry-run` | Yes | `c920b8a3` | `harness` | Shared optional-property projection and executable self-test; retained in the same batch | Readiness 34 and all downstream phases | New complete Readiness and Rehearsal |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.

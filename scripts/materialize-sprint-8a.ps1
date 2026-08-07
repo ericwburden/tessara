@@ -20,6 +20,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-7a-acceptance-contract.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
 
 $expectedProject = "tessara-sprint-8a"
 $installationId = "01980000-0000-7000-8000-00000000008a"
@@ -137,7 +138,7 @@ function Write-Sprint8ARawLines {
     Get-Sprint8AArtifact -Path $fullPath
 }
 
-function Get-Sprint8ASourceIdentity {
+function Get-Sprint8AMaterializationSourceIdentity {
     $commit = (& git -C $repoRoot rev-parse HEAD).Trim()
     $tree = (& git -C $repoRoot rev-parse "HEAD^{tree}").Trim()
     $branch = (& git -C $repoRoot branch --show-current).Trim()
@@ -549,14 +550,16 @@ try {
     }
 
     $unexpectedVolumes = @($configuration.volumes.PSObject.Properties | Where-Object {
-        $name = if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
+        $configuredName = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_.Value -Name "name"
+        $name = if ([string]::IsNullOrWhiteSpace([string]$configuredName)) { "${expectedProject}_$($_.Name)" } else { [string]$configuredName }
         -not $name.StartsWith("$expectedProject`_", [StringComparison]::Ordinal)
     })
     if ($unexpectedVolumes.Count -gt 0) {
         throw "Refusing reset because Compose resolves a named volume outside the $expectedProject namespace."
     }
     $unexpectedNetworks = @($configuration.networks.PSObject.Properties | Where-Object {
-        $name = if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
+        $configuredName = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_.Value -Name "name"
+        $name = if ([string]::IsNullOrWhiteSpace([string]$configuredName)) { "${expectedProject}_$($_.Name)" } else { [string]$configuredName }
         -not (Test-Sprint8AComposeResourceExternal -Resource $_.Value) -and
             -not $name.StartsWith("$expectedProject`_", [StringComparison]::Ordinal)
     })
@@ -564,48 +567,24 @@ try {
         throw "Refusing reset because Compose resolves a non-external named network outside the $expectedProject namespace."
     }
     $resolvedVolumeNames = @($configuration.volumes.PSObject.Properties | ForEach-Object {
-        if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
+        $configuredName = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_.Value -Name "name"
+        if ([string]::IsNullOrWhiteSpace([string]$configuredName)) { "${expectedProject}_$($_.Name)" } else { [string]$configuredName }
     } | Sort-Object)
     $resolvedNetworkNames = @($configuration.networks.PSObject.Properties | Where-Object {
         -not (Test-Sprint8AComposeResourceExternal -Resource $_.Value)
     } | ForEach-Object {
-        if ($_.Value.name) { [string]$_.Value.name } else { "${expectedProject}_$($_.Name)" }
+        $configuredName = Get-Sprint8AOptionalObjectPropertyValue -InputObject $_.Value -Name "name"
+        if ([string]::IsNullOrWhiteSpace([string]$configuredName)) { "${expectedProject}_$($_.Name)" } else { [string]$configuredName }
     } | Sort-Object)
 
-    $source = Get-Sprint8ASourceIdentity
+    $source = Get-Sprint8AMaterializationSourceIdentity
     if ($source.dirty) {
         throw "Sprint 8A source-exact materialization requires a clean Git worktree."
     }
 
-    $ports = @($configuration.services.PSObject.Properties | ForEach-Object {
-        $serviceName = [string]$_.Name
-        @($_.Value.ports | Where-Object { $null -ne $_.published } | ForEach-Object {
-            [pscustomobject][ordered]@{
-                service = $serviceName
-                host_ip = [string]$_.host_ip
-                published = [int]$_.published
-                target = [int]$_.target
-                protocol = [string]$_.protocol
-            }
-        })
-    } | Sort-Object service, published)
-    $databaseBindings = @($configuration.services.PSObject.Properties | ForEach-Object {
-        $serviceName = [string]$_.Name
-        $environment = $_.Value.environment
-        if ($null -ne $environment) {
-            @($environment.PSObject.Properties | Where-Object { $_.Name -match 'DATABASE_URL$' } | ForEach-Object {
-                $uri = [Uri][string]$_.Value
-                [pscustomobject][ordered]@{
-                    service = $serviceName
-                    variable = [string]$_.Name
-                    host = $uri.Host
-                    port = if ($uri.IsDefaultPort) { 5432 } else { $uri.Port }
-                    database = [Uri]::UnescapeDataString($uri.AbsolutePath.TrimStart('/'))
-                    role = [Uri]::UnescapeDataString(($uri.UserInfo.Split(':', 2))[0])
-                }
-            })
-        }
-    } | Sort-Object database, role, service)
+    $serviceProjection = Get-Sprint8AComposeServiceProjection -Services $configuration.services
+    $ports = @($serviceProjection.ports)
+    $databaseBindings = @($serviceProjection.database_bindings)
     $expectedDatabaseNames = @(
         "tessara_core",
         "tessara_deployment",
@@ -635,8 +614,11 @@ try {
     if ($null -eq $postgresVolumeProperty) {
         throw "Sprint 8A PostgreSQL data volume is absent from normalized Compose targets."
     }
-    $postgresVolumeName = if ($postgresVolumeProperty.Value.name) {
-        [string]$postgresVolumeProperty.Value.name
+    $configuredPostgresVolumeName = Get-Sprint8AOptionalObjectPropertyValue `
+        -InputObject $postgresVolumeProperty.Value `
+        -Name "name"
+    $postgresVolumeName = if (-not [string]::IsNullOrWhiteSpace([string]$configuredPostgresVolumeName)) {
+        [string]$configuredPostgresVolumeName
     } else {
         "${expectedProject}_$([string]$postgresDataMount[0].source)"
     }

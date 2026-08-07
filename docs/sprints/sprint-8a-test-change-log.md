@@ -361,3 +361,30 @@ All of these files are candidate-affecting and invalidate the Readiness 33
 source. Only focused implementation checks are recorded for this batch. No new
 Validation Readiness, Candidate Rehearsal, preflight, SIT, deployed Playwright,
 or formal UAT result is claimed.
+
+## 2026-08-06 — Consolidated Validation Readiness 34 correction
+
+Validation Readiness attempt 34 completed all 15 declared checks against clean
+commit `c920b8a3`, retaining 12 passes, two failures, and one exact prerequisite
+block. `compose-database-contract` classified the missing six database URLs,
+reset acknowledgement, and PostgreSQL client-container identity as one
+`environment` defect. `reset-dry-run` classified the materializer's StrictMode
+read of optional normalized-Compose properties as one `harness` defect.
+`environment-contract` was blocked by `compose-database-contract`; no product
+or destructive database action began. All receipt, state, raw-evidence, and
+inventory hashes verified.
+
+One batch, not per-failure micro-batches, is retained at
+`artifacts/sprint-8a-closeout/attempts/readiness-34-consolidated-correction-batch.json`.
+The correction introduces one shared property-safe Compose service projection,
+advances materialization to use it for ports and database bindings, hardens
+adjacent optional resource-name reads, and adds a portless/environmentless
+self-test enforced by Readiness and the acceptance contract. The successor
+cycle must use six fresh pairwise-distinct loopback test databases and pass the
+exact environment bindings in the same runner process.
+
+These runner, acceptance-contract, and documentation changes are
+candidate-affecting and supersede Readiness 34 for authorization. Candidate
+Rehearsal 29 remains Not Run. Focused parsing, self-test, projection, contract,
+and reset-WhatIf checks are correction evidence only; complete Readiness and
+Candidate Rehearsal gates remain required before preflight.

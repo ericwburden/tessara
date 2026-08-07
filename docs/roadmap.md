@@ -75,7 +75,7 @@ The codebase already includes a substantial vertical foundation:
 - Sprint 6C Dashboard runtime/data extraction: Dashboard service, database, identities, migrations, manifest, operations, APIs, SSR pages, same-origin routes, transition-only Components contract, and definition-independent Module Management controls, with root web source/build decoupling deliberately remaining for the post-closeout SDK adoption pass
 - Sprint 6D and 6E module SDK/runtime adoption: canonical module contract, runtime, UI/design-system, asset, and conformance packages plus completed Dashboard source/build independence, release-owned documents/assets, and Dashboard-only upgrade/rollback
 - Sprint 6F through 7B composition and cross-module correctness: deterministic Blueprint/lockfile/materialization operations, scoped cross-boundary authorization, typed resource lifecycle and dependency behavior, and the reusable extraction proofs that Phase 8 reruns
-- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; the implementation-readiness correction is complete and a new full readiness/rehearsal cycle is pending
+- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; the post-Readiness-34 validation-entry correction is complete and a new full readiness/rehearsal cycle is pending
 
 ### Historical closed Sprint 6A UI baseline
 
@@ -101,10 +101,12 @@ an enrolled real Module Release/Instance. Sprint 8A applies that pathway to
 Components, which is likewise represented by its real enrollment rather than
 by a Core transition descriptor.
 
-The post-Readiness-33 implementation reconciliation is complete. Readiness 33
-remains a failed diagnostic and Candidate Rehearsal 29 did not start. The next
-gap is one new source-exact Validation Readiness and Candidate Rehearsal cycle
-before preflight. The corrected Sprint 8A source now:
+The Readiness 34 fail-late diagnostic is complete: 12 checks passed, two failed,
+and one was blocked by its exact failed prerequisite. Its consolidated
+environment-and-materialization-harness correction is candidate-affecting;
+Candidate Rehearsal 29 did not start. The next gap is one new source-exact
+Validation Readiness and Candidate Rehearsal cycle before preflight. The
+corrected Sprint 8A source now:
 
 - keep Core's frozen transition catalog at exactly `tessara.forms`,
   `tessara.workflows`, `tessara.responses`, `tessara.datasets`, and
@@ -1162,11 +1164,13 @@ against the newly physical boundary.
 
 ### Sprint 8A: Component Module Separation Slice (Implementation Ready; Validation Restart Pending)
 
-**Validation posture:** implementation, acceptance inventory, deployment
-inputs, runners, and governing contracts are reconciled after failed Readiness
-33; Candidate Rehearsal 29 was never started. Start a new complete Validation
-Readiness and Candidate Rehearsal cycle against one clean source and environment
-identity; preflight remains closed until both pass.
+**Validation posture:** Readiness 34 retained one environment defect and one
+materialization-harness defect in a complete two-finding batch; Candidate
+Rehearsal 29 was never started. The property-safe Compose projection supersedes
+that diagnostic source; the successor cycle will use a fresh six-database
+environment. Start a new complete Validation Readiness and Candidate Rehearsal
+cycle against one clean source and environment identity; preflight remains
+closed until both pass.
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 
