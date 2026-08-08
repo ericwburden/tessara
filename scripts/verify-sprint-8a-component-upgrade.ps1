@@ -3,7 +3,7 @@ param(
     [string]$ComposeFile = "deploy/sprint-8a/compose.yaml",
     [string]$BaseUrl = "http://127.0.0.1:8088",
     [string]$SupervisorUrl = "http://127.0.0.1:8098",
-    [Parameter(Mandatory = $true)][string]$BaselineMetadataPath,
+    [string]$BaselineMetadataPath,
     [string]$CandidateManifestPath = "crates/tessara-component-module/manifest.json",
     [string]$CatalogTemplatePath = "deploy/sprint-8a/catalogs/local-release-catalog.json",
     [string]$AdminEmail = "admin@tessara.local",
@@ -80,6 +80,10 @@ if ($SelfTest) {
     if (-not $rejected) { throw "Component upgrade self-test accepted an unrelated owner mutation." }
     Write-Host "Sprint 8A Component semantic-delta upgrade verifier self-test passed."
     return
+}
+
+if ([string]::IsNullOrWhiteSpace($BaselineMetadataPath)) {
+    throw "BaselineMetadataPath is required outside self-test mode."
 }
 
 $configuration = & docker compose -f $composePath --profile reference config --format json | ConvertFrom-Json
