@@ -585,10 +585,13 @@ fn resolve_navigation_catalog(manifests: &[ModuleManifest]) -> Vec<ResolvedNavig
                 "Admin" => "core.admin",
                 _ => continue,
             };
+            let Some(key) = manifest_navigation_key(&route.path_template) else {
+                continue;
+            };
             known_ids.insert(contribution.id.to_string());
             catalog.push(ResolvedNavigationDestination {
                 id: contribution.id.to_string(),
-                key: contribution.id.to_string(),
+                key,
                 label: contribution.label.clone(),
                 route: route.path_template.clone(),
                 semantic_destination: Some(contribution.destination.to_string()),
@@ -607,6 +610,15 @@ fn resolve_navigation_catalog(manifests: &[ModuleManifest]) -> Vec<ResolvedNavig
         }
     }
     catalog
+}
+
+fn manifest_navigation_key(route: &str) -> Option<String> {
+    let key = route.trim_matches('/').split('/').next()?;
+    (!key.is_empty()
+        && key.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || "_-".contains(character)
+        }))
+    .then(|| key.to_string())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2672,6 +2684,7 @@ mod tests {
             Some("tessara.dashboards")
         );
         assert_eq!(dashboard.route, "/dashboards");
+        assert_eq!(dashboard.key, "dashboards");
         assert_eq!(
             reference
                 .iter()
@@ -2680,6 +2693,20 @@ mod tests {
             1,
             "Dashboard navigation must be projected exactly once from its real manifest"
         );
+    }
+
+    #[test]
+    fn manifest_navigation_keys_are_shell_route_identities_not_contribution_ids() {
+        assert_eq!(
+            manifest_navigation_key("/components"),
+            Some("components".into())
+        );
+        assert_eq!(
+            manifest_navigation_key("/dashboards/{dashboard_id}"),
+            Some("dashboards".into())
+        );
+        assert_eq!(manifest_navigation_key("/Visual Parts"), None);
+        assert_eq!(manifest_navigation_key("/"), None);
     }
 
     #[test]

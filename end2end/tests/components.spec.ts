@@ -504,6 +504,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       ),
     );
     await publish(page, definition, "publish-table");
+    const versionTablePath = `/api/components/${definition.slug}/versions/${draft.component_version_id}/table`;
 
     const current = await expectJson<ComponentDefinition>(
       await page.request.get(`/api/admin/components/${definition.slug}`),
@@ -550,7 +551,9 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       name: `Filter ${firstField.label}`,
     });
     await filterDialog.getByLabel("Operator").selectOption("equals");
-    await filterDialog.getByLabel("Value").fill(`unlikely-${RUN_ID}`);
+    await filterDialog
+      .getByRole("searchbox", { name: "Value", exact: true })
+      .fill(`unlikely-${RUN_ID}`);
     const filterResponse = page.waitForResponse(
       (response) =>
         response
@@ -565,14 +568,17 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     const rowSearch = page.getByRole("searchbox", {
       name: "Search component rows",
     });
-    await rowSearch.fill(RUN_ID);
-    await page.waitForResponse((response) =>
-      response.url().includes(`search=${RUN_ID}`),
-    );
+    await Promise.all([
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === versionTablePath && url.searchParams.get("search") === RUN_ID;
+      }),
+      rowSearch.fill(RUN_ID),
+    ]);
     const clearedSearch = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
-        url.pathname.endsWith(renderPath(definition.slug, "table")) &&
+        url.pathname === versionTablePath &&
         !url.searchParams.has("search") &&
         url.searchParams.get(`filter[${firstField.key}][operator]`) === "equals"
       );
@@ -588,7 +594,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       const projectionResponse = page.waitForResponse((response) => {
         const url = new URL(response.url());
         return (
-          url.pathname.endsWith(renderPath(definition.slug, "table")) &&
+          url.pathname === versionTablePath &&
           url.searchParams.has("visible_columns") &&
           !url.searchParams
             .get("visible_columns")!
@@ -721,9 +727,15 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     ).toBeVisible();
     await expect(versionsTable).toContainText("Published");
     await expect(versionsTable).toContainText("Updated draft");
-    const actions = page.getByText(/Open actions for/).first();
+    const actions = versionsTable.getByText(
+      `Open actions for ${current.versions[0].version_label}`,
+      { exact: true },
+    );
+    await expect(actions).toBeVisible();
     await actions.click();
-    await page.getByRole("button", { name: "Archive", exact: true }).click();
+    await versionsTable
+      .getByRole("menuitem", { name: "Archive", exact: true })
+      .click();
     const actionDialog = page.getByRole("dialog", {
       name: "Archive Component version?",
     });
@@ -745,9 +757,12 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       page.getByRole("textbox", { name: "Configuration JSON" }),
     ).toHaveCount(0);
     await page.getByText("Publish", { exact: true }).click();
-    await page
-      .getByRole("button", { name: "Create New Version", exact: true })
-      .click();
+    const createNewVersion = page.getByRole("menuitem", {
+      name: "Create New Version",
+      exact: true,
+    });
+    await expect(createNewVersion).toBeVisible();
+    await createNewVersion.click();
     const consumerReview = page.getByRole("dialog", {
       name: "Review component consumers",
     });

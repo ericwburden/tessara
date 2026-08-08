@@ -4,7 +4,7 @@
 //! service registration, projects current control state, and forwards only
 //! short-lived signed authority plus safe request metadata.
 
-use std::collections::BTreeMap;
+use std::{cmp::Reverse, collections::BTreeMap};
 
 use axum::{
     body::{Body, Bytes, to_bytes},
@@ -66,20 +66,32 @@ async fn dispatch_result(
 
     for module in installed {
         if matches!(method, Method::GET | Method::HEAD)
-            && let Some(route) = module.manifest.browser_routes.iter().find(|route| {
-                route.methods.iter().any(|declared| {
-                    matches!(
-                        (declared, &method),
-                        (
-                            tessara_module_contract::BrowserDocumentMethod::Get,
-                            &Method::GET
-                        ) | (
-                            tessara_module_contract::BrowserDocumentMethod::Head,
-                            &Method::HEAD
+            && let Some(route) = module
+                .manifest
+                .browser_routes
+                .iter()
+                .enumerate()
+                .filter(|(_, route)| {
+                    route.methods.iter().any(|declared| {
+                        matches!(
+                            (declared, &method),
+                            (
+                                tessara_module_contract::BrowserDocumentMethod::Get,
+                                &Method::GET
+                            ) | (
+                                tessara_module_contract::BrowserDocumentMethod::Head,
+                                &Method::HEAD
+                            )
                         )
+                    }) && path_template_matches(&route.path_template, &path)
+                })
+                .max_by_key(|(index, route)| {
+                    (
+                        path_template_specificity(&route.path_template),
+                        Reverse(*index),
                     )
-                }) && path_template_matches(&route.path_template, &path)
-            })
+                })
+                .map(|(_, route)| route)
         {
             if !module.serving {
                 return Ok(crate::module_unavailable_fallback_response());
@@ -122,10 +134,22 @@ async fn dispatch_result(
         }
 
         if module.serving
-            && let Some(route) = module.manifest.public_api_routes.iter().find(|route| {
-                api_method_matches(route.method, &method)
-                    && path_template_matches(&route.path_template, &path)
-            })
+            && let Some(route) = module
+                .manifest
+                .public_api_routes
+                .iter()
+                .enumerate()
+                .filter(|(_, route)| {
+                    api_method_matches(route.method, &method)
+                        && path_template_matches(&route.path_template, &path)
+                })
+                .max_by_key(|(index, route)| {
+                    (
+                        path_template_specificity(&route.path_template),
+                        Reverse(*index),
+                    )
+                })
+                .map(|(_, route)| route)
         {
             let grant = module_authorization(
                 state,
@@ -654,6 +678,14 @@ fn path_template_matches(template: &str, path: &str) -> bool {
         })
 }
 
+fn path_template_specificity(template: &str) -> usize {
+    template
+        .trim_matches('/')
+        .split('/')
+        .filter(|segment| !(segment.starts_with('{') && segment.ends_with('}')))
+        .count()
+}
+
 fn api_method_matches(declared: PublicApiMethod, actual: &Method) -> bool {
     matches!(
         (declared, actual),
@@ -714,6 +746,18 @@ mod tests {
             "/dashboards/{dashboard_id}/view",
             "/dashboards/new"
         ));
+    }
+
+    #[test]
+    fn manifest_route_specificity_places_static_siblings_before_parameters() {
+        assert!(
+            path_template_specificity("/api/admin/components/datasets")
+                > path_template_specificity("/api/admin/components/{component_id}")
+        );
+        assert!(
+            path_template_specificity("/api/admin/components/validate")
+                > path_template_specificity("/api/admin/components/{component_id}")
+        );
     }
 
     #[test]

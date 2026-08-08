@@ -1268,13 +1268,18 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         (placement) => placement.component === undefined,
       );
 
-      const hiddenBindings = redactedPlacements.map((hidden) => {
-        const adminPlacement = adminDefinition.placements.find(
+      const adminPlacementsForRedacted = redactedPlacements.map((hidden) =>
+        adminDefinition.placements.find(
           (placement) => placement.placement_id === hidden.placement_id,
-        );
-        expect(adminPlacement?.component, "admin projection should identify hidden binding").toBeTruthy();
-        return adminPlacement!.component!;
-      });
+        ),
+      );
+      expect(
+        adminPlacementsForRedacted.filter((placement) => placement?.component === undefined),
+        "a cross-scope Component binding must remain nondisclosed even to the Dashboard projection",
+      ).not.toHaveLength(0);
+      const hiddenBindings = adminPlacementsForRedacted.flatMap((placement) =>
+        placement?.component === undefined ? [] : [placement.component],
+      );
 
       await page.goto("/dashboards");
       await expect(page.locator(`[data-dashboard-id="${dashboard!.id}"]`)).toContainText(

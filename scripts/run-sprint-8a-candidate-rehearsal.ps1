@@ -182,13 +182,23 @@ function Assert-RehearsalRestorationMaterializationDocument {
         [Parameter(Mandatory)][int]$ExpectedAttempt
     )
 
+    $sourceMatches = $Document.source.commit -is [string] -and
+        [string]$Document.source.commit -ceq [string]$ExpectedSource.commit -and
+        $Document.source.tree -is [string] -and
+        [string]$Document.source.tree -ceq [string]$ExpectedSource.tree -and
+        $Document.source.branch -is [string] -and
+        [string]$Document.source.branch -ceq [string]$ExpectedSource.branch -and
+        $Document.source.dirty -is [bool] -and
+        [bool]$Document.source.dirty -eq [bool]$ExpectedSource.dirty -and
+        $Document.source.PSObject.Properties.Name -contains "dirty_paths" -and
+        @($Document.source.dirty_paths).Count -eq 0
+
     if (($Document.schema_version -isnot [int] -and $Document.schema_version -isnot [long]) -or
         [int]$Document.schema_version -ne 1 -or
         [string]$Document.contract -cne "tessara.sprint-8a.materialization-result" -or
         [int]$Document.attempt -ne $ExpectedAttempt -or
         $Document.passed -isnot [bool] -or -not [bool]$Document.passed -or
-        ($Document.source | ConvertTo-Json -Depth 20 -Compress) -cne
-            ($ExpectedSource | ConvertTo-Json -Depth 20 -Compress) -or
+        -not $sourceMatches -or
         [string]$Document.environment.declared_fingerprint -cne $ExpectedEnvironmentFingerprint -or
         $Document.first_apply.no_op -isnot [bool] -or [bool]$Document.first_apply.no_op -or
         $Document.no_op_apply.no_op -isnot [bool] -or -not [bool]$Document.no_op_apply.no_op -or
@@ -853,7 +863,13 @@ function Test-Sprint8AProcessLossRecoveryContract {
         contract = "tessara.sprint-8a.materialization-result"
         attempt = 33
         passed = $true
-        source = $verifiedSource
+        source = [pscustomobject][ordered]@{
+            commit = $verifiedSource.commit
+            tree = $verifiedSource.tree
+            branch = $verifiedSource.branch
+            dirty = $verifiedSource.dirty
+            dirty_paths = @()
+        }
         environment = [pscustomobject][ordered]@{ declared_fingerprint = "e" * 64 }
         first_apply = [pscustomobject][ordered]@{ no_op = $false }
         no_op_apply = [pscustomobject][ordered]@{ no_op = $true }
@@ -864,6 +880,19 @@ function Test-Sprint8AProcessLossRecoveryContract {
         -ExpectedSource $verifiedSource `
         -ExpectedEnvironmentFingerprint ("e" * 64) `
         -ExpectedAttempt 33
+    $restorationDocument.source.dirty_paths = @("tracked-change.txt")
+    try {
+        Assert-RehearsalRestorationMaterializationDocument `
+            -Document $restorationDocument `
+            -ExpectedSource $verifiedSource `
+            -ExpectedEnvironmentFingerprint ("e" * 64) `
+            -ExpectedAttempt 33
+        throw "Candidate Rehearsal recovery self-test accepted a dirty restoration source."
+    } catch {
+        if ($_.Exception.Message -ceq "Candidate Rehearsal recovery self-test accepted a dirty restoration source.") { throw }
+    } finally {
+        $restorationDocument.source.dirty_paths = @()
+    }
     $restorationDocument.no_op_apply.no_op = $false
     try {
         Assert-RehearsalRestorationMaterializationDocument `

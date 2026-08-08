@@ -348,6 +348,22 @@ function Assert-CandidateRehearsalLaneReceipt {
     $lane = Get-Content -LiteralPath ([string]$reference.full_path) -Raw | ConvertFrom-Json
     $expectedResult = $Result | ConvertTo-Json -Depth 100 | ConvertFrom-Json
     $expectedResult.PSObject.Properties.Remove("lane_receipt")
+    $identityMatches = (($lane.mutable_source_identity | ConvertTo-Json -Depth 30 -Compress) -ceq
+            ($Attempt.mutable_source_identity | ConvertTo-Json -Depth 30 -Compress)) -and
+        [string]$lane.environment_fingerprint -ceq [string]$Attempt.environment_fingerprint
+    $preAuthenticationLifecycleIdentity = [string]$Result.name -ceq "attempt-state-prerequisite" -and
+        [string]$lane.identity_binding -ceq "pre_authentication_lifecycle_placeholder" -and
+        [string]$lane.mutable_source_identity.commit -ceq ("0" * 40) -and
+        [string]$lane.mutable_source_identity.tree -ceq ("0" * 40) -and
+        [bool]$lane.mutable_source_identity.dirty -eq $false -and
+        [string]$lane.mutable_source_identity.branch -ceq "unverified" -and
+        [string]$lane.mutable_source_identity.acceptance_inventory_sha256 -ceq ("0" * 64) -and
+        [string]$lane.mutable_source_identity.deployment_inputs_sha256 -ceq ("0" * 64) -and
+        [string]$lane.environment_fingerprint -ceq ("0" * 64) -and
+        @("passed", "failed") -ccontains [string]$lane.result.state -and
+        $lane.result.assertions_started -is [bool] -and
+        [bool]$lane.result.assertions_started
+
     if ($sidecar -cne [string]$Result.lane_receipt.sha256 -or
         ($lane.schema_version -isnot [int] -and $lane.schema_version -isnot [long]) -or
         [int]$lane.schema_version -ne 2 -or
@@ -355,9 +371,7 @@ function Assert-CandidateRehearsalLaneReceipt {
         [string]$lane.phase -cne "candidate-rehearsal-lane" -or
         [int]$lane.attempt -ne [int]$Attempt.attempt -or
         [bool]$lane.authoritative -or
-        (($lane.mutable_source_identity | ConvertTo-Json -Depth 30 -Compress) -cne
-            ($Attempt.mutable_source_identity | ConvertTo-Json -Depth 30 -Compress)) -or
-        [string]$lane.environment_fingerprint -cne [string]$Attempt.environment_fingerprint -or
+        (-not $identityMatches -and -not $preAuthenticationLifecycleIdentity) -or
         (($lane.result | ConvertTo-Json -Depth 100 -Compress) -cne
             ($expectedResult | ConvertTo-Json -Depth 100 -Compress))) {
         throw "Candidate Rehearsal lane '$($Result.name)' receipt is stale or differs from terminal accounting."

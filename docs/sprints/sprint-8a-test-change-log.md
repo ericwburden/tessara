@@ -867,3 +867,31 @@ reserved for final certification: the clean disposable materialization/no-op,
 recovery, health, smoke, regression, acceptance, and runner reproducers must
 pass and retain explicitly non-authoritative evidence before Readiness 42 may be
 started.
+
+## 2026-08-07 — Rehearsal 33 consolidated product, fixture, and evidence correction
+
+R33 retained 29 passes, 2 failures, 1 dependency block, and 0 deferrals across
+all 32 lanes. The correction batch does not rewrite those receipts and starts
+no successor lifecycle attempt.
+
+- Product: real manifest navigation now uses exact shell route keys while
+  retaining exact contribution IDs; static module API routes outrank parameter
+  siblings, fixing the Component Dataset authorization path without a
+  definition-specific gateway branch.
+- Fixtures/acceptance: analytics advances from the superseded four-row result
+  to the canonical 30-row seed; Dashboard SSR asserts cross-scope
+  nondisclosure; diagnostics assert four semantic identities; Component
+  Playwright uses exact accessible roles and version-route identities.
+- Evidence: final restoration authenticates the compact materializer source
+  shape by canonical fields; harvest permits only the declared
+  pre-authentication lifecycle placeholder and still rejects every stale
+  authenticated lane. The retained R32 qualification self-test binds its
+  historical state to immutable Readiness 41 instead of the canonical alias
+  that legitimately advanced after later attempts.
+- Process: the Component browser path crossed the three-failure threshold and
+  was handled as one concentrated validation-platform fixture incident. Its
+  clean focused reproducer passed before the nine-regression successor set.
+
+All verification from this correction phase is focused and non-authoritative.
+It cannot produce a Candidate Rehearsal result or authorize preflight, freeze,
+SIT, UAT, or closeout.

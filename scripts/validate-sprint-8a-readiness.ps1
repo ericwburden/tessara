@@ -397,6 +397,21 @@ function Test-Sprint8AR32CorrectionAuthorizationQualification {
     $qualifiedStatePath = Join-Path $evidenceRootPath "attempts/candidate-rehearsal-32-correction-qualified-state.json"
     [void](Assert-Sprint8AReceiptSidecar -Path $qualifiedStatePath)
     $qualifiedState = Get-Content -LiteralPath $qualifiedStatePath -Raw | ConvertFrom-Json
+    # The retained snapshot records the canonical Readiness alias as it existed
+    # after R41. That alias legitimately advances after later attempts, so bind
+    # this historical regression fixture to R41's immutable receipt in memory.
+    $immutableReadinessPath = Join-Path $evidenceRootPath "attempts/readiness-$([int]$qualifiedState.readiness.attempt).json"
+    $immutableReadinessSha = Assert-Sprint8AReceiptSidecar -Path $immutableReadinessPath
+    if ([string]$qualifiedState.readiness.sha256 -cne $immutableReadinessSha) {
+        throw "R32 qualification self-test cannot bind its retained state to the immutable Readiness receipt."
+    }
+    $historicalReadinessValidation = [pscustomobject][ordered]@{
+        immutable = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($repoRoot, $immutableReadinessPath).Replace("\", "/")
+            sha256 = $immutableReadinessSha
+            document = Get-Content -LiteralPath $immutableReadinessPath -Raw | ConvertFrom-Json
+        }
+    }
     $lineage = Get-Sprint8AReadinessCorrectionLineage -State $qualifiedState
     $validation = Assert-Sprint8ACorrectionLineage `
         -Lineage $lineage `
@@ -411,7 +426,8 @@ function Test-Sprint8AR32CorrectionAuthorizationQualification {
         -StateDocument $qualifiedState `
         -AttemptNumber 42 `
         -RepositoryRoot $repoRoot `
-        -EvidenceRoot $evidenceRootPath
+        -EvidenceRoot $evidenceRootPath `
+        -HistoricalSelfTestReadinessValidation $historicalReadinessValidation
     if ($null -eq $reservation.authorization_qualification_reference -or
         [string]$reservation.authorization_qualification_reference.path -cne
             "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-32-correction-authorization-qualification.json") {
@@ -423,7 +439,8 @@ function Test-Sprint8AR32CorrectionAuthorizationQualification {
             -StateDocument $qualifiedState `
             -AttemptNumber 43 `
             -RepositoryRoot $repoRoot `
-            -EvidenceRoot $evidenceRootPath)
+            -EvidenceRoot $evidenceRootPath `
+            -HistoricalSelfTestReadinessValidation $historicalReadinessValidation)
     } catch { $wrongAttemptRejected = $true }
     if (-not $wrongAttemptRejected) {
         throw "R32 qualification self-test admitted a successor other than exact Readiness 42."
@@ -538,7 +555,8 @@ function Get-Sprint8AReadinessAttemptReservation {
         [AllowNull()]$StateDocument,
         [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$AttemptNumber,
         [Parameter(Mandatory)][string]$RepositoryRoot,
-        [Parameter(Mandatory)][string]$EvidenceRoot
+        [Parameter(Mandatory)][string]$EvidenceRoot,
+        [AllowNull()]$HistoricalSelfTestReadinessValidation = $null
     )
 
     if ($null -eq $StateDocument) {
@@ -568,10 +586,20 @@ function Get-Sprint8AReadinessAttemptReservation {
         [string]$StateDocument.sprint -cne "sprint-8a") {
         throw "Validation-state is not the exact Sprint 8A state schema."
     }
-    $currentReadinessValidation = Assert-Sprint8ACurrentReadinessReference `
-        -StateReadiness $StateDocument.readiness `
-        -RepositoryRoot $RepositoryRoot `
-        -EvidenceRoot $EvidenceRoot
+    $currentReadinessValidation = if ($null -eq $HistoricalSelfTestReadinessValidation) {
+        Assert-Sprint8ACurrentReadinessReference `
+            -StateReadiness $StateDocument.readiness `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot
+    } else {
+        if (-not $SelfTest -or
+            [string]$HistoricalSelfTestReadinessValidation.immutable.sha256 -cne [string]$StateDocument.readiness.sha256 -or
+            [int]$HistoricalSelfTestReadinessValidation.immutable.document.attempt -ne [int]$StateDocument.readiness.attempt -or
+            [string]$HistoricalSelfTestReadinessValidation.immutable.document.state -cne [string]$StateDocument.readiness.state) {
+            throw "Historical Readiness validation is restricted to an exact authenticated self-test fixture."
+        }
+        $HistoricalSelfTestReadinessValidation
+    }
 
     $lineage = Get-Sprint8AReadinessCorrectionLineage -State $StateDocument
     if (Test-Sprint8ACleanReadinessRerunState -State $StateDocument) {

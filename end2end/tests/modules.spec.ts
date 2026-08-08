@@ -1195,9 +1195,12 @@ test.describe.serial("Sprint 6A Module Management", () => {
           "download",
           `${entry.definition.id.replaceAll(".", "-")}-diagnostics.json`,
         );
-        await expect(page.locator(".module-dashboard-diagnostic-metric")).toHaveCount(
-          4,
-        );
+        await expect(page.locator(".module-diagnostic-metric > div > span")).toHaveText([
+          "Readiness",
+          "Liveness",
+          "Module database",
+          "Core authorization",
+        ]);
         await page.getByRole("tab", { name: "Configuration" }).click();
 
         await page.getByRole("switch", { name: "Disable product route" }).click();
@@ -2440,7 +2443,7 @@ test.describe.serial("Sprint 8A Module Management", () => {
       const diagnosticText = JSON.stringify(diagnostics);
       expect(diagnosticText).not.toContain(dataset!.reference.reference.resource_id);
       expect(diagnosticText).not.toContain(dataset!.dataset_name);
-      expect(diagnosticText).not.toContain(fieldKey);
+      expect(diagnosticText).not.toContain(JSON.stringify(fieldKey));
       expect(diagnosticText).not.toMatch(/password|secret|credential|bearer/i);
     } finally {
       if (instanceId !== undefined && originalConfiguration !== undefined) {

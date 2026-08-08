@@ -2267,3 +2267,48 @@ immutable fingerprint covers all authoritative SIT and UAT evidence.
 Closeout is forbidden until the validation coordinator verifies the complete
 hashed chain and writes authorization. This record implies no authoritative
 frozen-candidate deployment, SIT, formal-UAT, or acceptance result.
+
+## Rehearsal 33 consolidated correction and final-certification entry
+
+The later R32 correction history is append-only. Readiness 43 passed all 15
+checks against `2cdbf5432f9a737e82ea470ebabe7b55e42cd4ec` / tree
+`43c3b45c96b17b1fc3da9dabedcc36976ea97f8c` and environment fingerprint
+`5576717182719a9e6f53ba0ffe9ecdaad4db230f8b62336b3bc26197a1e298a3`.
+Candidate Rehearsal 33 then terminalized all 32 declared lanes with 29 passed,
+2 failed, 1 blocked, and 0 deferred. Its retained attempt, harvest, and single
+defect batch remain unchanged. No Candidate Rehearsal result, preflight,
+candidate freeze, SIT, or UAT was authorized.
+
+The R33 correction is one implementation batch. Full Candidate Rehearsal is
+final certification, not its debugging loop. The batch maps implementation to
+the governing Sprint 8A validation clauses as follows:
+
+| Governing clause | Correction | Focused non-authoritative proof |
+| --- | --- | --- |
+| Specifications 1 and 6; AC-01, AC-11, AC-13; exact composed navigation | Core derives the shell key for each real manifest contribution from its same-origin top-level route while retaining the exact contribution identity. Components and Dashboard each project once as `components` / `tessara.components.navigation` and `dashboards` / `tessara.dashboards.navigation`; the five frozen transitions remain unchanged. | Exact catalog unit tests, live navigation identity probe, root/Dataset/Workflow/module-configuration browser reproducers. |
+| Specifications 1, 3, and 6; AC-04, AC-05, AC-16; generic signed module routing | The generic module gateway deterministically selects the most-specific matching manifest route. Static Component routes such as `datasets` and `validate` therefore cannot be captured by `{component_id}` and receive their exact declared signed action grant. | Route-specificity unit test, live `GET /api/admin/components/datasets` 200 probe, Component and permissions browser reproducers. |
+| Specifications 4 and 5; AC-07, AC-08, AC-09; canonical fresh seed | Analytics expects the current 30-row Sprint 8A primary Dataset result. Dashboard SSR preserves nondisclosure when an invalid cross-scope Component binding is hidden from both actor projections. | Exact analytics render and JavaScript-disabled Dashboard SSR reproducers. |
+| Verification and UAT plan; durable exact test identities | Module diagnostics assert `Readiness`, `Liveness`, `Module database`, and `Core authorization`, not a copied count or retired class. Component tests bind exact roles, Component Version render paths, and menu semantics. | Nine-test R33 regression set; concentrated Component reproducer passes independently before broader verification. |
+| Validation/evidence plan; exact final restoration and fail-late harvest | Final restoration compares the materializer's canonical source fields instead of requiring the richer Rehearsal source shape. Harvest accepts only the exact pre-authentication placeholder on `attempt-state-prerequisite`; all authenticated lanes remain source/environment exact. The retained R32 qualification regression authenticates immutable Readiness 41 in memory rather than consulting the later canonical alias. | Readiness, Candidate Rehearsal, and harvest adversarial self-tests, including dirty restoration-source rejection and post-authentication mismatch rejection. |
+
+The repository-local implementation skill already enforces this mapping and
+requires behavior changes to ship with their affected materialization, no-op,
+recovery, fixture, runner, smoke, acceptance, and evidence consumers. It also
+requires clean disposable materialization, exact no-op, focused recovery, all
+known focused reproducers, and the two-/three-failure lane policy before
+implementation handoff. No duplicate skill rule or unrelated validation
+protocol/schema/scheduler/lineage enhancement is added in this batch.
+
+Focused evidence is retained under
+`artifacts/sprint-8a-focused-r32-correction/`. It is explicitly diagnostic and
+non-authoritative. The clean source command is:
+
+```powershell
+.\scripts\materialize-sprint-8a.ps1 -Attempt 3201 -EvidenceRoot artifacts/sprint-8a-focused-r32-correction -EnvironmentFingerprint 5576717182719a9e6f53ba0ffe9ecdaad4db230f8b62336b3bc26197a1e298a3 -AuthorizeDisposableReset -VerifyNoOp -Confirm:$false
+```
+
+The same focused boundary must retain induced-failure teardown, from-empty
+successor materialization, exact no-op, canonical restoration, exact Core and
+Supervisor health, the complete known-regression set, and validation-runner
+self-tests. Those receipts do not replace complete Readiness or complete
+Candidate Rehearsal against one later clean source/environment identity.
