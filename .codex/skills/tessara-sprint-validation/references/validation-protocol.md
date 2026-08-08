@@ -294,10 +294,18 @@ SIT, UAT, closeout, or any claim that rehearsal passed.
   schema-3 authorization embeds both canonical receipt references and hashes;
   validation state and successor Readiness authenticate them as part of the
   correction-lineage link.
-- The sole pre-enforcement exception is retained Sprint 8A Rehearsal 32. Its
-  schema-2 authorization is quarantined unless paired with the exact append-only
-  post-restoration qualification defined in the Candidate Rehearsal reference,
-  and that tuple permits only Readiness 42. Do not generalize or rewrite it.
+- Two exact Sprint 8A historical exceptions are retained and neither is a
+  reusable mechanism. Rehearsal 32's schema-2 authorization is quarantined
+  unless paired with its exact append-only post-restoration qualification; that
+  tuple permitted only Readiness 42. Rehearsal 33 remains failed and its
+  cleanup lane remains unchanged, but the user-approved R33 evidence-correction
+  tuple may qualify one separately issued authorization for exactly Readiness
+  44 after authenticating the immutable attempt, harvest, batch, failed cleanup
+  lane, successful source-exact apply/no-op, exact Core and Supervisor health,
+  five-transition/one-Dashboard inventory, passing final environment lane, and
+  the clean committed correction source. Neither qualification can produce a
+  rehearsal result or authorize preflight, freeze, SIT, UAT, or closeout. No
+  other failed attempt may use post-harvest qualification.
 - A completed failed rehearsal may authorize exactly one successor Readiness
   start only after its harvest and consolidated batch pass the executable
   harvest guard. That Readiness consumes the authorization through a

@@ -905,3 +905,19 @@ authority remains withheld. The protocol names R32 as the sole post-harvest
 qualification exception, so R33 cannot receive an analogous qualification
 without an explicit governing lifecycle decision. No historical receipt was
 rewritten.
+
+## 2026-08-08 — Approved R33 evidence-correction bridge
+
+The user approved a one-time append-only correction record after the retained
+R33 evidence proved that canonical recovery succeeded and only the old compact-
+source comparison failed. The implementation leaves every R33 attempt, lane,
+harvest, batch, log, and raw result unchanged. A repository-owned finalizer may
+issue an authorization/qualification tuple for exactly Readiness 44 only after
+authenticating the retained clean apply, semantic no-op, exact Core and
+Supervisor health, exact five-transition inventory, single real Dashboard
+presentation, passing final environment check, and the clean committed
+correction source. The tuple does not mark R33 passed and cannot authorize any
+downstream phase. Receipt validation rejects changed hashes, another attempt,
+another successor, a dirty or different correction source, or use after
+Readiness 44 has begun. This is the second and final named Sprint 8A historical
+bridge, not a reusable post-harvest exception.

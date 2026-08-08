@@ -2324,13 +2324,24 @@ their timestamps. The exact immutable Readiness prerequisite is
 `attempts/readiness-43.json`; the mutable canonical alias is not a valid
 terminal-recovery substitute.
 
-The validation state now records R33 as failed with 29 passed, 2 failed,
-1 blocked, 0 deferred, and `harvest_guard = passed`. Correction authorization
-remains withheld because the immutable attempt truthfully records
-`cleanup_restoration.result = not_proven`. The validation protocol explicitly
-reserves post-harvest qualification for the sole pre-enforcement R32 exception
-and forbids generalizing it. Consequently no repository-owned automatic path
-may authorize Readiness 44 from R33, and no Readiness 44, Rehearsal 34,
-preflight, candidate freeze, SIT, or UAT attempt is authorized. Advancing from
-this retained state requires an explicit coordinator/user decision that changes
-the governing lifecycle contract; R33 itself remains immutable and failed.
+The validation state records R33 as failed with 29 passed, 2 failed, 1 blocked,
+0 deferred, and `harvest_guard = passed`. The immutable attempt truthfully
+retains `cleanup_restoration.result = not_proven`. On 2026-08-08 the user
+approved one separate append-only record for this exact comparator mistake.
+The repository-owned finalizer authenticates the immutable attempt, harvest,
+batch, failed cleanup lane, successful source-exact apply/no-op, exact Core and
+Supervisor health, five-transition/one-Dashboard inventory, passing final
+environment lane, and clean committed correction source. It may issue and
+qualify exactly one authorization for Readiness 44 without changing R33 or
+making it pass. The qualification cannot authorize Rehearsal success,
+preflight, candidate freeze, SIT, UAT, or closeout. No other rehearsal receives
+this exception.
+
+After the correction commit, the coordinator records the approved bridge with:
+
+```powershell
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 33 -AuthorizeApprovedR33Correction
+```
+
+Only then may complete Readiness 44 start. If it passes, complete Rehearsal 34
+uses its immutable `attempts/readiness-44.json` receipt.

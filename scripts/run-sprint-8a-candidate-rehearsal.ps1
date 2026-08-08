@@ -4,6 +4,7 @@ param(
     [string]$ReadinessReceipt = "artifacts/sprint-8a-closeout/validation-readiness-result.json",
     [string]$EvidenceRoot = "artifacts/sprint-8a-closeout",
     [switch]$ResumeInterruptedAttempt,
+    [switch]$AuthorizeApprovedR33Correction,
     [switch]$SelfTest
 )
 
@@ -1015,8 +1016,204 @@ function Test-Sprint8AProcessLossRecoveryContract {
     }
 }
 
+function Invoke-ApprovedR33CorrectionAuthorization {
+    param([Parameter(Mandatory)][string]$ResolvedEvidenceRoot)
+
+    if ($Attempt -ne 33 -or $ResumeInterruptedAttempt -or $SelfTest) {
+        throw "The approved R33 evidence correction requires exactly -Attempt 33 and cannot be combined with resume or self-test."
+    }
+    $correctionSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    if ($correctionSource.dirty) {
+        throw "The approved R33 evidence correction can be recorded only from a clean committed correction source."
+    }
+
+    $attemptsRoot = Join-Path $ResolvedEvidenceRoot "attempts"
+    $statePath = Join-Path $ResolvedEvidenceRoot "validation-state.json"
+    $lockPath = Join-Path $ResolvedEvidenceRoot "validation-attempt.lock"
+    $authorizationPath = Join-Path $attemptsRoot "candidate-rehearsal-33-correction-authorization.json"
+    $qualificationPath = Join-Path $attemptsRoot "candidate-rehearsal-33-correction-authorization-qualification.json"
+    $lockHandle = $null
+    try {
+        $lockHandle = Open-Sprint8AValidationAttemptLock -Path $lockPath
+        $stateSha = Assert-Sprint8AReceiptSidecar -Path $statePath
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        if ([string]$state.rehearsal.state -cne "failed" -or
+            [int]$state.rehearsal.attempt -ne 33 -or
+            [string]$state.rehearsal.harvest_guard -cne "passed" -or
+            [string]$state.correction_authorization.state -cne "withheld" -or
+            [string]$state.correction_authorization.reason -cne "correction_authorization_withheld_cleanup_not_proven" -or
+            [bool]$state.preflight_eligible) {
+            throw "The approved R33 evidence correction requires the exact terminal failed R33 state with completed harvest and withheld authorization."
+        }
+        [void]$stateSha
+        if (Test-Path -LiteralPath (Join-Path $ResolvedEvidenceRoot "candidate-rehearsal-result.json") -PathType Leaf) {
+            throw "The approved R33 evidence correction cannot coexist with a passing Candidate Rehearsal result."
+        }
+        foreach ($collision in @(
+            (Join-Path $attemptsRoot "readiness-44-start.json"),
+            (Join-Path $attemptsRoot "readiness-44.json"),
+            (Join-Path $ResolvedEvidenceRoot "readiness-44")
+        )) {
+            if (Test-Path -LiteralPath $collision) {
+                throw "Readiness 44 already has evidence; the approved R33 correction bridge cannot be issued after its successor started."
+            }
+        }
+
+        $attemptPath = Join-Path $attemptsRoot "candidate-rehearsal-33-attempt.json"
+        $harvestPath = Join-Path $attemptsRoot "candidate-rehearsal-33-harvest.json"
+        $batchPath = Join-Path $attemptsRoot "candidate-rehearsal-33-defect-batch.json"
+        $attemptSha = Assert-Sprint8AReceiptSidecar -Path $attemptPath
+        $harvestSha = Assert-Sprint8AReceiptSidecar -Path $harvestPath
+        $batchSha = Assert-Sprint8AReceiptSidecar -Path $batchPath
+        $attemptDocument = Get-Content -LiteralPath $attemptPath -Raw | ConvertFrom-Json
+        $harvestDocument = Get-Content -LiteralPath $harvestPath -Raw | ConvertFrom-Json
+        $batchDocument = Get-Content -LiteralPath $batchPath -Raw | ConvertFrom-Json
+        if ([string]$attemptDocument.state -cne "failed" -or
+            [string]$attemptDocument.cleanup_restoration.result -cne "not_proven" -or
+            [string]$harvestDocument.state -cne "harvest_complete" -or
+            [string]$batchDocument.state -cne "open" -or
+            [int]$attemptDocument.deferred_count -ne 0 -or
+            [int]$harvestDocument.deferred_count -ne 0 -or
+            [int]$batchDocument.deferred_count -ne 0) {
+            throw "The approved R33 evidence correction found changed terminal attempt, harvest, batch, or deferral facts."
+        }
+
+        function New-R33Reference {
+            param([Parameter(Mandatory)][string]$Path)
+            [ordered]@{
+                path = ConvertTo-Sprint8ACanonicalEvidencePath -RepositoryRoot $repoRoot -EvidenceRoot $ResolvedEvidenceRoot -Path $Path
+                sha256 = Assert-Sprint8AReceiptSidecar -Path $Path
+            }
+        }
+        $attemptReference = New-R33Reference $attemptPath
+        $harvestReference = New-R33Reference $harvestPath
+        $batchReference = New-R33Reference $batchPath
+        $authorizationDocument = [ordered]@{
+            schema_version = 2
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal-correction-authorization"
+            attempt = 33
+            authoritative = $false
+            state = "authorized"
+            consumption_state = "unconsumed"
+            allowed_successor_phase = "validation-readiness"
+            allowed_successor_attempt = 44
+            allowed_successor_count = 1
+            generated_at = [DateTimeOffset]::UtcNow.ToString("o")
+            mutable_source_identity = $attemptDocument.mutable_source_identity
+            environment_fingerprint = [string]$attemptDocument.environment_fingerprint
+            predecessor_attempt_receipt = $attemptReference
+            harvest_receipt = $harvestReference
+            defect_batch = $batchReference
+            deferred_count = 0
+            authorization = "tracked correction and one successor readiness attempt are permitted for this consolidated batch"
+            qualification_required = $true
+            qualification_kind = "approved_historical_evidence_correction"
+        }
+        if (Test-Path -LiteralPath $authorizationPath -PathType Leaf) {
+            $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $authorizationPath
+            $authorizationDocument = Get-Content -LiteralPath $authorizationPath -Raw | ConvertFrom-Json
+        } else {
+            Publish-Sprint7AEvidence -Document $authorizationDocument -OutputPath $authorizationPath | Out-Null
+            $authorizationSha = Assert-Sprint8AReceiptSidecar -Path $authorizationPath
+        }
+        $authorizationReference = [ordered]@{
+            path = ConvertTo-Sprint8ACanonicalEvidencePath -RepositoryRoot $repoRoot -EvidenceRoot $ResolvedEvidenceRoot -Path $authorizationPath
+            sha256 = $authorizationSha
+        }
+
+        $failedHealthLanePath = Join-Path $ResolvedEvidenceRoot "rehearsal/attempt-33/lanes/final-successor-health.json"
+        $finalHealthPath = Join-Path $ResolvedEvidenceRoot "rehearsal/attempt-33/final-successor-health.json"
+        $materializationPath = Join-Path $ResolvedEvidenceRoot "rehearsal/attempt-33/final-restoration/materialization/attempt-33/materialization-result.json"
+        $inventoryPath = Join-Path $ResolvedEvidenceRoot "rehearsal/attempt-33/final-restoration-inventory.json"
+        $finalEnvironmentPath = Join-Path $ResolvedEvidenceRoot "rehearsal/attempt-33/lanes/final-environment-identity.json"
+        $qualificationDocument = [ordered]@{
+            schema_version = 1
+            contract = "tessara.sprint-8a.correction-authorization-qualification"
+            sprint = "sprint-8a"
+            phase = "candidate-rehearsal-correction-authorization-qualification"
+            attempt = 33
+            authoritative = $false
+            state = "authorized"
+            authorization_kind = "approved_historical_evidence_correction"
+            generated_at = [DateTimeOffset]::UtcNow.ToString("o")
+            source_identity = $attemptDocument.mutable_source_identity
+            approved_correction_source_identity = $correctionSource
+            environment_fingerprint = [string]$attemptDocument.environment_fingerprint
+            original_authorization = $authorizationReference
+            qualification_basis = [ordered]@{
+                immutable_attempt = $attemptReference
+                harvest = $harvestReference
+                defect_batch = $batchReference
+                failed_final_health_lane = New-R33Reference $failedHealthLanePath
+                final_health_evidence = New-R33Reference $finalHealthPath
+                materialization_result = New-R33Reference $materializationPath
+                inventory_navigation = New-R33Reference $inventoryPath
+                final_environment_lane = New-R33Reference $finalEnvironmentPath
+            }
+            authorization_effect = [ordered]@{
+                original_authorization_qualified = $true
+                correction_scope = "one consolidated tracked correction batch"
+                allowed_successor_phase = "validation-readiness"
+                allowed_successor_attempt = 44
+                allowed_successor_count = 1
+                requires_exact_tuple = $true
+                independently_consumable = $false
+                consumption_state = "unconsumed"
+            }
+            lifecycle_guards = [ordered]@{
+                predecessor_rehearsal_state = "failed"
+                candidate_rehearsal_result_authorized = $false
+                preflight_authorized = $false
+                candidate_freeze_authorized = $false
+                sit_authorized = $false
+                uat_authorized = $false
+                closeout_authorized = $false
+                next_formal_cycle_started = $false
+            }
+            statement = "The immutable R33 failure remains unchanged. Exact retained recovery evidence proves that its old comparator misread a successful clean apply, no-op, health check, inventory check, and environment check. This tuple permits only complete Readiness 44 and does not certify R33 or any downstream phase."
+        }
+        if (Test-Path -LiteralPath $qualificationPath -PathType Leaf) {
+            $qualificationSha = Assert-Sprint8AReceiptSidecar -Path $qualificationPath
+        } else {
+            Publish-Sprint7AEvidence -Document $qualificationDocument -OutputPath $qualificationPath | Out-Null
+            $qualificationSha = Assert-Sprint8AReceiptSidecar -Path $qualificationPath
+        }
+        $qualificationReference = [ordered]@{
+            path = ConvertTo-Sprint8ACanonicalEvidencePath -RepositoryRoot $repoRoot -EvidenceRoot $ResolvedEvidenceRoot -Path $qualificationPath
+            sha256 = $qualificationSha
+        }
+
+        $lineage = Add-Sprint8ACorrectionLineageLink `
+            -Lineage $state.correction_lineage `
+            -Predecessor ([ordered]@{
+                phase = "candidate-rehearsal"; attempt = 33
+                receipt = $attemptReference; harvest = $harvestReference; defect_batch = $batchReference
+            }) `
+            -Authorization $authorizationReference `
+            -ConsumedByReadiness $null
+        $lineage.links[-1]["authorization_qualification"] = $qualificationReference
+        [void](Assert-Sprint8ACorrectionLineage -Lineage $lineage -RepositoryRoot $repoRoot -EvidenceRoot $ResolvedEvidenceRoot)
+        $state.updated_at = [DateTimeOffset]::UtcNow.ToString("o")
+        $state.correction_lineage = $lineage
+        $state.correction_authorization = [pscustomobject][ordered]@{
+            state = "authorized"
+            path = [string]$authorizationReference.path
+            sha256 = [string]$authorizationReference.sha256
+            qualification = $qualificationReference
+            allowed_successor_attempt = 44
+        }
+        $state.preflight_eligible = $false
+        Publish-Sprint7AEvidence -Document $state -OutputPath $statePath -Overwrite | Out-Null
+        [void](Assert-Sprint8AReceiptSidecar -Path $statePath)
+        Write-Host "Recorded the approved R33 evidence correction. The immutable R33 failure remains failed; exactly Readiness 44 may start next."
+    } finally {
+        if ($null -ne $lockHandle) { $lockHandle.Dispose() }
+    }
+}
+
 if ($SelfTest) {
-    if ($ResumeInterruptedAttempt) { throw "Candidate Rehearsal self-test and process-loss recovery are mutually exclusive." }
+    if ($ResumeInterruptedAttempt -or $AuthorizeApprovedR33Correction) { throw "Candidate Rehearsal self-test cannot be combined with recovery or R33 evidence correction." }
     Test-Sprint8AExclusiveValidationLock
     Test-RehearsalScheduler
     Test-RehearsalReadinessLaneIsolation
@@ -1075,6 +1272,16 @@ if ($SelfTest) {
         $nested.mutable_source_identity = $source
     }
     Write-Host "Sprint 8A candidate rehearsal fail-late, process-loss recovery, immutable-tail, and nested-UAT authority self-test passed."
+    return
+}
+
+if ($AuthorizeApprovedR33Correction) {
+    $resolvedCorrectionEvidenceRoot = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
+        [IO.Path]::GetFullPath($EvidenceRoot)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repoRoot $EvidenceRoot))
+    }
+    Invoke-ApprovedR33CorrectionAuthorization -ResolvedEvidenceRoot $resolvedCorrectionEvidenceRoot
     return
 }
 

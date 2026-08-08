@@ -1839,6 +1839,211 @@ function Assert-Sprint8AR32CorrectionAuthorizationQualification {
     }
 }
 
+function Assert-Sprint8AR33CorrectionAuthorizationQualification {
+    param(
+        [Parameter(Mandatory)]$Link,
+        [Parameter(Mandatory)]$PredecessorDocument,
+        [Parameter(Mandatory)]$AuthorizationReference,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot
+    )
+
+    function Resolve-ExactR33Reference {
+        param(
+            [Parameter(Mandatory)]$Reference,
+            [Parameter(Mandatory)][string]$RelativePath,
+            [Parameter(Mandatory)][string]$Label
+        )
+
+        $expectedPath = Get-Sprint8AEvidenceRelativePath `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -RelativePath $RelativePath
+        if ($null -eq $Reference -or
+            [string]$Reference.path -cne $expectedPath -or
+            [string]$Reference.sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "$Label does not name its exact retained R33 path and SHA-256."
+        }
+        [void](Assert-Sprint8ACanonicalEvidencePath `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -Path ([string]$Reference.path) `
+            -Label $Label)
+        $resolved = Resolve-Sprint8AEvidenceReference `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -Path ([string]$Reference.path)
+        $sha = Assert-Sprint8AReceiptSidecar -Path ([string]$resolved.full_path)
+        if ($sha -cne [string]$Reference.sha256) {
+            throw "$Label digest differs from its retained artifact."
+        }
+        [pscustomobject][ordered]@{
+            path = [string]$resolved.path
+            full_path = [string]$resolved.full_path
+            sha256 = $sha
+            document = Get-Content -LiteralPath ([string]$resolved.full_path) -Raw | ConvertFrom-Json
+        }
+    }
+
+    function Assert-ExactR33Binding {
+        param($Actual, $Expected, [string]$Label)
+        if ($null -eq $Actual -or
+            [string]$Actual.path -cne [string]$Expected.path -or
+            [string]$Actual.sha256 -cne [string]$Expected.sha256) {
+            throw "$Label does not retain its exact authenticated path and SHA-256."
+        }
+    }
+
+    if ([string]$Link.predecessor.phase -cne "candidate-rehearsal" -or
+        [int]$Link.predecessor.attempt -ne 33) {
+        throw "The approved evidence-correction qualification is restricted to Candidate Rehearsal 33."
+    }
+    $qualification = Resolve-ExactR33Reference `
+        -Reference $Link.authorization_qualification `
+        -RelativePath "attempts/candidate-rehearsal-33-correction-authorization-qualification.json" `
+        -Label "R33 correction-authorization qualification"
+    $document = $qualification.document
+    if ([int]$document.schema_version -ne 1 -or
+        [string]$document.contract -cne "tessara.sprint-8a.correction-authorization-qualification" -or
+        [string]$document.sprint -cne "sprint-8a" -or
+        [string]$document.phase -cne "candidate-rehearsal-correction-authorization-qualification" -or
+        [int]$document.attempt -ne 33 -or
+        $document.authoritative -ne $false -or
+        [string]$document.state -cne "authorized" -or
+        [string]$document.authorization_kind -cne "approved_historical_evidence_correction") {
+        throw "The approved R33 correction-authorization qualification has an invalid contract header."
+    }
+    Assert-ExactR33Binding -Actual $document.original_authorization -Expected $AuthorizationReference -Label "R33 qualification authorization"
+    if (($document.source_identity | ConvertTo-Json -Depth 30 -Compress) -cne
+            ($PredecessorDocument.mutable_source_identity | ConvertTo-Json -Depth 30 -Compress) -or
+        [string]$document.environment_fingerprint -cne [string]$PredecessorDocument.environment_fingerprint) {
+        throw "The approved R33 qualification changes the failed rehearsal source or environment identity."
+    }
+    Assert-Sprint8ASourceIdentityObject -Source $document.approved_correction_source_identity | Out-Null
+    if ($document.approved_correction_source_identity.dirty -ne $false) {
+        throw "The approved R33 qualification is not bound to one clean committed correction source."
+    }
+
+    $basis = $document.qualification_basis
+    $attempt = Resolve-ExactR33Reference $basis.immutable_attempt "attempts/candidate-rehearsal-33-attempt.json" "R33 immutable attempt"
+    $harvest = Resolve-ExactR33Reference $basis.harvest "attempts/candidate-rehearsal-33-harvest.json" "R33 harvest"
+    $batch = Resolve-ExactR33Reference $basis.defect_batch "attempts/candidate-rehearsal-33-defect-batch.json" "R33 defect batch"
+    Assert-ExactR33Binding $attempt $Link.predecessor.receipt "R33 qualification attempt"
+    Assert-ExactR33Binding $harvest $Link.predecessor.harvest "R33 qualification harvest"
+    Assert-ExactR33Binding $batch $Link.predecessor.defect_batch "R33 qualification defect batch"
+
+    $failedHealthLane = Resolve-ExactR33Reference $basis.failed_final_health_lane "rehearsal/attempt-33/lanes/final-successor-health.json" "R33 failed final-health lane"
+    $finalHealth = Resolve-ExactR33Reference $basis.final_health_evidence "rehearsal/attempt-33/final-successor-health.json" "R33 final-health evidence"
+    $materialization = Resolve-ExactR33Reference $basis.materialization_result "rehearsal/attempt-33/final-restoration/materialization/attempt-33/materialization-result.json" "R33 final materialization"
+    $inventory = Resolve-ExactR33Reference $basis.inventory_navigation "rehearsal/attempt-33/final-restoration-inventory.json" "R33 final inventory"
+    $finalEnvironment = Resolve-ExactR33Reference $basis.final_environment_lane "rehearsal/attempt-33/lanes/final-environment-identity.json" "R33 final environment lane"
+
+    if ([string]$PredecessorDocument.state -cne "failed" -or
+        [string]$PredecessorDocument.cleanup_restoration.result -cne "not_proven" -or
+        [string]$failedHealthLane.document.result.name -cne "final-successor-health" -or
+        [string]$failedHealthLane.document.result.state -cne "failed" -or
+        $failedHealthLane.document.result.assertions_started -ne $true -or
+        [string]$finalEnvironment.document.result.name -cne "final-environment-identity" -or
+        [string]$finalEnvironment.document.result.state -cne "passed" -or
+        $finalEnvironment.document.result.assertions_started -ne $true) {
+        throw "The R33 qualification does not preserve the immutable failed-lane and passing final-environment facts."
+    }
+    $materializationBound = $false
+    $healthBound = $false
+    $inventoryBound = $false
+    foreach ($reference in @($failedHealthLane.document.result.produced_evidence)) {
+        if ([string]$reference.path -ceq [string]$materialization.path -and
+            [string]$reference.sha256 -ceq [string]$materialization.sha256) {
+            $materializationBound = $true
+        }
+        if ([string]$reference.path -ceq [string]$finalHealth.path -and
+            [string]$reference.sha256 -ceq [string]$finalHealth.sha256) {
+            $healthBound = $true
+        }
+        if ([string]$reference.path -ceq [string]$inventory.path -and
+            [string]$reference.sha256 -ceq [string]$inventory.sha256) {
+            $inventoryBound = $true
+        }
+    }
+    if (-not $materializationBound -or -not $healthBound -or -not $inventoryBound) {
+        throw "The R33 failed final-health lane does not bind the exact retained recovery evidence."
+    }
+
+    $materializedSource = $materialization.document.source
+    $predecessorSource = $PredecessorDocument.mutable_source_identity
+    if ([int]$materialization.document.attempt -ne 33 -or
+        $materialization.document.passed -ne $true -or
+        [string]$materializedSource.commit -cne [string]$predecessorSource.commit -or
+        [string]$materializedSource.tree -cne [string]$predecessorSource.tree -or
+        [string]$materializedSource.branch -cne [string]$predecessorSource.branch -or
+        [bool]$materializedSource.dirty -ne [bool]$predecessorSource.dirty -or
+        [string]$materialization.document.environment.declared_fingerprint -cne [string]$PredecessorDocument.environment_fingerprint -or
+        [string]$materialization.document.first_apply.operation_state -cne "succeeded" -or
+        $materialization.document.first_apply.no_op -ne $false -or
+        [string]$materialization.document.no_op_apply.operation_state -cne "succeeded" -or
+        $materialization.document.no_op_apply.no_op -ne $true -or
+        $materialization.document.final_health_passed -ne $true) {
+        throw "The R33 materialization receipt does not prove the clean apply, exact no-op, and final health that the old comparator missed."
+    }
+    if ([int]$finalHealth.document.attempt -ne 33 -or
+        $finalHealth.document.health.core.passed -ne $true -or
+        $finalHealth.document.health.supervisor.passed -ne $true -or
+        [string]$finalHealth.document.inventory_navigation.evidence.path -cne [string]$inventory.path -or
+        [string]$finalHealth.document.inventory_navigation.evidence.sha256 -cne [string]$inventory.sha256 -or
+        $inventory.document.passed -ne $true) {
+        throw "The R33 qualification lacks exact Core, Supervisor, or inventory recovery proof."
+    }
+    $coreHealth = $finalHealth.document.health.core
+    $supervisorHealth = $finalHealth.document.health.supervisor
+    if ([string]$coreHealth.expectation.path -cne "/health" -or
+        [int]$coreHealth.response.status -ne 200 -or
+        [string]$coreHealth.response.media_type -cne "text/plain" -or
+        [int]$coreHealth.response.body_utf8_length -ne 2 -or
+        [string]$coreHealth.response.body_sha256 -cne "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df" -or
+        [int]$coreHealth.response.redirects_followed -ne 0 -or
+        [string]$supervisorHealth.expectation.path -cne "/health/ready" -or
+        [int]$supervisorHealth.response.status -ne 204 -or
+        [int]$supervisorHealth.response.body_utf8_length -ne 0 -or
+        [string]$supervisorHealth.response.body_sha256 -cne "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" -or
+        [int]$supervisorHealth.response.redirects_followed -ne 0) {
+        throw "The R33 qualification substitutes broad health success for the exact Core and Supervisor contracts."
+    }
+    $expectedTransitions = @("tessara.datasets", "tessara.forms", "tessara.migration", "tessara.responses", "tessara.workflows")
+    $actualTransitions = @($inventory.document.transition_identities | ForEach-Object { [string]$_ } | Sort-Object)
+    $moduleDefinitions = @($inventory.document.module_inventory | ForEach-Object { [string]$_.definition_id } | Sort-Object)
+    $navigationKeys = @($inventory.document.module_navigation | ForEach-Object { [string]$_.key } | Sort-Object)
+    if (($actualTransitions | ConvertTo-Json -Compress) -cne ($expectedTransitions | Sort-Object | ConvertTo-Json -Compress) -or
+        ($moduleDefinitions | ConvertTo-Json -Compress) -cne (@("tessara.components", "tessara.dashboards") | ConvertTo-Json -Compress) -or
+        ($navigationKeys | ConvertTo-Json -Compress) -cne (@("tessara.components.navigation", "tessara.dashboards.navigation") | ConvertTo-Json -Compress) -or
+        @($inventory.document.navigation_order | Where-Object { [string]$_ -ceq "Dashboards" }).Count -ne 1) {
+        throw "The R33 recovery inventory does not preserve five Core transitions and one real Dashboard presentation."
+    }
+    $effect = $document.authorization_effect
+    $guards = $document.lifecycle_guards
+    if ($effect.original_authorization_qualified -ne $true -or
+        [string]$effect.allowed_successor_phase -cne "validation-readiness" -or
+        [int]$effect.allowed_successor_attempt -ne 44 -or
+        [int]$effect.allowed_successor_count -ne 1 -or
+        $effect.requires_exact_tuple -ne $true -or
+        $effect.independently_consumable -ne $false -or
+        [string]$effect.consumption_state -cne "unconsumed" -or
+        [string]$guards.predecessor_rehearsal_state -cne "failed" -or
+        $guards.candidate_rehearsal_result_authorized -ne $false -or
+        $guards.preflight_authorized -ne $false -or
+        $guards.candidate_freeze_authorized -ne $false -or
+        $guards.sit_authorized -ne $false -or
+        $guards.uat_authorized -ne $false -or
+        $guards.closeout_authorized -ne $false) {
+        throw "The R33 qualification does not preserve its exact one-use, non-certifying effect."
+    }
+
+    [pscustomobject][ordered]@{
+        qualification = $qualification
+        supporting_references = @($attempt, $harvest, $batch, $failedHealthLane, $finalHealth, $materialization, $inventory, $finalEnvironment)
+        allowed_successor_attempt = 44
+    }
+}
+
 function Assert-Sprint8ACandidateCorrectionAuthorizationCleanup {
     param(
         [Parameter(Mandatory)]$AuthorizationDocument,
@@ -2142,10 +2347,24 @@ function Assert-Sprint8ACorrectionLineage {
             ) + @($qualificationValidation.restoration_references)) {
                 $references.Add($reference)
             }
+        } elseif ($phase -ceq "candidate-rehearsal" -and $attempt -eq 33) {
+            if ($null -eq $authorizationQualification) {
+                throw "Candidate Rehearsal 33 correction authority requires its exact approved evidence-correction qualification."
+            }
+            $qualificationValidation = Assert-Sprint8AR33CorrectionAuthorizationQualification `
+                -Link $link `
+                -PredecessorDocument $receiptRef.document `
+                -AuthorizationReference $authorizationRef `
+                -RepositoryRoot $RepositoryRoot `
+                -EvidenceRoot $EvidenceRoot
+            $qualificationValidations[$index] = $qualificationValidation
+            foreach ($reference in @($qualificationValidation.supporting_references) + @($qualificationValidation.qualification)) {
+                $references.Add($reference)
+            }
         } elseif ($null -ne $authorizationQualification) {
-            throw "Correction-authorization qualification is permitted only for the retained Candidate Rehearsal 32 bridge."
+            throw "Correction-authorization qualification is permitted only for the exact retained Candidate Rehearsal 32 or approved Candidate Rehearsal 33 bridge."
         }
-        if ($phase -ceq "candidate-rehearsal" -and $attempt -gt 32) {
+        if ($phase -ceq "candidate-rehearsal" -and $attempt -gt 33) {
             $cleanupValidation = Assert-Sprint8ACandidateCorrectionAuthorizationCleanup `
                 -AuthorizationDocument $authorizationRef.document `
                 -Attempt $attempt `

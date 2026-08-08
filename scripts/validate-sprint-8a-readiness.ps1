@@ -459,6 +459,57 @@ function Test-Sprint8AR32CorrectionAuthorizationQualification {
     }
 }
 
+function Test-Sprint8AR33CorrectionAuthorizationQualification {
+    $qualificationPath = Join-Path $evidenceRootPath "attempts/candidate-rehearsal-33-correction-authorization-qualification.json"
+    if (-not (Test-Path -LiteralPath $qualificationPath -PathType Leaf)) {
+        # The exact bridge is created only after the tracked correction is committed
+        # and the coordinator explicitly invokes its one-time finalizer.
+        return
+    }
+    [void](Assert-Sprint8AReceiptSidecar -Path $qualificationPath)
+    $statePath = Join-Path $evidenceRootPath "validation-state.json"
+    [void](Assert-Sprint8AReceiptSidecar -Path $statePath)
+    $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+    $validation = Assert-Sprint8ACorrectionLineage `
+        -Lineage $state.correction_lineage `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $evidenceRootPath
+    if ([int]$validation.tip.predecessor.attempt -ne 33 -or
+        $null -eq $validation.tip_qualification -or
+        [int]$validation.tip_qualification.allowed_successor_attempt -ne 44) {
+        throw "R33 evidence-correction self-test did not authenticate the exact pending Readiness 44 bridge."
+    }
+    $qualification = $validation.tip_qualification.qualification.document
+    $currentSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    if (($qualification.approved_correction_source_identity | ConvertTo-Json -Depth 30 -Compress) -cne
+        ($currentSource | ConvertTo-Json -Depth 30 -Compress)) {
+        throw "R33 evidence-correction self-test is not bound to the current clean correction source."
+    }
+    $wrongAttemptRejected = $false
+    try {
+        [void](Get-Sprint8AReadinessAttemptReservation `
+            -StateDocument $state `
+            -AttemptNumber 45 `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath)
+    } catch { $wrongAttemptRejected = $true }
+    if (-not $wrongAttemptRejected) {
+        throw "R33 evidence-correction self-test admitted a successor other than exact Readiness 44."
+    }
+    $tamperedState = $state | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    @($tamperedState.correction_lineage.links)[-1].authorization_qualification.sha256 = "0" * 64
+    $tamperedRejected = $false
+    try {
+        [void](Assert-Sprint8ACorrectionLineage `
+            -Lineage $tamperedState.correction_lineage `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath)
+    } catch { $tamperedRejected = $true }
+    if (-not $tamperedRejected) {
+        throw "R33 evidence-correction self-test admitted a stale qualification digest."
+    }
+}
+
 $declaredChecks = @(
     [ordered]@{ name = "attempt-state-prerequisite"; depends_on = @(); classification = "preflight/setup" },
     [ordered]@{ name = "clean-source"; depends_on = @(); classification = "preflight/setup" },
@@ -713,7 +764,7 @@ function Get-Sprint8AReadinessAttemptReservation {
     }
     if ($null -ne $qualificationValidation -and
         [int]$qualificationValidation.allowed_successor_attempt -ne $AttemptNumber) {
-        throw "The retained R32 qualification tuple permits only Readiness attempt $([int]$qualificationValidation.allowed_successor_attempt), not attempt $AttemptNumber."
+        throw "The retained qualification tuple permits only Readiness attempt $([int]$qualificationValidation.allowed_successor_attempt), not attempt $AttemptNumber."
     }
 
     [pscustomobject][ordered]@{
@@ -1813,6 +1864,7 @@ if ($SelfTest) {
     Test-Sprint8AEvidenceReferenceResolution
     Test-Sprint8ACanonicalDeclaredEvidencePaths
     Test-Sprint8AR32CorrectionAuthorizationQualification
+    Test-Sprint8AR33CorrectionAuthorizationQualification
     Test-Sprint8ARehearsalTwoWaveScheduler
     $canonicalSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
     Assert-Sprint8ASourceIdentityObject -Source $canonicalSource | Out-Null
@@ -2265,6 +2317,15 @@ try {
         }
         if ($script:source.dirty) {
             throw "Readiness requires clean tracked and untracked source."
+        }
+        if ($null -ne $script:predecessorCorrectionAuthorizationQualification -and
+            $null -ne $launchReservation.authorization_qualification -and
+            [string]$launchReservation.authorization_qualification.authorization_kind -ceq "approved_historical_evidence_correction") {
+            $approvedSource = $launchReservation.authorization_qualification.approved_correction_source_identity
+            if (($script:source | ConvertTo-Json -Depth 30 -Compress) -cne
+                ($approvedSource | ConvertTo-Json -Depth 30 -Compress)) {
+                throw "Readiness source differs from the exact clean correction source approved by the R33 evidence-correction record."
+            }
         }
         $script:source | ConvertTo-Json -Depth 10
     }

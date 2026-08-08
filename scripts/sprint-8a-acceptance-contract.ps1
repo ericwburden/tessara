@@ -1082,6 +1082,10 @@ function Test-Sprint8AAcceptanceContract {
             "function Assert-Sprint8ACorrectionIdentityContinuity",
             "function Assert-Sprint8ACorrectionLineageTopology",
             "function Assert-Sprint8ACorrectionLineage",
+            "function Assert-Sprint8AR33CorrectionAuthorizationQualification",
+            "approved_historical_evidence_correction",
+            "allowed_successor_attempt = 44",
+            "five Core transitions and one real Dashboard presentation",
             "function Assert-Sprint8AReadinessSupersessionChain",
             "current_readiness_binding", "direct_correction_consumption",
             "clean_pre_rehearsal_supersession",
@@ -1212,7 +1216,10 @@ function Test-Sprint8AAcceptanceContract {
             "Test-RehearsalRecoveredTerminalSourceBinding",
             "Assert-RehearsalRestorationMaterializationReceipt", '$null -ne $restorationEvidence',
             '-HarvestOnly', "correction_authorization_withheld_cleanup_not_proven",
-            '$restorationRequired = $true'
+            '$restorationRequired = $true', "AuthorizeApprovedR33Correction",
+            "Invoke-ApprovedR33CorrectionAuthorization",
+            "The immutable R33 failure remains unchanged",
+            "exactly Readiness 44 may start next"
         )
         "scripts/test-sprint-validation-harvest.ps1" = @(
             "Assert-DiagnosticReceiptHeader", "Assert-MutableSourceIdentity", "Assert-EnvironmentFingerprint",
@@ -1259,6 +1266,8 @@ function Test-Sprint8AAcceptanceContract {
             '$cleanRerunPrerequisites.Count -ne 1',
             "without a second consumption", "noncontiguous successor attempt",
             "orphaned consumed correction transition",
+            "approved_historical_evidence_correction",
+            "source differs from the exact clean correction source approved by the R33 evidence-correction record",
             'receipt = $relativeAttemptPath',
             "CurrentReadinessReference", 'path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath)',
             "New-Sprint8ANextCandidateRehearsalPlan", "next_candidate_rehearsal",

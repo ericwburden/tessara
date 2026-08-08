@@ -1,31 +1,29 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Validation Readiness 41 passed its complete 15-check graph against
-clean commit `d703e7a67c3f1177b621b0e14161e0661209ea42`, tree
-`889ddc5f784ea1e81686ce63dd22669aabde956d`, and environment fingerprint
-`53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`.
-Candidate Rehearsal 32 then completed all 32 declared lanes under its
-conservative full-harvest schedule with 19 passes, 2 raw `product` failures,
-11 exact dependency blocks, and 0 deferrals. It issued no passing rehearsal
-result. Post-harvest diagnosis found one shared health-probe harness root, an
-authorization-before-restoration guard defect, noncanonical declaration paths,
-a stale Dashboard smoke assertion, and a real Dashboard bootstrap-layout
-product defect. Canonical source-exact restoration is now retained separately,
-and the already-issued R32 authorization is quarantined unless paired with its
-one-off append-only qualification for exactly Readiness 42. Implementation is
-mutable again; no candidate exists, and preflight, SIT, formal UAT, and closeout
-remain closed until complete Readiness 42 and its complete successor Rehearsal
-pass against the same corrected clean source and environment identity.
+Status: Validation Readiness 43 passed, then Candidate Rehearsal 33 retained a
+complete 32-lane failed result with 29 passes, 2 failures, 1 exact dependency
+block, and 0 deferrals. Its final restoration actually completed a clean first
+apply, exact semantic no-op, exact Core and Supervisor health checks, exact
+five-entry Core transition inventory, one real Dashboard presentation, and a
+passing final environment check; the old comparison code misread the compact
+materialization source shape. R33 remains immutable and failed. The user has
+approved one append-only evidence-correction tuple that leaves those receipts
+unchanged and permits only complete Readiness 44. No candidate exists, and
+preflight, SIT, formal UAT, and closeout remain closed until Readiness 44 and
+complete Candidate Rehearsal 34 pass against the same corrected clean source
+and environment identity.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
-- Current correction input and latest failed rehearsal source:
-  `d703e7a67c3f1177b621b0e14161e0661209ea42`
-- Current correction input tree:
-  `889ddc5f784ea1e81686ce63dd22669aabde956d`
+- Latest failed rehearsal source/tree:
+  `2cdbf5432f9a737e82ea470ebabe7b55e42cd4ec` /
+  `43c3b45c96b17b1fc3da9dabedcc36976ea97f8c`
+- Evidence-correction implementation base commit/tree:
+  `00442aae30028963ac791c2302bbfdc12f2a53f6` /
+  `cccdbd0255a6e691c119158ffb3a5fa331f544a4`
 - Latest rehearsal environment fingerprint:
-  `53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`
+  `5576717182719a9e6f53ba0ffe9ecdaad4db230f8b62336b3bc26197a1e298a3`
 - Roadmap authority:
   `Sprint 8A: Component Module Separation Slice (Implementation Correction)`
   and the reconciled
@@ -622,15 +620,14 @@ depends on the successor complete Readiness and Rehearsal gates.
 
 Focused implementation verification uses the all-feature, offline, warnings-
 denied command set recorded in the verification record. It is not a formal
-gate. R32's immutable attempt, harvest, raw two-defect batch, diagnostic
-supplement, post-harvest restoration, and authorization qualification remain
-append-only. After the mutable correction is committed cleanly and the
-validation coordinator authorizes the exact transition, only the qualified
-one-use R32 authorization may admit the next formal commands:
+gate. R33's immutable attempt, lanes, harvest, and defect batch remain
+append-only and failed. After the approved evidence-correction implementation
+is committed cleanly and its exact tuple is issued, only that one-use record
+may admit the next formal commands:
 
 ```powershell
-.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 42
-.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 33 -ReadinessReceipt "artifacts/sprint-8a-closeout/validation-readiness-result.json"
+.\scripts\validate-sprint-8a-readiness.ps1 -Attempt 44
+.\scripts\run-sprint-8a-candidate-rehearsal.ps1 -Attempt 34 -ReadinessReceipt "artifacts/sprint-8a-closeout/attempts/readiness-44.json"
 ```
 
 Only when both complete gates pass against the same source and environment

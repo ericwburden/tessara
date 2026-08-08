@@ -379,15 +379,21 @@ The schema-3 authorization embeds both canonical receipt references and hashes.
 Withhold authorization if that proof is absent; do not rewrite the attempt,
 harvest, batch, or raw evidence.
 
-Sprint 8A Candidate Rehearsal 32 is the sole historical exception predating
-that authorization guard. Its already-issued schema-2 authorization remains
-quarantined and is effective only as a tuple with the create-once
-`candidate-rehearsal-32-correction-authorization-qualification.json`, which
-authenticates the append-only diagnostic supplement and post-harvest canonical
-restoration receipt and permits exactly Readiness 42. The qualification is not
-independently consumable and authorizes no rehearsal result, preflight,
-candidate freeze, SIT, UAT, or closeout. Do not generalize this exception or
-rewrite the R32 receipts.
+Sprint 8A retains two exact historical bridges and no general qualification
+path. Rehearsal 32's already-issued schema-2 authorization was effective only
+with `candidate-rehearsal-32-correction-authorization-qualification.json` and
+permitted exactly Readiness 42. Rehearsal 33 remains immutable and failed, but
+the user-approved
+`candidate-rehearsal-33-correction-authorization-qualification.json` may pair
+with its separate quarantined authorization to permit exactly Readiness 44.
+That R33 record must authenticate the immutable attempt, harvest, batch, failed
+cleanup lane, successful source-exact apply and semantic no-op, exact Core and
+Supervisor health, exact five-transition inventory with Dashboard presented
+once through its real module, passing final environment lane, and the clean
+committed correction source. Neither bridge is independently consumable or
+authorizes a rehearsal result, preflight, candidate freeze, SIT, UAT, or
+closeout. Do not rewrite R32/R33 evidence or extend this exception to another
+attempt.
 
 Validation state retains these transitions as one correction lineage of
 authenticated append-only references, including any intervening failed
