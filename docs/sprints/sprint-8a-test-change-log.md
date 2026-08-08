@@ -895,3 +895,13 @@ no successor lifecycle attempt.
 All verification from this correction phase is focused and non-authoritative.
 It cannot produce a Candidate Rehearsal result or authorize preflight, freeze,
 SIT, UAT, or closeout.
+
+R33 terminal-tail recovery subsequently exposed and corrected two recovery
+projection defects: historical declarations were compared with the corrected
+runner, and retained append-only harvest/batch timestamps were reconstructed.
+Recovery now authenticates the immutable attempt graph and directly consumes
+the retained harvest/batch. The recovered state remains failed and correction
+authority remains withheld. The protocol names R32 as the sole post-harvest
+qualification exception, so R33 cannot receive an analogous qualification
+without an explicit governing lifecycle decision. No historical receipt was
+rewritten.

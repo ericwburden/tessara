@@ -43,7 +43,19 @@ function Publish-OrAuthenticateRehearsalImmutableEvidence {
     $retained = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
     if (($retained | ConvertTo-Json -Depth 100 -Compress) -cne
         ($Document | ConvertTo-Json -Depth 100 -Compress)) {
-        throw "$Label already exists but does not match the authenticated recovery projection; recovery will not rewrite it."
+        $propertyNames = @(
+            @($retained.PSObject.Properties.Name) +
+            @($Document.Keys) |
+                Sort-Object -Unique
+        )
+        $changedProperties = @($propertyNames | Where-Object {
+            $name = [string]$_
+            $retainedValue = if ($retained.PSObject.Properties.Name -contains $name) { $retained.$name } else { $null }
+            $projectedValue = if ($Document.Contains($name)) { $Document[$name] } else { $null }
+            ($retainedValue | ConvertTo-Json -Depth 100 -Compress) -cne
+                ($projectedValue | ConvertTo-Json -Depth 100 -Compress)
+        })
+        throw "$Label already exists but differs from the authenticated recovery projection in: $($changedProperties -join ', '); recovery will not rewrite it."
     }
     $sha
 }
@@ -1273,20 +1285,28 @@ $startReadinessReference = [ordered]@{ path = $relativeReadinessPath; sha256 = $
 if ($ResumeInterruptedAttempt -and $resumeHasStart) {
     $startSha = Assert-Sprint8AReceiptSidecar -Path $startPath
     $startDocument = Get-Content -LiteralPath $startPath -Raw | ConvertFrom-Json
+    $historicalDeclaredChecks = @($startDocument.declared_checks)
     if (($startDocument.schema_version -isnot [int] -and $startDocument.schema_version -isnot [long]) -or
         [int]$startDocument.schema_version -ne 3 -or
         [string]$startDocument.phase -cne "candidate-rehearsal-start" -or
         [int]$startDocument.attempt -ne $Attempt -or
         $startDocument.PSObject.Properties.Name -notcontains "declared_checks" -or
-        ($startDocument.declared_checks | ConvertTo-Json -Depth 30 -Compress) -cne
-            ($declaredChecks | ConvertTo-Json -Depth 30 -Compress) -or
+        (-not $resumeHasAttempt -and
+            ($historicalDeclaredChecks | ConvertTo-Json -Depth 30 -Compress) -cne
+                ($declaredChecks | ConvertTo-Json -Depth 30 -Compress)) -or
         [string]$startDocument.readiness_receipt.path -cne $relativeReadinessPath -or
         [string]$startDocument.schedule_sha256 -cne (Get-Sprint8ARehearsalJsonSha256 -Document $startDocument.schedule)) {
         $validationLockHandle.Dispose(); $validationLockHandle = $null
         throw "Candidate Rehearsal recovery rejected a mutated or malformed immutable start receipt."
     }
     [void](Assert-Sprint8ARehearsalScheduleContract `
-        -Schedule $startDocument.schedule -Checks $declaredChecks -ExpectedAttempt $Attempt)
+        -Schedule $startDocument.schedule -Checks $historicalDeclaredChecks -ExpectedAttempt $Attempt)
+    if ($resumeHasAttempt) {
+        # An immutable attempt checkpoint owns its immutable declarations. A later
+        # tracked correction may legitimately change the runner before terminal-tail
+        # finalization, but it cannot change which lanes the retained attempt ran.
+        $declaredChecks = $historicalDeclaredChecks
+    }
     $stateSnapshotSha = Assert-Sprint8AReceiptSidecar -Path $stateSnapshotPath
     if ([string]$startDocument.validation_state_receipt.path -cne $relativeStateSnapshotPath -or
         [string]$startDocument.validation_state_receipt.sha256 -cne $stateSnapshotSha) {
@@ -1631,14 +1651,18 @@ if ($ResumeInterruptedAttempt -and $resumeHasAttempt) {
     $recoveredSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
     $recoveredEnvironment = Get-Sprint8AEnvironmentContract `
         -RepositoryRoot $repoRoot -EvidenceRoot $EvidenceRoot -ProbeDatabases
+    $terminalHistoricalSourceAuthenticated = -not $recoveredTerminalAttempt -or
+        (Test-RehearsalRecoveredTerminalSourceBinding `
+            -AttemptDocument $attemptReceipt `
+            -RecoveredSource $validatedReadiness.mutable_source_identity)
     if ($null -ne $stateCapture.capture_error -or
         [string]$validatedReadinessSha -cne [string]$startDocument.readiness_receipt.sha256 -or
-        ($recoveredSource | ConvertTo-Json -Depth 20 -Compress) -cne
-            ($validatedReadiness.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress) -or
+        (-not $recoveredTerminalAttempt -and
+            ($recoveredSource | ConvertTo-Json -Depth 20 -Compress) -cne
+                ($validatedReadiness.mutable_source_identity | ConvertTo-Json -Depth 20 -Compress)) -or
         [string]$recoveredEnvironment.fingerprint -cne [string]$validatedReadiness.environment_fingerprint -or
         [string]$attemptReceipt.environment_fingerprint -notin @(("0" * 64), [string]$recoveredEnvironment.fingerprint) -or
-        ($recoveredTerminalAttempt -and -not (Test-RehearsalRecoveredTerminalSourceBinding `
-            -AttemptDocument $attemptReceipt -RecoveredSource $recoveredSource))) {
+        -not $terminalHistoricalSourceAuthenticated) {
         $validationLockHandle.Dispose(); $validationLockHandle = $null
         throw "Candidate Rehearsal recovery source, environment, Readiness, or state capture authentication failed."
     }
@@ -2835,8 +2859,16 @@ if (-not $passed) {
         nested_failed_count = $nestedFailedChecks.Count
         passed_count = @($terminalChecks | Where-Object state -CEQ "passed").Count
     }
-    $harvestSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
-        -Document $harvest -Path $harvestPath -Label "Candidate Rehearsal harvest"
+    if ($recoveredTerminalAttempt -and (Test-Path -LiteralPath $harvestPath -PathType Leaf)) {
+        # A terminal attempt may already have completed its append-only harvest
+        # before the controlling process was lost. Authenticate and consume that
+        # retained receipt; do not reconstruct timestamps or rewrite history.
+        $harvestSha = Assert-Sprint8AReceiptSidecar -Path $harvestPath
+        $harvest = Get-Content -LiteralPath $harvestPath -Raw | ConvertFrom-Json
+    } else {
+        $harvestSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
+            -Document $harvest -Path $harvestPath -Label "Candidate Rehearsal harvest"
+    }
     $laneDefects = @($failedChecks | ForEach-Object {
         [ordered]@{
             id = $null
@@ -2892,8 +2924,13 @@ if (-not $passed) {
             })
         )
     }
-    $batchSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
-        -Document $batch -Path $batchPath -Label "Candidate Rehearsal consolidated defect batch"
+    if ($recoveredTerminalAttempt -and (Test-Path -LiteralPath $batchPath -PathType Leaf)) {
+        $batchSha = Assert-Sprint8AReceiptSidecar -Path $batchPath
+        $batch = Get-Content -LiteralPath $batchPath -Raw | ConvertFrom-Json
+    } else {
+        $batchSha = Publish-OrAuthenticateRehearsalImmutableEvidence `
+            -Document $batch -Path $batchPath -Label "Candidate Rehearsal consolidated defect batch"
+    }
     if (-not [bool]$runtimeContext.launch_authorized) {
         if ($null -ne $validationLockHandle) { $validationLockHandle.Dispose(); $validationLockHandle = $null }
         throw "Sprint 8A Candidate Rehearsal launch was rejected by the active-attempt/state prerequisite. Safe independent evidence and one consolidated batch were retained, but no correction authorization was issued and validation-state was not overwritten."

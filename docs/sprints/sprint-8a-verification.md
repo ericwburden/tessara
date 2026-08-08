@@ -2312,3 +2312,25 @@ successor materialization, exact no-op, canonical restoration, exact Core and
 Supervisor health, the complete known-regression set, and validation-runner
 self-tests. Those receipts do not replace complete Readiness or complete
 Candidate Rehearsal against one later clean source/environment identity.
+
+### Rehearsal 33 terminal-tail recovery boundary
+
+Coordinator recovery authenticated R33's immutable start, terminal attempt,
+32 lane receipts, harvest, and consolidated defect batch without rewriting
+them. Recovery now treats the immutable start declarations as the historical
+attempt contract rather than comparing them with a later corrected runner, and
+it consumes an existing append-only harvest/batch instead of reconstructing
+their timestamps. The exact immutable Readiness prerequisite is
+`attempts/readiness-43.json`; the mutable canonical alias is not a valid
+terminal-recovery substitute.
+
+The validation state now records R33 as failed with 29 passed, 2 failed,
+1 blocked, 0 deferred, and `harvest_guard = passed`. Correction authorization
+remains withheld because the immutable attempt truthfully records
+`cleanup_restoration.result = not_proven`. The validation protocol explicitly
+reserves post-harvest qualification for the sole pre-enforcement R32 exception
+and forbids generalizing it. Consequently no repository-owned automatic path
+may authorize Readiness 44 from R33, and no Readiness 44, Rehearsal 34,
+preflight, candidate freeze, SIT, or UAT attempt is authorized. Advancing from
+this retained state requires an explicit coordinator/user decision that changes
+the governing lifecycle contract; R33 itself remains immutable and failed.
