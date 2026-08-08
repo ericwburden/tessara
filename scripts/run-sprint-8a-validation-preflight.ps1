@@ -1191,11 +1191,15 @@ function Test-Sprint8AValidationPreflightRunner {
     $rehearsalNames = @(Get-Sprint8APreflightDeclaredRunnerChecks `
         -Path (Join-Path $repoRoot "scripts/run-sprint-8a-candidate-rehearsal.ps1") `
         -EndMarker 'Assert-RehearsalGraph -Checks $declaredChecks')
+    $rehearsalRunnerSource = Get-Content `
+        -LiteralPath (Join-Path $repoRoot "scripts/run-sprint-8a-candidate-rehearsal.ps1") `
+        -Raw
     $claimProbe = [pscustomobject]@{
         child = [pscustomobject]@{ phase = "uat"; authoritative = $true }
     }
     if ($readinessNames -cnotcontains "runner-self-tests" -or
         $rehearsalNames -cnotcontains "failure-containment-successor-health" -or
+        -not $rehearsalRunnerSource.Contains('$declaredChecks = $historicalDeclaredChecks') -or
         @(Find-Sprint8APreflightAuthoritativeDownstreamClaim -Value $claimProbe).Count -ne 1) {
         throw "Sprint 8A preflight self-test found stale prerequisite identity or downstream-authority auditing."
     }
@@ -1806,7 +1810,9 @@ function Get-Sprint8APreflightDeclaredRunnerChecks {
         param($node)
         $node -is [Management.Automation.Language.AssignmentStatementAst] -and
             $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
-            [string]$node.Left.VariablePath.UserPath -ceq "declaredChecks"
+            [string]$node.Left.VariablePath.UserPath -ceq "declaredChecks" -and
+            $node.Right -is [Management.Automation.Language.CommandExpressionAst] -and
+            $node.Right.Expression -is [Management.Automation.Language.ArrayExpressionAst]
     }, $true))
     if (@($parseErrors).Count -ne 0 -or $assignments.Count -ne 1) {
         throw "Sprint 8A cannot identify one parsed declared check inventory in '$Path'."

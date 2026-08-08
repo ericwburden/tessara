@@ -474,30 +474,54 @@ function Test-Sprint8AR33CorrectionAuthorizationQualification {
         -Lineage $state.correction_lineage `
         -RepositoryRoot $repoRoot `
         -EvidenceRoot $evidenceRootPath
-    if ([int]$validation.tip.predecessor.attempt -ne 33 -or
-        $null -eq $validation.tip_qualification -or
-        [int]$validation.tip_qualification.allowed_successor_attempt -ne 44) {
-        throw "R33 evidence-correction self-test did not authenticate the exact pending Readiness 44 bridge."
+    $r33Links = @($validation.links | Where-Object {
+        [string]$_.predecessor.phase -ceq "candidate-rehearsal" -and
+        [int]$_.predecessor.attempt -eq 33
+    })
+    if ($r33Links.Count -ne 1) {
+        throw "R33 evidence-correction self-test did not authenticate exactly one Readiness 44 bridge."
     }
-    $qualification = $validation.tip_qualification.qualification.document
-    $currentSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    $r33Link = $r33Links[0]
+    $qualification = Get-Content -LiteralPath $qualificationPath -Raw | ConvertFrom-Json
+    $expectedCorrectionSource = if ($null -eq $r33Link.consumed_by_readiness) {
+        Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    } else {
+        if ([int]$r33Link.consumed_by_readiness.attempt -ne 44 -or
+            [string]$r33Link.consumed_by_readiness.receipt.state -notin @("passed", "failed")) {
+            throw "R33 evidence-correction self-test found a consumption other than terminal Readiness 44."
+        }
+        $consumedReceiptPath = (Resolve-Sprint8AEvidenceReference `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath `
+            -Path ([string]$r33Link.consumed_by_readiness.receipt.path)).path
+        [void](Assert-Sprint8AReceiptSidecar -Path $consumedReceiptPath)
+        (Get-Content -LiteralPath $consumedReceiptPath -Raw | ConvertFrom-Json).mutable_source_identity
+    }
     if (($qualification.approved_correction_source_identity | ConvertTo-Json -Depth 30 -Compress) -cne
-        ($currentSource | ConvertTo-Json -Depth 30 -Compress)) {
-        throw "R33 evidence-correction self-test is not bound to the current clean correction source."
+        ($expectedCorrectionSource | ConvertTo-Json -Depth 30 -Compress)) {
+        throw "R33 evidence-correction self-test is not bound to the source that consumed the bridge."
     }
+    $rejectedAttempt = if ($null -eq $r33Link.consumed_by_readiness) { 45 } else { 46 }
     $wrongAttemptRejected = $false
     try {
         [void](Get-Sprint8AReadinessAttemptReservation `
             -StateDocument $state `
-            -AttemptNumber 45 `
+            -AttemptNumber $rejectedAttempt `
             -RepositoryRoot $repoRoot `
             -EvidenceRoot $evidenceRootPath)
     } catch { $wrongAttemptRejected = $true }
     if (-not $wrongAttemptRejected) {
-        throw "R33 evidence-correction self-test admitted a successor other than exact Readiness 44."
+        throw "R33 evidence-correction self-test admitted an unauthorized successor attempt."
     }
     $tamperedState = $state | ConvertTo-Json -Depth 100 | ConvertFrom-Json
-    @($tamperedState.correction_lineage.links)[-1].authorization_qualification.sha256 = "0" * 64
+    $tamperedR33Links = @($tamperedState.correction_lineage.links | Where-Object {
+        [string]$_.predecessor.phase -ceq "candidate-rehearsal" -and
+        [int]$_.predecessor.attempt -eq 33
+    })
+    if ($tamperedR33Links.Count -ne 1) {
+        throw "R33 evidence-correction self-test could not isolate its tamper target."
+    }
+    $tamperedR33Links[0].authorization_qualification.sha256 = "0" * 64
     $tamperedRejected = $false
     try {
         [void](Assert-Sprint8ACorrectionLineage `

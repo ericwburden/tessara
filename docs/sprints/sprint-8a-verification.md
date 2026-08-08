@@ -2345,3 +2345,23 @@ After the correction commit, the coordinator records the approved bridge with:
 
 Only then may complete Readiness 44 start. If it passes, complete Rehearsal 34
 uses its immutable `attempts/readiness-44.json` receipt.
+
+### Readiness 44 consolidated correction boundary
+
+Readiness 44 consumed the approved R33 correction record and terminalized all
+15 declared checks. It retained 13 passes, two `harness` failures, no blocked
+checks, one complete harvest, and one two-defect batch. The failed
+`compose-and-fixture-contract` and `runner-self-tests` checks share one root
+cause: the preflight check-list reader treated the rehearsal's resume-time
+`$declaredChecks = $historicalDeclaredChecks` assignment as another canonical
+declaration.
+
+The correction narrows the parsed identity to the one literal array
+declaration and deliberately keeps the resume assignment present in the
+self-test fixture. The readiness self-test also authenticates R33 in both its
+pending and consumed positions, rather than assuming it remains the newest
+correction record. Focused non-authoritative acceptance, readiness, rehearsal,
+preflight, smoke, and automated UAT reproducers pass. They do not change
+Readiness 44 or replace a formal gate. The next permitted full gate is
+Readiness 45 against the clean correction commit and six fresh databases. Only
+a complete pass may authorize Candidate Rehearsal 34.

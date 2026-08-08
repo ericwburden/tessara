@@ -921,3 +921,25 @@ downstream phase. Receipt validation rejects changed hashes, another attempt,
 another successor, a dirty or different correction source, or use after
 Readiness 44 has begun. This is the second and final named Sprint 8A historical
 bridge, not a reusable post-harvest exception.
+
+## 2026-08-08 — Consolidated Readiness 44 check-list reader correction
+
+Readiness 44 completed its full fail-late inventory with 13 passes, two
+`harness` failures, and no blocked checks. Both retained defects have the same
+root cause. The preflight helper used an AST query for every assignment to
+`$declaredChecks`; the rehearsal runner legitimately has both its canonical
+array declaration and a later assignment that restores the immutable list
+when resuming an interrupted attempt.
+
+The helper now selects only an assignment whose right side is an array
+expression. Its self-test continues to require the resume assignment and
+proves that the canonical declaration is still extracted exactly. This maps
+to the verification plan's complete declared-check identity, recovery, smoke,
+UAT, and runner-self-test clauses. A related readiness self-test now locates
+the exact R33 correction link after consumption instead of assuming it remains
+the lineage tip; it authenticates the source that consumed the bridge and
+rejects the next unauthorized attempt in either the pending or consumed state.
+The direct acceptance contract plus readiness, rehearsal, preflight, smoke,
+and automated UAT self-tests pass as focused, non-authoritative reproducers.
+Readiness 44 remains failed and unchanged; the clean correction commit requires
+complete Readiness 45 before Rehearsal 34 can start.

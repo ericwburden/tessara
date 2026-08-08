@@ -1035,10 +1035,13 @@ tracked acceptance inputs are reconciled to those contracts, but formal proof
 still starts at the next complete Readiness gate.
 
 This status authorizes implementation correction and focused diagnostic proof
-only. R32's append-only post-harvest restoration qualifies, but does not
-replace, its quarantined one-use correction authorization for exactly Readiness
-42. After a clean correction commit and explicit validation-coordinator
-authorization, the next formal boundaries are complete Validation Readiness 42
-and complete Candidate Rehearsal 33 against the same corrected clean source and
-environment identity. This status does not assert candidate freeze, deployed
-acceptance, preflight, SIT, formal UAT, or closeout.
+only. The approved append-only R33 evidence correction was consumed by
+Readiness 44. That run terminalized all 15 checks, retaining 13 passes and two
+`harness` failures with no blocked checks. Both failures have one root cause:
+the preflight reader counted the rehearsal's resume-time assignment as a
+second check-list declaration. The corrected reader selects only the literal
+array declaration and its focused acceptance, preflight, smoke, and UAT
+reproducers pass. After a clean correction commit, the next formal boundary is
+complete Validation Readiness 45 with six fresh databases. Candidate Rehearsal
+34 may start only if that exact Readiness passes. This status does not assert
+candidate freeze, deployed acceptance, preflight, SIT, formal UAT, or closeout.
