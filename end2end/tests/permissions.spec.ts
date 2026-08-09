@@ -1917,13 +1917,13 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "get",
       `/api/components/${slug}/versions/${hiddenHistoryVersion.component_version_id}/table`,
       404,
-      "not_found",
+      "component.not_found",
     );
-    expect(hiddenHistoryError).toEqual({
-      code: "not_found",
-      message: "component not found",
-      error: "component not found",
-    });
+    expectComponentError(
+      hiddenHistoryError,
+      "component.not_found",
+      "Component resource was not found",
+    );
     const selectedCurrentTable = await getJson<ComponentTable>(
       fixtures.scopedManager,
       `/api/components/${slug}/versions/${secondVersionId}/table`,

@@ -2390,3 +2390,22 @@ The correction maps to the governing clauses as follows:
 No focused check makes R35 pass. A later complete Readiness and complete
 Candidate Rehearsal must run cleanly against one corrected committed source and
 environment before preflight, candidate freeze, SIT, or UAT.
+
+### Rehearsal 36 correction boundary
+
+Readiness 47 passed all 15 checks. Rehearsal 36 terminalized all 32 lanes with
+30 passes, one failed browser lane, one dependent blocked UAT diagnostic lane,
+and no deferrals; its cleanup and final identity checks passed. The retained
+failure showed that the historical Component-table permission scenario expected
+Core's retired generic `not_found` body even though the independently deployed
+Component module correctly returned its canonical nondisclosing
+`component.not_found` envelope.
+
+The correction maps to the exact acceptance-identity and module-owned-error
+clause: the scenario now checks the full `component.not_found` envelope through
+the common Component response helper. The exact historical-version scenario,
+acceptance inventory/manifest contract, Candidate Rehearsal and harvest-guard
+self-tests, and Markdown-link check pass as focused proof. These checks are
+diagnostic only. A new complete Readiness and Candidate Rehearsal against one
+corrected committed source and environment remain mandatory before preflight or
+later phases.

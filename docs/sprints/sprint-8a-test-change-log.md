@@ -994,3 +994,23 @@ materialization/no-op and induced-failure recovery successors are retained under
 `artifacts/sprint-8a-focused-r35-correction/`. Every artifact in that directory
 is diagnostic history only; none replaces complete Validation Readiness or a
 complete Candidate Rehearsal against the same committed source and environment.
+
+## 2026-08-09 — Rehearsal 36 historical Component response correction
+
+Readiness 47 passed all 15 checks against commit
+`28104a43e76f7633d9e6c2cae03f459cd230dafe`. Rehearsal 36 then completed its
+full fail-late harvest with 30 passes, one Playwright failure, one dependent UAT
+diagnostic block, and no deferrals. Recovery, final health, clean-source, and
+environment-identity checks passed. The immutable attempt, raw browser output,
+trace, harvest, and one-defect batch remain unchanged.
+
+The failed historical-version permission scenario still expected Core's
+retired generic `not_found` response. The Component module correctly returned
+its canonical nondisclosing `component.not_found` envelope. The scenario now
+asserts that complete module-owned envelope with the shared exact-response
+helper, matching the already-covered publish nondisclosure contract. This is an
+acceptance-test correction only; it does not alter product behavior or make
+Rehearsal 36 pass. The exact focused scenario, Sprint 8A acceptance contract,
+Candidate Rehearsal and harvest-guard self-tests, and Markdown-link check pass.
+The retained focused evidence is diagnostic only and cannot replace a new
+complete Readiness/Rehearsal cycle.
