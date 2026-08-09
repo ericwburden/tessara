@@ -379,7 +379,24 @@ function Test-Sprint8AAcceptanceContract {
         throw "Sprint 8A Component runtime must declare the exact readiness healthcheck used by upgrade/rollback."
     }
 
-    $componentManifest = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-component-module/manifest.json") -Raw | ConvertFrom-Json
+    $componentManifestPath = Join-Path $repoRoot "crates/tessara-component-module/manifest.json"
+    $componentManifest = Get-Content -LiteralPath $componentManifestPath -Raw | ConvertFrom-Json
+    $releaseCatalog = Get-Content -LiteralPath (Join-Path $repoRoot "deploy/sprint-8a/catalogs/local-release-catalog.json") -Raw | ConvertFrom-Json
+    $componentRelease = @($releaseCatalog.module_releases | Where-Object {
+        [string]$_.definition_id -ceq "tessara.components" -and [string]$_.version -ceq [string]$componentManifest.release_version
+    })
+    if ($componentRelease.Count -ne 1) {
+        throw "Sprint 8A release catalog must contain exactly one release for the current Component Manifest."
+    }
+    $componentManifestDigestOutput = @(& cargo run --manifest-path (Join-Path $repoRoot "Cargo.toml") --locked --offline -q -p tessara-supervisor --bin tessara-compose -- digest $componentManifestPath)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Sprint 8A Component Manifest canonical digest could not be computed."
+    }
+    $componentManifestDigest = [string]($componentManifestDigestOutput | Select-Object -Last 1)
+    if ($componentManifestDigest -cnotmatch '^sha256:[0-9a-f]{64}$' -or
+        [string]$componentRelease[0].manifest_digest -cne $componentManifestDigest) {
+        throw "Sprint 8A Component Manifest identity differs from its canonical release-catalog binding."
+    }
     $expectedComponentProvidedActions = @(
         "components.catalog|POST|/api/private/components/catalog|read|components:read",
         "components.render|POST|/api/private/components/render|read|components:read",
