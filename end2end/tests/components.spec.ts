@@ -1,4 +1,10 @@
-import { expect, test, type APIResponse, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIResponse,
+  type Page,
+  type Response,
+} from "@playwright/test";
 import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 
 const RUN_ID = `pw-components-${Date.now()}`;
@@ -98,6 +104,17 @@ async function expectJson<T>(response: APIResponse): Promise<T> {
     `${response.url()} returned ${response.status()}: ${text}`,
   ).toBeTruthy();
   return JSON.parse(text) as T;
+}
+
+async function expectBrowserResponseOk(response: Response): Promise<void> {
+  let detail = "";
+  if (!response.ok()) {
+    detail = await response.text().catch(() => "<response body unavailable>");
+  }
+  expect(
+    response.ok(),
+    `${response.url()} returned ${response.status()}: ${detail}`,
+  ).toBeTruthy();
 }
 
 async function signInAsAdmin(page: Page) {
@@ -274,12 +291,21 @@ function attachConsoleGuard(page: Page) {
     if (message.type() === "error") errors.push(message.text());
   });
   page.on("pageerror", (error) => errors.push(error.message));
-  return () => {
+  const assertNoConsoleErrors = () => {
     expect(
       errors,
       `Component routes must not emit browser console or hydration errors:\n${errors.join("\n")}`,
     ).toEqual([]);
   };
+  assertNoConsoleErrors.consumeExpected = (expected: string) => {
+    const index = errors.indexOf(expected);
+    expect(
+      index,
+      `Expected browser console error was not observed: ${expected}`,
+    ).not.toBe(-1);
+    errors.splice(index, 1);
+  };
+  return assertNoConsoleErrors;
 }
 
 async function chooseThemeWithKeyboard(page: Page, theme: "light" | "dark") {
@@ -846,9 +872,9 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       '[data-component-config-section="visual"]',
     );
     const valueField = visualEditor.locator("[data-component-value-field]");
-    const valueFieldSelect = valueField.getByLabel("Value field", {
-      exact: true,
-    });
+    const valueFieldSelect = valueField.locator(
+      'select[data-config-control="summary_field"]',
+    );
     const valueMissingPolicy = visualEditor.locator(
       "[data-component-value-missing-policy]",
     );
@@ -910,12 +936,11 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await sortHelpTrigger.focus();
     await page.keyboard.press("Enter");
     await expect(sortHelp).toBeHidden();
-    await expect(
-      barOptions.getByLabel("Series field", { exact: true }),
-    ).toBeVisible();
-    await barOptions
-      .getByLabel("Series field", { exact: true })
-      .selectOption(fieldKey);
+    const seriesField = barOptions.locator(
+      'select[data-config-control="comparison_field"]',
+    );
+    await expect(seriesField).toBeVisible();
+    await seriesField.selectOption(fieldKey);
     const seriesLabels = page.getByRole("table", { name: "Series Labels" });
     await expect(seriesLabels).toBeVisible();
     const firstSeriesLabel = seriesLabels
@@ -931,29 +956,27 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       categoryOverrideTable.locator("[data-category-display-label]").first(),
     ).not.toHaveValue("Custom series label");
     await barOptions.getByLabel("Split bars", { exact: true }).check();
-    await barOptions
-      .getByLabel("Series field", { exact: true })
-      .selectOption(fieldKey);
+    await seriesField.selectOption(fieldKey);
     await expect(
       page.getByRole("table", { name: "Series Labels" }),
     ).toBeVisible();
     await expect(
-      barOptions.getByLabel("Missing categories", { exact: true }),
+      barOptions.locator('select[data-config-control="category_missing_policy"]'),
     ).toBeVisible();
     await expect(
-      barOptions.getByLabel("Missing series", { exact: true }),
+      barOptions.locator('select[data-config-control="comparison_missing_policy"]'),
     ).toBeVisible();
     await expect(
-      page.getByLabel("Missing values", { exact: true }),
+      visualEditor.locator('select[data-config-control="value_missing_policy"]'),
     ).toBeVisible();
     await expect(
-      barOptions.getByLabel("Comparison Layout", { exact: true }),
+      barOptions.locator('select[data-config-control="comparison_layout"]'),
     ).toBeVisible();
     await barOptions
-      .getByLabel("Category axis title", { exact: true })
+      .locator('input[data-config-control="x_axis_label"]')
       .fill("Category");
     await barOptions
-      .getByLabel("Value axis title", { exact: true })
+      .locator('input[data-config-control="y_axis_label"]')
       .fill("Responses");
     await expect(page.locator(".component-editor-preview__badge")).toHaveText(
       "Valid config",
@@ -964,7 +987,13 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await expect(page.locator(".component-editor-preview__badge")).toHaveText(
       "Needs attention",
     );
+    const rejectedSave = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/components/save") &&
+        response.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    expect((await rejectedSave).status()).toBe(400);
     const validationFindings = page.getByRole("region", {
       name: "Validation Findings",
     });
@@ -974,6 +1003,9 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       page.getByRole("textbox", { name: "Name", exact: true }),
     ).toHaveValue(unsavedName);
     await expect(page).toHaveURL(/\/components\/new$/);
+    assertNoConsoleErrors.consumeExpected(
+      "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    );
     await calculation.selectOption("count");
     await expect(page.locator(".component-editor-preview__badge")).toHaveText(
       "Valid config",
@@ -982,11 +1014,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     const canonicalSave = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/admin/components/save") &&
-        response.request().method() === "POST" &&
-        response.ok(),
+        response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "Save Draft", exact: true }).click();
-    await canonicalSave;
+    await expectBrowserResponseOk(await canonicalSave);
     await expect(
       page.getByRole("heading", { level: 1, name: unsavedName }),
     ).toBeVisible();
@@ -1001,15 +1032,17 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       page.getByText("A donut chart is a pie chart with a hole in the center."),
     ).toBeVisible();
     const pieOptions = page.locator('[data-component-config-section="pie"]');
-    await page
-      .getByLabel("Value field", { exact: true })
+    await visualEditor
+      .locator('select[data-config-control="summary_field"]')
       .selectOption(fieldKey);
     await pieOptions
-      .getByLabel("Category Field", { exact: true })
+      .locator('select[data-config-control="pie_category_field"]')
       .selectOption(fieldKey);
-    await expect(pieOptions.getByLabel("Limit", { exact: true })).toBeVisible();
     await expect(
-      pieOptions.getByLabel("Legend Title", { exact: true }),
+      pieOptions.locator('input[data-config-control="max_slices"]'),
+    ).toBeVisible();
+    await expect(
+      visualEditor.locator('input[data-config-control="legend_title"]'),
     ).toBeVisible();
     const categoryLabels = page.getByRole("table", { name: "Category Labels" });
     await expect(categoryLabels).toBeVisible();
@@ -1019,36 +1052,38 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await expect(categoryLabels.locator("tbody tr")).not.toHaveCount(0);
 
     await selectComponentKind(page, "Pie");
-    await expect(pieOptions.getByLabel("Limit", { exact: true })).toBeVisible();
+    await expect(
+      pieOptions.locator('input[data-config-control="max_slices"]'),
+    ).toBeVisible();
     await selectComponentKind(page, "Line");
     const lineOptions = page.locator('[data-component-config-section="line"]');
     await expect(
-      lineOptions.getByLabel("Category Field", { exact: true }),
+      lineOptions.locator('select[data-config-control="x_field"]'),
     ).toBeVisible();
     await expect(
-      lineOptions.getByLabel("Smoothing", { exact: true }),
+      lineOptions.locator('input[data-config-control="smoothing"]'),
     ).toBeVisible();
     await expect(
-      lineOptions.getByLabel("Category axis title", { exact: true }),
+      lineOptions.locator('input[data-config-control="line_x_axis_label"]'),
     ).toBeVisible();
     await expect(
-      lineOptions.getByLabel("Value axis title", { exact: true }),
+      lineOptions.locator('input[data-config-control="line_y_axis_label"]'),
     ).toBeVisible();
     await expect(
-      lineOptions.getByLabel("Limit", { exact: true }),
+      lineOptions.locator('input[data-config-control="line_number_of_points"]'),
     ).toBeVisible();
     await selectComponentKind(page, "Stat Card");
     const statOptions = page.locator(
       '[data-component-config-section="stat_card"]',
     );
     await expect(
-      statOptions.getByLabel("Panel Style", { exact: true }),
+      statOptions.locator('select[data-config-control="panel_style"]'),
     ).toBeVisible();
     await expect(
-      statOptions.getByLabel("Label", { exact: true }),
+      statOptions.locator('input[data-config-control="stat_label"]'),
     ).toBeVisible();
     await expect(
-      statOptions.getByLabel("Supporting Text", { exact: true }),
+      statOptions.locator('input[data-config-control="supporting_text"]'),
     ).toBeVisible();
     await selectComponentKind(page, "Table");
     await expect(
@@ -1466,13 +1501,12 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     const recoveredPreview = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
-        new URL(response.url()).pathname === "/api/admin/components/preview" &&
-        response.ok(),
+        new URL(response.url()).pathname === "/api/admin/components/preview",
     );
     await outage
       .getByRole("button", { name: "Retry Dataset metadata", exact: true })
       .click();
-    await recoveredPreview;
+    await expectBrowserResponseOk(await recoveredPreview);
     await expect(outage).toBeHidden();
     await expect(
       page.getByRole("textbox", { name: "Name", exact: true }),
@@ -1490,13 +1524,12 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     const successfulMutation = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
-        new URL(response.url()).pathname === "/api/admin/components/save" &&
-        response.ok(),
+        new URL(response.url()).pathname === "/api/admin/components/save",
     );
     await page
       .getByRole("button", { name: "Save Draft", exact: true })
       .click();
-    await successfulMutation;
+    await expectBrowserResponseOk(await successfulMutation);
     expect(saveRequests).toBe(1);
     expect(successfulSaveResponses).toBe(1);
 

@@ -969,3 +969,28 @@ These changes map to the Sprint 8A recovery/evidence clauses, AC-04/AC-05
 Component ownership and resilience, and the exact acceptance-identity rule.
 Focused results remain diagnostic and cannot replace complete Readiness or
 Candidate Rehearsal.
+
+### Rehearsal 35 clean-entry completion
+
+The retained browser failures exposed two additional acceptance defects after
+the first selectors were corrected. The closed publish dialog carried a native
+`required` constraint on a hidden note field, which prevented every ordinary
+Save Draft submission before Component validation ran. The visual-authoring
+scenario also relied on duplicated accessible labels after the structured
+editor began moving category-display controls between sections. The correction
+removes the hidden native constraint while retaining the dialog's explicit note
+validation, and binds the scenario to stable `data-config-control` identities.
+
+The browser guard now accounts for exactly one expected HTTP 400 console entry
+when the scenario deliberately submits invalid visual configuration. Component
+permission checks assert the complete module-owned error envelopes, including
+the nondisclosing `component.not_found` response for an inaccessible existing
+Component. They no longer require Core's optional duplicate `error` field.
+
+Focused Component tests, warnings-denied Clippy, Playwright discovery, the three
+retained browser reproducers, the Sprint 8A acceptance contract, Candidate
+Rehearsal self-test, and harvest-guard self-test pass. Clean source-exact
+materialization/no-op and induced-failure recovery successors are retained under
+`artifacts/sprint-8a-focused-r35-correction/`. Every artifact in that directory
+is diagnostic history only; none replaces complete Validation Readiness or a
+complete Candidate Rehearsal against the same committed source and environment.

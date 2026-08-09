@@ -187,7 +187,10 @@ type SessionState = { authenticated: boolean; account: SessionAccount | null };
 type ApiErrorBody = {
   code: string;
   message: string;
-  error: string;
+  error?: string;
+  schema_version?: number;
+  retryable?: boolean;
+  findings?: unknown;
 };
 
 type FrozenNativeRoute = {
@@ -299,8 +302,26 @@ async function expectErrorStatus(
   const body = (await response.json()) as ApiErrorBody;
   expect(body.code).toBe(code);
   expect(body.message).toBeTruthy();
-  expect(body.error).toBe(body.message);
+  if (body.error !== undefined) expect(body.error).toBe(body.message);
   return body;
+}
+
+function expectComponentError(
+  body: ApiErrorBody,
+  code: string,
+  message: string,
+) {
+  expect(body).toEqual({
+    schema_version: 1,
+    code,
+    message,
+    retryable: false,
+    findings: null,
+  });
+}
+
+function expectComponentForbidden(body: ApiErrorBody) {
+  expectComponentError(body, "component.forbidden", "Forbidden");
 }
 
 async function signIn(context: APIRequestContext, email: string, password: string) {
@@ -1710,7 +1731,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     const partialSession = await getJson<SessionState>(fixtures.partialComponentManager, "/api/auth/session");
     expect(partialSession.account?.capabilities).toContain("components:manage");
     expect(fixtures.inScopeDataset.visibility_nodes.length).toBeGreaterThan(1);
-    await expectErrorStatus(
+    const partialContainmentError = await expectErrorStatus(
       fixtures.partialComponentManager,
       "post",
       "/api/admin/components",
@@ -1729,6 +1750,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         ),
       },
     );
+    expectComponentForbidden(partialContainmentError);
     const manageableComponent = await postJson<ComponentDefinition>(
       fixtures.componentManager,
       "/api/admin/components",
@@ -1773,7 +1795,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         ),
       },
     );
-    expect(bindError.message).toContain("components:manage");
+    expectComponentForbidden(bindError);
 
     const validateError = await expectErrorStatus(
       fixtures.componentManager,
@@ -1788,7 +1810,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         "Out-of-scope validation probe",
       ),
     );
-    expect(validateError.message).toContain("components:manage");
+    expectComponentForbidden(validateError);
 
     const outOfScopeDraft = await postJson<ComponentDefinition>(fixtures.admin, "/api/admin/components", {
       schema_version: 1,
@@ -1813,11 +1835,15 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.componentManager,
       "post",
       `/api/admin/components/${outOfScopeDraft.component_id}/versions/${outVersion.component_version_id}/publish`,
-      403,
-      "component.forbidden",
+      404,
+      "component.not_found",
       {},
     );
-    expect(publishError.message).toContain("components:manage");
+    expectComponentError(
+      publishError,
+      "component.not_found",
+      "Component resource was not found",
+    );
   });
 
   test("explicit historical component table checks selected version dataset scope", async () => {

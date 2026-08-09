@@ -791,7 +791,7 @@ fn render_form(component: Option<&Value>, datasets: &Value, dataset_error: Optio
     html.replace(&direct_publish, &publish_menu)
     .replace(
         "</form>",
-        r#"<dialog class="component-consumers-dialog" data-component-consumer-review aria-labelledby="component-consumer-review-title"><div><h2 id="component-consumer-review-title">Review component consumers</h2><p>Review consumers before publishing. Existing consumers remain pinned until they deliberately adopt the new Component version.</p><div class="component-consumers-dialog__inventory" role="status">No registered consumers currently require repinning.</div><label>New Version Note<textarea data-component-new-version-note required maxlength="2000" placeholder="Summarize what changed in this version"></textarea></label><p class="component-status" data-component-consumer-review-error role="alert" hidden></p><div class="component-actions"><button class="button button--secondary" type="button" data-component-consumer-review-cancel>Cancel</button><button class="button" type="button" data-component-consumer-review-confirm>Create New Version</button></div></div></dialog></form>"#,
+        r#"<dialog class="component-consumers-dialog" data-component-consumer-review aria-labelledby="component-consumer-review-title"><div><h2 id="component-consumer-review-title">Review component consumers</h2><p>Review consumers before publishing. Existing consumers remain pinned until they deliberately adopt the new Component version.</p><div class="component-consumers-dialog__inventory" role="status">No registered consumers currently require repinning.</div><label>New Version Note<textarea data-component-new-version-note maxlength="2000" placeholder="Summarize what changed in this version"></textarea></label><p class="component-status" data-component-consumer-review-error role="alert" hidden></p><div class="component-actions"><button class="button button--secondary" type="button" data-component-consumer-review-cancel>Cancel</button><button class="button" type="button" data-component-consumer-review-confirm>Create New Version</button></div></div></dialog></form>"#,
     )
     .replace(
         r#"<option value="median">Median</option>"#,
@@ -1071,6 +1071,8 @@ mod tests {
         assert!(editor.contains("data-component-save-action=\"save_draft\" disabled"));
         assert!(editor.contains("Review component consumers"));
         assert!(editor.contains("Create New Version"));
+        assert!(editor.contains("data-component-new-version-note"));
+        assert!(!editor.contains("data-component-new-version-note required"));
         assert!(editor.contains("line_x_axis_label"));
 
         let directory = render_directory(&serde_json::json!([]), false);
