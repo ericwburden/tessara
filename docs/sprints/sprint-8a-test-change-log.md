@@ -1044,3 +1044,18 @@ the first duplicated desktop/mobile text node.
 Because the Playwright lane failed in R36 and R37, no new formal rehearsal may
 start until both the exact scenario and the complete 75-scenario lane pass as
 focused, non-authoritative proof on the clean correction commit.
+
+### Rehearsal 38 consolidated harness correction
+
+- Rehearsal 38 passed 31 product, source, deployment, recovery, upgrade,
+  browser, cleanup, and identity lanes. Its sole failure was the aggregate
+  `uat-diagnostics` lane: the UAT receipt reader still required schema-v1 lane
+  receipts after the bounded scheduler began publishing authenticated
+  schema-v2 receipts.
+- `uat-sprint-8a.ps1` now accepts only schema-v2 prerequisite lane receipts
+  with `identity_binding: attempt_identity`. Its self-test rejects legacy
+  schema-v1 receipts, string-coerced schema values, and pre-authentication
+  identity bindings.
+- The retained Rehearsal 38 failure remains classified as a `harness` defect.
+  Focused verification is diagnostic only; the correction requires a new
+  complete Readiness and Candidate Rehearsal cycle before preflight.

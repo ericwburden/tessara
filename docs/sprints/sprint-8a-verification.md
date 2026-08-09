@@ -2436,3 +2436,20 @@ R36 and R37 are consecutive failures of the Playwright lane. The exact scenario
 and complete 75-scenario browser lane must therefore pass cleanly as focused,
 non-authoritative proof before another full lifecycle launch. A later complete
 Readiness and Candidate Rehearsal remain mandatory for preflight eligibility.
+
+### Rehearsal 38 result and correction boundary
+
+Rehearsal 38 completed fail-late collection with 31 passing lanes, one failed
+lane, no blocked lanes, and no deferred lanes. Source-exact materialization,
+the exact no-op path, induced-failure recovery, workspace tests, Component
+nondisclosure, product smoke, all 75 Playwright scenarios, Component
+upgrade/rollback, final canonical restoration, Core and Supervisor health,
+and final source/environment identity all passed.
+
+The only failure was `uat-diagnostics`. Its reader required the retired
+schema-v1 prerequisite receipt even though the rehearsal scheduler correctly
+published schema-v2 receipts bound with `identity_binding: attempt_identity`.
+The correction aligns the UAT reader and its adversarial self-test with that
+current contract while rejecting legacy, coerced, and pre-authentication
+receipts. This is focused, non-authoritative correction evidence and does not
+replace the next complete Validation Readiness and Candidate Rehearsal.

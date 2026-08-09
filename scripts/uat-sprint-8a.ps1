@@ -381,13 +381,15 @@ function Assert-LaneReceiptObject {
     $schema = $Receipt.schema_version
     if ($Receipt.PSObject.Properties.Name -notcontains "authoritative" -or
         -not ($schema -is [int] -or $schema -is [long]) -or
-        [long]$schema -ne 1 -or
+        [long]$schema -ne 2 -or
         $Receipt.sprint -isnot [string] -or
         [string]$Receipt.sprint -cne "sprint-8a" -or
         $Receipt.authoritative -isnot [bool] -or
         $Receipt.authoritative -ne $false -or
         $Receipt.phase -isnot [string] -or
         [string]$Receipt.phase -cne "candidate-rehearsal-lane" -or
+        $Receipt.identity_binding -isnot [string] -or
+        [string]$Receipt.identity_binding -cne "attempt_identity" -or
         [int]$Receipt.attempt -ne $ExpectedAttempt -or
         $ExpectedEnvironment -notmatch '^[0-9a-f]{64}$' -or
         $Receipt.environment_fingerprint -isnot [string] -or
@@ -1163,8 +1165,9 @@ if ($SelfTest) {
 
     $source = [pscustomobject]@{ commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "sprint-8a"; acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64 }
     $lane = [pscustomobject]@{
-        schema_version = 1; sprint = "sprint-8a"; phase = "candidate-rehearsal-lane"; attempt = 4
+        schema_version = 2; sprint = "sprint-8a"; phase = "candidate-rehearsal-lane"; attempt = 4
         authoritative = $false; environment_fingerprint = "e" * 64; mutable_source_identity = $source
+        identity_binding = "attempt_identity"
         result = [pscustomobject]@{
             name = "successor-product-smoke"; state = "passed"; exit_status = 0
             started_at = "2026-01-01T00:00:00Z"; ended_at = "2026-01-01T00:00:01Z"
@@ -1181,9 +1184,14 @@ if ($SelfTest) {
     $lane.authoritative = 0
     Invoke-ExpectedLaneGuardFailure { Assert-LaneReceiptObject -Receipt $lane -ExpectedName "successor-product-smoke" -ExpectedAttempt 4 -ExpectedEnvironment ("e" * 64) -ExpectedSource $source } "a numerically coerced prerequisite authority flag"
     $lane.authoritative = $false
-    $lane.schema_version = "1"
+    $lane.schema_version = "2"
     Invoke-ExpectedLaneGuardFailure { Assert-LaneReceiptObject -Receipt $lane -ExpectedName "successor-product-smoke" -ExpectedAttempt 4 -ExpectedEnvironment ("e" * 64) -ExpectedSource $source } "a string-coerced prerequisite schema"
     $lane.schema_version = 1
+    Invoke-ExpectedLaneGuardFailure { Assert-LaneReceiptObject -Receipt $lane -ExpectedName "successor-product-smoke" -ExpectedAttempt 4 -ExpectedEnvironment ("e" * 64) -ExpectedSource $source } "a legacy schema-v1 prerequisite lane"
+    $lane.schema_version = 2
+    $lane.identity_binding = "pre_authentication_lifecycle_placeholder"
+    Invoke-ExpectedLaneGuardFailure { Assert-LaneReceiptObject -Receipt $lane -ExpectedName "successor-product-smoke" -ExpectedAttempt 4 -ExpectedEnvironment ("e" * 64) -ExpectedSource $source } "a prerequisite lane without the authenticated attempt identity binding"
+    $lane.identity_binding = "attempt_identity"
     $lane.phase = "candidate-rehearsal-uat-diagnostics"
     Invoke-ExpectedLaneGuardFailure { Assert-LaneReceiptObject -Receipt $lane -ExpectedName "successor-product-smoke" -ExpectedAttempt 4 -ExpectedEnvironment ("e" * 64) -ExpectedSource $source } "a prerequisite lane with the wrong phase"
     $lane.phase = "candidate-rehearsal-lane"
