@@ -1059,3 +1059,28 @@ focused, non-authoritative proof on the clean correction commit.
 - The retained Rehearsal 38 failure remains classified as a `harness` defect.
   Focused verification is diagnostic only; the correction requires a new
   complete Readiness and Candidate Rehearsal cycle before preflight.
+
+## 2026-08-09 — Rehearsal 39 consolidated UAT evidence-reader correction
+
+Readiness 50 passed all 15 checks against commit
+`af5981a27d7445413a62f73b7102877bceeedc2b`. Rehearsal 39 then completed every
+declared lane with no blocked or deferred lanes. All product, deployment,
+materialization, recovery, browser, cleanup, health, source, and environment
+lanes passed, but the UAT projector reported 13 nested semantic failures and
+correctly prevented a passing rehearsal result.
+
+The immutable defect batch retains the original `product` labels. Review of
+the raw evidence refined those labels to one consolidated `harness` correction
+with three stale readers: optional leaf `suites` fields in the Playwright JSON,
+the four-owner materialization and current public-gateway observation shape,
+and the current `{ operation, receipt }` successor response shape. The UAT
+reader now checks the exact four-owner order and changed state for both real and
+no-op applies, the exact offline/ready gateway observations, and the chained
+successor receipt identities.
+
+The UAT self-test covers leaf Playwright suites without child collections and
+rejects a report without the required top-level suite inventory. When the
+retained Rehearsal 39 evidence is present, it also projects all 75 browser
+passes and every affected materialization and failure-containment fact as a
+regression fixture. This focused proof is diagnostic only and does not alter
+Rehearsal 39 or replace a new complete Readiness and Candidate Rehearsal.

@@ -579,10 +579,12 @@ function Add-UatPlaywrightSuiteResults {
         [string]$Suite.title -cne $file) {
         $titles += [string]$Suite.title
     }
-    foreach ($spec in @($Suite.specs)) {
+    $specs = if ($null -ne $Suite.PSObject.Properties['specs']) { @($Suite.specs) } else { @() }
+    foreach ($spec in $specs) {
         if ($null -eq $spec) { continue }
         $fullTitle = (@($titles) + @([string]$spec.title)) -join " › "
-        foreach ($test in @($spec.tests)) {
+        $tests = if ($null -ne $spec.PSObject.Properties['tests']) { @($spec.tests) } else { @() }
+        foreach ($test in $tests) {
             if ($null -eq $test) { continue }
             $testResults = @($test.results)
             $passed = [string]$test.expectedStatus -ceq "passed" -and
@@ -597,7 +599,8 @@ function Add-UatPlaywrightSuiteResults {
             })
         }
     }
-    foreach ($child in @($Suite.suites)) {
+    $children = if ($null -ne $Suite.PSObject.Properties['suites']) { @($Suite.suites) } else { @() }
+    foreach ($child in $children) {
         if ($null -ne $child) {
             Add-UatPlaywrightSuiteResults -Suite $child -ParentTitles $titles -InheritedFile $file -Results $Results
         }
@@ -606,11 +609,30 @@ function Add-UatPlaywrightSuiteResults {
 
 function Get-UatPlaywrightResults {
     param([Parameter(Mandatory)]$Report)
+    if ($null -eq $Report.PSObject.Properties['suites']) {
+        throw "Playwright evidence does not contain the required top-level suites inventory."
+    }
     $results = [Collections.Generic.List[object]]::new()
     foreach ($suite in @($Report.suites)) {
         Add-UatPlaywrightSuiteResults -Suite $suite -ParentTitles @() -InheritedFile "" -Results $results
     }
     @($results)
+}
+
+function Assert-UatBootstrapReceipts {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Receipts,
+        [Parameter(Mandatory)][bool]$ExpectedChanged,
+        [Parameter(Mandatory)][string]$Label
+    )
+    $expectedOwners = @("core", "tessara.components", "tessara.dashboards", "tessara.reference.scoped-records")
+    $actualOwners = @($Receipts | ForEach-Object { [string]$_.owner })
+    if (($actualOwners -join "`n") -cne ($expectedOwners -join "`n")) {
+        throw "$Label does not contain the exact canonical bootstrap owner order."
+    }
+    if (@($Receipts | Where-Object { $_.changed -isnot [bool] -or $_.changed -ne $ExpectedChanged }).Count -ne 0) {
+        throw "$Label does not contain the expected exact changed state for every bootstrap owner."
+    }
 }
 
 function Assert-UatSmokePredicate {
@@ -682,15 +704,18 @@ function Assert-UatMaterializationPredicate {
             }
             "first_apply" {
                 if ($document.first_apply.no_op -ne $false -or [string]$document.first_apply.operation_state -cne "succeeded" -or
-                    @($document.first_apply.owner_receipts).Count -ne 2) {
+                    $null -eq $document.first_apply.PSObject.Properties['owner_receipts']) {
                     throw "Materialization first apply is not one successful owner-produced non-no-op."
                 }
+                Assert-UatBootstrapReceipts -Receipts @($document.first_apply.owner_receipts) -ExpectedChanged $true -Label "Materialization first apply"
             }
             "no_op_apply" {
                 if ($document.no_op_apply.no_op -ne $true -or [string]$document.no_op_apply.operation_state -cne "succeeded" -or
-                    [string]$document.no_op_apply.previous_receipt_digest -cne [string]$document.first_apply.receipt_digest) {
+                    [string]$document.no_op_apply.previous_receipt_digest -cne [string]$document.first_apply.receipt_digest -or
+                    $null -eq $document.no_op_apply.PSObject.Properties['owner_receipts']) {
                     throw "Materialization successor apply is not the exact chained semantic no-op."
                 }
+                Assert-UatBootstrapReceipts -Receipts @($document.no_op_apply.owner_receipts) -ExpectedChanged $false -Label "Materialization no-op apply"
             }
             "final_health" {
                 if ($document.final_health_passed -ne $true) { throw "Materialization final health is not passing." }
@@ -699,9 +724,14 @@ function Assert-UatMaterializationPredicate {
                 $boundary = Read-UatReferencedJsonEvidence -Lane $Lane -Artifact $document.evidence.public_gateway_boundary -Label "public gateway boundary"
                 if ($boundary.document.passed -ne $true -or
                     @($boundary.document.gateway_service_before | Where-Object { [string]$_.state -ceq "running" }).Count -ne 0 -or
-                    $boundary.document.public_probe_before.available -ne $false -or
-                    [int]$boundary.document.public_probe_before.status -ne 0 -or
+                    $boundary.document.public_probe_before.response_received -ne $false -or
+                    $boundary.document.public_probe_before.unavailable_proven -ne $true -or
+                    $boundary.document.public_probe_before.observation.passed -ne $false -or
+                    $boundary.document.public_probe_before.observation.response.received -ne $false -or
                     [int]$boundary.document.start.exit_code -ne 0 -or
+                    $boundary.document.public_ready.passed -ne $true -or
+                    $boundary.document.public_ready.response.received -ne $true -or
+                    [int]$boundary.document.public_ready.response.status -ne 200 -or
                     (ConvertTo-Sprint8ADateTimeOffset -Value $boundary.document.public_ready_at -Label "public readiness") -lt
                         (ConvertTo-Sprint8ADateTimeOffset -Value $boundary.document.owner_materialization_completed_at -Label "owner materialization completion")) {
                     throw "Public gateway evidence does not prove the offline owner-materialization boundary."
@@ -874,12 +904,21 @@ function Assert-UatFailureContainmentPredicate {
             }
             "first_apply" {
                 $first = Read-UatReferencedJsonEvidence -Lane $Lane -Artifact $document.successor.first_apply_response -Label "successor first apply"
-                if ($first.document.no_op -ne $false) { throw "Canonical successor first apply was not a real apply." }
+                if ([string]$first.document.operation.state -cne "succeeded" -or $first.document.receipt.no_op -ne $false) {
+                    throw "Canonical successor first apply was not a successful real apply."
+                }
+                Assert-UatBootstrapReceipts -Receipts @($first.document.receipt.bootstrap_receipts) -ExpectedChanged $true -Label "Canonical successor first apply"
                 $evidence.Add($first.evidence)
             }
             "no_op" {
                 $noOp = Read-UatReferencedJsonEvidence -Lane $Lane -Artifact $document.successor.no_op_apply_response -Label "successor no-op"
-                if ($noOp.document.no_op -ne $true) { throw "Canonical successor second apply was not a semantic no-op." }
+                $first = Read-UatReferencedJsonEvidence -Lane $Lane -Artifact $document.successor.first_apply_response -Label "successor first apply"
+                if ([string]$noOp.document.operation.state -cne "succeeded" -or $noOp.document.receipt.no_op -ne $true -or
+                    [string]$noOp.document.receipt.previous_receipt_digest -cne [string]$first.document.operation.receipt_digest) {
+                    throw "Canonical successor second apply was not the exact chained semantic no-op."
+                }
+                Assert-UatBootstrapReceipts -Receipts @($noOp.document.receipt.bootstrap_receipts) -ExpectedChanged $false -Label "Canonical successor no-op apply"
+                $evidence.Add($first.evidence)
                 $evidence.Add($noOp.evidence)
             }
             "health" {
@@ -1220,7 +1259,7 @@ if ($SelfTest) {
     Assert-DiagnosticInventory
     $playwrightFixture = [pscustomobject]@{
         suites = @([pscustomobject]@{
-            title = "fixture.spec.ts"; file = "fixture.spec.ts"; suites = @()
+            title = "fixture.spec.ts"; file = "fixture.spec.ts"
             specs = @([pscustomobject]@{
                 title = "semantic behavior"; tests = @([pscustomobject]@{
                     projectName = "chromium"; expectedStatus = "passed"
@@ -1238,6 +1277,30 @@ if ($SelfTest) {
     $playwrightFixture.suites[0].specs[0].tests[0].results[0].retry = 1
     if (@(Get-UatPlaywrightResults -Report $playwrightFixture)[0].passed -ne $false) {
         throw "Self-test accepted retried Playwright evidence as an exact semantic pass."
+    }
+    Invoke-ExpectedLaneGuardFailure {
+        Get-UatPlaywrightResults -Report ([pscustomobject]@{ errors = @() }) | Out-Null
+    } "Playwright evidence without a top-level suites inventory"
+    $r39Root = Join-Path $repoRoot "artifacts/sprint-8a-closeout/rehearsal/attempt-39"
+    $r39LaneRoot = Join-Path $r39Root "lanes"
+    if (Test-Path -LiteralPath (Join-Path $r39LaneRoot "uat-diagnostics.json")) {
+        $r39PlaywrightLane = (Get-Content -LiteralPath (Join-Path $r39LaneRoot "playwright-execution.json") -Raw | ConvertFrom-Json).result
+        $r39Playwright = Read-UatLaneJsonEvidence -Lane $r39PlaywrightLane -FileName "playwright-acceptance.json"
+        $r39PlaywrightResults = @(Get-UatPlaywrightResults -Report $r39Playwright.document)
+        if ($r39PlaywrightResults.Count -ne 75 -or @($r39PlaywrightResults | Where-Object { $_.passed -ne $true }).Count -ne 0) {
+            throw "Retained Rehearsal 39 Playwright evidence did not project to 75 exact non-retried passes."
+        }
+
+        $r39MaterializationLane = (Get-Content -LiteralPath (Join-Path $r39LaneRoot "source-exact-materialization-no-op.json") -Raw | ConvertFrom-Json).result
+        Assert-UatMaterializationPredicate -Lane $r39MaterializationLane -Facts @(
+            "empty_baseline", "first_apply", "no_op_apply", "final_health", "public_gateway_after_owner_apply"
+        ) | Out-Null
+
+        $r39ContainmentLane = (Get-Content -LiteralPath (Join-Path $r39LaneRoot "failure-containment-successor-health.json") -Raw | ConvertFrom-Json).result
+        Assert-UatFailureContainmentPredicate -Lane $r39ContainmentLane -Facts @(
+            "expected_fault", "exact_teardown", "empty_successor", "first_apply", "no_op", "health"
+        ) | Out-Null
+        Write-Host "Retained Rehearsal 39 UAT evidence regression passed."
     }
     $cargoTimestamp = "2026-01-01T00:00:00.0000000+00:00"
     $validCargoSummaries = @(

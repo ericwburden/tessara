@@ -2453,3 +2453,35 @@ The correction aligns the UAT reader and its adversarial self-test with that
 current contract while rejecting legacy, coerced, and pre-authentication
 receipts. This is focused, non-authoritative correction evidence and does not
 replace the next complete Validation Readiness and Candidate Rehearsal.
+
+### Rehearsal 39 result and correction boundary
+
+Readiness 50 passed all 15 checks for commit
+`af5981a27d7445413a62f73b7102877bceeedc2b`. Rehearsal 39 terminalized every
+lane with no blocked or deferred lanes. The source-exact materialization and
+no-op, induced-failure recovery, workspace tests, module conformance, product
+smoke, all 75 browser scenarios, upgrade/rollback, canonical restoration,
+health contracts, and final identities passed. The UAT diagnostic projector
+alone produced 13 nested failures, so no passing rehearsal result or preflight
+authority was issued.
+
+The retained batch's raw `product` classifications remain immutable. The
+corrected assessment is a single `harness` batch with three root causes:
+
+- leaf Playwright suites legitimately omit child `suites` and sometimes
+  `specs`, while the top-level report must still publish `suites`;
+- materialization now contains the exact ordered owners `core`,
+  `tessara.components`, `tessara.dashboards`, and
+  `tessara.reference.scoped-records`, and its gateway boundary uses exact
+  offline and ready health observations;
+- failure-containment successor applies publish `{ operation, receipt }`, with
+  bootstrap results under `receipt.bootstrap_receipts` and no-op lineage bound
+  to the first operation receipt digest.
+
+The corrected projector validates those exact identities and states. Its
+self-test uses the retained Rehearsal 39 files, when available, to prove all 75
+Playwright results and every affected materialization and recovery predicate.
+Because the UAT diagnostic lane failed in two consecutive rehearsals, this
+focused reproducer must pass on the clean correction commit before the next
+formal launch. It remains non-authoritative and cannot substitute for complete
+Readiness and Rehearsal results from the same corrected source and environment.
