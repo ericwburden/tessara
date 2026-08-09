@@ -19,6 +19,7 @@ const RUN_ID = `pw-permissions-${Date.now()}`;
 const PLAYWRIGHT_ENTITY_PREFIX = "pw-permissions-";
 const PASSWORD = "tessara-dev-permissions";
 const COMPONENT_DOCUMENT_ROOT = "#module-content";
+const COMPONENT_CONTENT_ROOT = ".components-page";
 const DASHBOARD_DOCUMENT_ROOT = "#module-content";
 
 type IdResponse = { id: string };
@@ -2373,102 +2374,145 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   test("JavaScript-disabled Component and Dashboard routes preserve native SSR ownership", async ({
     browser,
   }) => {
-    const manageableComponents = await expectJson<Array<{
-      component_id: string;
-      name: string;
-      slug: string;
-      versions: Array<{ publication_state: string }>;
-    }>>(
-      await fixtures.admin.get("/api/admin/components"),
-    );
-    const draftOnly = requireItem(
-      manageableComponents,
-      (component) =>
-        component.versions.some((version) => version.publication_state === "draft") &&
-        !component.versions.some((version) => version.publication_state === "published"),
-      "the canonical Component inventory should contain a manager-visible draft-only definition",
-    );
-    await withNoJavaScriptPage(browser, async (page) => {
-      await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
-      await expectNoJavaScriptRoutes(page, [
-        {
-          path: "/components",
-          expectedText: "Components",
-          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-        },
-        {
-          path: "/components/new",
-          expectedText: "Create Component",
-          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-        },
-        {
-          path: `/components/${fixtures.inScopeComponent.slug}`,
-          expectedText: fixtures.inScopeComponent.name,
-          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-        },
-        {
-          path: `/components/${fixtures.inScopeComponent.slug}/edit`,
-          expectedText: "Edit Component",
-          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-        },
-        {
-          path: `/components/${fixtures.inScopeComponent.slug}/versions`,
-          expectedText: `${fixtures.inScopeComponent.name} versions`,
-          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-        },
-        {
-          path: `/components/${fixtures.inScopeComponent.slug}/view`,
-          expectedText: fixtures.inScopeComponent.name,
-          documentRootSelector: COMPONENT_DOCUMENT_ROOT,
-        },
-        {
-          path: "/dashboards",
-          expectedText: "Dashboards",
-          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
-        },
-        {
-          path: "/dashboards/new",
-          expectedText: "Create Dashboard",
-          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
-        },
-        {
-          path: `/dashboards/${fixtures.inScopeDashboard.id}`,
-          expectedText: "Dashboard Detail",
-          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
-        },
-        {
-          path: `/dashboards/${fixtures.inScopeDashboard.id}/edit`,
-          expectedText: "Dashboard builder",
-          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
-        },
-        {
-          path: `/dashboards/${fixtures.inScopeDashboard.id}/view`,
-          expectedText: "Viewer",
-          documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
-        },
-      ]);
-
-      await page.goto("/components");
-      await expect(page.getByRole("link", { name: "Create Component" })).toBeVisible();
-      await expect(page.getByText(draftOnly.name, { exact: true }).first()).toBeVisible();
-      await expect(page.getByRole("link", { name: "Edit" }).first()).toBeVisible();
-      await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
-      await expect(page.getByRole("link", { name: "Versions" })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
+    const draftOnly = await postJson<ComponentDefinition>(fixtures.admin, "/api/admin/components", {
+      schema_version: 1,
+      name: `${RUN_ID} Native Draft Component`,
+      slug: `${RUN_ID}-native-draft-component`,
+      description: "Isolated native-route draft visibility fixture.",
+      version: componentVersionInput(
+        fixtures.inScopeDatasetReference,
+        "table",
+        tableConfig(fixtures.inScopeDataset),
+        "Isolated native-route draft visibility fixture.",
+      ),
     });
+    const draftOnlyDetail = await getJson<ComponentDefinition>(
+      fixtures.admin,
+      `/api/admin/components/${draftOnly.component_id}`,
+    );
+    const draftOnlyVersion = requireItem(
+      draftOnlyDetail.versions,
+      (version) => version.publication_state === "draft",
+      "the native-route fixture should contain its own draft version",
+    );
+    try {
+      const manageableComponents = await expectJson<Array<{
+        component_id: string;
+        name: string;
+        slug: string;
+        versions: Array<{ publication_state: string }>;
+      }>>(
+        await fixtures.admin.get("/api/admin/components"),
+      );
+      expect(
+        manageableComponents.some(
+          (component) =>
+            component.component_id === draftOnly.component_id &&
+            component.versions.some((version) => version.publication_state === "draft") &&
+            !component.versions.some((version) => version.publication_state === "published"),
+        ),
+        "the scenario-owned draft Component should be manager-visible",
+      ).toBe(true);
+      await withNoJavaScriptPage(browser, async (page) => {
+        await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+        await expectNoJavaScriptRoutes(page, [
+          {
+            path: "/components",
+            expectedText: "Components",
+            documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+            contentSelector: COMPONENT_CONTENT_ROOT,
+          },
+          {
+            path: "/components/new",
+            expectedText: "Create Component",
+            documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+            contentSelector: COMPONENT_CONTENT_ROOT,
+          },
+          {
+            path: `/components/${fixtures.inScopeComponent.slug}`,
+            expectedText: fixtures.inScopeComponent.name,
+            documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+            contentSelector: COMPONENT_CONTENT_ROOT,
+          },
+          {
+            path: `/components/${fixtures.inScopeComponent.slug}/edit`,
+            expectedText: "Edit Component",
+            documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+            contentSelector: COMPONENT_CONTENT_ROOT,
+          },
+          {
+            path: `/components/${fixtures.inScopeComponent.slug}/versions`,
+            expectedText: `${fixtures.inScopeComponent.name} versions`,
+            documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+            contentSelector: COMPONENT_CONTENT_ROOT,
+          },
+          {
+            path: `/components/${fixtures.inScopeComponent.slug}/view`,
+            expectedText: fixtures.inScopeComponent.name,
+            documentRootSelector: COMPONENT_DOCUMENT_ROOT,
+            contentSelector: COMPONENT_CONTENT_ROOT,
+          },
+          {
+            path: "/dashboards",
+            expectedText: "Dashboards",
+            documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
+          },
+          {
+            path: "/dashboards/new",
+            expectedText: "Create Dashboard",
+            documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
+          },
+          {
+            path: `/dashboards/${fixtures.inScopeDashboard.id}`,
+            expectedText: "Dashboard Detail",
+            documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
+          },
+          {
+            path: `/dashboards/${fixtures.inScopeDashboard.id}/edit`,
+            expectedText: "Dashboard builder",
+            documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
+          },
+          {
+            path: `/dashboards/${fixtures.inScopeDashboard.id}/view`,
+            expectedText: "Viewer",
+            documentRootSelector: DASHBOARD_DOCUMENT_ROOT,
+          },
+        ]);
 
-    await withNoJavaScriptPage(browser, async (page) => {
-      await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
-      await page.goto("/components");
-      await expect(page.getByRole("heading", { level: 1, name: "Components" })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Create Component" })).toHaveCount(0);
-      await expect(page.getByText(draftOnly.name, { exact: true })).toHaveCount(0);
-      await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
-      await expect(
-        page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
-      ).toBeVisible();
-      await expect(page.getByRole("link", { name: "Versions" })).toHaveCount(0);
-      await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
-    });
+        await page.goto("/components");
+        await expect(page.getByRole("link", { name: "Create Component" })).toBeVisible();
+        const draftEntry = page
+          .locator(`[data-component-directory-item][data-component-id="${draftOnly.component_id}"]`)
+          .filter({ visible: true });
+        await expect(draftEntry).toHaveCount(1);
+        await expect(draftEntry.getByText(draftOnly.name, { exact: true })).toBeVisible();
+        await expect(draftEntry.getByRole("link", { name: "Edit" })).toBeVisible();
+        await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
+        await expect(page.getByRole("link", { name: "Versions" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
+      });
+
+      await withNoJavaScriptPage(browser, async (page) => {
+        await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+        await page.goto("/components");
+        await expect(page.getByRole("heading", { level: 1, name: "Components" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Create Component" })).toHaveCount(0);
+        await expect(page.locator(`[data-component-id="${draftOnly.component_id}"]`)).toHaveCount(0);
+        await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
+        await expect(
+          page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
+        ).toBeVisible();
+        await expect(page.getByRole("link", { name: "Versions" })).toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
+      });
+
+    } finally {
+      await expectStatus(
+        fixtures.admin,
+        "delete",
+        `/api/admin/components/${draftOnly.component_id}/versions/${draftOnlyVersion.component_version_id}`,
+        [200],
+      );
+    }
   });
 });

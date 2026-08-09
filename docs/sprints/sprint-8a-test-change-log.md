@@ -1014,3 +1014,33 @@ Rehearsal 36 pass. The exact focused scenario, Sprint 8A acceptance contract,
 Candidate Rehearsal and harvest-guard self-tests, and Markdown-link check pass.
 The retained focused evidence is diagnostic only and cannot replace a new
 complete Readiness/Rehearsal cycle.
+
+## 2026-08-09 — Rehearsal 37 Component native-route selector correction
+
+Readiness 48 passed all 15 checks against commit
+`65a9e1a3895841fce2d40bc18baaa849fe6ecf78`. Rehearsal 37 completed all 32
+lanes with 30 passes, one Playwright failure, one dependent UAT diagnostic
+block, and no deferrals. Its source-exact materialization, no-op, induced-failure
+recovery, upgrade/rollback, final health, clean-source, and environment checks
+passed. The immutable attempt and complete one-defect harvest remain unchanged.
+
+All 75 browser scenarios executed; 74 passed. The newly reachable
+JavaScript-disabled Component/Dashboard scenario loaded the correct native
+`/components` document and exact module content, but its shared route assertion
+looked for Core's `.route-panel` class. The independent Component UI canonically
+owns `.components-page`. All six Component routes in that scenario now bind to
+that exact content root while Dashboard routes retain their own `.route-panel`
+contract. This refines the retained default `product` classification to an
+acceptance-test identity defect; product behavior is unchanged.
+
+The required isolated reproducer then exposed a second defect inside the same
+scenario before route assertions began: it expected a draft Component left by
+an earlier serial test. The scenario now creates, verifies, and deletes its own
+draft version, removing the hidden test-order dependency without changing the
+application or canonical seed data. Its manager-visible assertion selects the
+scenario-owned Component ID and the one visible responsive entry, rather than
+the first duplicated desktop/mobile text node.
+
+Because the Playwright lane failed in R36 and R37, no new formal rehearsal may
+start until both the exact scenario and the complete 75-scenario lane pass as
+focused, non-authoritative proof on the clean correction commit.

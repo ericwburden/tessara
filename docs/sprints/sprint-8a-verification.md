@@ -2409,3 +2409,30 @@ self-tests, and Markdown-link check pass as focused proof. These checks are
 diagnostic only. A new complete Readiness and Candidate Rehearsal against one
 corrected committed source and environment remain mandatory before preflight or
 later phases.
+
+### Rehearsal 37 correction boundary
+
+Readiness 48 passed all 15 checks. Rehearsal 37 terminalized all 32 lanes with
+30 passes, one failed Playwright lane, one dependent blocked UAT diagnostic
+lane, and no deferrals. Exact materialization/no-op, failure containment,
+upgrade/rollback, restored deployment evidence and smoke, final health,
+clean-source, and environment identity all passed.
+
+The retained trace proves `/components` returned the correct independently
+owned native document and `.components-page` content. The acceptance scenario
+still looked for Core's generic `.route-panel`, so the defect is a stale
+acceptance identity rather than a product rendering failure. The six Component
+route declarations now name `.components-page` explicitly; Dashboard route
+declarations continue to use their module-owned `.route-panel` markup.
+
+The isolated scenario also now owns its draft-visibility fixture. It creates a
+draft Component from the established in-scope Dataset reference, verifies that
+exact identity in the manager directory, and deletes the draft version in a
+`finally` boundary. It no longer relies on state left by an earlier serial
+permission test. Responsive directory assertions bind to that Component ID and
+the visible desktop/mobile projection rather than an ambiguous first text node.
+
+R36 and R37 are consecutive failures of the Playwright lane. The exact scenario
+and complete 75-scenario browser lane must therefore pass cleanly as focused,
+non-authoritative proof before another full lifecycle launch. A later complete
+Readiness and Candidate Rehearsal remain mandatory for preflight eligibility.
