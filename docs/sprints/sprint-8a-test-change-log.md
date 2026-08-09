@@ -943,3 +943,29 @@ The direct acceptance contract plus readiness, rehearsal, preflight, smoke,
 and automated UAT self-tests pass as focused, non-authoritative reproducers.
 Readiness 44 remains failed and unchanged; the clean correction commit requires
 complete Readiness 45 before Rehearsal 34 can start.
+
+## 2026-08-09 — Rehearsal 35 consolidated recovery and browser correction
+
+Rehearsal 35 retained 27 passes, four failures, one dependency block, and no
+deferrals. Three failures record controlling-process loss; the fourth retains
+three Playwright failures and eleven tests that did not run after the suite's
+failure limit. Its attempt, lane, harvest, batch, logs, traces, and raw
+classifications remain unchanged.
+
+- Recovery now converts JSON-loaded declarations back to the runner's canonical
+  ordered dictionary before optional-member checks, and serializes recovered
+  orphan start boundaries as offset-qualified ISO 8601 text.
+- The harvest guard may interpret an old locale-form orphan timestamp only from
+  its exact hashed executing-lane capture. It does not accept a free-standing
+  offsetless timestamp or rewrite the retained result.
+- Component Dataset references now use recursively key-sorted JSON identity, so
+  a metadata retry preserves the selected major line even when equivalent JSON
+  objects arrive with a different property order.
+- The visual-editor test selects the Calculation combobox inside its exact
+  fieldset, and Component permission checks assert the module-owned
+  `component.forbidden` contract instead of Core's retired generic code.
+
+These changes map to the Sprint 8A recovery/evidence clauses, AC-04/AC-05
+Component ownership and resilience, and the exact acceptance-identity rule.
+Focused results remain diagnostic and cannot replace complete Readiness or
+Candidate Rehearsal.

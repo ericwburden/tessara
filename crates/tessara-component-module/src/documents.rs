@@ -38,7 +38,7 @@ pub(crate) const COMPONENT_CSS_SHA256: &str =
 pub(crate) const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
     "f84262d3386f58d17b9ce5d005bb450aa3e78ee7ece5a4fcca6375571cdbb944";
 pub(crate) const COMPONENT_JS_SHA256: &str =
-    "7f13c08219f641055c1fb3bbabc9ab38f724db9b7bda2cc712ca830c9c736e1e";
+    "fb6fd36841b670adb082df549647480db7a5e548db66306d3f9cc98724183ecc";
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "route", rename_all = "snake_case")]
@@ -922,6 +922,7 @@ mod tests {
         assert!(COMPONENT_JS.contains("\"/api/admin/components/save\""));
         assert!(!COMPONENT_JS.contains("metadataAction"));
         assert!(COMPONENT_JS.contains("showDatasetOutage"));
+        assert!(COMPONENT_JS.contains("Object.keys(value).sort()"));
         assert!(COMPONENT_JS.contains("component-d3-svg--"));
         assert!(COMPONENT_JS.contains("component-d3-chart__legend"));
         assert!(COMPONENT_JS.contains("chart.insertBefore(legend, svg)"));

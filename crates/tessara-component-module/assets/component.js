@@ -326,7 +326,16 @@ function initializeManagementAffordances(root, signal) {
 
 function datasetReferenceKey(reference) {
   try {
-    return JSON.stringify(reference);
+    const canonicalize = (value) => {
+      if (Array.isArray(value)) return value.map(canonicalize);
+      if (value && typeof value === "object") {
+        return Object.fromEntries(
+          Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]),
+        );
+      }
+      return value;
+    };
+    return JSON.stringify(canonicalize(reference));
   } catch {
     return "";
   }

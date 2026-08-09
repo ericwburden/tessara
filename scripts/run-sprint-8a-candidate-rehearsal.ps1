@@ -61,6 +61,26 @@ function Publish-OrAuthenticateRehearsalImmutableEvidence {
     $sha
 }
 
+function ConvertTo-RehearsalDeclarationDictionary {
+    param([Parameter(Mandatory)]$Declaration)
+
+    if ($Declaration -is [Collections.IDictionary]) { return $Declaration }
+    $converted = [ordered]@{}
+    foreach ($property in $Declaration.PSObject.Properties) {
+        $converted[[string]$property.Name] = $property.Value
+    }
+    $converted
+}
+
+function ConvertTo-RehearsalOffsetTimestampText {
+    param(
+        [Parameter(Mandatory)]$Value,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    (ConvertTo-Sprint8ADateTimeOffset -Value $Value -Label $Label).ToString("o")
+}
+
 function Assert-RehearsalCorrectionAuthorizationTail {
     param(
         [Parameter(Mandatory)]$Authorization,
@@ -871,6 +891,19 @@ function Test-Sprint8AProcessLossRecoveryContract {
         $postRecoveryLifecycleLane.environment_fingerprint = "e" * 64
     }
 
+    $jsonDeclaration = '{"name":"recovered","depends_on":[],"command":"pass","evidence_paths":[]}' | ConvertFrom-Json
+    $recoveredDeclaration = ConvertTo-RehearsalDeclarationDictionary -Declaration $jsonDeclaration
+    if ($recoveredDeclaration -isnot [Collections.IDictionary] -or
+        -not $recoveredDeclaration.Contains("evidence_paths")) {
+        throw "Candidate Rehearsal recovery self-test did not restore the canonical declaration representation."
+    }
+    $recoveredTimestamp = '"2026-08-08T09:36:46.6836471-04:00"' | ConvertFrom-Json
+    if ((ConvertTo-RehearsalOffsetTimestampText `
+        -Value $recoveredTimestamp `
+        -Label "process-loss recovery self-test") -notmatch '(?:Z|[+-]\d{2}:\d{2})$') {
+        throw "Candidate Rehearsal recovery self-test lost the active-lane timestamp offset."
+    }
+
     $restorationDocument = [pscustomobject][ordered]@{
         schema_version = 1
         contract = "tessara.sprint-8a.materialization-result"
@@ -1492,7 +1525,9 @@ $startReadinessReference = [ordered]@{ path = $relativeReadinessPath; sha256 = $
 if ($ResumeInterruptedAttempt -and $resumeHasStart) {
     $startSha = Assert-Sprint8AReceiptSidecar -Path $startPath
     $startDocument = Get-Content -LiteralPath $startPath -Raw | ConvertFrom-Json
-    $historicalDeclaredChecks = @($startDocument.declared_checks)
+    $historicalDeclaredChecks = @($startDocument.declared_checks | ForEach-Object {
+        ConvertTo-RehearsalDeclarationDictionary -Declaration $_
+    })
     if (($startDocument.schema_version -isnot [int] -and $startDocument.schema_version -isnot [long]) -or
         [int]$startDocument.schema_version -ne 3 -or
         [string]$startDocument.phase -cne "candidate-rehearsal-start" -or
@@ -2361,9 +2396,13 @@ function Complete-RehearsalOrphanedLane {
         "[$($ended.ToString('o'))] process_loss_recovery prior_executing_receipt_sha256=$(if ($null -eq $executingSha) { 'missing' } else { $executingSha })`n",
         [Text.UTF8Encoding]::new($false)
     )
-    $laneStartedAt = if ($null -ne $executingReceipt) {
-        [string]$executingReceipt.result.started_at
-    } else { [string]$attemptReceipt.active_lane_started_at }
+    $laneStartedAt = ConvertTo-RehearsalOffsetTimestampText `
+        -Value $(if ($null -ne $executingReceipt) {
+            $executingReceipt.result.started_at
+        } else {
+            $attemptReceipt.active_lane_started_at
+        }) `
+        -Label "process-loss lane '$Name' start"
     $entry = [pscustomobject][ordered]@{
         name = $Name
         depends_on = @($declaration[0].depends_on)

@@ -487,6 +487,59 @@ function Assert-AcyclicCheckGraph {
     foreach ($name in $names) { Visit-Check -Name $name }
 }
 
+function Resolve-HarvestExecutionStart {
+    param(
+        [Parameter(Mandatory)]$Result,
+        [Parameter(Mandatory)][int]$CurrentAttempt,
+        [switch]$SkipFileEvidence
+    )
+
+    try {
+        return ConvertTo-Sprint8ADateTimeOffset -Value $Result.started_at -Label "harvest check start"
+    } catch {
+        if ($_.Exception.Message -notmatch "has no UTC offset" -or
+            [string]$Result.state -cne "failed" -or
+            [string]$Result.classification -cne "harness" -or
+            [string]$Result.classification_source -cne "process_loss_recovery" -or
+            [string]$Result.started_at -cne [string]$Result.assertions_started_at -or
+            [string]$Result.started_at -notmatch '^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$') {
+            throw
+        }
+    }
+
+    $captures = @($Result.produced_evidence | Where-Object {
+        [string]$_.path -match '-process-loss\.json$'
+    })
+    if ($captures.Count -ne 1 -or $SkipFileEvidence) {
+        throw "Process-loss check '$($Result.name)' cannot recover its timestamp without one authenticated capture."
+    }
+    Assert-HashedFileEvidence -Evidence $captures[0] -Label "Process-loss timestamp capture"
+    $resolved = Resolve-Sprint8AEvidenceReference `
+        -RepositoryRoot $repoRoot `
+        -EvidenceRoot $EvidenceRoot `
+        -Path ([string]$captures[0].path)
+    $capture = Get-Content -LiteralPath $resolved.full_path -Raw | ConvertFrom-Json
+    if ([string]$capture.phase -cne "candidate-rehearsal-lane" -or
+        [int]$capture.attempt -ne $CurrentAttempt -or
+        [string]$capture.result.name -cne [string]$Result.name -or
+        [string]$capture.result.state -cne "executing" -or
+        -not [bool]$capture.result.assertions_started) {
+        throw "Process-loss check '$($Result.name)' has an invalid executing capture."
+    }
+    $capturedStart = ConvertTo-Sprint8ADateTimeOffset `
+        -Value $capture.result.started_at `
+        -Label "process-loss captured start"
+    $capturedAssertionStart = ConvertTo-Sprint8ADateTimeOffset `
+        -Value $capture.result.assertions_started_at `
+        -Label "process-loss captured assertion start"
+    if ($capturedStart -ne $capturedAssertionStart -or
+        $capturedStart.ToString("MM/dd/yyyy HH:mm:ss", [Globalization.CultureInfo]::InvariantCulture) -cne
+            [string]$Result.started_at) {
+        throw "Process-loss check '$($Result.name)' timestamp does not match its authenticated executing capture."
+    }
+    $capturedStart
+}
+
 function Assert-TerminalCheckEvidence {
     param(
         [Parameter(Mandatory)]$Declared,
@@ -556,15 +609,22 @@ function Assert-TerminalCheckEvidence {
         [string]::IsNullOrWhiteSpace([string]$Result.ended_at)) {
         throw "Executed check '$($Declared.name)' lacks command or timestamps."
     }
-    $started = ConvertTo-Sprint8ADateTimeOffset -Value $Result.started_at -Label "harvest check start"
+    $started = Resolve-HarvestExecutionStart `
+        -Result $Result `
+        -CurrentAttempt $CurrentAttempt `
+        -SkipFileEvidence:$SkipFileEvidence
     $ended = ConvertTo-Sprint8ADateTimeOffset -Value $Result.ended_at -Label "harvest check end"
     if (-not [bool]$Result.assertions_started -or
         [string]::IsNullOrWhiteSpace([string]$Result.assertions_started_at)) {
         throw "Executed check '$($Declared.name)' does not prove that assertions started."
     }
-    $assertionsStarted = ConvertTo-Sprint8ADateTimeOffset `
-        -Value $Result.assertions_started_at `
-        -Label "harvest assertion start"
+    $assertionsStarted = if ([string]$Result.assertions_started_at -match '(?:Z|[+-]\d{2}:\d{2})$') {
+        ConvertTo-Sprint8ADateTimeOffset `
+            -Value $Result.assertions_started_at `
+            -Label "harvest assertion start"
+    } else {
+        $started
+    }
     if ($ended -lt $started -or
         $assertionsStarted -lt $started -or
         $assertionsStarted -gt $ended -or

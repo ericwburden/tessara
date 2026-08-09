@@ -254,6 +254,13 @@ SIT, UAT, closeout, or any claim that rehearsal passed.
   harvest/batch/authorization or passing-result/state tail. Authenticate and
   reuse every complete immutable receipt/sidecar pair; never rerun lanes or
   rewrite immutable evidence after the attempt itself is terminal. The
+  recovered orphan result must serialize the authenticated executing receipt's
+  start and assertion-start values as offset-qualified ISO 8601 text; JSON
+  recovery must also restore declarations to the runner's one canonical
+  dictionary representation before optional members are inspected. A retained
+  orphan result from the old locale-string defect may be finalized only when
+  its exact hashed executing capture proves the same lane, assertion boundary,
+  and timestamp; the historical receipt remains unchanged. The
   lifecycle-prerequisite receipt may retain its exact pre-authentication
   placeholder identity. After authenticating a nonterminal recovery, persist
   the recovered source/environment identity in the attempt checkpoint before

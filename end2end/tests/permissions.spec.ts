@@ -1715,7 +1715,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "post",
       "/api/admin/components",
       403,
-      "forbidden",
+      "component.forbidden",
       {
         schema_version: 1,
         name: `${RUN_ID} Partial Containment Component`,
@@ -1762,7 +1762,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "post",
       `/api/admin/components/${manageableComponent.component_id}/versions`,
       403,
-      "forbidden",
+      "component.forbidden",
       {
         schema_version: 1,
         version: componentVersionInput(
@@ -1780,7 +1780,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "post",
       "/api/admin/components/validate",
       403,
-      "forbidden",
+      "component.forbidden",
       componentVersionInput(
         fixtures.outOfScopeDatasetReference,
         "table",
@@ -1814,7 +1814,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "post",
       `/api/admin/components/${outOfScopeDraft.component_id}/versions/${outVersion.component_version_id}/publish`,
       403,
-      "forbidden",
+      "component.forbidden",
       {},
     );
     expect(publishError.message).toContain("components:manage");

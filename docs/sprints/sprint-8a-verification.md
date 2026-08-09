@@ -2365,3 +2365,26 @@ preflight, smoke, and automated UAT reproducers pass. They do not change
 Readiness 44 or replace a formal gate. The next permitted full gate is
 Readiness 45 against the clean correction commit and six fresh databases. Only
 a complete pass may authorize Candidate Rehearsal 34.
+
+### Rehearsal 35 correction boundary
+
+Readiness 46 passed all 15 checks for commit
+`bcd685d5c1ef2ecca5518eb1ea14f0790aa57541` and environment
+`4654e4dbc58cc31c471dfe826b751e39a7b826fb94826d8579c7fb266cb8e953`.
+Rehearsal 35 then terminalized all 32 lanes: 27 passed, three retained
+controlling-process-loss failures, one Playwright failure, one UAT diagnostic
+block, and no deferrals. Canonical restoration passed. The original attempt,
+harvest, consolidated batch, lane receipts, logs, traces, and timestamps remain
+immutable.
+
+The correction maps to the governing clauses as follows:
+
+| Governing clause | Correction | Focused non-authoritative proof |
+| --- | --- | --- |
+| Validation protocol process-loss recovery and complete harvest | Restore JSON declarations to the canonical dictionary shape and retain offset-qualified orphan start boundaries. For R35's already-retained locale strings, accept only the exact hashed executing captures with matching lane and assertion boundaries. | Candidate Rehearsal and harvest adversarial self-tests; R35 harvest authentication and append-only correction authorization. |
+| AC-04/AC-05 Component ownership and dependency recovery | Canonicalize Dataset reference JSON recursively before using it as the native picker identity, preserving the exact selected major line across metadata retry. | Focused outage/retry/save Playwright scenario and Component package tests. |
+| Exact acceptance identities and module-owned errors | Scope the Calculation lookup to its exact fieldset and assert `component.forbidden` for Component-owned API denials. | Focused visual-authoring and scoped-permission Playwright scenarios. |
+
+No focused check makes R35 pass. A later complete Readiness and complete
+Candidate Rehearsal must run cleanly against one corrected committed source and
+environment before preflight, candidate freeze, SIT, or UAT.

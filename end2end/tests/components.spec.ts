@@ -828,7 +828,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       name: "Fields & Calculation",
     });
     await expect(fieldsAndCalculation).toBeVisible();
-    const calculation = page.getByLabel("Calculation", { exact: true });
+    const calculation = fieldsAndCalculation.getByRole("combobox", {
+      name: "Calculation",
+      exact: true,
+    });
     await expect(calculation).toBeVisible();
     await expect(calculation.locator("option")).toHaveText([
       "Count rows",
