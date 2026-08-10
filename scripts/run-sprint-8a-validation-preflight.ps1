@@ -2120,7 +2120,10 @@ function Assert-Sprint8APreflightReceiptChain {
     $script:runtimeContext.rehearsal_start_reference = $rehearsalAttemptReference.immutable_start_receipt
     $script:runtimeContext.validation_state = $state
     $script:runtimeContext.validation_state_reference = $stateReference
-    $script:runtimeContext.environment = $environment
+    $script:runtimeContext.environment = [pscustomobject][ordered]@{
+        contract = $environment
+        fingerprint = $environmentFingerprint
+    }
     $script:attemptReceipt.source_identity_verification_state = "claimed_from_prerequisites"
     $script:attemptReceipt.environment_verification_state = "claimed_from_prerequisites"
 
