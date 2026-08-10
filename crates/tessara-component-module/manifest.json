@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.components",
-  "release_version": "1.0.0",
+  "release_version": "1.0.1",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -16,18 +16,33 @@
         "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "platform": "linux",
         "architecture": "amd64",
-        "command": ["/usr/local/bin/component-module", "serve"]
+        "command": [
+          "/usr/local/bin/component-module",
+          "serve"
+        ]
       },
       "migration_image": {
         "image_reference": "registry.example/tessara/components@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "platform": "linux",
         "architecture": "amd64",
-        "command": ["/usr/local/bin/component-module", "migrate"]
+        "command": [
+          "/usr/local/bin/component-module",
+          "migrate"
+        ]
       },
-      "listen": {"protocol":"http","port":8092,"registration_name":"components"},
-      "configuration_keys": ["DISPLAY_LABEL", "DATASET_REQUEST_TIMEOUT_SECONDS"],
-      "secret_keys": ["DATABASE_URL"],
+      "listen": {
+        "protocol": "http",
+        "port": 8092,
+        "registration_name": "components"
+      },
+      "configuration_keys": [
+        "DISPLAY_LABEL",
+        "DATASET_REQUEST_TIMEOUT_SECONDS"
+      ],
+      "secret_keys": [
+        "DATABASE_URL"
+      ],
       "runtime_identity": "components-runtime",
       "migration_identity": "components-migration",
       "readiness_path": "/health/ready",
@@ -46,154 +61,629 @@
       "id": "tessara.components.authoring",
       "name": "Component authoring",
       "description": "Author and publish versioned presentation Components over typed Dataset major lines.",
-      "use_cases": ["Create, revise, publish, and manage Component lifecycle."],
-      "inputs": ["Component configuration and a typed Dataset major-line reference."],
-      "outcomes": ["A reusable ComponentVersion resource."],
-      "constraints": ["Dataset data is consumed only through the declared Dataset contract."],
-      "contracts": ["tessara.components.component-version", "tessara.datasets.dataset-major-line"],
-      "resource_types": ["tessara.components.component_version"],
-      "destinations": ["components.directory", "components.create", "components.edit", "components.versions"],
-      "capabilities": ["components:manage"],
-      "configuration_pointers": ["/properties/dataset_request_timeout_seconds"]
+      "use_cases": [
+        "Create, revise, publish, and manage Component lifecycle."
+      ],
+      "inputs": [
+        "Component configuration and a typed Dataset major-line reference."
+      ],
+      "outcomes": [
+        "A reusable ComponentVersion resource."
+      ],
+      "constraints": [
+        "Dataset data is consumed only through the declared Dataset contract."
+      ],
+      "contracts": [
+        "tessara.components.component-version",
+        "tessara.datasets.dataset-major-line"
+      ],
+      "resource_types": [
+        "tessara.components.component_version"
+      ],
+      "destinations": [
+        "components.directory",
+        "components.create",
+        "components.edit",
+        "components.versions"
+      ],
+      "capabilities": [
+        "components:manage"
+      ],
+      "configuration_pointers": [
+        "/properties/dataset_request_timeout_seconds"
+      ]
     },
     {
       "id": "tessara.components.viewing",
       "name": "Component viewing",
       "description": "Resolve and execute authorized ComponentVersions.",
-      "use_cases": ["Browse and render a Component."],
-      "inputs": ["An exact ComponentVersion reference and authorized actor context."],
-      "outcomes": ["A rendered table, chart, or statistic."],
-      "constraints": ["Restricted references remain non-disclosing."],
-      "contracts": ["tessara.components.component-version"],
-      "resource_types": ["tessara.components.component_version"],
-      "destinations": ["components.directory", "components.detail", "components.view"],
-      "capabilities": ["components:read"],
+      "use_cases": [
+        "Browse and render a Component."
+      ],
+      "inputs": [
+        "An exact ComponentVersion reference and authorized actor context."
+      ],
+      "outcomes": [
+        "A rendered table, chart, or statistic."
+      ],
+      "constraints": [
+        "Restricted references remain non-disclosing."
+      ],
+      "contracts": [
+        "tessara.components.component-version"
+      ],
+      "resource_types": [
+        "tessara.components.component_version"
+      ],
+      "destinations": [
+        "components.directory",
+        "components.detail",
+        "components.view"
+      ],
+      "capabilities": [
+        "components:read"
+      ],
       "configuration_pointers": []
     }
   ],
   "provided_contracts": [
-    {"id":"tessara.components.component-version","version":"3.0.0","kind":"resource","description":"Resolve and execute a ComponentVersion owned by this Module Instance."},
-    {"id":"tessara.components.authoring","version":"1.0.0","kind":"behavior","description":"Create, publish, and manage module-owned Component versions."}
+    {
+      "id": "tessara.components.component-version",
+      "version": "3.0.0",
+      "kind": "resource",
+      "description": "Resolve and execute a ComponentVersion owned by this Module Instance."
+    },
+    {
+      "id": "tessara.components.authoring",
+      "version": "1.0.0",
+      "kind": "behavior",
+      "description": "Create, publish, and manage module-owned Component versions."
+    }
   ],
   "dependencies": [
-    {"contract_id":"tessara.datasets.dataset-major-line","version_requirement":"=1.0.0","binding_key":"tessara.components.dataset-major-line","optional":false}
+    {
+      "contract_id": "tessara.datasets.dataset-major-line",
+      "version_requirement": "=1.0.0",
+      "binding_key": "tessara.components.dataset-major-line",
+      "optional": false
+    }
   ],
   "resource_types": [
-    {"id":"tessara.components.component_version","description":"A versioned presentation resource owned by the Component Module Instance."}
+    {
+      "id": "tessara.components.component_version",
+      "description": "A versioned presentation resource owned by the Component Module Instance."
+    }
   ],
   "typed_reference_schemas": [
-    {"resource_type":"tessara.components.component_version","resource_id":{"format":"uuid"}}
+    {
+      "resource_type": "tessara.components.component_version",
+      "resource_id": {
+        "format": "uuid"
+      }
+    }
   ],
   "routes": [
-    {"name":"components.directory","kind":"product","parameters":[]},
-    {"name":"components.create","kind":"product","parameters":[]},
-    {"name":"components.detail","kind":"product","parameters":[{"name":"component_ref","value_type":"string","required":true}]},
-    {"name":"components.edit","kind":"product","parameters":[{"name":"component_ref","value_type":"string","required":true}]},
-    {"name":"components.versions","kind":"product","parameters":[{"name":"component_ref","value_type":"string","required":true}]},
-    {"name":"components.view","kind":"product","parameters":[{"name":"component_ref","value_type":"string","required":true}]},
-    {"name":"components.configuration.validate","kind":"configuration","parameters":[]},
-    {"name":"components.compatibility","kind":"diagnostics","parameters":[]},
-    {"name":"components.status","kind":"diagnostics","parameters":[]},
-    {"name":"components.diagnostics","kind":"diagnostics","parameters":[]}
+    {
+      "name": "components.directory",
+      "kind": "product",
+      "parameters": []
+    },
+    {
+      "name": "components.create",
+      "kind": "product",
+      "parameters": []
+    },
+    {
+      "name": "components.detail",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "component_ref",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "components.edit",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "component_ref",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "components.versions",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "component_ref",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "components.view",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "component_ref",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "components.configuration.validate",
+      "kind": "configuration",
+      "parameters": []
+    },
+    {
+      "name": "components.compatibility",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "components.status",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "components.diagnostics",
+      "kind": "diagnostics",
+      "parameters": []
+    }
   ],
   "navigation": [
-    {"id":"tessara.components.navigation","destination":"components.directory","label":"Components","group":"Main","order_hint":60,"required_capabilities_any_of":["components:read","components:manage"]}
+    {
+      "id": "tessara.components.navigation",
+      "destination": "components.directory",
+      "label": "Components",
+      "group": "Main",
+      "order_hint": 60,
+      "required_capabilities_any_of": [
+        "components:read",
+        "components:manage"
+      ]
+    }
   ],
   "security_capabilities": [
-    {"id":"components:read","description":"Inspect and execute Component definitions."},
-    {"id":"components:manage","description":"Manage Component definitions and lifecycle."}
+    {
+      "id": "components:read",
+      "description": "Inspect and execute Component definitions."
+    },
+    {
+      "id": "components:manage",
+      "description": "Manage Component definitions and lifecycle."
+    }
   ],
   "configuration_schema": {
-    "type":"object",
+    "type": "object",
     "properties": {
-      "display_label":{"type":"string","minLength":1,"maxLength":80,"default":"Components"},
-      "dataset_request_timeout_seconds":{"type":"integer","minimum":1,"maximum":30,"default":5}
+      "display_label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "default": "Components"
+      },
+      "dataset_request_timeout_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 30,
+        "default": 5
+      }
     },
-    "required":["display_label","dataset_request_timeout_seconds"],
-    "additionalProperties":false
+    "required": [
+      "display_label",
+      "dataset_request_timeout_seconds"
+    ],
+    "additionalProperties": false
   },
   "operational_routes": {
-    "configuration_validation":"components.configuration.validate",
-    "compatibility":"components.compatibility",
-    "status":"components.status",
-    "diagnostics":"components.diagnostics"
+    "configuration_validation": "components.configuration.validate",
+    "compatibility": "components.compatibility",
+    "status": "components.status",
+    "diagnostics": "components.diagnostics"
   },
   "shell_contribution_contracts": null,
   "platform_versions": {
-    "core_release":"0.1.0",
-    "shell_context_schema":"1.0.0",
-    "module_control_protocol":"1.1.0",
-    "module_contract":"0.2.0",
-    "module_runtime":"0.2.0",
-    "module_ui":"0.2.0",
-    "design_system_asset_abi":"1.0.0",
-    "conformance_suite":"1.1.0"
+    "core_release": "0.1.0",
+    "shell_context_schema": "1.0.0",
+    "module_control_protocol": "1.1.0",
+    "module_contract": "0.3.0",
+    "module_runtime": "0.3.0",
+    "module_ui": "0.3.0",
+    "design_system_asset_abi": "2.0.0",
+    "conformance_suite": "1.2.0"
   },
-  "linked_packages": {"module_contract":"0.2.0","module_runtime":"0.2.0","module_ui":"0.2.0"},
+  "linked_packages": {
+    "module_contract": "0.3.0",
+    "module_runtime": "0.3.0",
+    "module_ui": "0.3.0"
+  },
   "browser_routes": [
-    {"destination":"components.directory","path_template":"/components","methods":["GET","HEAD"],"required_capability":"components:read","authorization_action":"components.list","dependency_binding":"tessara.core.components","functional_contract":"tessara.components.component-version","organization_scope_parameter":null},
-    {"destination":"components.create","path_template":"/components/new","methods":["GET","HEAD"],"required_capability":"components:manage","authorization_action":"components.list_manageable","dependency_binding":"tessara.core.components","functional_contract":"tessara.components.authoring","organization_scope_parameter":null},
-    {"destination":"components.detail","path_template":"/components/{component_ref}","methods":["GET","HEAD"],"required_capability":"components:read","authorization_action":"components.get","dependency_binding":"tessara.core.components","functional_contract":"tessara.components.component-version","organization_scope_parameter":null},
-    {"destination":"components.edit","path_template":"/components/{component_ref}/edit","methods":["GET","HEAD"],"required_capability":"components:manage","authorization_action":"components.edit","dependency_binding":"tessara.core.components","functional_contract":"tessara.components.authoring","organization_scope_parameter":null},
-    {"destination":"components.versions","path_template":"/components/{component_ref}/versions","methods":["GET","HEAD"],"required_capability":"components:read","authorization_action":"components.get","dependency_binding":"tessara.core.components","functional_contract":"tessara.components.component-version","organization_scope_parameter":null},
-    {"destination":"components.view","path_template":"/components/{component_ref}/view","methods":["GET","HEAD"],"required_capability":"components:read","authorization_action":"components.get","dependency_binding":"tessara.core.components","functional_contract":"tessara.components.component-version","organization_scope_parameter":null}
+    {
+      "destination": "components.directory",
+      "path_template": "/components",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "components:read",
+      "authorization_action": "components.list",
+      "dependency_binding": "tessara.core.components",
+      "functional_contract": "tessara.components.component-version",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "components.create",
+      "path_template": "/components/new",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "components:manage",
+      "authorization_action": "components.list_manageable",
+      "dependency_binding": "tessara.core.components",
+      "functional_contract": "tessara.components.authoring",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "components.detail",
+      "path_template": "/components/{component_ref}",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "components:read",
+      "authorization_action": "components.get",
+      "dependency_binding": "tessara.core.components",
+      "functional_contract": "tessara.components.component-version",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "components.edit",
+      "path_template": "/components/{component_ref}/edit",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "components:manage",
+      "authorization_action": "components.edit",
+      "dependency_binding": "tessara.core.components",
+      "functional_contract": "tessara.components.authoring",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "components.versions",
+      "path_template": "/components/{component_ref}/versions",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "components:read",
+      "authorization_action": "components.get",
+      "dependency_binding": "tessara.core.components",
+      "functional_contract": "tessara.components.component-version",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "components.view",
+      "path_template": "/components/{component_ref}/view",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "components:read",
+      "authorization_action": "components.get",
+      "dependency_binding": "tessara.core.components",
+      "functional_contract": "tessara.components.component-version",
+      "organization_scope_parameter": null
+    }
   ],
   "browser_lifecycle": {
-    "lifecycle_abi":"1.0.0",
-    "entry_asset":"/component.js",
-    "stylesheet_assets":["/component-lifecycle.css"],
-    "complete_document_fallback":true,
-    "capabilities":{"navigation_guard":true,"suspend_resume":true}
+    "lifecycle_abi": "1.0.0",
+    "entry_asset": "/component.js",
+    "stylesheet_assets": [
+      "/component-lifecycle.css"
+    ],
+    "complete_document_fallback": true,
+    "capabilities": {
+      "navigation_guard": true,
+      "suspend_resume": true
+    }
   },
   "public_api_routes": [
-    {"path_template":"/api/components","method":"GET","required_capability":"components:read","authorization_action":"components.list","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.component-version","idempotency":"none"},
-    {"path_template":"/api/components/{component_ref}","method":"GET","required_capability":"components:read","authorization_action":"components.get","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.component-version","idempotency":"none"},
-    {"path_template":"/api/components/{component_ref}/{kind}","method":"GET","required_capability":"components:read","authorization_action":"components.execute","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.component-version","idempotency":"none"},
-    {"path_template":"/api/components/{component_ref}/versions/{version_id}/{kind}","method":"GET","required_capability":"components:read","authorization_action":"components.execute","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.component-version","idempotency":"none"},
-    {"path_template":"/api/admin/components","method":"POST","required_capability":"components:manage","authorization_action":"components.create","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/components","method":"GET","required_capability":"components:manage","authorization_action":"components.list_manageable","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.authoring","idempotency":"none"},
-    {"path_template":"/api/admin/components/save","method":"POST","required_capability":"components:manage","authorization_action":"components.save","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/components/{component_id}","method":"GET","required_capability":"components:manage","authorization_action":"components.edit","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.authoring","idempotency":"none"},
-    {"path_template":"/api/admin/components/{component_id}","method":"PUT","required_capability":"components:manage","authorization_action":"components.update","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/components/{component_id}/versions","method":"POST","required_capability":"components:manage","authorization_action":"components.save_version","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/components/{component_id}/versions/{version_id}","method":"PUT","required_capability":"components:manage","authorization_action":"components.save_version","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/components/{component_id}/versions/{version_id}","method":"DELETE","required_capability":"components:manage","authorization_action":"components.delete_version","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/components/validate","method":"POST","required_capability":"components:manage","authorization_action":"components.validate","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"none"},
-    {"path_template":"/api/admin/components/preview","method":"POST","required_capability":"components:manage","authorization_action":"components.preview","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"none"},
-    {"path_template":"/api/admin/components/datasets","method":"GET","required_capability":"components:manage","authorization_action":"components.list_manageable","dependency_binding":"tessara.core.components","operation":"read","functional_contract":"tessara.components.authoring","idempotency":"none"},
-    {"path_template":"/api/admin/components/datasets/distinct-values","method":"POST","required_capability":"components:manage","authorization_action":"components.validate","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"none"},
-    {"path_template":"/api/admin/components/{component_id}/versions/{version_id}/publish","method":"POST","required_capability":"components:manage","authorization_action":"components.publish_version","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/components/{component_id}/versions/{version_id}/lifecycle","method":"POST","required_capability":"components:manage","authorization_action":"components.change_lifecycle","dependency_binding":"tessara.core.components","operation":"mutation","functional_contract":"tessara.components.authoring","idempotency":"forward_or_generate_header"}
+    {
+      "path_template": "/api/components",
+      "method": "GET",
+      "required_capability": "components:read",
+      "authorization_action": "components.list",
+      "dependency_binding": "tessara.core.components",
+      "operation": "read",
+      "functional_contract": "tessara.components.component-version",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/components/{component_ref}",
+      "method": "GET",
+      "required_capability": "components:read",
+      "authorization_action": "components.get",
+      "dependency_binding": "tessara.core.components",
+      "operation": "read",
+      "functional_contract": "tessara.components.component-version",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/components/{component_ref}/{kind}",
+      "method": "GET",
+      "required_capability": "components:read",
+      "authorization_action": "components.execute",
+      "dependency_binding": "tessara.core.components",
+      "operation": "read",
+      "functional_contract": "tessara.components.component-version",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/components/{component_ref}/versions/{version_id}/{kind}",
+      "method": "GET",
+      "required_capability": "components:read",
+      "authorization_action": "components.execute",
+      "dependency_binding": "tessara.core.components",
+      "operation": "read",
+      "functional_contract": "tessara.components.component-version",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/components",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.create",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/components",
+      "method": "GET",
+      "required_capability": "components:manage",
+      "authorization_action": "components.list_manageable",
+      "dependency_binding": "tessara.core.components",
+      "operation": "read",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/components/save",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.save",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/components/{component_id}",
+      "method": "GET",
+      "required_capability": "components:manage",
+      "authorization_action": "components.edit",
+      "dependency_binding": "tessara.core.components",
+      "operation": "read",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/components/{component_id}",
+      "method": "PUT",
+      "required_capability": "components:manage",
+      "authorization_action": "components.update",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/components/{component_id}/versions",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.save_version",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/components/{component_id}/versions/{version_id}",
+      "method": "PUT",
+      "required_capability": "components:manage",
+      "authorization_action": "components.save_version",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/components/{component_id}/versions/{version_id}",
+      "method": "DELETE",
+      "required_capability": "components:manage",
+      "authorization_action": "components.delete_version",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/components/validate",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.validate",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/components/preview",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.preview",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/components/datasets",
+      "method": "GET",
+      "required_capability": "components:manage",
+      "authorization_action": "components.list_manageable",
+      "dependency_binding": "tessara.core.components",
+      "operation": "read",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/components/datasets/distinct-values",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.validate",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/components/{component_id}/versions/{version_id}/publish",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.publish_version",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/components/{component_id}/versions/{version_id}/lifecycle",
+      "method": "POST",
+      "required_capability": "components:manage",
+      "authorization_action": "components.change_lifecycle",
+      "dependency_binding": "tessara.core.components",
+      "operation": "mutation",
+      "functional_contract": "tessara.components.authoring",
+      "idempotency": "forward_or_generate_header"
+    }
   ],
   "provided_service_actions": [
-    {"path":"/api/private/components/resolve","method":"POST","authorization_action":"components.resolve","operation":"read","required_capability":"components:read","functional_contract":"tessara.components.component-version"},
-    {"path":"/api/private/components/catalog","method":"POST","authorization_action":"components.catalog","operation":"read","required_capability":"components:read","functional_contract":"tessara.components.component-version"},
-    {"path":"/api/private/components/render","method":"POST","authorization_action":"components.render","operation":"read","required_capability":"components:read","functional_contract":"tessara.components.component-version"}
+    {
+      "path": "/api/private/components/resolve",
+      "method": "POST",
+      "authorization_action": "components.resolve",
+      "operation": "read",
+      "required_capability": "components:read",
+      "functional_contract": "tessara.components.component-version"
+    },
+    {
+      "path": "/api/private/components/catalog",
+      "method": "POST",
+      "authorization_action": "components.catalog",
+      "operation": "read",
+      "required_capability": "components:read",
+      "functional_contract": "tessara.components.component-version"
+    },
+    {
+      "path": "/api/private/components/render",
+      "method": "POST",
+      "authorization_action": "components.render",
+      "operation": "read",
+      "required_capability": "components:read",
+      "functional_contract": "tessara.components.component-version"
+    }
   ],
   "consumed_service_actions": [
-    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.bootstrap_validate"},
-    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.catalog"},
-    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.schema"},
-    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.distinct_values"},
-    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.compatibility"},
-    {"dependency_binding":"tessara.components.dataset-major-line","functional_contract":"tessara.datasets.dataset-major-line","authorization_action":"datasets.execute"}
+    {
+      "dependency_binding": "tessara.components.dataset-major-line",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "authorization_action": "datasets.bootstrap_validate"
+    },
+    {
+      "dependency_binding": "tessara.components.dataset-major-line",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "authorization_action": "datasets.catalog"
+    },
+    {
+      "dependency_binding": "tessara.components.dataset-major-line",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "authorization_action": "datasets.schema"
+    },
+    {
+      "dependency_binding": "tessara.components.dataset-major-line",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "authorization_action": "datasets.distinct_values"
+    },
+    {
+      "dependency_binding": "tessara.components.dataset-major-line",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "authorization_action": "datasets.compatibility"
+    },
+    {
+      "dependency_binding": "tessara.components.dataset-major-line",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "authorization_action": "datasets.execute"
+    }
   ],
   "bootstrap_dependency_validation": {
-    "dependency_binding":"tessara.components.dataset-major-line",
-    "functional_contract":"tessara.datasets.dataset-major-line",
-    "contract_version":"1.0.0",
-    "authorization_action":"datasets.bootstrap_validate",
-    "method":"POST",
-    "path":"/api/private/datasets/bootstrap-validation",
-    "audience":"resolved_dependency_provider",
-    "payload_pointer":"/dependency_validation"
+    "dependency_binding": "tessara.components.dataset-major-line",
+    "functional_contract": "tessara.datasets.dataset-major-line",
+    "contract_version": "1.0.0",
+    "authorization_action": "datasets.bootstrap_validate",
+    "method": "POST",
+    "path": "/api/private/datasets/bootstrap-validation",
+    "audience": "resolved_dependency_provider",
+    "payload_pointer": "/dependency_validation"
   },
   "control_projections": [
-    {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"}
+    {
+      "kind": "security_state",
+      "path": "/api/private/security-state",
+      "revision_field": "authorization_revision"
+    }
   ],
   "assets": [
-    {"path":"/component.css","digest":"sha256:389ba2d13693f99119be3ecf455f595a9e7def0918372edbacc1948859e2fbb0","content_type":"text/css; charset=utf-8"},
-    {"path":"/component-lifecycle.css","digest":"sha256:f84262d3386f58d17b9ce5d005bb450aa3e78ee7ece5a4fcca6375571cdbb944","content_type":"text/css; charset=utf-8"},
-    {"path":"/component.js","digest":"sha256:fb6fd36841b670adb082df549647480db7a5e548db66306d3f9cc98724183ecc","content_type":"text/javascript; charset=utf-8"}
+    {
+      "path": "/module-ui.css",
+      "digest": "sha256:a4a6fcde5b81831267ddcfbe94d5a3876d0ecfa98b36e2bd7dd92878206abe8a",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/component.css",
+      "digest": "sha256:07ea1dd7cda7edbe6826040e6c4178379bbb8e87f4ac8e76caaecb5065b63a24",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/component-lifecycle.css",
+      "digest": "sha256:b5a11137d84e6fb90bed9d11726576908054c41b76e0920228539416734d6d98",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/component.js",
+      "digest": "sha256:47534e7a73045e4c12b2d888661d18a5be7aabe5146808fa6826e833018a83a5",
+      "content_type": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "/component-bindings.js",
+      "digest": "sha256:89adb1a1d3fe348cc2a2f00741b0e078493dbdcb48e284754535b845d33a0b80",
+      "content_type": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "/component.wasm",
+      "digest": "sha256:14d17dac7f2ec912fbf1aa5525e4f88dc4c20bbc67d20aadfb703010f80c2c7e",
+      "content_type": "application/wasm"
+    }
   ]
 }

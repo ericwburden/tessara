@@ -1,6 +1,9 @@
 use leptos::{context::Provider, prelude::*};
 use tessara_module_contract::ShellContextV1;
-use tessara_module_ui::{ShellPresentation, escape_attribute, render_module_document};
+use tessara_module_ui::{
+    MODULE_UI_CSS_SHA256, ModuleBootstrapData, ModuleDocumentAssets, ModuleReleaseMetadata,
+    ShellPresentation, render_module_view_document,
+};
 
 use crate::{
     DashboardCreateContent, DashboardDetailContent, DashboardEditorContent,
@@ -8,11 +11,7 @@ use crate::{
 };
 
 pub const DASHBOARD_BOOTSTRAP_SCRIPT_ID: &str = "tessara-dashboard-bootstrap";
-pub const DASHBOARD_CSS: &str = concat!(
-    include_str!("../../tessara-module-ui/assets/module-shell.css"),
-    "\n",
-    include_str!("../assets/dashboard.css")
-);
+pub const DASHBOARD_CSS: &str = include_str!("../assets/dashboard.css");
 pub const DASHBOARD_LIFECYCLE_CSS: &str = concat!(
     include_str!("../assets/dashboard.css"),
     "\n",
@@ -22,15 +21,15 @@ pub const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 pub const DASHBOARD_BINDINGS_JS: &str = include_str!("../assets/dashboard-bindings.js");
 pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
-    "6257b298c6e97f867147e404b7327bff19c665f89bfb42b2903535f0dd888afa";
+    "b84176e5a2a26d2980dbd30463f5a1e9b8fb20dda258c38e673ebc5446020412";
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
-    "0844068d079b647efc4527aba90a8831a856d325e89d4b8527871a9c2e34183f";
+    "838136485a2d0a547d95e520076a039189c2d3fb24d9f15d23a977f98ca0cef3";
 pub const DASHBOARD_JS_SHA256: &str =
-    "2ed3a77275ca528ce7c9546de084ba5712cca06dc627810492ac0211c262222b";
+    "35568a22c51c9e6a14e2d462378cefbcd6aef0a0824ddbd72405f0c8b4fbabfa";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "8bca61949b209d995dfd72a2a21ce04afc30b237bc9d523daf99d6911d86811c";
+    "0d92e0c8c652b22cf565e0632571a2199a99e7fb9f591356cb4d241a0bc6f359";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "e4d3dcefc0528a02f4026b98713391295a5f56a77784d46c2294ed06ae6bc100";
+    "0aeece1c8e89e8f6e1dea5a9d65de496c77bb7d69567f9e633cd6b1c4411bc91";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")
@@ -51,29 +50,38 @@ pub fn render_dashboard_document(
     let _ = any_spawner::Executor::init_futures_executor();
 
     let bootstrap_for_view = bootstrap.clone();
-    let content = Owner::new().with(move || {
-        view! {
-            <Provider value=bootstrap_for_view.clone()>
-                {dashboard_content(&bootstrap_for_view)}
-            </Provider>
-        }
-        .to_html()
-    });
     let presentation = ShellPresentation::from_verified_context(context, path, title);
-    let stylesheet = dashboard_asset_path(release, DASHBOARD_CSS_SHA256, "dashboard.css");
-    let hydration = dashboard_asset_path(release, DASHBOARD_JS_SHA256, "dashboard.js");
-    let mut document =
-        render_module_document(&presentation, &stylesheet, Some(&hydration), &content);
     let bootstrap_json = escaped_bootstrap_json(bootstrap);
-    let metadata = format!(
-        r#"<meta name="tessara-module-definition" content="tessara.dashboards"><meta name="tessara-module-release" content="{}"><meta name="tessara-module-asset-digest" content="sha256:{}"><script id="{}" type="application/json">{}</script>"#,
-        escape_attribute(release),
-        DASHBOARD_JS_SHA256,
-        DASHBOARD_BOOTSTRAP_SCRIPT_ID,
-        bootstrap_json,
-    );
-    document = document.replacen("</head>", &format!("{metadata}</head>"), 1);
-    document
+    render_module_view_document(
+        &presentation,
+        &ModuleDocumentAssets {
+            stylesheets: vec![
+                dashboard_asset_path(release, MODULE_UI_CSS_SHA256, "module-ui.css"),
+                dashboard_asset_path(release, DASHBOARD_CSS_SHA256, "dashboard.css"),
+            ],
+            hydration_script: Some(dashboard_asset_path(
+                release,
+                DASHBOARD_JS_SHA256,
+                "dashboard.js",
+            )),
+        },
+        &ModuleReleaseMetadata {
+            definition_id: "tessara.dashboards".into(),
+            release_version: release.into(),
+            asset_digest: format!("sha256:{DASHBOARD_JS_SHA256}"),
+        },
+        Some(&ModuleBootstrapData {
+            script_id: DASHBOARD_BOOTSTRAP_SCRIPT_ID.into(),
+            json: bootstrap_json,
+        }),
+        || {
+            view! {
+                <Provider value=bootstrap_for_view.clone()>
+                    {dashboard_content(&bootstrap_for_view)}
+                </Provider>
+            }
+        },
+    )
 }
 
 pub(crate) fn dashboard_content(bootstrap: &DashboardRouteBootstrap) -> AnyView {
@@ -137,9 +145,11 @@ mod tests {
         assert!(DASHBOARD_CSS.contains("@media (max-width: 780px)"));
         assert!(DASHBOARD_CSS.contains(".dashboard-saved-grid > *"));
         assert!(DASHBOARD_CSS.contains(".dashboard-viewer-placement"));
-        assert!(DASHBOARD_CSS.contains(".app-shell"));
-        assert!(DASHBOARD_CSS.contains(".brand-lockup"));
-        assert!(DASHBOARD_CSS.contains(".mobile-nav__panel"));
+        assert!(!DASHBOARD_CSS.contains(".app-shell"));
+        assert!(tessara_module_ui::MODULE_UI_CSS.contains(".app-shell"));
+        assert!(DASHBOARD_CSS.contains(".module-scope--tessara-dashboards"));
+        assert!(!DASHBOARD_CSS.contains(".brand-lockup"));
+        assert!(!DASHBOARD_CSS.contains(".mobile-nav__panel"));
         assert!(DASHBOARD_CSS.contains(".dashboard-composition-tile__symbol svg"));
         assert!(DASHBOARD_CSS.contains("width: 1.9375rem"));
 
@@ -152,7 +162,9 @@ mod tests {
         assert!(DASHBOARD_LIFECYCLE_CSS.contains(".dashboard-saved-grid"));
         assert!(DASHBOARD_LIFECYCLE_CSS.contains(".dashboard-viewer-placement"));
         assert!(
-            DASHBOARD_LIFECYCLE_CSS.contains("#tessara-module-outlet .dashboards-page"),
+            DASHBOARD_LIFECYCLE_CSS.contains(
+                ".module-scope--tessara-dashboards #tessara-module-outlet .dashboards-page"
+            ),
             "the lifecycle-only outlet overrides remain appended to the product stylesheet"
         );
 
@@ -162,7 +174,7 @@ mod tests {
 
     #[test]
     fn release_entry_asset_resolves_bindings_and_wasm_from_the_same_release() {
-        assert!(DASHBOARD_JS.contains("/tessara.dashboards/3.0.0/"));
+        assert!(DASHBOARD_JS.contains("/tessara.dashboards/3.0.1/"));
         assert!(!DASHBOARD_JS.contains("/tessara.dashboards/2.1.0/"));
         let digest = format!("{:x}", Sha256::digest(DASHBOARD_JS.as_bytes()));
         assert_eq!(digest, DASHBOARD_JS_SHA256);
@@ -221,15 +233,17 @@ mod tests {
                     can_manage: false,
                 }],
             ),
-            "3.0.0",
+            "3.0.1",
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("Delivery"));
-        assert!(html.contains(r#"name="tessara-module-release" content="3.0.0""#));
+        assert!(html.contains(r#"name="tessara-module-release" content="3.0.1""#));
         assert!(html.contains(DASHBOARD_BOOTSTRAP_SCRIPT_ID));
         assert!(html.contains(r#"class="app-shell""#));
         assert!(html.contains(r#"class="brand-lockup""#));
         assert!(html.contains(r#"class="top-app-bar""#));
+        assert!(html.contains(r#"class="tessara-app module-scope--tessara-dashboards""#));
+        assert!(html.contains(r#"class="top-app-bar__title">Dashboards</span>"#));
         assert!(html.contains(r#"placeholder="Search Tessara""#));
         assert!(!html.contains("PROTOTYPE CONTROL"));
         assert!(!html.contains("tessara-web"));

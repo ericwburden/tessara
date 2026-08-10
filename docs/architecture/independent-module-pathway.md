@@ -55,6 +55,30 @@ Core owns:
 Core does not own module product tables, module configuration types, or
 definition-specific Module Management components.
 
+## Canonical Module UI Contract
+
+Core and every independently deployed module consume the same exact
+`tessara-module-ui` CSS asset. That asset is the sole owner of resets, design
+tokens, light/dark themes, application canvas, shell, navigation, page headers,
+panels, buttons, forms, tables, dialogs, status states, accessibility helpers,
+and responsive primitives. Core may add Core-product styles; a module may add
+only namespace-rooted product layout or visualization styles. Neither may copy
+or redefine SDK tokens or generic primitives.
+
+Module products are typed Leptos views. Only the SDK assembles a complete HTML
+document and composes authenticated shell presentation, exact release metadata,
+bootstrap data, SDK assets, and optional product assets. Direct documents load
+the SDK plus product CSS; lifecycle navigation reuses Core's identical SDK CSS
+and loads only product CSS. The shared lifecycle adapter owns mount, navigate,
+suspend/resume, dirty-state protection, and unmount. The lifecycle host derives
+the active manifest navigation item and top-bar title from the authenticated
+current route, so the title always matches the navigation label.
+
+`scripts/ui-sdk-conformance.ps1` enumerates every first-party manifest and
+rejects raw module HTML/DOM construction, copied or missing SDK assets,
+unnamespaced product selectors, product design-token declarations, unstyled SDK
+primitives, and mismatched SDK/design/conformance identities.
+
 ## Catalog And Navigation Ownership
 
 An independently deployed module is represented by its enrolled Module
@@ -201,7 +225,7 @@ adoption work.
     Core, gateway, and unrelated module images, container identities, restart
     counts, data, navigation, and availability remain unchanged. Sprint 8A
     builds a distinct compatible Component `0.9.0` binary/Manifest, upgrades to
-    `1.0.0`, rolls back to `0.9.0`, and restores intended `1.0.0` through the
+    `1.0.1`, rolls back to `0.9.0`, and restores intended `1.0.1` through the
     Compose adapter; relabeling the candidate image is not release evidence.
 12. Search Core and the web shell for the new definition ID. Matches in
     fixtures, seed, or routing registration must be explainable; Module

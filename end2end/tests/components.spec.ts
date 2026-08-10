@@ -458,6 +458,42 @@ async function selectComponentKind(page: Page, label: string) {
 }
 
 test.describe("Sprint 8A extracted Component UI parity", () => {
+  test("Core and enrolled modules share the SDK canvas, tokens, navigation state, and title", async ({
+    page,
+  }) => {
+    const assertNoConsoleErrors = attachConsoleGuard(page);
+    await signInAsAdmin(page);
+
+    const presentation = async () =>
+      page.evaluate(() => {
+        const styles = getComputedStyle(document.documentElement);
+        return {
+          canvas: styles.getPropertyValue("--color-bg").trim(),
+          primary: styles.getPropertyValue("--semantic-primary").trim(),
+          font: styles.getPropertyValue("--font-sans").trim(),
+          bodyBackground: getComputedStyle(document.body).backgroundColor,
+        };
+      });
+
+    await page.goto("/");
+    const core = await presentation();
+    await expect(page.locator(".top-app-bar__title")).toHaveText("Home");
+
+    for (const route of [
+      { path: "/components", label: "Components" },
+      { path: "/dashboards", label: "Dashboards" },
+      { path: "/reference/scoped-records", label: "Scoped Records" },
+    ]) {
+      await page.goto(route.path);
+      await expect(page.locator(".top-app-bar__title")).toHaveText(route.label);
+      const active = page.locator(`.sidebar-link.is-active[href="${route.path}"]`);
+      await expect(active).toHaveCount(2);
+      await expect(active.first()).toHaveText(route.label);
+      expect(await presentation()).toEqual(core);
+    }
+    assertNoConsoleErrors();
+  });
+
   test("admin can create, update, publish, and view a major-line table component", async ({
     page,
   }) => {

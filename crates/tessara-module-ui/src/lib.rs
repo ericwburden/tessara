@@ -49,7 +49,7 @@ mod tabs;
 mod timestamp;
 
 #[cfg(feature = "components")]
-use leptos::prelude::{AnyView, Fragment};
+use leptos::prelude::{AnyView, Fragment, IntoView, Owner};
 use tessara_module_contract::{
     NavigationProjectionV1, OriginalActorProjectionV1, ShellContextV1, ShellDocumentStateV1,
     ShellThemeV1,
@@ -83,7 +83,7 @@ pub use empty_state::EmptyState;
 #[cfg(feature = "components")]
 pub use info_list::{InfoListTable, InfoRow};
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-pub use lifecycle::LeptosLifecycleRoot;
+pub use lifecycle::{LeptosLifecycleAdapter, LeptosLifecycleRoot};
 #[cfg(feature = "components")]
 pub use modal_dialog::{FullscreenDialog, ModalDialog, ModalDialogSize};
 #[cfg(feature = "components")]
@@ -119,9 +119,9 @@ pub fn empty_view() -> AnyView {
 }
 
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const MODULE_SHELL_CSS: &str = include_str!("../assets/module-shell.css");
-pub const MODULE_SHELL_CSS_SHA256: &str =
-    "ca238aca616f242bfa144764a09ae4a76d0b6f075a288604cbb333d90859af46";
+pub const MODULE_UI_CSS: &str = include_str!("../assets/module-ui.css");
+pub const MODULE_UI_CSS_SHA256: &str =
+    "a4a6fcde5b81831267ddcfbe94d5a3876d0ecfa98b36e2bd7dd92878206abe8a";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
@@ -161,19 +161,83 @@ impl ShellPresentation {
     }
 }
 
-pub fn render_module_document(
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleDocumentAssets {
+    pub stylesheets: Vec<String>,
+    pub hydration_script: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleReleaseMetadata {
+    pub definition_id: String,
+    pub release_version: String,
+    pub asset_digest: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleBootstrapData {
+    pub script_id: String,
+    pub json: String,
+}
+
+/// Renders a complete module document from a typed product view. Product
+/// crates supply view state and namespaced assets; only the SDK assembles the
+/// outer document, canonical shell, release metadata, and bootstrap payload.
+#[cfg(feature = "components")]
+pub fn render_module_view_document<F, V>(
     presentation: &ShellPresentation,
-    stylesheet_href: &str,
-    hydration_script_href: Option<&str>,
+    assets: &ModuleDocumentAssets,
+    release: &ModuleReleaseMetadata,
+    bootstrap: Option<&ModuleBootstrapData>,
+    product_view: F,
+) -> String
+where
+    F: FnOnce() -> V,
+    V: IntoView + 'static,
+{
+    let content = Owner::new().with(|| product_view().to_html());
+    let mut document = render_document_markup(presentation, assets, release, &content);
+    let bootstrap_markup = bootstrap
+        .map(|bootstrap| {
+            format!(
+                r#"<script id="{}" type="application/json">{}</script>"#,
+                escape_attribute(&bootstrap.script_id),
+                bootstrap.json,
+            )
+        })
+        .unwrap_or_default();
+    let metadata = format!(
+        r#"<meta name="tessara-module-definition" content="{}"><meta name="tessara-module-release" content="{}"><meta name="tessara-module-asset-digest" content="{}">{}"#,
+        escape_attribute(&release.definition_id),
+        escape_attribute(&release.release_version),
+        escape_attribute(&release.asset_digest),
+        bootstrap_markup,
+    );
+    document = document.replacen("</head>", &format!("{metadata}</head>"), 1);
+    document
+}
+
+fn render_document_markup(
+    presentation: &ShellPresentation,
+    assets: &ModuleDocumentAssets,
+    release: &ModuleReleaseMetadata,
     body_html: &str,
 ) -> String {
     let theme = theme_name(presentation.theme);
     let theme_bootstrap = theme_bootstrap_script(theme);
+    let top_bar_title = presentation
+        .navigation
+        .iter()
+        .filter(|item| navigation_path_matches(&presentation.current_destination, &item.href))
+        .max_by_key(|item| item.href.len())
+        .map_or(presentation.document_title.as_str(), |item| {
+            item.label.as_str()
+        });
     let navigation = presentation
         .navigation
         .iter()
         .map(|item| {
-            let active = if item.href == presentation.current_destination {
+            let active = if navigation_path_matches(&presentation.current_destination, &item.href) {
                 " sidebar-link is-active"
             } else {
                 ""
@@ -188,7 +252,19 @@ pub fn render_module_document(
             )
         })
         .collect::<String>();
-    let hydration = hydration_script_href
+    let stylesheets = assets
+        .stylesheets
+        .iter()
+        .map(|href| {
+            format!(
+                r#"<link rel="stylesheet" href="{}">"#,
+                escape_attribute(href)
+            )
+        })
+        .collect::<String>();
+    let hydration = assets
+        .hydration_script
+        .as_deref()
         .map(|href| {
             format!(
                 r#"<script type="module" src="{}"></script>"#,
@@ -197,30 +273,75 @@ pub fn render_module_document(
         })
         .unwrap_or_default();
     format!(
-        r##"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F172A"><title>{} · Tessara</title><script>{}</script><link rel="stylesheet" href="{}"></head><body class="tessara-app" data-shell-state="{}" data-correlation-id="{}"><main class="app-shell"><aside class="sidebar" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside><section class="app-main" aria-label="Application content"><header class="top-app-bar"><div class="top-app-bar__title-row"><button class="icon-button mobile-nav__toggle" type="button" aria-label="Open navigation" aria-expanded="false">{}</button><span class="top-app-bar__title">{}</span></div><div class="top-app-bar__actions"><label class="search-field"><span class="sr-only">Search Tessara</span><input type="search" placeholder="Search Tessara"></label><div class="theme-toggle"><button class="icon-button theme-toggle__trigger" type="button" aria-label="Theme options" aria-haspopup="menu" aria-expanded="false">{}</button><button class="theme-toggle__scrim" type="button" aria-label="Close theme options"></button><div class="theme-toggle__menu blurred-surface" role="menu" aria-label="Theme options"><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="system">System</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="light">Light</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="dark">Dark</button></div></div><button class="icon-button" type="button" aria-label="Notifications" title="Notifications">{}</button><button class="icon-button" type="button" aria-label="Help" title="Help">{}</button></div></header><div class="app-page"><div id="module-content">{}</div></div></section><button class="mobile-nav__scrim" type="button" aria-label="Close navigation"></button><aside class="mobile-nav__panel blurred-surface" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside></main>{}<script>{}</script></body></html>"##,
+        r##"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F172A"><title>{} · Tessara</title><script>{}</script>{}</head><body class="tessara-app {}" data-shell-state="{}" data-correlation-id="{}"><main class="app-shell"><aside class="sidebar" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside><section class="app-main" aria-label="Application content"><header class="top-app-bar"><div class="top-app-bar__title-row"><button class="icon-button mobile-nav__toggle" type="button" aria-label="Open navigation" aria-expanded="false">{}</button><span class="top-app-bar__title">{}</span></div><div class="top-app-bar__actions"><label class="search-field"><span class="sr-only">Search Tessara</span><input type="search" placeholder="Search Tessara"></label><div class="theme-toggle"><button class="icon-button theme-toggle__trigger" type="button" aria-label="Theme options" aria-haspopup="menu" aria-expanded="false">{}</button><button class="theme-toggle__scrim" type="button" aria-label="Close theme options"></button><div class="theme-toggle__menu blurred-surface" role="menu" aria-label="Theme options"><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="system">System</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="light">Light</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="dark">Dark</button></div></div><button class="icon-button" type="button" aria-label="Notifications" title="Notifications">{}</button><button class="icon-button" type="button" aria-label="Help" title="Help">{}</button></div></header><div class="app-page"><div id="module-content">{}</div></div></section><button class="mobile-nav__scrim" type="button" aria-label="Close navigation"></button><aside class="mobile-nav__panel blurred-surface" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside></main>{}<script>{}</script></body></html>"##,
         escape_attribute(&presentation.locale),
         theme,
         theme,
         escape_text(&presentation.document_title),
         theme_bootstrap,
-        escape_attribute(stylesheet_href),
+        stylesheets,
+        escape_attribute(&module_scope_class(&release.definition_id)),
         document_state_name(presentation.document_state),
         presentation.correlation_id,
         brand_markup(&presentation.return_destination),
         navigation,
         account_markup(&presentation.actor.display_name),
         menu_icon(),
-        escape_text(&presentation.document_title),
+        escape_text(top_bar_title),
         theme_icon(),
         bell_icon(),
         help_icon(),
         body_html,
         brand_markup(&presentation.return_destination),
-        presentation.navigation.iter().map(|item| format!(r#"<a class="sidebar-link" href="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#, escape_attribute(&item.href), navigation_icon(), escape_text(&item.label))).collect::<String>(),
+        presentation.navigation.iter().map(|item| {
+            let active = if navigation_path_matches(&presentation.current_destination, &item.href) { " is-active" } else { "" };
+            format!(r#"<a class="sidebar-link{}" href="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#, active, escape_attribute(&item.href), navigation_icon(), escape_text(&item.label))
+        }).collect::<String>(),
         account_markup(&presentation.actor.display_name),
         hydration,
         shell_interaction_script(),
     )
+}
+
+/// Returns the stable CSS ownership scope shared by direct documents and the
+/// Core lifecycle host for one module definition.
+pub fn module_scope_class(definition_id: &str) -> String {
+    let mut slug = String::with_capacity(definition_id.len());
+    let mut previous_separator = false;
+    for character in definition_id.chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_lowercase());
+            previous_separator = false;
+        } else if !previous_separator && !slug.is_empty() {
+            slug.push('-');
+            previous_separator = true;
+        }
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    format!("module-scope--{slug}")
+}
+
+/// Matches a current document route to its manifest navigation destination.
+/// Segment boundaries prevent `/components-old` from activating Components.
+pub fn navigation_path_matches(current_path: &str, navigation_href: &str) -> bool {
+    let current = current_path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(current_path)
+        .trim_end_matches('/');
+    let href = navigation_href
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(navigation_href)
+        .trim_end_matches('/');
+    current == href
+        || (!href.is_empty()
+            && href != "/"
+            && current
+                .strip_prefix(href)
+                .is_some_and(|suffix| suffix.starts_with('/')))
 }
 
 fn brand_markup(href: &str) -> String {
@@ -303,16 +424,21 @@ pub fn escape_attribute(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "components")]
     use chrono::{Duration, Utc};
     use sha2::{Digest, Sha256};
+    #[cfg(feature = "components")]
     use tessara_module_contract::{
-        ModuleDefinitionId, OriginalActorProjectionV1, ShellDocumentStateV1, ShellThemeV1,
+        ModuleDefinitionId, NavigationContributionId, NavigationProjectionV1,
+        OriginalActorProjectionV1, ShellDocumentStateV1, ShellThemeV1,
     };
 
     use super::*;
 
+    #[cfg(feature = "components")]
     #[test]
     fn complete_document_is_escaped_and_no_javascript_useful() {
+        use leptos::prelude::*;
         let now = Utc::now();
         let context = ShellContextV1 {
             schema_version: 1,
@@ -325,7 +451,14 @@ mod tests {
                 email: None,
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![],
+            navigation: vec![NavigationProjectionV1 {
+                contribution_id: NavigationContributionId::new(
+                    "tessara.reference.module-sdk.navigation",
+                )
+                .unwrap(),
+                label: "SDK Reference".into(),
+                href: "/reference/module-sdk".into(),
+            }],
             return_destination: "/administration/modules".into(),
             locale: "en-US".into(),
             time_zone: "America/New_York".into(),
@@ -336,14 +469,24 @@ mod tests {
         };
         let presentation = ShellPresentation::from_verified_context(
             &context,
-            "/reference/module-sdk",
-            "Reference",
+            "/reference/module-sdk/diagnostics",
+            "Module SDK diagnostics",
         );
-        let html = render_module_document(
+        let html = render_module_view_document(
             &presentation,
-            "/_tessara/modules/example/1.0.0/sha256:abc/module-shell.css",
+            &ModuleDocumentAssets {
+                stylesheets: vec![
+                    "/_tessara/modules/example/1.0.0/sha256:abc/module-ui.css".into(),
+                ],
+                hydration_script: None,
+            },
+            &ModuleReleaseMetadata {
+                definition_id: "tessara.reference.module-sdk".into(),
+                release_version: "1.0.1".into(),
+                asset_digest: "sha256:abc".into(),
+            },
             None,
-            "<p>Recovery</p>",
+            || view! { <p>"Recovery"</p> },
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("data-shell-state=\"recovery\""));
@@ -351,19 +494,45 @@ mod tests {
         assert!(html.contains("tessara.themePreference"));
         assert!(html.contains("&lt;Operator&gt;"));
         assert!(html.contains("<div id=\"module-content\"><p>Recovery</p></div>"));
+        assert!(html.contains("module-ui.css"));
+        assert!(html.contains("module-scope--tessara-reference-module-sdk"));
+        assert!(html.contains(r#"class="top-app-bar__title">SDK Reference</span>"#));
+        assert_eq!(html.matches("sidebar-link is-active").count(), 2);
+        assert!(html.contains(r#"name="tessara-module-release" content="1.0.1""#));
         assert!(!html.contains("type=\"module\""));
     }
 
     #[test]
     fn published_stylesheet_digest_matches_canonical_bytes() {
-        assert!(MODULE_SHELL_CSS.contains("@media (max-width: 780px)"));
+        assert!(MODULE_UI_CSS.contains("@media (max-width: 780px)"));
+        assert!(MODULE_UI_CSS.contains(".app-shell"));
+        assert!(MODULE_UI_CSS.contains(".data-table"));
         assert_eq!(
-            format!("{:x}", Sha256::digest(MODULE_SHELL_CSS.as_bytes())),
-            MODULE_SHELL_CSS_SHA256,
+            format!("{:x}", Sha256::digest(MODULE_UI_CSS.as_bytes())),
+            MODULE_UI_CSS_SHA256,
         );
         assert_eq!(
             format!("{:x}", Sha256::digest(MODULE_SHELL_JS.as_bytes())),
             MODULE_SHELL_JS_SHA256,
+        );
+    }
+
+    #[test]
+    fn navigation_matching_uses_route_boundaries_and_nested_routes() {
+        assert!(navigation_path_matches("/dashboards", "/dashboards"));
+        assert!(navigation_path_matches(
+            "/dashboards/42/edit?tab=layout",
+            "/dashboards"
+        ));
+        assert!(!navigation_path_matches("/dashboards-old", "/dashboards"));
+        assert!(!navigation_path_matches("/", "/dashboards"));
+    }
+
+    #[test]
+    fn module_scope_is_stable_and_selector_safe() {
+        assert_eq!(
+            module_scope_class("Tessara.Reference/Module SDK"),
+            "module-scope--tessara-reference-module-sdk"
         );
     }
 }

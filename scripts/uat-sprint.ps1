@@ -232,9 +232,9 @@ $independentComponents = @($moduleInventory.entries | Where-Object {
     $_.definition.id -eq "tessara.components"
 })
 if ($independentDashboards.Count -ne 1 -or $independentComponents.Count -ne 1 -or
-    [string]$independentDashboards[0].release.version -cne "3.0.0" -or
-    [string]$independentComponents[0].release.version -cne "1.0.0") {
-    throw "Sprint UAT failure: Sprint 8A requires exactly one real Components 1.0.0 and Dashboard 3.0.0 Release/Instance."
+    [string]$independentDashboards[0].release.version -cne "3.0.1" -or
+    [string]$independentComponents[0].release.version -cne "1.0.1") {
+    throw "Sprint UAT failure: Sprint 8A requires exactly one real Components 1.0.1 and Dashboard 3.0.1 Release/Instance."
 }
 $seedSummary = $null
 if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {

@@ -25,8 +25,8 @@ $expectedNavigation = @(
     "Roles & Access", "Node Types", "Module Management", "Application Composition"
 )
 $expectedModules = [ordered]@{
-    "tessara.components" = [ordered]@{ version = "1.0.0"; instance_id = "142a1ece-f74b-85f6-8ca0-92f4a02e9409"; contribution_id = "tessara.components.navigation"; href = "/components" }
-    "tessara.dashboards" = [ordered]@{ version = "3.0.0"; instance_id = "a6339e9f-1131-870e-aac6-18a8a01e4bbd"; contribution_id = "tessara.dashboards.navigation"; href = "/dashboards" }
+    "tessara.components" = [ordered]@{ version = "1.0.1"; instance_id = "142a1ece-f74b-85f6-8ca0-92f4a02e9409"; contribution_id = "tessara.components.navigation"; href = "/components" }
+    "tessara.dashboards" = [ordered]@{ version = "3.0.1"; instance_id = "a6339e9f-1131-870e-aac6-18a8a01e4bbd"; contribution_id = "tessara.dashboards.navigation"; href = "/dashboards" }
 }
 
 function Assert-Sprint8ADeployedInventory {

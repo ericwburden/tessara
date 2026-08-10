@@ -1069,12 +1069,11 @@ Every row requires automated and manual evidence. No `N/A` is currently
 planned. If a proof becomes unsafe or inapplicable, amend this inventory before
 freeze with a concrete rationale and equal-or-stronger evidence.
 
-The current Playwright acceptance manifest declares 75 exact scenario
-identities. The added identity is `Sprint 7A scoped analytics boundary ›
-Dashboard and Component scopes must share a governing node before disclosure
-or render`; it is mapped to UAT-8A-04 assertion
-`joint-dashboard-component-scope`. This is an inventory declaration, not a
-browser execution result.
+The corrected Playwright acceptance manifest declares 83 exact scenario
+identities. Eight UI-correction identities cover the shared canvas, active
+navigation/title behavior, the required deterministic Component baselines,
+and cross-module parity. This is an inventory declaration, not a browser
+execution result.
 
 ## Required Evidence Inventory
 
@@ -1750,7 +1749,7 @@ result for each exact check identity below:
 | `receipt-chain` | — | Parse and hash the exact passing Readiness and Rehearsal receipts; prove their source/environment and prerequisite binding. |
 | `repository-scope` | — | Reconfirm repository instructions, worktree, branch, sprint scope, and one clean implementation commit. |
 | `clean-source` | `receipt-chain`, `repository-scope` | Recompute commit, tree, dirty state, acceptance-inventory digest, and deployment-input digest and compare them exactly with Rehearsal. |
-| `acceptance-traceability` | `receipt-chain`, `repository-scope` | Reconcile every roadmap exit and acceptance clause with the frozen 75-scenario browser inventory, smoke proof, and UAT-8A-01 through UAT-8A-08. |
+| `acceptance-traceability` | `receipt-chain`, `repository-scope` | Reconcile every roadmap exit and acceptance clause with the frozen 83-scenario browser inventory, smoke proof, and UAT-8A-01 through UAT-8A-08. |
 | `environment-contract` | `receipt-chain`, `repository-scope` | Revalidate the secret-free fingerprint, tools, ports, Compose project/profile, handoff URL, reset authorization, and output-path forms. |
 | `database-contract` | `environment-contract` | Revalidate all six named database variables, pairwise-distinct disposable identities, authenticated reachability, and migration-ledger tables. |
 | `deployment-contract` | `clean-source`, `environment-contract` | Validate Compose/configuration, exact provenance label keys, bootstrap/no-op/teardown/recovery commands, active slot, and canonical restoration command without building product images. |
@@ -2153,9 +2152,9 @@ human-readable summary.
 | Core Dataset compatibility | typed Dataset-major-line reference and versioned catalog/schema/distinct/execution/compatibility operations | no private DTO/SQL/credential; wrong audience/scope/version and outage do not disclose or fall back |
 | Module configuration and diagnostics | Manifest schema v1 defaults `Components`/`5`; real image command paths; selected Dataset binding compatibility/health observation | unknown schema/field, invalid label, 0/31 timeout and wrong authority rejected; no raw references/secrets; command paths exist in image |
 | Dashboard dependency | v3 provider binding; exact predecessor/successor and action placements; authorized Dashboard-scope intersection; exact ComponentVersion resource assertion; one common governing node; structured semantic evidence | no old owner/type or blocked/disjoint-scope metadata/title/data disclosure; disjoint render denied; Defer/Upgrade/Replace/Remove and Component outage/recovery cannot pass from broad labels |
-| Active first-party acceptance inputs | exact v3 Component and nested typed Dataset-reference fixtures; 75 exact Playwright identities | retired normalization aliases, flat Dataset-major fields, copied counts, or unmanifested scenario changes rejected |
+| Active first-party acceptance inputs | exact v3 Component and nested typed Dataset-reference fixtures; 83 exact Playwright identities | retired normalization aliases, flat Dataset-major fields, copied counts, or unmanifested scenario changes rejected |
 | Fresh bootstrap | destructive owner-ordered seed plus generic lockfile-owned dependency validation and exact 7-shell/8-version/7-placement idempotent seed | ambiguous or mismatched target, altered payload/request/apply/owner/audience, expiry, and replay rejected; no cross-owner or pre-validation writes; exact predecessor/successor/action identities; second run no-op; failed partial topology never reused |
-| Component release transition | source-built compatible `0.9.0` and candidate `1.0.0`; exact Supervisor/Compose one-owner deltas | candidate relabel rejected; release/binary identities distinct; unrelated owners absent from plan and unchanged in snapshots |
+| Component release transition | source-built compatible `0.9.0` and corrected candidate `1.0.1`; exact Supervisor/Compose one-owner deltas | candidate relabel rejected; release/binary identities distinct; unrelated owners absent from plan and unchanged in snapshots |
 | Core ownership | generic platform integration only | Component product storage/code/routes/adapter/readers absent |
 
 ## Source Provenance, Schema Baseline, And Evidence Rules
@@ -2531,3 +2530,46 @@ Because the UAT diagnostic lane failed in two consecutive rehearsals, this
 focused reproducer must pass on the clean correction commit before the next
 formal launch. It remains non-authoritative and cannot substitute for complete
 Readiness and Rehearsal results from the same corrected source and environment.
+
+### Sprint 8A Module UI SDK correction boundary
+
+Closeout inspection found a product architecture defect against AC-07, AC-15,
+UAT-8A-01, and the Independent Module Pathway: Components used handwritten
+structural HTML, DOM construction, and an independent stylesheet instead of
+the canonical Module UI SDK. Dashboard still carried a copied shared-style
+snapshot, Core did not import the same canonical canvas rules, and lifecycle
+navigation displayed the generic title `Module` instead of the active manifest
+navigation label. The visible result was inconsistent Components styling, a
+Core canvas color that differed from Dashboard, and a Dashboard top title that
+did not match its navigation entry. This is classified as one consolidated
+`product` defect with architecture, visual-continuity, hydration, asset-
+ownership, and lifecycle-title subtypes. All earlier Sprint 8A candidate
+evidence is superseded for certification; retained receipts remain immutable
+diagnostic history.
+
+The correction establishes one canonical presentation path:
+
+- `tessara-module-ui` `0.3.0`, design-system asset ABI `2.0.0`, and conformance
+  suite `1.2.0` own resets, themes, canvas, shell, and shared primitives;
+- Core imports that exact CSS source; direct module documents load it plus
+  namespace-rooted product CSS, while lifecycle navigation loads product CSS
+  only;
+- Components, Dashboard, Scoped Records, and the SDK reference module render
+  typed Leptos views through the SDK document renderer; no deployed module
+  injects raw structural HTML;
+- Components and Dashboard use the shared lifecycle adapter, and Core derives
+  the active navigation item and top title from the authenticated current
+  route; and
+- corrected immutable releases are Components `1.0.1`, Dashboard `3.0.1`,
+  Scoped Records `1.0.1`, and SDK reference `1.0.1`.
+
+The new `ui-sdk-conformance` implementation proof enumerates every first-party
+manifest, authenticates the exact SDK/design/conformance tuple and CSS digest,
+rejects raw HTML/DOM construction, copied/generic product styles and product
+token declarations, and verifies canonical primitive styling and canvas
+ownership. Focused visual parity must additionally prove direct-load versus
+lifecycle navigation title, active navigation, computed tokens, background,
+typography, controls, tables/dialogs, responsive behavior, accessibility,
+hydration, and clean console output. Formal Readiness, Candidate Rehearsal,
+Preflight, SIT, and UAT have not run for this corrected identity and remain
+required before closeout.

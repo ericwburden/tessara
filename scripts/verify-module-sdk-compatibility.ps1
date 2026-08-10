@@ -21,20 +21,24 @@ $supported = [ordered]@{
     core_release = "0.1.0"
     shell_context_schema = "1.0.0"
     module_control_protocol = "1.1.0"
-    module_contract = "0.2.0"
-    module_runtime = "0.2.0"
-    module_ui = "0.2.0"
-    design_system_asset_abi = "1.0.0"
-    conformance_suite = "1.1.0"
+    module_contract = "0.3.0"
+    module_runtime = "0.3.0"
+    module_ui = "0.3.0"
+    design_system_asset_abi = "2.0.0"
+    conformance_suite = "1.2.0"
 }
 $inventory = [Collections.Generic.List[object]]::new()
 
 Push-Location $repoRoot
 try {
     $manifestRecords = [Collections.Generic.List[object]]::new()
-    foreach ($path in @(
-        "crates/tessara-dashboard-module/manifest.json",
-        "crates/tessara-reference-module-sdk/manifest.json",
+    $firstPartyManifests = @(Get-ChildItem -LiteralPath "crates" -Recurse -File -Filter "manifest.json" |
+        ForEach-Object { [IO.Path]::GetRelativePath($repoRoot, $_.FullName) } |
+        Sort-Object)
+    if ($firstPartyManifests.Count -eq 0) {
+        throw "No first-party module manifests were discovered"
+    }
+    foreach ($path in @($firstPartyManifests) + @(
         "crates/tessara-module-contract/tests/fixtures/valid-manifest.json"
     )) {
         $manifestRecords.Add([pscustomobject]@{

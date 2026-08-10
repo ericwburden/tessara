@@ -45,7 +45,7 @@ extraction must use `phase8-module-extraction`, bind
 `docs/architecture/module-extraction-playbook.md`, and name the exact Module
 Definition and Core transition identity being replaced. The contract validator
 requires all playbook proof classes, including owner behavior, consumer
-cutover, Core subtraction, inventory/navigation, fresh seed, clean
+cutover, UI SDK conformance, Core subtraction, inventory/navigation, fresh seed, clean
 materialization, semantic no-op, failure recovery, fixtures, runner self-tests,
 deployed smoke, independent upgrade/rollback, and UAT readiness. This prevents
 a future extraction from entering certification with a known delivery surface
@@ -95,7 +95,8 @@ tracked validation contract. The result is non-authoritative and records:
 - every selected known target, exact command, result, and evidence reference;
 - clean-disposable-environment status where required;
 - materialization, semantic no-op, failure containment, recovery, fixture,
-  runner, smoke, and acceptance proofs selected by the affected domains;
+  runner, smoke, UI SDK/visual parity, and acceptance proofs selected by the
+  affected domains;
 - zero known failures; and
 - cleanup/restoration status.
 

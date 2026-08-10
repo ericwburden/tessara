@@ -130,6 +130,7 @@ try {
         "static-quality",
         "contract-boundary",
         "owner-product",
+        "ui-sdk-conformance",
         "consumer-cutover",
         "core-subtraction",
         "inventory-navigation",

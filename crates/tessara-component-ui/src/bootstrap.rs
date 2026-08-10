@@ -1,0 +1,78 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ComponentDirectoryItem {
+    pub component_id: String,
+    pub name: String,
+    pub slug: String,
+    pub component_type: String,
+    pub publication_state: String,
+    pub manageable: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ComponentVersionBootstrap {
+    pub component_version_id: String,
+    pub component_type: String,
+    pub publication_state: String,
+    pub lifecycle_state: String,
+    pub resource_revision: u64,
+    pub version_label: String,
+    #[serde(default)]
+    pub version_note: String,
+    #[serde(default)]
+    pub config: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ComponentDefinitionBootstrap {
+    pub component_id: String,
+    pub name: String,
+    pub slug: String,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub versions: Vec<ComponentVersionBootstrap>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "route", rename_all = "snake_case")]
+pub enum ComponentRouteBootstrap {
+    Directory {
+        components: Vec<ComponentDirectoryItem>,
+        can_manage: bool,
+    },
+    Create {
+        datasets: Value,
+        dataset_error: Option<String>,
+    },
+    Detail {
+        component: ComponentDefinitionBootstrap,
+        manageable: bool,
+    },
+    Edit {
+        component: ComponentDefinitionBootstrap,
+        datasets: Value,
+        dataset_error: Option<String>,
+    },
+    Versions {
+        component: ComponentDefinitionBootstrap,
+        manageable: bool,
+    },
+    View {
+        component: ComponentDefinitionBootstrap,
+        manageable: bool,
+    },
+}
+
+impl ComponentRouteBootstrap {
+    pub fn component_ref(&self) -> Option<String> {
+        match self {
+            Self::Detail { component, .. }
+            | Self::Edit { component, .. }
+            | Self::Versions { component, .. }
+            | Self::View { component, .. } => Some(component.slug.clone()),
+            Self::Directory { .. } | Self::Create { .. } => None,
+        }
+    }
+}

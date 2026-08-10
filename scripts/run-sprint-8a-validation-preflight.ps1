@@ -54,7 +54,7 @@ function Get-Sprint8APreflightDeclarations {
         [pscustomobject][ordered]@{
             name = "acceptance-traceability"
             depends_on = @("receipt-chain", "repository-scope")
-            command = "reconcile Sprint 8A clauses with 75 browser identities, smoke, and UAT-8A-01 through UAT-8A-08"
+            command = "reconcile Sprint 8A clauses with 83 browser identities, smoke, and UAT-8A-01 through UAT-8A-08"
             failure_classification = "product"
         }
         [pscustomobject][ordered]@{
@@ -2403,11 +2403,11 @@ function Assert-Sprint8APreflightAcceptanceTraceability {
     }
     if (($manifest.schema_version -isnot [int] -and $manifest.schema_version -isnot [long]) -or
         [int]$manifest.schema_version -ne 2 -or
-        [int]$manifest.expected_total -ne 75) {
-        throw "Sprint 8A Playwright acceptance manifest is not the exact schema-v2 75-scenario inventory."
+        [int]$manifest.expected_total -ne 83) {
+        throw "Sprint 8A Playwright acceptance manifest is not the exact schema-v2 83-scenario inventory."
     }
     $identities = @($manifest.files | ForEach-Object { @($_.tests) })
-    if ($identities.Count -ne 75 -or @($identities | Sort-Object -Unique).Count -ne 75) {
+    if ($identities.Count -ne 83 -or @($identities | Sort-Object -Unique).Count -ne 83) {
         throw "Sprint 8A Playwright acceptance identities are incomplete or duplicated."
     }
     foreach ($file in @($manifest.files)) {
@@ -2478,7 +2478,7 @@ function Assert-Sprint8APreflightAcceptanceTraceability {
         })
         smoke_runner = "scripts/smoke-sprint-8a.ps1"
     }) | Out-Null
-    "acceptance traceability retains 19 clauses, 75 browser identities, smoke, and eight manual scenarios"
+    "acceptance traceability retains 19 clauses, 83 browser identities, smoke, and eight manual scenarios"
 }
 
 function Assert-Sprint8APreflightEnvironmentContract {
@@ -2766,11 +2766,11 @@ function Assert-Sprint8APreflightDeploymentContract {
     $expectedModuleLabels = [ordered]@{
         components = [ordered]@{
             "com.tessara.module-definition" = "tessara.components"
-            "com.tessara.module-release" = "1.0.0"
+            "com.tessara.module-release" = "1.0.1"
         }
         dashboards = [ordered]@{
             "com.tessara.module-definition" = "tessara.dashboards"
-            "com.tessara.module-release" = "3.0.0"
+            "com.tessara.module-release" = "3.0.1"
         }
     }
     $labelKeys = @(

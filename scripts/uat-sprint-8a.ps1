@@ -769,8 +769,8 @@ function Assert-UatInventoryPredicate {
             "exact_real_modules" {
                 $actual = @($document.module_inventory | ForEach-Object { "$([string]$_.definition_id)|$([string]$_.release_version)|$([string]$_.instance_id)" } | Sort-Object)
                 $expected = @(
-                    "tessara.components|1.0.0|142a1ece-f74b-85f6-8ca0-92f4a02e9409",
-                    "tessara.dashboards|3.0.0|a6339e9f-1131-870e-aac6-18a8a01e4bbd"
+                    "tessara.components|1.0.1|142a1ece-f74b-85f6-8ca0-92f4a02e9409",
+                    "tessara.dashboards|3.0.1|a6339e9f-1131-870e-aac6-18a8a01e4bbd"
                 ) | Sort-Object
                 if (($actual -join "`n") -cne ($expected -join "`n")) {
                     throw "Components and Dashboard do not appear exactly once through their real release/instance identities."

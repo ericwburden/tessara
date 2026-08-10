@@ -131,8 +131,12 @@ Write the plan in Markdown with these sections:
 For a Phase 8 extraction, also include the playbook's complete Core subtraction
 inventory, provider/consumer edge inventory, target ownership table, fresh
 materialization/seed graph, canonical fixture inventory, and proof-class-to-
-command matrix. Reusing the architecture without these delivery details is not
-an implementation-ready plan.
+command matrix. Include an accepted pre-extraction visual and interaction
+baseline plus a UI ownership inventory for markup, SDK primitives, styles,
+assets, SSR/hydration, lifecycle behavior, navigation title/state, and
+responsive behavior. Map a focused visual reproducer and
+`ui-sdk-conformance` target before consumer cutover. Reusing the architecture
+without these delivery details is not an implementation-ready plan.
 
 Use repository evidence to make the plan concrete, but do not make speculative
 code edits. Keep scope bounded by the roadmap. A slice must produce a coherent,
@@ -198,6 +202,9 @@ Before declaring kickoff complete, verify that:
   rollback are covered where applicable
 - implementation slices have a dependency-valid order and testable boundaries
 - required harness and fixture changes are paired with their product slices
+- every extracted UI has an accepted baseline, canonical SDK ownership map,
+  namespaced product-style inventory, direct/lifecycle parity target, and
+  mandatory passing `ui-sdk-conformance` implementation target
 - acceptance commands, roles, environments, data, and evidence destinations
   are concrete
 - assumptions and unresolved decisions are visible and no blocker is hidden

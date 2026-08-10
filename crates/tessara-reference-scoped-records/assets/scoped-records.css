@@ -1,0 +1,492 @@
+/* Scoped Records product-only styles. Canonical primitives are owned by tessara-module-ui. */
+.module-scope--tessara-reference-scoped-records .scoped-records-page {
+  gap: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-module-content {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-breadcrumb a {
+  color: var(--semantic-link);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-heading > div:first-child {
+  min-width: 0;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-heading h1 {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  letter-spacing: -0.025em;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-heading h1::after {
+  display: block;
+  width: 3.2rem;
+  height: 2px;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--semantic-primary), var(--semantic-warning));
+  content: "";
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-heading p,
+.module-scope--tessara-reference-scoped-records .scoped-records-card p {
+  margin: 0.4rem 0 0;
+  color: var(--color-muted);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-scope-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  border: 1px solid var(--semantic-primary-border);
+  border-radius: var(--radius);
+  background: var(--semantic-primary-soft);
+  padding: 0.8rem 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-scope-summary > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-scope-summary span {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-toolbar {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1fr) minmax(14rem, auto) auto;
+  gap: 0.65rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-toolbar input,
+.module-scope--tessara-reference-scoped-records .scoped-records-toolbar select,
+.module-scope--tessara-reference-scoped-records .scoped-records-form input,
+.module-scope--tessara-reference-scoped-records .scoped-records-form select {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  color: var(--color-text);
+  padding: 0 0.8rem;
+  font: inherit;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table {
+  width: 100%;
+  min-width: 46rem;
+  border-collapse: collapse;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table th,
+.module-scope--tessara-reference-scoped-records .scoped-records-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.8rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table thead th {
+  color: var(--color-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table tbody tr:nth-child(odd) {
+  background: var(--color-table-row);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table tbody th {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-table code {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-primary-link {
+  color: var(--semantic-link);
+  font-weight: 800;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.85fr);
+  gap: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-card {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-panel) 84%, var(--color-control));
+  padding: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-card h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-card dl {
+  display: grid;
+  margin: 0 -1rem -1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-card dl > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.65fr) minmax(0, 1fr);
+  gap: 1rem;
+  border-top: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-card dt,
+.module-scope--tessara-reference-scoped-records .scoped-records-auth-context span {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-auth-context {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-auth-context > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-notice,
+.module-scope--tessara-reference-scoped-records .scoped-records-validation {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: var(--radius);
+  background: var(--semantic-info-soft);
+  padding: 0.8rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-validation {
+  border-color: var(--semantic-success-border);
+  background: var(--semantic-success-soft);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-notice span,
+.module-scope--tessara-reference-scoped-records .scoped-records-validation span,
+.module-scope--tessara-reference-scoped-records .scoped-records-empty span {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-form {
+  width: min(52rem, 100%);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-form-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-form-grid label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 800;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-tabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-tabs a {
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted);
+  padding: 0.6rem 0.35rem;
+  font-weight: 800;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-tabs a.is-active {
+  border-bottom-color: var(--semantic-primary);
+  color: var(--semantic-primary);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.3rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid article > div {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1rem;
+  color: var(--semantic-primary);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid article > strong,
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid article > div > strong,
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid small {
+  color: var(--color-muted);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-empty {
+  display: grid;
+  place-items: center;
+  gap: 0.35rem;
+  min-height: 8rem;
+  text-align: center;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-empty-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  color: var(--semantic-success);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-treatment {
+  display: grid;
+  justify-items: start;
+  gap: 0.8rem;
+  border: 1px solid var(--semantic-warning-border);
+  border-radius: var(--radius);
+  background: var(--semantic-warning-soft);
+  padding: 1.25rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-treatment__eyebrow {
+  color: var(--semantic-warning);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-treatment h1,
+.module-scope--tessara-reference-scoped-records .scoped-records-state-treatment p,
+.module-scope--tessara-reference-scoped-records .scoped-records-state-context h2,
+.module-scope--tessara-reference-scoped-records .scoped-records-state-context dl {
+  margin: 0;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-treatment p {
+  max-width: 48rem;
+  color: var(--color-muted);
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-context {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 1rem 1.25rem;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-context dl {
+  display: grid;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-context dl > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.5fr) minmax(0, 1fr);
+  gap: 1rem;
+  border-top: 1px solid var(--color-border);
+  padding: 0.7rem 0;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-context dt {
+  color: var(--color-muted);
+  font-weight: 800;
+}
+
+.module-scope--tessara-reference-scoped-records .scoped-records-state-context dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 56rem) {
+  .module-scope--tessara-reference-scoped-records .scoped-records-heading,
+.module-scope--tessara-reference-scoped-records .scoped-records-pagination,
+.module-scope--tessara-reference-scoped-records .scoped-records-card > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-toolbar,
+.module-scope--tessara-reference-scoped-records .scoped-records-detail-grid,
+.module-scope--tessara-reference-scoped-records .scoped-records-diagnostic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-actions,
+.module-scope--tessara-reference-scoped-records .scoped-records-form-actions {
+    justify-content: stretch;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-actions .button,
+.module-scope--tessara-reference-scoped-records .scoped-records-form-actions .button {
+    flex: 1;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-state-context dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}
+
+@media (max-width: 40rem) {
+  .module-scope--tessara-reference-scoped-records .scoped-records-table-wrap {
+    overflow: visible;
+    border: 0;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table thead {
+    display: none;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table tbody tr,
+.module-scope--tessara-reference-scoped-records .scoped-records-table tbody tr:nth-child(odd) {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-panel) 84%, var(--color-control));
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table th,
+.module-scope--tessara-reference-scoped-records .scoped-records-table td {
+    display: block;
+    border: 0;
+    padding: 0.18rem 0.85rem;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table tbody th {
+    display: grid;
+    padding-top: 0.85rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table tbody td:last-child {
+    padding-top: 0.45rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .module-scope--tessara-reference-scoped-records .scoped-records-table .status-badge {
+    width: fit-content;
+  }
+}

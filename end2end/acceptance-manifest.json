@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 75,
+  "expected_total": 83,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
@@ -33,12 +33,25 @@
     {
       "path": "components.spec.ts",
       "tests": [
+        "Sprint 8A extracted Component UI parity › Core and enrolled modules share the SDK canvas, tokens, navigation state, and title",
         "Sprint 8A extracted Component UI parity › admin can create, update, publish, and view a major-line table component",
         "Sprint 8A extracted Component UI parity › admin can author, publish, and view visual components",
         "Sprint 8A extracted Component UI parity › exact viewport and theme matrix preserves directory editor detail and viewer usability",
         "Sprint 8A extracted Component UI parity › Dataset provider outage retains unsaved editor state and one retry mutation",
         "Sprint 8A extracted Component UI parity › component editor remains contained and uses an accessible mobile preview dialog",
         "Sprint 8A extracted Component UI parity › Component and Dashboard visuals stay contained at 200% zoom in light and dark themes"
+      ]
+    },
+    {
+      "path": "module-ui-visual.spec.ts",
+      "tests": [
+        "canonical module UI visual baselines › Components directory at 1280 px (light)",
+        "canonical module UI visual baselines › Components editor at 390 px (light)",
+        "canonical module UI visual baselines › Components directory at 1280 px (dark)",
+        "canonical module UI visual baselines › Components editor at 390 px (dark)",
+        "canonical module UI visual baselines › Components versions at 768 px",
+        "canonical module UI visual baselines › Components viewer at 1280 px",
+        "canonical module UI visual baselines › Components, Dashboards, and Scoped Records share one module canvas"
       ]
     },
     {

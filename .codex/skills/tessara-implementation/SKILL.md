@@ -36,6 +36,10 @@ validation skills.
    `docs/architecture/module-extraction-playbook.md` completely. Treat its
    ordered slices, subtraction inventory, and proof classes as governing
    implementation requirements rather than optional validation suggestions.
+8. For module UI work, read the accepted pre-extraction visual/interaction
+   baseline and the UI ownership inventory. Map markup, SDK primitives,
+   tokens/styles, product assets, SSR/hydration, lifecycle navigation, dirty
+   state, and responsive behavior to their canonical owners before editing.
 
 ## Define the forward-only end state
 
@@ -48,6 +52,8 @@ Before editing, identify:
 - the directly affected producers, consumers, tests, seeds, migrations,
   harnesses, and documentation; and
 - focused proof that the resulting behavior and boundary are correct.
+- for a module UI, the accepted baseline, SDK primitive mapping, allowed
+  namespaced product styling, and direct-document/lifecycle parity target.
 
 Map every implementation work item to the exact governing sprint-plan,
 acceptance, architecture, or validation-spec clause it satisfies. Keep that
@@ -113,6 +119,19 @@ that cone instead of silently expanding scope.
 - Consolidate genuinely shared, policy-neutral behavior under one owner. Do
   not copy implementations or create module-definition-specific branches in
   generic platform code.
+- Build module documents and lifecycle views through `tessara-module-ui` and
+  typed Leptos views. The SDK alone owns the outer document, reset, design
+  tokens, themes, shell, and generic primitives. Product CSS must be rooted in
+  its module namespace and may contain only product-specific layout or
+  visualization rules. Raw structural HTML assembly, DOM construction, copied
+  SDK CSS, and product token declarations are forbidden.
+- Core imports the same canonical SDK asset used by direct module documents.
+  Lifecycle navigation loads only namespaced product CSS and must derive the
+  top-bar title and active navigation item from the authenticated route.
+- Generate and source-check first-party module browser assets with
+  `scripts/build-module-ui-browser-assets.ps1`; never hand-copy unverified WASM
+  or bindings into an immutable release, and reconcile every digest before
+  implementation completion.
 
 ### Organize for cohesion and simplicity
 
@@ -176,6 +195,8 @@ Before handoff, answer from the diff and repository rather than intention:
 - Are tests at least as strong, and are warnings still denied?
 - Does the implementation-to-validation-clause mapping have passing focused
   proof for every affected clause?
+- For module UI, does the focused visual reproducer show continuity with the
+  accepted baseline, and does `ui-sdk-conformance` pass without exceptions?
 
 Resolve findings inside the touched cone before declaring implementation
 complete.
@@ -203,6 +224,10 @@ complete.
    `scripts/verify-module-sdk-boundaries.ps1`, or
    `scripts/verify-module-sdk-compatibility.ps1` when their contracts are
    affected.
+   For every module UI or Phase 8 extraction change, also run
+   `pwsh -NoProfile -File scripts/ui-sdk-conformance.ps1` and focused
+   direct-load versus lifecycle-navigation visual/semantic checks before
+   formal validation.
 5. Run `git diff --check` and inspect `git status --short`. Identify preserved
    unrelated user changes explicitly.
 6. Run broader repository checks in proportion to the change and the sprint

@@ -80,10 +80,10 @@ pub const CURRENT_CORE_RELEASE: &str = "0.1.0";
 pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "1.0.0";
 pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.1.0";
 pub const CURRENT_MODULE_CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.2.0";
-pub const CURRENT_MODULE_UI_VERSION: &str = "0.2.0";
-pub const CURRENT_DESIGN_SYSTEM_ASSET_ABI: &str = "1.0.0";
-pub const CURRENT_CONFORMANCE_SUITE_VERSION: &str = "1.1.0";
+pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.3.0";
+pub const CURRENT_MODULE_UI_VERSION: &str = "0.3.0";
+pub const CURRENT_DESIGN_SYSTEM_ASSET_ABI: &str = "2.0.0";
+pub const CURRENT_CONFORMANCE_SUITE_VERSION: &str = "1.2.0";
 
 fn deserialize_schema_version_v1<'de, D>(deserializer: D) -> Result<u16, D::Error>
 where

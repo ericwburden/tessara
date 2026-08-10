@@ -4699,7 +4699,7 @@ version = "0.1.0"
 
 [[package]]
 name = "tessara-component-module"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -4711,6 +4711,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlx",
+ "tessara-component-ui",
  "tessara-components-contract",
  "tessara-composition",
  "tessara-datasets-contract",
@@ -4725,6 +4726,38 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "tessara-component-ui"
+version = "1.0.1"
+dependencies = [
+ "any_spawner",
+ "gloo-net",
+ "icons",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-component-viewer-ui",
+ "tessara-module-contract",
+ "tessara-module-ui",
+ "tessara-web-data-ops",
+ "tessara-web-http",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-component-viewer-ui"
+version = "1.0.1"
+dependencies = [
+ "gloo-timers",
+ "icons",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-module-ui",
+ "tessara-web-http",
 ]
 
 [[package]]
@@ -4767,7 +4800,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-dashboard-module"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -4811,7 +4844,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-dashboard-ui"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "any_spawner",
  "chrono",
@@ -4930,7 +4963,7 @@ version = "0.1.0"
 
 [[package]]
 name = "tessara-module-contract"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "chrono",
@@ -4946,7 +4979,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-module-runtime"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4966,7 +4999,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-module-testkit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "serde",
@@ -4979,7 +5012,7 @@ dependencies = [
 
 [[package]]
 name = "tessara-module-ui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "icons",
@@ -5003,6 +5036,7 @@ dependencies = [
  "axum",
  "base64",
  "chrono",
+ "leptos",
  "serde",
  "serde_json",
  "tessara-module-contract",
@@ -5025,6 +5059,7 @@ dependencies = [
  "base64",
  "chrono",
  "icons",
+ "leptos",
  "serde",
  "serde_json",
  "sha2",

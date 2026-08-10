@@ -261,11 +261,13 @@ mod browser {
     pub(crate) async fn deactivate() {
         next_generation();
         let active = ACTIVE.with(|slot| slot.borrow_mut().take());
-        let Some(active) = active else { return };
-        let _ = invoke(&active.instance, "unmount", None).await;
-        let _ = invoke(&active.instance, "dispose", None).await;
-        remove_navigation_guard(&active._click_guard);
-        remove_stylesheets(&active.stylesheet_ids);
+        if let Some(active) = active {
+            let _ = invoke(&active.instance, "unmount", None).await;
+            let _ = invoke(&active.instance, "dispose", None).await;
+            remove_navigation_guard(&active._click_guard);
+            remove_stylesheets(&active.stylesheet_ids);
+        }
+        clear_module_scope();
     }
 
     fn next_generation() -> u64 {
@@ -521,7 +523,13 @@ mod browser {
 
     fn update_document(bootstrap: &BrowserLifecycleBootstrapV1) {
         if let Some(document) = web_sys::window().and_then(|window| window.document()) {
+            set_module_scope(&document, bootstrap.definition_id.as_str());
             document.set_title(&format!("{} · Tessara", bootstrap.title));
+            let navigation_title = update_active_navigation(&document, &bootstrap.path)
+                .unwrap_or_else(|| bootstrap.title.clone());
+            if let Ok(Some(title)) = document.query_selector(".top-app-bar__title") {
+                title.set_text_content(Some(&navigation_title));
+            }
             if let Some(outlet) = document.get_element_by_id(MODULE_OUTLET_ID) {
                 let _ = outlet.set_attribute("aria-busy", "false");
                 let _ = outlet
@@ -538,6 +546,106 @@ mod browser {
                 }
             }
         }
+    }
+
+    fn set_module_scope(document: &web_sys::Document, definition_id: &str) {
+        let Some(body) = document.body() else { return };
+        let mut classes = body
+            .get_attribute("class")
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter(|name| !name.starts_with("module-scope--"))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        classes.push(tessara_module_ui::module_scope_class(definition_id));
+        let _ = body.set_attribute("class", &classes.join(" "));
+    }
+
+    fn clear_module_scope() {
+        let Some(body) = web_sys::window()
+            .and_then(|window| window.document())
+            .and_then(|document| document.body())
+        else {
+            return;
+        };
+        let classes = body
+            .get_attribute("class")
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter(|name| !name.starts_with("module-scope--"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let _ = body.set_attribute("class", &classes);
+    }
+
+    fn update_active_navigation(
+        document: &web_sys::Document,
+        current_path: &str,
+    ) -> Option<String> {
+        let links = document.query_selector_all(".sidebar-link").ok()?;
+        let current_path = current_path
+            .split(['?', '#'])
+            .next()
+            .unwrap_or(current_path);
+        let mut best: Option<(usize, String)> = None;
+        for index in 0..links.length() {
+            let Some(link) = links
+                .item(index)
+                .and_then(|node| node.dyn_into::<web_sys::Element>().ok())
+            else {
+                continue;
+            };
+            let href = link.get_attribute("href").unwrap_or_default();
+            let href_path = href
+                .split(['?', '#'])
+                .next()
+                .unwrap_or(&href)
+                .trim_end_matches('/');
+            let matches = tessara_module_ui::navigation_path_matches(current_path, href_path);
+            let class = link
+                .get_attribute("class")
+                .unwrap_or_else(|| "sidebar-link".into());
+            let base_class = class
+                .split_whitespace()
+                .filter(|name| *name != "is-active")
+                .collect::<Vec<_>>()
+                .join(" ");
+            let _ = link.set_attribute("class", &base_class);
+            if matches
+                && best
+                    .as_ref()
+                    .is_none_or(|(length, _)| href_path.len() > *length)
+            {
+                best = Some((
+                    href_path.len(),
+                    link.text_content().unwrap_or_default().trim().to_string(),
+                ));
+            }
+        }
+        let (best_length, label) = best?;
+        for index in 0..links.length() {
+            let Some(link) = links
+                .item(index)
+                .and_then(|node| node.dyn_into::<web_sys::Element>().ok())
+            else {
+                continue;
+            };
+            let href = link.get_attribute("href").unwrap_or_default();
+            let href_path = href
+                .split(['?', '#'])
+                .next()
+                .unwrap_or(&href)
+                .trim_end_matches('/');
+            if href_path.len() == best_length
+                && link.text_content().unwrap_or_default().trim() == label
+            {
+                let class = link
+                    .get_attribute("class")
+                    .unwrap_or_else(|| "sidebar-link".into());
+                let _ = link.set_attribute("class", &format!("{class} is-active"));
+            }
+        }
+        Some(label)
     }
 
     fn js_error(error: JsValue) -> String {

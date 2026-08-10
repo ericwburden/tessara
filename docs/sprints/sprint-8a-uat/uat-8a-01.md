@@ -7,7 +7,7 @@
 - Environment: Frozen Sprint 8A UAT candidate
 - User role: Component manager and reader
 - Scenario: Create, edit, publish, view, and retire a disposable Component while confirming all supported seeded kinds and accepted responsive/theme/accessibility behavior remain usable.
-- Acceptance: Product vocabulary and behavior remain familiar; Component documents/assets load through module-owned routes; and light/dark, 1280/768/390 px, keyboard, 200% zoom, no-JavaScript SSR, and hydrated behavior have explicit evidence.
+- Acceptance: Product vocabulary and behavior remain familiar; Component documents/assets load through typed SDK views and module-owned routes; direct load and lifecycle navigation share the canonical canvas, tokens, controls, navigation state, and title; and light/dark, 1280/768/390 px, keyboard, 200% zoom, no-JavaScript SSR, and hydrated behavior have explicit evidence.
 - Machine contract: `docs/sprints/sprint-8a-uat/scenario-contract.json` entry `UAT-8A-01`; its acceptance criteria, semantic predicates, role and actor bindings, preconditions, starting state, ordered steps, and evidence IDs, kinds, cardinalities, and capture metadata are exact.
 
 ## 2. Before You Start
@@ -29,7 +29,7 @@
 
 | Step | User action | Expected result | Required evidence ID(s) | Actual result | Pass/Fail | Notes or defect ID |
 |---|---|---|---|---|---|---|
-| 1 | Open Components from navigation and open every supported seeded kind. | Each list/detail/view route loads with canonical Components wording and recognizable output. | `seeded-kind-route-record` | | | |
+| 1 | Open Components from navigation and open every supported seeded kind. Repeat the directory once by direct URL. | Each list/detail/view route loads with canonical Components wording and recognizable output. The top title is `Components`, Components is the only active matching navigation item, and direct/lifecycle views use the same SDK canvas and computed design tokens. | `seeded-kind-route-record` | | | |
 | 2 | Create the disposable Component, edit it, publish a new version, and open its view. | Each action succeeds and the published view reflects the saved change. | `component-lifecycle-trace` | | | |
 | 3 | Exercise the allowed lifecycle actions, then remove the disposable record. | State changes are clear and cleanup succeeds. | `component-cleanup-record` | | | |
 | 4 | At 1280, 768, and 390 CSS pixels, inspect the directory, editor, detail, and viewer in both light and dark themes; capture the named evidence. | Layout, structured controls, table/visual output, focus, contrast, and vocabulary match the accepted baseline with no horizontal overflow or hidden required action. | `light-1280-screenshot`, `light-768-screenshot`, `light-390-screenshot`, `dark-1280-screenshot`, `dark-768-screenshot`, `dark-390-screenshot` | | | |

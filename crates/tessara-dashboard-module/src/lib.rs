@@ -44,7 +44,7 @@ pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
-pub const MODULE_RELEASE_VERSION: &str = "3.0.0";
+pub const MODULE_RELEASE_VERSION: &str = "3.0.1";
 
 const COMPONENT_PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -480,6 +480,11 @@ async fn dashboard_asset(
         return StatusCode::NOT_FOUND.into_response();
     }
     let (expected_digest, content_type, bytes): (&str, &str, &'static [u8]) = match asset.as_str() {
+        "module-ui.css" => (
+            tessara_module_ui::MODULE_UI_CSS_SHA256,
+            "text/css; charset=utf-8",
+            tessara_module_ui::MODULE_UI_CSS.as_bytes(),
+        ),
         "dashboard.css" => (
             tessara_dashboard_ui::DASHBOARD_CSS_SHA256,
             "text/css; charset=utf-8",
@@ -1239,7 +1244,7 @@ mod tests {
         let manifest: ModuleManifest =
             serde_json::from_str(include_str!("../manifest.json")).expect("valid manifest");
         assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
-        assert_eq!(manifest.release_version.to_string(), "3.0.0");
+        assert_eq!(manifest.release_version.to_string(), "3.0.1");
         let lifecycle = manifest
             .browser_lifecycle
             .as_ref()

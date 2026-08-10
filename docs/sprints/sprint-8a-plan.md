@@ -55,7 +55,7 @@ payloads. Supported import and legacy mapping remain Phase 9 work.
 
 ### In scope
 
-- Create Module Definition `tessara.components`, initial release `1.0.0`, one
+- Create Module Definition `tessara.components`, corrected immutable release `1.0.1`, one
   selected Module Instance, an isolated Component database, and separate
   runtime and schema-migration identities.
 - Move all Component UI, API, version/lifecycle behavior, execution,
@@ -144,7 +144,7 @@ deployment/bootstrap path, end-to-end tests, and acceptance runners.
 
 ### 1. Module, source, UI, and operational ownership
 
-- `tessara.components` release `1.0.0` declares product and operational routes,
+- `tessara.components` release `1.0.1` declares product and operational routes,
   Feature Declarations, capabilities `components:read` and
   `components:manage`, configuration schema v1, database, probes, assets,
   contracts, dependencies, and provenance.
@@ -453,7 +453,10 @@ requires a plan amendment and user approval.
   migrated/retired result, or fallback exists.
 - **AC-07:** Component directory, create, edit, versions, view, every supported
   kind, publication, lifecycle, and execution remain user-visible and
-  behaviorally equivalent through module-owned same-origin routes.
+  behaviorally equivalent through module-owned same-origin routes rendered as
+  typed Leptos views through the canonical Module UI SDK. No handwritten
+  structural HTML, DOM-construction renderer, copied SDK stylesheet, or
+  product-owned design token remains.
 - **AC-08:** Configuration validates exact schema v1, label behavior, timeout
   default/range, authority, persistence, and sanitized diagnostics.
 - **AC-09:** Component stores typed Core-owned Dataset-major-line references and
@@ -480,13 +483,16 @@ requires a plan amendment and user approval.
   partial disposable topology and volumes, and succeeds only after a complete
   from-empty rerun.
 - **AC-14:** A real source-built compatible Component `0.9.0` release upgrades
-  to `1.0.0`, rolls back to `0.9.0`, and restores `1.0.0` through exact
+  to `1.0.1`, rolls back to `0.9.0`, and restores `1.0.1` through exact
   one-owner Supervisor/Compose applies. Component data, identity,
   configuration, routes, and behavior persist while unrelated digests,
   identities, restart counts, data, and availability remain unchanged.
 - **AC-15:** At 1280, 768, and 390 px, dark/light themes, keyboard operation,
   200% zoom, JavaScript-disabled SSR, and hydrated navigation, Component UI
   matches the accepted baseline and produces no hydration or console errors.
+  Direct load and lifecycle navigation use the same SDK version, computed
+  tokens, canvas background, typography, panels, controls, tables, dialogs,
+  responsive behavior, active navigation item, and navigation-label title.
 - **AC-16:** Core's frozen transition catalog contains exactly Forms,
   Workflows, Responses, Datasets, and Migration. Dashboard is absent from Core
   transition inputs, inventory, semantic destination resolution, and default

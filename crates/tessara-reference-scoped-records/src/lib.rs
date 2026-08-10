@@ -9,7 +9,7 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use icons::common::{IconType, StaticSvgElement, icon_registry_getter::get_icon_elements};
+use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -23,11 +23,20 @@ use tessara_module_contract::{
 use tessara_module_runtime::{
     decode_signed_envelope_header, request_correlation_id, verify_shell_context,
 };
-use tessara_module_ui::{ShellPresentation, render_module_document};
+use tessara_module_ui::{
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    MODULE_UI_CSS_SHA256, ModuleDocumentAssets, ModuleReleaseMetadata, PageHeader,
+    ShellPresentation, render_module_view_document,
+};
 use uuid::Uuid;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.reference.scoped-records";
-pub const MODULE_SHELL_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.0/sha256:ca238aca616f242bfa144764a09ae4a76d0b6f075a288604cbb333d90859af46/module-shell.css";
+pub const MODULE_RELEASE_VERSION: &str = "1.0.1";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:a4a6fcde5b81831267ddcfbe94d5a3876d0ecfa98b36e2bd7dd92878206abe8a/module-ui.css";
+pub const SCOPED_RECORDS_CSS: &str = include_str!("../assets/scoped-records.css");
+pub const SCOPED_RECORDS_CSS_SHA256: &str =
+    "ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77";
+pub const SCOPED_RECORDS_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77/scoped-records.css";
 pub const READ_CAPABILITY: &str = "tessara.reference.scoped-records:read";
 pub const MANAGE_CAPABILITY: &str = "tessara.reference.scoped-records:manage";
 
@@ -187,7 +196,8 @@ pub fn router(state: ModuleState) -> Router {
         .route("/health/ready", get(ready))
         .route("/health", get(health_page))
         .route("/diagnostics", get(diagnostics_page))
-        .route(MODULE_SHELL_CSS_PATH, get(module_shell_stylesheet))
+        .route(MODULE_UI_CSS_PATH, get(module_ui_stylesheet))
+        .route(SCOPED_RECORDS_CSS_PATH, get(scoped_records_stylesheet))
         .with_state(state)
 }
 
@@ -721,12 +731,12 @@ async fn directory_page(
     headers: HeaderMap,
     Query(query): Query<DirectoryQuery>,
 ) -> Result<Response, ApiError> {
-    if let Some(content) = product_state_html(&load_security_state(&state.pool).await?) {
+    if let Some(content) = product_state_view(&load_security_state(&state.pool).await?) {
         return shell_page(
             &state,
             &headers,
             &configuration_label(&state.pool).await,
-            &content,
+            content,
         )
         .await;
     }
@@ -737,16 +747,16 @@ async fn directory_page(
         &state,
         &headers,
         &configuration_label(&state.pool).await,
-        &directory_html(&records, &organizations, &query),
+        directory_view(&records, &organizations, &query),
     )
     .await
 }
 
-fn directory_html(
+fn directory_view(
     records: &[ScopedRecord],
     organizations: &[OrganizationAccessProjectionV1],
     query: &DirectoryQuery,
-) -> String {
+) -> AnyView {
     let organization_map = organizations
         .iter()
         .map(|organization| (organization.organization_id, organization))
@@ -756,71 +766,59 @@ fn directory_html(
         .map(|record| {
             let organization = organization_map.get(&record.organization_owner_id);
             let owner_label = organization
-                .map(|value| escape(&value.label))
+                .map(|value| value.label.clone())
                 .unwrap_or_else(|| "Unavailable Organization".into());
-            let authority = if organization.is_some_and(|value| value.can_manage) {
-                "<span class=\"status-badge is-success\">Read · Manage</span>"
-            } else {
-                "<span class=\"status-badge is-info\">Read</span>"
-            };
-            format!(
-                "<tr><th><a class=\"scoped-records-primary-link\" href=\"/reference/scoped-records/records/{id}\">{label}</a><code>{id}</code></th><td>{owner_label}</td><td>{updated}</td><td>{authority}</td></tr>",
-                id = record.id,
-                label = escape(&record.label),
-                updated = record.updated_at.format("%b %e, %Y · %l:%M %p UTC"),
-            )
+            let can_manage = organization.is_some_and(|value| value.can_manage);
+            let badge_class = if can_manage { "status-badge is-success" } else { "status-badge is-info" };
+            let authority = if can_manage { "Read · Manage" } else { "Read" };
+            let id = record.id.to_string();
+            let href = format!("/reference/scoped-records/records/{id}");
+            let label = record.label.clone();
+            let updated = record.updated_at.format("%b %e, %Y · %l:%M %p UTC").to_string();
+            view! {
+                <tr>
+                    <th><a class="scoped-records-primary-link" href=href>{label}</a><code>{id}</code></th>
+                    <td>{owner_label}</td><td>{updated}</td><td><span class=badge_class>{authority}</span></td>
+                </tr>
+            }
         })
-        .collect::<String>();
+        .collect_view();
     let directory = if records.is_empty() {
-        "<div class=\"organization-detail-card empty-state\"><h2>No scoped records</h2><p>No records are owned by an Organization in your current read scope.</p></div>".to_string()
+        view! { <div class="organization-detail-card empty-state"><h2>"No scoped records"</h2><p>"No records are owned by an Organization in your current read scope."</p></div> }.into_any()
     } else {
-        format!(
-            "<div class=\"scoped-records-table-wrap\"><table class=\"scoped-records-table\"><thead><tr><th>Record</th><th>Organization owner</th><th>Updated</th><th>Authority</th></tr></thead><tbody>{rows}</tbody></table></div><div class=\"scoped-records-pagination\"><span>Showing 1-{} of {} records</span><span>Rows <strong>10</strong> · Page 1 of 1</span></div>",
-            records.len(),
-            records.len(),
-        )
+        let count = records.len();
+        view! {
+            <div class="scoped-records-table-wrap"><table class="scoped-records-table"><thead><tr><th>"Record"</th><th>"Organization owner"</th><th>"Updated"</th><th>"Authority"</th></tr></thead><tbody>{rows}</tbody></table></div>
+            <div class="scoped-records-pagination"><span>{format!("Showing 1-{count} of {count} records")}</span><span>"Rows "<strong>"10"</strong>" · Page 1 of 1"</span></div>
+        }.into_any()
     };
+    let selected_organization = query
+        .organization
+        .as_deref()
+        .and_then(|value| Uuid::parse_str(value).ok());
     let options = organizations
         .iter()
         .map(|organization| {
-            let selected = if query
-                .organization
-                .as_deref()
-                .and_then(|value| Uuid::parse_str(value).ok())
-                == Some(organization.organization_id)
-            {
-                " selected"
-            } else {
-                ""
-            };
-            format!(
-                "<option value=\"{}\"{}>{}</option>",
-                organization.organization_id,
-                selected,
-                escape(&organization.label)
-            )
+            let selected = selected_organization == Some(organization.organization_id);
+            let id = organization.organization_id.to_string();
+            let label = organization.label.clone();
+            view! { <option value=id selected=selected>{label}</option> }
         })
-        .collect::<String>();
+        .collect_view();
     let readable = organizations.len();
     let manageable = organizations
         .iter()
         .filter(|organization| organization.can_manage)
         .count();
-    let create_action = if manageable > 0 {
-        format!(
-            "<a class=\"button\" href=\"/reference/scoped-records/records/new\">{}New Record</a>",
-            icon_html(IconType::Plus, "button__icon")
-        )
-    } else {
-        String::new()
-    };
-    let breadcrumb = scoped_records_breadcrumb(&[("Home", Some("/")), ("Scoped Records", None)]);
-    format!(
-        "{breadcrumb}<div class=\"scoped-records-heading\"><div><h1>Scoped Records</h1><p>Organization-owned reference records available within your assigned read scope.</p></div>{create_action}</div>\
-         <div class=\"scoped-records-scope-summary\"><div><strong>Read access across {readable} accessible Organizations</strong><span>{manageable} include manage authority</span></div><a href=\"/administration/roles\">View access</a></div>\
-         <form class=\"scoped-records-toolbar\" method=\"get\" action=\"/reference/scoped-records\"><input type=\"search\" name=\"q\" value=\"{}\" placeholder=\"Search record label, ID, or Organization\"><select name=\"organization\" aria-label=\"Filter by Organization\"><option value=\"\">All accessible Organizations</option>{options}</select><button class=\"button button--secondary\" type=\"submit\">Filter</button></form>{directory}",
-        escape(&query.q)
-    )
+    let create_action = (manageable > 0).then(|| view! { <a class="button" href="/reference/scoped-records/records/new">"New Record"</a> });
+    let q = query.q.clone();
+    view! {
+        {scoped_records_breadcrumb(vec![("Home".into(), Some("/".into())), ("Scoped Records".into(), None)])}
+        <PageHeader title="Scoped Records" description="Organization-owned reference records available within your assigned read scope.">{create_action}</PageHeader>
+        <div class="scoped-records-scope-summary"><div><strong>{format!("Read access across {readable} accessible Organizations")}</strong><span>{format!("{manageable} include manage authority")}</span></div><a href="/administration/roles">"View access"</a></div>
+        <form class="scoped-records-toolbar" method="get" action="/reference/scoped-records"><input type="search" name="q" value=q placeholder="Search record label, ID, or Organization"/><select name="organization" aria-label="Filter by Organization"><option value="">"All accessible Organizations"</option>{options}</select><button class="button button--secondary" type="submit">"Filter"</button></form>
+        {directory}
+    }.into_any()
 }
 
 fn filter_directory_records(
@@ -884,8 +882,8 @@ async fn detail_page(
     headers: HeaderMap,
     Path(record_id): Path<Uuid>,
 ) -> Result<Response, ApiError> {
-    if let Some(content) = product_state_html(&load_security_state(&state.pool).await?) {
-        return shell_page(&state, &headers, "Scoped Records", &content).await;
+    if let Some(content) = product_state_view(&load_security_state(&state.pool).await?) {
+        return shell_page(&state, &headers, "Scoped Records", content).await;
     }
     let auth = authorize(
         &state,
@@ -903,54 +901,56 @@ async fn detail_page(
         .iter()
         .find(|value| value.organization_id == record.organization_owner_id);
     let owner_label = organization
-        .map(|value| escape(&value.label))
+        .map(|value| value.label.clone())
         .unwrap_or_else(|| "Unavailable Organization".into());
     let can_manage = organization.is_some_and(|value| value.can_manage);
-    let edit_action = if can_manage {
-        format!(
-            "<a class=\"button\" href=\"/reference/scoped-records/records/{record_id}/edit\">{}Edit Record</a>",
-            icon_html(IconType::Pencil, "button__icon")
-        )
-    } else {
-        String::new()
-    };
+    let edit_action = can_manage.then(|| {
+        let href = format!("/reference/scoped-records/records/{record_id}/edit");
+        view! { <a class="button" href=href>"Edit Record"</a> }
+    });
     let record_id_text = record_id.to_string();
-    let breadcrumb = scoped_records_breadcrumb(&[
-        ("Home", Some("/")),
-        ("Scoped Records", Some("/reference/scoped-records")),
-        (&record_id_text, None),
-    ]);
-    let body = format!(
-        "{breadcrumb}<div class=\"scoped-records-heading\"><div><h1>{label}</h1><p>{record_id}</p></div><div class=\"scoped-records-actions\"><a class=\"button button--secondary\" href=\"/reference/scoped-records\">Back to Records</a>{edit_action}</div></div>\
-         <div class=\"scoped-records-detail-grid\"><section class=\"scoped-records-card\"><header><div><h2>Record</h2><p>Product data owned by the Scoped Records Module Instance.</p></div><span class=\"status-badge {badge_class}\">{authority}</span></header><dl><div><dt>Record ID</dt><dd><code>{record_id}</code></dd></div><div><dt>Label</dt><dd>{label}</dd></div><div><dt>Organization owner</dt><dd>{owner_label} <code>{owner_id}</code></dd></div><div><dt>Created</dt><dd>{created}</dd></div><div><dt>Last updated</dt><dd>{updated}</dd></div></dl></section>\
-         <aside class=\"scoped-records-card\"><header><div><h2>Authorization context</h2><p>Current Core decision for this module action.</p></div></header><div class=\"scoped-records-auth-context\"><div><span>Capability</span><code>{read_capability}</code></div><div><span>Authorized Organization</span><strong>{owner_label}</strong></div><div><span>Decision freshness</span><span class=\"status-badge is-success\">Current</span></div><div><span>Presenting service</span><code>tessara.reference.scoped-records</code></div></div><div class=\"scoped-records-notice\"><strong>Core credentials are not shared</strong><span>This module received only a short-lived, audience-bound decision.</span></div></aside></div>",
-        label = escape(&record.label),
-        owner_id = record.organization_owner_id,
-        created = record.created_at.format("%b %e, %Y · %l:%M %p UTC"),
-        updated = record.updated_at.format("%b %e, %Y · %l:%M %p UTC"),
-        badge_class = if can_manage { "is-success" } else { "is-info" },
-        authority = if can_manage { "Read · Manage" } else { "Read" },
-        read_capability = READ_CAPABILITY,
-    );
-    shell_page(&state, &headers, &record.label, &body).await
+    let label = record.label.clone();
+    let page_label = label.clone();
+    let owner_id = record.organization_owner_id.to_string();
+    let created = record
+        .created_at
+        .format("%b %e, %Y · %l:%M %p UTC")
+        .to_string();
+    let updated = record
+        .updated_at
+        .format("%b %e, %Y · %l:%M %p UTC")
+        .to_string();
+    let badge_class = if can_manage {
+        "status-badge is-success"
+    } else {
+        "status-badge is-info"
+    };
+    let authority = if can_manage { "Read · Manage" } else { "Read" };
+    let body = view! {
+        {scoped_records_breadcrumb(vec![("Home".into(), Some("/".into())), ("Scoped Records".into(), Some("/reference/scoped-records".into())), (record_id_text.clone(), None)])}
+        <PageHeader title=label.clone() description=record_id_text.clone()><a class="button button--secondary" href="/reference/scoped-records">"Back to Records"</a>{edit_action}</PageHeader>
+        <div class="scoped-records-detail-grid"><section class="scoped-records-card"><header><div><h2>"Record"</h2><p>"Product data owned by the Scoped Records Module Instance."</p></div><span class=badge_class>{authority}</span></header><dl><div><dt>"Record ID"</dt><dd><code>{record_id_text}</code></dd></div><div><dt>"Label"</dt><dd>{label}</dd></div><div><dt>"Organization owner"</dt><dd>{owner_label.clone()}" "<code>{owner_id}</code></dd></div><div><dt>"Created"</dt><dd>{created}</dd></div><div><dt>"Last updated"</dt><dd>{updated}</dd></div></dl></section>
+        <aside class="scoped-records-card"><header><div><h2>"Authorization context"</h2><p>"Current Core decision for this module action."</p></div></header><div class="scoped-records-auth-context"><div><span>"Capability"</span><code>{READ_CAPABILITY}</code></div><div><span>"Authorized Organization"</span><strong>{owner_label}</strong></div><div><span>"Decision freshness"</span><span class="status-badge is-success">"Current"</span></div><div><span>"Presenting service"</span><code>{MODULE_DEFINITION_ID}</code></div></div><div class="scoped-records-notice"><strong>"Core credentials are not shared"</strong><span>"This module received only a short-lived, audience-bound decision."</span></div></aside></div>
+    }.into_any();
+    shell_page(&state, &headers, &page_label, body).await
 }
 
 async fn create_page(
     State(state): State<ModuleState>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    if let Some(content) = product_state_html(&load_security_state(&state.pool).await?) {
-        return shell_page(&state, &headers, "Scoped Records", &content).await;
+    if let Some(content) = product_state_view(&load_security_state(&state.pool).await?) {
+        return shell_page(&state, &headers, "Scoped Records", content).await;
     }
     let organizations = organization_access_projection(&headers)?;
     if !has_manage_authority(&organizations) {
-        return shell_page(&state, &headers, "Scoped Records", &manage_denied_html()).await;
+        return shell_page(&state, &headers, "Scoped Records", manage_denied_view()).await;
     }
     shell_page(
         &state,
         &headers,
         "Create Record",
-        &record_form_html(None, &organizations),
+        record_form_view(None, &organizations),
     )
     .await
 }
@@ -960,8 +960,8 @@ async fn edit_page(
     headers: HeaderMap,
     Path(record_id): Path<Uuid>,
 ) -> Result<Response, ApiError> {
-    if let Some(content) = product_state_html(&load_security_state(&state.pool).await?) {
-        return shell_page(&state, &headers, "Scoped Records", &content).await;
+    if let Some(content) = product_state_view(&load_security_state(&state.pool).await?) {
+        return shell_page(&state, &headers, "Scoped Records", content).await;
     }
     let auth = authorize(
         &state,
@@ -979,21 +979,21 @@ async fn edit_page(
         .iter()
         .any(|value| value.organization_id == record.organization_owner_id && value.can_manage)
     {
-        return shell_page(&state, &headers, "Scoped Records", &manage_denied_html()).await;
+        return shell_page(&state, &headers, "Scoped Records", manage_denied_view()).await;
     }
     shell_page(
         &state,
         &headers,
         "Edit Record",
-        &record_form_html(Some(&record), &organizations),
+        record_form_view(Some(&record), &organizations),
     )
     .await
 }
 
-fn record_form_html(
+fn record_form_view(
     record: Option<&ScopedRecord>,
     organizations: &[OrganizationAccessProjectionV1],
-) -> String {
+) -> AnyView {
     let editing = record.is_some();
     let title = if editing { "Edit Record" } else { "New Record" };
     let submit_label = if editing {
@@ -1013,50 +1013,46 @@ fn record_form_html(
         .iter()
         .filter(|organization| organization.can_manage)
         .map(|organization| {
-            let selected = if record
-                .is_some_and(|record| record.organization_owner_id == organization.organization_id)
-            {
-                " selected"
-            } else {
-                ""
-            };
-            format!(
-                "<option value=\"{}\"{}>{}</option>",
-                organization.organization_id,
-                selected,
-                escape(&organization.label)
-            )
+            let selected = record
+                .is_some_and(|record| record.organization_owner_id == organization.organization_id);
+            let id = organization.organization_id.to_string();
+            let label = organization.label.clone();
+            view! { <option value=id selected=selected>{label}</option> }
         })
-        .collect::<String>();
+        .collect_view();
     let label = record
-        .map(|record| escape(&record.label))
+        .map(|record| record.label.clone())
         .unwrap_or_default();
-    let record_code = record
-        .map(|record| format!("<code>{}</code>", record.id))
-        .unwrap_or_default();
+    let record_code = record.map(|record| view! { <code>{record.id.to_string()}</code> });
     let record_id_text = record.map(|record| record.id.to_string());
     let breadcrumb = if let Some(record_id) = record_id_text.as_deref() {
-        scoped_records_breadcrumb(&[
-            ("Home", Some("/")),
-            ("Scoped Records", Some("/reference/scoped-records")),
+        scoped_records_breadcrumb(vec![
+            ("Home".into(), Some("/".into())),
             (
-                record_id,
-                Some(&format!("/reference/scoped-records/records/{record_id}")),
+                "Scoped Records".into(),
+                Some("/reference/scoped-records".into()),
             ),
-            ("Edit", None),
+            (
+                record_id.into(),
+                Some(format!("/reference/scoped-records/records/{record_id}")),
+            ),
+            ("Edit".into(), None),
         ])
     } else {
-        scoped_records_breadcrumb(&[
-            ("Home", Some("/")),
-            ("Scoped Records", Some("/reference/scoped-records")),
-            ("New Record", None),
+        scoped_records_breadcrumb(vec![
+            ("Home".into(), Some("/".into())),
+            (
+                "Scoped Records".into(),
+                Some("/reference/scoped-records".into()),
+            ),
+            ("New Record".into(), None),
         ])
     };
-    format!(
-        "{breadcrumb}<div class=\"scoped-records-heading\"><div><h1>{title}</h1><p>Manage authority is checked against the selected Organization subtree when saved.</p></div></div>\
-         <form class=\"scoped-records-card scoped-records-form\" method=\"post\" action=\"{action}\"><header><div><h2>Record details</h2><p>Fields and validation belong to Scoped Records.</p></div>{record_code}</header><div class=\"scoped-records-form-grid\"><label><span>Label</span><input name=\"label\" value=\"{label}\" placeholder=\"Enter a clear record label\" maxlength=\"200\" required></label><label><span>Organization owner</span><select name=\"organization_owner_id\" required>{options}</select></label></div><input type=\"hidden\" name=\"idempotency_key\" value=\"{}\"><div class=\"scoped-records-validation\"><strong>Manage authority confirmed</strong><span>Only Organizations covered by your current manage authority are available.</span></div><div class=\"scoped-records-form-actions\"><a class=\"button button--secondary\" href=\"{cancel}\">Cancel</a><button class=\"button\" type=\"submit\">{submit_label}</button></div></form>",
-        Uuid::new_v4(),
-    )
+    let idempotency_key = Uuid::new_v4().to_string();
+    view! {
+        {breadcrumb}<PageHeader title=title description="Manage authority is checked against the selected Organization subtree when saved." />
+        <form class="scoped-records-card scoped-records-form" method="post" action=action><header><div><h2>"Record details"</h2><p>"Fields and validation belong to Scoped Records."</p></div>{record_code}</header><div class="scoped-records-form-grid"><label><span>"Label"</span><input name="label" value=label placeholder="Enter a clear record label" maxlength="200" required/></label><label><span>"Organization owner"</span><select name="organization_owner_id" required>{options}</select></label></div><input type="hidden" name="idempotency_key" value=idempotency_key/><div class="scoped-records-validation"><strong>"Manage authority confirmed"</strong><span>"Only Organizations covered by your current manage authority are available."</span></div><div class="scoped-records-form-actions"><a class="button button--secondary" href=cancel>"Cancel"</a><button class="button" type="submit">{submit_label}</button></div></form>
+    }.into_any()
 }
 
 async fn health_page(
@@ -1076,19 +1072,12 @@ async fn health_page(
         &state,
         &headers,
         "Scoped Records",
-        &format!(
-            "{}<div class=\"scoped-records-heading\"><div><h1>Scoped Records health</h1><p>Module-owned operational detail with Core installation context.</p></div><a class=\"button button--secondary\" href=\"/reference/scoped-records/health\">{}Refresh status</a></div><nav class=\"scoped-records-tabs\"><a class=\"is-active\" href=\"/reference/scoped-records/health\">Health</a><a href=\"/reference/scoped-records/diagnostics\">Diagnostics</a></nav><div class=\"scoped-records-diagnostic-grid\"><article>{}<div><h2>Readiness</h2><strong>{status}</strong><small>Module can serve authorized product requests.</small></div></article><article>{}<div><h2>Liveness</h2><strong>Passing</strong><small>Module process is responding.</small></div></article><article>{}<div><h2>Configuration</h2><strong>Valid</strong><small>Schema v1 · no findings.</small></div></article><article>{}<div><h2>Core authorization</h2><strong>Connected</strong><small>Signed decision exchange is available.</small></div></article></div>",
-            scoped_records_breadcrumb(&[
-                ("Home", Some("/")),
-                ("Scoped Records", Some("/reference/scoped-records")),
-                ("Health & diagnostics", None),
-            ]),
-            icon_html(IconType::RefreshCw, "button__icon"),
-            icon_html(IconType::Activity, "scoped-records-diagnostic-icon"),
-            icon_html(IconType::Activity, "scoped-records-diagnostic-icon"),
-            icon_html(IconType::Activity, "scoped-records-diagnostic-icon"),
-            icon_html(IconType::Activity, "scoped-records-diagnostic-icon"),
-        ),
+        view! {
+            {scoped_records_breadcrumb(vec![("Home".into(), Some("/".into())), ("Scoped Records".into(), Some("/reference/scoped-records".into())), ("Health & diagnostics".into(), None)])}
+            <PageHeader title="Scoped Records health" description="Module-owned operational detail with Core installation context."><a class="button button--secondary" href="/reference/scoped-records/health">"Refresh status"</a></PageHeader>
+            <nav class="scoped-records-tabs"><a class="is-active" href="/reference/scoped-records/health">"Health"</a><a href="/reference/scoped-records/diagnostics">"Diagnostics"</a></nav>
+            <div class="scoped-records-diagnostic-grid"><article><div><h2>"Readiness"</h2><strong>{status}</strong><small>"Module can serve authorized product requests."</small></div></article><article><div><h2>"Liveness"</h2><strong>"Passing"</strong><small>"Module process is responding."</small></div></article><article><div><h2>"Configuration"</h2><strong>"Valid"</strong><small>"Schema v1 · no findings."</small></div></article><article><div><h2>"Core authorization"</h2><strong>"Connected"</strong><small>"Signed decision exchange is available."</small></div></article></div>
+        }.into_any(),
     )
     .await
 }
@@ -1106,18 +1095,16 @@ async fn diagnostics_page(
         &state,
         &headers,
         "Scoped Records",
-        &format!(
-            "{}<div class=\"scoped-records-heading\"><div><h1>Scoped Records health</h1><p>Module-owned operational detail with Core installation context.</p></div><a class=\"button button--secondary\" href=\"/reference/scoped-records/diagnostics\">{}Refresh status</a></div><nav class=\"scoped-records-tabs\"><a href=\"/reference/scoped-records/health\">Health</a><a class=\"is-active\" href=\"/reference/scoped-records/diagnostics\">Diagnostics</a></nav><div class=\"scoped-records-detail-grid scoped-records-diagnostics\"><section class=\"scoped-records-card\"><header><div><h2>Diagnostic context</h2><p>Shareable values are sanitized and contain no claim secrets or Core credentials.</p></div></header><dl><div><dt>Module version</dt><dd>1.0.0</dd></div><div><dt>Module Instance</dt><dd><code>{module_instance}</code></dd></div><div><dt>Database binding</dt><dd><code>tessara_module_scoped_records</code></dd></div><div><dt>Authorization revision</dt><dd><code>auth:{authorization_revision}</code></dd></div><div><dt>Organization revision</dt><dd><code>org:{organization_revision}</code></dd></div></dl></section><aside class=\"scoped-records-card\"><header><div><h2>Recent findings</h2><p>Stable codes from module-owned validation and health checks.</p></div></header><div class=\"scoped-records-empty\">{}<strong>No active findings</strong><span>All required contracts and probes currently pass.</span></div><a class=\"button button--secondary\" download=\"scoped-records-diagnostics.json\" href=\"data:application/json,%7B%22schema_version%22%3A1%2C%22module%22%3A%22tessara.reference.scoped-records%22%7D\">Download sanitized diagnostics</a></aside></div>",
-            scoped_records_breadcrumb(&[
-                ("Home", Some("/")),
-                ("Scoped Records", Some("/reference/scoped-records")),
-                ("Health & diagnostics", None),
-            ]),
-            icon_html(IconType::RefreshCw, "button__icon"),
-            icon_html(IconType::CircleCheck, "scoped-records-empty-icon"),
-            authorization_revision = security.as_ref().map(|value| value.authorization_revision).unwrap_or_default(),
-            organization_revision = security.as_ref().map(|value| value.organization_revision).unwrap_or_default(),
-        ),
+        {
+            let authorization_revision = security.as_ref().map(|value| value.authorization_revision).unwrap_or_default();
+            let organization_revision = security.as_ref().map(|value| value.organization_revision).unwrap_or_default();
+            view! {
+                {scoped_records_breadcrumb(vec![("Home".into(), Some("/".into())), ("Scoped Records".into(), Some("/reference/scoped-records".into())), ("Health & diagnostics".into(), None)])}
+                <PageHeader title="Scoped Records health" description="Module-owned operational detail with Core installation context."><a class="button button--secondary" href="/reference/scoped-records/diagnostics">"Refresh status"</a></PageHeader>
+                <nav class="scoped-records-tabs"><a href="/reference/scoped-records/health">"Health"</a><a class="is-active" href="/reference/scoped-records/diagnostics">"Diagnostics"</a></nav>
+                <div class="scoped-records-detail-grid scoped-records-diagnostics"><section class="scoped-records-card"><header><div><h2>"Diagnostic context"</h2><p>"Shareable values are sanitized and contain no claim secrets or Core credentials."</p></div></header><dl><div><dt>"Module version"</dt><dd>{MODULE_RELEASE_VERSION}</dd></div><div><dt>"Module Instance"</dt><dd><code>{module_instance}</code></dd></div><div><dt>"Database binding"</dt><dd><code>"tessara_module_scoped_records"</code></dd></div><div><dt>"Authorization revision"</dt><dd><code>{format!("auth:{authorization_revision}")}</code></dd></div><div><dt>"Organization revision"</dt><dd><code>{format!("org:{organization_revision}")}</code></dd></div></dl></section><aside class="scoped-records-card"><header><div><h2>"Recent findings"</h2><p>"Stable codes from module-owned validation and health checks."</p></div></header><div class="scoped-records-empty"><strong>"No active findings"</strong><span>"All required contracts and probes currently pass."</span></div><a class="button button--secondary" download="scoped-records-diagnostics.json" href="data:application/json,%7B%22schema_version%22%3A1%2C%22module%22%3A%22tessara.reference.scoped-records%22%7D">"Download sanitized diagnostics"</a></aside></div>
+            }.into_any()
+        },
     )
     .await
 }
@@ -1149,7 +1136,7 @@ async fn configuration_label(pool: &PgPool) -> String {
     .unwrap_or_else(|| "Scoped Records".into())
 }
 
-fn product_state_html(security: &SecurityState) -> Option<String> {
+fn product_state_view(security: &SecurityState) -> Option<AnyView> {
     let (eyebrow, title, message, action_label, action_href) = if !security.enabled
         || security.document_state == "disabled"
     {
@@ -1172,35 +1159,27 @@ fn product_state_html(security: &SecurityState) -> Option<String> {
         return None;
     };
 
-    Some(format!(
-        "{}<section class=\"scoped-records-state-treatment\"><span class=\"scoped-records-state-treatment__eyebrow\">{eyebrow}</span><h1>{title}</h1><p>{message}</p><a class=\"button\" href=\"{action_href}\">{action_label}</a></section>\
-         <section class=\"scoped-records-state-context\"><h2>Protected context</h2><dl><div><dt>Module</dt><dd>tessara.reference.scoped-records</dd></div><div><dt>Lifecycle state</dt><dd>{state}</dd></div><div><dt>Product data</dt><dd>Retained</dd></div></dl></section>",
-        scoped_records_breadcrumb(&[
-            ("Home", Some("/")),
-            ("Scoped Records", Some("/reference/scoped-records")),
-            ("State", None),
-        ]),
-        state = escape(&security.document_state),
-    ))
+    let state = security.document_state.clone();
+    Some(view! {
+        {scoped_records_breadcrumb(vec![("Home".into(), Some("/".into())), ("Scoped Records".into(), Some("/reference/scoped-records".into())), ("State".into(), None)])}
+        <section class="scoped-records-state-treatment"><span class="scoped-records-state-treatment__eyebrow">{eyebrow}</span><h1>{title}</h1><p>{message}</p><a class="button" href=action_href>{action_label}</a></section>
+        <section class="scoped-records-state-context"><h2>"Protected context"</h2><dl><div><dt>"Module"</dt><dd>{MODULE_DEFINITION_ID}</dd></div><div><dt>"Lifecycle state"</dt><dd>{state}</dd></div><div><dt>"Product data"</dt><dd>"Retained"</dd></div></dl></section>
+    }.into_any())
 }
 
-fn manage_denied_html() -> String {
-    format!(
-        "{}<section class=\"scoped-records-state-treatment\"><span class=\"scoped-records-state-treatment__eyebrow\">Scoped action unavailable</span><h1>You can’t manage this record</h1><p>Your current access permits reading Scoped Records, but not creating or changing them.</p><a class=\"button\" href=\"/reference/scoped-records\">Back to Records</a></section>\
-         <section class=\"scoped-records-state-context\"><h2>Protected context</h2><dl><div><dt>Required capability</dt><dd><code>tessara.reference.scoped-records:manage</code></dd></div><div><dt>Current route</dt><dd>Read-only</dd></div><div><dt>Disclosure</dt><dd>No unavailable record details shown</dd></div></dl></section>",
-        scoped_records_breadcrumb(&[
-            ("Home", Some("/")),
-            ("Scoped Records", Some("/reference/scoped-records")),
-            ("Manage access", None),
-        ])
-    )
+fn manage_denied_view() -> AnyView {
+    view! {
+        {scoped_records_breadcrumb(vec![("Home".into(), Some("/".into())), ("Scoped Records".into(), Some("/reference/scoped-records".into())), ("Manage access".into(), None)])}
+        <section class="scoped-records-state-treatment"><span class="scoped-records-state-treatment__eyebrow">"Scoped action unavailable"</span><h1>"You can’t manage this record"</h1><p>"Your current access permits reading Scoped Records, but not creating or changing them."</p><a class="button" href="/reference/scoped-records">"Back to Records"</a></section>
+        <section class="scoped-records-state-context"><h2>"Protected context"</h2><dl><div><dt>"Required capability"</dt><dd><code>{MANAGE_CAPABILITY}</code></dd></div><div><dt>"Current route"</dt><dd>"Read-only"</dd></div><div><dt>"Disclosure"</dt><dd>"No unavailable record details shown"</dd></div></dl></section>
+    }.into_any()
 }
 
 async fn shell_page(
     state: &ModuleState,
     headers: &HeaderMap,
     heading: &str,
-    body: &str,
+    body: AnyView,
 ) -> Result<Response, ApiError> {
     let correlation_id =
         request_correlation_id(headers).map_err(|_| ApiError::shell_unavailable())?;
@@ -1229,114 +1208,55 @@ async fn shell_page(
             .unwrap_or("/reference/scoped-records"),
         heading,
     );
-    Ok(Html(render_module_document(
+    Ok(Html(render_module_view_document(
         &presentation,
-        MODULE_SHELL_CSS_PATH,
+        &ModuleDocumentAssets {
+            stylesheets: vec![MODULE_UI_CSS_PATH.into(), SCOPED_RECORDS_CSS_PATH.into()],
+            hydration_script: None,
+        },
+        &ModuleReleaseMetadata {
+            definition_id: MODULE_DEFINITION_ID.into(),
+            release_version: MODULE_RELEASE_VERSION.into(),
+            asset_digest: format!("sha256:{MODULE_UI_CSS_SHA256}"),
+        },
         None,
-        body,
+        || view! { <div class="scoped-records-module-content">{body}</div> },
     ))
     .into_response())
 }
 
-async fn module_shell_stylesheet() -> Response {
+async fn module_ui_stylesheet() -> Response {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-        tessara_module_ui::MODULE_SHELL_CSS,
+        tessara_module_ui::MODULE_UI_CSS,
     )
         .into_response()
 }
 
-fn escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+async fn scoped_records_stylesheet() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        SCOPED_RECORDS_CSS,
+    )
+        .into_response()
 }
 
-fn scoped_records_breadcrumb(items: &[(&str, Option<&str>)]) -> String {
-    let mut html =
-        "<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol class=\"breadcrumb__list\">"
-            .to_string();
-    for (index, (label, href)) in items.iter().enumerate() {
+fn scoped_records_breadcrumb(items: Vec<(String, Option<String>)>) -> AnyView {
+    let mut children = Vec::<AnyView>::new();
+    for (index, (label, href)) in items.into_iter().enumerate() {
         if index > 0 {
-            html.push_str("<li class=\"breadcrumb__separator\" aria-hidden=\"true\">");
-            html.push_str(&icon_html(
-                IconType::ChevronRight,
-                "breadcrumb__separator-icon",
-            ));
-            html.push_str("</li>");
+            children.push(view! { <BreadcrumbSeparator /> }.into_any());
         }
-        html.push_str("<li class=\"breadcrumb__item\">");
         if let Some(href) = href {
-            html.push_str(&format!(
-                "<a class=\"breadcrumb__link\" href=\"{}\">{}</a>",
-                escape(href),
-                escape(label)
-            ));
+            children.push(view! { <BreadcrumbItem><BreadcrumbLink href=href>{label}</BreadcrumbLink></BreadcrumbItem> }.into_any());
         } else {
-            html.push_str(&format!(
-                "<span class=\"breadcrumb__page\" aria-current=\"page\">{}</span>",
-                escape(label)
-            ));
-        }
-        html.push_str("</li>");
-    }
-    html.push_str("</ol></nav>");
-    html
-}
-
-fn icon_html(icon: IconType, class: &str) -> String {
-    let mut html = format!(
-        "<svg class=\"{}\" xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">",
-        escape(class)
-    );
-    if let Some(elements) = get_icon_elements(icon) {
-        for element in elements {
-            match element {
-                StaticSvgElement::Path { d } => {
-                    html.push_str(&format!("<path d=\"{d}\"></path>"));
-                }
-                StaticSvgElement::Circle { cx, cy, r } => {
-                    html.push_str(&format!(
-                        "<circle cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\"></circle>"
-                    ));
-                }
-                StaticSvgElement::Rect {
-                    x,
-                    y,
-                    width,
-                    height,
-                    rx,
-                    ry,
-                } => {
-                    html.push_str(&format!(
-                        "<rect x=\"{x}\" y=\"{y}\" width=\"{width}\" height=\"{height}\"{}{}></rect>",
-                        rx.map(|value| format!(" rx=\"{value}\"")).unwrap_or_default(),
-                        ry.map(|value| format!(" ry=\"{value}\"")).unwrap_or_default(),
-                    ));
-                }
-                StaticSvgElement::Ellipse { cx, cy, rx, ry } => {
-                    html.push_str(&format!(
-                        "<ellipse cx=\"{cx}\" cy=\"{cy}\" rx=\"{rx}\" ry=\"{ry}\"></ellipse>"
-                    ));
-                }
-                StaticSvgElement::Line { x1, y1, x2, y2 } => {
-                    html.push_str(&format!(
-                        "<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\"></line>"
-                    ));
-                }
-                StaticSvgElement::Polyline { points } => {
-                    html.push_str(&format!("<polyline points=\"{points}\"></polyline>"));
-                }
-                StaticSvgElement::Polygon { points } => {
-                    html.push_str(&format!("<polygon points=\"{points}\"></polygon>"));
-                }
-            }
+            children.push(
+                view! { <BreadcrumbItem><BreadcrumbPage>{label}</BreadcrumbPage></BreadcrumbItem> }
+                    .into_any(),
+            );
         }
     }
-    html.push_str("</svg>");
-    html
+    view! { <Breadcrumb>{children}</Breadcrumb> }.into_any()
 }
 
 fn require_private_key(headers: &HeaderMap) -> Result<(), ApiError> {
@@ -1438,6 +1358,10 @@ impl IntoResponse for ApiError {
 mod tests {
     use super::*;
 
+    fn render(view: AnyView) -> String {
+        Owner::new().with(|| view.to_html())
+    }
+
     #[test]
     fn configuration_validator_normalizes_and_returns_stable_findings() {
         let valid = validate_configuration(&ScopedRecordsConfigurationV1 {
@@ -1515,7 +1439,7 @@ mod tests {
             label: "North Region".into(),
             can_manage: true,
         }];
-        let html = directory_html(
+        let html = render(directory_view(
             &[ScopedRecord {
                 id: record_id,
                 label: "<North & Central>".into(),
@@ -1525,7 +1449,7 @@ mod tests {
             }],
             &organizations,
             &DirectoryQuery::default(),
-        );
+        ));
 
         assert!(html.contains(&format!(
             "href=\"/reference/scoped-records/records/{record_id}\""
@@ -1534,13 +1458,17 @@ mod tests {
         assert!(html.contains("North Region"));
         assert!(html.contains("Read · Manage"));
         assert!(html.contains("Showing 1-1 of 1 records"));
-        assert!(html.contains("class=\"breadcrumb\" aria-label=\"Breadcrumb\""));
+        assert!(html.contains("class=\"breadcrumb\""));
+        assert!(html.contains("aria-label=\"Breadcrumb\""));
         assert!(html.contains("class=\"breadcrumb__separator-icon\""));
-        assert!(html.contains("class=\"button__icon\""));
         assert!(html.contains("<path"));
         assert!(!html.contains("<North & Central>"));
 
-        let empty = directory_html(&[], &organizations, &DirectoryQuery::default());
+        let empty = render(directory_view(
+            &[],
+            &organizations,
+            &DirectoryQuery::default(),
+        ));
         assert!(empty.contains("No scoped records"));
         assert!(!empty.contains("<tbody>"));
     }
@@ -1558,17 +1486,16 @@ mod tests {
             can_manage: false,
         };
         let organizations = vec![managed.clone(), read_only];
-        let create = record_form_html(None, &organizations);
+        let create = render(record_form_view(None, &organizations));
         assert!(create.contains("<h1>New Record</h1>"));
-        assert!(
-            create.contains("<span class=\"breadcrumb__page\" aria-current=\"page\">New Record")
-        );
+        assert!(create.contains("class=\"breadcrumb__page\""));
+        assert!(create.contains("New Record"));
         assert!(create.contains("action=\"/reference/scoped-records/records\""));
         assert!(create.contains("North Region"));
         assert!(!create.contains("West Region"));
 
         let record_id = Uuid::from_u128(11);
-        let edit = record_form_html(
+        let edit = render(record_form_view(
             Some(&ScopedRecord {
                 id: record_id,
                 label: "North intake review".into(),
@@ -1577,9 +1504,10 @@ mod tests {
                 updated_at: Utc::now(),
             }),
             &organizations,
-        );
+        ));
         assert!(edit.contains("<h1>Edit Record</h1>"));
-        assert!(edit.contains("<span class=\"breadcrumb__page\" aria-current=\"page\">Edit"));
+        assert!(edit.contains("class=\"breadcrumb__page\""));
+        assert!(edit.contains("Edit"));
         assert!(edit.contains(&format!(
             "action=\"/reference/scoped-records/records/{record_id}\""
         )));
@@ -1594,7 +1522,11 @@ mod tests {
             label: "North Region".into(),
             can_manage: false,
         }];
-        let html = directory_html(&[], &organizations, &DirectoryQuery::default());
+        let html = render(directory_view(
+            &[],
+            &organizations,
+            &DirectoryQuery::default(),
+        ));
 
         assert!(html.contains("0 include manage authority"));
         assert!(!html.contains("/reference/scoped-records/records/new"));
@@ -1612,7 +1544,8 @@ mod tests {
             enabled: false,
             document_state: "disabled".into(),
         };
-        let disabled_html = product_state_html(&disabled).expect("disabled state treatment");
+        let disabled_html =
+            render(product_state_view(&disabled).expect("disabled state treatment"));
         assert!(disabled_html.contains("Scoped Records is not serving product routes"));
         assert!(disabled_html.contains("/administration/modules/tessara.reference.scoped-records"));
         assert!(disabled_html.contains("Product data</dt><dd>Retained"));
@@ -1622,9 +1555,9 @@ mod tests {
             document_state: "enabled".into(),
             ..disabled
         };
-        assert!(product_state_html(&enabled).is_none());
+        assert!(product_state_view(&enabled).is_none());
 
-        let denied_html = manage_denied_html();
+        let denied_html = render(manage_denied_view());
         assert!(denied_html.contains("You can’t manage this record"));
         assert!(denied_html.contains("tessara.reference.scoped-records:manage"));
         assert!(denied_html.contains("Back to Records"));

@@ -170,7 +170,10 @@ Their validation contract selects `phase8-module-extraction` and maps exact
 implementation commands to every required proof class. The inner loop closes
 one ordered extraction slice at a time; clean materialization, semantic no-op,
 failure recovery, fixture/runner proof, deployed smoke, and upgrade/rollback
-all complete before formal Readiness. Do not fork Sprint 8A's large lifecycle
+all complete before formal Readiness. The `ui-sdk-conformance` proof is also
+mandatory: establish the accepted visual/interaction baseline, map UI
+ownership, build typed SDK views before cutover, and prove direct/lifecycle
+visual and semantic parity. Do not fork Sprint 8A's large lifecycle
 runners or evidence lineage into the next sprint; extract only genuinely
 policy-neutral helpers and keep the future sprint runner a thin profile over
 current shared contracts.
@@ -207,8 +210,8 @@ Implementation owns the known-target debugging loop. Before formal validation:
 1. determine changed paths and affected dependency domains;
 2. run every required or intersecting target from the tracked contract;
 3. complete clean-environment materialization, semantic no-op, failure
-   containment, recovery, fixture, runner, smoke, and acceptance proof when the
-   affected domains require it;
+   containment, recovery, fixture, runner, smoke, UI SDK/visual parity, and
+   acceptance proof when the affected domains require it;
 4. resolve every known failure; and
 5. publish a compact, non-authoritative
    `implementation-readiness-result.json` under the ignored sprint evidence

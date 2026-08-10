@@ -86,7 +86,7 @@
   "scenarios": [
     {
       "id": "UAT-8A-01",
-      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-01.md", "sha256": "1212934ee871f2eae085e2cd85132f1269822e944b57894ab5dc8c26e6999f55" },
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-01.md", "sha256": "127fcd3a387f5c31759d727119bfbecb5aac63c7c1d78e5ee60caa972d4185e6" },
       "role": "Component manager and reader",
       "acceptance_criteria": ["AC-01", "AC-07", "AC-15", "AC-19"],
       "semantic_predicate_ids": ["component-module-live-script", "complete-browser-inventory", "module-owned-documents-and-assets", "exact-v3-first-party-inputs"],
@@ -103,8 +103,8 @@
       "steps": [
         {
           "step": 1,
-          "action": "Open Components from navigation and open every supported seeded kind.",
-          "expected_result": "Each list/detail/view route loads with canonical Components wording and recognizable output.",
+          "action": "Open Components from navigation and open every supported seeded kind. Repeat the directory once by direct URL.",
+          "expected_result": "Each list/detail/view route loads with canonical Components wording and recognizable output. The top title is `Components`, Components is the only active matching navigation item, and direct/lifecycle views use the same SDK canvas and computed design tokens.",
           "evidence_requirements": [
             { "id": "seeded-kind-route-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }
           ]
@@ -355,7 +355,7 @@
     },
     {
       "id": "UAT-8A-08",
-      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-08.md", "sha256": "33687796fd02f97400bc6e0c832106b16e73dcfc565b4e97e3021796a19bd109" },
+      "document": { "path": "docs/sprints/sprint-8a-uat/uat-8a-08.md", "sha256": "ad95e6dca18cfaebe88577693f3a2b7d9cbe4f581349dad07192a878e436169b" },
       "role": "Operator and reviewer",
       "acceptance_criteria": ["AC-14"],
       "semantic_predicate_ids": ["component-only-upgrade", "rollback", "unrelated-identity-stability", "intended-release-restoration"],
@@ -367,16 +367,16 @@
       "required_starting_state": [
         { "id": "component-baseline-snapshot", "description": "Component image, container, restart, instance, configuration, and recognizable data baseline." },
         { "id": "unrelated-owner-baseline", "description": "Unrelated owner image, container, restart, data, navigation, and availability baseline." },
-        { "id": "compatible-release-provenance", "description": "Distinct source-built 0.9.0 and 1.0.0 executable, image, and manifest identities." }
+        { "id": "compatible-release-provenance", "description": "Distinct source-built 0.9.0 and 1.0.1 executable, image, and manifest identities." }
       ],
       "steps": [
-        { "step": 1, "action": "From healthy `1.0.0`, apply the compatible-baseline selection through the composition API and Supervisor.", "expected_result": "The resolved plan is an exact Component-only delta; Supervisor/Compose establishes healthy `0.9.0` without changing Component state or unrelated owners.", "evidence_requirements": [{ "id": "baseline-selection-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
-        { "step": 2, "action": "Apply the `1.0.0` selection and exercise Component plus Dashboard routes.", "expected_result": "The exact `0.9.0` to `1.0.0` upgrade is health-gated; recorded Component data/configuration and placements remain usable.", "evidence_requirements": [{ "id": "candidate-upgrade-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 1, "action": "From healthy `1.0.1`, apply the compatible-baseline selection through the composition API and Supervisor.", "expected_result": "The resolved plan is an exact Component-only delta; Supervisor/Compose establishes healthy `0.9.0` without changing Component state or unrelated owners.", "evidence_requirements": [{ "id": "baseline-selection-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
+        { "step": 2, "action": "Apply the `1.0.1` selection and exercise Component plus Dashboard routes.", "expected_result": "The exact `0.9.0` to `1.0.1` upgrade is health-gated; recorded Component data/configuration and placements remain usable.", "evidence_requirements": [{ "id": "candidate-upgrade-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
         { "step": 3, "action": "Compare the pre-transition and post-upgrade snapshots.", "expected_result": "Core, gateway, Supervisor, Dashboard, Dataset compatibility, and other modules retain image/container/restart, semantic data, navigation, and availability identity.", "evidence_requirements": [{ "id": "unrelated-owner-stability-record", "kind": "operator-record", "minimum": 1, "maximum": 1 }] },
         {
           "step": 4,
-          "action": "Apply rollback to `0.9.0`, verify health/behavior, then restore intended `1.0.0`.",
-          "expected_result": "Each plan remains Component-only and health-gated; release read-back matches each stage; final state is healthy intended `1.0.0`; publish the authenticated upgrade/rollback JSON receipt.",
+          "action": "Apply rollback to `0.9.0`, verify health/behavior, then restore intended `1.0.1`.",
+          "expected_result": "Each plan remains Component-only and health-gated; release read-back matches each stage; final state is healthy intended `1.0.1`; publish the authenticated upgrade/rollback JSON receipt.",
           "evidence_requirements": [
             {
               "id": "upgrade-rollback-receipt",

@@ -1232,7 +1232,8 @@ Sprint 8B and every later extraction instantiate the
 [Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md)
 and the validation contract's `phase8-module-extraction` implementation
 profile. The plan must enumerate Core subtraction, provider/consumer cutover,
-fresh owner-seed order, fixtures, and exact commands for every required proof
+fresh owner-seed order, fixtures, an accepted UI baseline and ownership map,
+and exact commands for every required proof
 class. A passing implementation-readiness result must prove those targets on
 the current clean source before formal Readiness begins. Future sprints reuse
 the generic platform and policy contracts; they do not clone Sprint 8A's

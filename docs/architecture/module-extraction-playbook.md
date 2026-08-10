@@ -60,7 +60,10 @@ plan and tracked validation contract. The plan must name:
    old-contract cases;
 7. exact implementation commands for every required proof class below; and
 8. exact Readiness, Rehearsal, Preflight, SIT, and UAT lanes mapped to the same
-   requirements and dependency domains.
+   requirements and dependency domains; and
+9. an accepted pre-extraction visual/interaction baseline and UI ownership
+   inventory covering markup, SDK primitives, styles, assets, SSR/hydration,
+   lifecycle behavior, navigation title/state, and responsive behavior.
 
 Use exact identities instead of copied counts unless the count is itself a
 product contract. When a count is contractual, declare one canonical source of
@@ -90,6 +93,12 @@ assertions, not only prose.
   assets, capabilities, and module-owned tests.
 - Reuse the canonical contract/runtime/UI/testkit packages and generic Core
   enrollment, routing, configuration, and diagnostics seams.
+- Build typed SDK/Leptos views and canonical asset composition before consumer
+  cutover. The SDK owns the outer document, reset, design tokens, theme, shell,
+  and generic primitives; product CSS is namespace-rooted and product-only.
+- Generate and source-check first-party browser assets with
+  `pwsh -NoProfile -File scripts/build-module-ui-browser-assets.ps1 -Module all -Check`;
+  reconcile every emitted digest with the loader, manifest, and release catalog.
 - Reject any new definition-ID branch in Core or Module Management.
 
 Complete when the module is independently buildable and conforming before
@@ -99,6 +108,10 @@ product traffic or consumers switch.
 
 - Move product policy, API, UI, lifecycle, execution, and persistence to the
   module.
+- Preserve the accepted information architecture and workflows while proving
+  direct-document and lifecycle-navigation parity, including canvas color,
+  typography, controls, title/navigation identity, responsive behavior,
+  accessibility, hydration, and clean console output.
 - Replace direct implementation, table, and credential access with the exact
   public boundary.
 - Advance every controlled consumer, generated client, fixture, smoke input,
@@ -163,6 +176,7 @@ when the command actually proves each one.
 | `static-quality` | Format, compile, and Clippy with warnings denied for the affected Rust/TypeScript graphs. |
 | `contract-boundary` | Exact current contracts, typed references, negative old shapes, authorization, and package/source boundaries. |
 | `owner-product` | Module-owned API, UI, persistence, lifecycle, configuration, diagnostics, routes, assets, and health. |
+| `ui-sdk-conformance` | Accepted visual/interaction baseline, typed SDK view construction, canonical CSS ownership, namespace-rooted product assets, direct/lifecycle parity, accessibility, and absence of raw module HTML/DOM construction. |
 | `consumer-cutover` | Every controlled provider/consumer integration uses the new contract and real process boundary. |
 | `core-subtraction` | Exact absence of old Core schema, source, routes, adapters, readers, writers, seed, and policy. |
 | `inventory-navigation` | Exact transition and enrolled-module identities with no duplicate inventory or navigation presentation. |
@@ -202,6 +216,9 @@ Future sprints must prevent these defect families during implementation:
   rather than exact identities and authenticated semantic evidence; and
 - formal validation launched before clean materialization, no-op, recovery,
   runner, fixture, smoke, and acceptance reproducers pass.
+- UI extraction that copied a visual snapshot or rebuilt structural HTML
+  instead of adopting the SDK, allowing Core and module backgrounds, titles,
+  controls, and hydration behavior to drift.
 
 These are implementation obligations. Adding more receipt history or rerunning
 full certification is not an acceptable substitute.
@@ -228,6 +245,9 @@ run complete SIT and UAT.
 The repeatable debt paid before Sprint 8B consists of:
 
 - canonical module contract/runtime/UI/testkit packages and boundary checks;
+- one canonical module UI asset consumed by Core and every module, typed
+  document/lifecycle adapters, namespace ownership checks, and focused visual
+  parity required before validation;
 - generic enrollment, configuration, diagnostics, navigation, routing,
   Blueprint, lockfile, Supervisor apply, bootstrap, health, and rollback paths;
 - the forward-only extraction and Core-subtraction rules in this playbook;

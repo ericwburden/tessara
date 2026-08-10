@@ -35,7 +35,7 @@ pub const MODULE_DEFINITION_ID: &str = tessara_components_contract::COMPONENT_MO
 #[cfg(feature = "sprint-8a-rehearsal-baseline")]
 pub const MODULE_RELEASE_VERSION: &str = "0.9.0";
 #[cfg(not(feature = "sprint-8a-rehearsal-baseline"))]
-pub const MODULE_RELEASE_VERSION: &str = "1.0.0";
+pub const MODULE_RELEASE_VERSION: &str = "1.0.1";
 pub const READ_CAPABILITY: &str = "components:read";
 pub const MANAGE_CAPABILITY: &str = "components:manage";
 
@@ -289,6 +289,11 @@ async fn component_asset(
         return StatusCode::NOT_FOUND.into_response();
     }
     let (expected, content_type, bytes): (&str, &str, &'static [u8]) = match asset.as_str() {
+        "module-ui.css" => (
+            tessara_module_ui::MODULE_UI_CSS_SHA256,
+            "text/css; charset=utf-8",
+            tessara_module_ui::MODULE_UI_CSS.as_bytes(),
+        ),
         "component.css" => (
             documents::COMPONENT_CSS_SHA256,
             "text/css; charset=utf-8",
@@ -303,6 +308,16 @@ async fn component_asset(
             documents::COMPONENT_JS_SHA256,
             "text/javascript; charset=utf-8",
             documents::COMPONENT_JS.as_bytes(),
+        ),
+        "component-bindings.js" => (
+            documents::COMPONENT_BINDINGS_JS_SHA256,
+            "text/javascript; charset=utf-8",
+            documents::COMPONENT_BINDINGS_JS.as_bytes(),
+        ),
+        "component.wasm" => (
+            documents::COMPONENT_WASM_SHA256,
+            "application/wasm",
+            documents::COMPONENT_WASM,
         ),
         _ => return StatusCode::NOT_FOUND.into_response(),
     };

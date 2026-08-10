@@ -18,6 +18,7 @@ tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-composition = { path = "../tessara-composition" }
 tessara-module-runtime = { path = "../tessara-module-runtime" }
 tessara-module-ui = { path = "../tessara-module-ui", features = ["ssr"] }
+leptos = { workspace = true, features = ["ssr"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

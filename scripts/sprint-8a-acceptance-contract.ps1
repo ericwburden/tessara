@@ -447,7 +447,7 @@ function Test-Sprint8AAcceptanceContract {
     }
     $componentAssets = [ordered]@{
         "/component.css" = @(
-            "crates/tessara-module-ui/assets/module-shell.css",
+            "crates/tessara-module-ui/assets/module-ui.css",
             "crates/tessara-component-module/assets/component.css"
         )
         "/component-lifecycle.css" = @(
