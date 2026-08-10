@@ -915,6 +915,7 @@ function Publish-Sprint8ALifecycleReceipt {
         [AllowEmptyCollection()][object[]]$Checks = @(),
         [AllowNull()]$Details,
         [AllowNull()]$CleanupRestoration,
+        [switch]$AllowPreflightHarnessOnlySourceAdvance,
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$EvidenceRoot,
         [Parameter(Mandatory)][string]$OutputPath,
@@ -944,6 +945,7 @@ function Publish-Sprint8ALifecycleReceipt {
         -EnvironmentFingerprint $EnvironmentFingerprint `
         -NormalizedDeploymentConfigurationSha256 $NormalizedDeploymentConfigurationSha256 `
         -CandidateFingerprint $CandidateFingerprint `
+        -AllowPreflightHarnessOnlySourceAdvance:$AllowPreflightHarnessOnlySourceAdvance `
         -RepositoryRoot $RepositoryRoot `
         -EvidenceRoot $EvidenceRoot
     $canonicalPrerequisites = @($resolvedPrerequisites | ForEach-Object { $_.reference })
