@@ -776,12 +776,12 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
         [Parameter(Mandatory)][string]$EvidenceRoot
     )
 
-    $expectedPhases = switch ($Phase) {
+    $expectedPhases = @(switch ($Phase) {
         "validation-preflight" { @("validation-readiness", "candidate-rehearsal") }
         "candidate-freeze" { @("validation-preflight") }
         "sit" { @("validation-preflight", "candidate-freeze") }
         "uat" { @("validation-preflight", "candidate-freeze", "sit") }
-    }
+    })
     if (@($References).Count -ne $expectedPhases.Count) {
         throw "Lifecycle phase '$Phase' requires exactly: $($expectedPhases -join ', ')."
     }
