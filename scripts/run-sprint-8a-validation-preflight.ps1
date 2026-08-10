@@ -1471,6 +1471,10 @@ function Test-Sprint8AValidationPreflightRunner {
     }
 
     $sourceText = Get-Content -LiteralPath $PSCommandPath -Raw
+    $dateBearingReceipt = '{"started_at":"2026-08-09T20:03:18.8927547-04:00","authoritative":false}' | ConvertFrom-Json
+    if (@(Find-Sprint8APreflightAuthoritativeDownstreamClaim -Value $dateBearingReceipt).Count -ne 0) {
+        throw "Sprint 8A preflight self-test misclassified a non-authoritative date-bearing receipt."
+    }
     $receiptChainText = @($functionDefinitions | Where-Object Name -CEQ "Assert-Sprint8APreflightReceiptChain")[0].Extent.Text
     $lockAcquisition = $sourceText.LastIndexOf(
         '$script:runtimeContext.attempt_lock = Open-Sprint8AValidationAttemptLock -Path $preflightLockPath',
@@ -1878,7 +1882,7 @@ function Find-Sprint8APreflightAuthoritativeDownstreamClaim {
         [string]$Path = '$'
     )
 
-    if ($null -eq $Value -or $Value -is [string] -or $Value.GetType().IsPrimitive) { return }
+    if ($null -eq $Value -or $Value -is [string] -or $Value -is [ValueType]) { return }
     if ($Value -is [Collections.IDictionary]) {
         $phase = if ($Value.Contains("phase")) { [string]$Value["phase"] } else { $null }
         $authority = if ($Value.Contains("authoritative")) { $Value["authoritative"] } else { $null }
