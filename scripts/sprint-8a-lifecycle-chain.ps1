@@ -596,12 +596,20 @@ function Assert-Sprint8AExactTerminalIdentities {
             }
             $exitStatus = 0
             $duration = 0L
+            $hasRawEvidence = if ($null -ne $result.PSObject.Properties['evidence']) {
+                @($result.evidence).Count -ge 1
+            } else {
+                $null -ne $result.PSObject.Properties['evidence_path'] -and
+                    -not [string]::IsNullOrWhiteSpace([string]$result.evidence_path) -and
+                    $null -ne $result.PSObject.Properties['evidence_sha256'] -and
+                    [string]$result.evidence_sha256 -cmatch '^[0-9a-f]{64}$'
+            }
             if ([string]::IsNullOrWhiteSpace([string]$result.command) -or
                 -not [int]::TryParse([string]$result.exit_status, [ref]$exitStatus) -or
                 -not [long]::TryParse([string]$result.duration_ms, [ref]$duration) -or
                 $duration -ne [long][Math]::Max(0, ($ended - $started).TotalMilliseconds) -or
                 $ended -lt $started -or
-                @($result.evidence).Count -lt 1) {
+                -not $hasRawEvidence) {
                 throw "$Label executed result '$($result.name)' lacks its command, chronology, exit status, or raw evidence."
             }
             if (([string]$result.state -ceq "passed" -and $exitStatus -ne 0) -or
@@ -4444,6 +4452,21 @@ function Test-Sprint8ALifecycleChain {
     Assert-Sprint8AExactTerminalIdentities -Results $sit -ExpectedNames (Get-Sprint8ASitLaneNames) -Label "SIT self-test" | Out-Null
     $sitRoundTrip = $sit | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     Assert-Sprint8AExactTerminalIdentities -Results @($sitRoundTrip) -ExpectedNames (Get-Sprint8ASitLaneNames) -Label "SIT JSON round-trip self-test" | Out-Null
+    $currentRunnerResults = $sit | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    foreach ($result in $currentRunnerResults) {
+        $result.PSObject.Properties.Remove("evidence")
+        $result | Add-Member -NotePropertyName evidence_path -NotePropertyValue "artifacts/sprint-8a-closeout/self-test-$([string]$result.name).log"
+        $result | Add-Member -NotePropertyName evidence_sha256 -NotePropertyValue ("b" * 64)
+    }
+    Assert-Sprint8AExactTerminalIdentities -Results @($currentRunnerResults) -ExpectedNames (Get-Sprint8ASitLaneNames) -Label "current runner evidence self-test" | Out-Null
+    $currentRunnerResults[0].evidence_sha256 = $null
+    $missingCurrentEvidenceRejected = $false
+    try {
+        Assert-Sprint8AExactTerminalIdentities -Results @($currentRunnerResults) -ExpectedNames (Get-Sprint8ASitLaneNames) -Label "missing current runner evidence self-test" | Out-Null
+    } catch { $missingCurrentEvidenceRejected = $true }
+    if (-not $missingCurrentEvidenceRejected) {
+        throw "Sprint 8A lifecycle-chain self-test accepted a current runner result without authenticated raw evidence."
+    }
     $manualContract = Get-Sprint8AManualUatScenarioContract -Scenario "UAT-8A-01"
     $manual = [pscustomobject]@{
         schema_version = 2
