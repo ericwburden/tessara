@@ -32,8 +32,8 @@ use super::types::{
     DatasetFieldDefinition, DatasetSummary,
 };
 use tessara_component_viewer_ui::{
-    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
-    ComponentViewerMode, ComponentVisual, ComponentVisualPresentation,
+    ComponentRenderPresentation, ComponentRenderResponse, ComponentVersionExecutionContent,
+    ComponentVersionKind, ComponentVersionTarget, ComponentViewerMode,
 };
 
 #[component]
@@ -203,7 +203,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let consumer_modal_open = RwSignal::new(false);
     let consumer_search = RwSignal::new(String::new());
     let new_version_note = RwSignal::new(String::new());
-    let draft_preview = RwSignal::new(None::<ComponentVisual>);
+    let draft_preview = RwSignal::new(None::<ComponentRenderResponse>);
     let draft_preview_error = RwSignal::new(None::<String>);
     let draft_preview_loading = RwSignal::new(false);
     let draft_preview_generation = RwSignal::new(0_u64);
@@ -611,6 +611,49 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         }
                     })}
                 </div>
+                {move || {
+                    let selected_major = dataset_major.get().trim().parse::<i32>().ok();
+                    let selected_dataset = datasets
+                        .get()
+                        .into_iter()
+                        .find(|dataset| dataset.id == dataset_id.get());
+                    selected_dataset.zip(selected_major).map(|(dataset, major)| {
+                        let fields = dataset_fields_for_major(&dataset, major);
+                        view! {
+                            <section class="component-dataset-picker__field-preview">
+                                <h3>{format!("{} v{} field preview", dataset.name, major)}</h3>
+                                {if fields.is_empty() {
+                                    view! { <p>"This Dataset version does not expose any fields."</p> }.into_any()
+                                } else {
+                                    view! {
+                                        <div class="table-wrap">
+                                            <table class="component-table component-dataset-picker__field-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>"Field"</th>
+                                                        <th>"Key"</th>
+                                                        <th>"Type"</th>
+                                                        <th>"Restriction"</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {fields.into_iter().map(|field| view! {
+                                                        <tr>
+                                                            <td>{field.label}</td>
+                                                            <td>{field.key}</td>
+                                                            <td>{field.field_type}</td>
+                                                            <td>{field.restriction_tier.unwrap_or_else(|| "—".into())}</td>
+                                                        </tr>
+                                                    }).collect_view()}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }.into_any()
+                                }}
+                            </section>
+                        }
+                    })
+                }}
                 {move || if component_type.get() == "table" {
                     view! {
                         <div class="component-editor__workbench">
@@ -1026,7 +1069,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     });
 
     view! {
-        <section class="route-panel components-page">
+        <section class="route-panel components-page" data-component-directory>
             <ComponentViewerBreadcrumb component_ref=component_ref.clone() component=component/>
             <header class="page-header">
                 <div>
@@ -1179,7 +1222,7 @@ fn ComponentEditorRightRail(
     has_kind_specific_changes: Signal<bool>,
     on_kind_change: Callback<String>,
     preview_drawer_open: RwSignal<bool>,
-    visual: RwSignal<Option<ComponentVisual>>,
+    visual: RwSignal<Option<ComponentRenderResponse>>,
     error: RwSignal<Option<String>>,
     loading: RwSignal<bool>,
     fields: Signal<Vec<DatasetFieldDefinition>>,
@@ -1285,7 +1328,7 @@ fn ComponentEditorRightRail(
 
 #[component]
 fn ComponentEditorDraftPreview(
-    visual: RwSignal<Option<ComponentVisual>>,
+    visual: RwSignal<Option<ComponentRenderResponse>>,
     error: RwSignal<Option<String>>,
     loading: RwSignal<bool>,
     component_type: RwSignal<String>,
@@ -1325,8 +1368,8 @@ fn ComponentEditorDraftPreview(
             <div class="component-editor-preview__body" aria-live="polite">
                 {move || if let Some(message) = error.get() {
                     view! { <EmptyState title="Preview unavailable" message/> }.into_any()
-                } else if let Some(visual) = visual.get() {
-                    view! { <ComponentVisualPresentation visual/> }.into_any()
+                } else if let Some(response) = visual.get() {
+                    view! { <ComponentRenderPresentation response/> }.into_any()
                 } else {
                     view! {
                         <EmptyState
@@ -1728,13 +1771,13 @@ fn ComponentsTable(components: Vec<ComponentSummary>, can_manage: bool) -> impl 
                                             let status_label = component_summary_status_label(&component);
                                             let revision_label = component_summary_revision_label(&component);
                                             view! {
-                                                <tr>
+                                                <tr data-component-directory-item data-component-id=component.id>
                                                     <th scope="row">
                                                         <a class="data-table__primary-link" href=href>{component.name}</a>
                                                     </th>
-                                                    <td class="data-table__cell--center">{kind_label}</td>
+                                                    <td class="data-table__cell--center" data-component-directory-kind>{kind_label}</td>
                                                     <td class="data-table__cell--center">{revision_label}</td>
-                                                    <td class="data-table__cell--center">{status_label}</td>
+                                                    <td class="data-table__cell--center" data-component-directory-status>{status_label}</td>
                                                     {can_manage.then(|| view! {
                                                         <td class="data-table__cell--center">
                                                             <div class="data-table__action-group">
@@ -1811,18 +1854,22 @@ fn ComponentsMobileCards(
                             let status_label = component_summary_status_label(&component);
                             let revision_label = component_summary_revision_label(&component);
                             view! {
-                                <article class="forms-list-mobile-card components-list-mobile-card">
+                                <article
+                                    class="forms-list-mobile-card components-list-mobile-card"
+                                    data-component-directory-item
+                                    data-component-id=component.id
+                                >
                                     <div class="forms-list-mobile-card__header">
                                         <h3><a href=href>{component.name}</a></h3>
                                     </div>
                                     <dl>
                                         <div>
                                             <dt>"Kind"</dt>
-                                            <dd>{kind_label}</dd>
+                                            <dd data-component-directory-kind>{kind_label}</dd>
                                         </div>
                                         <div>
                                             <dt>"Status"</dt>
-                                            <dd>{status_label}</dd>
+                                            <dd data-component-directory-status>{status_label}</dd>
                                         </div>
                                         <div>
                                             <dt>"Revision"</dt>
@@ -2505,16 +2552,22 @@ fn load_datasets(_: RwSignal<Vec<DatasetSummary>>, _: RwSignal<Option<String>>) 
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn component_preview_ready(values: &ComponentFormValues) -> bool {
-    if values.dataset_id.trim().is_empty()
-        || values.dataset_major.trim().parse::<i32>().is_err()
-        || !visual_summary_field_ready(&values.visual_summary_type, &values.visual_summary_field)
-    {
+    if values.dataset_id.trim().is_empty() || values.dataset_major.trim().parse::<i32>().is_err() {
         return false;
     }
     match values.component_type.as_str() {
-        "bar" | "pie" | "donut" => !values.visual_category_field.trim().is_empty(),
-        "line" => !values.visual_x_field.trim().is_empty(),
-        "stat_card" => true,
+        "table" => !values.columns.is_empty(),
+        "bar" | "pie" | "donut" => {
+            visual_summary_field_ready(&values.visual_summary_type, &values.visual_summary_field)
+                && !values.visual_category_field.trim().is_empty()
+        }
+        "line" => {
+            visual_summary_field_ready(&values.visual_summary_type, &values.visual_summary_field)
+                && !values.visual_x_field.trim().is_empty()
+        }
+        "stat_card" => {
+            visual_summary_field_ready(&values.visual_summary_type, &values.visual_summary_field)
+        }
         _ => false,
     }
 }
@@ -2526,7 +2579,7 @@ fn visual_summary_field_ready(summary_type: &str, summary_field: &str) -> bool {
 #[cfg(feature = "hydrate")]
 fn schedule_component_editor_preview(
     values: ComponentFormValues,
-    preview: RwSignal<Option<ComponentVisual>>,
+    preview: RwSignal<Option<ComponentRenderResponse>>,
     error: RwSignal<Option<String>>,
     loading: RwSignal<bool>,
     generation: RwSignal<u64>,
@@ -2559,7 +2612,7 @@ fn schedule_component_editor_preview(
 #[cfg(not(feature = "hydrate"))]
 fn schedule_component_editor_preview(
     _: ComponentFormValues,
-    _: RwSignal<Option<ComponentVisual>>,
+    _: RwSignal<Option<ComponentRenderResponse>>,
     _: RwSignal<Option<String>>,
     _: RwSignal<bool>,
     _: RwSignal<u64>,
@@ -2570,7 +2623,7 @@ fn schedule_component_editor_preview(
 #[cfg(feature = "hydrate")]
 fn request_component_editor_preview(
     values: ComponentFormValues,
-    preview: RwSignal<Option<ComponentVisual>>,
+    preview: RwSignal<Option<ComponentRenderResponse>>,
     error: RwSignal<Option<String>>,
     loading: RwSignal<bool>,
     generation: RwSignal<u64>,
@@ -2594,7 +2647,7 @@ fn request_component_editor_preview(
     loading.set(true);
     error.set(None);
     leptos::task::spawn_local(async move {
-        let result = api::preview_component_visual(payload).await;
+        let result = api::preview_component(payload).await;
         if generation.get_untracked() != request_generation {
             return;
         }
@@ -2616,7 +2669,7 @@ fn request_component_editor_preview(
 #[allow(dead_code)]
 fn request_component_editor_preview(
     _: ComponentFormValues,
-    _: RwSignal<Option<ComponentVisual>>,
+    _: RwSignal<Option<ComponentRenderResponse>>,
     _: RwSignal<Option<String>>,
     _: RwSignal<bool>,
     _: RwSignal<u64>,

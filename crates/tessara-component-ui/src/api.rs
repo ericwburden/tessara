@@ -12,7 +12,7 @@ use super::types::{
 #[cfg(feature = "hydrate")]
 use serde::Deserialize;
 #[cfg(feature = "hydrate")]
-use tessara_component_viewer_ui::ComponentVisual;
+use tessara_component_viewer_ui::ComponentRenderResponse;
 
 #[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_components() -> Result<Option<Vec<ComponentSummary>>, String> {
@@ -47,9 +47,9 @@ pub(crate) async fn fetch_admin_component(
 }
 
 #[cfg(feature = "hydrate")]
-pub(crate) async fn preview_component_visual(
+pub(crate) async fn preview_component(
     payload: CreateComponentVersionRequest,
-) -> Result<ComponentVisual, String> {
+) -> Result<ComponentRenderResponse, String> {
     send_json_request(
         gloo_net::http::Request::post("/api/admin/components/preview"),
         serde_json::to_string(&payload)

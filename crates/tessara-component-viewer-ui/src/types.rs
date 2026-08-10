@@ -2,8 +2,8 @@
 #![cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 
 pub use tessara_components_contract::{
-    ComponentStatValue, ComponentVisualPoint, ComponentVisualResponse as ComponentVisual,
-    ComponentVisualSlice,
+    ComponentRenderResponse, ComponentStatValue, ComponentVisualPoint,
+    ComponentVisualResponse as ComponentVisual, ComponentVisualSlice,
 };
 pub(crate) use tessara_components_contract::{
     ComponentTableColumn, ComponentTableResponse as ComponentTable,

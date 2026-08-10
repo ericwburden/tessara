@@ -970,6 +970,25 @@ fn ComponentTableResults(
     }
 }
 
+pub(crate) fn component_table_response_presentation(table: ComponentTable) -> impl IntoView {
+    let state = RwSignal::new(ComponentTableViewState::default());
+    let known_columns = ArcRwSignal::new(table.columns.clone());
+    let loading = ArcRwSignal::new(false);
+    view! {
+        <ComponentTableResults
+            table
+            state
+            reset_state=ComponentTableViewState::default()
+            known_columns
+            loading
+            compact=false
+            title=None
+            fullscreen=None
+            column_menu_id="component-table-preview-columns".into()
+        />
+    }
+}
+
 #[component]
 fn ComponentTableColumnMenu(
     id: String,

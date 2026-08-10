@@ -342,6 +342,8 @@ pub(crate) struct DatasetFieldDefinition {
     pub(crate) label: String,
     #[serde(alias = "data_type")]
     pub(crate) field_type: String,
+    #[serde(default)]
+    pub(crate) restriction_tier: Option<String>,
 }
 
 thread_local! {

@@ -48,6 +48,7 @@ fn dataset_field(key: &str) -> DatasetFieldDefinition {
         key: key.into(),
         label: key.into(),
         field_type: "text".into(),
+        restriction_tier: None,
     }
 }
 
