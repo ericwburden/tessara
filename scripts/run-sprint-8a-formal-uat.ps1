@@ -132,6 +132,38 @@ function Get-Sprint8AFormalUatSourceAdvanceManifestOverrides {
     })
 }
 
+function Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure {
+    param([Parameter(Mandatory)]$Receipt)
+
+    $propertyNames = @($Receipt.PSObject.Properties | ForEach-Object { $_.Name })
+    if ($propertyNames -notcontains "failure_batch" -or
+        $propertyNames -notcontains "restoration_check" -or
+        $propertyNames -notcontains "restoration_checks" -or
+        $propertyNames -notcontains "cleanup_restoration") {
+        return $false
+    }
+    $messages = @(Get-Sprint8AFormalUatFailureMessages -Receipt $Receipt)
+    $originalProjectionFailure =
+        "The property 'classification' cannot be found on this object. Verify that the property exists."
+    $allowedIncidentMessages = @(
+        $originalProjectionFailure,
+        "The property 'Count' cannot be found on this object. Verify that the property exists.",
+        "The existing Sprint 8A evidence manifest has stale or malformed entry 'artifacts/sprint-8a-closeout/attempts/uat-9.json'."
+    )
+    [string]$Receipt.state -ceq "failed" -and
+        [string]$Receipt.stage -ceq "canonical-restoration" -and
+        @($messages | Where-Object { $_ -ceq $originalProjectionFailure }).Count -eq 1 -and
+        $messages.Count -ge 1 -and
+        $messages.Count -le $allowedIncidentMessages.Count -and
+        @($messages | Select-Object -Unique).Count -eq $messages.Count -and
+        @($messages | Where-Object { $_ -cnotin $allowedIncidentMessages }).Count -eq 0 -and
+        [int]$Receipt.failure_batch.blocked_check_count -eq 0 -and
+        [string]$Receipt.restoration_check.state -ceq "passed" -and
+        @($Receipt.restoration_checks).Count -eq 3 -and
+        @($Receipt.restoration_checks | Where-Object state -CNE "passed").Count -eq 0 -and
+        [string]$Receipt.cleanup_restoration.result -ceq "canonical_topology_verified"
+}
+
 function Get-Sprint8AFormalUatSourceContext {
     param(
         [Parameter(Mandatory)]$CurrentSource,
@@ -2263,6 +2295,33 @@ if ($SelfTest) {
         $emptyFailureMessages.Count -ne 0) {
         throw "Formal Sprint 8A UAT self-test lost singleton/empty failure-message cardinality."
     }
+    $aggregateRecoveryFixture = [pscustomobject]@{
+        state = "failed"
+        stage = "canonical-restoration"
+        failure_batch = [pscustomobject]@{
+            blocked_check_count = 0
+            defects = @(
+                [pscustomobject]@{ message = "The property 'classification' cannot be found on this object. Verify that the property exists." },
+                [pscustomobject]@{ message = "The property 'Count' cannot be found on this object. Verify that the property exists." },
+                [pscustomobject]@{ message = "The existing Sprint 8A evidence manifest has stale or malformed entry 'artifacts/sprint-8a-closeout/attempts/uat-9.json'." }
+            )
+        }
+        restoration_check = [pscustomobject]@{ state = "passed" }
+        restoration_checks = @(
+            [pscustomobject]@{ state = "passed" },
+            [pscustomobject]@{ state = "passed" },
+            [pscustomobject]@{ state = "passed" }
+        )
+        cleanup_restoration = [pscustomobject]@{ result = "canonical_topology_verified" }
+    }
+    if (-not (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $aggregateRecoveryFixture)) {
+        throw "Formal Sprint 8A UAT self-test rejected the exact cumulative aggregate-recovery incident."
+    }
+    $aggregateRecoveryFixture.failure_batch.defects +=
+        [pscustomobject]@{ message = "unknown recovery failure" }
+    if (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $aggregateRecoveryFixture) {
+        throw "Formal Sprint 8A UAT self-test accepted an unknown aggregate-recovery failure."
+    }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
         acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
@@ -2903,16 +2962,8 @@ $isExactSourceAdvanceFailure = [string]$attemptReceipt.state -ceq "failed" -and
     }).Count -eq 1 -and
     $sourceAdvanceFailureMessages.Count -eq 2 -and
     [int]$attemptReceipt.failure_batch.blocked_check_count -eq (Get-Sprint8AManualUatScenarioNames).Count
-$isExactAggregateProjectionFailure = [string]$attemptReceipt.state -ceq "failed" -and
-    [string]$attemptReceipt.stage -ceq "canonical-restoration" -and
-    $sourceAdvanceFailureMessages.Count -eq 1 -and
-    [string]$sourceAdvanceFailureMessages[0] -ceq
-        "The property 'classification' cannot be found on this object. Verify that the property exists." -and
-    [int]$attemptReceipt.failure_batch.blocked_check_count -eq 0 -and
-    [string]$attemptReceipt.restoration_check.state -ceq "passed" -and
-    @($attemptReceipt.restoration_checks).Count -eq 3 -and
-    @($attemptReceipt.restoration_checks | Where-Object state -CNE "passed").Count -eq 0 -and
-    [string]$attemptReceipt.cleanup_restoration.result -ceq "canonical_topology_verified"
+$isExactAggregateProjectionFailure =
+    Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $attemptReceipt
 if (($isExactSourceAdvanceFailure -or $isExactAggregateProjectionFailure) -and
     $AuthorizeUatHarnessOnlySourceAdvance) {
     if ($isExactAggregateProjectionFailure) {
