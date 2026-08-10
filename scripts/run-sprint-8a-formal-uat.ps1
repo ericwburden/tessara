@@ -86,6 +86,14 @@ function ConvertTo-Sprint8AFormalUatTerminalTimestamp {
     (ConvertTo-Sprint8ADateTimeOffset -Value $Value -Label $Label).ToString("o")
 }
 
+function Get-Sprint8AFormalUatFailureClassifications {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Failures)
+
+    @($Failures | ForEach-Object { [string]$_.classification } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Sort-Object -Unique)
+}
+
 function Get-Sprint8AFormalUatSourceContext {
     param(
         [Parameter(Mandatory)]$CurrentSource,
@@ -2171,6 +2179,14 @@ if ($SelfTest) {
     if ($canonicalTimestamp -notmatch '(Z|[+-][0-9]{2}:[0-9]{2})$') {
         throw "Formal Sprint 8A UAT self-test lost the UTC offset after JSON timestamp conversion."
     }
+    if (@(Get-Sprint8AFormalUatFailureClassifications -Failures @()).Count -ne 0 -or
+        (@(Get-Sprint8AFormalUatFailureClassifications -Failures @(
+                    [pscustomobject]@{ classification = "product" },
+                    [pscustomobject]@{ classification = "product" },
+                    [pscustomobject]@{ classification = $null }
+                )) -join "`n") -cne "product") {
+        throw "Formal Sprint 8A UAT self-test mishandled empty or duplicate failure classifications."
+    }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
         acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
@@ -2798,6 +2814,8 @@ if (-not $AuthorizeDisposableReset) {
 }
 $sourceAdvanceRecoveryAuthorized = $false
 $sourceAdvanceRecoveryReference = $null
+$reusableRestorationCheck = $null
+$reusableRestorationChecks = @()
 $sourceAdvanceFailureMessages = if ($attemptReceipt.PSObject.Properties.Name -contains "failure_batch" -and
     $null -ne $attemptReceipt.failure_batch) {
     @($attemptReceipt.failure_batch.defects | ForEach-Object { [string]$_.message })
@@ -2812,7 +2830,24 @@ $isExactSourceAdvanceFailure = [string]$attemptReceipt.state -ceq "failed" -and
     }).Count -eq 1 -and
     $sourceAdvanceFailureMessages.Count -eq 2 -and
     [int]$attemptReceipt.failure_batch.blocked_check_count -eq (Get-Sprint8AManualUatScenarioNames).Count
-if ($isExactSourceAdvanceFailure -and $AuthorizeUatHarnessOnlySourceAdvance) {
+$isExactAggregateProjectionFailure = [string]$attemptReceipt.state -ceq "failed" -and
+    [string]$attemptReceipt.stage -ceq "canonical-restoration" -and
+    $sourceAdvanceFailureMessages.Count -eq 1 -and
+    [string]$sourceAdvanceFailureMessages[0] -ceq
+        "The property 'classification' cannot be found on this object. Verify that the property exists." -and
+    [int]$attemptReceipt.failure_batch.blocked_check_count -eq 0 -and
+    [string]$attemptReceipt.restoration_check.state -ceq "passed" -and
+    @($attemptReceipt.restoration_checks).Count -eq 3 -and
+    @($attemptReceipt.restoration_checks | Where-Object state -CNE "passed").Count -eq 0 -and
+    [string]$attemptReceipt.cleanup_restoration.result -ceq "canonical_topology_verified"
+if (($isExactSourceAdvanceFailure -or $isExactAggregateProjectionFailure) -and
+    $AuthorizeUatHarnessOnlySourceAdvance) {
+    if ($isExactAggregateProjectionFailure) {
+        $reusableRestorationCheck = $attemptReceipt.restoration_check | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+        $reusableRestorationChecks = @($attemptReceipt.restoration_checks | ForEach-Object {
+            $_ | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+        })
+    }
     $currentSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
     Assert-Sprint8ASourceIdentityObject -Source $currentSource -RequireClean | Out-Null
     $incrementalSourceContext = Get-Sprint8AFormalUatSourceContext `
@@ -2860,6 +2895,7 @@ if ($isExactSourceAdvanceFailure -and $AuthorizeUatHarnessOnlySourceAdvance) {
         upstream_gates_affected = $false
         manual_scenarios_reused = @(Get-Sprint8AManualUatScenarioNames)
         manual_assertions_reexecuted = $false
+        canonical_restoration_reused = [bool]$isExactAggregateProjectionFailure
     }
     Publish-Sprint7AEvidence -Document $recoveryDocument -OutputPath $recoveryPath | Out-Null
     $sourceAdvanceRecoveryReference = [pscustomobject][ordered]@{
@@ -3495,6 +3531,31 @@ Sync-Sprint8AFormalUatEvidenceManifest -Overrides @([pscustomobject][ordered]@{
     path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
     phase = "uat-attempt"; authoritative = $false; status = "canonical-restoration"
 }) | Out-Null
+if ($null -ne $reusableRestorationCheck) {
+    $restorationCheck = $reusableRestorationCheck
+    $restorationChecks = @($reusableRestorationChecks)
+    Assert-Sprint8AExactTerminalIdentities `
+        -Results $restorationChecks `
+        -ExpectedNames @(
+            "canonical-restoration-materialization",
+            "canonical-restoration-inventory",
+            "canonical-restoration-smoke"
+        ) `
+        -Label "Formal UAT reusable canonical restoration" | Out-Null
+    if ([string]$restorationCheck.state -cne "passed" -or
+        @($restorationChecks | Where-Object state -CNE "passed").Count -ne 0) {
+        throw "Formal UAT aggregate-only retry cannot reuse a nonpassing canonical restoration."
+    }
+    foreach ($evidence in @($restorationCheck.evidence) + @($restorationChecks | ForEach-Object { @($_.evidence) })) {
+        $resolvedEvidence = Resolve-Sprint8AEvidenceReference `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $evidenceRootPath `
+            -Path ([string]$evidence.path)
+        if ((Get-Sprint8AFileSha256 -Path ([string]$resolvedEvidence.full_path)) -cne [string]$evidence.sha256) {
+            throw "Formal UAT aggregate-only retry found changed canonical-restoration evidence '$([string]$evidence.path)'."
+        }
+    }
+} else {
 $materializationCheck = Invoke-Sprint8AFormalUatCheck `
     -Name "canonical-restoration-materialization" `
     -Command ".\scripts\materialize-sprint-8a.ps1 -Attempt $Attempt -EvidenceRoot '$restorationRoot' -EnvironmentFingerprint '$environmentFingerprint' -AuthorizeDisposableReset -Confirm:`$false -SkipBuild -VerifyNoOp" `
@@ -3618,6 +3679,7 @@ $restorationCheck = [pscustomobject][ordered]@{
         "$([string]$_.path)`u{001f}$([string]$_.sha256)"
     } | ForEach-Object { $_.Group[0] })
 }
+}
 $rawScriptedChecks = @($attemptReceipt.checks | Where-Object {
     [string]$_.name -in @("scripted-inventory", "scripted-smoke")
 })
@@ -3628,7 +3690,7 @@ $scriptedEnded = @($rawScriptedChecks | ForEach-Object {
     ConvertTo-Sprint8ADateTimeOffset -Value $_.ended_at -Label "restoration check end"
 } | Sort-Object | Select-Object -Last 1)[0]
 $scriptedFailures = @($rawScriptedChecks | Where-Object state -CEQ "failed")
-$scriptedClassifications = @($scriptedFailures.classification | Sort-Object -Unique)
+$scriptedClassifications = @(Get-Sprint8AFormalUatFailureClassifications -Failures $scriptedFailures)
 $scriptedCheck = [pscustomobject][ordered]@{
     name = "scripted-uat"
     state = if ($scriptedFailures.Count -eq 0) { "passed" } else { "failed" }
