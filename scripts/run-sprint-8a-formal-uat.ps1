@@ -10,6 +10,7 @@ param(
     [string]$OutputPath = "artifacts/sprint-8a-closeout/uat-result.json",
     [string]$BaseUrl = "http://127.0.0.1:8088",
     [switch]$AuthorizeDisposableReset,
+    [switch]$AuthorizeUatHarnessOnlySourceAdvance,
     [switch]$SelfTest
 )
 
@@ -61,6 +62,52 @@ function Get-Sprint8AFormalUatPriorAttempts {
             }
         }
     )
+}
+
+function Get-Sprint8AFormalUatSourceContext {
+    param(
+        [Parameter(Mandatory)]$CurrentSource,
+        [Parameter(Mandatory)]$CandidateSource,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [switch]$AllowHarnessOnlySourceAdvance
+    )
+
+    Assert-Sprint8ASourceIdentityObject -Source $CurrentSource -RequireClean | Out-Null
+    Assert-Sprint8ASourceIdentityObject -Source $CandidateSource -RequireClean | Out-Null
+    if (Test-Sprint8ASourceIdentityMatch -Expected $CandidateSource -Actual $CurrentSource) {
+        return [pscustomobject][ordered]@{
+            candidate_source_identity = $CandidateSource
+            harness_source_identity = $CurrentSource
+            harness_only_source_advance = $null
+        }
+    }
+    if (-not $AllowHarnessOnlySourceAdvance) {
+        throw "Formal UAT source differs from the frozen candidate."
+    }
+
+    & git -C $RepositoryRoot merge-base --is-ancestor ([string]$CandidateSource.commit) ([string]$CurrentSource.commit)
+    $ancestorExit = $LASTEXITCODE
+    $changedPaths = @(& git -C $RepositoryRoot diff --name-only "$([string]$CandidateSource.commit)..$([string]$CurrentSource.commit)" |
+        ForEach-Object { $_.Replace("\", "/") })
+    $diffExit = $LASTEXITCODE
+    $allowedPaths = @("scripts/run-sprint-8a-formal-uat.ps1")
+    if ($ancestorExit -ne 0 -or $diffExit -ne 0 -or
+        (($changedPaths | Sort-Object) -join "`n") -cne (($allowedPaths | Sort-Object) -join "`n")) {
+        throw "Authorized formal UAT harness advance contains a path outside the exact UAT-runner correction set."
+    }
+
+    [pscustomobject][ordered]@{
+        candidate_source_identity = $CandidateSource
+        harness_source_identity = $CurrentSource
+        harness_only_source_advance = [pscustomobject][ordered]@{
+            authorization = "user_directed_impact_scoped_validation"
+            candidate_source_commit = [string]$CandidateSource.commit
+            uat_harness_source_commit = [string]$CurrentSource.commit
+            exact_changed_paths = $changedPaths
+            product_test_fixture_deployment_changes = $false
+            upstream_gates_affected = $false
+        }
+    }
 }
 
 function Set-Sprint8AFormalUatAttemptState {
@@ -1733,6 +1780,10 @@ if ($SelfTest) {
         -not $sourceText.Contains('Publish-Sprint8AFormalUatResultCommit') -or
         -not $sourceText.Contains('Publish-Sprint8AFormalUatFinalizationFailure') -or
         -not $sourceText.Contains('-AuthorizeDisposableReset') -or
+        -not $sourceText.Contains('-AuthorizeUatHarnessOnlySourceAdvance') -or
+        -not $sourceText.Contains('endpoints = $null') -or
+        -not $sourceText.Contains('verified_uat_harness_only_advance') -or
+        -not $sourceText.Contains('scripts/run-sprint-8a-formal-uat.ps1') -or
         -not $sourceText.Contains('-PrepareOnly') -or
         -not $sourceText.Contains('-Merge') -or
         -not $sourceText.Contains('Open-Sprint8AValidationAttemptLock') -or
@@ -1865,6 +1916,16 @@ if ($SelfTest) {
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
         acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
     }
+    $exactSourceContext = Get-Sprint8AFormalUatSourceContext `
+        -CurrentSource $fixtureSource `
+        -CandidateSource $fixtureSource `
+        -RepositoryRoot $repoRoot
+    if ($null -ne $exactSourceContext.harness_only_source_advance -or
+        -not (Test-Sprint8ASourceIdentityMatch `
+            -Expected $fixtureSource `
+            -Actual $exactSourceContext.candidate_source_identity)) {
+        throw "Formal Sprint 8A UAT self-test rejected an exact candidate/harness source match."
+    }
     $fixtureCandidate = Get-Sprint8ACandidateIdentity `
         -RepositoryRoot $repoRoot `
         -Source $fixtureSource `
@@ -1942,7 +2003,10 @@ if ($Stage -ceq "Start") {
             state = "preparing"; stage = "prerequisites"; at = [DateTimeOffset]::UtcNow.ToString("o")
         })
         source_identity = $placeholderSource; source_verification_state = "unverified"
+        candidate_source_identity = $placeholderSource
+        uat_harness_only_source_advance = $null
         environment_fingerprint = "0" * 64; candidate_fingerprint = "0" * 64
+        endpoints = $null
         prerequisite_receipts = @()
         declared_checks = @(
             [pscustomobject][ordered]@{ name = "authenticated-prerequisites"; depends_on = @() },
@@ -1997,7 +2061,8 @@ if ($Stage -ceq "Start") {
         }
         $invalidatedSameCandidate = @($priorAttempts | Where-Object {
             [string]$_.receipt.state -in @("failed", "blocked") -and
-                [string]$_.receipt.candidate_fingerprint -ceq $candidateFingerprint
+                [string]$_.receipt.candidate_fingerprint -ceq $candidateFingerprint -and
+                ($_.receipt.assertions_started -is [bool]) -and [bool]$_.receipt.assertions_started
         })
         if ($invalidatedSameCandidate.Count -gt 0) {
             throw "Formal UAT candidate was already invalidated or blocked by prior attempt(s): $(@($invalidatedSameCandidate.receipt.attempt) -join ', ')."
@@ -2017,10 +2082,11 @@ if ($Stage -ceq "Start") {
             throw "Authoritative SIT receipt contains a failed or blocked terminal lane."
         }
         $currentSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
-        Assert-Sprint8ASourceIdentityObject -Source $currentSource -RequireClean | Out-Null
-        if (-not (Test-Sprint8ASourceIdentityMatch -Expected $candidateReceiptObject.source_identity -Actual $currentSource)) {
-            throw "Formal UAT source differs from the frozen candidate."
-        }
+        $sourceContext = Get-Sprint8AFormalUatSourceContext `
+            -CurrentSource $currentSource `
+            -CandidateSource $candidateReceiptObject.source_identity `
+            -RepositoryRoot $repoRoot `
+            -AllowHarnessOnlySourceAdvance:$AuthorizeUatHarnessOnlySourceAdvance
         $environment = Get-Sprint8AEnvironmentContract `
             -RepositoryRoot $repoRoot `
             -EvidenceRoot $EvidenceRoot `
@@ -2031,7 +2097,7 @@ if ($Stage -ceq "Start") {
         $normalizedDeploymentConfigurationSha256 = [string]$environment.contract.compose.normalized_config_sha256
         $candidateIdentity = Get-Sprint8ACandidateIdentity `
             -RepositoryRoot $repoRoot `
-            -Source $currentSource `
+            -Source $sourceContext.candidate_source_identity `
             -NormalizedDeploymentConfigurationSha256 $normalizedDeploymentConfigurationSha256
         if ([string]$candidateIdentity.fingerprint -cne $candidateFingerprint) {
             throw "Formal UAT recomputed a different candidate fingerprint."
@@ -2040,7 +2106,7 @@ if ($Stage -ceq "Start") {
         Assert-Sprint8ALifecyclePrerequisiteSet `
             -Phase "uat" `
             -References @($preflightReference, $candidateReference, $sitReference) `
-            -Source $currentSource `
+            -Source $sourceContext.candidate_source_identity `
             -EnvironmentFingerprint $environmentFingerprint `
             -NormalizedDeploymentConfigurationSha256 $normalizedDeploymentConfigurationSha256 `
             -CandidateFingerprint $candidateFingerprint `
@@ -2068,7 +2134,11 @@ if ($Stage -ceq "Start") {
             })
         }
         $attemptReceipt.source_identity = $currentSource
-        $attemptReceipt.source_verification_state = "verified"
+        $attemptReceipt.candidate_source_identity = $sourceContext.candidate_source_identity
+        $attemptReceipt.uat_harness_only_source_advance = $sourceContext.harness_only_source_advance
+        $attemptReceipt.source_verification_state = if ($null -eq $sourceContext.harness_only_source_advance) {
+            "verified"
+        } else { "verified_uat_harness_only_advance" }
         $attemptReceipt.environment_fingerprint = $environmentFingerprint
         $attemptReceipt.candidate_fingerprint = $candidateFingerprint
         $attemptReceipt.endpoints = $endpoints
@@ -2112,7 +2182,7 @@ if ($Stage -ceq "Start") {
                 $postScriptedSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
                 try {
                     Assert-Sprint8ASourceIdentityObject -Source $postScriptedSource -RequireClean | Out-Null
-                    if (-not (Test-Sprint8ASourceIdentityMatch -Expected $candidateReceiptObject.source_identity -Actual $postScriptedSource)) {
+                    if (-not (Test-Sprint8ASourceIdentityMatch -Expected $sourceContext.harness_source_identity -Actual $postScriptedSource)) {
                         throw "Formal UAT source changed during scripted execution."
                     }
                 } catch {
@@ -2129,7 +2199,7 @@ if ($Stage -ceq "Start") {
                     }
                     $postScriptedCandidate = Get-Sprint8ACandidateIdentity `
                         -RepositoryRoot $repoRoot `
-                        -Source $postScriptedSource `
+                        -Source $sourceContext.candidate_source_identity `
                         -NormalizedDeploymentConfigurationSha256 ([string]$postScriptedEnvironment.contract.compose.normalized_config_sha256)
                     if ([string]$postScriptedCandidate.fingerprint -cne $candidateFingerprint) {
                         throw "Formal UAT candidate identity changed during scripted execution."
@@ -2544,7 +2614,7 @@ if ([string]$attemptReceipt.state -ceq "passed" -and [string]$attemptReceipt.sta
         Assert-Sprint8ALifecyclePrerequisiteSet `
             -Phase "uat" `
             -References $canonicalPrerequisites `
-            -Source $currentSource `
+            -Source $attemptReceipt.candidate_source_identity `
             -EnvironmentFingerprint ([string]$attemptReceipt.environment_fingerprint) `
             -NormalizedDeploymentConfigurationSha256 ([string]$environment.contract.compose.normalized_config_sha256) `
             -CandidateFingerprint ([string]$attemptReceipt.candidate_fingerprint) `
@@ -2755,7 +2825,7 @@ if ($hasFinalizationCompletionCheckpoint -and
         Assert-Sprint8ALifecyclePrerequisiteSet `
             -Phase "uat" `
             -References $currentPrerequisites `
-            -Source $currentSource `
+            -Source $attemptReceipt.candidate_source_identity `
             -EnvironmentFingerprint ([string]$attemptReceipt.environment_fingerprint) `
             -NormalizedDeploymentConfigurationSha256 ([string]$environment.contract.compose.normalized_config_sha256) `
             -CandidateFingerprint ([string]$attemptReceipt.candidate_fingerprint) `
@@ -3276,7 +3346,7 @@ if ([string]$postRestorationEnvironment.fingerprint -cne $environmentFingerprint
 }
 $postRestorationCandidate = Get-Sprint8ACandidateIdentity `
     -RepositoryRoot $repoRoot `
-    -Source $postRestorationSource `
+    -Source $attemptReceipt.candidate_source_identity `
     -NormalizedDeploymentConfigurationSha256 ([string]$postRestorationEnvironment.contract.compose.normalized_config_sha256)
 if ([string]$postRestorationCandidate.fingerprint -cne $candidateFingerprint) {
     throw "Formal UAT candidate identity changed during manual validation or canonical restoration."
@@ -3307,7 +3377,7 @@ $canonicalPrerequisites = @(
 Assert-Sprint8ALifecyclePrerequisiteSet `
     -Phase "uat" `
     -References $canonicalPrerequisites `
-    -Source $currentSource `
+    -Source $attemptReceipt.candidate_source_identity `
     -EnvironmentFingerprint $environmentFingerprint `
     -NormalizedDeploymentConfigurationSha256 ([string]$postRestorationEnvironment.contract.compose.normalized_config_sha256) `
     -CandidateFingerprint $candidateFingerprint `
