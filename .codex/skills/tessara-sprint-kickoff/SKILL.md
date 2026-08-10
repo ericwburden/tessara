@@ -87,6 +87,9 @@ the current roadmap.
    leave the `main` checkout untouched.
 6. Inspect the roadmap block and the affected code, tests, architecture,
    deployment, and prior sprint artifacts in planning mode only.
+   If the sprint extracts a Core-owned feature into an independently deployed
+   module, read `docs/architecture/module-extraction-playbook.md` completely
+   and use its planning package and ordered slices.
 7. Write `docs/sprints/<slug>-plan.md` as the execution contract.
 8. Use `tessara-sprint-validation` and its record template to create
    `docs/sprints/<slug>-verification.md` as a planned acceptance inventory.
@@ -95,7 +98,10 @@ the current roadmap.
    `tessara-sprint-validation/assets/sprint-validation-contract.json`, and
    ensure every placeholder is replaced and every requirement,
    target, lane, prerequisite, dependency domain, environment section, and
-   evidence policy is complete.
+   evidence policy is complete. Select `implementation_profile.kind` as
+   `phase8-module-extraction` for a Phase 8 extraction, bind the canonical
+   playbook and exact module/transition identities, and map required exact
+   commands to every playbook proof class.
 10. Prepend the kickoff entry to `docs/progress-report.md`.
 11. Run the comprehensive planning audit below and correct planning gaps.
 12. Present the plan, unresolved decisions, and recommended first
@@ -121,6 +127,12 @@ Write the plan in Markdown with these sections:
   authorization plan
 - rollout, migration, compatibility, recovery, and rollback plan where relevant
 - risks with prevention, detection, and recovery measures
+
+For a Phase 8 extraction, also include the playbook's complete Core subtraction
+inventory, provider/consumer edge inventory, target ownership table, fresh
+materialization/seed graph, canonical fixture inventory, and proof-class-to-
+command matrix. Reusing the architecture without these delivery details is not
+an implementation-ready plan.
 
 Use repository evidence to make the plan concrete, but do not make speculative
 code edits. Keep scope bounded by the roadmap. A slice must produce a coherent,
@@ -176,6 +188,10 @@ Before declaring kickoff complete, verify that:
 - the machine-readable validation contract agrees with the plan and record,
   validates against `validation-contract.schema.json`, and contains no
   unmapped requirement, target, lane, dependency, or tracked path category
+- a Phase 8 extraction selects `phase8-module-extraction`, instantiates the
+  canonical playbook, and covers every required proof class with a required
+  exact implementation target; clean materialization, semantic no-op, and
+  failure recovery use clean-environment targets
 - UI, API, persistence, authorization, integration, deployment, and operational
   impacts were considered and irrelevant domains were explicitly dismissed
 - happy paths, negative paths, boundary cases, nondisclosure, recovery, and

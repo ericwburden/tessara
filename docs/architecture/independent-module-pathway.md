@@ -3,6 +3,11 @@
 Status: current Phase 8 module-authoring and extraction contract. Dashboard
 completed this pathway in Sprint 6E; Components applies it in Sprint 8A.
 
+The architecture checklist below is paired with the required
+[Phase 8 Module Extraction Playbook](./module-extraction-playbook.md). Future
+extraction sprints use the pathway to define the end state and the playbook to
+plan ordered delivery and prove implementation readiness before certification.
+
 The non-product `tessara.reference.module-sdk` release is the canonical
 source/build conformance fixture. Scoped Records proves adoption with real
 product persistence. Dashboard and Components prove that existing product
@@ -157,6 +162,12 @@ flow or markup is a conformance failure.
 
 ## Adoption Checklist
 
+For a Core-to-module extraction, instantiate the playbook's planning package
+and `phase8-module-extraction` validation-contract profile before using this
+checklist. Every item below must map to an implementation proof class and exact
+command; formal Candidate Rehearsal is not the discovery loop for missing
+adoption work.
+
 1. Create a module crate/service with its own database baseline and distinct
    owner, migration, and runtime identities.
 2. Publish the sole current manifest, including exact platform/SDK versions,
@@ -212,3 +223,6 @@ The pathway is reusable only while this check remains true:
 The Sprint 6D reference module remains the canonical conformance fixture for
 this statement. Scoped Records, Dashboard, and Components are current
 conforming product exemplars.
+
+The reusable delivery proof is the playbook profile, not a copy of Sprint 8A's
+sprint-specific validation state machine or evidence history.

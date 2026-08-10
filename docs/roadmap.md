@@ -1228,6 +1228,16 @@ extraction reruns the Phase 7 scope, lifecycle, outage, compatibility,
 source-ownership, package-graph, independent-image-upgrade, and rollback proofs
 against the newly physical boundary.
 
+Sprint 8B and every later extraction instantiate the
+[Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md)
+and the validation contract's `phase8-module-extraction` implementation
+profile. The plan must enumerate Core subtraction, provider/consumer cutover,
+fresh owner-seed order, fixtures, and exact commands for every required proof
+class. A passing implementation-readiness result must prove those targets on
+the current clean source before formal Readiness begins. Future sprints reuse
+the generic platform and policy contracts; they do not clone Sprint 8A's
+attempt lineage or use Candidate Rehearsal as the implementation loop.
+
 ### Sprint 8A: Component Module Separation Slice (Implementation Correction)
 
 **Validation posture:** Readiness 38 is terminal with 12 passed, 2 failed, and

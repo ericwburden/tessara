@@ -164,6 +164,17 @@ the exact five-entry Core catalog (`tessara.forms`, `tessara.workflows`,
 manifest-only reference order Scoped Records `7`, Components `8`, Dashboard
 `9`, with no duplicate inventory or navigation presentation.
 
+Sprint 8B and later extractions must follow the
+[Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md).
+Their validation contract selects `phase8-module-extraction` and maps exact
+implementation commands to every required proof class. The inner loop closes
+one ordered extraction slice at a time; clean materialization, semantic no-op,
+failure recovery, fixture/runner proof, deployed smoke, and upgrade/rollback
+all complete before formal Readiness. Do not fork Sprint 8A's large lifecycle
+runners or evidence lineage into the next sprint; extract only genuinely
+policy-neutral helpers and keep the future sprint runner a thin profile over
+current shared contracts.
+
 Sprint closeout for a module-affecting change must run both focused module tests
 and the resolved application's integration, browser, and conformance suites.
 
@@ -181,6 +192,13 @@ target and lane to dependency domains, and every domain to tracked input paths.
 Validate it with `scripts/tessara-validation-policy.psm1`. An unmapped changed
 path selects conservative validation; it is never silently treated as
 unaffected.
+
+The contract also selects an implementation profile. `standard` is the default
+for ordinary work. A Phase 8 feature extraction uses
+`phase8-module-extraction`, identifies the exact module and transition being
+replaced, and is rejected if any mandatory playbook proof class is missing or
+if materialization, semantic no-op, or failure recovery lacks a required clean-
+environment target.
 
 ### Implementation exit
 

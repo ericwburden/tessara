@@ -2,6 +2,8 @@
 
 - Validation policy: `tessara-validation-v2`
 - Tracked validation contract: `docs/sprints/<slug>-validation-contract.json`
+- Implementation profile: `standard` / `phase8-module-extraction`
+- Profile playbook and module/transition identities, when applicable:
 - Activation boundary: first sprint after Sprint 8A; no legacy evidence retrofit
 
 ## Scope and acceptance inventory
@@ -33,9 +35,13 @@
 
 ## Implementation exit gate
 
-| Requirement/target | Affected domains | Exact command | Clean environment | Result | Evidence |
-|---|---|---|---|---|---|
-| | | | | Not Run | |
+For `phase8-module-extraction`, include every mandatory proof class from
+`docs/architecture/module-extraction-playbook.md`. A blank or optional class is
+a planning/implementation defect, not work for formal validation to discover.
+
+| Requirement/target | Proof classes | Affected domains | Exact command | Clean environment | Result | Evidence |
+|---|---|---|---|---|---|---|
+| | | | | | Not Run | |
 
 - Clean source and validation-contract hash:
 - Materialization / first apply:

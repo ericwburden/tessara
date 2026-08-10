@@ -37,12 +37,21 @@ try {
     $templatePath = Join-Path $repositoryRoot ".codex/skills/tessara-sprint-validation/assets/sprint-validation-contract.json"
     $templateContract = Get-Content -LiteralPath $templatePath -Raw | ConvertFrom-Json
     $null = Assert-TessaraValidationContract -Contract $templateContract
+    $playbookImpact = Get-TessaraValidationImpact -Contract $templateContract -ChangedPaths @("docs/architecture/module-extraction-playbook.md")
+    if (($playbookImpact.phase_decisions | Where-Object phase -eq "validation-readiness").action -cne "recertify_affected_lanes" -or
+        ($playbookImpact.phase_decisions | Where-Object phase -eq "candidate-rehearsal").action -cne "recertify_affected_lanes" -or
+        @($playbookImpact.phase_decisions | Where-Object {
+            $_.phase -in @("validation-preflight", "sit", "uat") -and $_.action -ne "rerun_full_phase"
+        }).Count -ne 0) {
+        throw "The Phase 8 playbook is not bound as shared executable validation policy."
+    }
 
     $contract = [pscustomobject]@{
         schema_version = 2
         contract = "tessara.validation-contract"
         policy_version = "tessara-validation-v2"
         sprint = "sprint-9a"
+        implementation_profile = [pscustomobject]@{ kind = "standard" }
         requirements = @(
             [pscustomobject]@{
                 id = "req-product"
@@ -65,6 +74,7 @@ try {
                 id = "target-static"
                 command = "cargo check --workspace --locked"
                 dependency_domains = @("product-source")
+                proof_classes = @("static-quality")
                 required = $true
                 clean_environment = $false
             },
@@ -72,6 +82,7 @@ try {
                 id = "target-materialize"
                 command = ".\scripts\materialize.ps1 -Clean"
                 dependency_domains = @("deployment-materialization")
+                proof_classes = @("clean-materialization", "semantic-noop", "failure-recovery")
                 required = $false
                 clean_environment = $true
             }
@@ -103,6 +114,44 @@ try {
     $duplicateContract = $contract | ConvertTo-Json -Depth 30 | ConvertFrom-Json
     $duplicateContract.dependency_domains += $duplicateContract.dependency_domains[0]
     Assert-Throws -Label "duplicate dependency domain" -Action { Assert-TessaraValidationContract -Contract $duplicateContract }
+
+    $extractionContract = $contract | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $extractionContract.implementation_profile = [pscustomobject]@{
+        kind = "phase8-module-extraction"
+        playbook = "docs/architecture/module-extraction-playbook.md"
+        module_definition = "tessara.datasets"
+        transition_identity = "tessara.datasets"
+    }
+    Assert-Throws -Label "incomplete Phase 8 extraction proof profile" -Action {
+        Assert-TessaraValidationContract -Contract $extractionContract
+    }
+
+    $extractionProofClasses = @(
+        "static-quality",
+        "contract-boundary",
+        "owner-product",
+        "consumer-cutover",
+        "core-subtraction",
+        "inventory-navigation",
+        "migration-seed",
+        "clean-materialization",
+        "semantic-noop",
+        "failure-recovery",
+        "fixture-acceptance",
+        "runner-selftest",
+        "deployed-smoke",
+        "independent-upgrade-rollback",
+        "uat-readiness"
+    )
+    $extractionContract.implementation_targets[0].proof_classes = $extractionProofClasses
+    $extractionContract.implementation_targets[0].clean_environment = $true
+    $null = Assert-TessaraValidationContract -Contract $extractionContract
+
+    $nonCleanExtractionContract = $extractionContract | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $nonCleanExtractionContract.implementation_targets[0].clean_environment = $false
+    Assert-Throws -Label "Phase 8 extraction clean-environment proof" -Action {
+        Assert-TessaraValidationContract -Contract $nonCleanExtractionContract
+    }
 
     $preflightImpact = Get-TessaraValidationImpact -Contract $contract -ChangedPaths @("scripts/preflight-freeze.ps1")
     if (($preflightImpact.phase_decisions | Where-Object phase -eq "validation-readiness").action -cne "reuse_certificate" -or
@@ -196,6 +245,31 @@ try {
     $missingMaterialization.affected_domains = @("deployment-materialization")
     Assert-Throws -Label "missing selected clean materialization target" -Action {
         Assert-TessaraImplementationReadinessResult -Result $missingMaterialization -Contract $contract -ContractPath $contractPath
+    }
+
+    $extractionContractPath = Join-Path $temporaryRoot "extraction-validation-contract.json"
+    $extractionContract | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $extractionContractPath -Encoding utf8NoBOM
+    $extractionContractSha = Get-TessaraValidationSha256 -Path $extractionContractPath
+    $extractionImplementation = $implementationResult | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $extractionImplementation.validation_contract.sha256 = $extractionContractSha
+    $extractionImplementation.targets[0].clean_environment = $true
+    $extractionImplementation.materialization.required = $true
+    foreach ($proofName in @("first_apply", "semantic_no_op", "recovery")) {
+        $extractionImplementation.materialization.$proofName.required = $true
+        $extractionImplementation.materialization.$proofName.state = "passed"
+        $extractionImplementation.materialization.$proofName.evidence = New-Reference -Path "artifacts/sprint-9a-closeout/implementation/$proofName.json"
+    }
+    $extractionImplementation.cleanup_restoration.required = $true
+    $extractionImplementation.cleanup_restoration.state = "passed"
+    $extractionImplementation.cleanup_restoration.evidence = New-Reference -Path "artifacts/sprint-9a-closeout/implementation/restoration.json"
+    $null = Assert-TessaraImplementationReadinessResult -Result $extractionImplementation -Contract $extractionContract -ContractPath $extractionContractPath
+
+    $extractionMissingRecovery = $extractionImplementation | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $extractionMissingRecovery.materialization.recovery.required = $false
+    $extractionMissingRecovery.materialization.recovery.state = "not_applicable"
+    $extractionMissingRecovery.materialization.recovery.evidence = $null
+    Assert-Throws -Label "Phase 8 extraction missing recovery result" -Action {
+        Assert-TessaraImplementationReadinessResult -Result $extractionMissingRecovery -Contract $extractionContract -ContractPath $extractionContractPath
     }
 
     $fingerprints = @(

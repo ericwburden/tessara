@@ -656,7 +656,10 @@ The installation must remain locally operable without a mandatory central Tessar
 6. Finish Dashboard source/build independence by adopting those packages, owning its routes/assets, and removing root Core/web application dependencies.
 7. Add deterministic Blueprint, lockfile, plan, apply, and read-back tooling.
 8. Prove cross-module scope and resource lifecycle behavior.
-9. Apply the proven SDK/runtime and full-stack extraction pass to Components, Datasets, Responses, Workflows, and Forms.
+9. Apply the proven SDK/runtime and full-stack extraction pass to Components,
+   Datasets, Responses, Workflows, and Forms through the
+   [Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md),
+   completing its implementation proof classes before formal certification.
 10. Harden migration, upgrades, backup/restore, diagnostics, and multiple independently supported application compositions.
 
 This sequence deliberately establishes the platform contract before many applications depend on the current shared structure.

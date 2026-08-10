@@ -31,6 +31,11 @@ validation skills.
    contract's exact dependency domains and implementation targets. Sprint 8A
    and earlier remain governed by their retained sprint-specific plans and
    runners; never retrofit their evidence to v2.
+7. When that contract declares
+   `implementation_profile.kind: phase8-module-extraction`, read
+   `docs/architecture/module-extraction-playbook.md` completely. Treat its
+   ordered slices, subtraction inventory, and proof classes as governing
+   implementation requirements rather than optional validation suggestions.
 
 ## Define the forward-only end state
 
@@ -55,6 +60,14 @@ mapping. Identify changed paths and affected dependency domains before editing,
 then select every required or intersecting implementation target from that
 contract. An unmapped path or uncertain consumer expands the implementation
 verification cone; it is not deferred to formal validation.
+
+For a Phase 8 module extraction, maintain the plan's owner/consumer/subtraction
+inventories as code moves. Do not declare the slice complete until each
+required playbook proof class is bound to a required exact target and has
+passing focused evidence. The module starting successfully is not sufficient:
+consumer cutover, Core subtraction, inventory/navigation, fresh seed,
+materialization, no-op, recovery, fixtures, runners, smoke, upgrade/rollback,
+and UAT readiness are part of implementation.
 
 Use the touched dependency cone as the cleanup boundary. Remove obsolete paths
 from the changed capability and its directly affected consumers without turning
@@ -203,6 +216,10 @@ complete.
    environment proof where required, report zero known failures, and record
    required materialization/no-op/recovery and restoration results. A missing,
    blocked, or failing selected target forbids formal Readiness entry.
+   For `phase8-module-extraction`, also verify that every playbook proof class
+   is represented by a required passing target and that the three clean-
+   environment classes were actually executed from the declared disposable
+   environment.
 8. Hand the clean implementation commit and passing implementation-readiness
    result to `tessara-sprint-validation` when formal sprint validation is
    requested. Let `tessara-sprint-validation`,

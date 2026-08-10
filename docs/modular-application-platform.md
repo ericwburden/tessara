@@ -380,6 +380,12 @@ volumes, and reruns from empty rather than repairing or resuming it. Supported
 legacy import, mapping, rebinding, partial-failure resume, and migration audit
 belong to Phase 9.
 
+Sprint 8B and later extractions apply this architecture through the
+[Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md).
+The playbook makes Core subtraction, consumer cutover, fresh seed ownership,
+materialization/no-op/recovery, fixtures, runners, smoke, and acceptance part
+of implementation readiness rather than late certification discovery.
+
 Because no production application depends on the current internal database
 layout, Tessara uses this fresh policy to establish clean ownership boundaries
 instead of preserving accidental coupling.

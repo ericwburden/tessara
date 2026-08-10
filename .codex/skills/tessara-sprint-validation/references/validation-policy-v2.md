@@ -39,6 +39,18 @@ Every changed tracked path must map to a declared domain. An unmapped path,
 ambiguous mapping, missing digest, or unauthenticated receipt selects the
 conservative full affected-phase boundary.
 
+The contract also declares an implementation profile and proof classes for
+each exact target. Use `standard` for ordinary work. A pre-production feature
+extraction must use `phase8-module-extraction`, bind
+`docs/architecture/module-extraction-playbook.md`, and name the exact Module
+Definition and Core transition identity being replaced. The contract validator
+requires all playbook proof classes, including owner behavior, consumer
+cutover, Core subtraction, inventory/navigation, fresh seed, clean
+materialization, semantic no-op, failure recovery, fixtures, runner self-tests,
+deployed smoke, independent upgrade/rollback, and UAT readiness. This prevents
+a future extraction from entering certification with a known delivery surface
+left unimplemented.
+
 ## Dependency domains
 
 Use these canonical domains unless a sprint records a narrower owned domain:
@@ -69,6 +81,8 @@ Documentation is non-affecting only when it cannot alter executable behavior,
 acceptance scope, validation interpretation, commands, or evidence semantics.
 Validation policy, schemas, runner instructions, and acceptance documents are
 not ordinary documentation for impact purposes.
+The Phase 8 extraction playbook is likewise a `validation-shared` input because
+it changes mandatory implementation and certification interpretation.
 
 ## Implementation exit gate
 
@@ -89,6 +103,9 @@ The implementation result does not replace formal validation. It proves that
 the known contract was implemented and exercised before certification. A
 missing target, failed target, runner self-test failure, dirty source, or
 required clean-environment proof that was not run blocks Readiness entry.
+For a Phase 8 extraction, it must cover every required playbook proof class;
+formal validation may not be used to discover which extraction slice was
+omitted.
 
 ## Compact phase certificates
 

@@ -113,8 +113,13 @@ stale.
 
 For a v2 sprint:
 
-1. Require the passing non-authoritative implementation-readiness result for
-   the current clean source and tracked validation-contract hash.
+1. Validate the contract's implementation profile and require the passing
+   non-authoritative implementation-readiness result for the current clean
+   source and tracked validation-contract hash. For
+   `phase8-module-extraction`, require every proof class from
+   `docs/architecture/module-extraction-playbook.md`; an omitted extraction
+   surface returns to implementation and does not become a diagnostic
+   Rehearsal lane.
 2. Run or recertify Validation Readiness from the impact-selected lanes and
    authenticated unaffected lane certificates. Fall back to complete Readiness
    when any mapping, fingerprint, or prior certificate is uncertain.

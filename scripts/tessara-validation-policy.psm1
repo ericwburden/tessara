@@ -177,6 +177,31 @@ function Assert-TessaraValidationContract {
     $lanes = Get-TessaraNamedItems -Items @($Contract.lanes) -Property id -Label "Validation lanes"
     $null = Get-TessaraNamedItems -Items @($Contract.requirements) -Property id -Label "Requirements"
 
+    $profileKind = [string]$Contract.implementation_profile.kind
+    $requiredExtractionProofClasses = @(
+        "static-quality",
+        "contract-boundary",
+        "owner-product",
+        "consumer-cutover",
+        "core-subtraction",
+        "inventory-navigation",
+        "migration-seed",
+        "clean-materialization",
+        "semantic-noop",
+        "failure-recovery",
+        "fixture-acceptance",
+        "runner-selftest",
+        "deployed-smoke",
+        "independent-upgrade-rollback",
+        "uat-readiness"
+    )
+    $cleanEnvironmentProofClasses = @(
+        "clean-materialization",
+        "semantic-noop",
+        "failure-recovery"
+    )
+    $proofTargets = @{}
+
     foreach ($domain in @($Contract.dependency_domains)) {
         foreach ($pattern in @($domain.tracked_inputs)) {
             $null = ConvertTo-TessaraRepositoryPath -Path ([string]$pattern)
@@ -187,6 +212,29 @@ function Assert-TessaraValidationContract {
         foreach ($domainName in @($target.dependency_domains)) {
             if (-not $domains.ContainsKey([string]$domainName)) {
                 throw "Implementation target '$($target.id)' references unknown domain '$domainName'."
+            }
+        }
+        foreach ($proofClass in @($target.proof_classes)) {
+            $proofClassName = [string]$proofClass
+            if (-not $proofTargets.ContainsKey($proofClassName)) {
+                $proofTargets[$proofClassName] = [Collections.Generic.List[object]]::new()
+            }
+            $proofTargets[$proofClassName].Add($target)
+        }
+    }
+
+    if ($profileKind -ceq "phase8-module-extraction") {
+        foreach ($proofClass in $requiredExtractionProofClasses) {
+            if (-not $proofTargets.ContainsKey($proofClass)) {
+                throw "Phase 8 module extraction is missing implementation proof class '$proofClass'."
+            }
+            $requiredTargets = @($proofTargets[$proofClass] | Where-Object { $_.required -eq $true })
+            if ($requiredTargets.Count -eq 0) {
+                throw "Phase 8 module extraction proof class '$proofClass' is not bound to a required target."
+            }
+            if ($proofClass -in $cleanEnvironmentProofClasses -and
+                @($requiredTargets | Where-Object { $_.clean_environment -eq $true }).Count -eq 0) {
+                throw "Phase 8 module extraction proof class '$proofClass' is not bound to a clean-environment target."
             }
         }
     }
@@ -412,6 +460,18 @@ function Assert-TessaraImplementationReadinessResult {
     }
     if ([bool]$Result.cleanup_restoration.required -and [string]$Result.cleanup_restoration.state -cne "passed") {
         throw "Required implementation cleanup/restoration did not pass."
+    }
+    if ([string]$Contract.implementation_profile.kind -ceq "phase8-module-extraction") {
+        foreach ($proofName in @("first_apply", "semantic_no_op", "recovery")) {
+            $proof = $Result.materialization.$proofName
+            if (-not [bool]$proof.required -or [string]$proof.state -cne "passed") {
+                throw "Phase 8 module extraction requires passing implementation proof '$proofName'."
+            }
+        }
+        if (-not [bool]$Result.cleanup_restoration.required -or
+            [string]$Result.cleanup_restoration.state -cne "passed") {
+            throw "Phase 8 module extraction requires passing cleanup/restoration proof."
+        }
     }
     return $true
 }
