@@ -42,6 +42,7 @@ test.describe("canonical module UI visual baselines", () => {
       const actions = page.locator(".data-table__action-group .icon-button");
       await expect(actions).toHaveCount(14);
       await expect(actions.first().locator("svg")).toBeVisible();
+      await expect(page.locator(".components-list-mobile-cards")).toBeHidden();
       await expect(page).toHaveScreenshot(`components-directory-${theme}-1280.png`, {
         animations: "disabled",
       });
