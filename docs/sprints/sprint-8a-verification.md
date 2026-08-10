@@ -1758,6 +1758,30 @@ result for each exact check identity below:
 | `evidence-path-contract` | `repository-scope` | Reject unsupported absolute, traversal, and outside-root inputs; normalize contained repository-relative inputs; and prove no required path collides with immutable prior evidence. The only absolute-path exception is canonical consumption of the already-issued in-root R30 authorization. |
 | `evidence-inventory` | `acceptance-traceability`, `deployment-contract`, `downstream-command-contract`, `evidence-path-contract` | Create the complete SIT/UAT/failure/manifest inventory before freeze and retain every mandatory output path. |
 
+#### Acceptance-clause traceability
+
+| Clause | Certification coverage |
+| --- | --- |
+| AC-01 | Module ownership, migration, manifest, route, asset, smoke, and UAT-8A-01 evidence. |
+| AC-02 | Core boundary checks, workspace tests, module inventory, and UAT-8A-06 evidence. |
+| AC-03 | Clean source-exact materialization and UAT-8A-02 first-apply evidence. |
+| AC-04 | Exact semantic no-op and UAT-8A-02 evidence. |
+| AC-05 | Dashboard/Component placement, bootstrap, and UAT-8A-02/UAT-8A-04 evidence. |
+| AC-06 | Retired-input rejection, source-boundary checks, and UAT-8A-06 evidence. |
+| AC-07 | Complete browser inventory, smoke, and UAT-8A-01 evidence. |
+| AC-08 | Configuration-schema browser scenarios and UAT-8A-03 evidence. |
+| AC-09 | Dataset reference contract tests, browser scenarios, and UAT-8A-04 evidence. |
+| AC-10 | Authorization, nondisclosure, outage recovery, browser, and UAT-8A-04 evidence. |
+| AC-11 | Dashboard lifecycle/dependency diagnostics and UAT-8A-05 evidence. |
+| AC-12 | Compose credential boundaries, module boundaries, and UAT-8A-06 evidence. |
+| AC-13 | Failure containment, exact teardown, successor health, and UAT-8A-07 evidence. |
+| AC-14 | Component-only upgrade/rollback and UAT-8A-08 evidence. |
+| AC-15 | Responsive, theme, keyboard, reduced-motion browser, and UAT-8A-01 evidence. |
+| AC-16 | Exact five-transition Core inventory/navigation and UAT-8A-02 evidence. |
+| AC-17 | Format, check, warnings-denied Clippy, workspace tests, smoke, SIT, and UAT evidence. |
+| AC-18 | Components contract tests, exact rendering identities, browser, and UAT-8A-04/UAT-8A-05 evidence. |
+| AC-19 | Exact v3 first-party inputs across seeds, smoke, browser, and UAT-8A-01/UAT-8A-04/UAT-8A-06 evidence. |
+
 Before authenticating either prerequisite, write
 `attempts/preflight-<n>.json` in `preparing` state with unverified claimed
 source/environment identity, the ten declared check identities and their

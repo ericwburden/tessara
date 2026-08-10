@@ -18,6 +18,7 @@ if ($PSVersionTable.PSEdition -cne "Core" -or $PSVersionTable.PSVersion.Major -l
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-8a-rehearsal-scheduler.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
 $script:PreflightAllowedClassifications = @(
     "preflight/setup",
     "product",
