@@ -167,18 +167,22 @@ function Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure {
         "The variable '`$restorationFailures' cannot be retrieved because it has not been set."
     $manualChronologyFailure =
         "Formal manual UAT executed result 'UAT-8A-01' has malformed chronology: Sprint 8A Formal manual UAT 'UAT-8A-01' start has no UTC offset."
+    $candidateFingerprintFailure =
+        "Lifecycle phase 'uat' carries a non-canonical candidate fingerprint."
     $allowedIncidentMessages = @(
         $originalProjectionFailure,
         "The property 'Count' cannot be found on this object. Verify that the property exists.",
         "The existing Sprint 8A evidence manifest has stale or malformed entry 'artifacts/sprint-8a-closeout/attempts/uat-9.json'.",
         $restorationReuseInitializationFailure,
-        $manualChronologyFailure
+        $manualChronologyFailure,
+        $candidateFingerprintFailure
     )
     [string]$Receipt.state -ceq "failed" -and
         [string]$Receipt.stage -ceq "canonical-restoration" -and
         (@($messages | Where-Object { $_ -ceq $originalProjectionFailure }).Count -eq 1 -or
             @($messages | Where-Object { $_ -ceq $restorationReuseInitializationFailure }).Count -eq 1 -or
-            @($messages | Where-Object { $_ -ceq $manualChronologyFailure }).Count -eq 1) -and
+            @($messages | Where-Object { $_ -ceq $manualChronologyFailure }).Count -eq 1 -or
+            @($messages | Where-Object { $_ -ceq $candidateFingerprintFailure }).Count -eq 1) -and
         $messages.Count -ge 1 -and
         $messages.Count -le $allowedIncidentMessages.Count -and
         @($messages | Select-Object -Unique).Count -eq $messages.Count -and
@@ -1454,7 +1458,6 @@ function Invoke-Sprint8AFormalUatPublicationTail {
     param(
         [Parameter(Mandatory)]$AttemptReceipt,
         [Parameter(Mandatory)]$CompletionCheckpoint,
-        [Parameter(Mandatory)]$CurrentSource,
         [Parameter(Mandatory)][string]$AttemptPath,
         [Parameter(Mandatory)][string]$ResultCommitPath,
         [Parameter(Mandatory)][string]$OutputPath
@@ -1467,7 +1470,7 @@ function Invoke-Sprint8AFormalUatPublicationTail {
     $resultReference = Publish-Sprint8ALifecycleReceipt `
         -Phase "uat" `
         -Attempt ([int]$AttemptReceipt.attempt) `
-        -Source $CurrentSource `
+        -Source $AttemptReceipt.candidate_source_identity `
         -EnvironmentFingerprint ([string]$completion.environment_fingerprint) `
         -NormalizedDeploymentConfigurationSha256 ([string]$completion.normalized_deployment_configuration_sha256) `
         -CandidateFingerprint ([string]$completion.candidate_fingerprint) `
@@ -1483,6 +1486,8 @@ function Invoke-Sprint8AFormalUatPublicationTail {
             manual_receipts = @($completion.manual_receipts)
             canonical_restoration = $restorationCheck
             canonical_restoration_checks = @($completion.restoration_checks)
+            validation_source_identity = $AttemptReceipt.source_identity
+            uat_harness_only_source_advance = $AttemptReceipt.uat_harness_only_source_advance
             finalization_completion_checkpoint = [pscustomobject][ordered]@{
                 path = [string]$CompletionCheckpoint.reference.path
                 sha256 = [string]$CompletionCheckpoint.reference.sha256
@@ -2384,6 +2389,29 @@ if ($SelfTest) {
     })
     if (-not (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $restorationReuseRecoveryFixture)) {
         throw "Formal Sprint 8A UAT self-test rejected the exact manual-chronology recovery incident."
+    }
+    $restorationReuseRecoveryFixture.failure_batch.defects = @([pscustomobject]@{
+        message = "Lifecycle phase 'uat' carries a non-canonical candidate fingerprint."
+    })
+    if (-not (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $restorationReuseRecoveryFixture)) {
+        throw "Formal Sprint 8A UAT self-test rejected the exact candidate-publication recovery incident."
+    }
+    $publicationTailStart = $sourceText.IndexOf(
+        'function Invoke-Sprint8AFormalUatPublicationTail',
+        [StringComparison]::Ordinal
+    )
+    $publicationTailEnd = $sourceText.IndexOf(
+        'function Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility',
+        $publicationTailStart,
+        [StringComparison]::Ordinal
+    )
+    $publicationTailSource = if ($publicationTailStart -ge 0 -and $publicationTailEnd -gt $publicationTailStart) {
+        $sourceText.Substring($publicationTailStart, $publicationTailEnd - $publicationTailStart)
+    } else { "" }
+    if (-not $publicationTailSource.Contains('-Source $AttemptReceipt.candidate_source_identity') -or
+        -not $publicationTailSource.Contains('validation_source_identity = $AttemptReceipt.source_identity') -or
+        $publicationTailSource.Contains('-Source $CurrentSource')) {
+        throw "Formal Sprint 8A UAT self-test found a non-canonical publication source binding."
     }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
@@ -3397,7 +3425,6 @@ if ($hasFinalizationCompletionCheckpoint -and
         Invoke-Sprint8AFormalUatPublicationTail `
             -AttemptReceipt $attemptReceipt `
             -CompletionCheckpoint $completionCheckpoint `
-            -CurrentSource $currentSource `
             -AttemptPath $attemptPath `
             -ResultCommitPath (Join-Path $retryRunRoot "result-commit.json") `
             -OutputPath $OutputPath | Out-Null
@@ -4140,7 +4167,6 @@ $completionCheckpoint = Assert-Sprint8AFormalUatFinalizationCompletionCheckpoint
 Invoke-Sprint8AFormalUatPublicationTail `
     -AttemptReceipt $attemptReceipt `
     -CompletionCheckpoint $completionCheckpoint `
-    -CurrentSource $currentSource `
     -AttemptPath $attemptPath `
     -ResultCommitPath $resultCommitPath `
     -OutputPath $OutputPath | Out-Null
