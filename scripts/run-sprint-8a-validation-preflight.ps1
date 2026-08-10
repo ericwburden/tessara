@@ -2019,11 +2019,10 @@ function Assert-Sprint8APreflightReceiptChain {
         throw "Readiness environment evidence differs from its exact receipt reference."
     }
     $environment = $environmentReference.document
-    if ([string]$environment.fingerprint -cne [string]$readiness.environment_fingerprint -or
-        [string]$environment.fingerprint -notmatch '^[0-9a-f]{64}$' -or
-        (Get-Sprint8APreflightStringSha256 -Text (ConvertTo-Sprint8APreflightCanonicalJson $environment.contract)) -cne
-            [string]$environment.fingerprint -or
-        [string]$environment.contract.contract -cne "tessara.sprint-8a.validation-environment") {
+    $environmentFingerprint = Get-Sprint8APreflightStringSha256 -Text (ConvertTo-Sprint8APreflightCanonicalJson $environment)
+    if ([string]$environmentFingerprint -cne [string]$readiness.environment_fingerprint -or
+        [string]$environmentFingerprint -notmatch '^[0-9a-f]{64}$' -or
+        [string]$environment.contract -cne "tessara.sprint-8a.validation-environment") {
         throw "Readiness environment artifact is malformed or has a stale fingerprint."
     }
 
@@ -2039,7 +2038,7 @@ function Assert-Sprint8APreflightReceiptChain {
         [int]$state.schema_version -ne 1 -or
         [string]$state.sprint -cne "sprint-8a" -or
         $state.preflight_eligible -isnot [bool] -or $state.preflight_eligible -ne $true -or
-        [string]$state.environment_fingerprint -cne [string]$environment.fingerprint -or
+        [string]$state.environment_fingerprint -cne [string]$environmentFingerprint -or
         -not (Test-Sprint8ASourceIdentityMatch `
             -Expected $rehearsal.mutable_source_identity `
             -Actual $state.source_identity) -or
@@ -2135,7 +2134,7 @@ function Assert-Sprint8APreflightReceiptChain {
         rehearsal_attempt = [pscustomobject]@{ path = $rehearsalAttemptReference.path; sha256 = $rehearsalAttemptReference.sha256 }
         rehearsal_start = $rehearsalAttemptReference.immutable_start_receipt
         validation_state = [pscustomobject]@{ path = $stateReference.path; sha256 = $stateReference.sha256 }
-        environment = [pscustomobject]@{ path = $environmentReference.path; sha256 = $environmentReference.sha256; fingerprint = $environment.fingerprint }
+        environment = [pscustomobject]@{ path = $environmentReference.path; sha256 = $environmentReference.sha256; fingerprint = $environmentFingerprint }
         source_identity = $rehearsal.mutable_source_identity
         correction_authorization = $script:runtimeContext.correction_authorization_reference
         correction_lineage = if ($null -eq $script:runtimeContext.correction_lineage_validation) { @() } else {
