@@ -7,7 +7,7 @@ import init, {
   resume_component,
   suspend_component,
   unmount_component,
-} from "/_tessara/modules/tessara.components/1.0.1/sha256:5ced05ea4b5677db7aed50f26c651fa7c5c88a7ff400fc7ba6b21e5611fc3fe4/component-bindings.js";
+} from "/_tessara/modules/tessara.components/1.0.1/sha256:4cc5a22156729d153d374a217f88d89871fe7f92edff8a0230459b9f013abb95/component-bindings.js";
 
 await init("/_tessara/modules/tessara.components/1.0.1/sha256:99129792c26443a6ff5a069f1bfb990e9e5386fb102e94803458a1251f0818a8/component.wasm");
 
