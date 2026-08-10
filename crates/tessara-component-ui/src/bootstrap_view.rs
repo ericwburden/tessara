@@ -12,7 +12,7 @@ pub(crate) fn component_bootstrap_view(bootstrap: &ComponentRouteBootstrap) -> A
             let components = components.clone();
             let can_manage = *can_manage;
             view! {
-                <section class="route-panel components-page component-directory">
+                <section class="route-panel components-page component-directory" data-component-directory>
                     <PageHeader eyebrow="Reusable presentation" title="Components" description="Find, inspect, and reuse published Component definitions.">
                         {can_manage.then(|| view! { <Button href="/components/new">"Create Component"</Button> })}
                     </PageHeader>
@@ -90,7 +90,7 @@ fn editor_view(
         .and_then(|value| value.description.clone())
         .unwrap_or_default();
     view! {
-        <section class="route-panel components-page component-editor">
+        <section class="route-panel components-page component-editor" data-component-editor-root>
             <PageHeader title=if editing { "Edit Component" } else { "Create Component" } description="Define reusable presentation backed by an authorized Dataset version."/>
             {dataset_error.map(|message| view! { <div class="empty-state" role="alert"><h2>"Dataset metadata unavailable"</h2><p>{message}</p></div> })}
             <form class="component-form" data-component-editor>

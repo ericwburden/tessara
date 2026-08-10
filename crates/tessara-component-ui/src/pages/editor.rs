@@ -250,6 +250,7 @@ pub(super) fn BarConfigEditor(
     });
 
     view! {
+        <div data-component-config-section="bar">
         <ComponentEditorFieldset title="Fields & Calculation" class="component-editor__bar-fields">
             <header class="component-editor__section-heading">
                 <h2>"Build the bars"</h2>
@@ -264,7 +265,7 @@ pub(super) fn BarConfigEditor(
                     <p>"What should each row or column of bars represent?"</p>
                     <label class="form-field">
                         <span>"Category field"</span>
-                        <select prop:value=move || category_field.get() on:change=move |event| {
+                        <select data-config-control="category_field" prop:value=move || category_field.get() on:change=move |event| {
                             let next = event_target_value(&event);
                             if next != category_field.get_untracked() && comparison_field.get_untracked().trim().is_empty() {
                                 category_labels.set(String::new());
@@ -278,7 +279,7 @@ pub(super) fn BarConfigEditor(
                     </label>
                     <label class="form-field">
                         <span>"Missing categories"</span>
-                        <select prop:value=move || category_missing_policy.get() on:change=move |event| category_missing_policy.set(event_target_value(&event))>
+                        <select data-config-control="category_missing_policy" prop:value=move || category_missing_policy.get() on:change=move |event| category_missing_policy.set(event_target_value(&event))>
                             <option value="omit">"Omit rows"</option>
                             <option value="explicit_missing">"Show as Missing"</option>
                         </select>
@@ -319,7 +320,7 @@ pub(super) fn BarConfigEditor(
                     {move || split_bars.get().then(|| view! {
                         <label class="form-field">
                             <span>"Series field"</span>
-                            <select prop:value=move || comparison_field.get() on:change=move |event| {
+                            <select data-config-control="comparison_field" prop:value=move || comparison_field.get() on:change=move |event| {
                                 let next = event_target_value(&event);
                                 if next != comparison_field.get_untracked() {
                                     category_labels.set(String::new());
@@ -334,7 +335,7 @@ pub(super) fn BarConfigEditor(
                         </label>
                         <label class="form-field">
                             <span>"Missing series"</span>
-                            <select prop:value=move || comparison_missing_policy.get() on:change=move |event| comparison_missing_policy.set(event_target_value(&event))>
+                            <select data-config-control="comparison_missing_policy" prop:value=move || comparison_missing_policy.get() on:change=move |event| comparison_missing_policy.set(event_target_value(&event))>
                                 <option value="omit">"Omit rows"</option>
                                 <option value="explicit_missing">"Show as Missing"</option>
                             </select>
@@ -351,7 +352,7 @@ pub(super) fn BarConfigEditor(
                     <div class="component-editor__measure-grid">
                         <label class="form-field">
                             <span>"Calculation"</span>
-                            <select prop:value=move || summary_type.get() on:change=move |event| summary_type.set(event_target_value(&event))>
+                            <select data-config-control="summary_type" prop:value=move || summary_type.get() on:change=move |event| summary_type.set(event_target_value(&event))>
                                 <option value="row_count">"Count rows"</option>
                                 <option value="count">"Count non-empty values"</option>
                                 <option value="unique_count">"Count unique values"</option>
@@ -361,25 +362,36 @@ pub(super) fn BarConfigEditor(
                                 <option value="none">"Do not summarize"</option>
                             </select>
                         </label>
-                        {move || (summary_type.get() != "row_count").then(|| view! {
-                            <label class="form-field">
+                        <label
+                            class="form-field"
+                            data-component-value-field
+                            hidden=move || summary_type.get() == "row_count"
+                        >
                                 <span>"Value field"</span>
-                                <select prop:value=move || summary_field.get() on:change=move |event| summary_field.set(event_target_value(&event))>
+                                <select
+                                    data-config-control="summary_field"
+                                    disabled=move || summary_type.get() == "row_count"
+                                    prop:value=move || summary_field.get()
+                                    on:change=move |event| summary_field.set(event_target_value(&event))
+                                >
                                     <option value="">"Select field"</option>
                                     {move || fields.get().into_iter().map(|field| field_option_selected(field, summary_field)).collect_view()}
                                 </select>
-                            </label>
-                            <label class="form-field">
+                        </label>
+                        <label
+                            class="form-field"
+                            data-component-value-missing-policy
+                            hidden=move || summary_type.get() == "row_count"
+                        >
                                 <span>"Missing values"</span>
-                                <select prop:value=move || value_missing_policy.get() on:change=move |event| value_missing_policy.set(event_target_value(&event))>
+                                <select data-config-control="value_missing_policy" prop:value=move || value_missing_policy.get() on:change=move |event| value_missing_policy.set(event_target_value(&event))>
                                     <option value="omit">"Omit missing values"</option>
                                     <option value="zero">"Treat missing as zero"</option>
                                     <option value="explicit_missing">"Include as a distinct value"</option>
                                 </select>
-                            </label>
-                        })}
+                        </label>
                         {move || (summary_type.get() == "none").then(|| view! {
-                            <p class="form-message form-message--warning component-editor__calculation-warning">
+                            <p class="form-message form-message--warning component-editor__calculation-warning" data-component-calculation-warning>
                                 "Every category and series group must resolve to exactly one row. Preview and execution will report an error when duplicates exist."
                             </p>
                         })}
@@ -400,10 +412,20 @@ pub(super) fn BarConfigEditor(
 
         <ComponentEditorFieldset title="Order & Display" class="component-editor__bar-display">
             <label class="form-field">
-                <FieldHelpLabel label="Order categories by" help="Category label: sorts alphabetically or chronologically by the Category Field.\nTotal value: sorts by the summarized value across all series."/>
-                <select prop:value=move || sort_field.get() on:change=move |event| sort_field.set(event_target_value(&event))>
-                    <option value="category">"Category label"</option>
-                    <option value="summary_value">"Total value"</option>
+                <DynamicFieldHelpLabel
+                    label="Sort Field"
+                    help=Signal::derive(move || visual_sort_field_help(
+                        "bar",
+                        if split_bars.get() { "comparison" } else { "" },
+                    ))
+                />
+                <select aria-label="Sort Field" data-config-control="visual_sort_field" prop:value=move || sort_field.get() on:change=move |event| sort_field.set(event_target_value(&event))>
+                    {move || visual_sort_field_options(
+                        "bar",
+                        if split_bars.get() { "comparison" } else { "" },
+                    ).into_iter().map(|(value, label)| view! {
+                        <option value=value>{label}</option>
+                    }).collect_view()}
                 </select>
             </label>
             <label class="form-field">
@@ -442,7 +464,7 @@ pub(super) fn BarConfigEditor(
                             "Stacked is unavailable for this non-additive calculation.".to_string()
                         })
                     />
-                    <select aria-label="Comparison Layout" prop:value=move || comparison_layout.get() on:change=move |event| comparison_layout.set(event_target_value(&event))>
+                    <select aria-label="Comparison Layout" data-config-control="comparison_layout" prop:value=move || comparison_layout.get() on:change=move |event| comparison_layout.set(event_target_value(&event))>
                         <option value="grouped">"Grouped"</option>
                         <option value="stacked" disabled=move || !matches!(summary_type.get().as_str(), "row_count" | "count" | "sum")>"Stacked"</option>
                     </select>
@@ -459,7 +481,7 @@ pub(super) fn BarConfigEditor(
             </label>
             <label class="form-field">
                 <span>"Category axis title"</span>
-                <input prop:value=move || if orientation.get() == "horizontal" { y_axis_label.get() } else { x_axis_label.get() } on:input=move |event| {
+                <input data-config-control="x_axis_label" prop:value=move || if orientation.get() == "horizontal" { y_axis_label.get() } else { x_axis_label.get() } on:input=move |event| {
                     if orientation.get_untracked() == "horizontal" {
                         y_axis_label.set(event_target_value(&event));
                     } else {
@@ -469,7 +491,7 @@ pub(super) fn BarConfigEditor(
             </label>
             <label class="form-field">
                 <span>"Value axis title"</span>
-                <input prop:value=move || if orientation.get() == "horizontal" { x_axis_label.get() } else { y_axis_label.get() } on:input=move |event| {
+                <input data-config-control="y_axis_label" prop:value=move || if orientation.get() == "horizontal" { x_axis_label.get() } else { y_axis_label.get() } on:input=move |event| {
                     if orientation.get_untracked() == "horizontal" {
                         x_axis_label.set(event_target_value(&event));
                     } else {
@@ -478,6 +500,7 @@ pub(super) fn BarConfigEditor(
                 }/>
             </label>
         </ComponentEditorFieldset>
+        </div>
     }
 }
 
@@ -517,7 +540,7 @@ fn VisualMeasureEditor(
     view! {
         <label class="form-field component-editor__calculation-field">
             <FieldHelpLabel label="Calculation" help="Count rows: counts every participating row.\nCount non-empty values: counts rows with a Value field value.\nCount unique values: counts distinct Value field values.\nSum: adds numeric values.\nAverage: averages numeric values.\nMedian: returns the middle numeric value.\nDo not summarize: requires exactly one row per group."/>
-            <select aria-label="Calculation" prop:value=move || summary_type.get() on:change=move |event| summary_type.set(event_target_value(&event))>
+            <select aria-label="Calculation" data-config-control="summary_type" prop:value=move || summary_type.get() on:change=move |event| summary_type.set(event_target_value(&event))>
                 <option value="row_count">"Count rows"</option>
                 <option value="count">"Count non-empty values"</option>
                 <option value="unique_count">"Count unique values"</option>
@@ -527,26 +550,32 @@ fn VisualMeasureEditor(
                 <option value="none">"Do not summarize"</option>
             </select>
         </label>
-        {move || (summary_type.get() != "row_count").then(|| view! {
-                <label class="form-field component-editor__value-field">
+        <label
+            class="form-field component-editor__value-field"
+            data-component-value-field
+            hidden=move || summary_type.get() == "row_count"
+        >
                     <FieldHelpLabel label="Value field" help="Choose the Dataset output field whose values are counted or summarized."/>
-                    <select aria-label="Value field" prop:value=move || summary_field.get() on:change=move |event| summary_field.set(event_target_value(&event))>
+                    <select aria-label="Value field" data-config-control="summary_field" disabled=move || summary_type.get() == "row_count" prop:value=move || summary_field.get() on:change=move |event| summary_field.set(event_target_value(&event))>
                         <option value="">"Select field"</option>
                         {move || fields.get().into_iter().map(|field| field_option_selected(field, summary_field)).collect_view()}
                     </select>
-                </label>
-                <label class="form-field component-editor__missing-measure-field">
+        </label>
+        <label
+            class="form-field component-editor__missing-measure-field"
+            data-component-value-missing-policy
+            hidden=move || summary_type.get() == "row_count"
+        >
                     <FieldHelpLabel label="Missing measure values" help="Omit: skips missing values.\nZero: treats missing numeric values as 0 where supported.\nExplicit Missing: includes missing values as a distinct value for compatible calculations."/>
-                    <select aria-label="Missing measure values" prop:value=move || value_missing_policy.get() on:change=move |event| value_missing_policy.set(event_target_value(&event))>
+                    <select aria-label="Missing measure values" data-config-control="value_missing_policy" prop:value=move || value_missing_policy.get() on:change=move |event| value_missing_policy.set(event_target_value(&event))>
                         <option value="omit">"Omit"</option>
                         <option value="zero">"Zero"</option>
                         <option value="explicit_missing">"Explicit Missing"</option>
                     </select>
-                </label>
-        })}
+        </label>
         {move || (summary_type.get() == "none").then(|| view! {
-            <p class="form-message form-message--warning component-editor__calculation-warning">
-                "Every group must resolve to exactly one row. Preview and execution report an error when duplicates exist."
+            <p class="form-message form-message--warning component-editor__calculation-warning" data-component-calculation-warning>
+                "Every category and series group must resolve to exactly one row. Preview and execution will report an error when duplicates exist."
             </p>
         })}
     }
@@ -555,6 +584,7 @@ fn VisualMeasureEditor(
 #[component]
 fn VisualOrderEditor(
     kind: &'static str,
+    limit_control: &'static str,
     sort_field: RwSignal<String>,
     sort_direction: RwSignal<String>,
     limit: RwSignal<String>,
@@ -586,7 +616,7 @@ fn VisualOrderEditor(
         </label>
         <label class="form-field component-editor__limit-field">
             <FieldHelpLabel label="Limit" help="Caps grouped chart output after sorting. Range is 1 to 100."/>
-            <input aria-label="Limit" type="number" min="1" max="100" prop:value=move || limit.get() on:input=move |event| limit.set(event_target_value(&event))/>
+            <input aria-label="Limit" data-config-control=limit_control type="number" min="1" max="100" prop:value=move || limit.get() on:input=move |event| limit.set(event_target_value(&event))/>
         </label>
         <label class="form-field component-editor__format-field">
             <FieldHelpLabel label="Format" help="Plain: compact default number.\nInteger: whole number with no decimals.\nDecimal: two decimal places.\nPercent: multiplies by 100 and appends a percent sign."/>
@@ -608,6 +638,8 @@ pub(super) fn LineConfigEditor(
     summary_type: RwSignal<String>,
     x_field: RwSignal<String>,
     smoothing: RwSignal<bool>,
+    x_axis_label: RwSignal<String>,
+    y_axis_label: RwSignal<String>,
     sort_field: RwSignal<String>,
     sort_direction: RwSignal<String>,
     limit: RwSignal<String>,
@@ -615,19 +647,18 @@ pub(super) fn LineConfigEditor(
     x_missing_policy: RwSignal<String>,
     value_missing_policy: RwSignal<String>,
 ) -> impl IntoView {
-    view! { <ComponentEditorFieldset title="Line Config" class="component-editor__visual-defaults component-editor__line-config">
+    view! { <div data-component-config-section="line"><ComponentEditorFieldset title="Line Config" class="component-editor__visual-defaults component-editor__line-config">
         <VisualMeasureEditor fields summary_field summary_type value_missing_policy/>
-        <label class="form-field component-editor__category-field"><FieldHelpLabel label="Category Field" help="Groups line points along the horizontal axis, such as a date or ordered label."/><select aria-label="Category Field" prop:value=move || x_field.get() on:change=move |event| x_field.set(event_target_value(&event))><option value="">"Select field"</option>{move || fields.get().into_iter().map(|field| field_option_selected(field, x_field)).collect_view()}</select></label>
+        <label class="form-field component-editor__category-field"><FieldHelpLabel label="Category Field" help="Groups line points along the horizontal axis, such as a date or ordered label."/><select aria-label="Category Field" data-config-control="x_field" prop:value=move || x_field.get() on:change=move |event| x_field.set(event_target_value(&event))><option value="">"Select field"</option>{move || fields.get().into_iter().map(|field| field_option_selected(field, x_field)).collect_view()}</select></label>
         <label class="form-field component-editor__missing-category-field"><FieldHelpLabel label="Missing Categories" help="Omit rows: excludes rows without a category. Show as Missing: retains them in a visible missing group."/><select aria-label="Missing Categories" prop:value=move || x_missing_policy.get() on:change=move |event| x_missing_policy.set(event_target_value(&event))><option value="omit">"Omit rows"</option><option value="explicit_missing">"Show as Missing"</option></select></label>
-        <VisualOrderEditor kind="line" sort_field sort_direction limit value_format/>
-        <div class="form-field component-editor__smoothing-field">
+        <VisualOrderEditor kind="line" limit_control="line_number_of_points" sort_field sort_direction limit value_format/>
+        <label class="form-field component-editor__smoothing-field">
             <FieldHelpLabel label="Smoothing" help="On: draws a smooth curve through the points. Off: connects points with straight line segments."/>
-            <div class="segmented-toggle segmented-toggle--binary" role="group" aria-label="Smoothing">
-                <button type="button" class:segmented-toggle__option=true class:is-active=move || smoothing.get() on:click=move |_| smoothing.set(true) aria-pressed=move || smoothing.get()>"On"</button>
-                <button type="button" class:segmented-toggle__option=true class:is-active=move || !smoothing.get() on:click=move |_| smoothing.set(false) aria-pressed=move || !smoothing.get()>"Off"</button>
-            </div>
-        </div>
-    </ComponentEditorFieldset> }
+            <input type="checkbox" aria-label="Smoothing" data-config-control="smoothing" prop:checked=move || smoothing.get() on:change=move |event| smoothing.set(event_target_checked(&event))/>
+        </label>
+        <label class="form-field"><span>"Category axis title"</span><input aria-label="Category axis title" data-config-control="line_x_axis_label" prop:value=move || x_axis_label.get() on:input=move |event| x_axis_label.set(event_target_value(&event))/></label>
+        <label class="form-field"><span>"Value axis title"</span><input aria-label="Value axis title" data-config-control="line_y_axis_label" prop:value=move || y_axis_label.get() on:input=move |event| y_axis_label.set(event_target_value(&event))/></label>
+    </ComponentEditorFieldset></div> }
 }
 
 #[component]
@@ -647,12 +678,12 @@ pub(super) fn PieDonutConfigEditor(
     category_missing_policy: RwSignal<String>,
     value_missing_policy: RwSignal<String>,
 ) -> impl IntoView {
-    view! { <ComponentEditorFieldset title="Pie / Donut Config" class="component-editor__visual-defaults component-editor__pie-donut-config">
+    view! { <div data-component-config-section="pie"><ComponentEditorFieldset title="Pie / Donut Config" class="component-editor__visual-defaults component-editor__pie-donut-config">
         <VisualMeasureEditor fields summary_field summary_type value_missing_policy/>
-        <label class="form-field component-editor__category-field"><FieldHelpLabel label="Category Field" help="Groups results into labeled slices."/><select aria-label="Category Field" prop:value=move || category_field.get() on:change=move |event| { let next=event_target_value(&event); if next != category_field.get_untracked() { category_labels.set(String::new()); category_colors.set(String::new()); legend_title.set(field_label_for_key(&fields.get_untracked(), &next).unwrap_or_default()); } category_field.set(next); }><option value="">"Select field"</option>{move || fields.get().into_iter().map(|field| field_option_selected(field, category_field)).collect_view()}</select></label>
+        <label class="form-field component-editor__category-field"><FieldHelpLabel label="Category Field" help="Groups results into labeled slices."/><select aria-label="Category Field" data-config-control="pie_category_field" prop:value=move || category_field.get() on:change=move |event| { let next=event_target_value(&event); if next != category_field.get_untracked() { category_labels.set(String::new()); category_colors.set(String::new()); legend_title.set(field_label_for_key(&fields.get_untracked(), &next).unwrap_or_default()); } category_field.set(next); }><option value="">"Select field"</option>{move || fields.get().into_iter().map(|field| field_option_selected(field, category_field)).collect_view()}</select></label>
         <label class="form-field component-editor__missing-category-field"><FieldHelpLabel label="Missing categories" help="Omit rows: excludes rows without a category. Show as Missing: retains them in a visible missing group."/><select aria-label="Missing categories" prop:value=move || category_missing_policy.get() on:change=move |event| category_missing_policy.set(event_target_value(&event))><option value="omit">"Omit rows"</option><option value="explicit_missing">"Show as Missing"</option></select></label>
-        <VisualOrderEditor kind="pie" sort_field sort_direction limit value_format/>
-    </ComponentEditorFieldset> }
+        <VisualOrderEditor kind="pie" limit_control="max_slices" sort_field sort_direction limit value_format/>
+    </ComponentEditorFieldset></div> }
 }
 
 #[component]
@@ -667,13 +698,13 @@ pub(super) fn StatCardConfigEditor(
     stat_supporting_text: RwSignal<String>,
     stat_panel_style: RwSignal<String>,
 ) -> impl IntoView {
-    view! { <ComponentEditorFieldset title="Stat Card Config" class="component-editor__visual-defaults component-editor__stat-card-config">
+    view! { <div data-component-config-section="stat_card"><ComponentEditorFieldset title="Stat Card Config" class="component-editor__visual-defaults component-editor__stat-card-config">
         <VisualMeasureEditor fields summary_field summary_type value_missing_policy/>
         <label class="form-field component-editor__format-field"><FieldHelpLabel label="Format" help="Plain: compact default number.\nInteger: whole number with no decimals.\nDecimal: two decimal places.\nPercent: multiplies by 100 and appends a percent sign."/><select aria-label="Format" prop:value=move || value_format.get() on:change=move |event| value_format.set(event_target_value(&event))><option value="plain">"Plain"</option><option value="integer">"Integer"</option><option value="decimal">"Decimal"</option><option value="percent">"Percent"</option></select></label>
-        <label class="form-field component-editor__stat-label-field"><FieldHelpLabel label="Label" help="Overrides the Stat Card display label."/><input aria-label="Label" prop:value=move || stat_label.get() on:input=move |event| stat_label.set(event_target_value(&event))/></label>
-        <label class="form-field component-editor__stat-style-field"><FieldHelpLabel label="Panel Style" help="Default: standard emphasis. Muted: quieter supporting value. Accent: stronger highlighted value."/><select aria-label="Panel Style" prop:value=move || stat_panel_style.get() on:change=move |event| stat_panel_style.set(event_target_value(&event))><option value="default">"Default"</option><option value="muted">"Muted"</option><option value="accent">"Accent"</option></select></label>
-        <label class="form-field form-field--wide component-editor__stat-supporting-field"><FieldHelpLabel label="Supporting Text" help="Adds short context beneath the Stat Card value."/><input aria-label="Supporting Text" prop:value=move || stat_supporting_text.get() on:input=move |event| stat_supporting_text.set(event_target_value(&event))/></label>
-    </ComponentEditorFieldset> }
+        <label class="form-field component-editor__stat-label-field"><FieldHelpLabel label="Label" help="Overrides the Stat Card display label."/><input aria-label="Label" data-config-control="stat_label" prop:value=move || stat_label.get() on:input=move |event| stat_label.set(event_target_value(&event))/></label>
+        <label class="form-field component-editor__stat-style-field"><FieldHelpLabel label="Panel Style" help="Default: standard emphasis. Muted: quieter supporting value. Accent: stronger highlighted value."/><select aria-label="Panel Style" data-config-control="panel_style" prop:value=move || stat_panel_style.get() on:change=move |event| stat_panel_style.set(event_target_value(&event))><option value="default">"Default"</option><option value="muted">"Muted"</option><option value="accent">"Accent"</option></select></label>
+        <label class="form-field form-field--wide component-editor__stat-supporting-field"><FieldHelpLabel label="Supporting Text" help="Adds short context beneath the Stat Card value."/><input aria-label="Supporting Text" data-config-control="supporting_text" prop:value=move || stat_supporting_text.get() on:input=move |event| stat_supporting_text.set(event_target_value(&event))/></label>
+    </ComponentEditorFieldset></div> }
 }
 
 #[component]
@@ -802,6 +833,7 @@ pub(super) fn CategoryDisplayControls(
                 <FieldHelpLabel label="Legend Title" help="Optional text displayed above the chart legend."/>
                 <input
                     aria-label="Legend Title"
+                    data-config-control="legend_title"
                     prop:value=move || legend_title.get()
                     on:input=move |event| legend_title.set(event_target_value(&event))
                 />
@@ -882,6 +914,7 @@ fn CategoryLabelsControl(
                                                 <th scope="row">{raw_for_display}</th>
                                                 <td>
                                                     <input
+                                                        data-category-display-label
                                                         aria-label=format!("Display label for {raw_for_label_input}")
                                                         placeholder=raw_for_label_input.clone()
                                                         prop:value=move || category_label_display(&category_labels.get(), &raw_for_label_value)

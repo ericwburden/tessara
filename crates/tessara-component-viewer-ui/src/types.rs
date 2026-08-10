@@ -8,5 +8,5 @@ pub use tessara_components_contract::{
 pub(crate) use tessara_components_contract::{
     ComponentTableColumn, ComponentTableResponse as ComponentTable,
 };
-#[cfg(test)]
+#[cfg(all(test, feature = "ssr"))]
 pub(crate) use tessara_components_contract::{ComponentTablePagination, ComponentTableRow};

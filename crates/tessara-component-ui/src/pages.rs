@@ -203,9 +203,12 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let consumer_modal_open = RwSignal::new(false);
     let consumer_search = RwSignal::new(String::new());
     let new_version_note = RwSignal::new(String::new());
+    let version_note = RwSignal::new(String::new());
     let draft_preview = RwSignal::new(None::<ComponentRenderResponse>);
     let draft_preview_error = RwSignal::new(None::<String>);
     let draft_preview_loading = RwSignal::new(false);
+    let dataset_preview_outage = RwSignal::new(false);
+    let preview_retry = RwSignal::new(0_u64);
     let draft_preview_generation = RwSignal::new(0_u64);
     let draft_preview_timeout = RwSignal::new(None::<i32>);
     on_cleanup(|| crate::set_lifecycle_dirty(false));
@@ -285,6 +288,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     stat_label,
                     stat_supporting_text,
                     stat_panel_style,
+                    version_note,
                     slug_manually_edited,
                     error,
                 );
@@ -292,6 +296,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
         }
     });
     Effect::new(move |_| {
+        let _retry = preview_retry.get();
         let values = ComponentFormValues {
             name: name.get(),
             slug: slug.get(),
@@ -335,6 +340,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
             draft_preview_loading,
             draft_preview_generation,
             draft_preview_timeout,
+            dataset_preview_outage,
         );
     });
     let has_kind_specific_changes = Signal::derive(move || match component_type.get().as_str() {
@@ -385,10 +391,23 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     view! {
         <section
             class="route-panel components-page"
+            data-component-editor-root
             on:click=move |_| dataset_picker_open.set(false)
         >
             <ComponentsBreadcrumb current=title/>
             <PageHeader title/>
+            {move || dataset_preview_outage.get().then(|| view! {
+                <section class="form-status is-error component-dataset-outage" data-component-dataset-outage role="alert">
+                    <p>"Dataset metadata is temporarily unavailable. Your unsaved Component changes are preserved."</p>
+                    <button
+                        class="button button--secondary button--small"
+                        type="button"
+                        on:click=move |_| preview_retry.update(|value| *value += 1)
+                    >
+                        "Retry Dataset metadata"
+                    </button>
+                </section>
+            })}
             <form
                 class="route-panel__section form-grid component-editor-form"
                 on:input=move |_| crate::set_lifecycle_dirty(true)
@@ -401,7 +420,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         editing_version_id: editing_version_id.get_untracked(),
                         current_published_version_id: current_published_version_id.get_untracked(),
                         publish_action: ComponentPublishAction::SaveDraft,
-                        version_note: None,
+                        version_note: Some(version_note.get_untracked()),
                     },
                     ComponentFormValues {
                         name: name.get_untracked(),
@@ -715,6 +734,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                         embedded=true
                                     />
                                 </ComponentEditorFieldset>
+                                <div data-component-config-section="visual">
                                 {move || if component_type.get() == "bar" {
                                     view! {
                                         <BarConfigEditor
@@ -740,7 +760,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                         />
                                     }.into_any()
                                 } else if component_type.get() == "line" {
-                                    view! { <LineConfigEditor fields=Signal::derive(move || selected_fields.get()) summary_field=visual_summary_field summary_type=visual_summary_type x_field=visual_x_field smoothing=visual_line_smoothing sort_field=visual_sort_field sort_direction=visual_sort_direction limit=visual_limit value_format=visual_value_format x_missing_policy=visual_category_missing_policy value_missing_policy=visual_missing_policy/> }.into_any()
+                                    view! { <LineConfigEditor fields=Signal::derive(move || selected_fields.get()) summary_field=visual_summary_field summary_type=visual_summary_type x_field=visual_x_field smoothing=visual_line_smoothing x_axis_label=visual_x_axis_label y_axis_label=visual_y_axis_label sort_field=visual_sort_field sort_direction=visual_sort_direction limit=visual_limit value_format=visual_value_format x_missing_policy=visual_category_missing_policy value_missing_policy=visual_missing_policy/> }.into_any()
                                 } else if matches!(component_type.get().as_str(), "pie" | "donut") {
                                     view! { <PieDonutConfigEditor fields=Signal::derive(move || selected_fields.get()) summary_field=visual_summary_field summary_type=visual_summary_type category_field=visual_category_field category_labels=visual_category_labels category_colors=visual_category_colors legend_title=visual_legend_title sort_field=visual_sort_field sort_direction=visual_sort_direction limit=visual_limit value_format=visual_value_format category_missing_policy=visual_category_missing_policy value_missing_policy=visual_missing_policy/> }.into_any()
                                 } else {
@@ -759,6 +779,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                         legend_title=visual_legend_title
                                     />
                                 })}
+                                </div>
                             </div>
                             <ComponentEditorRightRail
                                 component_type
@@ -796,6 +817,17 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         />
                     </ComponentEditorFieldset>
                 })}
+                <ComponentEditorFieldset title="Version" class="component-editor__version-panel">
+                    <label class="form-field form-field--wide">
+                        <span>"Version note"</span>
+                        <input
+                            maxlength="2000"
+                            prop:value=move || version_note.get()
+                            on:input=move |event| version_note.set(event_target_value(&event))
+                        />
+                    </label>
+                    <p class="muted">"Publishing a new version requires a note so consumers can review the change."</p>
+                </ComponentEditorFieldset>
                 <div class="form-actions">
                     <button
                         class="button button--secondary button--warning"
@@ -818,7 +850,12 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                             }>"Discard Draft"</button>
                         }
                     })}
-                    <button class="button button--secondary" type="submit">"Save Draft"</button>
+                    <button
+                        class="button button--secondary"
+                        type="submit"
+                        data-component-save-action="save_draft"
+                        disabled=move || dataset_preview_outage.get()
+                    >"Save Draft"</button>
                     <div class=move || if publish_menu_open.get() {
                         "dropdown-menu component-editor__publish-menu is-open"
                     } else {
@@ -827,6 +864,8 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         <button
                             class="button component-editor__publish-button"
                             type="button"
+                            data-component-open-consumer-review
+                            disabled=move || dataset_preview_outage.get()
                             aria-expanded=move || publish_menu_open.get().to_string()
                             on:click=move |_| publish_menu_open.update(|open| *open = !*open)
                         >
@@ -844,7 +883,8 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                 class="dropdown-menu__item"
                                 type="button"
                                 role="menuitem"
-                                disabled=move || current_published_version_id.get().is_none()
+                                data-component-save-action="update_existing_version"
+                                disabled=move || current_published_version_id.get().is_none() || dataset_preview_outage.get()
                                 on:click=move |_| {
                                 publish_menu_open.set(false);
                                 create_component_from_form(
@@ -853,7 +893,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                         editing_version_id: editing_version_id.get_untracked(),
                                         current_published_version_id: current_published_version_id.get_untracked(),
                                         publish_action: ComponentPublishAction::UpdateExistingVersion,
-                                        version_note: None,
+                                        version_note: Some(version_note.get_untracked()),
                                     },
                                     ComponentFormValues {
                                         name: name.get_untracked(),
@@ -900,7 +940,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                             }>
                                 "Update Existing Version"
                             </button>
-                            <button class="dropdown-menu__item" type="button" role="menuitem" on:click=move |_| {
+                            <button class="dropdown-menu__item" type="button" role="menuitem" data-component-open-consumer-review disabled=move || dataset_preview_outage.get() on:click=move |_| {
                                 publish_menu_open.set(false);
                                 consumer_search.set(String::new());
                                 new_version_note.set(String::new());
@@ -2397,6 +2437,7 @@ fn load_component_for_edit(
     stat_label: RwSignal<String>,
     stat_supporting_text: RwSignal<String>,
     stat_panel_style: RwSignal<String>,
+    version_note: RwSignal<String>,
     slug_manually_edited: RwSignal<bool>,
     error: RwSignal<Option<String>>,
 ) {
@@ -2418,6 +2459,7 @@ fn load_component_for_edit(
                 description.set(component.description.clone().unwrap_or_default());
                 if let Some(version) = editable_component_version(&component) {
                     editing_version_id.set((version.status == "draft").then(|| version.id.clone()));
+                    version_note.set(version.version_note.clone());
                     dataset_id.set(version.dataset_id);
                     dataset_major.set(version.dataset_version_major.to_string());
                     component_type.set(version.component_type.clone());
@@ -2504,6 +2546,7 @@ fn load_component_for_edit(
     _stat_label: RwSignal<String>,
     _stat_supporting_text: RwSignal<String>,
     _stat_panel_style: RwSignal<String>,
+    _version_note: RwSignal<String>,
     _slug_manually_edited: RwSignal<bool>,
     _error: RwSignal<Option<String>>,
 ) {
@@ -2584,6 +2627,7 @@ fn schedule_component_editor_preview(
     loading: RwSignal<bool>,
     generation: RwSignal<u64>,
     timeout: RwSignal<Option<i32>>,
+    dataset_outage: RwSignal<bool>,
 ) {
     let Some(window) = web_sys::window() else {
         return;
@@ -2593,12 +2637,26 @@ fn schedule_component_editor_preview(
         timeout.set(None);
     }
     if !component_preview_ready(&values) {
-        request_component_editor_preview(values, preview, error, loading, generation);
+        request_component_editor_preview(
+            values,
+            preview,
+            error,
+            loading,
+            generation,
+            dataset_outage,
+        );
         return;
     }
     let callback = Closure::once(Box::new(move || {
         timeout.set(None);
-        request_component_editor_preview(values, preview, error, loading, generation);
+        request_component_editor_preview(
+            values,
+            preview,
+            error,
+            loading,
+            generation,
+            dataset_outage,
+        );
     }) as Box<dyn FnOnce()>);
     if let Ok(handle) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
         callback.as_ref().unchecked_ref(),
@@ -2617,6 +2675,7 @@ fn schedule_component_editor_preview(
     _: RwSignal<bool>,
     _: RwSignal<u64>,
     _: RwSignal<Option<i32>>,
+    _: RwSignal<bool>,
 ) {
 }
 
@@ -2627,12 +2686,14 @@ fn request_component_editor_preview(
     error: RwSignal<Option<String>>,
     loading: RwSignal<bool>,
     generation: RwSignal<u64>,
+    dataset_outage: RwSignal<bool>,
 ) {
     if !component_preview_ready(&values) {
         generation.update(|value| *value += 1);
         preview.set(None);
         error.set(None);
         loading.set(false);
+        dataset_outage.set(false);
         return;
     }
     generation.update(|value| *value += 1);
@@ -2656,9 +2717,11 @@ fn request_component_editor_preview(
             Ok(next_preview) => {
                 preview.set(Some(next_preview));
                 error.set(None);
+                dataset_outage.set(false);
             }
             Err(message) => {
                 preview.set(None);
+                dataset_outage.set(component_dependency_unavailable(&message));
                 error.set(Some(message));
             }
         }
@@ -2673,7 +2736,17 @@ fn request_component_editor_preview(
     _: RwSignal<Option<String>>,
     _: RwSignal<bool>,
     _: RwSignal<u64>,
+    _: RwSignal<bool>,
 ) {
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn component_dependency_unavailable(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("dependency_unavailable")
+        || message.contains("dataset.unavailable")
+        || message.contains("dataset provider unavailable")
+        || message.contains("dataset metadata") && message.contains("unavailable")
 }
 
 #[cfg(feature = "hydrate")]

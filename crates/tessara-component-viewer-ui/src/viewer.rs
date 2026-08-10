@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 
 use icons::{ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Fullscreen, ListFilter, RotateCcw};
 use leptos::prelude::*;
-#[cfg(any(feature = "hydrate", test))]
+#[cfg(feature = "hydrate")]
 use tessara_components_contract::ComponentRenderKind;
 use tessara_module_ui::{
     EmptyState, FullscreenDialog, TableColumnOption, TableColumnSelector, TablePaginationBar,
@@ -1047,18 +1047,15 @@ fn ComponentTableHeader(
     let popover = TablePopoverController::new();
     let key = column.key;
     let label = column.label;
-    let filter_operator = default_filter_operator(&column.field_type);
-    let filter_label = if filter_operator == "contains" {
-        "Contains"
-    } else {
-        "Equals"
-    };
+    let filter_operators = table_filter_operators(&column.field_type);
+    let default_operator = default_filter_operator(&column.field_type);
+    let pending_filter_operator = RwSignal::new(default_operator.to_string());
+    let pending_filter_value = RwSignal::new(String::new());
     let class_key = key.clone();
     let icon_key = key.clone();
     let ascending_key = key.clone();
     let descending_key = key.clone();
     let clear_sort_key = key.clone();
-    let filter_key = key.clone();
     let filter_value_key = key.clone();
     let clear_filter_key = key.clone();
 
@@ -1083,11 +1080,22 @@ fn ComponentTableHeader(
                             }
                         }
                         type="button"
-                        aria-label=format!("Sort and filter {label}")
+                        aria-label=format!("Filter {label}")
                         title=format!("Sort and filter {label}")
                         aria-haspopup="dialog"
                         aria-expanded=move || popover.open.get().to_string()
-                        on:click=move |_| popover.toggle()
+                        on:click=move |_| {
+                            if !popover.open.get_untracked() {
+                                if let Some(active) = state.get_untracked().filters.get(&key) {
+                                    pending_filter_operator.set(active.operator.to_string());
+                                    pending_filter_value.set(active.value.clone());
+                                } else {
+                                    pending_filter_operator.set(default_operator.to_string());
+                                    pending_filter_value.set(String::new());
+                                }
+                            }
+                            popover.toggle();
+                        }
                     >
                         {move || match state.get().sort {
                             Some(sort) if sort.field_key == icon_key && sort.direction == "asc" => {
@@ -1109,7 +1117,7 @@ fn ComponentTableHeader(
                         node_ref=popover.panel
                         class="data-table-filter__menu blurred-surface interactive-data-table__header-controls"
                         role="dialog"
-                        aria-label=format!("Sort and filter {label}")
+                        aria-label=format!("Filter {label}")
                         tabindex="-1"
                         on:keydown=move |event| popover.handle_keydown(event)
                     >
@@ -1164,48 +1172,69 @@ fn ComponentTableHeader(
                         </button>
                         <hr class="interactive-data-table__menu-rule"/>
                         <label class="form-field">
-                            <span>{filter_label}</span>
+                            <span>"Operator"</span>
+                            <select
+                                aria-label="Operator"
+                                prop:value=move || pending_filter_operator.get()
+                                on:change=move |event| pending_filter_operator.set(event_target_value(&event))
+                            >
+                                {filter_operators.into_iter().map(|(value, label)| view! {
+                                    <option value=value>{label}</option>
+                                }).collect_view()}
+                            </select>
+                        </label>
+                        <label class="form-field" hidden=move || !table_filter_needs_value(&pending_filter_operator.get())>
+                            <span>"Value"</span>
                             <input
                                 type="search"
-                                placeholder="Filter values"
-                                prop:value=move || state
-                                    .get()
-                                    .filters
-                                    .get(&filter_value_key)
-                                    .map(|filter| filter.value.clone())
-                                    .unwrap_or_default()
-                                on:input=move |event| {
-                                    let value = event_target_value(&event);
+                                aria-label="Value"
+                                placeholder=move || if pending_filter_operator.get() == "between" { "Start..end" } else { "Filter value" }
+                                prop:value=move || pending_filter_value.get()
+                                on:input=move |event| pending_filter_value.set(event_target_value(&event))
+                            />
+                        </label>
+                        <div class="action-row">
+                            <button
+                                class="button button--secondary button--small"
+                                type="button"
+                                on:click=move |_| {
                                     state.update(|state| {
-                                        if value.trim().is_empty() {
-                                            state.filters.remove(&filter_key);
+                                        state.filters.remove(&clear_filter_key);
+                                        state.reset_paging();
+                                    });
+                                    pending_filter_operator.set(default_operator.to_string());
+                                    pending_filter_value.set(String::new());
+                                    popover.close();
+                                }
+                            >
+                                "Clear"
+                            </button>
+                            <button
+                                class="button button--small"
+                                type="button"
+                                on:click=move |_| {
+                                    let operator = pending_filter_operator.get_untracked();
+                                    let value = pending_filter_value.get_untracked();
+                                    state.update(|state| {
+                                        if table_filter_needs_value(&operator) && value.trim().is_empty() {
+                                            state.filters.remove(&filter_value_key);
                                         } else {
                                             state.filters.insert(
-                                                filter_key.clone(),
+                                                filter_value_key.clone(),
                                                 ComponentTableFilter {
-                                                    operator: filter_operator,
+                                                    operator: canonical_table_filter_operator(&operator),
                                                     value,
                                                 },
                                             );
                                         }
                                         state.reset_paging();
                                     });
+                                    popover.close();
                                 }
-                            />
-                        </label>
-                        <button
-                            class="data-table-filter__option"
-                            type="button"
-                            on:click=move |_| {
-                                state.update(|state| {
-                                    state.filters.remove(&clear_filter_key);
-                                    state.reset_paging();
-                                });
-                                popover.close();
-                            }
-                        >
-                            "Clear filter"
-                        </button>
+                            >
+                                "Apply filter"
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1217,6 +1246,79 @@ fn default_filter_operator(field_type: &str) -> &'static str {
     match field_type {
         "text" | "static_text" => "contains",
         _ => "equals",
+    }
+}
+
+fn table_filter_operators(field_type: &str) -> Vec<(&'static str, &'static str)> {
+    let common = vec![("equals", "Equals"), ("not_equals", "Does not equal")];
+    match field_type.to_ascii_lowercase().as_str() {
+        "integer" | "number" | "decimal" | "float" => common
+            .into_iter()
+            .chain([
+                ("greater_than", "Greater than"),
+                ("greater_than_or_equal", "At least"),
+                ("less_than", "Less than"),
+                ("less_than_or_equal", "At most"),
+                ("between", "Between"),
+                ("is_null", "Has no value"),
+                ("is_not_null", "Has a value"),
+            ])
+            .collect(),
+        "date" | "datetime" | "timestamp" => common
+            .into_iter()
+            .chain([
+                ("greater_than", "After"),
+                ("greater_than_or_equal", "On or after"),
+                ("less_than", "Before"),
+                ("less_than_or_equal", "On or before"),
+                ("between", "Between"),
+                ("is_null", "Has no value"),
+                ("is_not_null", "Has a value"),
+            ])
+            .collect(),
+        "boolean" | "bool" => common
+            .into_iter()
+            .chain([("is_null", "Has no value"), ("is_not_null", "Has a value")])
+            .collect(),
+        _ => vec![
+            ("contains", "Contains"),
+            ("not_contains", "Does not contain"),
+            ("starts_with", "Starts with"),
+            ("ends_with", "Ends with"),
+            ("equals", "Equals"),
+            ("not_equals", "Does not equal"),
+            ("is_empty", "Is empty"),
+            ("is_not_empty", "Is not empty"),
+            ("is_null", "Has no value"),
+            ("is_not_null", "Has a value"),
+        ],
+    }
+}
+
+fn table_filter_needs_value(operator: &str) -> bool {
+    !matches!(
+        operator,
+        "is_empty" | "is_not_empty" | "is_null" | "is_not_null"
+    )
+}
+
+fn canonical_table_filter_operator(operator: &str) -> &'static str {
+    match operator {
+        "not_contains" => "not_contains",
+        "starts_with" => "starts_with",
+        "ends_with" => "ends_with",
+        "equals" => "equals",
+        "not_equals" => "not_equals",
+        "greater_than" => "greater_than",
+        "greater_than_or_equal" => "greater_than_or_equal",
+        "less_than" => "less_than",
+        "less_than_or_equal" => "less_than_or_equal",
+        "between" => "between",
+        "is_empty" => "is_empty",
+        "is_not_empty" => "is_not_empty",
+        "is_null" => "is_null",
+        "is_not_null" => "is_not_null",
+        _ => "contains",
     }
 }
 
@@ -1431,6 +1533,8 @@ mod tests {
     };
     #[cfg(feature = "ssr")]
     use std::collections::BTreeMap;
+    #[cfg(feature = "ssr")]
+    use tessara_components_contract::ComponentRenderKind;
 
     #[test]
     fn persisted_table_state_restores_page_controls_and_stays_bounded() {
@@ -1574,6 +1678,11 @@ mod tests {
         assert_eq!(default_filter_operator("number"), "equals");
         assert_eq!(default_filter_operator("date"), "equals");
         assert_eq!(default_filter_operator("boolean"), "equals");
+        assert!(table_filter_operators("text").contains(&("contains", "Contains")));
+        assert!(table_filter_operators("number").contains(&("between", "Between")));
+        assert!(table_filter_needs_value("equals"));
+        assert!(!table_filter_needs_value("is_null"));
+        assert_eq!(canonical_table_filter_operator("between"), "between");
     }
 
     #[test]

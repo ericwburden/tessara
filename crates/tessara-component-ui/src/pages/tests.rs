@@ -7,15 +7,15 @@ use super::{
     dataset_picker_majors, toggle_csv_key, toggle_visible_column,
 };
 use super::{
-    component_kind_filter_options, component_matches_filters, component_status_filter_options,
+    component_dependency_unavailable, component_redirect_ref, component_summary_kind_label,
+    component_summary_revision_label, component_summary_status_label, dataset_catalog_option_label,
+    dataset_picker_rows, dataset_provenance_label, editable_component_version,
+    published_component_target, selected_dataset_major_value, selected_dataset_picker_label,
+    snake_case_component_slug, table_page_size_from_config, table_sort_from_config,
+    table_visible_columns_from_config, visual_summary_field_ready,
 };
 use super::{
-    component_redirect_ref, component_summary_kind_label, component_summary_revision_label,
-    component_summary_status_label, dataset_catalog_option_label, dataset_picker_rows,
-    dataset_provenance_label, editable_component_version, published_component_target,
-    selected_dataset_major_value, selected_dataset_picker_label, snake_case_component_slug,
-    table_page_size_from_config, table_sort_from_config, table_visible_columns_from_config,
-    visual_summary_field_ready,
+    component_kind_filter_options, component_matches_filters, component_status_filter_options,
 };
 use super::{lifecycle_action_label, lifecycle_actions};
 use crate::types::{
@@ -249,6 +249,19 @@ fn row_count_preview_does_not_require_a_value_field() {
     assert!(visual_summary_field_ready("row_count", ""));
     assert!(!visual_summary_field_ready("sum", ""));
     assert!(visual_summary_field_ready("sum", "amount"));
+}
+
+#[test]
+fn component_preview_classifies_dataset_dependency_outages() {
+    assert!(component_dependency_unavailable(
+        "Dataset provider unavailable for deterministic acceptance."
+    ));
+    assert!(component_dependency_unavailable(
+        "component.dependency_unavailable"
+    ));
+    assert!(!component_dependency_unavailable(
+        "Component config is invalid."
+    ));
 }
 
 #[test]
