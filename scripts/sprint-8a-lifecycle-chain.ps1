@@ -1841,7 +1841,8 @@ function Assert-Sprint8AManualUatReceipt {
         $evidenceFailureDetail = if ([string]::IsNullOrWhiteSpace([string]$evidenceContractFailure)) {
             ""
         } else { " Evidence validation failed: $evidenceContractFailure" }
-        throw "Manual UAT receipt '$ExpectedScenario' is malformed, incomplete, or bound to another candidate/environment.$evidenceFailureDetail"
+        $contractFailureDetail = " shape=$shapeContractValid identity=$identityContractValid actions=$actionContractValid evidence=$evidenceContractValid resume=$resumeContractValid"
+        throw "Manual UAT receipt '$ExpectedScenario' is malformed, incomplete, or bound to another candidate/environment.$contractFailureDetail$evidenceFailureDetail"
     }
     if (([string]$Receipt.state -ceq "passed" -and
             ((@($actionStates | Where-Object { $_ -cne "passed" }).Count -ne 0) -or
