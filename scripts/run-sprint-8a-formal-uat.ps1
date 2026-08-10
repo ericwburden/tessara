@@ -1461,6 +1461,60 @@ function Invoke-Sprint8AFormalUatPublicationTail {
     $resultReference
 }
 
+function Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility {
+    param(
+        [Parameter(Mandatory)]$Receipt,
+        [Parameter(Mandatory)][int]$ExpectedAttempt
+    )
+
+    return (
+        ($Receipt.schema_version -is [int] -or $Receipt.schema_version -is [long]) -and
+        [int]$Receipt.schema_version -eq 1 -and
+        [string]$Receipt.sprint -ceq "sprint-8a" -and
+        [string]$Receipt.phase -ceq "uat" -and
+        ($Receipt.attempt -is [int] -or $Receipt.attempt -is [long]) -and
+        [int]$Receipt.attempt -eq $ExpectedAttempt -and
+        $Receipt.authoritative -is [bool] -and
+        -not [bool]$Receipt.authoritative -and
+        [string]$Receipt.state -in @("passed", "failed", "blocked") -and
+        $Receipt.PSObject.Properties.Name -contains "manifest_update_failure"
+    )
+}
+
+function Get-Sprint8AFormalUatTerminalAttemptManifestRepairOverrides {
+    $manifestPath = Join-Path $evidenceRootPath "evidence-manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return @() }
+    Assert-Sprint8AReceiptSidecar -Path $manifestPath | Out-Null
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $manifestByPath = @{}
+    foreach ($entry in @($manifest.entries)) { $manifestByPath[[string]$entry.path] = $entry }
+    $attemptsRoot = Join-Path $evidenceRootPath "attempts"
+    if (-not (Test-Path -LiteralPath $attemptsRoot -PathType Container)) { return @() }
+    @(
+        foreach ($file in @(Get-ChildItem -LiteralPath $attemptsRoot -File -Filter "uat-*.json" | Where-Object {
+                    $_.Name -match '^uat-(\d+)\.json$'
+                })) {
+            $attemptNumber = [int][regex]::Match($file.Name, '^uat-(\d+)\.json$').Groups[1].Value
+            $sha = Assert-Sprint8AReceiptSidecar -Path $file.FullName
+            $path = [IO.Path]::GetRelativePath($repoRoot, $file.FullName).Replace("\", "/")
+            $existing = $manifestByPath[$path]
+            if ($null -eq $existing -or [string]$existing.sha256 -ceq $sha) { continue }
+            $receipt = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+            if (-not (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
+                    -Receipt $receipt -ExpectedAttempt $attemptNumber)) {
+                throw "Formal UAT cannot repair stale manifest entry '$path' because its receipt is not an authenticated terminal manifest-publication failure."
+            }
+            [pscustomobject][ordered]@{
+                path = $path
+                sha256 = $sha
+                phase = "uat-attempt"
+                authoritative = $false
+                status = [string]$receipt.state
+            }
+        }
+    )
+}
+
 function Sync-Sprint8AFormalUatEvidenceManifest {
     param(
         [AllowEmptyCollection()][object[]]$Overrides = @(),
@@ -1473,6 +1527,8 @@ function Sync-Sprint8AFormalUatEvidenceManifest {
     }
     Assert-Sprint8AReceiptSidecar -Path $manifestPath | Out-Null
     $existingManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $repairOverrides = @(Get-Sprint8AFormalUatTerminalAttemptManifestRepairOverrides)
+    $Overrides = @(@($Overrides) + $repairOverrides | Group-Object path | ForEach-Object { $_.Group[0] })
     $entries = Get-Sprint8AEvidenceFileManifestEntries `
         -RepositoryRoot $repoRoot `
         -EvidenceRoot $evidenceRootPath `
@@ -1637,6 +1693,26 @@ if ($SelfTest) {
     $pairSelfTestRoot = Join-Path ([IO.Path]::GetTempPath()) "tessara-sprint-8a-uat-pair-$([guid]::NewGuid().ToString('N'))"
     [IO.Directory]::CreateDirectory($pairSelfTestRoot) | Out-Null
     try {
+        $repairEligibleFixture = [pscustomobject][ordered]@{
+            schema_version = 1; sprint = "sprint-8a"; phase = "uat"; attempt = 5
+            authoritative = $false; state = "failed"
+            manifest_update_failure = [pscustomobject]@{ message = "retained publication failure" }
+        }
+        if (-not (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
+                -Receipt $repairEligibleFixture -ExpectedAttempt 5)) {
+            throw "Formal UAT self-test rejected an authenticated terminal manifest-publication repair."
+        }
+        $repairEligibleFixture.state = "executing"
+        if (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
+                -Receipt $repairEligibleFixture -ExpectedAttempt 5) {
+            throw "Formal UAT self-test accepted a nonterminal manifest repair."
+        }
+        $repairEligibleFixture.state = "failed"
+        $repairEligibleFixture.PSObject.Properties.Remove("manifest_update_failure")
+        if (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
+                -Receipt $repairEligibleFixture -ExpectedAttempt 5) {
+            throw "Formal UAT self-test accepted a manifest repair without retained publication-failure evidence."
+        }
         $emptyEvidenceCheck = Invoke-Sprint8AFormalUatCheck `
             -Name "self-test-empty-evidence" `
             -Command "no-op identity assertion" `
