@@ -3344,7 +3344,8 @@ try {
     }
     $publicationEnvironment = Get-Sprint8AEnvironmentContract `
         -RepositoryRoot $repoRoot `
-        -EvidenceRoot $EvidenceRoot
+        -EvidenceRoot $EvidenceRoot `
+        -ProbeDatabases
     if ([string]$publicationEnvironment.fingerprint -cne [string]$script:runtimeContext.environment.fingerprint) {
         throw "Sprint 8A environment changed after the terminal inventory and before lifecycle publication."
     }
