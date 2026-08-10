@@ -194,6 +194,26 @@ function Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure {
         [string]$Receipt.cleanup_restoration.result -ceq "canonical_topology_verified"
 }
 
+function Test-Sprint8AFormalUatPartialResultCommitRecovery {
+    param([Parameter(Mandatory)]$Receipt)
+
+    $propertyNames = @($Receipt.PSObject.Properties | ForEach-Object { $_.Name })
+    $history = if ($propertyNames -contains "evidence_finalization_failure_history") {
+        @($Receipt.evidence_finalization_failure_history)
+    } else { @() }
+    [string]$Receipt.state -ceq "passed" -and
+        [string]$Receipt.stage -ceq "result-committed" -and
+        $propertyNames -notcontains "uat_result_commit" -and
+        $propertyNames -notcontains "result_commit_artifact" -and
+        $history.Count -eq 1 -and
+        [string]$history[0].message -ceq
+            "Exception setting `"uat_result_commit`": `"The property 'uat_result_commit' cannot be found on this object. Verify that the property exists and can be set.`"" -and
+        [string]$Receipt.restoration_check.state -ceq "passed" -and
+        @($Receipt.restoration_checks).Count -eq 3 -and
+        @($Receipt.restoration_checks | Where-Object state -CNE "passed").Count -eq 0 -and
+        [string]$Receipt.cleanup_restoration.result -ceq "pending"
+}
+
 function Get-Sprint8AFormalUatSourceContext {
     param(
         [Parameter(Mandatory)]$CurrentSource,
@@ -1515,10 +1535,15 @@ function Invoke-Sprint8AFormalUatPublicationTail {
     $AttemptReceipt.blocked_count = 0
     $AttemptReceipt.classification = $null
     $AttemptReceipt.failure_batch = $null
-    $AttemptReceipt.uat_result_commit = [pscustomobject][ordered]@{
-        path = [string]$resultReference.path; sha256 = [string]$resultReference.sha256
-    }
-    $AttemptReceipt.result_commit_artifact = $resultCommitReference
+    $AttemptReceipt | Add-Member -Force -NotePropertyName uat_result_commit -NotePropertyValue (
+        [pscustomobject][ordered]@{
+            path = [string]$resultReference.path; sha256 = [string]$resultReference.sha256
+        }
+    )
+    $AttemptReceipt | Add-Member `
+        -Force `
+        -NotePropertyName result_commit_artifact `
+        -NotePropertyValue $resultCommitReference
     $AttemptReceipt | Add-Member -Force -NotePropertyName restoration_check -NotePropertyValue $restorationCheck
     $AttemptReceipt | Add-Member -Force -NotePropertyName restoration_checks -NotePropertyValue @($completion.restoration_checks)
     $AttemptReceipt.cleanup_restoration = [pscustomobject][ordered]@{
@@ -2410,8 +2435,33 @@ if ($SelfTest) {
     } else { "" }
     if (-not $publicationTailSource.Contains('-Source $AttemptReceipt.candidate_source_identity') -or
         -not $publicationTailSource.Contains('validation_source_identity = $AttemptReceipt.source_identity') -or
-        $publicationTailSource.Contains('-Source $CurrentSource')) {
+        $publicationTailSource.Contains('-Source $CurrentSource') -or
+        -not $publicationTailSource.Contains('-NotePropertyName uat_result_commit') -or
+        -not $publicationTailSource.Contains('-NotePropertyName result_commit_artifact')) {
         throw "Formal Sprint 8A UAT self-test found a non-canonical publication source binding."
+    }
+    $partialResultCommitFixture = [pscustomobject]@{
+        state = "passed"
+        stage = "result-committed"
+        evidence_finalization_failure_history = @([pscustomobject]@{
+            message = "Exception setting `"uat_result_commit`": `"The property 'uat_result_commit' cannot be found on this object. Verify that the property exists and can be set.`""
+        })
+        restoration_check = [pscustomobject]@{ state = "passed" }
+        restoration_checks = @(
+            [pscustomobject]@{ state = "passed" },
+            [pscustomobject]@{ state = "passed" },
+            [pscustomobject]@{ state = "passed" }
+        )
+        cleanup_restoration = [pscustomobject]@{ result = "pending" }
+    }
+    if (-not (Test-Sprint8AFormalUatPartialResultCommitRecovery -Receipt $partialResultCommitFixture)) {
+        throw "Formal Sprint 8A UAT self-test rejected the exact partial result-commit recovery incident."
+    }
+    $partialResultCommitFixture | Add-Member `
+        -NotePropertyName uat_result_commit `
+        -NotePropertyValue ([pscustomobject]@{})
+    if (Test-Sprint8AFormalUatPartialResultCommitRecovery -Receipt $partialResultCommitFixture) {
+        throw "Formal Sprint 8A UAT self-test accepted an already-referenced partial result commit."
     }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
@@ -3055,9 +3105,12 @@ $isExactSourceAdvanceFailure = [string]$attemptReceipt.state -ceq "failed" -and
     [int]$attemptReceipt.failure_batch.blocked_check_count -eq (Get-Sprint8AManualUatScenarioNames).Count
 $isExactAggregateProjectionFailure =
     Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $attemptReceipt
-if (($isExactSourceAdvanceFailure -or $isExactAggregateProjectionFailure) -and
+$isExactPartialResultCommitFailure =
+    Test-Sprint8AFormalUatPartialResultCommitRecovery -Receipt $attemptReceipt
+if (($isExactSourceAdvanceFailure -or $isExactAggregateProjectionFailure -or
+        $isExactPartialResultCommitFailure) -and
     $AuthorizeUatHarnessOnlySourceAdvance) {
-    if ($isExactAggregateProjectionFailure) {
+    if ($isExactAggregateProjectionFailure -or $isExactPartialResultCommitFailure) {
         $reusableRestorationCheck = $attemptReceipt.restoration_check | ConvertTo-Json -Depth 30 | ConvertFrom-Json
         $reusableRestorationChecks = @($attemptReceipt.restoration_checks | ForEach-Object {
             $_ | ConvertTo-Json -Depth 30 | ConvertFrom-Json
@@ -3110,7 +3163,8 @@ if (($isExactSourceAdvanceFailure -or $isExactAggregateProjectionFailure) -and
         upstream_gates_affected = $false
         manual_scenarios_reused = @(Get-Sprint8AManualUatScenarioNames)
         manual_assertions_reexecuted = $false
-        canonical_restoration_reused = [bool]$isExactAggregateProjectionFailure
+        canonical_restoration_reused = [bool]($isExactAggregateProjectionFailure -or
+            $isExactPartialResultCommitFailure)
     }
     Publish-Sprint7AEvidence -Document $recoveryDocument -OutputPath $recoveryPath | Out-Null
     $sourceAdvanceRecoveryReference = [pscustomobject][ordered]@{
@@ -3121,7 +3175,7 @@ if (($isExactSourceAdvanceFailure -or $isExactAggregateProjectionFailure) -and
         -RepositoryRoot $repoRoot `
         -AttemptPath $attemptPath `
         -RecoveryRoot $recoveryRoot `
-        -AttemptStatus "failed"
+        -AttemptStatus $(if ($isExactPartialResultCommitFailure) { "result-commit-partial" } else { "failed" })
     Sync-Sprint8AFormalUatEvidenceManifest -Overrides $sourceAdvanceManifestOverrides | Out-Null
     $attemptReceipt = $attemptCheckpoint | ConvertTo-Json -Depth 50 | ConvertFrom-Json
     $attemptReceipt.source_identity = $currentSource
