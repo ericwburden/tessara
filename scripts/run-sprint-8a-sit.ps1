@@ -2338,7 +2338,7 @@ if ($Stage -ceq "Run") {
                 -Name "attempt-interrupted-terminal"
             $attemptReceipt.raw_terminal_checkpoint = $interruptedCheckpoint
             Publish-Sprint8ASitDocument -Document $attemptReceipt -Path $script:attemptPath -Overwrite | Out-Null
-            if ($authenticated -and $null -ne $lockHandle -and
+            if ($null -ne $lockHandle -and
                 $null -ne $preflightReference -and $null -ne $candidateReference) {
                 try {
                     Update-Sprint8ASitEvidenceManifest `
@@ -2365,6 +2365,60 @@ $lockHandle = Open-Sprint8AValidationAttemptLock -Path $lockPath
 try {
     Assert-Sprint8AReceiptSidecar -Path $script:attemptPath | Out-Null
     $attemptReceipt = Get-Content -LiteralPath $script:attemptPath -Raw | ConvertFrom-Json
+    if ([string]$attemptReceipt.state -ceq "failed" -and
+        [string]$attemptReceipt.stage -ceq "prerequisites" -and
+        [string]$attemptReceipt.classification -ceq "evidence-finalization") {
+        if ($attemptReceipt.authoritative -isnot [bool] -or [bool]$attemptReceipt.authoritative -or
+            -not [bool]$attemptReceipt.raw_results_complete -or
+            [int]$attemptReceipt.assertion_count -ne 0 -or
+            [int]$attemptReceipt.failure_count -ne 1 -or
+            [int]$attemptReceipt.blocked_count -ne (Get-Sprint8ASitLaneNames).Count -or
+            -not [bool]$attemptReceipt.failure_batch.harvest_complete -or
+            -not [bool]$attemptReceipt.failure_batch.consolidated) {
+            throw "SIT prerequisite-failure manifest finalization requires one exact complete retained failure harvest."
+        }
+        Assert-Sprint8AExactTerminalIdentities `
+            -Results @($attemptReceipt.checks) `
+            -ExpectedNames (Get-Sprint8ASitLaneNames) `
+            -Label "SIT prerequisite-failure manifest finalization" | Out-Null
+        if (@($attemptReceipt.checks | Where-Object state -CNE "blocked").Count -ne 0 -or
+            @($attemptReceipt.checks | Where-Object assertions_started -EQ $true).Count -ne 0) {
+            throw "SIT prerequisite-failure manifest finalization found an executed or non-blocked SIT lane."
+        }
+        foreach ($laneReference in @($attemptReceipt.lane_receipts)) {
+            Get-Sprint8ASitEvidenceReference -Path ([string]$laneReference.path) -RequireSidecar | Out-Null
+        }
+        $preflightReference = Get-Sprint8ASitEvidenceReference -Path $PreflightReceipt -RequireSidecar
+        $candidateReference = Get-Sprint8ASitEvidenceReference -Path $CandidateReceipt -RequireSidecar
+        $preflight = Assert-Sprint8ALifecyclePrerequisite `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $script:evidenceRootPath `
+            -Reference $preflightReference `
+            -ExpectedPhase "validation-preflight"
+        $candidate = Assert-Sprint8ALifecyclePrerequisite `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $script:evidenceRootPath `
+            -Reference $candidateReference `
+            -ExpectedPhase "candidate-freeze"
+        $normalizedDeploymentConfigurationSha256 = `
+            [string]$candidate.receipt.details.candidate_identity.normalized_deployment_configuration_sha256
+        Assert-Sprint8ALifecyclePrerequisiteSet `
+            -Phase "sit" `
+            -References @($preflightReference, $candidateReference) `
+            -Source $candidate.receipt.source_identity `
+            -EnvironmentFingerprint ([string]$candidate.receipt.environment_fingerprint) `
+            -NormalizedDeploymentConfigurationSha256 $normalizedDeploymentConfigurationSha256 `
+            -CandidateFingerprint ([string]$candidate.receipt.candidate_fingerprint) `
+            -RepositoryRoot $repoRoot `
+            -EvidenceRoot $script:evidenceRootPath | Out-Null
+        $manifest = Update-Sprint8ASitEvidenceManifest `
+            -AttemptReceipt $attemptReceipt `
+            -PrerequisiteReferences @($preflightReference, $candidateReference) `
+            -ResultReference $null
+        Write-Host "Sprint 8A SIT retained prerequisite-failure evidence is now included in the manifest."
+        $manifest
+        return
+    }
     if ([string]$attemptReceipt.state -cne "failed" -or
         [string]$attemptReceipt.stage -cne "publication-failed" -or
         [string]$attemptReceipt.classification -cne "evidence-finalization") {
