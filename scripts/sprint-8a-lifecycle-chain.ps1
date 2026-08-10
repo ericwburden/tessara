@@ -2203,9 +2203,13 @@ function Open-Sprint8AManualUatScenarioLease {
         [bool]$Diagnostic = $false,
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$EvidenceRoot,
-        [switch]$Resume
+        [switch]$Resume,
+        [switch]$RetryPublication
     )
 
+    if ($Resume -and $RetryPublication) {
+        throw "Manual UAT scenario '$Scenario' cannot resume execution and retry publication together."
+    }
     if ((Get-Sprint8AManualUatScenarioNames) -cnotcontains $Scenario) {
         throw "Unknown Sprint 8A manual UAT scenario '$Scenario'."
     }
@@ -2264,7 +2268,7 @@ function Open-Sprint8AManualUatScenarioLease {
         $originalProcessId = 0
         $currentProcessId = $PID
         if (Test-Path -LiteralPath $leasePath -PathType Leaf) {
-            if (-not $Resume) {
+            if (-not $Resume -and -not $RetryPublication) {
                 throw "Manual UAT scenario '$Scenario' has an interrupted execution lease; resume it explicitly."
             }
             $leaseSha = Assert-Sprint8AReceiptSidecar -Path $leasePath
@@ -2290,6 +2294,13 @@ function Open-Sprint8AManualUatScenarioLease {
             }
             $originalProcessId = [int]$leaseDocument.process_id
             Repair-Sprint7AEvidencePublication -Path $resumePath
+            if ($RetryPublication) {
+                if ($originalProcessId -ne $PID -or
+                    (Test-Path -LiteralPath $resumePath -PathType Leaf) -or
+                    (Test-Path -LiteralPath "$resumePath.sha256" -PathType Leaf)) {
+                    throw "Manual UAT scenario '$Scenario' publication retry is not the same live process lineage."
+                }
+            } else {
             if (Test-Path -LiteralPath $resumePath -PathType Leaf) {
                 $resumeReference = [pscustomobject][ordered]@{
                     path = [IO.Path]::GetRelativePath($RepositoryRoot, $resumePath).Replace("\", "/")
@@ -2351,8 +2362,11 @@ function Open-Sprint8AManualUatScenarioLease {
                 -OutputPath ([IO.Path]::GetRelativePath($RepositoryRoot, $manifestFullPath).Replace("\", "/")) `
                 -Merge `
                 -AuthorizedReplacementPaths $authorizedReplacementPaths | Out-Null
+            }
         } else {
-            if ($Resume) { throw "Manual UAT scenario '$Scenario' has no interrupted lease to resume." }
+            if ($Resume -or $RetryPublication) {
+                throw "Manual UAT scenario '$Scenario' has no interrupted lease to resume or retry."
+            }
             $leaseDocument = [pscustomobject][ordered]@{
                 schema_version = 1; sprint = "sprint-8a"; phase = "uat-manual-execution-lease"
                 authoritative = $Authoritative; diagnostic = $Diagnostic; state = "executing"
