@@ -64,6 +64,28 @@ function Get-Sprint8AFormalUatPriorAttempts {
     )
 }
 
+function Test-Sprint8AFormalUatHarnessChangedPaths {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$ChangedPaths)
+
+    $allowedPaths = @(
+        "scripts/run-sprint-8a-formal-uat.ps1",
+        "scripts/sprint-8a-lifecycle-chain.ps1",
+        "scripts/validate-resource-reference-nondisclosure.ps1",
+        "docs/sprints/sprint-8a-verification.md"
+    )
+    $ChangedPaths.Count -gt 0 -and
+        @($ChangedPaths | Where-Object { $_ -cnotin $allowedPaths }).Count -eq 0
+}
+
+function ConvertTo-Sprint8AFormalUatTerminalTimestamp {
+    param(
+        [Parameter(Mandatory)]$Value,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    (ConvertTo-Sprint8ADateTimeOffset -Value $Value -Label $Label).ToString("o")
+}
+
 function Get-Sprint8AFormalUatSourceContext {
     param(
         [Parameter(Mandatory)]$CurrentSource,
@@ -90,12 +112,8 @@ function Get-Sprint8AFormalUatSourceContext {
     $changedPaths = @(& git -C $RepositoryRoot diff --name-only "$([string]$CandidateSource.commit)..$([string]$CurrentSource.commit)" |
         ForEach-Object { $_.Replace("\", "/") })
     $diffExit = $LASTEXITCODE
-    $allowedPaths = @(
-        "scripts/run-sprint-8a-formal-uat.ps1",
-        "scripts/sprint-8a-lifecycle-chain.ps1"
-    )
     if ($ancestorExit -ne 0 -or $diffExit -ne 0 -or
-        (($changedPaths | Sort-Object) -join "`n") -cne (($allowedPaths | Sort-Object) -join "`n")) {
+        -not (Test-Sprint8AFormalUatHarnessChangedPaths -ChangedPaths $changedPaths)) {
         throw "Authorized formal UAT harness advance contains a path outside the exact UAT-runner correction set."
     }
 
@@ -798,11 +816,19 @@ function Invoke-Sprint8AFormalUatCatchHarvest {
                 authoritative = $false
                 diagnostic = $true
                 assertions_started = [bool]$receipt.assertions_started
-                assertions_started_at = if ([bool]$receipt.assertions_started) { [string]$receipt.assertions_started_at } else { $null }
+                assertions_started_at = if ([bool]$receipt.assertions_started) {
+                    (ConvertTo-Sprint8AFormalUatTerminalTimestamp `
+                        -Value $receipt.assertions_started_at `
+                        -Label "$scenario assertions start")
+                } else { $null }
                 command = "diagnostic validation of retained manual scenario $($reference.path)"
                 exit_status = if ([string]$receipt.state -ceq "passed") { 0 } elseif ([string]$receipt.state -ceq "failed") { 1 } else { $null }
-                started_at = [string]$receipt.started_at
-                ended_at = [string]$receipt.ended_at
+                started_at = (ConvertTo-Sprint8AFormalUatTerminalTimestamp `
+                    -Value $receipt.started_at `
+                    -Label "$scenario start")
+                ended_at = (ConvertTo-Sprint8AFormalUatTerminalTimestamp `
+                    -Value $receipt.ended_at `
+                    -Label "$scenario end")
                 duration_ms = [long]$receipt.duration_ms
                 classification = if ([string]$receipt.state -in @("failed", "blocked")) { [string]$receipt.classification } else { $null }
                 classification_source = if ([string]$receipt.state -in @("failed", "blocked")) { [string]$receipt.classification_source } else { $null }
@@ -1991,6 +2017,11 @@ if ($SelfTest) {
         -not $sourceText.Contains('endpoints = $null') -or
         -not $sourceText.Contains('verified_uat_harness_only_advance') -or
         -not $sourceText.Contains('scripts/run-sprint-8a-formal-uat.ps1') -or
+        -not $sourceText.Contains('scripts/validate-resource-reference-nondisclosure.ps1') -or
+        -not $sourceText.Contains('docs/sprints/sprint-8a-verification.md') -or
+        -not $sourceText.Contains('uat-source-advance-recovery') -or
+        -not $sourceText.Contains('prior-failed-attempt.json') -or
+        -not $sourceText.Contains('manual_assertions_reexecuted = $false') -or
         -not $sourceText.Contains('-PrepareOnly') -or
         -not $sourceText.Contains('-Merge') -or
         -not $sourceText.Contains('Open-Sprint8AValidationAttemptLock') -or
@@ -2118,6 +2149,27 @@ if ($SelfTest) {
         [int]$mixedDisposition.blocked_decision_count -ne 1 -or
         [string]$mixedDisposition.classification -cne "product") {
         throw "Formal Sprint 8A UAT self-test lost a real scripted defect beside a product decision."
+    }
+    if (-not (Test-Sprint8AFormalUatHarnessChangedPaths -ChangedPaths @(
+                "scripts/sprint-8a-lifecycle-chain.ps1"
+            )) -or
+        -not (Test-Sprint8AFormalUatHarnessChangedPaths -ChangedPaths @(
+                "scripts/run-sprint-8a-formal-uat.ps1",
+                "scripts/validate-resource-reference-nondisclosure.ps1"
+            )) -or
+        (Test-Sprint8AFormalUatHarnessChangedPaths -ChangedPaths @()) -or
+        (Test-Sprint8AFormalUatHarnessChangedPaths -ChangedPaths @(
+                "scripts/sprint-8a-lifecycle-chain.ps1",
+                "crates/tessara-core/src/main.rs"
+            ))) {
+        throw "Formal Sprint 8A UAT self-test accepted an outside/empty source advance or rejected an allowed subset."
+    }
+    $jsonTimestampFixture = '{"at":"2026-08-10T04:13:48.2064453-04:00"}' | ConvertFrom-Json
+    $canonicalTimestamp = ConvertTo-Sprint8AFormalUatTerminalTimestamp `
+        -Value $jsonTimestampFixture.at `
+        -Label "formal UAT JSON timestamp self-test"
+    if ($canonicalTimestamp -notmatch '(Z|[+-][0-9]{2}:[0-9]{2})$') {
+        throw "Formal Sprint 8A UAT self-test lost the UTC offset after JSON timestamp conversion."
     }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
@@ -2744,6 +2796,93 @@ $attemptCheckpoint = Get-Content -LiteralPath $attemptCheckpointPath -Raw | Conv
 if (-not $AuthorizeDisposableReset) {
     throw "Formal UAT Finalize requires -AuthorizeDisposableReset for source-exact canonical restoration."
 }
+$sourceAdvanceRecoveryAuthorized = $false
+$sourceAdvanceRecoveryReference = $null
+$sourceAdvanceFailureMessages = if ($attemptReceipt.PSObject.Properties.Name -contains "failure_batch" -and
+    $null -ne $attemptReceipt.failure_batch) {
+    @($attemptReceipt.failure_batch.defects | ForEach-Object { [string]$_.message })
+} else { @() }
+$isExactSourceAdvanceFailure = [string]$attemptReceipt.state -ceq "failed" -and
+    [string]$attemptReceipt.stage -ceq "manual" -and
+    @($sourceAdvanceFailureMessages | Where-Object {
+        $_ -ceq "Formal UAT source changed after the scripted stage."
+    }).Count -eq 1 -and
+    @($sourceAdvanceFailureMessages | Where-Object {
+        $_ -match "Formal UAT catch harvest 'UAT-8A-01' start has no UTC offset"
+    }).Count -eq 1 -and
+    $sourceAdvanceFailureMessages.Count -eq 2 -and
+    [int]$attemptReceipt.failure_batch.blocked_check_count -eq (Get-Sprint8AManualUatScenarioNames).Count
+if ($isExactSourceAdvanceFailure -and $AuthorizeUatHarnessOnlySourceAdvance) {
+    $currentSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    Assert-Sprint8ASourceIdentityObject -Source $currentSource -RequireClean | Out-Null
+    $incrementalSourceContext = Get-Sprint8AFormalUatSourceContext `
+        -CurrentSource $currentSource `
+        -CandidateSource $attemptReceipt.source_identity `
+        -RepositoryRoot $repoRoot `
+        -AllowHarnessOnlySourceAdvance
+    $candidateSourceContext = Get-Sprint8AFormalUatSourceContext `
+        -CurrentSource $currentSource `
+        -CandidateSource $attemptReceipt.candidate_source_identity `
+        -RepositoryRoot $repoRoot `
+        -AllowHarnessOnlySourceAdvance
+    $recoveryRoot = Join-Path $attemptRoot "source-advance-recoveries"
+    [IO.Directory]::CreateDirectory($recoveryRoot) | Out-Null
+    $recoveryNumbers = @(Get-ChildItem -LiteralPath $recoveryRoot -Directory -Filter "run-*" -ErrorAction SilentlyContinue | ForEach-Object {
+        $number = 0
+        if ([int]::TryParse($_.Name.Substring(4), [ref]$number)) { $number }
+    })
+    $recoveryNumber = if ($recoveryNumbers.Count -eq 0) { 1 } else {
+        [int](($recoveryNumbers | Measure-Object -Maximum).Maximum) + 1
+    }
+    $recoveryRunRoot = Join-Path $recoveryRoot ("run-{0:d3}" -f $recoveryNumber)
+    [IO.Directory]::CreateDirectory($recoveryRunRoot) | Out-Null
+    $priorAttemptPath = Join-Path $recoveryRunRoot "prior-failed-attempt.json"
+    Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $priorAttemptPath | Out-Null
+    $priorAttemptReference = [pscustomobject][ordered]@{
+        path = [IO.Path]::GetRelativePath($repoRoot, $priorAttemptPath).Replace("\", "/")
+        sha256 = Assert-Sprint8AReceiptSidecar -Path $priorAttemptPath
+    }
+    $recoveryPath = Join-Path $recoveryRunRoot "source-advance-recovery.json"
+    $recoveryDocument = [pscustomobject][ordered]@{
+        schema_version = 1
+        sprint = "sprint-8a"
+        phase = "uat-source-advance-recovery"
+        state = "authorized"
+        attempt = $Attempt
+        authorized_at = [DateTimeOffset]::UtcNow.ToString("o")
+        authorization = "user_directed_impact_scoped_validation"
+        prior_failed_attempt = $priorAttemptReference
+        prior_harness_source_identity = $attemptReceipt.source_identity
+        corrected_harness_source_identity = $currentSource
+        candidate_source_identity = $attemptReceipt.candidate_source_identity
+        exact_changed_paths = @($incrementalSourceContext.harness_only_source_advance.exact_changed_paths)
+        product_test_fixture_deployment_changes = $false
+        upstream_gates_affected = $false
+        manual_scenarios_reused = @(Get-Sprint8AManualUatScenarioNames)
+        manual_assertions_reexecuted = $false
+    }
+    Publish-Sprint7AEvidence -Document $recoveryDocument -OutputPath $recoveryPath | Out-Null
+    $sourceAdvanceRecoveryReference = [pscustomobject][ordered]@{
+        path = [IO.Path]::GetRelativePath($repoRoot, $recoveryPath).Replace("\", "/")
+        sha256 = Assert-Sprint8AReceiptSidecar -Path $recoveryPath
+    }
+    Sync-Sprint8AFormalUatEvidenceManifest -Overrides @(
+        [pscustomobject][ordered]@{
+            path = [string]$priorAttemptReference.path; sha256 = [string]$priorAttemptReference.sha256
+            phase = "uat-source-advance-prior-failure"; authoritative = $false; status = "retained"
+        },
+        [pscustomobject][ordered]@{
+            path = [string]$sourceAdvanceRecoveryReference.path; sha256 = [string]$sourceAdvanceRecoveryReference.sha256
+            phase = "uat-source-advance-recovery"; authoritative = $false; status = "authorized"
+        }
+    ) | Out-Null
+    $attemptReceipt = $attemptCheckpoint | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $attemptReceipt.source_identity = $currentSource
+    $attemptReceipt.candidate_source_identity = $candidateSourceContext.candidate_source_identity
+    $attemptReceipt.uat_harness_only_source_advance = $candidateSourceContext.harness_only_source_advance
+    $attemptReceipt.source_verification_state = "verified_uat_harness_only_advance"
+    $sourceAdvanceRecoveryAuthorized = $true
+}
 Repair-Sprint8AManualUatPreparedPublications `
     -Attempt $Attempt `
     -RepositoryRoot $repoRoot `
@@ -3106,8 +3245,8 @@ if ($hasFinalizationCompletionCheckpoint -and
 }
 $attemptMatchesCheckpoint = ($attemptReceipt | ConvertTo-Json -Depth 50 -Compress) -ceq
     ($attemptCheckpoint | ConvertTo-Json -Depth 50 -Compress)
-$resumedAttemptReference = $null
-if (-not $attemptMatchesCheckpoint) {
+$resumedAttemptReference = $sourceAdvanceRecoveryReference
+if (-not $attemptMatchesCheckpoint -and -not $sourceAdvanceRecoveryAuthorized) {
     $resumableFinalization = [string]$attemptReceipt.state -ceq "finalizing" -and
         [string]$attemptReceipt.stage -in @("manual-receipt-validation", "canonical-restoration") -and
         [int]$attemptReceipt.attempt -eq [int]$attemptCheckpoint.attempt -and
@@ -3121,7 +3260,7 @@ if (-not $attemptMatchesCheckpoint) {
         throw "Formal UAT mutable attempt is neither the awaiting-manual checkpoint nor a resumable finalization checkpoint."
     }
 }
-if ($attemptMatchesCheckpoint) {
+if ($attemptMatchesCheckpoint -or $sourceAdvanceRecoveryAuthorized) {
     Assert-Sprint8AEvidenceManifestCompleteness `
         -RepositoryRoot $repoRoot `
         -EvidenceRoot $evidenceRootPath `
@@ -3142,7 +3281,7 @@ $finalizationRoot = Join-Path $finalizationsRoot ("run-{0:d3}" -f $finalizationR
 [IO.Directory]::CreateDirectory($finalizationRoot) | Out-Null
 $logRoot = Join-Path $finalizationRoot "logs"
 [IO.Directory]::CreateDirectory($logRoot) | Out-Null
-if (-not $attemptMatchesCheckpoint) {
+if (-not $attemptMatchesCheckpoint -and -not $sourceAdvanceRecoveryAuthorized) {
     $resumedAttemptPath = Join-Path $finalizationRoot "resumed-attempt.json"
     Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $resumedAttemptPath | Out-Null
     $resumedAttemptReference = [pscustomobject][ordered]@{

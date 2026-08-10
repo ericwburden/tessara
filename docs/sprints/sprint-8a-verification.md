@@ -1947,6 +1947,15 @@ Readiness/preflight validates this interface without starting UAT by running
   environment and normalized Compose identities, and runs fresh
   inventory/navigation plus Sprint 8A product smoke. It writes immutable
   `attempts/uat-<n>-manual-checkpoint.json` before manual execution.
+- A user-authorized UAT-harness-only source advance may be applied at
+  `Finalize` without rerunning signed manual scenarios when every changed path
+  is in the exact formal-UAT runner, lifecycle helper, nondisclosure verifier,
+  or Sprint 8A verification-document set. The runner retains the failed
+  mutable attempt, writes an authenticated source-advance recovery receipt,
+  proves that no product, fixture, deployment, acceptance inventory, or
+  upstream-gate input changed, and then revalidates every manual receipt before
+  canonical restoration and aggregate publication. An empty change set or any
+  outside path is rejected.
 - If scripted checks pass, manual scenarios are authoritative. If one or more
   scripted product/harness/environment assertions fail while identity remains
   trustworthy, the attempt enters `diagnostic-manual`: execute every safe
@@ -2235,6 +2244,7 @@ Runtime chronology:
 | 2026-08-09 | SIT 3 / runner interruption | Formatting completed, but the lane result was not committed; 4 lanes terminalized blocked | same frozen candidate/environment | `harness` | `Task[VoidTaskResult]` values leaked from asynchronous stream-copy completion ahead of the named result. Focused process-result-shape self-test now requires exactly one named result. | SIT only | Commit the focused runner correction, then start a new SIT attempt |
 | 2026-08-09–10 | SIT 4 / complete fail-late harvest and restoration | All 4 lanes terminal; 2 passed and 2 failed; 0 blocked | same frozen product candidate; SIT harness advance recorded | Raw: 4 `product`; diagnosed: 1 stale SIT smoke-contract root | Formatting, full Rust, 75/75 Playwright, materialization/no-op, inventory, exact Core/Supervisor health, component upgrade/rollback, failure containment, and recovery passed. Four deployment-evidence checks all failed only because the generic legacy shell smoke still required `Transitional — not independently deployable`; exact inventory proved five Core transitions and Dashboard only as independently deployed. | SIT command contract and Preflight declaration only; Readiness and Rehearsal unaffected | Replace redundant generic shell smoke in SIT with direct deployment-evidence capture, rerun Preflight only to bind the corrected downstream command/source, then run a new complete SIT |
 | 2026-08-10 | Preflight 19 / complete fail-late harvest | 5 checks passed, 2 failed, and 3 were dependency-blocked | corrected SIT/preflight harness source; Readiness 51/Rehearsal 40 unchanged | `environment` invocation error and `harness` freeze-supersession gap | The launch omitted `TEST_API_DATABASE_URL`. Separately, the runner rejected the still-present Preflight 18 freeze but had no authenticated way to archive it after failed SIT. The correction moves the exact old preflight, candidate, manifest, and sidecars to an immutable attempt archive, writes a hashed mapping bound to the failed SIT receipt, and only then permits replacement. | Preflight and downstream only; Readiness and Rehearsal unaffected | Pass all six exact database variables and rerun Preflight with the existing harness-only source-advance authorization |
+| 2026-08-10 | UAT 9 / first Finalize attempt | Eight signed manual scenarios passed; aggregate publication stopped before manual receipt validation or canonical restoration | frozen candidate `51933925...`; UAT harness source advanced after Start | `preflight/setup` plus dependent catch-harvest `harness` | Finalize rejected an authorized UAT-only source advance, then its catch collector converted valid JSON timestamps to locale text and rejected the lost offsets. Raw failure evidence and the failed mutable attempt are retained. The correction accepts only an authenticated subset of the exact UAT validation/document paths, archives the failed attempt, writes a source-advance recovery receipt, preserves all eight signed scenario receipts, and normalizes typed timestamps back to offset-bearing ISO 8601. | UAT only; Readiness 51, Rehearsal 40, Preflight 22, and SIT 5 remain valid | Run focused formal-UAT/lifecycle self-tests, commit cleanly, then retry UAT 9 Finalize with the explicit UAT-harness-only source authorization; do not rerun manual scenarios or upstream gates |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
