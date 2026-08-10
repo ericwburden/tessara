@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/correction-impact-assessment-v2.json",
+  "title": "Tessara correction impact assessment v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract",
+    "policy_version",
+    "sprint",
+    "baseline_source",
+    "current_source",
+    "changed_paths",
+    "changed_domains",
+    "unknown_paths",
+    "phase_decisions",
+    "candidate_changed",
+    "require_complete_sit",
+    "require_complete_uat",
+    "authorized_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "contract": { "const": "tessara.validation.correction-impact-assessment" },
+    "policy_version": { "const": "tessara-validation-v2" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "baseline_source": { "$ref": "#/$defs/sourceIdentity" },
+    "current_source": { "$ref": "#/$defs/sourceIdentity" },
+    "changed_paths": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "domains"],
+        "properties": {
+          "path": { "$ref": "#/$defs/path" },
+          "domains": { "$ref": "#/$defs/ids" }
+        }
+      }
+    },
+    "changed_domains": { "$ref": "#/$defs/ids" },
+    "unknown_paths": { "type": "array", "items": { "$ref": "#/$defs/path" } },
+    "phase_decisions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["phase", "action", "affected_lanes", "rationale"],
+        "properties": {
+          "phase": { "enum": ["validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] },
+          "action": { "enum": ["reuse_certificate", "recertify_affected_lanes", "rerun_full_phase", "finalization_only"] },
+          "affected_lanes": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "candidate_changed": { "type": "boolean" },
+    "require_complete_sit": { "type": "boolean" },
+    "require_complete_uat": { "type": "boolean" },
+    "authorized_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "sourceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tree", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "dirty": { "type": "boolean" },
+        "branch": { "type": "string", "minLength": 1 },
+        "acceptance_inventory_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "deployment_inputs_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

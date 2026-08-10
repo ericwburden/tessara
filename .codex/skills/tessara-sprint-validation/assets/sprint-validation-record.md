@@ -1,5 +1,9 @@
 # <Sprint> Validation Record
 
+- Validation policy: `tessara-validation-v2`
+- Tracked validation contract: `docs/sprints/<slug>-validation-contract.json`
+- Activation boundary: first sprint after Sprint 8A; no legacy evidence retrofit
+
 ## Scope and acceptance inventory
 
 | Roadmap clause | Risk/contract | Automated proof | Smoke proof | Manual UAT proof |
@@ -10,6 +14,7 @@
 
 | Artifact | Producer | Required before | Status |
 |---|---|---|---|
+| `implementation-readiness-result.json` | Implementation | Validation Readiness | Not Run |
 | `validation-readiness-result.json` | Validation coordinator | Rehearsal | Not Run |
 | `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not Run |
 | `preflight-result.json` | Preflight | Candidate freeze | Not Run |
@@ -22,8 +27,23 @@
 | `focused-repair-validation/attempt-<n>.json` | SIT/UAT/coordinator | Convergence, when triggered | Planned / Conditional |
 | `canonical-restoration.json` | Coordinator | Convergence/final certification, when triggered | Planned / Conditional |
 | `final-certification-entry.json` | Coordinator | Final readiness/rehearsal, when triggered | Planned / Conditional |
-| `evidence-manifest.json` and sidecar | Validation phases | Authorization | Not Run |
+| per-phase `evidence-index.json` and sidecar | Each phase | Phase certificate | Not Run |
+| `evidence-chain.json` and sidecar | Validation coordinator | Authorization | Not Run |
 | `closeout-authorization.json` | Coordinator | Closeout | Not Run |
+
+## Implementation exit gate
+
+| Requirement/target | Affected domains | Exact command | Clean environment | Result | Evidence |
+|---|---|---|---|---|---|
+| | | | | Not Run | |
+
+- Clean source and validation-contract hash:
+- Materialization / first apply:
+- Semantic no-op:
+- Failure containment / recovery:
+- Fixture, runner, smoke, and acceptance reproducers:
+- Known failure count:
+- Implementation-readiness result:
 
 ## Candidate identity
 
@@ -48,6 +68,10 @@
 - Acceptance-clause evidence mapping:
 - Clean repository and source-exact inputs:
 - Result receipt:
+- Dependency fingerprints:
+- Newly executed lanes:
+- Authenticated inherited lanes:
+- Phase-local evidence index:
 
 ## Candidate Rehearsal
 
@@ -67,6 +91,10 @@
 - Consolidated defects and correction batch:
 - Complete-cycle repetitions:
 - Result receipt:
+- Dependency fingerprints:
+- Newly executed lanes:
+- Authenticated inherited lanes:
+- Phase-local evidence index:
 
 ## Environment contract
 
@@ -157,7 +185,7 @@
 - Canonical restoration passed:
 - Decision to enter complete final readiness/rehearsal:
 - Final-certification-entry receipt:
-- Successor full readiness/rehearsal/SIT/UAT chain:
+- Successor pre-freeze certificate coverage and complete candidate-bound SIT/UAT chain:
 
 ## Failure and invalidation chronology
 
@@ -167,12 +195,12 @@
 
 ## Evidence integrity
 
-- Required files complete:
-- Structured artifacts parse:
-- Markdown links pass:
-- Authoritative/superseded attempts distinguished:
-- Manifest file count:
-- Manifest SHA-256:
+- Compact phase certificates authenticate:
+- Phase-local indexes parse and hash:
+- Raw evidence retained cold under ignored `/artifacts/`:
+- Routine downstream review avoided recursive raw-evidence reads:
+- Final full-integrity audit result:
+- Evidence-chain SHA-256:
 
 ## Closeout authorization
 

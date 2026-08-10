@@ -1,5 +1,11 @@
 # Tessara Validation Protocol
 
+This is the legacy protocol for Sprint 8A and earlier sprint-specific runners.
+When a tracked sprint validation contract declares
+`policy_version: tessara-validation-v2`, use `validation-policy-v2.md` instead
+for certificate reuse, invalidation, and evidence packaging. Never retrofit
+legacy receipts to the v2 schema.
+
 This protocol is the shared contract for `tessara-validation-preflight`,
 `tessara-sit`, `tessara-uat`, `tessara-sprint-validation`, and
 `tessara-sprint-closeout`.

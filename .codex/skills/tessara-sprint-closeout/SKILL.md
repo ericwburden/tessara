@@ -9,6 +9,11 @@ Use this skill only after `tessara-sprint-validation` has authorized closeout.
 Treat `docs/roadmap.md` as the authoritative scope and the sprint plan and
 verification record as supporting inputs.
 
+When the tracked sprint validation contract declares
+`policy_version: tessara-validation-v2`, read
+[`../tessara-sprint-validation/references/validation-policy-v2.md`](../tessara-sprint-validation/references/validation-policy-v2.md)
+completely before auditing authorization.
+
 When retained history contains a candidate-invalidating post-SIT failure,
 read
 [`../tessara-sprint-validation/references/post-sit-defect-convergence.md`](../tessara-sprint-validation/references/post-sit-defect-convergence.md)
@@ -23,18 +28,25 @@ Closeout consumes validation evidence; it does not create it.
 - If no authorized verification record exists, invoke
   `tessara-sprint-validation` and complete its full regime before continuing.
 - Require the coordinator-issued `closeout-authorization.json` and verify its
-  prerequisite receipt and evidence-manifest hashes.
+  prerequisite receipt hashes plus the legacy evidence manifest or v2 evidence
+  chain selected by the sprint contract.
 - If evidence is missing, stale, or tied to multiple candidates, reopen
   validation rather than filling the gap during closeout.
 - If a post-SIT convergence cycle occurred, require its complete retained
   harvest, batch, impact, focused-attempt, restoration, and final-entry chain;
-  verify that the authorized candidate was frozen only after the subsequent
-  complete readiness and rehearsal passed.
+  verify that the authorized candidate was frozen only after the required
+  legacy full pass or v2 affected-lane pre-freeze recertification passed.
 - If closeout reveals a missing acceptance assertion or changes executable,
   harness, migration, seed, manifest, bootstrap, or deployment source, create
   a new candidate and restart SIT.
 - Allow documentation-only corrections to remain in closeout when they cannot
   alter executable behavior or test interpretation.
+
+For v2, verify compact phase-certificate and `evidence-chain.json` hashes in
+place of a growing global raw-evidence manifest. Run the one final complete
+integrity audit over every sealed phase-local evidence index. Routine closeout
+review uses phase summaries; open raw evidence only when the audit fails or a
+certificate is challenged.
 
 ## Inputs
 
@@ -84,8 +96,10 @@ Require all of the following before changing roadmap status:
   return to final readiness/rehearsal
 - focused repair evidence is marked non-authoritative and was not reused to
   satisfy the successor candidate's complete SIT or UAT
-- the final successor fingerprint has its own complete readiness, rehearsal,
-  preflight, SIT, and UAT chain from the beginning
+- the final successor fingerprint has passing Readiness and Rehearsal
+  certificates with complete declared coverage, then its own Preflight and
+  complete SIT/UAT chain; legacy sprints additionally require complete
+  Readiness/Rehearsal execution from the beginning
 - every roadmap exit-condition clause maps to automated and manual evidence
 - changed route, navigation, lifecycle, role, seed, manifest, bootstrap, and
   deployment contracts have explicit coverage
@@ -213,7 +227,9 @@ Do not finalize closeout if:
 - roadmap or progress updates are missing or inconsistent
 - any exit condition lacks both automated and manual evidence
 - evidence does not resolve to one clean candidate
-- an executable or harness change was made without restarting SIT
+- under the legacy policy, an executable or harness change was made without
+  restarting SIT; under v2, a changed certificate dependency lacks its required
+  invalidation/recertification, or a successor candidate lacks complete SIT
 - the closeout documentation commit is not distinguished from the evidence
   source commit
 - the intended application route is unhealthy or not left reviewer-testable

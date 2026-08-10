@@ -9,7 +9,13 @@ Run formal acceptance for the exact SIT-authorized candidate. Do not change
 the acceptance inventory while executing it and do not authorize closeout
 directly.
 
-Before acting, read
+Inspect the tracked sprint validation contract before loading a protocol. When
+it declares `policy_version: tessara-validation-v2`, read
+[`../tessara-sprint-validation/references/validation-policy-v2.md`](../tessara-sprint-validation/references/validation-policy-v2.md)
+completely. Authenticate compact prerequisite certificates and publish UAT
+through one phase-local evidence index plus a compact UAT certificate.
+
+Otherwise read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
 completely.
 
@@ -34,6 +40,10 @@ Also require the receipt chain to include the passing pre-freeze Validation
 Readiness and Candidate Rehearsal receipts audited by preflight. Rehearsal's
 automated UAT diagnostics are not formal UAT evidence and cannot replace any
 scripted or manual scenario below.
+
+Under v2, every scripted and manual UAT scenario executes for the exact
+SIT-authorized candidate. A successor candidate cannot inherit UAT acceptance
+from its predecessor.
 
 ## Required execution order
 
@@ -75,7 +85,8 @@ Record the stage and whether product actions began. Use a narrow safe check to
 classify the cause, then ask `tessara-sprint-validation` for invalidation scope.
 
 - product or tracked harness correction: enter coordinator-owned convergence,
-  then refreeze only after the final complete readiness/rehearsal passes
+  then refreeze only after the required legacy complete pass or v2 affected-
+  lane pre-freeze recertification passes
 - shared environment/topology correction: rerun affected SIT/downstream work
   as directed by the coordinator
 - scenario setup failure before actions: rerun that scenario after prerequisite
@@ -118,6 +129,10 @@ the cone or authorize entry to final certification.
 closeout. The coordinator verifies the full receipt chain, acceptance mapping,
 failure chronology, manifest, and final topology before writing closeout
 authorization.
+
+For v2, routine verification consumes compact certificates and
+`evidence-chain.json`. Raw UAT artifacts remain cold after the UAT phase index
+is sealed; closeout performs the one required full integrity audit.
 
 ## Finish criteria
 

@@ -11,16 +11,28 @@ Own validation policy and authorization. Delegate phase execution to:
 - `tessara-sit`
 - `tessara-uat`
 
-Before acting, read
-[`references/validation-protocol.md`](references/validation-protocol.md)
-completely. It is authoritative for receipts, fingerprints, classifications,
-result collection, and invalidation scope.
+## Policy selection
 
-Before creating a candidate, also read
+Inspect the tracked sprint validation contract before loading a protocol. When
+it declares `policy_version: tessara-validation-v2`, read
+[`references/validation-policy-v2.md`](references/validation-policy-v2.md)
+completely and validate the contract with
+`scripts/tessara-validation-policy.psm1`.
+
+Otherwise read
+[`references/validation-protocol.md`](references/validation-protocol.md)
+completely. Before creating a legacy candidate, also read
 [`references/validation-readiness.md`](references/validation-readiness.md)
-completely. It is authoritative for the Test Readiness Gate and Candidate
-Rehearsal. This coordinator owns both gates; phase skills must not duplicate
-them.
+completely. Those references remain authoritative for Sprint 8A and earlier
+sprint-specific runners.
+
+The v2 reference overrides the legacy full-rerun, two-wave deferral, embedded-
+lineage, and global-manifest rules below. All other safety, authority,
+classification, fail-late, candidate-freeze, and candidate-bound SIT/UAT rules
+continue to apply. When the contract is absent or selects another policy, use
+the legacy protocol unchanged. Never add v2 fields to legacy evidence, convert
+it into v2 certificates, or use this policy change to reopen a completed
+lifecycle.
 
 After authoritative SIT has started, read
 [`references/post-sit-defect-convergence.md`](references/post-sit-defect-convergence.md)
@@ -98,6 +110,28 @@ coverage to change in the same candidate as the behavior that makes them
 stale.
 
 ## Full-regime execution
+
+For a v2 sprint:
+
+1. Require the passing non-authoritative implementation-readiness result for
+   the current clean source and tracked validation-contract hash.
+2. Run or recertify Validation Readiness from the impact-selected lanes and
+   authenticated unaffected lane certificates. Fall back to complete Readiness
+   when any mapping, fingerprint, or prior certificate is uncertain.
+3. Run or recertify Candidate Rehearsal the same way. Rehearsal is the final
+   pre-freeze certification surface, not the routine implementation loop.
+4. Require compact passing Readiness and Rehearsal certificates with complete
+   declared coverage, no open defect, and sealed phase-local evidence indexes.
+5. Freeze through Preflight, then run complete candidate-bound SIT and complete
+   UAT. A successor candidate never inherits SIT lanes or manual UAT scenarios
+   from its predecessor.
+6. Consume certificate and correction hashes through `evidence-chain.json`.
+   Do not recursively reopen raw evidence during routine phase authorization.
+7. At closeout, perform one full integrity audit across all sealed phase-local
+   indexes, then authorize the exact candidate.
+
+The remaining full-regime steps describe the legacy policy used by Sprint 8A
+and earlier sprint-specific runners.
 
 1. Execute the complete Test Readiness Gate and retain
    `validation-readiness-result.json`.
@@ -199,6 +233,14 @@ Examples:
 
 Never choose a narrower scope merely to avoid expensive work.
 
+For v2, determine scope from the tracked dependency map and authenticated
+domain fingerprints. Preserve a closed upstream certificate when its complete
+dependency set is unchanged. Recertify only intersecting Readiness or Rehearsal
+lanes, including their prerequisite closure. An unknown path, missing digest,
+or uncertain consumer selects complete affected-phase execution. After freeze,
+a candidate-changing correction still requires a successor freeze followed by
+complete SIT and complete UAT.
+
 ## Result collection and recovery
 
 - Prefer repository-owned phase runners over ad hoc compound commands.
@@ -230,6 +272,11 @@ Authorize `tessara-sprint-closeout` only when:
 Write `closeout-authorization.json` with hashes of the prerequisite receipts
 and evidence manifest. Name the evidence-source commit separately from later
 documentation-only commits.
+
+For v2, replace the growing evidence-manifest prerequisite with the compact
+`evidence-chain.json` and its one passing final full-integrity audit. Phase
+certificates and sealed phase-local indexes remain the ordinary downstream
+trust boundary; raw artifacts are cold evidence.
 
 If closeout discovers missing coverage or executable evidence, reopen at the
 boundary chosen by this coordinator. Documentation-only corrections may stay

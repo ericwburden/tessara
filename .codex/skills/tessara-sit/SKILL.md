@@ -8,7 +8,13 @@ description: Execute and retain Tessara system integration testing for one prefl
 Run the complete SIT phase for one frozen candidate. Do not run UAT or
 authorize closeout.
 
-Before acting, read
+Inspect the tracked sprint validation contract before loading a protocol. When
+it declares `policy_version: tessara-validation-v2`, read
+[`../tessara-sprint-validation/references/validation-policy-v2.md`](../tessara-sprint-validation/references/validation-policy-v2.md)
+completely. Authenticate compact prerequisite certificates and write one
+phase-local evidence index plus a compact SIT certificate.
+
+Otherwise read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
 completely.
 
@@ -34,6 +40,10 @@ Do not repair a stale prerequisite silently. Return to
 
 Do not relabel or reuse rehearsal output as SIT evidence. Every authoritative
 SIT lane reruns after freeze and produces its own receipt.
+
+Under v2, every SIT lane still executes for the frozen candidate. A successor
+candidate cannot inherit a SIT lane from its predecessor, even when pre-freeze
+Readiness or Rehearsal reused authenticated unaffected lanes.
 
 ## Phase model
 
@@ -108,6 +118,10 @@ all four lanes pass for the same candidate and environment contract.
 Generate or update the evidence manifest during SIT. Do not postpone discovery
 of missing required evidence until closeout.
 
+For v2, hash artifacts as they are published, seal one SIT-attempt
+`evidence-index.json`, and add only the compact SIT certificate/index hashes to
+`evidence-chain.json`. Do not rebuild a sprint-wide raw-file manifest.
+
 ## Failure handling
 
 Stop downstream dependent lanes after a failed lane. Record the command,
@@ -120,8 +134,8 @@ returned nonzero. Apply the shared invalidation matrix through
 `tessara-sprint-validation`:
 
 - candidate-affecting correction: refreeze and restart all SIT
-- before any successor freeze, the coordinator must complete the full
-  readiness gate and non-authoritative rehearsal cycle
+- before any successor freeze, the coordinator must complete the legacy full
+  Readiness/Rehearsal cycle or v2 affected-lane pre-freeze recertification
 - shared-environment correction: rerun affected and downstream lanes
 - lane setup failure before assertions: rerun that lane
 - evidence finalization failure with intact raw results: rerun finalization

@@ -167,6 +167,72 @@ manifest-only reference order Scoped Records `7`, Components `8`, Dashboard
 Sprint closeout for a module-affecting change must run both focused module tests
 and the resolved application's integration, browser, and conformance suites.
 
+## Implementation And Validation Policy V2
+
+The first sprint after Sprint 8A adopts `tessara-validation-v2`. Sprint 8A and
+earlier retained evidence remains governed by its original sprint-specific
+protocol and runners. Do not retrofit, rewrite, or reassess that evidence merely
+because the repository now contains the prospective policy.
+
+Kickoff for a v2 sprint creates
+`docs/sprints/<sprint-slug>-validation-contract.json`. The contract maps every
+requirement to exact implementation targets and formal validation lanes, every
+target and lane to dependency domains, and every domain to tracked input paths.
+Validate it with `scripts/tessara-validation-policy.psm1`. An unmapped changed
+path selects conservative validation; it is never silently treated as
+unaffected.
+
+### Implementation exit
+
+Implementation owns the known-target debugging loop. Before formal validation:
+
+1. determine changed paths and affected dependency domains;
+2. run every required or intersecting target from the tracked contract;
+3. complete clean-environment materialization, semantic no-op, failure
+   containment, recovery, fixture, runner, smoke, and acceptance proof when the
+   affected domains require it;
+4. resolve every known failure; and
+5. publish a compact, non-authoritative
+   `implementation-readiness-result.json` under the ignored sprint evidence
+   root.
+
+A missing or failing target, dirty source, runner self-test failure, or missing
+clean-environment proof blocks Readiness. Formal validation certifies a
+completed implementation; it is not the routine way to discover whether a
+known correction works.
+
+### Phase trust and invalidation
+
+Readiness and Candidate Rehearsal publish compact certificates. After a
+correction they rerun only never-certified, failed, newly reachable, or
+dependency-affected lanes and their prerequisite closure. Authenticated
+unaffected lanes may be inherited with their prior receipt/hash, unchanged
+dependency fingerprints, and explicit non-impact rationale. Any uncertainty
+falls back to complete affected-phase execution.
+
+A downstream-only change does not reopen an upstream certificate. For example,
+a Preflight-runner change leaves Readiness and Rehearsal closed when none of
+their declared dependencies changed. A candidate-changing correction still
+requires a successor freeze followed by complete SIT and complete UAT; no SIT
+lane or manual UAT scenario is inherited across candidate fingerprints.
+
+### Evidence packaging
+
+Generated validation evidence remains untracked under `/artifacts/`. Each
+phase attempt seals one local `evidence-index.json`; canonical phase results
+contain compact summaries and the index hash. Routine downstream work reads
+those certificates and the compact `evidence-chain.json`, not the complete raw
+history. Raw evidence remains available for failure diagnosis and explicit
+audit. Closeout performs one complete integrity audit over all sealed phase
+indexes instead of every phase repeatedly rebuilding a global raw-file
+manifest.
+
+Run the shared policy contract tests with:
+
+```powershell
+.\scripts\test-tessara-validation-policy.ps1 -SelfTest
+```
+
 ## Test Evidence And Change Control
 
 Tests are durable executable contracts and proof of correctness, not

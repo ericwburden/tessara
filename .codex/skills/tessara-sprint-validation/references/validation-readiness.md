@@ -1,5 +1,11 @@
 # Tessara Validation Readiness and Candidate Rehearsal
 
+This is the legacy Readiness/Rehearsal contract for Sprint 8A and earlier
+sprint-specific runners. A sprint selecting `tessara-validation-v2` uses
+`validation-policy-v2.md`, compact phase certificates, and authenticated
+affected-lane recertification instead of the two-wave deferral scheduler below.
+Never rewrite a legacy attempt or result into the v2 model.
+
 This reference defines the mandatory mutable-build process before every
 candidate freeze. `tessara-sprint-validation` owns both gates. Preflight audits
 their receipts and freezes the candidate; SIT and UAT do not rerun them.

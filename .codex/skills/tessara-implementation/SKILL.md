@@ -25,6 +25,12 @@ validation skills.
 5. Treat an approved user decision, requirement, or sprint plan as authority
    over an older implementation description. Reconcile affected stale
    documentation in the same slice.
+6. When `docs/sprints/<sprint-slug>-validation-contract.json` declares
+   `policy_version: tessara-validation-v2`, read
+   `../tessara-sprint-validation/references/validation-policy-v2.md` and use the
+   contract's exact dependency domains and implementation targets. Sprint 8A
+   and earlier remain governed by their retained sprint-specific plans and
+   runners; never retrofit their evidence to v2.
 
 ## Define the forward-only end state
 
@@ -43,6 +49,12 @@ acceptance, architecture, or validation-spec clause it satisfies. Keep that
 mapping in the implementation notes or sprint verification document so the
 handoff can show which behavior proves each clause; a list of changed files or
 test counts is not a substitute.
+
+Under validation policy v2, the tracked validation contract is the executable
+mapping. Identify changed paths and affected dependency domains before editing,
+then select every required or intersecting implementation target from that
+contract. An unmapped path or uncertain consumer expands the implementation
+verification cone; it is not deferred to formal validation.
 
 Use the touched dependency cone as the cleanup boundary. Remove obsolete paths
 from the changed capability and its directly affected consumers without turning
@@ -128,6 +140,10 @@ that cone instead of silently expanding scope.
   acceptance-contract, and evidence-schema change. Do not leave validation
   consumers to discover an already-known producer/contract mismatch during a
   full candidate run.
+- Treat formal validation as certification of a completed implementation, not
+  as the ordinary debugging loop. Reproduce and resolve every known failure in
+  the implementation phase. Do not launch Readiness or Rehearsal merely to find
+  out whether a known target now passes.
 - Require formatting, compilation, and Clippy with warnings denied. Do not add
   blanket warning allowlists or suppressions to defer cleanup.
 
@@ -178,7 +194,17 @@ complete.
    unrelated user changes explicitly.
 6. Run broader repository checks in proportion to the change and the sprint
    plan. Do not claim checks that were skipped or silently filtered.
-7. Hand the clean implementation commit to `tessara-validation-preflight` when
-   formal sprint validation is requested. Let `tessara-sprint-validation`,
+7. Under validation policy v2, write a compact non-authoritative
+   `implementation-readiness-result.json` under the ignored sprint evidence
+   root. Validate it against the tracked contract and
+   `implementation-readiness.schema.json` with
+   `scripts/tessara-validation-policy.psm1`. It must bind the clean source and
+   contract hash, enumerate every selected exact target, retain clean-
+   environment proof where required, report zero known failures, and record
+   required materialization/no-op/recovery and restoration results. A missing,
+   blocked, or failing selected target forbids formal Readiness entry.
+8. Hand the clean implementation commit and passing implementation-readiness
+   result to `tessara-sprint-validation` when formal sprint validation is
+   requested. Let `tessara-sprint-validation`,
    `tessara-sit`, `tessara-uat`, and `tessara-sprint-closeout` retain authority
    over candidate freeze, SIT, UAT, evidence, and closeout.

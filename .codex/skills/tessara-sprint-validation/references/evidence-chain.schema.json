@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/evidence-chain-v1.json",
+  "title": "Tessara compact evidence chain",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "policy_version", "sprint", "certificates", "corrections", "final_integrity_audit"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.validation.evidence-chain" },
+    "policy_version": { "const": "tessara-validation-v2" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "certificates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["phase", "path", "sha256"],
+        "properties": {
+          "phase": { "enum": ["implementation-readiness", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] },
+          "path": { "$ref": "#/$defs/path" },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "corrections": { "type": "array", "items": { "$ref": "#/$defs/reference" } },
+    "final_integrity_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "audited_at", "phase_index_count", "artifact_count"],
+      "properties": {
+        "state": { "enum": ["pending", "passed", "failed"] },
+        "audited_at": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+        "phase_index_count": { "type": "integer", "minimum": 0 },
+        "artifact_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}
