@@ -103,6 +103,35 @@ function Get-Sprint8AFormalUatFailureMessages {
     }
 }
 
+function Get-Sprint8AFormalUatSourceAdvanceManifestOverrides {
+    param(
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$AttemptPath,
+        [Parameter(Mandatory)][string]$RecoveryRoot,
+        [Parameter(Mandatory)][string]$AttemptStatus
+    )
+
+    $primaryPaths = @($AttemptPath) + @(Get-ChildItem -LiteralPath $RecoveryRoot -Recurse -File -Filter "*.json" |
+        Where-Object { $_.Name -notlike "*.publish-journal.json" } |
+        ForEach-Object { $_.FullName })
+    @($primaryPaths | Sort-Object -Unique | ForEach-Object {
+        $fullPath = [IO.Path]::GetFullPath($_)
+        $relativePath = [IO.Path]::GetRelativePath($RepositoryRoot, $fullPath).Replace("\", "/")
+        $isAttempt = $fullPath -ceq [IO.Path]::GetFullPath($AttemptPath)
+        [pscustomobject][ordered]@{
+            path = $relativePath
+            sha256 = Assert-Sprint8AReceiptSidecar -Path $fullPath
+            phase = if ($isAttempt) { "uat-attempt" } elseif ([IO.Path]::GetFileName($fullPath) -ceq "prior-failed-attempt.json") {
+                "uat-source-advance-prior-failure"
+            } else { "uat-source-advance-recovery" }
+            authoritative = $false
+            status = if ($isAttempt) { $AttemptStatus } elseif ([IO.Path]::GetFileName($fullPath) -ceq "prior-failed-attempt.json") {
+                "retained"
+            } else { "authorized" }
+        }
+    })
+}
+
 function Get-Sprint8AFormalUatSourceContext {
     param(
         [Parameter(Mandatory)]$CurrentSource,
@@ -1974,6 +2003,33 @@ if ($SelfTest) {
             [DateTimeOffset]::Parse("2026-01-01T00:00:00Z")) {
             throw "Formal UAT self-test lost the instant while normalizing a typed JSON timestamp."
         }
+        $sourceAdvanceFixtureRoot = Join-Path $pairSelfTestRoot "source-advance"
+        $sourceAdvanceFixtureRecoveryRoot = Join-Path $sourceAdvanceFixtureRoot "recoveries/run-001"
+        [IO.Directory]::CreateDirectory($sourceAdvanceFixtureRecoveryRoot) | Out-Null
+        $sourceAdvanceFixtureAttempt = Join-Path $sourceAdvanceFixtureRoot "uat-1.json"
+        $sourceAdvanceFixturePrior = Join-Path $sourceAdvanceFixtureRecoveryRoot "prior-failed-attempt.json"
+        $sourceAdvanceFixtureRecovery = Join-Path $sourceAdvanceFixtureRecoveryRoot "source-advance-recovery.json"
+        foreach ($fixture in @(
+            [pscustomobject]@{ path = $sourceAdvanceFixtureAttempt; phase = "uat" },
+            [pscustomobject]@{ path = $sourceAdvanceFixturePrior; phase = "prior" },
+            [pscustomobject]@{ path = $sourceAdvanceFixtureRecovery; phase = "recovery" }
+        )) {
+            Publish-Sprint7AEvidence `
+                -Document ([pscustomobject][ordered]@{ schema_version = 1; phase = [string]$fixture.phase }) `
+                -OutputPath ([string]$fixture.path) | Out-Null
+        }
+        $sourceAdvanceFixtureOverrides = @(Get-Sprint8AFormalUatSourceAdvanceManifestOverrides `
+            -RepositoryRoot $repoRoot `
+            -AttemptPath $sourceAdvanceFixtureAttempt `
+            -RecoveryRoot (Join-Path $sourceAdvanceFixtureRoot "recoveries") `
+            -AttemptStatus "failed")
+        if ($sourceAdvanceFixtureOverrides.Count -ne 3 -or
+            @($sourceAdvanceFixtureOverrides | Where-Object phase -CEQ "uat-attempt").Count -ne 1 -or
+            @($sourceAdvanceFixtureOverrides | Where-Object phase -CEQ "uat-source-advance-prior-failure").Count -ne 1 -or
+            @($sourceAdvanceFixtureOverrides | Where-Object phase -CEQ "uat-source-advance-recovery").Count -ne 1 -or
+            @($sourceAdvanceFixtureOverrides | Where-Object { [string]$_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -ne 0) {
+            throw "Formal UAT self-test did not synchronize the failed attempt and every source-advance recovery receipt together."
+        }
     } finally {
         if (Test-Path -LiteralPath $pairSelfTestRoot -PathType Container) {
             [IO.Directory]::Delete($pairSelfTestRoot, $true)
@@ -2919,16 +2975,12 @@ if (($isExactSourceAdvanceFailure -or $isExactAggregateProjectionFailure) -and
         path = [IO.Path]::GetRelativePath($repoRoot, $recoveryPath).Replace("\", "/")
         sha256 = Assert-Sprint8AReceiptSidecar -Path $recoveryPath
     }
-    Sync-Sprint8AFormalUatEvidenceManifest -Overrides @(
-        [pscustomobject][ordered]@{
-            path = [string]$priorAttemptReference.path; sha256 = [string]$priorAttemptReference.sha256
-            phase = "uat-source-advance-prior-failure"; authoritative = $false; status = "retained"
-        },
-        [pscustomobject][ordered]@{
-            path = [string]$sourceAdvanceRecoveryReference.path; sha256 = [string]$sourceAdvanceRecoveryReference.sha256
-            phase = "uat-source-advance-recovery"; authoritative = $false; status = "authorized"
-        }
-    ) | Out-Null
+    $sourceAdvanceManifestOverrides = Get-Sprint8AFormalUatSourceAdvanceManifestOverrides `
+        -RepositoryRoot $repoRoot `
+        -AttemptPath $attemptPath `
+        -RecoveryRoot $recoveryRoot `
+        -AttemptStatus "failed"
+    Sync-Sprint8AFormalUatEvidenceManifest -Overrides $sourceAdvanceManifestOverrides | Out-Null
     $attemptReceipt = $attemptCheckpoint | ConvertTo-Json -Depth 50 | ConvertFrom-Json
     $attemptReceipt.source_identity = $currentSource
     $attemptReceipt.candidate_source_identity = $candidateSourceContext.candidate_source_identity
