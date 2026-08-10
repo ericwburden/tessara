@@ -1493,6 +1493,10 @@ function Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility {
 }
 
 function Get-Sprint8AFormalUatTerminalAttemptManifestRepairOverrides {
+    param([AllowEmptyCollection()][string[]]$ExcludedPaths = @())
+
+    $excluded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($excludedPath in @($ExcludedPaths)) { $excluded.Add([string]$excludedPath) | Out-Null }
     $manifestPath = Join-Path $evidenceRootPath "evidence-manifest.json"
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return @() }
     Assert-Sprint8AReceiptSidecar -Path $manifestPath | Out-Null
@@ -1508,6 +1512,7 @@ function Get-Sprint8AFormalUatTerminalAttemptManifestRepairOverrides {
             $attemptNumber = [int][regex]::Match($file.Name, '^uat-(\d+)\.json$').Groups[1].Value
             $sha = Assert-Sprint8AReceiptSidecar -Path $file.FullName
             $path = [IO.Path]::GetRelativePath($repoRoot, $file.FullName).Replace("\", "/")
+            if ($excluded.Contains($path)) { continue }
             $existing = $manifestByPath[$path]
             if ($null -eq $existing -or [string]$existing.sha256 -ceq $sha) { continue }
             $receipt = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
@@ -1538,7 +1543,9 @@ function Sync-Sprint8AFormalUatEvidenceManifest {
     }
     Assert-Sprint8AReceiptSidecar -Path $manifestPath | Out-Null
     $existingManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $repairOverrides = @(Get-Sprint8AFormalUatTerminalAttemptManifestRepairOverrides)
+    $requestedOverridePaths = @($Overrides | ForEach-Object { [string]$_.path })
+    $repairOverrides = @(Get-Sprint8AFormalUatTerminalAttemptManifestRepairOverrides `
+        -ExcludedPaths $requestedOverridePaths)
     $Overrides = @(@($Overrides) + $repairOverrides | Group-Object path | ForEach-Object { $_.Group[0] })
     $entries = Get-Sprint8AEvidenceFileManifestEntries `
         -RepositoryRoot $repoRoot `
@@ -1934,7 +1941,8 @@ if ($SelfTest) {
             '"scripts/run-sprint-8a-formal-uat.ps1",',
             '"scripts/sprint-8a-lifecycle-chain.ps1"',
             '[IO.Path]::GetRelativePath($repoRoot, $manualFullPath)',
-            '$effectiveRestorationChecks = @(if ('
+            '$effectiveRestorationChecks = @(if (',
+            '-ExcludedPaths $requestedOverridePaths'
         )) {
         if (-not $sourceText.Contains($requiredSourceGuard)) {
             throw "Formal UAT self-test cannot find required correction guard: $requiredSourceGuard"
