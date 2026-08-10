@@ -86,6 +86,24 @@ function ConvertTo-Sprint8AFormalUatTerminalTimestamp {
     (ConvertTo-Sprint8ADateTimeOffset -Value $Value -Label $Label).ToString("o")
 }
 
+function Get-Sprint8AFormalUatManualChronology {
+    param([Parameter(Mandatory)]$Receipt)
+
+    [pscustomobject][ordered]@{
+        assertions_started_at = if ([bool]$Receipt.assertions_started) {
+            ConvertTo-Sprint8AFormalUatTerminalTimestamp `
+                -Value $Receipt.assertions_started_at `
+                -Label "manual assertion start"
+        } else { $null }
+        started_at = ConvertTo-Sprint8AFormalUatTerminalTimestamp `
+            -Value $Receipt.started_at `
+            -Label "manual scenario start"
+        ended_at = ConvertTo-Sprint8AFormalUatTerminalTimestamp `
+            -Value $Receipt.ended_at `
+            -Label "manual scenario end"
+    }
+}
+
 function Get-Sprint8AFormalUatFailureClassifications {
     param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Failures)
 
@@ -147,16 +165,20 @@ function Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure {
         "The property 'classification' cannot be found on this object. Verify that the property exists."
     $restorationReuseInitializationFailure =
         "The variable '`$restorationFailures' cannot be retrieved because it has not been set."
+    $manualChronologyFailure =
+        "Formal manual UAT executed result 'UAT-8A-01' has malformed chronology: Sprint 8A Formal manual UAT 'UAT-8A-01' start has no UTC offset."
     $allowedIncidentMessages = @(
         $originalProjectionFailure,
         "The property 'Count' cannot be found on this object. Verify that the property exists.",
         "The existing Sprint 8A evidence manifest has stale or malformed entry 'artifacts/sprint-8a-closeout/attempts/uat-9.json'.",
-        $restorationReuseInitializationFailure
+        $restorationReuseInitializationFailure,
+        $manualChronologyFailure
     )
     [string]$Receipt.state -ceq "failed" -and
         [string]$Receipt.stage -ceq "canonical-restoration" -and
         (@($messages | Where-Object { $_ -ceq $originalProjectionFailure }).Count -eq 1 -or
-            @($messages | Where-Object { $_ -ceq $restorationReuseInitializationFailure }).Count -eq 1) -and
+            @($messages | Where-Object { $_ -ceq $restorationReuseInitializationFailure }).Count -eq 1 -or
+            @($messages | Where-Object { $_ -ceq $manualChronologyFailure }).Count -eq 1) -and
         $messages.Count -ge 1 -and
         $messages.Count -le $allowedIncidentMessages.Count -and
         @($messages | Select-Object -Unique).Count -eq $messages.Count -and
@@ -2280,6 +2302,17 @@ if ($SelfTest) {
     if ($canonicalTimestamp -notmatch '(Z|[+-][0-9]{2}:[0-9]{2})$') {
         throw "Formal Sprint 8A UAT self-test lost the UTC offset after JSON timestamp conversion."
     }
+    $manualChronologyFixture = Get-Sprint8AFormalUatManualChronology -Receipt (
+        '{"assertions_started":true,"assertions_started_at":"2026-08-10T03:07:34.0000000-04:00","started_at":"2026-08-10T03:07:34.0000000-04:00","ended_at":"2026-08-10T03:20:21.0000000-04:00"}' |
+            ConvertFrom-Json
+    )
+    if (@(
+            $manualChronologyFixture.assertions_started_at,
+            $manualChronologyFixture.started_at,
+            $manualChronologyFixture.ended_at
+        | Where-Object { $_ -notmatch '(Z|[+-][0-9]{2}:[0-9]{2})$' }).Count -ne 0) {
+        throw "Formal Sprint 8A UAT self-test lost a manual-check UTC offset after JSON conversion."
+    }
     if (@(Get-Sprint8AFormalUatFailureClassifications -Failures @()).Count -ne 0 -or
         (@(Get-Sprint8AFormalUatFailureClassifications -Failures @(
                     [pscustomobject]@{ classification = "product" },
@@ -2345,6 +2378,12 @@ if ($SelfTest) {
     }
     if (-not (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $restorationReuseRecoveryFixture)) {
         throw "Formal Sprint 8A UAT self-test rejected the exact restoration-reuse initialization incident."
+    }
+    $restorationReuseRecoveryFixture.failure_batch.defects = @([pscustomobject]@{
+        message = "Formal manual UAT executed result 'UAT-8A-01' has malformed chronology: Sprint 8A Formal manual UAT 'UAT-8A-01' start has no UTC offset."
+    })
+    if (-not (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $restorationReuseRecoveryFixture)) {
+        throw "Formal Sprint 8A UAT self-test rejected the exact manual-chronology recovery incident."
     }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
@@ -3585,17 +3624,18 @@ foreach ($scenario in Get-Sprint8AManualUatScenarioNames) {
                 status = "retained"
             })
         }
+        $manualChronology = Get-Sprint8AFormalUatManualChronology -Receipt $receipt
         $check = [pscustomobject][ordered]@{
             name = $scenario
             state = [string]$receipt.state
             authoritative = [bool]$receipt.authoritative
             diagnostic = [bool]$receipt.diagnostic
             assertions_started = [bool]$receipt.assertions_started
-            assertions_started_at = if ([bool]$receipt.assertions_started) { [string]$receipt.assertions_started_at } else { $null }
+            assertions_started_at = $manualChronology.assertions_started_at
             command = "manual scenario receipt $($reference.path)"
             exit_status = if ([string]$receipt.state -ceq "passed") { 0 } elseif ([string]$receipt.state -ceq "failed") { 1 } else { $null }
-            started_at = [string]$receipt.started_at
-            ended_at = [string]$receipt.ended_at
+            started_at = $manualChronology.started_at
+            ended_at = $manualChronology.ended_at
             duration_ms = [long]$receipt.duration_ms
             classification = if ([string]$receipt.state -in @("failed", "blocked")) { [string]$receipt.classification } else { $null }
             classification_source = if ([string]$receipt.state -in @("failed", "blocked")) { [string]$receipt.classification_source } else { $null }
