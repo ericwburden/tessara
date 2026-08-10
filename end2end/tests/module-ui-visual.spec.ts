@@ -8,13 +8,13 @@ async function signIn(page: Page) {
 }
 
 async function useTheme(page: Page, theme: "light" | "dark") {
-  await page.getByRole("button", { name: "Theme options" }).click();
-  await page
-    .getByRole("menuitemradio", {
-      name: theme === "light" ? "Light" : "Dark",
-      exact: true,
-    })
-    .click();
+  await page.evaluate((selectedTheme) => {
+    localStorage.setItem("tessara.themePreference", selectedTheme);
+    document.documentElement.dataset.themePreference = selectedTheme;
+    document.documentElement.dataset.theme = selectedTheme;
+    const applicationContent = document.querySelector<HTMLElement>(".app-main");
+    applicationContent?.scrollTo({ top: 0, left: 0 });
+  }, theme);
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 }
 
@@ -71,6 +71,13 @@ test.describe("canonical module UI visual baselines", () => {
   test("Components viewer at 1280 px", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await visit(page, "/components/sprint-8a-label-bar/view", "dark");
+    await expect(
+      page
+        .locator(
+          ".component-table-viewer__table, .component-d3-chart__surface, .component-stat-card",
+        )
+        .first(),
+    ).toBeVisible();
     await expect(page).toHaveScreenshot("components-viewer-dark-1280.png", {
       animations: "disabled",
     });

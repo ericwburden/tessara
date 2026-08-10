@@ -13,6 +13,8 @@ use std::collections::VecDeque;
 
 use icons::{ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Fullscreen, ListFilter, RotateCcw};
 use leptos::prelude::*;
+#[cfg(any(feature = "hydrate", test))]
+use tessara_components_contract::ComponentRenderKind;
 use tessara_module_ui::{
     EmptyState, FullscreenDialog, TableColumnOption, TableColumnSelector, TablePaginationBar,
     TablePopoverController, TableSearch,
@@ -768,7 +770,7 @@ fn ComponentTableResults(
     let columns = table.columns.clone();
     let rows = table.rows.clone();
     let row_count = rows.len();
-    let returned_page_size = table.pagination.page_size.max(1);
+    let returned_page_size = table.pagination.page_size.max(1) as usize;
     let next_cursor = table.pagination.next_cursor.clone();
     let has_more = table.pagination.has_more && next_cursor.is_some();
     let mut page_sizes = vec![10_usize, 25, 50, 100, 200];
@@ -1311,8 +1313,8 @@ fn load_component_table(request: ComponentTableRequest) {
             loading.set(false);
             let completion = match result {
                 Ok(Some(response))
-                    if response.component_type == "table"
-                        && response.component_version_id == expected_version_id =>
+                    if response.component_type == ComponentRenderKind::Table
+                        && response.component_version_id.to_string() == expected_version_id =>
                 {
                     let retryable = materialization_is_retryable(&response.materialization_state);
                     known_columns.update(|known| merge_known_columns(known, &response.columns));
@@ -1573,14 +1575,16 @@ mod tests {
     #[cfg(feature = "ssr")]
     #[test]
     fn table_result_renders_a_bounded_server_page_with_shared_presentation_controls() {
+        use tessara_components_contract::COMPONENT_RENDER_RESPONSE_SCHEMA_VERSION;
+        use uuid::Uuid;
+
         let mut values = BTreeMap::new();
         values.insert("program".into(), Some("Outreach".into()));
         let table = ComponentTable {
-            component_id: "component-1".into(),
-            component_version_id: "version-1".into(),
-            dataset_id: "dataset-1".into(),
-            dataset_version_major: 1,
-            component_type: "table".into(),
+            schema_version: COMPONENT_RENDER_RESPONSE_SCHEMA_VERSION,
+            component_id: Uuid::from_u128(1),
+            component_version_id: Uuid::from_u128(2),
+            component_type: ComponentRenderKind::Table,
             materialization_state: "ready".into(),
             columns: vec![ComponentTableColumn {
                 key: "program".into(),
@@ -1704,14 +1708,16 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     fn visual_fixture(kind: &str) -> ComponentVisual {
+        use tessara_components_contract::COMPONENT_RENDER_RESPONSE_SCHEMA_VERSION;
+        use uuid::Uuid;
+
         let is_stat = kind == "stat_card";
         let is_round = matches!(kind, "pie" | "donut");
         ComponentVisual {
-            component_id: "component-1".into(),
-            component_version_id: "version-1".into(),
-            dataset_id: "dataset-1".into(),
-            dataset_version_major: 1,
-            component_type: kind.into(),
+            schema_version: COMPONENT_RENDER_RESPONSE_SCHEMA_VERSION,
+            component_id: Uuid::from_u128(1),
+            component_version_id: Uuid::from_u128(2),
+            component_type: ComponentRenderKind::from_api_kind(kind).expect("fixture kind"),
             materialization_state: "ready".into(),
             value_format: "number".into(),
             legend_title: Some("Program".into()),

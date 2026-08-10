@@ -49,14 +49,15 @@ pub fn ComponentsIndexContent() -> impl IntoView {
 
     view! {
         <section class="route-panel components-page">
-            <div class="page-header">
-                <div></div>
+            <PageHeader
+                eyebrow="Reusable presentation"
+                title="Components"
+                description="Find, inspect, and reuse published Component definitions."
+            >
                 {move || can_manage_components.get().then(|| view! {
-                    <div class="page-header__actions">
-                        <a class="button" href="/components/new">"Create Component"</a>
-                    </div>
+                    <a class="button" href="/components/new">"Create Component"</a>
                 })}
-            </div>
+            </PageHeader>
             {move || {
                 if is_loading.get() {
                     view! { <EmptyState title="Loading components" message="Fetching visible components."/> }.into_any()
@@ -555,6 +556,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                             <tr>
                                                 <th>"Dataset"</th>
                                                 <th>"Version"</th>
+                                                <th>"Grain"</th>
                                                 <th>"Tags"</th>
                                                 <th>"Provenance"</th>
                                             </tr>
@@ -593,6 +595,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                                             </button>
                                                         </td>
                                                         <td>{format!("v{major}")}</td>
+                                                        <td>{dataset.grain.clone()}</td>
                                                         <td>{tags}</td>
                                                         <td>{provenance}</td>
                                                     </tr>
@@ -633,15 +636,22 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                     page_size
                                 />
                             </div>
-                            <div class="component-editor__right-rail">
-                                <div class="component-editor__kind-stack">
-                                    <ComponentKindControls
-                                        component_type
-                                        has_kind_specific_changes
-                                        on_kind_change=change_component_kind
-                                    />
-                                </div>
-                            </div>
+                            <ComponentEditorRightRail
+                                component_type
+                                has_kind_specific_changes
+                                on_kind_change=change_component_kind
+                                preview_drawer_open
+                                visual=draft_preview
+                                error=draft_preview_error
+                                loading=draft_preview_loading
+                                fields=Signal::derive(move || selected_fields.get())
+                                summary_field=visual_summary_field
+                                summary_type=visual_summary_type
+                                category_field=visual_category_field
+                                comparison_field=visual_comparison_field
+                                sort_direction=visual_sort_direction
+                                limit=visual_limit
+                            />
                         </div>
                     }.into_any()
                 } else {
@@ -707,95 +717,22 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                     />
                                 })}
                             </div>
-                            <div class="component-editor__right-rail">
-                                <div class="component-editor__kind-stack">
-                                    <ComponentKindControls
-                                        component_type
-                                        has_kind_specific_changes
-                                        on_kind_change=change_component_kind
-                                    />
-                                </div>
-                                <div class="component-editor__preview-stack">
-                                    <div class=move || if preview_drawer_open.get() {
-                                        "component-editor__preview-drawer is-open"
-                                    } else {
-                                        "component-editor__preview-drawer"
-                                    }>
-                                        <button
-                                            class="component-editor__preview-drawer-scrim"
-                                            type="button"
-                                            aria-label="Close preview"
-                                            on:click=move |_| {
-                                                preview_drawer_open.set(false);
-                                                focus_component_preview_button();
-                                            }
-                                        ></button>
-                                        <div
-                                            id="component-editor-preview-drawer"
-                                            class="component-editor__preview-drawer-surface"
-                                            role=move || preview_drawer_open.get().then_some("dialog")
-                                            aria-modal=move || preview_drawer_open.get().then_some("true")
-                                            aria-label="Component preview"
-                                            tabindex="-1"
-                                            on:keydown=move |event| {
-                                                if event.key() == "Escape" {
-                                                    event.prevent_default();
-                                                    preview_drawer_open.set(false);
-                                                    focus_component_preview_button();
-                                                } else if event.key() == "Tab" && preview_drawer_open.get_untracked() {
-                                                    event.prevent_default();
-                                                    focus_component_preview_close_button();
-                                                }
-                                            }
-                                        >
-                                            <header class="component-editor__preview-drawer-header">
-                                                <strong>"Preview"</strong>
-                                                <button
-                                                    class="icon-button icon-button--compact-control"
-                                                    id="component-editor-preview-close"
-                                                    type="button"
-                                                    aria-label="Close preview"
-                                                    title="Close preview"
-                                                    on:click=move |_| {
-                                                        preview_drawer_open.set(false);
-                                                        focus_component_preview_button();
-                                                    }
-                                                >
-                                                    <X class="icon-button__icon"/>
-                                                </button>
-                                            </header>
-                                            <ComponentEditorDraftPreview
-                                                visual=draft_preview
-                                                error=draft_preview_error
-                                                loading=draft_preview_loading
-                                                component_type
-                                                fields=Signal::derive(move || selected_fields.get())
-                                                summary_field=visual_summary_field
-                                                summary_type=visual_summary_type
-                                                category_field=visual_category_field
-                                                comparison_field=visual_comparison_field
-                                                sort_direction=visual_sort_direction
-                                                limit=visual_limit
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                                <button
-                                    class="component-editor__preview-fab"
-                                    id="component-editor-preview-fab"
-                                    type="button"
-                                    aria-label="Open preview"
-                                    aria-controls="component-editor-preview-drawer"
-                                    aria-expanded=move || preview_drawer_open.get().to_string()
-                                    title="Preview"
-                                    on:click=move |_| {
-                                        preview_drawer_open.set(true);
-                                        focus_component_preview_drawer();
-                                    }
-                                >
-                                    <PanelRight class="component-editor__preview-fab-icon"/>
-                                </button>
-                            </div>
+                            <ComponentEditorRightRail
+                                component_type
+                                has_kind_specific_changes
+                                on_kind_change=change_component_kind
+                                preview_drawer_open
+                                visual=draft_preview
+                                error=draft_preview_error
+                                loading=draft_preview_loading
+                                fields=Signal::derive(move || selected_fields.get())
+                                summary_field=visual_summary_field
+                                summary_type=visual_summary_type
+                                category_field=visual_category_field
+                                comparison_field=visual_comparison_field
+                                sort_direction=visual_sort_direction
+                                limit=visual_limit
+                            />
                         </div>
                     }.into_any()
                 }}
@@ -1232,6 +1169,117 @@ fn ComponentExecutionPreviewSection(target: ComponentVersionTarget) -> impl Into
             </div>
             <ComponentVersionExecutionContent target mode=ComponentViewerMode::Full/>
         </section>
+    }
+}
+
+#[component]
+#[allow(clippy::too_many_arguments)]
+fn ComponentEditorRightRail(
+    component_type: RwSignal<String>,
+    has_kind_specific_changes: Signal<bool>,
+    on_kind_change: Callback<String>,
+    preview_drawer_open: RwSignal<bool>,
+    visual: RwSignal<Option<ComponentVisual>>,
+    error: RwSignal<Option<String>>,
+    loading: RwSignal<bool>,
+    fields: Signal<Vec<DatasetFieldDefinition>>,
+    summary_field: RwSignal<String>,
+    summary_type: RwSignal<String>,
+    category_field: RwSignal<String>,
+    comparison_field: RwSignal<String>,
+    sort_direction: RwSignal<String>,
+    limit: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <div class="component-editor__right-rail">
+            <div class="component-editor__kind-stack">
+                <ComponentKindControls
+                    component_type
+                    has_kind_specific_changes
+                    on_kind_change
+                />
+            </div>
+            <div class="component-editor__preview-stack">
+                <div class=move || if preview_drawer_open.get() {
+                    "component-editor__preview-drawer is-open"
+                } else {
+                    "component-editor__preview-drawer"
+                }>
+                    <button
+                        class="component-editor__preview-drawer-scrim"
+                        type="button"
+                        aria-label="Close preview"
+                        on:click=move |_| {
+                            preview_drawer_open.set(false);
+                            focus_component_preview_button();
+                        }
+                    ></button>
+                    <div
+                        id="component-editor-preview-drawer"
+                        class="component-editor__preview-drawer-surface"
+                        role=move || preview_drawer_open.get().then_some("dialog")
+                        aria-modal=move || preview_drawer_open.get().then_some("true")
+                        aria-label="Component preview"
+                        tabindex="-1"
+                        on:keydown=move |event| {
+                            if event.key() == "Escape" {
+                                event.prevent_default();
+                                preview_drawer_open.set(false);
+                                focus_component_preview_button();
+                            } else if event.key() == "Tab" && preview_drawer_open.get_untracked() {
+                                event.prevent_default();
+                                focus_component_preview_close_button();
+                            }
+                        }
+                    >
+                        <header class="component-editor__preview-drawer-header">
+                            <strong>"Preview"</strong>
+                            <button
+                                class="icon-button icon-button--compact-control"
+                                id="component-editor-preview-close"
+                                type="button"
+                                aria-label="Close preview"
+                                title="Close preview"
+                                on:click=move |_| {
+                                    preview_drawer_open.set(false);
+                                    focus_component_preview_button();
+                                }
+                            >
+                                <X class="icon-button__icon"/>
+                            </button>
+                        </header>
+                        <ComponentEditorDraftPreview
+                            visual
+                            error
+                            loading
+                            component_type
+                            fields
+                            summary_field
+                            summary_type
+                            category_field
+                            comparison_field
+                            sort_direction
+                            limit
+                        />
+                    </div>
+                </div>
+            </div>
+            <button
+                class="component-editor__preview-fab"
+                id="component-editor-preview-fab"
+                type="button"
+                aria-label="Open preview"
+                aria-controls="component-editor-preview-drawer"
+                aria-expanded=move || preview_drawer_open.get().to_string()
+                title="Preview"
+                on:click=move |_| {
+                    preview_drawer_open.set(true);
+                    focus_component_preview_drawer();
+                }
+            >
+                <PanelRight class="component-editor__preview-fab-icon"/>
+            </button>
+        </div>
     }
 }
 

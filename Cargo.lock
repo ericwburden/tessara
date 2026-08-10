@@ -4756,8 +4756,10 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-components-contract",
  "tessara-module-ui",
  "tessara-web-http",
+ "uuid",
 ]
 
 [[package]]

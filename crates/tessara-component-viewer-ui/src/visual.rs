@@ -1,6 +1,7 @@
 //! Route-free visual execution and shared stat/chart presentation.
 
 use leptos::prelude::*;
+use tessara_components_contract::ComponentRenderKind;
 use tessara_module_ui::{EmptyState, Skeleton};
 
 #[cfg(feature = "hydrate")]
@@ -25,7 +26,7 @@ use crate::{
 /// exact-version viewer uses for published and superseded versions.
 #[component]
 pub fn ComponentVisualPresentation(visual: ComponentVisual) -> impl IntoView {
-    if visual.component_type == "stat_card" {
+    if visual.component_type == ComponentRenderKind::StatCard {
         view! { <ComponentStatCard visual/> }.into_any()
     } else {
         view! { <ComponentD3Chart visual/> }.into_any()
@@ -66,8 +67,8 @@ fn ComponentStatCard(visual: ComponentVisual) -> impl IntoView {
 
 #[component]
 fn ComponentD3Chart(visual: ComponentVisual) -> impl IntoView {
-    let kind = visual.component_type.clone();
-    let item_count = if matches!(kind.as_str(), "pie" | "donut") {
+    let kind = visual.component_type;
+    let item_count = if matches!(kind, ComponentRenderKind::Pie | ComponentRenderKind::Donut) {
         visual.slices.len()
     } else {
         visual.points.len()
@@ -75,7 +76,7 @@ fn ComponentD3Chart(visual: ComponentVisual) -> impl IntoView {
     let payload = serde_json::to_string(&visual).unwrap_or_else(|_| "{}".into());
     let aria_label = format!(
         "{} chart preview",
-        ComponentVersionKind::from_api_kind(&kind)
+        ComponentVersionKind::from_api_kind(kind.as_api_value())
             .map(ComponentVersionKind::label)
             .unwrap_or("Component")
     );
@@ -273,7 +274,7 @@ fn load_component_visual(request: ComponentVisualRequest) {
         let request_guard = RequestActivityGuard::new(request_lifecycle, on_request_activity);
         leptos::task::spawn_local(async move {
             let mut request_guard = request_guard;
-            let expected_kind = target.kind().as_api_value();
+            let expected_kind = ComponentRenderKind::from_api_kind(target.kind().as_api_value());
             let expected_version_id = target.component_version_id().to_owned();
             let endpoint = target.endpoint_path();
             let result = api::fetch_component_visual_endpoint(&endpoint).await;
@@ -283,8 +284,8 @@ fn load_component_visual(request: ComponentVisualRequest) {
             loading.set(false);
             let completion = match result {
                 Ok(Some(response))
-                    if response.component_type == expected_kind
-                        && response.component_version_id == expected_version_id =>
+                    if Some(response.component_type) == expected_kind
+                        && response.component_version_id.to_string() == expected_version_id =>
                 {
                     let retryable = materialization_is_retryable(&response.materialization_state);
                     visual.set(Some(response));

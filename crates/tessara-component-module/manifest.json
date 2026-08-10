@@ -657,32 +657,32 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:166e8b5102ee767de2fc50736946c6b9a7f3d40ca97b5413c7e24ddab7ff013e",
+      "digest": "sha256:dfe302cbfe7b603dcd721a73b8da5d61d1ff5c9daabcc1a8ff09db45f8a55b02",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component.css",
-      "digest": "sha256:7dc06e92a387afd6460d702ff563b797c7cfbb720611813b92194d24d3d6cfdd",
+      "digest": "sha256:2bc73b45249710846f70f6dd6856f224f1b305d9a4190712c0212a28a61afb81",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component-lifecycle.css",
-      "digest": "sha256:986688e4a6e077e7cff3c2fb738ebb6d93b4e7352cf0cdf22881e82137c99a46",
+      "digest": "sha256:4c3394597a44d378a1452cbf30469ba1f48dca0e1c0d659d6504c392c2f2619c",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component.js",
-      "digest": "sha256:716275d70eef41ce0e97d56ddd0fa31e54446096f01f32db439d94c23ebfbf18",
+      "digest": "sha256:086ee33301cb77350b308321f060d530a96689973889327b4af6cff110c1253b",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component-bindings.js",
-      "digest": "sha256:89adb1a1d3fe348cc2a2f00741b0e078493dbdcb48e284754535b845d33a0b80",
+      "digest": "sha256:c7330627174bdceba97221b3ff4afa0149788881e25e961e814f94d4005b5760",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:6a72a0fc1d697ff902393a7052901795d0c5883c9686bf5fe20cc298d21686f1",
+      "digest": "sha256:6836dc7cdbd2a079167105ee4803e4b01ff65b862868ae51058bc12ba439f7ce",
       "content_type": "application/wasm"
     }
   ]

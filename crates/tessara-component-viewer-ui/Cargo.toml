@@ -25,3 +25,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-module-ui = { path = "../tessara-module-ui", default-features = false, features = ["components"] }
+tessara-components-contract = { path = "../tessara-components-contract" }
+
+[dev-dependencies]
+uuid = { workspace = true }

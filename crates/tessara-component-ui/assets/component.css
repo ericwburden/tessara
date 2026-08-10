@@ -320,12 +320,21 @@
   max-width: none;
 }
 
-.module-scope--tessara-components .component-editor__layout {
+.module-scope--tessara-components .component-editor__workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.72fr);
   gap: 1rem;
   min-width: 0;
   align-items: start;
+}
+
+.module-scope--tessara-components .component-editor__config-stack,
+.module-scope--tessara-components .component-editor__right-rail,
+.module-scope--tessara-components .component-editor__kind-stack,
+.module-scope--tessara-components .component-editor__preview-stack {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
 }
 
 .module-scope--tessara-components .component-editor__fields,
@@ -533,7 +542,9 @@
   overflow: auto;
 }
 
-.module-scope--tessara-components .component-editor-preview__fab {
+.module-scope--tessara-components .component-editor__preview-drawer-scrim,
+.module-scope--tessara-components .component-editor__preview-drawer-header,
+.module-scope--tessara-components .component-editor__preview-fab {
   display: none;
 }
 
@@ -912,15 +923,71 @@
 }
 
 @media (max-width: 60rem) {
-  .module-scope--tessara-components .component-editor__layout {
+  .module-scope--tessara-components .component-editor__workbench {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .module-scope--tessara-components .component-editor__right-rail {
+    order: -1;
   }
 
   .module-scope--tessara-components .component-editor-preview {
     display: none;
   }
 
-  .module-scope--tessara-components .component-editor-preview__fab {
+  .module-scope--tessara-components .component-editor__preview-drawer {
+    position: fixed;
+    z-index: 70;
+    inset: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .module-scope--tessara-components .component-editor__preview-drawer.is-open {
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .module-scope--tessara-components .component-editor__preview-drawer-scrim {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    border: 0;
+    background: rgb(20 24 32 / 52%);
+  }
+
+  .module-scope--tessara-components .component-editor__preview-drawer-surface {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(32rem, 92vw);
+    overflow: auto;
+    border-inline-start: 1px solid var(--color-border);
+    padding: 1rem;
+    background: var(--color-canvas);
+    box-shadow: -0.75rem 0 2rem rgb(20 24 32 / 24%);
+  }
+
+  .module-scope--tessara-components .component-editor__preview-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block-end: 0.75rem;
+  }
+
+  .module-scope--tessara-components .component-editor__preview-drawer.is-open .component-editor-preview {
+    position: static;
+    display: grid;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .module-scope--tessara-components .component-editor__preview-fab {
     position: sticky;
     z-index: 8;
     bottom: 0.75rem;

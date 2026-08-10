@@ -329,6 +329,15 @@ textarea {
   font-family: var(--font-heading);
 }
 
+.page-header__eyebrow {
+  margin: 0 0 0.2rem;
+  color: var(--semantic-primary);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .top-app-bar__title {
   display: block;
   font-size: 2rem;
