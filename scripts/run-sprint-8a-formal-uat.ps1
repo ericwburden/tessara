@@ -1496,7 +1496,7 @@ function Invoke-Sprint8AFormalUatCheck {
         [Parameter(Mandatory)][string]$Command,
         [Parameter(Mandatory)][scriptblock]$Action,
         [Parameter(Mandatory)][string]$LogPath,
-        [Parameter(Mandatory)][string[]]$EvidencePaths,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$EvidencePaths,
         [Parameter(Mandatory)][ValidateSet("preflight/setup", "product", "harness", "environment", "flaky", "evidence-finalization", "product-decision")][string]$DefaultClassification
     )
 
@@ -1584,6 +1584,18 @@ if ($SelfTest) {
     $pairSelfTestRoot = Join-Path ([IO.Path]::GetTempPath()) "tessara-sprint-8a-uat-pair-$([guid]::NewGuid().ToString('N'))"
     [IO.Directory]::CreateDirectory($pairSelfTestRoot) | Out-Null
     try {
+        $emptyEvidenceCheck = Invoke-Sprint8AFormalUatCheck `
+            -Name "self-test-empty-evidence" `
+            -Command "no-op identity assertion" `
+            -Action { } `
+            -LogPath (Join-Path $pairSelfTestRoot "empty-evidence-check.log") `
+            -EvidencePaths @() `
+            -DefaultClassification "preflight/setup"
+        if ([string]$emptyEvidenceCheck.state -cne "passed" -or
+            @($emptyEvidenceCheck.evidence).Count -ne 1 -or
+            -not ([string]$emptyEvidenceCheck.evidence[0].path).EndsWith("empty-evidence-check.log")) {
+            throw "Formal UAT self-test rejected an evidence-free identity check."
+        }
         $preJournalBoundaryPath = Join-Path $pairSelfTestRoot "pre-journal-result.json"
         $preJournalTemporary = Join-Path $pairSelfTestRoot ".pre-journal-result.json.$([guid]::NewGuid().ToString('N')).tmp"
         [IO.File]::WriteAllText($preJournalTemporary, "{`"state`":`"uncommitted`"}`n", [Text.UTF8Encoding]::new($false))
