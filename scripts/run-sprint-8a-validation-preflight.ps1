@@ -1504,7 +1504,8 @@ function Test-Sprint8AValidationPreflightRunner {
         -not $sourceText.Contains('immutable_snapshots_and_terminal_receipts_are_never_overwritten = $true') -or
         -not $sourceText.Contains('[switch]$AuthorizePreflightHarnessOnlySourceAdvance') -or
         -not $sourceText.Contains('user_directed_preflight_with_corrected_validation_code') -or
-        -not $sourceText.Contains('product_test_fixture_deployment_changes = $false')) {
+        -not $sourceText.Contains('product_test_fixture_deployment_changes = $false') -or
+        -not $sourceText.Contains('$script:runtimeContext.rehearsal.mutable_source_identity')) {
         throw "Sprint 8A preflight self-test found a stale start-receipt, scheduler, or manifest-initialization boundary."
     }
     "Sprint 8A validation-preflight graph, receipt, classification, lifecycle, and no-execution self-test passed."
@@ -1608,6 +1609,7 @@ $script:runtimeContext = [ordered]@{
     validation_state_reference = $null
     environment = $null
     source = $null
+    preflight_harness_only_source_advance = $null
     candidate_identity = $null
     normalized_deployment_configuration_sha256 = $null
     correction_authorization_reference = $null
@@ -2257,6 +2259,7 @@ function Assert-Sprint8APreflightCleanSource {
         throw "Current clean source is not on the expected Sprint 8A branch."
     }
     $script:runtimeContext.source = $source
+    $script:runtimeContext.preflight_harness_only_source_advance = $sourceAdvance
     $script:attemptReceipt.source_identity_verification_state = if ($exactSourceMatch) { "verified" } else { "verified_preflight_harness_only_advance" }
     Publish-Sprint8APreflightStructuredEvidence -CheckName "clean-source" -Document ([pscustomobject][ordered]@{
         schema_version = 1
@@ -2742,9 +2745,14 @@ function Assert-Sprint8APreflightDeploymentContract {
             }
             $image = @($imageOutput | ConvertFrom-Json)[0]
             $labels = $image.Config.Labels
+            $provenanceSource = if ($null -eq $script:runtimeContext.preflight_harness_only_source_advance) {
+                $source
+            } else {
+                $script:runtimeContext.rehearsal.mutable_source_identity
+            }
             $expectedLabels = [ordered]@{
-                "org.opencontainers.image.revision" = [string]$source.commit
-                "com.tessara.source-tree" = [string]$source.tree
+                "org.opencontainers.image.revision" = [string]$provenanceSource.commit
+                "com.tessara.source-tree" = [string]$provenanceSource.tree
                 "com.tessara.source-dirty" = "false"
                 "com.tessara.build-profile" = "release"
             }
