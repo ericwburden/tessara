@@ -556,7 +556,7 @@ function Test-Sprint8AReceiptReferenceMatch {
 function Assert-Sprint8AExactTerminalIdentities {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Results,
-        [Parameter(Mandatory)][string[]]$ExpectedNames,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$ExpectedNames,
         [Parameter(Mandatory)][string]$Label
     )
 
