@@ -180,12 +180,6 @@
   }
 }
 
-.module-scope--tessara-components [data-component-manage-only]:not(.is-authorized),
-.module-scope--tessara-components [data-component-version-action]:not(.is-authorized),
-.module-scope--tessara-components a[href^="/components/"][href$="/edit"]:not(.is-authorized) {
-  display: none !important;
-}
-
 .module-scope--tessara-components .component-directory__toolbar,
 .module-scope--tessara-components .component-table-viewer__controls,
 .module-scope--tessara-components .component-table-viewer__paging,

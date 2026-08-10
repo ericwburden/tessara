@@ -662,12 +662,12 @@
     },
     {
       "path": "/component.css",
-      "digest": "sha256:07ea1dd7cda7edbe6826040e6c4178379bbb8e87f4ac8e76caaecb5065b63a24",
+      "digest": "sha256:f223b447fe5ac606e68ff72de4b9759fc878dbd19fbcedf2db60f4252b984924",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component-lifecycle.css",
-      "digest": "sha256:b5a11137d84e6fb90bed9d11726576908054c41b76e0920228539416734d6d98",
+      "digest": "sha256:a7e0a747a2615a786efb5bdc413fcf4ecd46dce0dc85aeff6a1d2ab1129ebf94",
       "content_type": "text/css; charset=utf-8"
     },
     {

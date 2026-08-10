@@ -17,9 +17,9 @@ pub const COMPONENT_JS: &str = include_str!("../assets/component.js");
 pub const COMPONENT_BINDINGS_JS: &str = include_str!("../assets/component-bindings.js");
 pub const COMPONENT_WASM: &[u8] = include_bytes!("../assets/component.wasm");
 pub const COMPONENT_CSS_SHA256: &str =
-    "07ea1dd7cda7edbe6826040e6c4178379bbb8e87f4ac8e76caaecb5065b63a24";
+    "f223b447fe5ac606e68ff72de4b9759fc878dbd19fbcedf2db60f4252b984924";
 pub const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
-    "b5a11137d84e6fb90bed9d11726576908054c41b76e0920228539416734d6d98";
+    "a7e0a747a2615a786efb5bdc413fcf4ecd46dce0dc85aeff6a1d2ab1129ebf94";
 pub const COMPONENT_JS_SHA256: &str =
     "716275d70eef41ce0e97d56ddd0fa31e54446096f01f32db439d94c23ebfbf18";
 pub const COMPONENT_BINDINGS_JS_SHA256: &str =
