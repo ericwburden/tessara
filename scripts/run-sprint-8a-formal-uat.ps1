@@ -110,6 +110,55 @@ function Get-Sprint8AFormalUatSourceContext {
     }
 }
 
+function New-Sprint8AFormalUatAttemptReceipt {
+    param([Parameter(Mandatory)][ValidateRange(1, 9999)][int]$AttemptNumber)
+
+    $placeholderSource = [pscustomobject][ordered]@{
+        commit = "0" * 40; tree = "0" * 40; dirty = $false; branch = "unverified"
+        acceptance_inventory_sha256 = "0" * 64; deployment_inputs_sha256 = "0" * 64
+    }
+    [pscustomobject][ordered]@{
+        schema_version = 1; sprint = "sprint-8a"; phase = "uat"; attempt = $AttemptNumber
+        authoritative = $false; state = "preparing"; assertions_started = $false
+        stage = "prerequisites"
+        started_at = [DateTimeOffset]::UtcNow.ToString("o"); ended_at = $null; duration_ms = 0L
+        state_history = @([pscustomobject][ordered]@{
+            state = "preparing"; stage = "prerequisites"; at = [DateTimeOffset]::UtcNow.ToString("o")
+        })
+        source_identity = $placeholderSource; source_verification_state = "unverified"
+        candidate_source_identity = $placeholderSource
+        uat_harness_only_source_advance = $null
+        environment_fingerprint = "0" * 64; candidate_fingerprint = "0" * 64
+        endpoints = $null
+        prerequisite_receipts = @()
+        declared_checks = @(
+            [pscustomobject][ordered]@{ name = "authenticated-prerequisites"; depends_on = @() },
+            [pscustomobject][ordered]@{ name = "scripted-inventory"; depends_on = @("authenticated-prerequisites") },
+            [pscustomobject][ordered]@{ name = "scripted-smoke"; depends_on = @("authenticated-prerequisites") },
+            [pscustomobject][ordered]@{ name = "post-scripted-identity"; depends_on = @("authenticated-prerequisites") }
+        ) + @(Get-Sprint8AManualUatScenarioNames | ForEach-Object {
+            [pscustomobject][ordered]@{ name = $_; depends_on = @("authenticated-prerequisites", "post-scripted-identity") }
+        })
+        checks = @(); assertion_count = 0; failure_count = 0; blocked_count = 0
+        classification = $null; failure_batch = $null
+        scripted_completed_at = $null; scripted_defects = @()
+        manual_scenarios_pending = @(Get-Sprint8AManualUatScenarioNames)
+        restoration_check = $null
+        cleanup_restoration = [pscustomobject]@{ required = $true; result = "pending"; evidence = @() }
+    }
+}
+
+function Test-Sprint8AFormalUatAttemptInvalidatesCandidate {
+    param(
+        [Parameter(Mandatory)]$Receipt,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$CandidateFingerprint
+    )
+
+    [string]$Receipt.state -in @("failed", "blocked") -and
+        [string]$Receipt.candidate_fingerprint -ceq $CandidateFingerprint -and
+        [string]$Receipt.classification -in @("product", "product-decision")
+}
+
 function Set-Sprint8AFormalUatAttemptState {
     param(
         [Parameter(Mandatory)]$Receipt,
@@ -1777,6 +1826,30 @@ if ($SelfTest) {
         }
     }
     $sourceText = Get-Content -LiteralPath $PSCommandPath -Raw
+    $attemptShapeFixture = New-Sprint8AFormalUatAttemptReceipt -AttemptNumber 1
+    $directAttemptAssignments = @([regex]::Matches($sourceText, '\$attemptReceipt\.([A-Za-z0-9_]+)\s*=') |
+        ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    $missingAttemptFields = @($directAttemptAssignments | Where-Object {
+        $attemptShapeFixture.PSObject.Properties.Name -cnotcontains $_
+    })
+    if ($missingAttemptFields.Count -gt 0) {
+        throw "Formal UAT attempt receipt omits directly assigned field(s): $($missingAttemptFields -join ', ')."
+    }
+    $candidateFingerprintFixture = "e" * 64
+    $setupFailureFixture = [pscustomobject]@{
+        state = "failed"; candidate_fingerprint = $candidateFingerprintFixture; classification = "preflight/setup"
+    }
+    $productFailureFixture = [pscustomobject]@{
+        state = "failed"; candidate_fingerprint = $candidateFingerprintFixture; classification = "product"
+    }
+    if ((Test-Sprint8AFormalUatAttemptInvalidatesCandidate `
+            -Receipt $setupFailureFixture `
+            -CandidateFingerprint $candidateFingerprintFixture) -or
+        -not (Test-Sprint8AFormalUatAttemptInvalidatesCandidate `
+            -Receipt $productFailureFixture `
+            -CandidateFingerprint $candidateFingerprintFixture)) {
+        throw "Formal UAT self-test confused a runner setup failure with a candidate-invalidating product failure."
+    }
     $rehearsalPhase = "candidate-rehearsal-" + "uat-diagnostics"
     $diagnosticRunner = "uat-sprint-" + "8a.ps1"
     $legacySourceField = "mutable_source_" + "identity"
@@ -2002,37 +2075,7 @@ if ($Stage -ceq "Start") {
     if (Test-Path -LiteralPath $attemptPath) {
         throw "Formal UAT attempt $Attempt already exists and cannot be reused."
     }
-    $placeholderSource = [pscustomobject][ordered]@{
-        commit = "0" * 40; tree = "0" * 40; dirty = $false; branch = "unverified"
-        acceptance_inventory_sha256 = "0" * 64; deployment_inputs_sha256 = "0" * 64
-    }
-    $attemptReceipt = [pscustomobject][ordered]@{
-        schema_version = 1; sprint = "sprint-8a"; phase = "uat"; attempt = $Attempt
-        authoritative = $false; state = "preparing"; assertions_started = $false
-        stage = "prerequisites"
-        started_at = [DateTimeOffset]::UtcNow.ToString("o"); ended_at = $null; duration_ms = 0L
-        state_history = @([pscustomobject][ordered]@{
-            state = "preparing"; stage = "prerequisites"; at = [DateTimeOffset]::UtcNow.ToString("o")
-        })
-        source_identity = $placeholderSource; source_verification_state = "unverified"
-        candidate_source_identity = $placeholderSource
-        uat_harness_only_source_advance = $null
-        environment_fingerprint = "0" * 64; candidate_fingerprint = "0" * 64
-        endpoints = $null
-        prerequisite_receipts = @()
-        declared_checks = @(
-            [pscustomobject][ordered]@{ name = "authenticated-prerequisites"; depends_on = @() },
-            [pscustomobject][ordered]@{ name = "scripted-inventory"; depends_on = @("authenticated-prerequisites") },
-            [pscustomobject][ordered]@{ name = "scripted-smoke"; depends_on = @("authenticated-prerequisites") },
-            [pscustomobject][ordered]@{ name = "post-scripted-identity"; depends_on = @("authenticated-prerequisites") }
-        ) + @(Get-Sprint8AManualUatScenarioNames | ForEach-Object {
-            [pscustomobject][ordered]@{ name = $_; depends_on = @("authenticated-prerequisites", "post-scripted-identity") }
-        })
-        checks = @(); assertion_count = 0; failure_count = 0; blocked_count = 0
-        classification = $null; failure_batch = $null
-        manual_scenarios_pending = @(Get-Sprint8AManualUatScenarioNames)
-        cleanup_restoration = [pscustomobject]@{ required = $true; result = "pending"; evidence = @() }
-    }
+    $attemptReceipt = New-Sprint8AFormalUatAttemptReceipt -AttemptNumber $Attempt
     Publish-Sprint7AEvidence -Document $attemptReceipt -OutputPath $attemptPath | Out-Null
     try {
         Sync-Sprint8AFormalUatEvidenceManifest -Overrides @([pscustomobject][ordered]@{
@@ -2072,9 +2115,9 @@ if ($Stage -ceq "Start") {
             throw "Candidate receipt omits exact candidate/environment fingerprints."
         }
         $invalidatedSameCandidate = @($priorAttempts | Where-Object {
-            [string]$_.receipt.state -in @("failed", "blocked") -and
-                [string]$_.receipt.candidate_fingerprint -ceq $candidateFingerprint -and
-                ($_.receipt.assertions_started -is [bool]) -and [bool]$_.receipt.assertions_started
+            Test-Sprint8AFormalUatAttemptInvalidatesCandidate `
+                -Receipt $_.receipt `
+                -CandidateFingerprint $candidateFingerprint
         })
         if ($invalidatedSameCandidate.Count -gt 0) {
             throw "Formal UAT candidate was already invalidated or blocked by prior attempt(s): $(@($invalidatedSameCandidate.receipt.attempt) -join ', ')."
