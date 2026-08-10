@@ -480,6 +480,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       });
 
     await page.goto("/");
+    await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
     const core = await presentation();
     await expect(page.locator(".top-app-bar__title")).toHaveText("Home");
 
@@ -495,6 +496,12 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
         await expect(active).toHaveCount(2);
         await expect(active.first()).toHaveText(route.label);
         expect(await presentation()).toEqual(core);
+        if (route.path === "/components" || route.path === "/dashboards") {
+          await expect(page.locator("#module-content")).toHaveAttribute(
+            "data-hydration",
+            "ready",
+          );
+        }
       });
     }
     assertNoConsoleErrors();

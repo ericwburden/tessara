@@ -1689,7 +1689,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>, can_manage: bool) -> impl 
                                                     <td class="data-table__cell--center">{status_label}</td>
                                                     {can_manage.then(|| view! {
                                                         <td class="data-table__cell--center">
-                                                            <div class="components-list-actions">
+                                                            <div class="data-table__action-group">
                                                                 <a class="icon-button" href=edit_href aria-label="Edit component" title="Edit component">
                                                                     <Pencil class="icon-button__icon"/>
                                                                 </a>

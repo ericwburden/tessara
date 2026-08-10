@@ -20,6 +20,12 @@ async function useTheme(page: Page, theme: "light" | "dark") {
 
 async function visit(page: Page, path: string, theme: "light" | "dark") {
   await page.goto(path);
+  if (path.startsWith("/components") || path.startsWith("/dashboards")) {
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+  }
   await useTheme(page, theme);
   await expect(
     page.locator("[data-hydration=ready], #tessara-module-outlet, #module-content").first(),
@@ -33,6 +39,9 @@ test.describe("canonical module UI visual baselines", () => {
     test(`Components directory at 1280 px (${theme})`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 900 });
       await visit(page, "/components", theme);
+      const actions = page.locator(".data-table__action-group .icon-button");
+      await expect(actions).toHaveCount(14);
+      await expect(actions.first().locator("svg")).toBeVisible();
       await expect(page).toHaveScreenshot(`components-directory-${theme}-1280.png`, {
         animations: "disabled",
       });
