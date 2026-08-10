@@ -6,6 +6,7 @@ param(
     [string]$EvidenceRoot = "artifacts/sprint-8a-closeout",
     [string]$ExpectedBranch = "codex/sprint-8a",
     [string]$HandoffUrl = "http://127.0.0.1:8088",
+    [switch]$AuthorizePreflightHarnessOnlySourceAdvance,
     [switch]$SelfTest
 )
 
@@ -1500,7 +1501,10 @@ function Test-Sprint8AValidationPreflightRunner {
         $manifestScan -lt 0 -or $manifestPublish -le $manifestScan -or $manifestAssert -le $manifestPublish -or
         -not $sourceText.Contains('future_paths_are_declarations_not_manifest_entries = $true') -or
         -not $sourceText.Contains('mutable_attempt_checkpoints_are_overwritten_only_by_the_owning_runner = $true') -or
-        -not $sourceText.Contains('immutable_snapshots_and_terminal_receipts_are_never_overwritten = $true')) {
+        -not $sourceText.Contains('immutable_snapshots_and_terminal_receipts_are_never_overwritten = $true') -or
+        -not $sourceText.Contains('[switch]$AuthorizePreflightHarnessOnlySourceAdvance') -or
+        -not $sourceText.Contains('user_directed_preflight_with_corrected_validation_code') -or
+        -not $sourceText.Contains('product_test_fixture_deployment_changes = $false')) {
         throw "Sprint 8A preflight self-test found a stale start-receipt, scheduler, or manifest-initialization boundary."
     }
     "Sprint 8A validation-preflight graph, receipt, classification, lifecycle, and no-execution self-test passed."
@@ -2218,25 +2222,55 @@ function Assert-Sprint8APreflightRepositoryScope {
 function Assert-Sprint8APreflightCleanSource {
     $source = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
     Assert-Sprint8ASourceIdentityObject -Source $source -RequireClean | Out-Null
-    if (-not (Test-Sprint8ASourceIdentityMatch `
-            -Expected $script:runtimeContext.readiness.mutable_source_identity `
-            -Actual $source) -or
-        -not (Test-Sprint8ASourceIdentityMatch `
-            -Expected $script:runtimeContext.rehearsal.mutable_source_identity `
-            -Actual $source) -or
-        [string]$source.branch -cne $ExpectedBranch) {
-        throw "Current clean source differs from the exact passing Readiness/Rehearsal source identity."
+    $readinessSource = $script:runtimeContext.readiness.mutable_source_identity
+    $rehearsalSource = $script:runtimeContext.rehearsal.mutable_source_identity
+    $exactSourceMatch = (Test-Sprint8ASourceIdentityMatch -Expected $readinessSource -Actual $source) -and
+        (Test-Sprint8ASourceIdentityMatch -Expected $rehearsalSource -Actual $source)
+    $sourceAdvance = $null
+    if (-not $exactSourceMatch) {
+        if (-not $AuthorizePreflightHarnessOnlySourceAdvance) {
+            throw "Current clean source differs from the exact passing Readiness/Rehearsal source identity."
+        }
+        $allowedPaths = @(
+            "docs/sprints/sprint-8a-verification.md",
+            "scripts/run-sprint-8a-validation-preflight.ps1",
+            "scripts/sprint-8a-lifecycle-chain.ps1"
+        )
+        & git merge-base --is-ancestor ([string]$rehearsalSource.commit) ([string]$source.commit)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Authorized preflight harness advance is not a descendant of the passing Rehearsal source."
+        }
+        $changedPaths = @(& git diff --name-only "$([string]$rehearsalSource.commit)..$([string]$source.commit)" | ForEach-Object { $_.Replace("\", "/") })
+        if ($LASTEXITCODE -ne 0 -or
+            (($changedPaths | Sort-Object) -join "`n") -cne (($allowedPaths | Sort-Object) -join "`n")) {
+            throw "Authorized preflight harness advance contains a path outside the exact approved correction set."
+        }
+        $sourceAdvance = [pscustomobject][ordered]@{
+            authorization = "user_directed_preflight_with_corrected_validation_code"
+            passing_source_commit = [string]$rehearsalSource.commit
+            candidate_source_commit = [string]$source.commit
+            exact_changed_paths = $changedPaths
+            product_test_fixture_deployment_changes = $false
+        }
+    }
+    if ([string]$source.branch -cne $ExpectedBranch) {
+        throw "Current clean source is not on the expected Sprint 8A branch."
     }
     $script:runtimeContext.source = $source
-    $script:attemptReceipt.source_identity_verification_state = "verified"
+    $script:attemptReceipt.source_identity_verification_state = if ($exactSourceMatch) { "verified" } else { "verified_preflight_harness_only_advance" }
     Publish-Sprint8APreflightStructuredEvidence -CheckName "clean-source" -Document ([pscustomobject][ordered]@{
         schema_version = 1
         sprint = "sprint-8a"
         source_identity = $source
-        exact_readiness_match = $true
-        exact_rehearsal_match = $true
+        exact_readiness_match = $exactSourceMatch
+        exact_rehearsal_match = $exactSourceMatch
+        preflight_harness_only_source_advance = $sourceAdvance
     }) | Out-Null
-    "clean source identity exactly matches both passing mutable receipts"
+    if ($exactSourceMatch) {
+        "clean source identity exactly matches both passing mutable receipts"
+    } else {
+        "clean candidate source contains only the explicitly authorized preflight harness correction set"
+    }
 }
 
 function Assert-Sprint8APreflightAcceptanceTraceability {
