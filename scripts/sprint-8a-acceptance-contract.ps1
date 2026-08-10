@@ -78,15 +78,6 @@ function Test-Sprint8AFirstPartyComponentContractSources {
                 '$visualVersion.component_version_id'
             )
         }
-        "crates/tessara-component-module/assets/component.js" = [ordered]@{
-            forbidden = @(
-                '(?m)^\s*missing_policy\s*:',
-                'config\.missing_policy'
-            )
-            required = @(
-                'value_missing_policy: configControl(form, "value_missing_policy").value'
-            )
-        }
         "end2end/tests/components.spec.ts" = [ordered]@{
             forbidden = @(
                 '(?m)^\s*missing_policy\s*:',
@@ -129,7 +120,11 @@ function Test-Sprint8AFirstPartyComponentContractSources {
         }
     }
     foreach ($sourcePath in $sourceContracts.Keys) {
-        $sourceText = Get-Content -LiteralPath (Join-Path $RepoRoot $sourcePath) -Raw
+        $resolvedSourcePath = Join-Path $RepoRoot $sourcePath
+        if (-not (Test-Path -LiteralPath $resolvedSourcePath -PathType Leaf)) {
+            throw "Sprint 8A first-party acceptance source '$sourcePath' is missing."
+        }
+        $sourceText = Get-Content -LiteralPath $resolvedSourcePath -Raw
         foreach ($pattern in $sourceContracts[$sourcePath].forbidden) {
             if ($sourceText -match $pattern) {
                 throw "Sprint 8A first-party acceptance source '$sourcePath' retains a legacy Component payload or response alias matching '$pattern'."
@@ -446,15 +441,15 @@ function Test-Sprint8AAcceptanceContract {
         }
     }
     $componentAssets = [ordered]@{
-        "/component.css" = @(
-            "crates/tessara-module-ui/assets/module-ui.css",
-            "crates/tessara-component-module/assets/component.css"
-        )
+        "/module-ui.css" = @("crates/tessara-module-ui/assets/module-ui.css")
+        "/component.css" = @("crates/tessara-component-ui/assets/component.css")
         "/component-lifecycle.css" = @(
-            "crates/tessara-component-module/assets/component.css",
-            "crates/tessara-component-module/assets/component-lifecycle.css"
+            "crates/tessara-component-ui/assets/component.css",
+            "crates/tessara-component-ui/assets/component-lifecycle.css"
         )
-        "/component.js" = @("crates/tessara-component-module/assets/component.js")
+        "/component.js" = @("crates/tessara-component-ui/assets/component.js")
+        "/component-bindings.js" = @("crates/tessara-component-ui/assets/component-bindings.js")
+        "/component.wasm" = @("crates/tessara-component-ui/assets/component.wasm")
     }
     foreach ($assetPath in $componentAssets.Keys) {
         $declaration = @($componentManifest.assets | Where-Object path -CEQ $assetPath)
@@ -465,7 +460,11 @@ function Test-Sprint8AAcceptanceContract {
         try {
             $sourcePaths = @($componentAssets[$assetPath])
             for ($index = 0; $index -lt $sourcePaths.Count; $index++) {
-                $sourceBytes = [IO.File]::ReadAllBytes((Join-Path $repoRoot $sourcePaths[$index]))
+                $sourcePath = Join-Path $repoRoot $sourcePaths[$index]
+                if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+                    throw "Component asset source '$($sourcePaths[$index])' is missing."
+                }
+                $sourceBytes = [IO.File]::ReadAllBytes($sourcePath)
                 $assetStream.Write($sourceBytes, 0, $sourceBytes.Length)
                 if ($index -lt ($sourcePaths.Count - 1)) {
                     # These assets are served from Rust concat!(include_str!(...), "\n", ...).
@@ -502,18 +501,12 @@ function Test-Sprint8AAcceptanceContract {
         (Join-Path $repoRoot "crates/tessara-component-module/src/validation.rs") -Raw
     $componentProviderText = Get-Content -LiteralPath `
         (Join-Path $repoRoot "crates/tessara-component-module/src/provider.rs") -Raw
-    $componentJavaScriptText = Get-Content -LiteralPath `
-        (Join-Path $repoRoot "crates/tessara-component-module/assets/component.js") -Raw
     foreach ($retiredReader in @(
         [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = '#[serde(alias = "field")]' },
         [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "enum ComponentFieldRef" },
         [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("field")' },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "item.field_key || item.key || item.field" },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "filter.field_key || filter.field" },
         [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "missing_policy: String"; pattern = '(?m)^\s*missing_policy:\s*String' },
-        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("missing_policy")' },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "`n    missing_policy:" },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = "config.missing_policy" }
+        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("missing_policy")' }
     )) {
         $retiredPresent = if ($retiredReader.PSObject.Properties.Name -contains "pattern") {
             $retiredReader.text -match [string]$retiredReader.pattern
@@ -527,10 +520,8 @@ function Test-Sprint8AAcceptanceContract {
     foreach ($canonicalReader in @(
         [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "visible_columns: Vec<String>" },
         [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("field_key")' },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = 'const storedField = filter.field_key || "";' },
         [pscustomobject]@{ source = "validation"; text = $componentValidationText; fragment = "value_missing_policy: String" },
-        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("value_missing_policy")' },
-        [pscustomobject]@{ source = "browser"; text = $componentJavaScriptText; fragment = 'value_missing_policy: configControl(form, "value_missing_policy").value' }
+        [pscustomobject]@{ source = "provider"; text = $componentProviderText; fragment = '.get("value_missing_policy")' }
     )) {
         if (-not $canonicalReader.text.Contains($canonicalReader.fragment)) {
             throw "Component $($canonicalReader.source) source omits canonical configuration reader '$($canonicalReader.fragment)'."

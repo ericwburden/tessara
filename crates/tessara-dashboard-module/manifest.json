@@ -524,7 +524,7 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:dfe302cbfe7b603dcd721a73b8da5d61d1ff5c9daabcc1a8ff09db45f8a55b02",
+      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
       "content_type": "text/css; charset=utf-8"
     },
     {
@@ -539,7 +539,7 @@
     },
     {
       "path": "/dashboard.js",
-      "digest": "sha256:bcfdfe6a3b6300a313939f06e1db3f7a0b546fd59f07de4fed70f8ae5c1d0fb8",
+      "digest": "sha256:cf4c501e43cba2ff8b058d583c113b395744950ef582eab57f447562a63a63b9",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
@@ -549,7 +549,7 @@
     },
     {
       "path": "/dashboard.wasm",
-      "digest": "sha256:e695dc036f76d5cde6588308e13a6ceea09a8588c2a12dc89464efb9d14acc40",
+      "digest": "sha256:55b2e966422a6b4f8a64a19881400b289f1195172803906582c635ed5aa562e8",
       "content_type": "application/wasm"
     }
   ]

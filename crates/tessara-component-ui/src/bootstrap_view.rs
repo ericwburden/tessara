@@ -12,7 +12,7 @@ pub(crate) fn component_bootstrap_view(bootstrap: &ComponentRouteBootstrap) -> A
             let components = components.clone();
             let can_manage = *can_manage;
             view! {
-                <section class="route-panel components-page component-directory" data-component-directory>
+                <section class="route-panel components-page component-directory" data-component-directory="true">
                     <PageHeader eyebrow="Reusable presentation" title="Components" description="Find, inspect, and reuse published Component definitions.">
                         {can_manage.then(|| view! { <Button href="/components/new">"Create Component"</Button> })}
                     </PageHeader>

@@ -472,6 +472,9 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
           primary: styles.getPropertyValue("--semantic-primary").trim(),
           font: styles.getPropertyValue("--font-sans").trim(),
           bodyBackground: getComputedStyle(document.body).backgroundColor,
+          mainBackground: getComputedStyle(
+            document.querySelector(".app-main")!,
+          ).backgroundColor,
           resolvedTheme: document.documentElement.dataset.theme,
           themePreference: document.documentElement.dataset.themePreference,
           storedTheme: window.localStorage.getItem("tessara.themePreference"),
@@ -482,6 +485,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await page.goto("/");
     await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
     const core = await presentation();
+    expect(core.mainBackground).toBe(core.bodyBackground);
     await expect(page.locator(".top-app-bar__title")).toHaveText("Home");
 
     for (const route of [

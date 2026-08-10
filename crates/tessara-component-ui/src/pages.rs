@@ -48,7 +48,7 @@ pub fn ComponentsIndexContent() -> impl IntoView {
     });
 
     view! {
-        <section class="route-panel components-page">
+        <section class="route-panel components-page" data-component-directory="true">
             <PageHeader
                 eyebrow="Reusable presentation"
                 title="Components"
@@ -1109,7 +1109,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     });
 
     view! {
-        <section class="route-panel components-page" data-component-directory>
+        <section class="route-panel components-page" data-component-viewer="true">
             <ComponentViewerBreadcrumb component_ref=component_ref.clone() component=component/>
             <header class="page-header">
                 <div>
@@ -2903,6 +2903,7 @@ fn create_component_from_form(
         feedback.message.set(None);
         feedback.error.set(None);
         feedback.findings.set(Vec::new());
+        let (draft_version_id, published_version_id) = component_save_version_identities(&intent);
         let major = values.dataset_major.trim().parse::<i32>().unwrap_or(1);
         let config = build_component_config(&values);
         let version = CreateComponentVersionRequest {
@@ -2937,8 +2938,8 @@ fn create_component_from_form(
         let request = SaveComponentEditRequest {
             schema_version: 1,
             component_id: intent.editing_component_id,
-            draft_version_id: intent.editing_version_id,
-            published_version_id: intent.current_published_version_id,
+            draft_version_id,
+            published_version_id,
             action: action.into(),
             component: UpdateComponentRequest {
                 name: values.name,
@@ -2970,6 +2971,20 @@ fn create_component_from_form(
             Err(message) => feedback.error.set(Some(message)),
         }
     });
+}
+
+#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+fn component_save_version_identities(
+    intent: &ComponentSaveIntent,
+) -> (Option<String>, Option<String>) {
+    match intent.publish_action {
+        ComponentPublishAction::SaveDraft | ComponentPublishAction::CreateNewVersion => {
+            (intent.editing_version_id.clone(), None)
+        }
+        ComponentPublishAction::UpdateExistingVersion => {
+            (None, intent.current_published_version_id.clone())
+        }
+    }
 }
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]

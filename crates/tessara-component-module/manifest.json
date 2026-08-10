@@ -657,7 +657,7 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:dfe302cbfe7b603dcd721a73b8da5d61d1ff5c9daabcc1a8ff09db45f8a55b02",
+      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
       "content_type": "text/css; charset=utf-8"
     },
     {
@@ -672,7 +672,7 @@
     },
     {
       "path": "/component.js",
-      "digest": "sha256:dc088546bb0d5c9d6388e6e468a4629b154a6a72dad7899180887c5eb32c6958",
+      "digest": "sha256:9bade26e3762f10e49d9e5279f2eccb57d4f0521fe4f9f26970fbe375e959ec6",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
@@ -682,7 +682,7 @@
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:99129792c26443a6ff5a069f1bfb990e9e5386fb102e94803458a1251f0818a8",
+      "digest": "sha256:860e65e0c4f2dac1853bdf1cfa7bdc3ac3d9986d3fabc939e1baae843436da3b",
       "content_type": "application/wasm"
     }
   ]

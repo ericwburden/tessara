@@ -1065,9 +1065,9 @@ fn ComponentTableHeader(
                 <span>{label.clone()}</span>
                 <div class=move || {
                     if popover.open.get() {
-                        "interactive-data-table__header-menu is-open"
+                        "interactive-data-table__header-menu data-table-filter is-open"
                     } else {
-                        "interactive-data-table__header-menu"
+                        "interactive-data-table__header-menu data-table-filter"
                     }
                 }>
                     <button

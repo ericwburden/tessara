@@ -185,8 +185,8 @@
   ],
   "assets": [
     {
-      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:dfe302cbfe7b603dcd721a73b8da5d61d1ff5c9daabcc1a8ff09db45f8a55b02/module-ui.css",
-      "digest": "sha256:dfe302cbfe7b603dcd721a73b8da5d61d1ff5c9daabcc1a8ff09db45f8a55b02",
+      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe/module-ui.css",
+      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
       "content_type": "text/css; charset=utf-8"
     },
     {

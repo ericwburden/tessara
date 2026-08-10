@@ -2004,9 +2004,7 @@ fn start_dashboard_placement_resize(
     let event = start.event;
     event.prevent_default();
     event.stop_propagation();
-    let Some(window) = web_sys::window() else {
-        return None;
-    };
+    let window = web_sys::window()?;
     if window
         .match_media("(max-width: 767px)")
         .ok()
@@ -2015,32 +2013,19 @@ fn start_dashboard_placement_resize(
     {
         return None;
     }
-    let Some(target) = event
+    let target = event
         .target()
-        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
-    else {
-        return None;
-    };
-    let Some(tile) = target.closest(".placement-editor-tile").ok().flatten() else {
-        return None;
-    };
-    let Some(grid) = target
+        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())?;
+    let tile = target.closest(".placement-editor-tile").ok().flatten()?;
+    let grid = target
         .closest("[data-placement-grid-canvas]")
         .ok()
-        .flatten()
-    else {
-        return None;
-    };
-    let Some(metrics) = placement_grid_metrics_from_element(&grid) else {
-        return None;
-    };
+        .flatten()?;
+    let metrics = placement_grid_metrics_from_element(&grid)?;
     let current = placements.get_untracked();
-    let Some(editor) = current
+    let editor = current
         .iter()
-        .find(|placement| !placement.removed && placement.key() == placement_id)
-    else {
-        return None;
-    };
+        .find(|placement| !placement.removed && placement.key() == placement_id)?;
     let start_rect = GridRect::new(
         editor.placement.grid_row,
         editor.placement.grid_column,

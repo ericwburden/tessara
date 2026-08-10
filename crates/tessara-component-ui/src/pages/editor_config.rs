@@ -191,7 +191,6 @@ impl VisualSharedDraft {
         config.insert("summary_field".into(), Value::String(self.summary_field));
         config.insert("summary_type".into(), Value::String(self.summary_type));
         config.insert("value_format".into(), Value::String(self.value_format));
-        config.insert("missing_policy".into(), Value::String("omit".into()));
         config.insert(
             "value_missing_policy".into(),
             Value::String(self.value_missing_policy),

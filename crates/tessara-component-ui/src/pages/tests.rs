@@ -6,6 +6,7 @@ use super::{
     VisualSharedDraft, build_table_component_config, dataset_fields_for_major,
     dataset_picker_majors, toggle_csv_key, toggle_visible_column,
 };
+use super::{ComponentPublishAction, ComponentSaveIntent, component_save_version_identities};
 use super::{
     component_dependency_unavailable, component_redirect_ref, component_summary_kind_label,
     component_summary_revision_label, component_summary_status_label, dataset_catalog_option_label,
@@ -141,6 +142,7 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     assert_eq!(bar["comparison_missing_policy"], "omit");
     assert_eq!(bar["number_of_points"], 12);
     assert!(bar.get("x_field").is_none());
+    assert!(bar.get("missing_policy").is_none());
 
     let line = ComponentConfigDraft::Line(LineConfigDraft {
         shared: visual_shared_draft(),
@@ -152,6 +154,7 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     assert_eq!(line["x_field"], "period");
     assert_eq!(line["smoothing"], false);
     assert!(line.get("category_field").is_none());
+    assert!(line.get("missing_policy").is_none());
 
     let pie = ComponentConfigDraft::Pie(PieDonutConfigDraft {
         shared: visual_shared_draft(),
@@ -164,6 +167,7 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     .into_json();
     assert_eq!(pie["max_slices"], 12);
     assert!(pie.get("orientation").is_none());
+    assert!(pie.get("missing_policy").is_none());
 
     let donut = ComponentConfigDraft::Donut(PieDonutConfigDraft {
         shared: visual_shared_draft(),
@@ -175,6 +179,7 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     })
     .into_json();
     assert_eq!(donut["max_slices"], 12);
+    assert!(donut.get("missing_policy").is_none());
 
     let stat = ComponentConfigDraft::StatCard(StatCardConfigDraft {
         shared: visual_shared_draft(),
@@ -186,6 +191,31 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     assert_eq!(stat["panel_style"], "accent");
     assert!(stat.get("sort_field").is_none());
     assert!(stat.get("number_of_points").is_none());
+    assert!(stat.get("missing_policy").is_none());
+}
+
+#[test]
+fn save_actions_send_only_the_version_identity_accepted_by_the_api() {
+    let intent = |publish_action| ComponentSaveIntent {
+        editing_component_id: Some("component-id".into()),
+        editing_version_id: Some("draft-id".into()),
+        current_published_version_id: Some("published-id".into()),
+        publish_action,
+        version_note: None,
+    };
+
+    assert_eq!(
+        component_save_version_identities(&intent(ComponentPublishAction::SaveDraft)),
+        (Some("draft-id".into()), None)
+    );
+    assert_eq!(
+        component_save_version_identities(&intent(ComponentPublishAction::CreateNewVersion)),
+        (Some("draft-id".into()), None)
+    );
+    assert_eq!(
+        component_save_version_identities(&intent(ComponentPublishAction::UpdateExistingVersion)),
+        (None, Some("published-id".into()))
+    );
 }
 
 fn component_summary(
