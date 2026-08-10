@@ -858,13 +858,24 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
         $byPhase[[string]$prerequisite.receipt.phase] = $prerequisite
     }
     if ($Phase -ceq "validation-preflight") {
+        $readinessDirectory = [IO.Path]::GetDirectoryName([string]$byPhase["validation-readiness"].reference.path).Replace("\", "/")
+        $readinessImmutableReference = [pscustomobject][ordered]@{
+            path = "$readinessDirectory/attempts/readiness-$([int]$byPhase["validation-readiness"].receipt.attempt).json"
+            sha256 = [string]$byPhase["validation-readiness"].reference.sha256
+        }
+        Assert-Sprint8ALifecyclePrerequisite `
+            -RepositoryRoot $RepositoryRoot `
+            -EvidenceRoot $EvidenceRoot `
+            -Reference $readinessImmutableReference `
+            -ExpectedPhase "validation-readiness" `
+            -ExpectedEnvironmentFingerprint $EnvironmentFingerprint | Out-Null
         if ($byPhase["validation-readiness"].receipt.authoritative -isnot [bool] -or
             $byPhase["candidate-rehearsal"].receipt.authoritative -isnot [bool] -or
             $byPhase["validation-readiness"].receipt.authoritative -ne $false -or
             $byPhase["candidate-rehearsal"].receipt.authoritative -ne $false -or
             -not (Test-Sprint8AReceiptReferenceMatch `
                 -References @($byPhase["candidate-rehearsal"].receipt.prerequisite_receipts) `
-                -ExpectedReference $byPhase["validation-readiness"].reference)) {
+                -ExpectedReference $readinessImmutableReference)) {
             throw "Preflight prerequisites do not form the exact non-authoritative Readiness -> Rehearsal chain."
         }
     }
