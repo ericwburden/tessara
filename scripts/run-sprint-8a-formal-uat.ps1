@@ -94,6 +94,15 @@ function Get-Sprint8AFormalUatFailureClassifications {
         Sort-Object -Unique)
 }
 
+function Get-Sprint8AFormalUatFailureMessages {
+    param([Parameter(Mandatory)]$Receipt)
+
+    if (@($Receipt.PSObject.Properties | ForEach-Object { $_.Name }) -contains "failure_batch" -and
+        $null -ne $Receipt.failure_batch) {
+        $Receipt.failure_batch.defects | ForEach-Object { [string]$_.message }
+    }
+}
+
 function Get-Sprint8AFormalUatSourceContext {
     param(
         [Parameter(Mandatory)]$CurrentSource,
@@ -2187,6 +2196,17 @@ if ($SelfTest) {
                 )) -join "`n") -cne "product") {
         throw "Formal Sprint 8A UAT self-test mishandled empty or duplicate failure classifications."
     }
+    $singletonFailureMessages = @(Get-Sprint8AFormalUatFailureMessages -Receipt ([pscustomobject]@{
+        failure_batch = [pscustomobject]@{
+            defects = @([pscustomobject]@{ message = "singleton" })
+        }
+    }))
+    $emptyFailureMessages = @(Get-Sprint8AFormalUatFailureMessages -Receipt ([pscustomobject]@{}))
+    if ($singletonFailureMessages.Count -ne 1 -or
+        [string]$singletonFailureMessages[0] -cne "singleton" -or
+        $emptyFailureMessages.Count -ne 0) {
+        throw "Formal Sprint 8A UAT self-test lost singleton/empty failure-message cardinality."
+    }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
         acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
@@ -2816,10 +2836,7 @@ $sourceAdvanceRecoveryAuthorized = $false
 $sourceAdvanceRecoveryReference = $null
 $reusableRestorationCheck = $null
 $reusableRestorationChecks = @()
-$sourceAdvanceFailureMessages = if ($attemptReceipt.PSObject.Properties.Name -contains "failure_batch" -and
-    $null -ne $attemptReceipt.failure_batch) {
-    @($attemptReceipt.failure_batch.defects | ForEach-Object { [string]$_.message })
-} else { @() }
+$sourceAdvanceFailureMessages = @(Get-Sprint8AFormalUatFailureMessages -Receipt $attemptReceipt)
 $isExactSourceAdvanceFailure = [string]$attemptReceipt.state -ceq "failed" -and
     [string]$attemptReceipt.stage -ceq "manual" -and
     @($sourceAdvanceFailureMessages | Where-Object {
