@@ -368,7 +368,7 @@ fn shell_context(
             display_name: actor.account.display_name.clone(),
             email: Some(actor.account.email.clone()),
         },
-        theme: ShellThemeV1::Dark,
+        theme: ShellThemeV1::System,
         navigation,
         return_destination: "/".into(),
         locale: "en-US".into(),

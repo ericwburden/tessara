@@ -1060,7 +1060,7 @@ async fn proxy_manifest_module_document(
                 display_name: request.account.display_name.clone(),
                 email: Some(request.account.email.clone()),
             },
-            theme: ShellThemeV1::Dark,
+            theme: ShellThemeV1::System,
             navigation,
             return_destination: "/".into(),
             locale: "en-US".into(),
@@ -1478,7 +1478,7 @@ async fn scoped_records_shell_context(
             display_name: request.account.display_name.clone(),
             email: Some(request.account.email.clone()),
         },
-        theme: ShellThemeV1::Dark,
+        theme: ShellThemeV1::System,
         navigation: vec![
             NavigationProjectionV1 {
                 contribution_id: NavigationContributionId::new("tessara.core.home")

@@ -2573,3 +2573,13 @@ typography, controls, tables/dialogs, responsive behavior, accessibility,
 hydration, and clean console output. Formal Readiness, Candidate Rehearsal,
 Preflight, SIT, and UAT have not run for this corrected identity and remain
 required before closeout.
+
+The first focused browser parity run also exposed that Core's signed module
+shell contexts still forced `dark` even when Core itself resolved the user's
+`system` or stored theme preference. That stale host policy made direct module
+loads use Dashboard's dark canvas while Core used the light canvas. The module
+gateway and the Core-owned direct-document contexts now declare `system`, so
+the SDK's one theme bootstrap resolves the same stored or operating-system
+preference for Core, Components, Dashboard, and Scoped Records. The parity
+reproducer records the resolved preference, computed tokens, and body canvas
+for every route; this focused evidence remains non-authoritative.

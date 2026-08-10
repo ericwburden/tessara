@@ -472,6 +472,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
           primary: styles.getPropertyValue("--semantic-primary").trim(),
           font: styles.getPropertyValue("--font-sans").trim(),
           bodyBackground: getComputedStyle(document.body).backgroundColor,
+          resolvedTheme: document.documentElement.dataset.theme,
+          themePreference: document.documentElement.dataset.themePreference,
+          storedTheme: window.localStorage.getItem("tessara.themePreference"),
+          systemDark: window.matchMedia("(prefers-color-scheme: dark)").matches,
         };
       });
 
@@ -484,12 +488,14 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       { path: "/dashboards", label: "Dashboards" },
       { path: "/reference/scoped-records", label: "Scoped Records" },
     ]) {
-      await page.goto(route.path);
-      await expect(page.locator(".top-app-bar__title")).toHaveText(route.label);
-      const active = page.locator(`.sidebar-link.is-active[href="${route.path}"]`);
-      await expect(active).toHaveCount(2);
-      await expect(active.first()).toHaveText(route.label);
-      expect(await presentation()).toEqual(core);
+      await test.step(`${route.label} uses the Core shell presentation`, async () => {
+        await page.goto(route.path);
+        await expect(page.locator(".top-app-bar__title")).toHaveText(route.label);
+        const active = page.locator(`.sidebar-link.is-active[href="${route.path}"]`);
+        await expect(active).toHaveCount(2);
+        await expect(active.first()).toHaveText(route.label);
+        expect(await presentation()).toEqual(core);
+      });
     }
     assertNoConsoleErrors();
   });
