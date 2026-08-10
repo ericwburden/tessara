@@ -90,7 +90,10 @@ function Get-Sprint8AFormalUatSourceContext {
     $changedPaths = @(& git -C $RepositoryRoot diff --name-only "$([string]$CandidateSource.commit)..$([string]$CurrentSource.commit)" |
         ForEach-Object { $_.Replace("\", "/") })
     $diffExit = $LASTEXITCODE
-    $allowedPaths = @("scripts/run-sprint-8a-formal-uat.ps1")
+    $allowedPaths = @(
+        "scripts/run-sprint-8a-formal-uat.ps1",
+        "scripts/sprint-8a-lifecycle-chain.ps1"
+    )
     if ($ancestorExit -ne 0 -or $diffExit -ne 0 -or
         (($changedPaths | Sort-Object) -join "`n") -cne (($allowedPaths | Sort-Object) -join "`n")) {
         throw "Authorized formal UAT harness advance contains a path outside the exact UAT-runner correction set."
@@ -759,7 +762,8 @@ function Invoke-Sprint8AFormalUatCatchHarvest {
     try { $checkpointSha = Assert-Sprint8AReceiptSidecar -Path $AttemptCheckpointPath } catch { }
     foreach ($scenario in Get-Sprint8AManualUatScenarioNames) {
         $started = [DateTimeOffset]::UtcNow
-        $manualPath = Join-Path $ManualReceiptRoot "$($scenario.ToLowerInvariant()).json"
+        $manualFullPath = Join-Path $ManualReceiptRoot "$($scenario.ToLowerInvariant()).json"
+        $manualPath = [IO.Path]::GetRelativePath($repoRoot, $manualFullPath).Replace("\", "/")
         try {
             $reference = Get-Sprint8AFormalUatReference -Path $manualPath
             $receipt = Get-Content -LiteralPath ([string]$reference.full_path) -Raw | ConvertFrom-Json
@@ -907,11 +911,11 @@ function Invoke-Sprint8AFormalUatCatchHarvest {
             evidence = @($manualBlocked.evidence)
         })
     }
-    $effectiveRestorationChecks = if (@($RetainedRestorationChecks).Count -gt 0) {
+    $effectiveRestorationChecks = @(if (@($RetainedRestorationChecks).Count -gt 0) {
         @($RetainedRestorationChecks)
     } elseif ($AttemptReceipt.PSObject.Properties.Name -contains "restoration_checks") {
         @($AttemptReceipt.restoration_checks)
-    } else { @() }
+    } else { @() })
     if ($effectiveRestorationChecks.Count -gt 0) {
         Assert-Sprint8AExactTerminalIdentities `
             -Results $effectiveRestorationChecks `
@@ -1826,6 +1830,16 @@ if ($SelfTest) {
         }
     }
     $sourceText = Get-Content -LiteralPath $PSCommandPath -Raw
+    foreach ($requiredSourceGuard in @(
+            '"scripts/run-sprint-8a-formal-uat.ps1",',
+            '"scripts/sprint-8a-lifecycle-chain.ps1"',
+            '[IO.Path]::GetRelativePath($repoRoot, $manualFullPath)',
+            '$effectiveRestorationChecks = @(if ('
+        )) {
+        if (-not $sourceText.Contains($requiredSourceGuard)) {
+            throw "Formal UAT self-test cannot find required correction guard: $requiredSourceGuard"
+        }
+    }
     $attemptShapeFixture = New-Sprint8AFormalUatAttemptReceipt -AttemptNumber 1
     $directAttemptAssignments = @([regex]::Matches($sourceText, '\$attemptReceipt\.([A-Za-z0-9_]+)\s*=') |
         ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
@@ -3089,7 +3103,8 @@ $scriptedCompletedAt = ConvertTo-Sprint8ADateTimeOffset `
     -Label "formal UAT scripted completion"
 foreach ($scenario in Get-Sprint8AManualUatScenarioNames) {
     $validationStarted = [DateTimeOffset]::UtcNow
-    $manualPath = Join-Path $manualReceiptRoot "$($scenario.ToLowerInvariant()).json"
+    $manualFullPath = Join-Path $manualReceiptRoot "$($scenario.ToLowerInvariant()).json"
+    $manualPath = [IO.Path]::GetRelativePath($repoRoot, $manualFullPath).Replace("\", "/")
     try {
         $reference = Get-Sprint8AFormalUatReference -Path $manualPath
         $receipt = Get-Content -LiteralPath ([string]$reference.full_path) -Raw | ConvertFrom-Json

@@ -1977,6 +1977,35 @@ function Assert-Sprint8AManualUatExecutionLeasePair {
     }
 }
 
+function Test-Sprint8AManualUatCheckpointSourceVerification {
+    param([Parameter(Mandatory)]$Checkpoint)
+
+    if ([string]$Checkpoint.source_verification_state -ceq "verified") { return $true }
+    if ([string]$Checkpoint.source_verification_state -cne "verified_uat_harness_only_advance" -or
+        $Checkpoint.PSObject.Properties.Name -cnotcontains "uat_harness_only_source_advance") {
+        return $false
+    }
+    $advance = $Checkpoint.uat_harness_only_source_advance
+    $allowedPaths = @(
+        "scripts/run-sprint-8a-formal-uat.ps1",
+        "scripts/sprint-8a-lifecycle-chain.ps1"
+    )
+    $changedPaths = @($advance.exact_changed_paths | ForEach-Object { [string]$_ })
+    return (
+        [string]$advance.authorization -ceq "user_directed_impact_scoped_validation" -and
+        [string]$advance.candidate_source_commit -ceq [string]$Checkpoint.candidate_source_identity.commit -and
+        [string]$advance.uat_harness_source_commit -ceq [string]$Checkpoint.source_identity.commit -and
+        $advance.product_test_fixture_deployment_changes -is [bool] -and
+        -not [bool]$advance.product_test_fixture_deployment_changes -and
+        $advance.upstream_gates_affected -is [bool] -and
+        -not [bool]$advance.upstream_gates_affected -and
+        $changedPaths.Count -gt 0 -and
+        $changedPaths -ccontains "scripts/run-sprint-8a-formal-uat.ps1" -and
+        @($changedPaths | Where-Object { $allowedPaths -cnotcontains $_ }).Count -eq 0 -and
+        @($changedPaths | Sort-Object -Unique).Count -eq $changedPaths.Count
+    )
+}
+
 function Assert-Sprint8AManualUatStartCheckpoint {
     param(
         [Parameter(Mandatory)][ValidateRange(1, 9999)][int]$Attempt,
@@ -2008,6 +2037,7 @@ function Assert-Sprint8AManualUatStartCheckpoint {
     } catch {
         throw "Manual UAT scenario '$Scenario' Start checkpoint has malformed chronology: $($_.Exception.Message)"
     }
+    $sourceVerificationAccepted = Test-Sprint8AManualUatCheckpointSourceVerification -Checkpoint $checkpoint
     if (($checkpoint.schema_version -isnot [int] -and $checkpoint.schema_version -isnot [long]) -or
         [int]$checkpoint.schema_version -ne 1 -or
         [string]$checkpoint.sprint -cne "sprint-8a" -or
@@ -2017,7 +2047,7 @@ function Assert-Sprint8AManualUatStartCheckpoint {
         $checkpoint.authoritative -isnot [bool] -or [bool]$checkpoint.authoritative -or
         [string]$checkpoint.state -cne "executing" -or
         [string]$checkpoint.stage -notin @("manual", "diagnostic-manual") -or
-        [string]$checkpoint.source_verification_state -cne "verified" -or
+        -not $sourceVerificationAccepted -or
         [string]$checkpoint.candidate_fingerprint -cne $CandidateFingerprint -or
         [string]$checkpoint.environment_fingerprint -cne $EnvironmentFingerprint -or
         @($checkpoint.prerequisite_receipts).Count -ne 3 -or
@@ -4444,6 +4474,35 @@ function Test-Sprint8AManualUatAttemptAuthority {
 }
 
 function Test-Sprint8ALifecycleChain {
+    $advancedCheckpoint = [pscustomobject][ordered]@{
+        source_verification_state = "verified_uat_harness_only_advance"
+        candidate_source_identity = [pscustomobject]@{ commit = "a" * 40 }
+        source_identity = [pscustomobject]@{ commit = "b" * 40 }
+        uat_harness_only_source_advance = [pscustomobject][ordered]@{
+            authorization = "user_directed_impact_scoped_validation"
+            candidate_source_commit = "a" * 40
+            uat_harness_source_commit = "b" * 40
+            exact_changed_paths = @(
+                "scripts/run-sprint-8a-formal-uat.ps1",
+                "scripts/sprint-8a-lifecycle-chain.ps1"
+            )
+            product_test_fixture_deployment_changes = $false
+            upstream_gates_affected = $false
+        }
+    }
+    if (-not (Test-Sprint8AManualUatCheckpointSourceVerification -Checkpoint $advancedCheckpoint)) {
+        throw "Sprint 8A lifecycle self-test rejected an exact authenticated UAT-harness-only source advance."
+    }
+    $outsidePathCheckpoint = $advancedCheckpoint | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+    $outsidePathCheckpoint.uat_harness_only_source_advance.exact_changed_paths += "scripts/run-sprint-8a-formal-sit.ps1"
+    if (Test-Sprint8AManualUatCheckpointSourceVerification -Checkpoint $outsidePathCheckpoint) {
+        throw "Sprint 8A lifecycle self-test accepted an outside path in a UAT-harness-only source advance."
+    }
+    $wrongSourceCheckpoint = $advancedCheckpoint | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+    $wrongSourceCheckpoint.uat_harness_only_source_advance.uat_harness_source_commit = "c" * 40
+    if (Test-Sprint8AManualUatCheckpointSourceVerification -Checkpoint $wrongSourceCheckpoint) {
+        throw "Sprint 8A lifecycle self-test accepted a UAT-harness-only advance bound to the wrong source."
+    }
     $offsetlessRejected = $false
     try {
         ConvertTo-Sprint8ADateTimeOffset `
