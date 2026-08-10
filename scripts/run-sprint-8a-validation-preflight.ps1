@@ -3121,7 +3121,8 @@ function Publish-Sprint8APreflightInventory {
     }
     $freezeEnvironment = Get-Sprint8AEnvironmentContract `
         -RepositoryRoot $repoRoot `
-        -EvidenceRoot $EvidenceRoot
+        -EvidenceRoot $EvidenceRoot `
+        -ProbeDatabases
     if ([string]$freezeEnvironment.fingerprint -cne [string]$script:runtimeContext.environment.fingerprint) {
         $exception = [InvalidOperationException]::new(
             "Sprint 8A environment changed after environment-contract and before freeze-boundary inventory."
