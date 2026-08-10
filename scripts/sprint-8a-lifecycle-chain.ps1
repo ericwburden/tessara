@@ -771,6 +771,7 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
         [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')]
         [string]$NormalizedDeploymentConfigurationSha256,
         [AllowNull()][string]$CandidateFingerprint,
+        [switch]$AllowPreflightHarnessOnlySourceAdvance,
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$EvidenceRoot
     )
@@ -789,6 +790,9 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
             throw "Validation preflight cannot receive a candidate fingerprint before freeze."
         }
     } else {
+        if ($AllowPreflightHarnessOnlySourceAdvance) {
+            throw "Preflight harness-only source advance cannot authorize a frozen-candidate downstream phase."
+        }
         $expectedCandidateIdentity = Get-Sprint8ACandidateIdentity `
             -RepositoryRoot $RepositoryRoot `
             -Source $Source `
@@ -823,9 +827,25 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
         if ($null -eq $receiptSource) {
             $receiptSource = $prerequisite.receipt.PSObject.Properties["mutable_source_identity"]
         }
-        if ($null -eq $receiptSource -or
-            -not (Test-Sprint8ASourceIdentityMatch -Expected $Source -Actual $receiptSource.Value)) {
-            throw "Lifecycle prerequisite '$($prerequisite.receipt.phase)' carries another source identity."
+        $sourceMatches = $null -ne $receiptSource -and
+            (Test-Sprint8ASourceIdentityMatch -Expected $Source -Actual $receiptSource.Value)
+        if (-not $sourceMatches) {
+            if (-not $AllowPreflightHarnessOnlySourceAdvance -or $Phase -cne "validation-preflight" -or $null -eq $receiptSource) {
+                throw "Lifecycle prerequisite '$($prerequisite.receipt.phase)' carries another source identity."
+            }
+            $allowedPaths = @(
+                "docs/sprints/sprint-8a-verification.md",
+                "scripts/run-sprint-8a-validation-preflight.ps1",
+                "scripts/sprint-8a-lifecycle-chain.ps1"
+            )
+            & git -C $RepositoryRoot merge-base --is-ancestor ([string]$receiptSource.Value.commit) ([string]$Source.commit)
+            $ancestorExit = $LASTEXITCODE
+            $changedPaths = @(& git -C $RepositoryRoot diff --name-only "$([string]$receiptSource.Value.commit)..$([string]$Source.commit)" |
+                ForEach-Object { $_.Replace("\", "/") })
+            if ($ancestorExit -ne 0 -or $LASTEXITCODE -ne 0 -or
+                (($changedPaths | Sort-Object) -join "`n") -cne (($allowedPaths | Sort-Object) -join "`n")) {
+                throw "Lifecycle preflight harness-only advance contains a path outside the exact authorized correction set."
+            }
         }
         if ([string]$prerequisite.receipt.phase -in @("candidate-freeze", "sit") -and
             [string]$prerequisite.receipt.candidate_fingerprint -cne $CandidateFingerprint) {

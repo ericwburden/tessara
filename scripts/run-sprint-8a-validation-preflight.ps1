@@ -3370,6 +3370,7 @@ try {
         -Source $publicationSource `
         -EnvironmentFingerprint ([string]$script:runtimeContext.environment.fingerprint) `
         -NormalizedDeploymentConfigurationSha256 ([string]$script:runtimeContext.normalized_deployment_configuration_sha256) `
+        -AllowPreflightHarnessOnlySourceAdvance:($null -ne $script:runtimeContext.preflight_harness_only_source_advance) `
         -PrerequisiteReceipts $prerequisites `
         -Checks @($script:terminalChecks) `
         -Details ([pscustomobject][ordered]@{
@@ -3385,7 +3386,8 @@ try {
             rehearsal_start = $script:runtimeContext.rehearsal_start_reference
             handoff_url = $HandoffUrl.TrimEnd("/")
             normalized_deployment_configuration_sha256 = [string]$script:runtimeContext.normalized_deployment_configuration_sha256
-            source_and_environment_exact = $true
+            source_and_environment_exact = ($null -eq $script:runtimeContext.preflight_harness_only_source_advance)
+            preflight_harness_only_source_advance = $script:runtimeContext.preflight_harness_only_source_advance
             safe_fail_late_complete = $true
         }) `
         -RepositoryRoot $repoRoot `
