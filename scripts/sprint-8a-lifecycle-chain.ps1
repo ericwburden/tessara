@@ -735,9 +735,14 @@ function Assert-Sprint8ALifecyclePrerequisite {
         throw "Lifecycle prerequisite '$ExpectedPhase' SHA-256 differs from its reference."
     }
     $receipt = Get-Content -LiteralPath ([string]$resolved.full_path) -Raw | ConvertFrom-Json
-    $expectedSchemaVersion = if ([string]$receipt.phase -in @("validation-readiness", "candidate-rehearsal")) { 2 } else { 1 }
+    $mutableGateReceipt = [string]$receipt.phase -in @("validation-readiness", "candidate-rehearsal")
+    $schemaVersionAccepted = if ($mutableGateReceipt) {
+        [int]$receipt.schema_version -in @(2, 3)
+    } else {
+        [int]$receipt.schema_version -eq 1
+    }
     if (($receipt.schema_version -isnot [int] -and $receipt.schema_version -isnot [long]) -or
-        [int]$receipt.schema_version -ne $expectedSchemaVersion -or
+        -not $schemaVersionAccepted -or
         [string]$receipt.sprint -cne "sprint-8a" -or
         (-not [string]::IsNullOrWhiteSpace($ExpectedPhase) -and [string]$receipt.phase -cne $ExpectedPhase) -or
         [string]$receipt.state -cne "passed") {
