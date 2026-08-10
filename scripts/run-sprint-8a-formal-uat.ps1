@@ -145,14 +145,18 @@ function Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure {
     $messages = @(Get-Sprint8AFormalUatFailureMessages -Receipt $Receipt)
     $originalProjectionFailure =
         "The property 'classification' cannot be found on this object. Verify that the property exists."
+    $restorationReuseInitializationFailure =
+        "The variable '`$restorationFailures' cannot be retrieved because it has not been set."
     $allowedIncidentMessages = @(
         $originalProjectionFailure,
         "The property 'Count' cannot be found on this object. Verify that the property exists.",
-        "The existing Sprint 8A evidence manifest has stale or malformed entry 'artifacts/sprint-8a-closeout/attempts/uat-9.json'."
+        "The existing Sprint 8A evidence manifest has stale or malformed entry 'artifacts/sprint-8a-closeout/attempts/uat-9.json'.",
+        $restorationReuseInitializationFailure
     )
     [string]$Receipt.state -ceq "failed" -and
         [string]$Receipt.stage -ceq "canonical-restoration" -and
-        @($messages | Where-Object { $_ -ceq $originalProjectionFailure }).Count -eq 1 -and
+        (@($messages | Where-Object { $_ -ceq $originalProjectionFailure }).Count -eq 1 -or
+            @($messages | Where-Object { $_ -ceq $restorationReuseInitializationFailure }).Count -eq 1) -and
         $messages.Count -ge 1 -and
         $messages.Count -le $allowedIncidentMessages.Count -and
         @($messages | Select-Object -Unique).Count -eq $messages.Count -and
@@ -2322,6 +2326,26 @@ if ($SelfTest) {
     if (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $aggregateRecoveryFixture) {
         throw "Formal Sprint 8A UAT self-test accepted an unknown aggregate-recovery failure."
     }
+    $restorationReuseRecoveryFixture = [pscustomobject]@{
+        state = "failed"
+        stage = "canonical-restoration"
+        failure_batch = [pscustomobject]@{
+            blocked_check_count = 0
+            defects = @([pscustomobject]@{
+                message = "The variable '`$restorationFailures' cannot be retrieved because it has not been set."
+            })
+        }
+        restoration_check = [pscustomobject]@{ state = "passed" }
+        restoration_checks = @(
+            [pscustomobject]@{ state = "passed" },
+            [pscustomobject]@{ state = "passed" },
+            [pscustomobject]@{ state = "passed" }
+        )
+        cleanup_restoration = [pscustomobject]@{ result = "canonical_topology_verified" }
+    }
+    if (-not (Test-Sprint8AFormalUatAggregateProjectionRecoveryFailure -Receipt $restorationReuseRecoveryFixture)) {
+        throw "Formal Sprint 8A UAT self-test rejected the exact restoration-reuse initialization incident."
+    }
     $fixtureSource = [pscustomobject][ordered]@{
         commit = "a" * 40; tree = "b" * 40; dirty = $false; branch = "self-test"
         acceptance_inventory_sha256 = "c" * 64; deployment_inputs_sha256 = "d" * 64
@@ -3651,6 +3675,8 @@ Sync-Sprint8AFormalUatEvidenceManifest -Overrides @([pscustomobject][ordered]@{
     path = [IO.Path]::GetRelativePath($repoRoot, $attemptPath).Replace("\", "/")
     phase = "uat-attempt"; authoritative = $false; status = "canonical-restoration"
 }) | Out-Null
+$restorationFailures = @()
+$restorationBlocked = @()
 if ($null -ne $reusableRestorationCheck) {
     $restorationCheck = $reusableRestorationCheck
     $restorationChecks = @($reusableRestorationChecks)
