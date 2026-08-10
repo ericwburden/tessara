@@ -212,6 +212,113 @@ function Assert-Sprint8APreflightSidecar {
     $actual
 }
 
+function Move-Sprint8ASupersededFreezeEvidence {
+    param(
+        [Parameter(Mandatory)][string]$EvidenceRootPath,
+        [Parameter(Mandatory)][int]$CurrentAttempt,
+        [Parameter(Mandatory)][string]$PreflightPath,
+        [Parameter(Mandatory)][string]$CandidatePath,
+        [Parameter(Mandatory)][string]$ManifestPath
+    )
+
+    $canonicalPaths = @($PreflightPath, $CandidatePath, $ManifestPath)
+    $canonicalFiles = @($canonicalPaths | ForEach-Object { $_; "$_.sha256" })
+    $existing = @($canonicalFiles | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+    if ($existing.Count -eq 0) { return $null }
+    if ($existing.Count -ne $canonicalFiles.Count) {
+        throw "A prior Sprint 8A freeze is only partially present and cannot be superseded safely."
+    }
+
+    $preflightSha256 = Assert-Sprint8APreflightSidecar -Path $PreflightPath
+    $candidateSha256 = Assert-Sprint8APreflightSidecar -Path $CandidatePath
+    $manifestSha256 = Assert-Sprint8APreflightSidecar -Path $ManifestPath
+    $priorPreflight = Get-Content -LiteralPath $PreflightPath -Raw | ConvertFrom-Json
+    $priorCandidate = Get-Content -LiteralPath $CandidatePath -Raw | ConvertFrom-Json
+    if ([string]$priorPreflight.phase -cne "validation-preflight" -or
+        [string]$priorPreflight.state -cne "passed" -or
+        [string]$priorCandidate.phase -cne "candidate-freeze" -or
+        [string]$priorCandidate.state -cne "passed" -or
+        [int]$priorPreflight.attempt -ne [int]$priorCandidate.attempt) {
+        throw "The existing canonical freeze pair is not one exact passing Preflight/Candidate attempt."
+    }
+    $priorAttempt = [int]$priorCandidate.attempt
+    $failedSitReceipts = @(Get-ChildItem -LiteralPath (Join-Path $EvidenceRootPath "attempts") `
+        -Filter "sit-*.json" -File -ErrorAction SilentlyContinue | ForEach-Object {
+            $document = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
+            $candidateReference = @($document.prerequisite_receipts | Where-Object {
+                [string]$_.path -ceq "artifacts/sprint-8a-closeout/candidate.json" -and
+                [string]$_.sha256 -ceq $candidateSha256
+            })
+            if ([string]$document.phase -ceq "sit" -and
+                [string]$document.state -ceq "failed" -and
+                $candidateReference.Count -eq 1) {
+                [pscustomobject][ordered]@{
+                    path = [IO.Path]::GetRelativePath($repoRoot, $_.FullName).Replace("\", "/")
+                    sha256 = Assert-Sprint8APreflightSidecar -Path $_.FullName
+                    attempt = [int]$document.attempt
+                }
+            }
+        })
+    if ($failedSitReceipts.Count -lt 1 -or
+        (Test-Path -LiteralPath (Join-Path $EvidenceRootPath "sit-result.json"))) {
+        throw "A prior freeze may be superseded only after an authenticated failed SIT and before any passing SIT result."
+    }
+
+    $archiveRoot = Join-Path $EvidenceRootPath "preflight/superseded/attempt-$priorAttempt"
+    if (Test-Path -LiteralPath $archiveRoot) {
+        throw "The immutable archive for superseded Preflight attempt $priorAttempt already exists."
+    }
+    [IO.Directory]::CreateDirectory($archiveRoot) | Out-Null
+    $moved = [Collections.Generic.List[object]]::new()
+    try {
+        foreach ($path in $canonicalFiles) {
+            $destination = Join-Path $archiveRoot ([IO.Path]::GetFileName($path))
+            [IO.File]::Move($path, $destination)
+            $moved.Add([pscustomobject][ordered]@{
+                prior_path = [IO.Path]::GetRelativePath($repoRoot, $path).Replace("\", "/")
+                archived_path = [IO.Path]::GetRelativePath($repoRoot, $destination).Replace("\", "/")
+                sha256 = Get-Sprint8APreflightFileSha256 -Path $destination
+            })
+        }
+        $receiptPath = Join-Path $structuredRoot "freeze-supersession.json"
+        $receiptSha256 = Write-Sprint8APreflightJsonReceipt -Path $receiptPath -Document ([pscustomobject][ordered]@{
+            schema_version = 1
+            sprint = "sprint-8a"
+            contract = "tessara.sprint-8a.failed-sit-freeze-supersession"
+            prior_preflight_attempt = $priorAttempt
+            successor_preflight_attempt = $CurrentAttempt
+            reason = "failed_sit_harness_correction_requires_refreeze"
+            prior_preflight_sha256 = $preflightSha256
+            prior_candidate_sha256 = $candidateSha256
+            prior_manifest_sha256 = $manifestSha256
+            failed_sit_receipts = $failedSitReceipts
+            archived_files = @($moved)
+            historical_evidence_is_diagnostic_only = $true
+        })
+        [pscustomobject][ordered]@{
+            receipt = [pscustomobject][ordered]@{
+                path = [IO.Path]::GetRelativePath($repoRoot, $receiptPath).Replace("\", "/")
+                sha256 = $receiptSha256
+            }
+            archived_files = @($moved | Where-Object { $_.archived_path -notmatch '\.sha256$' } | ForEach-Object {
+                [pscustomobject][ordered]@{ path = [string]$_.archived_path; sha256 = [string]$_.sha256 }
+            })
+        }
+    } catch {
+        foreach ($entry in @($moved | Select-Object -Last 100)) {
+            $source = Join-Path $repoRoot ([string]$entry.archived_path)
+            $destination = Join-Path $repoRoot ([string]$entry.prior_path)
+            if ((Test-Path -LiteralPath $source) -and -not (Test-Path -LiteralPath $destination)) {
+                [IO.File]::Move($source, $destination)
+            }
+        }
+        if (Test-Path -LiteralPath $archiveRoot) {
+            [IO.Directory]::Delete($archiveRoot, $true)
+        }
+        throw
+    }
+}
+
 function Test-Sprint8APreflightContainedPath {
     param(
         [Parameter(Mandatory)][string]$Parent,
@@ -1114,6 +1221,7 @@ function Test-Sprint8AValidationPreflightRunner {
         "Assert-Sprint8APreflightDeploymentContract",
         "Get-Sprint8ADownstreamCommandSets",
         "Assert-Sprint8APreflightDownstreamCommands",
+        "Move-Sprint8ASupersededFreezeEvidence",
         "Assert-Sprint8APreflightEvidencePaths",
         "Publish-Sprint8APreflightInventory",
         "Initialize-Sprint8APreflightEvidenceManifest"
@@ -1503,6 +1611,8 @@ function Test-Sprint8AValidationPreflightRunner {
         -not $sourceText.Contains('mutable_attempt_checkpoints_are_overwritten_only_by_the_owning_runner = $true') -or
         -not $sourceText.Contains('immutable_snapshots_and_terminal_receipts_are_never_overwritten = $true') -or
         -not $sourceText.Contains('[switch]$AuthorizePreflightHarnessOnlySourceAdvance') -or
+        -not $sourceText.Contains('tessara.sprint-8a.failed-sit-freeze-supersession') -or
+        -not $sourceText.Contains('failed_sit_harness_correction_requires_refreeze') -or
         -not $sourceText.Contains('user_directed_preflight_with_corrected_validation_code') -or
         -not $sourceText.Contains('product_test_fixture_deployment_changes = $false') -or
         -not $sourceText.Contains('$script:runtimeContext.rehearsal.mutable_source_identity')) {
@@ -3065,6 +3175,25 @@ function Assert-Sprint8APreflightEvidencePaths {
         }
     }
 
+    $freezeSupersession = $null
+    $freezePaths = @(
+        $preflightResultPath,
+        "$preflightResultPath.sha256",
+        $candidatePath,
+        "$candidatePath.sha256",
+        $manifestPath,
+        "$manifestPath.sha256"
+    )
+    if (@($freezePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0 -and
+        $AuthorizePreflightHarnessOnlySourceAdvance) {
+        $freezeSupersession = Move-Sprint8ASupersededFreezeEvidence `
+            -EvidenceRootPath $script:evidenceRootPath `
+            -CurrentAttempt $Attempt `
+            -PreflightPath $preflightResultPath `
+            -CandidatePath $candidatePath `
+            -ManifestPath $manifestPath
+    }
+
     $reserved = @(
         $preflightResultPath,
         "$preflightResultPath.sha256",
@@ -3093,7 +3222,7 @@ function Assert-Sprint8APreflightEvidencePaths {
             authenticated = $true
         }
     }
-    Publish-Sprint8APreflightStructuredEvidence -CheckName "evidence-path-contract" -Document ([pscustomobject][ordered]@{
+    $contractReference = Publish-Sprint8APreflightStructuredEvidence -CheckName "evidence-path-contract" -Document ([pscustomobject][ordered]@{
         schema_version = 1
         sprint = "sprint-8a"
         contract = "tessara.sprint-8a.preflight-evidence-paths"
@@ -3104,9 +3233,16 @@ function Assert-Sprint8APreflightEvidencePaths {
             [IO.Path]::GetRelativePath($repoRoot, $_).Replace("\", "/")
         })
         collision_count = 0
+        superseded_freeze = if ($null -eq $freezeSupersession) { $null } else { $freezeSupersession.receipt }
         absolute_path_exception = $legacyException
-    }) | Out-Null
-    "canonical paths are contained, unsupported paths rejected, and immutable freeze outputs unused"
+    })
+    if ($null -ne $freezeSupersession) {
+        $script:producedEvidenceByCheck["evidence-path-contract"] = @(
+            $contractReference,
+            $freezeSupersession.receipt
+        ) + @($freezeSupersession.archived_files)
+    }
+    "canonical paths are contained, unsupported paths rejected, and any failed-SIT freeze was archived before replacement"
 }
 
 function Publish-Sprint8APreflightInventory {
