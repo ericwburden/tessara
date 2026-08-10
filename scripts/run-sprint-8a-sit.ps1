@@ -8,6 +8,7 @@ param(
     [string]$OutputPath = "artifacts/sprint-8a-closeout/sit-result.json",
     [string]$BaseUrl = "http://127.0.0.1:8088",
     [switch]$AuthorizeDisposableReset,
+    [switch]$AuthorizeSitHarnessOnlySourceAdvance,
     [switch]$SelfTest
 )
 
@@ -36,16 +37,30 @@ function Get-Sprint8ASitRelativePath {
     [IO.Path]::GetRelativePath($repoRoot, [IO.Path]::GetFullPath($Path)).Replace("\", "/")
 }
 
+function ConvertTo-Sprint8ASitRepositoryRelativePath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not [IO.Path]::IsPathRooted($Path)) {
+        return $Path.Replace("\", "/")
+    }
+    $relative = [IO.Path]::GetRelativePath($repoRoot, [IO.Path]::GetFullPath($Path)).Replace("\", "/")
+    if ($relative -eq ".." -or $relative.StartsWith("../", [StringComparison]::Ordinal)) {
+        throw "SIT evidence path escapes the repository: '$Path'."
+    }
+    $relative
+}
+
 function Get-Sprint8ASitEvidenceReference {
     param(
         [Parameter(Mandatory)][string]$Path,
         [switch]$RequireSidecar
     )
 
+    $normalizedPath = ConvertTo-Sprint8ASitRepositoryRelativePath -Path $Path
     $resolved = Resolve-Sprint8AEvidenceReference `
         -RepositoryRoot $repoRoot `
         -EvidenceRoot $script:evidenceRootPath `
-        -Path $Path
+        -Path $normalizedPath
     $sha = if ($RequireSidecar) {
         Assert-Sprint8AReceiptSidecar -Path ([string]$resolved.full_path)
     } else {
@@ -1251,10 +1266,30 @@ function Get-Sprint8ASitAuthenticatedContext {
     if (-not $AuthorizeDisposableReset) {
         throw "Authoritative Sprint 8A SIT requires -AuthorizeDisposableReset."
     }
-    $source = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
-    Assert-Sprint8ASourceIdentityObject -Source $source -RequireClean | Out-Null
-    if (-not (Test-Sprint8ASourceIdentityMatch -Expected $candidate.receipt.source_identity -Actual $source)) {
-        throw "The current source differs from the frozen Sprint 8A candidate."
+    $currentSource = Get-Sprint8ASourceIdentity -RepositoryRoot $repoRoot
+    Assert-Sprint8ASourceIdentityObject -Source $currentSource -RequireClean | Out-Null
+    $source = $currentSource
+    $sitHarnessAdvance = $null
+    if (-not (Test-Sprint8ASourceIdentityMatch -Expected $candidate.receipt.source_identity -Actual $currentSource)) {
+        if (-not $AuthorizeSitHarnessOnlySourceAdvance) {
+            throw "The current source differs from the frozen Sprint 8A candidate."
+        }
+        & git -C $repoRoot merge-base --is-ancestor ([string]$candidate.receipt.source_identity.commit) ([string]$currentSource.commit)
+        $ancestorExit = $LASTEXITCODE
+        $changedPaths = @(& git -C $repoRoot diff --name-only "$([string]$candidate.receipt.source_identity.commit)..$([string]$currentSource.commit)" |
+            ForEach-Object { $_.Replace("\", "/") })
+        if ($ancestorExit -ne 0 -or $LASTEXITCODE -ne 0 -or
+            (($changedPaths | Sort-Object) -join "`n") -cne "scripts/run-sprint-8a-sit.ps1") {
+            throw "Authorized SIT harness advance contains a path outside the exact SIT runner correction."
+        }
+        $sitHarnessAdvance = [pscustomobject][ordered]@{
+            authorization = "impact_based_sit_harness_only_advance"
+            candidate_source_commit = [string]$candidate.receipt.source_identity.commit
+            harness_source_commit = [string]$currentSource.commit
+            exact_changed_paths = $changedPaths
+            product_test_fixture_deployment_changes = $false
+        }
+        $source = $candidate.receipt.source_identity
     }
     $environment = Get-Sprint8AEnvironmentContract `
         -RepositoryRoot $repoRoot `
@@ -1300,6 +1335,7 @@ function Get-Sprint8ASitAuthenticatedContext {
         environment_fingerprint = $environmentFingerprint
         normalized_deployment_configuration_sha256 = $normalizedDeploymentConfigurationSha256
         environment = $environment
+        sit_harness_only_source_advance = $sitHarnessAdvance
     }
 }
 
@@ -1612,6 +1648,7 @@ function Complete-Sprint8ASitPublication {
                     start_checkpoint = $AttemptReceipt.start_checkpoint
                     raw_terminal_checkpoint = $AttemptReceipt.raw_terminal_checkpoint
                     finalization_generation = [int]$Restoration.generation
+                    sit_harness_only_source_advance = $Context.sit_harness_only_source_advance
                 }) `
                 -CleanupRestoration ([pscustomobject][ordered]@{
                     result = "canonical_topology_verified"
@@ -1765,6 +1802,19 @@ function Test-Sprint8ASitRunner {
     }
     $literal = ConvertTo-Sprint8APowerShellLiteral -Value "a'b"
     if ($literal -cne "'a''b'") { throw "SIT runner self-test found unsafe PowerShell literal quoting." }
+    $absoluteInRepository = Join-Path $repoRoot "artifacts/sprint-8a-closeout/self-test.json"
+    if ((ConvertTo-Sprint8ASitRepositoryRelativePath -Path $absoluteInRepository) -cne
+        "artifacts/sprint-8a-closeout/self-test.json") {
+        throw "SIT runner self-test did not normalize an absolute in-repository evidence path."
+    }
+    $outsidePathRejected = $false
+    try {
+        ConvertTo-Sprint8ASitRepositoryRelativePath `
+            -Path (Join-Path (Split-Path -Parent $repoRoot) "outside-sit-evidence.json") | Out-Null
+    } catch { $outsidePathRejected = $true }
+    if (-not $outsidePathRejected) {
+        throw "SIT runner self-test accepted an absolute evidence path outside the repository."
+    }
     $jsonTimestampFixture = '{"started_at":"2026-01-01T00:00:00+00:00"}' | ConvertFrom-Json
     $jsonTimestampInstant = ConvertTo-Sprint8ADateTimeOffset `
         -Value $jsonTimestampFixture.started_at `
