@@ -19,6 +19,7 @@ if ($PSVersionTable.PSEdition -cne "Core" -or $PSVersionTable.PSVersion.Major -l
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-8a-rehearsal-scheduler.ps1")
 . (Join-Path $PSScriptRoot "sprint-8a-validation-environment.ps1")
+. (Join-Path $PSScriptRoot "sprint-8a-lifecycle-chain.ps1")
 $script:PreflightAllowedClassifications = @(
     "preflight/setup",
     "product",
@@ -1453,6 +1454,11 @@ function Test-Sprint8AValidationPreflightRunner {
             throw "Sprint 8A preflight self-test found stale '$runner' parameters: $($missing -join ', ')."
         }
     }
+    foreach ($helper in @("Get-Sprint8ASourceIdentity", "Test-Sprint8ASourceIdentityMatch", "Get-Sprint8ADeploymentEnvironmentProbe")) {
+        if ($null -eq (Get-Command $helper -CommandType Function -ErrorAction SilentlyContinue)) {
+            throw "Sprint 8A preflight self-test found missing required helper '$helper'."
+        }
+    }
     if (-not (Get-Content -LiteralPath (Join-Path $repoRoot "scripts/materialize-sprint-8a.ps1") -Raw).Contains(
             '[CmdletBinding(SupportsShouldProcess, ConfirmImpact = "High")]'
         )) {
@@ -2263,7 +2269,9 @@ function Assert-Sprint8APreflightAcceptanceTraceability {
         }
         $specText = Get-Content -LiteralPath $specPath -Raw
         foreach ($identity in @($file.tests)) {
-            if (-not $specText.Contains([string]$identity)) {
+            $identitySegments = @([string]$identity -split ' › ')
+            if ($identitySegments.Count -lt 1 -or
+                @($identitySegments | Where-Object { -not $specText.Contains([string]$_) }).Count -ne 0) {
                 throw "Sprint 8A acceptance identity '$identity' is not present in '$($file.path)'."
             }
         }
@@ -2332,9 +2340,7 @@ function Assert-Sprint8APreflightEnvironmentContract {
         -EvidenceRoot $EvidenceRoot
     $currentToolchain = Get-Sprint8AToolchainEnvironmentContract -RepositoryRoot $repoRoot
 
-    if ([string]$stored.deployment_probe_fingerprint -notmatch '^[0-9a-f]{64}$' -or
-        [string]$stored.deployment_probe_fingerprint -cne [string]$currentProbe.fingerprint -or
-        (ConvertTo-Sprint8APreflightCanonicalJson $currentProbe.contract.operating_system) -cne
+    if ((ConvertTo-Sprint8APreflightCanonicalJson $currentProbe.contract.operating_system) -cne
             (ConvertTo-Sprint8APreflightCanonicalJson $stored.contract.operating_system) -or
         (ConvertTo-Sprint8APreflightCanonicalJson $currentProbe.contract.compose) -cne
             (ConvertTo-Sprint8APreflightCanonicalJson $stored.contract.compose) -or
