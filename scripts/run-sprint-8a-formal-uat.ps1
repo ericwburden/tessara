@@ -1467,13 +1467,17 @@ function Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility {
         [Parameter(Mandatory)][int]$ExpectedAttempt
     )
 
-    $hasRetainedManifestFailure = $Receipt.PSObject.Properties.Name -contains "manifest_update_failure"
-    $hasRetainedCatchHarvestFailure =
-        $Receipt.PSObject.Properties.Name -contains "failure_batch" -and
-        @($Receipt.failure_batch.defects | Where-Object {
-                [string]$_.check -ceq "catch-harvest" -and
-                [string]$_.classification -in @("harness", "evidence-finalization")
-            }).Count -gt 0
+    $receiptProperties = @($Receipt.PSObject.Properties | ForEach-Object { $_.Name })
+    $hasRetainedManifestFailure = $receiptProperties -contains "manifest_update_failure"
+    $hasRetainedCatchHarvestFailure = $false
+    if ($receiptProperties -contains "failure_batch" -and
+        $null -ne $Receipt.failure_batch -and
+        @($Receipt.failure_batch.PSObject.Properties | ForEach-Object { $_.Name }) -contains "defects") {
+        $hasRetainedCatchHarvestFailure = @($Receipt.failure_batch.defects | Where-Object {
+                    [string]$_.check -ceq "catch-harvest" -and
+                    [string]$_.classification -in @("harness", "evidence-finalization")
+                }).Count -gt 0
+    }
     return (
         ($Receipt.schema_version -is [int] -or $Receipt.schema_version -is [long]) -and
         [int]$Receipt.schema_version -eq 1 -and
@@ -1720,6 +1724,12 @@ if ($SelfTest) {
                 -Receipt $repairEligibleFixture -ExpectedAttempt 5) {
             throw "Formal UAT self-test accepted a manifest repair without retained publication-failure evidence."
         }
+        $repairEligibleFixture | Add-Member -NotePropertyName failure_batch -NotePropertyValue ([pscustomobject]@{})
+        if (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
+                -Receipt $repairEligibleFixture -ExpectedAttempt 5) {
+            throw "Formal UAT self-test accepted an empty failure batch as manifest-repair evidence."
+        }
+        $repairEligibleFixture.PSObject.Properties.Remove("failure_batch")
         $repairEligibleFixture | Add-Member -NotePropertyName failure_batch -NotePropertyValue ([pscustomobject]@{
             defects = @([pscustomobject]@{ check = "catch-harvest"; classification = "harness" })
         })
