@@ -351,9 +351,9 @@ function Invoke-Sprint8ASitProcessCheck {
             )
         }
         $process.WaitForExit()
-        $stdoutCopy.GetAwaiter().GetResult()
+        $stdoutCopy.GetAwaiter().GetResult() | Out-Null
         $stdoutCopy = $null
-        $stderrCopy.GetAwaiter().GetResult()
+        $stderrCopy.GetAwaiter().GetResult() | Out-Null
         $stderrCopy = $null
         $stdoutFile.Flush($true)
         $stderrFile.Flush($true)
@@ -392,7 +392,7 @@ function Invoke-Sprint8ASitProcessCheck {
         }
         foreach ($copy in @($stdoutCopy, $stderrCopy)) {
             if ($null -eq $copy) { continue }
-            try { $copy.GetAwaiter().GetResult() } catch {
+            try { $copy.GetAwaiter().GetResult() | Out-Null } catch {
                 [IO.File]::AppendAllText(
                     $LogPath,
                     "[$([DateTimeOffset]::UtcNow.ToString('o'))] raw_stream_copy_failure=$($_.Exception.Message)`n",
@@ -1802,6 +1802,37 @@ function Test-Sprint8ASitRunner {
     }
     $literal = ConvertTo-Sprint8APowerShellLiteral -Value "a'b"
     if ($literal -cne "'a''b'") { throw "SIT runner self-test found unsafe PowerShell literal quoting." }
+    $priorEvidenceRootVariable = Get-Variable -Name evidenceRootPath -Scope Script -ErrorAction SilentlyContinue
+    $processProbeRoot = Join-Path $repoRoot (".tmp-sit-runner-self-test-{0}" -f [Guid]::NewGuid().ToString("N"))
+    [IO.Directory]::CreateDirectory($processProbeRoot) | Out-Null
+    try {
+        $script:evidenceRootPath = $repoRoot
+        $processProbeResults = @(Invoke-Sprint8ASitProcessCheck `
+            -Name "process-result-shape" `
+            -DisplayCommand "exit 0" `
+            -CommandBody "exit 0" `
+            -LogPath (Join-Path $processProbeRoot "process-result-shape.log") `
+            -DefaultClassification "harness")
+        if ($processProbeResults.Count -ne 1 -or
+            [string]$processProbeResults[0].name -cne "process-result-shape" -or
+            [string]$processProbeResults[0].state -cne "passed") {
+            throw "SIT runner self-test found leaked asynchronous completion values in a process result."
+        }
+    } finally {
+        if ($null -ne $priorEvidenceRootVariable) {
+            $script:evidenceRootPath = [string]$priorEvidenceRootVariable.Value
+        } else {
+            Remove-Variable -Name evidenceRootPath -Scope Script -ErrorAction SilentlyContinue
+        }
+        $resolvedProbeRoot = [IO.Path]::GetFullPath($processProbeRoot)
+        $requiredProbePrefix = [IO.Path]::GetFullPath((Join-Path $repoRoot ".tmp-sit-runner-self-test-"))
+        if (-not $resolvedProbeRoot.StartsWith($requiredProbePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "SIT runner self-test refused unsafe temporary cleanup."
+        }
+        if (Test-Path -LiteralPath $resolvedProbeRoot -PathType Container) {
+            [IO.Directory]::Delete($resolvedProbeRoot, $true)
+        }
+    }
     $absoluteInRepository = Join-Path $repoRoot "artifacts/sprint-8a-closeout/self-test.json"
     if ((ConvertTo-Sprint8ASitRepositoryRelativePath -Path $absoluteInRepository) -cne
         "artifacts/sprint-8a-closeout/self-test.json") {
