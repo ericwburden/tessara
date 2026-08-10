@@ -146,6 +146,12 @@ textarea {
   overflow: hidden;
 }
 
+.mobile-nav__toggle,
+.mobile-nav__scrim,
+.mobile-nav__panel {
+  display: none;
+}
+
 .sidebar {
   display: flex;
   height: 100vh;
@@ -1543,6 +1549,7 @@ textarea {
   }
 
   .mobile-nav__toggle {
+    display: inline-flex;
     position: relative;
     z-index: 90;
     background: var(--semantic-primary-soft);

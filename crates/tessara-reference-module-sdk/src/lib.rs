@@ -13,8 +13,8 @@ pub const RELEASE_VERSION: &str = "1.0.1";
 pub const READ_CAPABILITY: &str = "tessara.reference.module-sdk:read";
 pub const ROOT_PATH: &str = "/reference/module-sdk";
 pub const MODULE_UI_CSS_DIGEST: &str =
-    "sha256:a4a6fcde5b81831267ddcfbe94d5a3876d0ecfa98b36e2bd7dd92878206abe8a";
-pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:a4a6fcde5b81831267ddcfbe94d5a3876d0ecfa98b36e2bd7dd92878206abe8a/module-ui.css";
+    "sha256:ab97b846519326439249cfe2a774756f450fb5c9ae52855a513fb13c60a7a403";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:ab97b846519326439249cfe2a774756f450fb5c9ae52855a513fb13c60a7a403/module-ui.css";
 pub const MODULE_SHELL_JS_DIGEST: &str =
     "sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
 pub const MODULE_SHELL_JS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js";

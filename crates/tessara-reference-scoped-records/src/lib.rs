@@ -32,7 +32,7 @@ use uuid::Uuid;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.reference.scoped-records";
 pub const MODULE_RELEASE_VERSION: &str = "1.0.1";
-pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:a4a6fcde5b81831267ddcfbe94d5a3876d0ecfa98b36e2bd7dd92878206abe8a/module-ui.css";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:ab97b846519326439249cfe2a774756f450fb5c9ae52855a513fb13c60a7a403/module-ui.css";
 pub const SCOPED_RECORDS_CSS: &str = include_str!("../assets/scoped-records.css");
 pub const SCOPED_RECORDS_CSS_SHA256: &str =
     "ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77";

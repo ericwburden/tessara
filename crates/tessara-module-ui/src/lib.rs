@@ -121,7 +121,7 @@ pub fn empty_view() -> AnyView {
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MODULE_UI_CSS: &str = include_str!("../assets/module-ui.css");
 pub const MODULE_UI_CSS_SHA256: &str =
-    "a4a6fcde5b81831267ddcfbe94d5a3876d0ecfa98b36e2bd7dd92878206abe8a";
+    "ab97b846519326439249cfe2a774756f450fb5c9ae52855a513fb13c60a7a403";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
@@ -217,6 +217,7 @@ where
     document
 }
 
+#[cfg(feature = "components")]
 fn render_document_markup(
     presentation: &ShellPresentation,
     assets: &ModuleDocumentAssets,
@@ -344,6 +345,7 @@ pub fn navigation_path_matches(current_path: &str, navigation_href: &str) -> boo
                 .is_some_and(|suffix| suffix.starts_with('/')))
 }
 
+#[cfg(feature = "components")]
 fn brand_markup(href: &str) -> String {
     format!(
         r#"<a class="brand-lockup" href="{}"><span class="brand-mark" aria-hidden="true"><img src="/assets/tessara-icon-256.svg" alt=""></span><span class="brand-copy"><strong>Tessara</strong></span></a>"#,
@@ -351,6 +353,7 @@ fn brand_markup(href: &str) -> String {
     )
 }
 
+#[cfg(feature = "components")]
 fn account_markup(display_name: &str) -> String {
     let initials = display_name
         .split_whitespace()
@@ -365,32 +368,40 @@ fn account_markup(display_name: &str) -> String {
     )
 }
 
+#[cfg(feature = "components")]
 fn navigation_icon() -> &'static str {
     r#"<svg class="sidebar-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>"#
 }
+#[cfg(feature = "components")]
 fn menu_icon() -> &'static str {
     r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>"#
 }
+#[cfg(feature = "components")]
 fn theme_icon() -> &'static str {
     r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>"#
 }
+#[cfg(feature = "components")]
 fn bell_icon() -> &'static str {
     r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>"#
 }
+#[cfg(feature = "components")]
 fn help_icon() -> &'static str {
     r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 1-1 1.7M12 17h.01"/></svg>"#
 }
 
+#[cfg(feature = "components")]
 fn shell_interaction_script() -> &'static str {
     r#"(function(){const root=document.documentElement;const shell=document.querySelector('.app-shell');const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{shell?.classList.remove('mobile-nav-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{shell?.classList.add('mobile-nav-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu)})();"#
 }
 
+#[cfg(feature = "components")]
 fn theme_bootstrap_script(fallback: &str) -> String {
     format!(
         r#"(function(){{const root=document.documentElement;const fallback="{fallback}";let preference=fallback;try{{const stored=window.localStorage.getItem("tessara.themePreference");if(stored==="light"||stored==="dark"||stored==="system"){{preference=stored;}}}}catch(_error){{preference=fallback;}}const systemDark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;root.dataset.themePreference=preference;root.dataset.theme=preference==="system"?(systemDark?"dark":"light"):preference;}})();"#
     )
 }
 
+#[cfg(feature = "components")]
 fn theme_name(theme: ShellThemeV1) -> &'static str {
     match theme {
         ShellThemeV1::System => "system",
@@ -399,6 +410,7 @@ fn theme_name(theme: ShellThemeV1) -> &'static str {
     }
 }
 
+#[cfg(feature = "components")]
 fn document_state_name(state: ShellDocumentStateV1) -> &'static str {
     match state {
         ShellDocumentStateV1::Active => "active",

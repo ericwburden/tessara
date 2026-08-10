@@ -43,6 +43,8 @@ test.describe("canonical module UI visual baselines", () => {
       await expect(actions).toHaveCount(14);
       await expect(actions.first().locator("svg")).toBeVisible();
       await expect(page.locator(".components-list-mobile-cards")).toBeHidden();
+      await expect(page.locator(".mobile-nav__toggle")).toBeHidden();
+      await expect(page.locator(".mobile-nav__panel")).toBeHidden();
       await expect(page).toHaveScreenshot(`components-directory-${theme}-1280.png`, {
         animations: "disabled",
       });
@@ -51,6 +53,7 @@ test.describe("canonical module UI visual baselines", () => {
     test(`Components editor at 390 px (${theme})`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await visit(page, "/components/sprint-8a-label-bar/edit", theme);
+      await expect(page.locator(".mobile-nav__toggle")).toBeVisible();
       await expect(page).toHaveScreenshot(`components-editor-${theme}-390.png`, {
         animations: "disabled",
       });
