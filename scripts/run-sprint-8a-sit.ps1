@@ -668,6 +668,31 @@ function New-Sprint8ASitSpec {
     }
 }
 
+function New-Sprint8ASitDeploymentEvidenceStatement {
+    param([Parameter(Mandatory)][string]$EvidencePath)
+
+    $composePath = ConvertTo-Sprint8APowerShellLiteral -Value (Join-Path $repoRoot "deploy/sprint-8a/compose.yaml")
+    $capturePath = ConvertTo-Sprint8APowerShellLiteral -Value (Join-Path $repoRoot "scripts/capture-sprint-6a-deployment-evidence.ps1")
+    $baseLiteral = ConvertTo-Sprint8APowerShellLiteral -Value $BaseUrl
+    $evidenceLiteral = ConvertTo-Sprint8APowerShellLiteral -Value $EvidencePath
+    @"
+`$composePath = $composePath
+function Get-ExactSprint8AContainerId([string]`$Service) {
+    `$ids = @(& docker compose -f `$composePath --profile reference ps --status running -q `$Service |
+        ForEach-Object { ([string]`$_).Trim() } | Where-Object { `$_ })
+    if (`$LASTEXITCODE -ne 0 -or `$ids.Count -ne 1 -or `$ids[0] -cnotmatch '^[0-9a-f]{64}$') {
+        throw "Expected exactly one running Sprint 8A '`$Service' container."
+    }
+    `$ids[0]
+}
+`$coreContainer = Get-ExactSprint8AContainerId 'core'
+`$gatewayContainer = Get-ExactSprint8AContainerId 'gateway'
+`$databaseContainer = Get-ExactSprint8AContainerId 'postgres'
+& $capturePath -BaseUrl $baseLiteral -ExpectedDataState fresh -OutputPath $evidenceLiteral -ApiContainerId `$coreContainer -GatewayContainerId `$gatewayContainer -DatabaseContainerId `$databaseContainer -TransitionCatalogProfile sprint-8a
+if (-not `$?) { exit 1 }
+"@
+}
+
 function Get-Sprint8ASitLaneSpecifications {
     param(
         [Parameter(Mandatory)][string]$Lane,
@@ -746,8 +771,8 @@ function Get-Sprint8ASitLaneSpecifications {
                     -Statement "& .\scripts\materialize-sprint-8a.ps1 -Attempt $Attempt -EvidenceRoot $(ConvertTo-Sprint8APowerShellLiteral $rootRelative) -EnvironmentFingerprint $($Environment.fingerprint) -AuthorizeDisposableReset -Confirm:`$false -VerifyNoOp$scriptGuard" `
                     -EvidencePaths @($materialization)
                 New-Sprint8ASitSpec -Name "deployment-evidence" `
-                    -Command ".\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath `"$rootRelative/deployment.json`"" `
-                    -Statement "& .\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath $(ConvertTo-Sprint8APowerShellLiteral "$rootRelative/deployment.json")$scriptGuard" `
+                    -Command ".\scripts\capture-sprint-6a-deployment-evidence.ps1 -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath `"$rootRelative/deployment.json`" -ApiContainerId <core> -GatewayContainerId <gateway> -DatabaseContainerId <postgres>" `
+                    -Statement (New-Sprint8ASitDeploymentEvidenceStatement -EvidencePath "$rootRelative/deployment.json") `
                     -DependsOn @("source-exact-materialization-no-op") -EvidencePaths @($deployment)
                 New-Sprint8ASitSpec -Name "playwright-execution" `
                     -Command ".\scripts\validate-e2e.ps1 -BaseUrl `"$BaseUrl`" -DeploymentEvidencePath `"$rootRelative/deployment.json`" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -EvidencePath `"$rootRelative/playwright.json`" -FailureEvidenceDirectory `"$rootRelative/failures`"" `
@@ -779,8 +804,8 @@ function Get-Sprint8ASitLaneSpecifications {
                     -Statement "& .\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl $(ConvertTo-Sprint8APowerShellLiteral $BaseUrl) -OutputPath $(ConvertTo-Sprint8APowerShellLiteral "$rootRelative/initial-inventory.json")$scriptGuard" `
                     -DependsOn @("source-exact-materialization-no-op") -EvidencePaths @($initialInventory)
                 New-Sprint8ASitSpec -Name "initial-deployment-evidence" `
-                    -Command ".\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath `"$rootRelative/initial-deployment.json`"" `
-                    -Statement "& .\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath $(ConvertTo-Sprint8APowerShellLiteral "$rootRelative/initial-deployment.json")$scriptGuard" `
+                    -Command ".\scripts\capture-sprint-6a-deployment-evidence.ps1 -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath `"$rootRelative/initial-deployment.json`" -ApiContainerId <core> -GatewayContainerId <gateway> -DatabaseContainerId <postgres>" `
+                    -Statement (New-Sprint8ASitDeploymentEvidenceStatement -EvidencePath "$rootRelative/initial-deployment.json") `
                     -DependsOn @("source-exact-materialization-no-op") -EvidencePaths @($initialDeployment)
                 New-Sprint8ASitSpec -Name "initial-product-smoke" `
                     -Command ".\scripts\smoke-sprint-8a.ps1 -BaseUrl `"$BaseUrl`" -SupervisorUrl `"$supervisor`" -OutputPath `"$rootRelative/initial-smoke.json`"" `
@@ -799,8 +824,8 @@ function Get-Sprint8ASitLaneSpecifications {
                     -Statement "& .\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl $(ConvertTo-Sprint8APowerShellLiteral $BaseUrl) -OutputPath $(ConvertTo-Sprint8APowerShellLiteral "$rootRelative/restored-inventory.json")$scriptGuard" `
                     -DependsOn @("failure-containment-successor-health") -EvidencePaths @($restoredInventory)
                 New-Sprint8ASitSpec -Name "restored-deployment-evidence" `
-                    -Command ".\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath `"$rootRelative/restored-deployment.json`"" `
-                    -Statement "& .\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath $(ConvertTo-Sprint8APowerShellLiteral "$rootRelative/restored-deployment.json")$scriptGuard" `
+                    -Command ".\scripts\capture-sprint-6a-deployment-evidence.ps1 -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath `"$rootRelative/restored-deployment.json`" -ApiContainerId <core> -GatewayContainerId <gateway> -DatabaseContainerId <postgres>" `
+                    -Statement (New-Sprint8ASitDeploymentEvidenceStatement -EvidencePath "$rootRelative/restored-deployment.json") `
                     -DependsOn @("failure-containment-successor-health") -EvidencePaths @($restoredDeployment)
                 New-Sprint8ASitSpec -Name "restored-product-smoke" `
                     -Command ".\scripts\smoke-sprint-8a.ps1 -BaseUrl `"$BaseUrl`" -SupervisorUrl `"$supervisor`" -OutputPath `"$rootRelative/restored-smoke.json`"" `
@@ -1365,8 +1390,8 @@ function Invoke-Sprint8ASitCanonicalRestoration {
             -Statement "& .\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl $(ConvertTo-Sprint8APowerShellLiteral $BaseUrl) -OutputPath $(ConvertTo-Sprint8APowerShellLiteral "$rootRelative/inventory.json")$scriptGuard" `
             -DependsOn @("canonical-materialization") -EvidencePaths @($inventory)
         New-Sprint8ASitSpec -Name "canonical-deployment-evidence" `
-            -Command ".\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath `"$rootRelative/deployment.json`"" `
-            -Statement "& .\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath $(ConvertTo-Sprint8APowerShellLiteral "$rootRelative/deployment.json")$scriptGuard" `
+            -Command ".\scripts\capture-sprint-6a-deployment-evidence.ps1 -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath `"$rootRelative/deployment.json`" -ApiContainerId <core> -GatewayContainerId <gateway> -DatabaseContainerId <postgres>" `
+            -Statement (New-Sprint8ASitDeploymentEvidenceStatement -EvidencePath "$rootRelative/deployment.json") `
             -DependsOn @("canonical-materialization") -EvidencePaths @($deployment)
         New-Sprint8ASitSpec -Name "canonical-product-smoke" `
             -Command ".\scripts\smoke-sprint-8a.ps1 -BaseUrl `"$BaseUrl`" -SupervisorUrl `"$supervisor`" -OutputPath `"$rootRelative/smoke.json`"" `
@@ -1876,7 +1901,7 @@ function Test-Sprint8ASitRunner {
     }
     foreach ($command in @(
         "materialize-sprint-8a.ps1", "audit-sprint-8a-deployed-inventory.ps1",
-        "run-sprint-8a-deployed-smoke.ps1", "smoke-sprint-8a.ps1",
+        "capture-sprint-6a-deployment-evidence.ps1", "smoke-sprint-8a.ps1",
         "run-sprint-8a-component-upgrade.ps1", "run-sprint-8a-failure-containment.ps1",
         "validate-e2e.ps1"
     )) {

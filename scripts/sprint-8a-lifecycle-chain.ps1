@@ -835,6 +835,7 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
             }
             $allowedPaths = @(
                 "docs/sprints/sprint-8a-verification.md",
+                "scripts/run-sprint-8a-sit.ps1",
                 "scripts/run-sprint-8a-validation-preflight.ps1",
                 "scripts/sprint-8a-lifecycle-chain.ps1"
             )

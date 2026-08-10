@@ -2235,6 +2235,7 @@ function Assert-Sprint8APreflightCleanSource {
         }
         $allowedPaths = @(
             "docs/sprints/sprint-8a-verification.md",
+            "scripts/run-sprint-8a-sit.ps1",
             "scripts/run-sprint-8a-validation-preflight.ps1",
             "scripts/sprint-8a-lifecycle-chain.ps1"
         )
@@ -2854,18 +2855,18 @@ function Get-Sprint8ADownstreamCommandSets {
         )
         playwright = @(
             '.\scripts\materialize-sprint-8a.ps1 -Attempt <n> -EvidenceRoot "artifacts/sprint-8a-closeout/sit/playwright-<n>" -EnvironmentFingerprint <environment-fingerprint> -AuthorizeDisposableReset -Confirm:$false -VerifyNoOp',
-            '.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/playwright-<n>/deployment.json"',
+            '.\scripts\capture-sprint-6a-deployment-evidence.ps1 -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath "artifacts/sprint-8a-closeout/sit/playwright-<n>/deployment.json" -ApiContainerId <core> -GatewayContainerId <gateway> -DatabaseContainerId <postgres>',
             '.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8088" -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/playwright-<n>/deployment.json" -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -EvidencePath "artifacts/sprint-8a-closeout/sit/playwright-<n>/playwright.json" -FailureEvidenceDirectory "artifacts/sprint-8a-closeout/sit/playwright-<n>/failures"'
         )
         deployed_acceptance_smoke = @(
             '.\scripts\materialize-sprint-8a.ps1 -Attempt <n> -EvidenceRoot "artifacts/sprint-8a-closeout/sit/attempt-<n>" -EnvironmentFingerprint <environment-fingerprint> -AuthorizeDisposableReset -Confirm:$false -VerifyNoOp',
             '.\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/initial-inventory.json"',
-            '.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/attempt-<n>/initial-deployment.json"',
+            '.\scripts\capture-sprint-6a-deployment-evidence.ps1 -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/initial-deployment.json" -ApiContainerId <core> -GatewayContainerId <gateway> -DatabaseContainerId <postgres>',
             '.\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/initial-smoke.json"',
             '.\scripts\run-sprint-8a-component-upgrade.ps1 -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/component-upgrade.json"',
             '.\scripts\run-sprint-8a-failure-containment.ps1 -Attempt <n> -EvidenceRoot "artifacts/sprint-8a-closeout/sit/attempt-<n>" -EnvironmentFingerprint <environment-fingerprint> -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/failure-containment.json" -AuthorizeDisposableReset -SkipBuild',
             '.\scripts\audit-sprint-8a-deployed-inventory.ps1 -BaseUrl "http://127.0.0.1:8088" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/restored-inventory.json"',
-            '.\scripts\run-sprint-8a-deployed-smoke.ps1 -DeploymentEvidencePath "artifacts/sprint-8a-closeout/sit/attempt-<n>/restored-deployment.json"',
+            '.\scripts\capture-sprint-6a-deployment-evidence.ps1 -ExpectedDataState fresh -TransitionCatalogProfile sprint-8a -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/restored-deployment.json" -ApiContainerId <core> -GatewayContainerId <gateway> -DatabaseContainerId <postgres>',
             '.\scripts\smoke-sprint-8a.ps1 -BaseUrl "http://127.0.0.1:8088" -SupervisorUrl "http://127.0.0.1:8098" -OutputPath "artifacts/sprint-8a-closeout/sit/attempt-<n>/restored-smoke.json"'
         )
         formal_uat = @(
