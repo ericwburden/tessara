@@ -817,8 +817,8 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
         }
         $resolvedPrerequisites.Add($matches[0])
     }
-    if (@($resolvedPrerequisites | ForEach-Object { [string]$_.reference.path } | Sort-Object -Unique).Count -ne
-        $resolvedPrerequisites.Count) {
+    $uniquePrerequisitePaths = @($resolvedPrerequisites | ForEach-Object { [string]$_.reference.path } | Sort-Object -Unique)
+    if ($uniquePrerequisitePaths.Count -ne $resolvedPrerequisites.Count) {
         throw "Lifecycle phase '$Phase' repeats a prerequisite receipt path."
     }
 
