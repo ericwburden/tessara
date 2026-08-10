@@ -1467,6 +1467,13 @@ function Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility {
         [Parameter(Mandatory)][int]$ExpectedAttempt
     )
 
+    $hasRetainedManifestFailure = $Receipt.PSObject.Properties.Name -contains "manifest_update_failure"
+    $hasRetainedCatchHarvestFailure =
+        $Receipt.PSObject.Properties.Name -contains "failure_batch" -and
+        @($Receipt.failure_batch.defects | Where-Object {
+                [string]$_.check -ceq "catch-harvest" -and
+                [string]$_.classification -in @("harness", "evidence-finalization")
+            }).Count -gt 0
     return (
         ($Receipt.schema_version -is [int] -or $Receipt.schema_version -is [long]) -and
         [int]$Receipt.schema_version -eq 1 -and
@@ -1477,7 +1484,7 @@ function Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility {
         $Receipt.authoritative -is [bool] -and
         -not [bool]$Receipt.authoritative -and
         [string]$Receipt.state -in @("passed", "failed", "blocked") -and
-        $Receipt.PSObject.Properties.Name -contains "manifest_update_failure"
+        ($hasRetainedManifestFailure -or $hasRetainedCatchHarvestFailure)
     )
 }
 
@@ -1502,7 +1509,7 @@ function Get-Sprint8AFormalUatTerminalAttemptManifestRepairOverrides {
             $receipt = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
             if (-not (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
                     -Receipt $receipt -ExpectedAttempt $attemptNumber)) {
-                throw "Formal UAT cannot repair stale manifest entry '$path' because its receipt is not an authenticated terminal manifest-publication failure."
+                throw "Formal UAT cannot repair stale manifest entry '$path' because its receipt is not an authenticated terminal publication/catch-harvest failure."
             }
             [pscustomobject][ordered]@{
                 path = $path
@@ -1712,6 +1719,13 @@ if ($SelfTest) {
         if (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
                 -Receipt $repairEligibleFixture -ExpectedAttempt 5) {
             throw "Formal UAT self-test accepted a manifest repair without retained publication-failure evidence."
+        }
+        $repairEligibleFixture | Add-Member -NotePropertyName failure_batch -NotePropertyValue ([pscustomobject]@{
+            defects = @([pscustomobject]@{ check = "catch-harvest"; classification = "harness" })
+        })
+        if (-not (Test-Sprint8AFormalUatTerminalAttemptManifestRepairEligibility `
+                -Receipt $repairEligibleFixture -ExpectedAttempt 5)) {
+            throw "Formal UAT self-test rejected a terminal receipt with retained catch-harvest failure evidence."
         }
         $emptyEvidenceCheck = Invoke-Sprint8AFormalUatCheck `
             -Name "self-test-empty-evidence" `
