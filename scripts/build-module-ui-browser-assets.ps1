@@ -3,6 +3,7 @@ param(
     [ValidateSet("all", "components", "dashboards")]
     [string]$Module = "all",
     [switch]$Check,
+    [switch]$DeclarationsOnly,
     [switch]$SelfTest
 )
 
@@ -23,6 +24,16 @@ $modules = @(
         WasmAsset = "crates/tessara-component-ui/assets/component.wasm"
         BindingsName = "component-bindings.js"
         WasmName = "component.wasm"
+        DigestContract = "crates/tessara-component-ui/src/document.rs"
+        Manifest = "crates/tessara-component-module/manifest.json"
+        ReleaseCatalog = "deploy/sprint-8a/catalogs/local-release-catalog.json"
+        AssetSpecs = @(
+            [pscustomobject]@{ Path = "/component.css"; Constant = "COMPONENT_CSS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.css") }
+            [pscustomobject]@{ Path = "/component-lifecycle.css"; Constant = "COMPONENT_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.css", "crates/tessara-component-ui/assets/component-lifecycle.css") }
+            [pscustomobject]@{ Path = "/component.js"; Constant = "COMPONENT_JS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.js") }
+            [pscustomobject]@{ Path = "/component-bindings.js"; Constant = "COMPONENT_BINDINGS_JS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component-bindings.js") }
+            [pscustomobject]@{ Path = "/component.wasm"; Constant = "COMPONENT_WASM_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.wasm") }
+        )
     },
     [pscustomobject]@{
         Name = "dashboards"
@@ -36,6 +47,16 @@ $modules = @(
         WasmAsset = "crates/tessara-dashboard-ui/assets/dashboard.wasm"
         BindingsName = "dashboard-bindings.js"
         WasmName = "dashboard.wasm"
+        DigestContract = "crates/tessara-dashboard-ui/src/document.rs"
+        Manifest = "crates/tessara-dashboard-module/manifest.json"
+        ReleaseCatalog = "deploy/sprint-8a/catalogs/local-release-catalog.json"
+        AssetSpecs = @(
+            [pscustomobject]@{ Path = "/dashboard.css"; Constant = "DASHBOARD_CSS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.css") }
+            [pscustomobject]@{ Path = "/dashboard-lifecycle.css"; Constant = "DASHBOARD_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.css", "crates/tessara-dashboard-ui/assets/dashboard-lifecycle.css") }
+            [pscustomobject]@{ Path = "/dashboard.js"; Constant = "DASHBOARD_JS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.js") }
+            [pscustomobject]@{ Path = "/dashboard-bindings.js"; Constant = "DASHBOARD_BINDINGS_JS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard-bindings.js") }
+            [pscustomobject]@{ Path = "/dashboard.wasm"; Constant = "DASHBOARD_WASM_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.wasm") }
+        )
     }
 )
 if ($Module -cne "all") {
@@ -44,6 +65,77 @@ if ($Module -cne "all") {
 
 function Get-Sha256([string]$Path) {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-CompositeSha256([string[]]$Sources) {
+    $stream = [IO.MemoryStream]::new()
+    try {
+        for ($index = 0; $index -lt $Sources.Count; $index++) {
+            $sourcePath = Join-Path $repoRoot $Sources[$index]
+            $bytes = [IO.File]::ReadAllBytes($sourcePath)
+            $stream.Write($bytes, 0, $bytes.Length)
+            if ($index -lt ($Sources.Count - 1)) {
+                $stream.WriteByte(10)
+            }
+        }
+        -join ([Security.Cryptography.SHA256]::HashData($stream.ToArray()) | ForEach-Object { $_.ToString("x2") })
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Sync-SingleDigest(
+    [string]$Path,
+    [string]$Pattern,
+    [string]$ExpectedDigest,
+    [string]$Description,
+    [switch]$CheckOnly
+) {
+    $text = [IO.File]::ReadAllText($Path)
+    $matches = [regex]::Matches($text, $Pattern)
+    if ($matches.Count -ne 1) {
+        throw "$Description must declare exactly one digest binding."
+    }
+    $digestGroup = $matches[0].Groups["digest"]
+    if ($digestGroup.Value -ceq $ExpectedDigest) {
+        return
+    }
+    if ($CheckOnly) {
+        throw "$Description digest is stale: declared $($digestGroup.Value), source-exact $ExpectedDigest."
+    }
+    $updated = $text.Remove($digestGroup.Index, $digestGroup.Length).Insert($digestGroup.Index, $ExpectedDigest)
+    [IO.File]::WriteAllText($Path, $updated, [Text.UTF8Encoding]::new($false))
+}
+
+function Sync-ModuleAssetDigests([pscustomobject]$ModuleDefinition, [switch]$CheckOnly) {
+    $contractPath = Join-Path $repoRoot $ModuleDefinition.DigestContract
+    $manifestPath = Join-Path $repoRoot $ModuleDefinition.Manifest
+    $digests = [ordered]@{}
+    foreach ($asset in $ModuleDefinition.AssetSpecs) {
+        $digest = Get-CompositeSha256 @($asset.Sources)
+        $digests[$asset.Path] = $digest
+        $constantPattern = "(?s)pub const $([regex]::Escape($asset.Constant)): &str =\s*`"(?<digest>[0-9a-f]{64})`";"
+        $manifestPattern = "(?s)`"path`"\s*:\s*`"$([regex]::Escape($asset.Path))`"\s*,\s*`"digest`"\s*:\s*`"sha256:(?<digest>[0-9a-f]{64})`""
+        Sync-SingleDigest $contractPath $constantPattern $digest "$($ModuleDefinition.Name) Rust constant $($asset.Constant)" -CheckOnly:$CheckOnly
+        Sync-SingleDigest $manifestPath $manifestPattern $digest "$($ModuleDefinition.Name) manifest asset $($asset.Path)" -CheckOnly:$CheckOnly
+    }
+    $digests
+}
+
+function Sync-ReleaseCatalogManifestDigest([pscustomobject]$ModuleDefinition, [switch]$CheckOnly) {
+    $manifestPath = Join-Path $repoRoot $ModuleDefinition.Manifest
+    $digestOutput = @(& cargo run --manifest-path (Join-Path $repoRoot "Cargo.toml") --locked --offline -q -p tessara-supervisor --bin tessara-compose -- digest $manifestPath)
+    if ($LASTEXITCODE -ne 0) {
+        throw "$($ModuleDefinition.Name) manifest canonical digest could not be computed."
+    }
+    $manifestDigest = [string]($digestOutput | Select-Object -Last 1)
+    if ($manifestDigest -cnotmatch '^sha256:(?<value>[0-9a-f]{64})$') {
+        throw "$($ModuleDefinition.Name) manifest canonical digest output is invalid: $manifestDigest"
+    }
+    $catalogPath = Join-Path $repoRoot $ModuleDefinition.ReleaseCatalog
+    $catalogPattern = "(?s)`"definition_id`"\s*:\s*`"$([regex]::Escape($ModuleDefinition.Definition))`"\s*,\s*`"version`"\s*:\s*`"$([regex]::Escape($ModuleDefinition.Release))`"\s*,\s*`"manifest_digest`"\s*:\s*`"sha256:(?<digest>[0-9a-f]{64})`""
+    Sync-SingleDigest $catalogPath $catalogPattern $manifestDigest.Substring(7) "$($ModuleDefinition.Name) release-catalog manifest identity" -CheckOnly:$CheckOnly
+    $manifestDigest
 }
 
 function Assert-SourceExactEntryAssetReferences(
@@ -80,11 +172,55 @@ await init("/_tessara/modules/$($fixture.Definition)/$($fixture.Release)/sha256:
     if (-not $rejectedMismatch) {
         throw "Entry asset source-exact reference self-test did not reject a stale bindings digest."
     }
+    $declarationFixture = 'pub const SAMPLE_SHA256: &str = "' + ("c" * 64) + '";'
+    $declarationFixturePath = Join-Path ([IO.Path]::GetTempPath()) "tessara-module-ui-digest-$([guid]::NewGuid().ToString('N')).rs"
+    try {
+        [IO.File]::WriteAllText($declarationFixturePath, $declarationFixture, [Text.UTF8Encoding]::new($false))
+        $staleDeclarationRejected = $false
+        try {
+            Sync-SingleDigest $declarationFixturePath 'pub const SAMPLE_SHA256: &str = "(?<digest>[0-9a-f]{64})";' $bindingsHash "self-test digest" -CheckOnly
+        } catch {
+            $staleDeclarationRejected = $_.Exception.Message.Contains("digest is stale")
+        }
+        if (-not $staleDeclarationRejected) {
+            throw "Declared asset digest self-test did not reject a stale source binding."
+        }
+        Sync-SingleDigest $declarationFixturePath 'pub const SAMPLE_SHA256: &str = "(?<digest>[0-9a-f]{64})";' $bindingsHash "self-test digest"
+        if (-not ([IO.File]::ReadAllText($declarationFixturePath).Contains($bindingsHash))) {
+            throw "Declared asset digest self-test did not update the exact digest group."
+        }
+    } finally {
+        Remove-Item -LiteralPath $declarationFixturePath -Force -ErrorAction SilentlyContinue
+    }
     [pscustomobject][ordered]@{
         contract = "tessara.module-ui.entry-asset-source-exact-self-test"
         state = "passed"
         stale_bindings_digest_rejected = $rejectedMismatch
+        stale_declared_digest_rejected = $staleDeclarationRejected
     } | ConvertTo-Json -Compress
+    exit 0
+}
+
+if ($DeclarationsOnly) {
+    Push-Location $repoRoot
+    try {
+        foreach ($item in $modules) {
+            $bindingsHash = Get-Sha256 (Join-Path $repoRoot $item.BindingsAsset)
+            $wasmHash = Get-Sha256 (Join-Path $repoRoot $item.WasmAsset)
+            $entryText = Get-Content -LiteralPath (Join-Path $repoRoot $item.EntryAsset) -Raw
+            Assert-SourceExactEntryAssetReferences $item $entryText $bindingsHash $wasmHash
+            $assetDigests = Sync-ModuleAssetDigests $item -CheckOnly
+            $manifestDigest = Sync-ReleaseCatalogManifestDigest $item -CheckOnly
+            [pscustomobject][ordered]@{
+                module = $item.Name
+                asset_digests = $assetDigests
+                manifest_digest = $manifestDigest
+                state = "declared-source-exact"
+            } | ConvertTo-Json -Compress
+        }
+    } finally {
+        Pop-Location
+    }
     exit 0
 }
 
@@ -147,11 +283,15 @@ try {
 
         $entryText = Get-Content -LiteralPath $entryAsset -Raw
         Assert-SourceExactEntryAssetReferences $item $entryText $generatedBindingsHash $generatedWasmHash
+        $assetDigests = Sync-ModuleAssetDigests $item -CheckOnly:$Check
+        $manifestDigest = Sync-ReleaseCatalogManifestDigest $item -CheckOnly:$Check
 
         [pscustomobject][ordered]@{
             module = $item.Name
             bindings_sha256 = $generatedBindingsHash
             wasm_sha256 = $generatedWasmHash
+            asset_digests = $assetDigests
+            manifest_digest = $manifestDigest
             state = if ($Check) { "source-exact" } else { "generated" }
         } | ConvertTo-Json -Compress
     }

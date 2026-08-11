@@ -19,15 +19,15 @@ pub const COMPONENT_JS: &str = include_str!("../assets/component.js");
 pub const COMPONENT_BINDINGS_JS: &str = include_str!("../assets/component-bindings.js");
 pub const COMPONENT_WASM: &[u8] = include_bytes!("../assets/component.wasm");
 pub const COMPONENT_CSS_SHA256: &str =
-    "2bc73b45249710846f70f6dd6856f224f1b305d9a4190712c0212a28a61afb81";
+    "752387257cd0ddb69780425d88be40128a1a3cc96ed0cdffd725749ba723600e";
 pub const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
-    "4c3394597a44d378a1452cbf30469ba1f48dca0e1c0d659d6504c392c2f2619c";
+    "17eac83dcf01b4d39808474e7f58b5d4188d784f077d61f9d0a09021cb612724";
 pub const COMPONENT_JS_SHA256: &str =
-    "79ce8b02dceb6c27ef6d75a37a09c51e505dd7b6120601212887c84f6d6cd312";
+    "165b38c1b137005bb22565ce471ee562e4ff481b36a44823b8b1c5150e4fbf73";
 pub const COMPONENT_BINDINGS_JS_SHA256: &str =
-    "8ccf28f0eecb2c5861661de11be8efe1909bee1c393d91c9cad785b6c09725a6";
+    "6e31cb9a04f6ca19a4f60be5e7d1583cecbcbd3673e9627ead95a9013bfa9fb3";
 pub const COMPONENT_WASM_SHA256: &str =
-    "745fd0b24f4a4b8f1cfeae6b0d5b5c8f292867c6f5f78c2942508188beed4ffb";
+    "9295096a71d2cd187634e31afda268dc2d7d0381009e901c8577214480ea09e1";
 
 pub fn component_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.components/{release}/sha256:{digest}/{name}")

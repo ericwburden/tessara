@@ -33,6 +33,15 @@ try {
         }
     }
 
+    try {
+        & "scripts/build-module-ui-browser-assets.ps1" -Module all -DeclarationsOnly | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Add-Finding "module_asset_identity_mismatch" "scripts/build-module-ui-browser-assets.ps1" "module asset declarations are not source exact"
+        }
+    } catch {
+        Add-Finding "module_asset_identity_mismatch" "scripts/build-module-ui-browser-assets.ps1" $_.Exception.Message
+    }
+
     $cssOwnershipJson = & node "scripts/check-product-css-ownership.mjs" 2>&1
     $cssOwnershipExit = $LASTEXITCODE
     $cssOwnership = $cssOwnershipJson | ConvertFrom-Json

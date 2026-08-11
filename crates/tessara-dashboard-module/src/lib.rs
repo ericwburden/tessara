@@ -759,10 +759,63 @@ mod tests {
     use tessara_module_contract::{ModuleManifest, ResourceOwner, TypedResourceReference};
 
     use super::{
-        DashboardBootstrapPlacementV2, DashboardBootstrapV2, DashboardConfigurationV1,
+        DashboardBootstrapPlacementV2, DashboardBootstrapV2, DashboardConfigurationV1, manifest,
         module_service_client_with_timeout, validate_configuration,
         validate_dashboard_bootstrap_input,
     };
+
+    fn sha256(bytes: &[u8]) -> String {
+        format!("{:x}", Sha256::digest(bytes))
+    }
+
+    #[test]
+    fn browser_asset_identities_are_source_exact_and_match_the_manifest() {
+        let assets = [
+            (
+                "/dashboard.css",
+                sha256(tessara_dashboard_ui::DASHBOARD_CSS.as_bytes()),
+                tessara_dashboard_ui::DASHBOARD_CSS_SHA256,
+            ),
+            (
+                "/dashboard-lifecycle.css",
+                sha256(tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS.as_bytes()),
+                tessara_dashboard_ui::DASHBOARD_LIFECYCLE_CSS_SHA256,
+            ),
+            (
+                "/dashboard.js",
+                sha256(tessara_dashboard_ui::DASHBOARD_JS.as_bytes()),
+                tessara_dashboard_ui::DASHBOARD_JS_SHA256,
+            ),
+            (
+                "/dashboard-bindings.js",
+                sha256(tessara_dashboard_ui::DASHBOARD_BINDINGS_JS.as_bytes()),
+                tessara_dashboard_ui::DASHBOARD_BINDINGS_JS_SHA256,
+            ),
+            (
+                "/dashboard.wasm",
+                sha256(tessara_dashboard_ui::DASHBOARD_WASM),
+                tessara_dashboard_ui::DASHBOARD_WASM_SHA256,
+            ),
+        ];
+        let manifest = manifest();
+
+        for (path, source_digest, declared_digest) in assets {
+            assert_eq!(
+                source_digest, declared_digest,
+                "stale digest constant for {path}"
+            );
+            let manifest_asset = manifest
+                .assets
+                .iter()
+                .find(|asset| asset.path == path)
+                .unwrap_or_else(|| panic!("manifest should declare {path}"));
+            assert_eq!(
+                manifest_asset.digest.to_string(),
+                format!("sha256:{source_digest}"),
+                "stale manifest digest for {path}"
+            );
+        }
+    }
 
     #[test]
     fn sprint_8a_bootstrap_owns_seven_exact_receipt_bound_component_placements() {
