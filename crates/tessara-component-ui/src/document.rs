@@ -23,11 +23,11 @@ pub const COMPONENT_CSS_SHA256: &str =
 pub const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
     "17eac83dcf01b4d39808474e7f58b5d4188d784f077d61f9d0a09021cb612724";
 pub const COMPONENT_JS_SHA256: &str =
-    "165b38c1b137005bb22565ce471ee562e4ff481b36a44823b8b1c5150e4fbf73";
+    "779de74c2a498065ad1ae2f25bd2492cc908eea99f0a49531290025d6de4262d";
 pub const COMPONENT_BINDINGS_JS_SHA256: &str =
-    "6e31cb9a04f6ca19a4f60be5e7d1583cecbcbd3673e9627ead95a9013bfa9fb3";
+    "241997874c335786a6b9855d8e49466fdd0b766d1c060e92903662e0c9b221fd";
 pub const COMPONENT_WASM_SHA256: &str =
-    "9295096a71d2cd187634e31afda268dc2d7d0381009e901c8577214480ea09e1";
+    "881e5635cb1076ffefe2aea329e2a20354e9c5fefe074d14b8ed27da80f7ed09";
 
 pub fn component_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.components/{release}/sha256:{digest}/{name}")
@@ -48,6 +48,10 @@ pub fn render_component_document(
             stylesheets: vec![
                 component_asset_path(release, MODULE_UI_CSS_SHA256, "module-ui.css"),
                 component_asset_path(release, COMPONENT_CSS_SHA256, "component.css"),
+            ],
+            deferred_scripts: vec![
+                "/assets/d3.v7.9.0.min.js".into(),
+                "/assets/tessara-d3-charts.js".into(),
             ],
             hydration_script: Some(component_asset_path(
                 release,
@@ -148,6 +152,8 @@ mod tests {
         assert!(html.contains("data-component-directory-item"));
         assert!(html.contains("searchable-data-table__search"));
         assert!(html.contains("Delivery health"));
+        assert!(html.contains(r#"src="/assets/d3.v7.9.0.min.js" defer"#));
+        assert!(html.contains(r#"src="/assets/tessara-d3-charts.js" defer"#));
         assert!(!html.contains("data-component-search"));
     }
 }

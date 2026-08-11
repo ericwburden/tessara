@@ -83,6 +83,7 @@ pub fn render_reference_document(
         presentation,
         &ModuleDocumentAssets {
             stylesheets: vec![MODULE_UI_CSS_PATH.into()],
+            deferred_scripts: Vec::new(),
             hydration_script: Some(MODULE_SHELL_JS_PATH.into()),
         },
         &ModuleReleaseMetadata {

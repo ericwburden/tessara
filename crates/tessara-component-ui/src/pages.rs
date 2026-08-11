@@ -2092,7 +2092,8 @@ fn ComponentsMobileFilterSheet(
                             >
                                 <option value="all">"All kinds"</option>
                                 {kind_options.clone().into_iter().map(|option| {
-                                    view! { <option value=option.clone()>{option.clone()}</option> }
+                                    let label = component_type_label(&option);
+                                    view! { <option value=option>{label}</option> }
                                 }).collect_view()}
                             </select>
                         </label>
@@ -2105,7 +2106,8 @@ fn ComponentsMobileFilterSheet(
                             >
                                 <option value="all">"All statuses"</option>
                                 {status_options.clone().into_iter().map(|option| {
-                                    view! { <option value=option.clone()>{option.clone()}</option> }
+                                    let label = component_status_filter_label(&option);
+                                    view! { <option value=option>{label}</option> }
                                 }).collect_view()}
                             </select>
                         </label>
@@ -2137,6 +2139,15 @@ fn component_type_label(component_type: &str) -> &'static str {
         "donut" => "Donut",
         "stat_card" => "Stat Card",
         _ => "Component",
+    }
+}
+
+fn component_status_filter_label(status: &str) -> &'static str {
+    match status {
+        "draft" => "Draft",
+        "published" => "Published",
+        "updating" => "Updating",
+        _ => "Unknown",
     }
 }
 
@@ -2179,7 +2190,12 @@ fn component_summary_revision_label(component: &ComponentSummary) -> String {
 fn component_kind_filter_options(components: &[ComponentSummary]) -> Vec<String> {
     let mut options = components
         .iter()
-        .map(|component| component_summary_kind_label(component).to_string())
+        .map(|component| {
+            component
+                .current_component_type
+                .clone()
+                .unwrap_or_else(|| "table".into())
+        })
         .collect::<Vec<_>>();
     options.sort();
     options.dedup();
@@ -2189,7 +2205,7 @@ fn component_kind_filter_options(components: &[ComponentSummary]) -> Vec<String>
 fn component_status_filter_options(components: &[ComponentSummary]) -> Vec<String> {
     let mut options = components
         .iter()
-        .map(|component| component_summary_status_label(component).to_string())
+        .map(|component| component_summary_status_label(component).to_ascii_lowercase())
         .collect::<Vec<_>>();
     options.sort();
     options.dedup();
@@ -2203,8 +2219,14 @@ fn component_matches_filters(
     status_filter: &str,
 ) -> bool {
     component_text_matches(search, &[&component.name])
-        && (kind_filter == "all" || component_summary_kind_label(component) == kind_filter)
-        && (status_filter == "all" || component_summary_status_label(component) == status_filter)
+        && (kind_filter == "all"
+            || component
+                .current_component_type
+                .as_deref()
+                .unwrap_or("table")
+                == kind_filter)
+        && (status_filter == "all"
+            || component_summary_status_label(component).eq_ignore_ascii_case(status_filter))
 }
 
 fn component_mobile_filter_button_label(kind_filter: &str, status_filter: &str) -> String {

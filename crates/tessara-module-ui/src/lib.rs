@@ -164,6 +164,7 @@ impl ShellPresentation {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModuleDocumentAssets {
     pub stylesheets: Vec<String>,
+    pub deferred_scripts: Vec<String>,
     pub hydration_script: Option<String>,
 }
 
@@ -263,6 +264,11 @@ fn render_document_markup(
             )
         })
         .collect::<String>();
+    let deferred_scripts = assets
+        .deferred_scripts
+        .iter()
+        .map(|src| format!(r#"<script src="{}" defer></script>"#, escape_attribute(src)))
+        .collect::<String>();
     let hydration = assets
         .hydration_script
         .as_deref()
@@ -274,13 +280,14 @@ fn render_document_markup(
         })
         .unwrap_or_default();
     format!(
-        r##"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F172A"><title>{} · Tessara</title><script>{}</script>{}</head><body class="tessara-app {}" data-shell-state="{}" data-correlation-id="{}"><main class="app-shell"><aside class="sidebar" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside><section class="app-main" aria-label="Application content"><header class="top-app-bar"><div class="top-app-bar__title-row"><button class="icon-button mobile-nav__toggle" type="button" aria-label="Open navigation" aria-expanded="false">{}</button><span class="top-app-bar__title">{}</span></div><div class="top-app-bar__actions"><label class="search-field"><span class="sr-only">Search Tessara</span><input type="search" placeholder="Search Tessara"></label><div class="theme-toggle"><button class="icon-button theme-toggle__trigger" type="button" aria-label="Theme options" aria-haspopup="menu" aria-expanded="false">{}</button><button class="theme-toggle__scrim" type="button" aria-label="Close theme options"></button><div class="theme-toggle__menu blurred-surface" role="menu" aria-label="Theme options"><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="system">System</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="light">Light</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="dark">Dark</button></div></div><button class="icon-button" type="button" aria-label="Notifications" title="Notifications">{}</button><button class="icon-button" type="button" aria-label="Help" title="Help">{}</button></div></header><div class="app-page"><div id="module-content">{}</div></div></section><button class="mobile-nav__scrim" type="button" aria-label="Close navigation"></button><aside class="mobile-nav__panel blurred-surface" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside></main>{}<script>{}</script></body></html>"##,
+        r##"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F172A"><title>{} · Tessara</title><script>{}</script>{}{}</head><body class="tessara-app {}" data-shell-state="{}" data-correlation-id="{}"><main class="app-shell"><aside class="sidebar" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside><section class="app-main" aria-label="Application content"><header class="top-app-bar"><div class="top-app-bar__title-row"><button class="icon-button mobile-nav__toggle" type="button" aria-label="Open navigation" aria-expanded="false">{}</button><span class="top-app-bar__title">{}</span></div><div class="top-app-bar__actions"><label class="search-field"><span class="sr-only">Search Tessara</span><input type="search" placeholder="Search Tessara"></label><div class="theme-toggle"><button class="icon-button theme-toggle__trigger" type="button" aria-label="Theme options" aria-haspopup="menu" aria-expanded="false">{}</button><button class="theme-toggle__scrim" type="button" aria-label="Close theme options"></button><div class="theme-toggle__menu blurred-surface" role="menu" aria-label="Theme options"><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="system">System</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="light">Light</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="dark">Dark</button></div></div><button class="icon-button" type="button" aria-label="Notifications" title="Notifications">{}</button><button class="icon-button" type="button" aria-label="Help" title="Help">{}</button></div></header><div class="app-page"><div id="module-content">{}</div></div></section><button class="mobile-nav__scrim" type="button" aria-label="Close navigation"></button><aside class="mobile-nav__panel blurred-surface" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside></main>{}<script>{}</script></body></html>"##,
         escape_attribute(&presentation.locale),
         theme,
         theme,
         escape_text(&presentation.document_title),
         theme_bootstrap,
         stylesheets,
+        deferred_scripts,
         escape_attribute(&module_scope_class(&release.definition_id)),
         document_state_name(presentation.document_state),
         presentation.correlation_id,
@@ -490,6 +497,7 @@ mod tests {
                 stylesheets: vec![
                     "/_tessara/modules/example/1.0.0/sha256:abc/module-ui.css".into(),
                 ],
+                deferred_scripts: vec!["/assets/shared.js".into()],
                 hydration_script: None,
             },
             &ModuleReleaseMetadata {
@@ -507,6 +515,7 @@ mod tests {
         assert!(html.contains("&lt;Operator&gt;"));
         assert!(html.contains("<div id=\"module-content\"><p>Recovery</p></div>"));
         assert!(html.contains("module-ui.css"));
+        assert!(html.contains("<script src=\"/assets/shared.js\" defer></script>"));
         assert!(html.contains("module-scope--tessara-reference-module-sdk"));
         assert!(html.contains(r#"class="top-app-bar__title">SDK Reference</span>"#));
         assert_eq!(html.matches("sidebar-link is-active").count(), 2);

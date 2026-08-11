@@ -1212,6 +1212,7 @@ async fn shell_page(
         &presentation,
         &ModuleDocumentAssets {
             stylesheets: vec![MODULE_UI_CSS_PATH.into(), SCOPED_RECORDS_CSS_PATH.into()],
+            deferred_scripts: Vec::new(),
             hydration_script: None,
         },
         &ModuleReleaseMetadata {

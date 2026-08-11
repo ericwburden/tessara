@@ -25,11 +25,11 @@ pub const DASHBOARD_CSS_SHA256: &str =
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "838136485a2d0a547d95e520076a039189c2d3fb24d9f15d23a977f98ca0cef3";
 pub const DASHBOARD_JS_SHA256: &str =
-    "afebfa379f4c809513e5225c163f010e64f164938f56e237d2b75070c249737d";
+    "3c0f0390e32b62235865a98ed696dfb20e1c3f347cec9d3ec9d735122be30b3f";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "9989ec5b7de30f7794ab7151372358efb898c3a7e8e48b559c24ec5446704f66";
+    "2c32514efd6b7d68c6d9de2bb47574b86499a215d0dce8a0c9eb07980d9cd82f";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "185ba47ac961798fe86a0449c25f8b41349642bdc05f14eb4632a77cd933a62b";
+    "cb17d6d3b92b7154cafef893daa7cc5b8824f84d1170cb73ea83629baa96ff98";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")
@@ -58,6 +58,10 @@ pub fn render_dashboard_document(
             stylesheets: vec![
                 dashboard_asset_path(release, MODULE_UI_CSS_SHA256, "module-ui.css"),
                 dashboard_asset_path(release, DASHBOARD_CSS_SHA256, "dashboard.css"),
+            ],
+            deferred_scripts: vec![
+                "/assets/d3.v7.9.0.min.js".into(),
+                "/assets/tessara-d3-charts.js".into(),
             ],
             hydration_script: Some(dashboard_asset_path(
                 release,
@@ -245,6 +249,8 @@ mod tests {
         assert!(html.contains(r#"class="tessara-app module-scope--tessara-dashboards""#));
         assert!(html.contains(r#"class="top-app-bar__title">Dashboards</span>"#));
         assert!(html.contains(r#"placeholder="Search Tessara""#));
+        assert!(html.contains(r#"src="/assets/d3.v7.9.0.min.js" defer"#));
+        assert!(html.contains(r#"src="/assets/tessara-d3-charts.js" defer"#));
         assert!(!html.contains("PROTOTYPE CONTROL"));
         assert!(!html.contains("tessara-web"));
     }

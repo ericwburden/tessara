@@ -337,6 +337,7 @@ async fn diagnostics_document(
         &presentation,
         &tessara_module_ui::ModuleDocumentAssets {
             stylesheets: vec![MODULE_UI_CSS_PATH.into()],
+            deferred_scripts: Vec::new(),
             hydration_script: Some(MODULE_SHELL_JS_PATH.into()),
         },
         &tessara_module_ui::ModuleReleaseMetadata {

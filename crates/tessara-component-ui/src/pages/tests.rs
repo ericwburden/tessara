@@ -334,34 +334,34 @@ fn component_list_filters_match_name_kind_and_status() {
         updating_component.clone(),
     ];
 
-    assert_eq!(component_kind_filter_options(&components), vec!["Table"]);
+    assert_eq!(component_kind_filter_options(&components), vec!["table"]);
     assert_eq!(
         component_status_filter_options(&components),
-        vec!["Draft", "Published", "Updating"]
+        vec!["draft", "published", "updating"]
     );
     assert!(component_matches_filters(
         &published_table,
         "snapshot",
-        "Table",
-        "Published"
+        "table",
+        "published"
     ));
     assert!(!component_matches_filters(
         &published_table,
         "snapshot",
-        "Draft",
-        "Published"
+        "bar",
+        "published"
     ));
     assert!(component_matches_filters(
         &draft_component,
         "program",
-        "Table",
-        "Draft"
+        "table",
+        "draft"
     ));
     assert!(component_matches_filters(
         &updating_component,
         "program",
-        "Table",
-        "Updating"
+        "table",
+        "updating"
     ));
 }
 
