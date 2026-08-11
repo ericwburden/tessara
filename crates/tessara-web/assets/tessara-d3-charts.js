@@ -59,6 +59,28 @@
       .text(labelForDatum);
   }
 
+  function appendAxisLabels(svg, visual, width, height, margin) {
+    if (visual.x_axis_label) {
+      svg
+        .append("text")
+        .attr("class", "component-d3-axis-label")
+        .attr("x", (margin.left + width - margin.right) / 2)
+        .attr("y", height - 12)
+        .attr("text-anchor", "middle")
+        .text(visual.x_axis_label);
+    }
+    if (visual.y_axis_label) {
+      svg
+        .append("text")
+        .attr("class", "component-d3-axis-label")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -((margin.top + height - margin.bottom) / 2))
+        .attr("y", 16)
+        .attr("text-anchor", "middle")
+        .text(visual.y_axis_label);
+    }
+  }
+
   function renderBar(surface, visual) {
     const data = (visual.points || []).map((point) => ({
       category: point.x || "",
@@ -146,28 +168,6 @@
       .append("svg")
       .attr("class", "component-d3-svg component-d3-svg--bar")
       .attr("viewBox", `0 0 ${width} ${height}`);
-
-    function appendAxisLabels() {
-      if (visual.x_axis_label) {
-        svg
-          .append("text")
-          .attr("class", "component-d3-axis-label")
-          .attr("x", (margin.left + width - margin.right) / 2)
-          .attr("y", height - 12)
-          .attr("text-anchor", "middle")
-          .text(visual.x_axis_label);
-      }
-      if (visual.y_axis_label) {
-        svg
-          .append("text")
-          .attr("class", "component-d3-axis-label")
-          .attr("transform", "rotate(-90)")
-          .attr("x", -((margin.top + height - margin.bottom) / 2))
-          .attr("y", 16)
-          .attr("text-anchor", "middle")
-          .text(visual.y_axis_label);
-      }
-    }
 
     if (orientation === "vertical") {
       const x = window.d3
@@ -320,7 +320,7 @@
       }
     }
 
-    appendAxisLabels();
+    appendAxisLabels(svg, visual, width, height, margin);
   }
 
   function renderLine(surface, visual) {
@@ -404,6 +404,7 @@
       .attr("cy", (d) => y(d.value))
       .attr("r", 4);
     decorateMarks(surface, points, (d) => `${d.label}: ${d.display}`);
+    appendAxisLabels(svg, visual, width, height, margin);
   }
 
   function renderSlices(surface, visual) {

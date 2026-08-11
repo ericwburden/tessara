@@ -117,6 +117,7 @@ mod tests {
         assert!(asset.content.contains("focus.tessara-tooltip"));
         assert!(asset.content.contains("mouseenter.tessara-tooltip"));
         assert!(asset.content.contains("aria-describedby"));
+        assert_eq!(asset.content.matches("appendAxisLabels(svg").count(), 3);
         assert!(static_asset("missing.js").is_none());
     }
 }
