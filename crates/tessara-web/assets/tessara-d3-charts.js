@@ -2,6 +2,7 @@
   "use strict";
 
   const renderedKey = "renderedChart";
+  let nextTooltipId = 0;
 
   function parseVisual(element) {
     try {
@@ -23,6 +24,39 @@
 
   function formatValue(value) {
     return Number.isFinite(value) ? value : 0;
+  }
+
+  function decorateMarks(surface, selection, labelForDatum) {
+    let tooltip = surface.querySelector(".component-d3-tooltip");
+    if (!tooltip) {
+      tooltip = document.createElement("div");
+      tooltip.className = "component-d3-tooltip";
+      tooltip.id = `component-d3-tooltip-${++nextTooltipId}`;
+      tooltip.setAttribute("role", "tooltip");
+      tooltip.hidden = true;
+      surface.appendChild(tooltip);
+    }
+
+    const showTooltip = function (_event, datum) {
+      tooltip.textContent = labelForDatum(datum);
+      tooltip.hidden = false;
+      this.setAttribute("aria-describedby", tooltip.id);
+    };
+    const hideTooltip = function () {
+      tooltip.hidden = true;
+      this.removeAttribute("aria-describedby");
+    };
+
+    selection
+      .attr("tabindex", 0)
+      .attr("role", "img")
+      .attr("aria-label", labelForDatum)
+      .on("focus.tessara-tooltip", showTooltip)
+      .on("blur.tessara-tooltip", hideTooltip)
+      .on("mouseenter.tessara-tooltip", showTooltip)
+      .on("mouseleave.tessara-tooltip", hideTooltip)
+      .append("title")
+      .text(labelForDatum);
   }
 
   function renderBar(surface, visual) {
@@ -189,20 +223,20 @@
             }
             const y0 = y(start);
             const y1 = y(end);
-            svg
+            const mark = svg
               .append("rect")
+              .datum(datum)
               .attr("class", "component-d3-bar")
               .attr("x", x(category) || margin.left)
               .attr("y", Math.min(y0, y1))
               .attr("width", x.bandwidth())
               .attr("height", Math.max(1, Math.abs(y1 - y0)))
-              .style("fill", color(datum))
-              .append("title")
-              .text(`${datum.label}: ${datum.display}`);
+              .style("fill", color(datum));
+            decorateMarks(surface, mark, (d) => `${d.label}: ${d.display}`);
           });
         });
       } else {
-        svg
+        const marks = svg
           .append("g")
           .selectAll("rect")
           .data(data)
@@ -212,9 +246,8 @@
           .attr("y", (d) => Math.min(y(0), y(d.value)))
           .attr("width", xInner.bandwidth())
           .attr("height", (d) => Math.max(1, Math.abs(y(d.value) - y(0))))
-          .style("fill", color)
-          .append("title")
-          .text((d) => `${d.label}: ${d.display}`);
+          .style("fill", color);
+        decorateMarks(surface, marks, (d) => `${d.label}: ${d.display}`);
       }
     } else {
       const x = window.d3
@@ -259,20 +292,20 @@
             }
             const x0 = x(start);
             const x1 = x(end);
-            svg
+            const mark = svg
               .append("rect")
+              .datum(datum)
               .attr("class", "component-d3-bar")
               .attr("x", Math.min(x0, x1))
               .attr("y", y(category) || margin.top)
               .attr("height", y.bandwidth())
               .attr("width", Math.max(1, Math.abs(x1 - x0)))
-              .style("fill", color(datum))
-              .append("title")
-              .text(`${datum.label}: ${datum.display}`);
+              .style("fill", color(datum));
+            decorateMarks(surface, mark, (d) => `${d.label}: ${d.display}`);
           });
         });
       } else {
-        svg
+        const marks = svg
           .append("g")
           .selectAll("rect")
           .data(data)
@@ -282,9 +315,8 @@
           .attr("y", (d) => (y(d.category) || 0) + (yInner(d.comparison || "") || 0))
           .attr("height", yInner.bandwidth())
           .attr("width", (d) => Math.max(1, Math.abs(x(d.value) - x(0))))
-          .style("fill", color)
-          .append("title")
-          .text((d) => `${d.label}: ${d.display}`);
+          .style("fill", color);
+        decorateMarks(surface, marks, (d) => `${d.label}: ${d.display}`);
       }
     }
 
@@ -362,7 +394,7 @@
       .datum(data)
       .attr("class", "component-d3-line")
       .attr("d", line);
-    svg
+    const points = svg
       .append("g")
       .selectAll("circle")
       .data(data)
@@ -370,9 +402,8 @@
       .attr("class", "component-d3-point")
       .attr("cx", (d) => x(d.label) || margin.left)
       .attr("cy", (d) => y(d.value))
-      .attr("r", 4)
-      .append("title")
-      .text((d) => `${d.label}: ${d.display}`);
+      .attr("r", 4);
+    decorateMarks(surface, points, (d) => `${d.label}: ${d.display}`);
   }
 
   function renderSlices(surface, visual) {
@@ -408,7 +439,7 @@
       .range(["var(--semantic-primary)", "var(--semantic-success)", "var(--semantic-info)", "var(--semantic-warning)", "var(--color-cyan)"]);
     const color = (datum) => datum.color || fallbackColor(datum.label);
 
-    svg
+    const slices = svg
       .append("g")
       .attr("transform", `translate(${centerX},${centerY})`)
       .selectAll("path")
@@ -416,9 +447,8 @@
       .join("path")
       .attr("class", "component-d3-slice")
       .attr("fill", (d) => color(d.data))
-      .attr("d", arc)
-      .append("title")
-      .text((d) => `${d.data.label}: ${d.data.display}`);
+      .attr("d", arc);
+    decorateMarks(surface, slices, (d) => `${d.data.label}: ${d.data.display}`);
 
     const legend = svg
       .append("g")

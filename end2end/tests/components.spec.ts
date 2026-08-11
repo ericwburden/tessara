@@ -452,14 +452,26 @@ async function selectDatasetMajorLine(page: Page, dataset: DatasetOption) {
 }
 
 async function selectComponentKind(page: Page, label: string) {
-  await page.getByRole("radio", { name: label, exact: true }).click();
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
+  const option = page.getByRole("radio", { name: label, exact: true });
+  await option.click();
   const confirmation = page.getByRole("button", {
     name: `Change to ${label}`,
     exact: true,
   });
-  if ((await confirmation.count()) > 0 && (await confirmation.isVisible())) {
+  await expect
+    .poll(
+      async () => (await option.isChecked()) || (await confirmation.isVisible()),
+      { message: `Wait for the ${label} kind change or its confirmation` },
+    )
+    .toBe(true);
+  if (await confirmation.isVisible()) {
     await confirmation.click();
   }
+  await expect(option).toBeChecked();
 }
 
 test.describe("Sprint 8A extracted Component UI parity", () => {
@@ -1065,6 +1077,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await barOptions
       .locator('input[data-config-control="y_axis_label"]')
       .fill("Responses");
+    await expect(calculation).toHaveValue("count");
+    await expect(valueFieldSelect).toHaveValue(fieldKey);
+    await expect(categoryField).toHaveValue(fieldKey);
+    await expect(seriesField).toHaveValue(fieldKey);
     await expect(page.locator(".component-editor-preview__badge")).toHaveText(
       "Valid config",
     );

@@ -130,10 +130,7 @@ pub(super) fn focus_component_kind_editor() {
             let _ = element.focus();
         }
     }) as Box<dyn FnOnce()>);
-    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-        callback.as_ref().unchecked_ref(),
-        100,
-    );
+    let _ = window.request_animation_frame(callback.as_ref().unchecked_ref());
     callback.forget();
 }
 

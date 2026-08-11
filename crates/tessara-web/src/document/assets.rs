@@ -114,6 +114,9 @@ mod tests {
         assert!(asset.content.contains("TessaraCharts"));
         assert!(asset.content.contains("if (currentHelp)"));
         assert!(asset.content.contains("details !== currentHelp"));
+        assert!(asset.content.contains("focus.tessara-tooltip"));
+        assert!(asset.content.contains("mouseenter.tessara-tooltip"));
+        assert!(asset.content.contains("aria-describedby"));
         assert!(static_asset("missing.js").is_none());
     }
 }
