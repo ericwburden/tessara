@@ -34,3 +34,7 @@ tessara-module-ui = { path = "../tessara-module-ui", features = ["components"] }
 web-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 tessara-module-contract = { path = "../tessara-module-contract" }
+
+[dev-dependencies]
+chrono = { workspace = true }
+uuid = { workspace = true }

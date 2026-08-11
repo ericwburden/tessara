@@ -5,6 +5,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use std::{cell::RefCell, collections::BTreeMap};
 
+use crate::{ComponentDefinitionBootstrap, ComponentDirectoryItem, ComponentVersionBootstrap};
+
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct ComponentSummary {
     pub(crate) id: String,
@@ -16,6 +18,23 @@ pub(crate) struct ComponentSummary {
     pub(crate) current_component_type: Option<String>,
     pub(crate) draft_version_id: Option<String>,
     pub(crate) draft_version_label: Option<String>,
+}
+
+impl From<ComponentDirectoryItem> for ComponentSummary {
+    fn from(value: ComponentDirectoryItem) -> Self {
+        Self {
+            id: value.component_id,
+            name: value.name,
+            slug: value.slug,
+            description: value.description,
+            current_version_id: value.current_version_id,
+            current_version_label: value.current_version_label,
+            current_component_type: (!value.component_type.is_empty())
+                .then_some(value.component_type),
+            draft_version_id: value.draft_version_id,
+            draft_version_label: value.draft_version_label,
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for ComponentSummary {
@@ -74,6 +93,23 @@ pub(crate) struct ComponentDefinition {
     pub(crate) slug: String,
     pub(crate) description: Option<String>,
     pub(crate) versions: Vec<ComponentVersionSummary>,
+}
+
+impl From<ComponentDefinitionBootstrap> for ComponentDefinition {
+    fn from(value: ComponentDefinitionBootstrap) -> Self {
+        let component_id = value.component_id;
+        Self {
+            id: component_id.clone(),
+            name: value.name,
+            slug: value.slug,
+            description: value.description,
+            versions: value
+                .versions
+                .into_iter()
+                .map(|version| ComponentVersionSummary::from_bootstrap(&component_id, version))
+                .collect(),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for ComponentDefinition {
@@ -152,6 +188,40 @@ impl<'de> Deserialize<'de> for ComponentVersionSummary {
             config: value.get("config").cloned().unwrap_or(Value::Null),
         })
     }
+}
+
+impl ComponentVersionSummary {
+    fn from_bootstrap(component_id: &str, value: ComponentVersionBootstrap) -> Self {
+        let resource_id = value
+            .dataset_reference
+            .pointer("/reference/resource_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let (dataset_id, major) = resource_id.rsplit_once('@').unwrap_or((resource_id, "1"));
+        Self {
+            id: value.component_version_id,
+            component_id: component_id.to_string(),
+            dataset_id: dataset_id.to_string(),
+            dataset_version_major: major.parse().unwrap_or(1),
+            binding_mode: "fixed_major".into(),
+            component_type: value.component_type,
+            status: value.publication_state,
+            lifecycle_state: Some(value.lifecycle_state),
+            resource_revision: i64::try_from(value.resource_revision).unwrap_or(i64::MAX),
+            successor_version_id: None,
+            version_label: value.version_label,
+            version_note: value.version_note,
+            config: value.config,
+        }
+    }
+}
+
+pub(crate) fn datasets_from_bootstrap(value: &Value) -> Vec<DatasetSummary> {
+    let datasets = value
+        .get("datasets")
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    serde_json::from_value(datasets).unwrap_or_default()
 }
 
 #[derive(Clone)]

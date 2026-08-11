@@ -1,4 +1,5 @@
 //! Typed Component editor drafts, saved-config parsing, and query serialization.
+#![cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 
 use leptos::prelude::{RwSignal, Set};
 use serde_json::{Value, json};

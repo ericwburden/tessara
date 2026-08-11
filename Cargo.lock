@@ -4733,6 +4733,7 @@ name = "tessara-component-ui"
 version = "1.0.1"
 dependencies = [
  "any_spawner",
+ "chrono",
  "gloo-net",
  "icons",
  "leptos",
@@ -4743,6 +4744,7 @@ dependencies = [
  "tessara-module-ui",
  "tessara-web-data-ops",
  "tessara-web-http",
+ "uuid",
  "wasm-bindgen",
  "web-sys",
 ]

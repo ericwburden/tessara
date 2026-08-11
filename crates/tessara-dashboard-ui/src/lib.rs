@@ -33,12 +33,14 @@ pub use types::{
 thread_local! {
     static LIFECYCLE: std::cell::RefCell<tessara_module_ui::LeptosLifecycleAdapter<DashboardRouteBootstrap>> =
         const { std::cell::RefCell::new(tessara_module_ui::LeptosLifecycleAdapter::new()) };
+    static DIRECT_ROOT: std::cell::RefCell<tessara_module_ui::LeptosLifecycleRoot> =
+        const { std::cell::RefCell::new(tessara_module_ui::LeptosLifecycleRoot::new()) };
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate_dashboard() {
-    use leptos::{context::Provider, mount::hydrate_from, prelude::*};
+    use leptos::{context::Provider, prelude::*};
     use wasm_bindgen::JsCast;
 
     let _ = any_spawner::Executor::init_wasm_bindgen();
@@ -59,14 +61,15 @@ pub fn hydrate_dashboard() {
         return;
     };
     let bootstrap_for_view = bootstrap.clone();
-    let handle = hydrate_from(root.clone(), move || {
-        view! {
-            <Provider value=bootstrap_for_view.clone()>
-                {document::dashboard_content(&bootstrap_for_view)}
-            </Provider>
-        }
+    DIRECT_ROOT.with(|direct| {
+        direct.borrow_mut().hydrate(root.clone(), move || {
+            view! {
+                <Provider value=bootstrap_for_view.clone()>
+                    {document::dashboard_content(&bootstrap_for_view)}
+                </Provider>
+            }
+        })
     });
-    handle.forget();
     let _ = root.set_attribute("data-hydration", "ready");
 }
 

@@ -4,7 +4,6 @@
 
 mod api;
 mod bootstrap;
-mod bootstrap_view;
 mod document;
 mod http;
 mod pages;
@@ -14,7 +13,6 @@ pub use bootstrap::{
     ComponentDefinitionBootstrap, ComponentDirectoryItem, ComponentRouteBootstrap,
     ComponentVersionBootstrap,
 };
-pub(crate) use bootstrap_view::component_bootstrap_view;
 pub use document::{
     COMPONENT_BINDINGS_JS, COMPONENT_BINDINGS_JS_SHA256, COMPONENT_BOOTSTRAP_SCRIPT_ID,
     COMPONENT_CSS, COMPONENT_CSS_SHA256, COMPONENT_JS, COMPONENT_JS_SHA256,
@@ -38,8 +36,7 @@ thread_local! {
         const { std::cell::RefCell::new(tessara_module_ui::LeptosLifecycleRoot::new()) };
 }
 
-#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-fn interactive_content(bootstrap: &ComponentRouteBootstrap) -> leptos::prelude::AnyView {
+pub(crate) fn component_content(bootstrap: &ComponentRouteBootstrap) -> leptos::prelude::AnyView {
     use leptos::prelude::*;
     match bootstrap {
         ComponentRouteBootstrap::Directory { .. } => view! { <ComponentsIndexContent/> }.into_any(),
@@ -63,6 +60,7 @@ fn interactive_content(bootstrap: &ComponentRouteBootstrap) -> leptos::prelude::
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate_component() {
+    use leptos::{context::Provider, prelude::*};
     use wasm_bindgen::JsCast;
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let Some(document) = web_sys::window().and_then(|window| window.document()) else {
@@ -81,10 +79,15 @@ pub fn hydrate_component() {
     else {
         return;
     };
+    let bootstrap_for_view = bootstrap.clone();
     DIRECT_ROOT.with(|direct| {
-        direct
-            .borrow_mut()
-            .mount(root.clone(), move || interactive_content(&bootstrap))
+        direct.borrow_mut().hydrate(root.clone(), move || {
+            view! {
+                <Provider value=bootstrap_for_view.clone()>
+                    {component_content(&bootstrap_for_view)}
+                </Provider>
+            }
+        })
     });
     let _ = root.set_attribute("data-hydration", "ready");
 }
@@ -92,6 +95,7 @@ pub fn hydrate_component() {
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn mount_component(root_id: &str, bootstrap_json: &str) -> Result<(), wasm_bindgen::JsValue> {
+    use leptos::{context::Provider, prelude::*};
     use wasm_bindgen::JsCast;
     unmount_component();
     let bootstrap = serde_json::from_str::<ComponentRouteBootstrap>(bootstrap_json)
@@ -107,7 +111,13 @@ pub fn mount_component(root_id: &str, bootstrap_json: &str) -> Result<(), wasm_b
         lifecycle
             .borrow_mut()
             .mount(root_id, root, bootstrap, |current| {
-                interactive_content(&current)
+                let provided = current.clone();
+                view! {
+                    <Provider value=provided>
+                        {component_content(&current)}
+                    </Provider>
+                }
+                .into_any()
             })
     });
     Ok(())

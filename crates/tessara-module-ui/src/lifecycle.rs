@@ -28,6 +28,17 @@ impl LeptosLifecycleRoot {
         self.handle = Some(Box::new(leptos::mount::mount_to(outlet, view)));
     }
 
+    /// Hydrates a server-rendered module view without replacing its DOM.
+    pub fn hydrate<F, N>(&mut self, outlet: web_sys::HtmlElement, view: F)
+    where
+        F: FnOnce() -> N + 'static,
+        N: IntoView,
+        N::State: 'static,
+    {
+        self.unmount();
+        self.handle = Some(Box::new(leptos::mount::hydrate_from(outlet, view)));
+    }
+
     pub fn unmount(&mut self) {
         drop(self.handle.take());
     }

@@ -1,11 +1,9 @@
 //! Route-level page composition for the Components feature.
 
 mod editor;
-#[cfg(any(feature = "hydrate", test))]
 mod editor_config;
 
 use editor::*;
-#[cfg(any(feature = "hydrate", test))]
 use editor_config::*;
 
 #[cfg(feature = "hydrate")]
@@ -29,8 +27,9 @@ use tessara_web_data_ops::{
 use super::api;
 use super::types::{
     ComponentDefinition, ComponentSummary, ComponentValidationFinding, ComponentVersionSummary,
-    DatasetFieldDefinition, DatasetSummary,
+    DatasetFieldDefinition, DatasetSummary, datasets_from_bootstrap, remember_dataset_references,
 };
+use crate::{ComponentRouteBootstrap, bootstrap::component_route_bootstrap};
 use tessara_component_viewer_ui::{
     ComponentRenderPresentation, ComponentRenderResponse, ComponentVersionExecutionContent,
     ComponentVersionKind, ComponentVersionTarget, ComponentViewerMode,
@@ -38,13 +37,26 @@ use tessara_component_viewer_ui::{
 
 #[component]
 pub fn ComponentsIndexContent() -> impl IntoView {
-    let components = RwSignal::new(Vec::<ComponentSummary>::new());
-    let is_loading = RwSignal::new(true);
+    let (initial_components, initial_can_manage, bootstrapped) = match component_route_bootstrap() {
+        Some(ComponentRouteBootstrap::Directory {
+            components,
+            can_manage,
+        }) => (
+            components.into_iter().map(ComponentSummary::from).collect(),
+            can_manage,
+            true,
+        ),
+        _ => (Vec::new(), false, false),
+    };
+    let components = RwSignal::new(initial_components);
+    let is_loading = RwSignal::new(cfg!(feature = "hydrate") && !bootstrapped);
     let load_error = RwSignal::new(None::<String>);
-    let can_manage_components = RwSignal::new(false);
+    let can_manage_components = RwSignal::new(initial_can_manage);
 
     Effect::new(move |_| {
-        load_components(components, is_loading, load_error, can_manage_components);
+        if !bootstrapped {
+            load_components(components, is_loading, load_error, can_manage_components);
+        }
     });
 
     view! {
@@ -75,10 +87,19 @@ pub fn ComponentsIndexContent() -> impl IntoView {
 
 #[component]
 pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
-    let component = RwSignal::new(None::<ComponentDefinition>);
-    let is_loading = RwSignal::new(true);
+    let (initial_component, initial_can_manage, bootstrapped) = match component_route_bootstrap() {
+        Some(ComponentRouteBootstrap::Versions {
+            component,
+            manageable,
+        }) if component.slug == component_ref => {
+            (Some(ComponentDefinition::from(component)), manageable, true)
+        }
+        _ => (None, false, false),
+    };
+    let component = RwSignal::new(initial_component);
+    let is_loading = RwSignal::new(cfg!(feature = "hydrate") && !bootstrapped);
     let load_error = RwSignal::new(None::<String>);
-    let can_manage_component = RwSignal::new(false);
+    let can_manage_component = RwSignal::new(initial_can_manage);
     let lifecycle_confirmation = RwSignal::new(None::<LifecycleSelection>);
     let lifecycle_pending = RwSignal::new(false);
     let lifecycle_error = RwSignal::new(None::<String>);
@@ -87,13 +108,15 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
     Effect::new({
         let component_ref = component_ref.clone();
         move |_| {
-            load_component(
-                component_ref.clone(),
-                component,
-                is_loading,
-                load_error,
-                can_manage_component,
-            )
+            if !bootstrapped {
+                load_component(
+                    component_ref.clone(),
+                    component,
+                    is_loading,
+                    load_error,
+                    can_manage_component,
+                )
+            }
         }
     });
 
@@ -145,6 +168,30 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
 
 #[component]
 pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
+    let (initial_component, initial_datasets, initial_dataset_error, bootstrapped) =
+        match component_route_bootstrap() {
+            Some(ComponentRouteBootstrap::Create {
+                datasets,
+                dataset_error,
+            }) if component_ref.is_none() => (
+                None,
+                datasets_from_bootstrap(&datasets),
+                dataset_error,
+                true,
+            ),
+            Some(ComponentRouteBootstrap::Edit {
+                component,
+                datasets,
+                dataset_error,
+            }) if component_ref.as_deref() == Some(component.slug.as_str()) => (
+                Some(ComponentDefinition::from(component)),
+                datasets_from_bootstrap(&datasets),
+                dataset_error,
+                true,
+            ),
+            _ => (None, Vec::new(), None, false),
+        };
+    remember_dataset_references(&initial_datasets);
     let title = if component_ref.is_some() {
         "Edit Component"
     } else {
@@ -153,8 +200,8 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let message = RwSignal::new(None::<String>);
     let error = RwSignal::new(None::<String>);
     let validation_findings = RwSignal::new(Vec::<ComponentValidationFinding>::new());
-    let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
-    let dataset_error = RwSignal::new(None::<String>);
+    let datasets = RwSignal::new(initial_datasets);
+    let dataset_error = RwSignal::new(initial_dataset_error);
     let name = RwSignal::new(String::new());
     let slug = RwSignal::new(String::new());
     let slug_manually_edited = RwSignal::new(false);
@@ -213,6 +260,51 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let draft_preview_timeout = RwSignal::new(None::<i32>);
     on_cleanup(|| crate::set_lifecycle_dirty(false));
 
+    if let Some(component) = initial_component {
+        apply_component_for_edit(
+            component,
+            editing_component_id,
+            editing_version_id,
+            current_published_version_id,
+            name,
+            slug,
+            description,
+            dataset_id,
+            dataset_major,
+            component_type,
+            columns,
+            filters,
+            sort_field,
+            sort_direction,
+            page_size,
+            visual_summary_field,
+            visual_summary_type,
+            visual_category_field,
+            visual_category_labels,
+            visual_category_colors,
+            visual_legend_title,
+            visual_comparison_field,
+            visual_bar_orientation,
+            visual_bar_comparison_layout,
+            visual_x_axis_label,
+            visual_y_axis_label,
+            visual_x_field,
+            visual_line_smoothing,
+            visual_sort_field,
+            visual_sort_direction,
+            visual_limit,
+            visual_value_format,
+            visual_category_missing_policy,
+            visual_comparison_missing_policy,
+            visual_missing_policy,
+            stat_label,
+            stat_supporting_text,
+            stat_panel_style,
+            version_note,
+            slug_manually_edited,
+        );
+    }
+
     let selected_fields = Memo::new(move |_| {
         let selected_major = dataset_major.get().trim().parse::<i32>().ok();
         datasets
@@ -244,11 +336,15 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
             let _ = input.focus();
         }
     });
-    Effect::new(move |_| load_datasets(datasets, dataset_error));
+    Effect::new(move |_| {
+        if !bootstrapped {
+            load_datasets(datasets, dataset_error);
+        }
+    });
     Effect::new({
         let component_ref = component_ref.clone();
         move |_| {
-            if let Some(component_ref) = component_ref.clone() {
+            if !bootstrapped && let Some(component_ref) = component_ref.clone() {
                 load_component_for_edit(
                     component_ref,
                     editing_component_id,
@@ -1087,10 +1183,23 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
 
 #[component]
 pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
-    let component = RwSignal::new(None::<ComponentDefinition>);
-    let component_loading = RwSignal::new(true);
+    let (initial_component, initial_can_manage, bootstrapped) = match component_route_bootstrap() {
+        Some(ComponentRouteBootstrap::Detail {
+            component,
+            manageable,
+        })
+        | Some(ComponentRouteBootstrap::View {
+            component,
+            manageable,
+        }) if component.slug == component_ref => {
+            (Some(ComponentDefinition::from(component)), manageable, true)
+        }
+        _ => (None, false, false),
+    };
+    let component = RwSignal::new(initial_component);
+    let component_loading = RwSignal::new(cfg!(feature = "hydrate") && !bootstrapped);
     let component_error = RwSignal::new(None::<String>);
-    let can_manage_component = RwSignal::new(false);
+    let can_manage_component = RwSignal::new(initial_can_manage);
     let component_ref_for_title = component_ref.clone();
     let component_ref_for_actions = component_ref.clone();
     let component_ref_for_execution = component_ref.clone();
@@ -1098,13 +1207,15 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     Effect::new({
         let component_ref = component_ref.clone();
         move |_| {
-            load_component(
-                component_ref.clone(),
-                component,
-                component_loading,
-                component_error,
-                can_manage_component,
-            )
+            if !bootstrapped {
+                load_component(
+                    component_ref.clone(),
+                    component,
+                    component_loading,
+                    component_error,
+                    can_manage_component,
+                )
+            }
         }
     });
 
@@ -2444,65 +2555,149 @@ fn load_component_for_edit(
     leptos::task::spawn_local(async move {
         error.set(None);
         match api::fetch_admin_component(&component_ref).await {
-            Ok(Some(component)) => {
-                editing_component_id.set(Some(component.id.clone()));
-                current_published_version_id.set(
-                    component
-                        .versions
-                        .iter()
-                        .find(|version| version.status == "published")
-                        .map(|version| version.id.clone()),
-                );
-                name.set(component.name.clone());
-                slug.set(component.slug.clone());
-                slug_manually_edited.set(true);
-                description.set(component.description.clone().unwrap_or_default());
-                if let Some(version) = editable_component_version(&component) {
-                    editing_version_id.set((version.status == "draft").then(|| version.id.clone()));
-                    version_note.set(version.version_note.clone());
-                    dataset_id.set(version.dataset_id);
-                    dataset_major.set(version.dataset_version_major.to_string());
-                    component_type.set(version.component_type.clone());
-                    let (loaded_sort_field, loaded_sort_direction) =
-                        table_sort_from_config(&version.config);
-                    sort_field.set(loaded_sort_field);
-                    sort_direction.set(loaded_sort_direction);
-                    page_size.set(table_page_size_from_config(&version.config));
-                    columns.set(table_projection_fields_from_config_keys(&version.config));
-                    filters.set(table_filter_drafts_from_config(&version.config));
-                    load_visual_config_signals(
-                        &version.component_type,
-                        &version.config,
-                        visual_summary_field,
-                        visual_summary_type,
-                        visual_category_field,
-                        visual_category_labels,
-                        visual_category_colors,
-                        visual_legend_title,
-                        visual_comparison_field,
-                        visual_bar_orientation,
-                        visual_bar_comparison_layout,
-                        visual_x_axis_label,
-                        visual_y_axis_label,
-                        visual_x_field,
-                        visual_line_smoothing,
-                        visual_sort_field,
-                        visual_sort_direction,
-                        visual_limit,
-                        visual_value_format,
-                        visual_category_missing_policy,
-                        visual_comparison_missing_policy,
-                        visual_missing_policy,
-                        stat_label,
-                        stat_supporting_text,
-                        stat_panel_style,
-                    );
-                }
-            }
+            Ok(Some(component)) => apply_component_for_edit(
+                component,
+                editing_component_id,
+                editing_version_id,
+                current_published_version_id,
+                name,
+                slug,
+                description,
+                dataset_id,
+                dataset_major,
+                component_type,
+                columns,
+                filters,
+                sort_field,
+                sort_direction,
+                page_size,
+                visual_summary_field,
+                visual_summary_type,
+                visual_category_field,
+                visual_category_labels,
+                visual_category_colors,
+                visual_legend_title,
+                visual_comparison_field,
+                visual_bar_orientation,
+                visual_bar_comparison_layout,
+                visual_x_axis_label,
+                visual_y_axis_label,
+                visual_x_field,
+                visual_line_smoothing,
+                visual_sort_field,
+                visual_sort_direction,
+                visual_limit,
+                visual_value_format,
+                visual_category_missing_policy,
+                visual_comparison_missing_policy,
+                visual_missing_policy,
+                stat_label,
+                stat_supporting_text,
+                stat_panel_style,
+                version_note,
+                slug_manually_edited,
+            ),
             Ok(None) => error.set(Some("Component could not be loaded.".into())),
             Err(message) => error.set(Some(message)),
         }
     });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_component_for_edit(
+    component: ComponentDefinition,
+    editing_component_id: RwSignal<Option<String>>,
+    editing_version_id: RwSignal<Option<String>>,
+    current_published_version_id: RwSignal<Option<String>>,
+    name: RwSignal<String>,
+    slug: RwSignal<String>,
+    description: RwSignal<String>,
+    dataset_id: RwSignal<String>,
+    dataset_major: RwSignal<String>,
+    component_type: RwSignal<String>,
+    columns: RwSignal<Vec<DataOpsDatasetFieldDraft>>,
+    filters: RwSignal<Vec<DataOpsRowFilterDraft>>,
+    sort_field: RwSignal<String>,
+    sort_direction: RwSignal<String>,
+    page_size: RwSignal<String>,
+    visual_summary_field: RwSignal<String>,
+    visual_summary_type: RwSignal<String>,
+    visual_category_field: RwSignal<String>,
+    visual_category_labels: RwSignal<String>,
+    visual_category_colors: RwSignal<String>,
+    visual_legend_title: RwSignal<String>,
+    visual_comparison_field: RwSignal<String>,
+    visual_bar_orientation: RwSignal<String>,
+    visual_bar_comparison_layout: RwSignal<String>,
+    visual_x_axis_label: RwSignal<String>,
+    visual_y_axis_label: RwSignal<String>,
+    visual_x_field: RwSignal<String>,
+    visual_line_smoothing: RwSignal<bool>,
+    visual_sort_field: RwSignal<String>,
+    visual_sort_direction: RwSignal<String>,
+    visual_limit: RwSignal<String>,
+    visual_value_format: RwSignal<String>,
+    visual_category_missing_policy: RwSignal<String>,
+    visual_comparison_missing_policy: RwSignal<String>,
+    visual_missing_policy: RwSignal<String>,
+    stat_label: RwSignal<String>,
+    stat_supporting_text: RwSignal<String>,
+    stat_panel_style: RwSignal<String>,
+    version_note: RwSignal<String>,
+    slug_manually_edited: RwSignal<bool>,
+) {
+    editing_component_id.set(Some(component.id.clone()));
+    current_published_version_id.set(
+        component
+            .versions
+            .iter()
+            .find(|version| version.status == "published")
+            .map(|version| version.id.clone()),
+    );
+    name.set(component.name.clone());
+    slug.set(component.slug.clone());
+    slug_manually_edited.set(true);
+    description.set(component.description.clone().unwrap_or_default());
+    if let Some(version) = editable_component_version(&component) {
+        editing_version_id.set((version.status == "draft").then(|| version.id.clone()));
+        version_note.set(version.version_note.clone());
+        dataset_id.set(version.dataset_id);
+        dataset_major.set(version.dataset_version_major.to_string());
+        component_type.set(version.component_type.clone());
+        let (loaded_sort_field, loaded_sort_direction) = table_sort_from_config(&version.config);
+        sort_field.set(loaded_sort_field);
+        sort_direction.set(loaded_sort_direction);
+        page_size.set(table_page_size_from_config(&version.config));
+        columns.set(table_projection_fields_from_config_keys(&version.config));
+        filters.set(table_filter_drafts_from_config(&version.config));
+        load_visual_config_signals(
+            &version.component_type,
+            &version.config,
+            visual_summary_field,
+            visual_summary_type,
+            visual_category_field,
+            visual_category_labels,
+            visual_category_colors,
+            visual_legend_title,
+            visual_comparison_field,
+            visual_bar_orientation,
+            visual_bar_comparison_layout,
+            visual_x_axis_label,
+            visual_y_axis_label,
+            visual_x_field,
+            visual_line_smoothing,
+            visual_sort_field,
+            visual_sort_direction,
+            visual_limit,
+            visual_value_format,
+            visual_category_missing_policy,
+            visual_comparison_missing_policy,
+            visual_missing_policy,
+            stat_label,
+            stat_supporting_text,
+            stat_panel_style,
+        );
+    }
 }
 
 #[cfg(not(feature = "hydrate"))]

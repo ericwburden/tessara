@@ -1,3 +1,4 @@
+use leptos::context::use_context;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -6,8 +7,13 @@ pub struct ComponentDirectoryItem {
     pub component_id: String,
     pub name: String,
     pub slug: String,
+    pub description: Option<String>,
     pub component_type: String,
     pub publication_state: String,
+    pub current_version_id: Option<String>,
+    pub current_version_label: Option<String>,
+    pub draft_version_id: Option<String>,
+    pub draft_version_label: Option<String>,
     pub manageable: bool,
 }
 
@@ -22,7 +28,13 @@ pub struct ComponentVersionBootstrap {
     #[serde(default)]
     pub version_note: String,
     #[serde(default)]
+    pub dataset_reference: Value,
+    #[serde(default)]
     pub config: Value,
+}
+
+pub(crate) fn component_route_bootstrap() -> Option<ComponentRouteBootstrap> {
+    use_context::<ComponentRouteBootstrap>()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

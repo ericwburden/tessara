@@ -337,6 +337,15 @@ fn directory_projection(public: Value, manageable: Value) -> Vec<ComponentDirect
             })
             .or_else(|| value.get("current_version"))
             .unwrap_or(&Value::Null);
+        let draft = value
+            .get("versions")
+            .and_then(Value::as_array)
+            .and_then(|versions| {
+                versions.iter().find(|version| {
+                    version.get("publication_state").and_then(Value::as_str) == Some("draft")
+                })
+            })
+            .unwrap_or(&Value::Null);
         let component_id = json_text(value, "component_id");
         by_id.insert(
             component_id.clone(),
@@ -344,8 +353,16 @@ fn directory_projection(public: Value, manageable: Value) -> Vec<ComponentDirect
                 component_id,
                 name: json_text(value, "name"),
                 slug: json_text(value, "slug"),
+                description: value
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 component_type: json_text(current, "component_type"),
                 publication_state: json_text(current, "publication_state"),
+                current_version_id: optional_json_text(current, "component_version_id"),
+                current_version_label: optional_json_text(current, "version_label"),
+                draft_version_id: optional_json_text(draft, "component_version_id"),
+                draft_version_label: optional_json_text(draft, "version_label"),
                 manageable: can_manage,
             },
         );
@@ -361,6 +378,14 @@ fn json_text(value: &Value, key: &str) -> String {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string()
+}
+
+fn optional_json_text(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn destination(value: &ComponentRouteBootstrap) -> &'static str {
