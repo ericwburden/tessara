@@ -23,11 +23,11 @@ pub const COMPONENT_CSS_SHA256: &str =
 pub const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
     "17eac83dcf01b4d39808474e7f58b5d4188d784f077d61f9d0a09021cb612724";
 pub const COMPONENT_JS_SHA256: &str =
-    "726a1028b08dd30487e10c7e7cbc836ed15fc38f919c006535ab3cada4fbb4b1";
+    "d54c060e7f0413548e94cf199e982512813a45570206b5c3b97959e2c26f6cce";
 pub const COMPONENT_BINDINGS_JS_SHA256: &str =
-    "cb0bd057acdafc02eeb8c8318bbe0f3196c2629fab8a9ebacca2bb3c746c817a";
+    "c33a8cf1d62732d506d8cf6f0e903e437d66f59ce480b8d9c3a1f031448c7dc3";
 pub const COMPONENT_WASM_SHA256: &str =
-    "8f3bdee27a9ceaa28ff17a43f71630a39288ca7726ef23071becd68771f6a30e";
+    "1e3b8d179069bde99ffd3ace848be6b8bc7780c542e822e05cba4ecd4e3c462a";
 
 pub fn component_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.components/{release}/sha256:{digest}/{name}")
