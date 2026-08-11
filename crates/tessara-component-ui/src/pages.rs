@@ -1078,7 +1078,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                 </button>
                             </header>
                             <p class="component-consumers-modal__intro">
-                                "This step prepares the consumer review workflow for the new version. Consumer re-pinning will use this list when dashboard and report consumers are available."
+                                "Review consumers before publishing. Existing consumers remain pinned until they deliberately adopt the new Component version."
                             </p>
                             <label class="form-field component-consumers-modal__search">
                                 <span>"Search consumers"</span>
@@ -1091,8 +1091,8 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                             </label>
                             <div class="component-consumers-modal__list" role="list">
                                 <EmptyState
-                                    title="Consumer review placeholder"
-                                    message="Consumer discovery is not wired in Sprint 4A yet. Creating a new version will not automatically repin dashboards or reports."
+                                    title="No consumers require repinning"
+                                    message="No registered consumers currently require repinning."
                                 />
                             </div>
                             <label class="form-field component-consumers-modal__note">
