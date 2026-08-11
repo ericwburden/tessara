@@ -320,6 +320,14 @@
   max-width: none;
 }
 
+.module-scope--tessara-components .component-editor-form > .component-dataset-picker__field-preview,
+.module-scope--tessara-components .component-editor-form > .component-editor__workbench,
+.module-scope--tessara-components .component-editor-form > .component-editor__projection-panel,
+.module-scope--tessara-components .component-editor-form > .component-editor__version-panel,
+.module-scope--tessara-components .component-editor-form > .form-actions {
+  grid-column: 1 / -1;
+}
+
 .module-scope--tessara-components .component-editor__workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.72fr);
@@ -335,6 +343,13 @@
   display: grid;
   gap: 1rem;
   min-width: 0;
+}
+
+.module-scope--tessara-components .component-editor__workbench > *,
+.module-scope--tessara-components .component-editor__config-stack > *,
+.module-scope--tessara-components .component-editor__preview-stack > * {
+  max-inline-size: 100%;
+  min-inline-size: 0;
 }
 
 .module-scope--tessara-components .component-editor__fields,

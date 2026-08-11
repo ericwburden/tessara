@@ -414,6 +414,10 @@ async function expectViewportContainment(
 }
 
 async function selectDatasetMajorLine(page: Page, dataset: DatasetOption) {
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
   const major = datasetMajor(dataset.reference);
   const picker = page.getByRole("combobox", { name: "Dataset Version" });
   await expect(picker).toBeVisible();
