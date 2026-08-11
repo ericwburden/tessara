@@ -18,7 +18,7 @@ use super::{
 use super::{
     component_kind_filter_options, component_matches_filters, component_status_filter_options,
 };
-use super::{lifecycle_action_label, lifecycle_actions};
+use super::{lifecycle_action_label, lifecycle_actions, lifecycle_confirmation_title};
 use crate::types::{
     ComponentSummary, DatasetFieldDefinition, DatasetProvenanceItem, DatasetProvenanceSummary,
     DatasetRevisionFieldSummary,
@@ -62,6 +62,18 @@ fn component_version_lifecycle_menu_matches_the_provider_state_machine() {
     assert!(lifecycle_actions("draft").is_empty());
     assert_eq!(lifecycle_action_label("deactivate"), "Deactivate");
     assert_eq!(lifecycle_action_label("tombstone"), "Tombstone");
+}
+
+#[test]
+fn lifecycle_confirmation_uses_the_selected_action_as_its_accessible_title() {
+    assert_eq!(
+        lifecycle_confirmation_title("archive"),
+        "Archive Component version?"
+    );
+    assert_eq!(
+        lifecycle_confirmation_title("tombstone"),
+        "Tombstone Component version?"
+    );
 }
 
 #[test]

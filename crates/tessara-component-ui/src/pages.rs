@@ -570,10 +570,12 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     <span>"Name"</span>
                     <input
                         prop:value=move || name.get()
-                        on:input=move |event| name.set(event_target_value(&event))
-                        on:change=move |event| commit_component_name(name, slug, slug_manually_edited, event_target_value(&event))
-                        on:blur=move |event| commit_component_name(name, slug, slug_manually_edited, event_target_value(&event))
-                        on:focusout=move |event| commit_component_name(name, slug, slug_manually_edited, event_target_value(&event))
+                        on:input=move |event| commit_component_name(
+                            name,
+                            slug,
+                            slug_manually_edited,
+                            event_target_value(&event),
+                        )
                     />
                 </label>
                 <label class="form-field">
@@ -1729,20 +1731,25 @@ fn LifecycleConfirmationDialog(
 ) -> impl IntoView {
     let component_ref_for_submit = StoredValue::new(component_ref);
     view! {
-        <ModalDialog
-            id="component-lifecycle-confirmation"
-            title="Confirm lifecycle change"
-            description="This changes provider-owned Component lifecycle state."
-            open=Signal::derive(move || lifecycle_confirmation.get().is_some())
-            on_close=Callback::new(move |_| {
-                if !lifecycle_pending.get() {
-                    lifecycle_confirmation.set(None);
-                    lifecycle_error.set(None);
-                }
-            })
-            close_label="Cancel lifecycle change"
-        >
-            {move || lifecycle_confirmation.get().map(|selection| {
+        {move || lifecycle_confirmation.get().map(|selection| {
+            let title = lifecycle_confirmation_title(&selection.action);
+            let selection_for_content = StoredValue::new(selection);
+            view! {
+                <ModalDialog
+                    id="component-lifecycle-confirmation"
+                    title=title
+                    description="This changes provider-owned Component lifecycle state."
+                    open=Signal::derive(|| true)
+                    on_close=Callback::new(move |_| {
+                        if !lifecycle_pending.get() {
+                            lifecycle_confirmation.set(None);
+                            lifecycle_error.set(None);
+                        }
+                    })
+                    close_label="Cancel lifecycle change"
+                >
+                {move || {
+                let selection = selection_for_content.get_value();
                 let irreversible = matches!(selection.action.as_str(), "archive" | "tombstone");
                 let submit_selection = selection.clone();
                 let button_class = if selection.action == "tombstone" {
@@ -1803,9 +1810,15 @@ fn LifecycleConfirmationDialog(
                         </div>
                     </div>
                 }
-            })}
-        </ModalDialog>
+                }}
+                </ModalDialog>
+            }
+        })}
     }
+}
+
+fn lifecycle_confirmation_title(action: &str) -> String {
+    format!("{} Component version?", lifecycle_action_label(action))
 }
 
 #[component]

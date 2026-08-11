@@ -7,9 +7,9 @@ import init, {
   resume_component,
   suspend_component,
   unmount_component,
-} from "/_tessara/modules/tessara.components/1.0.1/sha256:241997874c335786a6b9855d8e49466fdd0b766d1c060e92903662e0c9b221fd/component-bindings.js";
+} from "/_tessara/modules/tessara.components/1.0.1/sha256:8647b25ef0ac193922ceed4446a43ea18d8bb61e77298e10c05a4d370166b633/component-bindings.js";
 
-await init("/_tessara/modules/tessara.components/1.0.1/sha256:9e76fa71b9775e225220c6b98460f38b3d8a312d91bc64f8217ae229aa061b58/component.wasm");
+await init("/_tessara/modules/tessara.components/1.0.1/sha256:c9eaec22d541850aca63ee0b639981a87d7d3dfe6757a1802e5b552022185a35/component.wasm");
 
 if (document.getElementById("module-content")) {
   hydrate_component();
