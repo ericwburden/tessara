@@ -798,11 +798,12 @@ pub(super) fn CategoryDisplayControls(
         let selected_dataset_major = dataset_major.get();
         let selected_category_field = category_field.get();
         let selected_comparison_field = comparison_field.get();
-        let selected_display_field = if kind == "bar" {
-            selected_comparison_field
-        } else {
-            selected_category_field
-        };
+        let selected_display_field =
+            if kind == "bar" && !selected_comparison_field.trim().is_empty() {
+                selected_comparison_field
+            } else {
+                selected_category_field
+            };
         active_dataset_major.set(selected_dataset_major.clone());
         active_display_field.set(selected_display_field.clone());
         if !matches!(kind.as_str(), "bar" | "pie" | "donut")
@@ -843,6 +844,7 @@ pub(super) fn CategoryDisplayControls(
                 component_type
                 fields
                 display_field=active_display_field
+                comparison_field
                 category_values
                 category_labels
                 category_colors
@@ -857,6 +859,7 @@ fn CategoryLabelsControl(
     component_type: RwSignal<String>,
     fields: Signal<Vec<DatasetFieldDefinition>>,
     display_field: RwSignal<String>,
+    comparison_field: RwSignal<String>,
     category_values: RwSignal<Vec<String>>,
     category_labels: RwSignal<String>,
     category_colors: RwSignal<String>,
@@ -864,7 +867,7 @@ fn CategoryLabelsControl(
 ) -> impl IntoView {
     view! {
         <div class="form-field form-field--wide component-category-labels">
-            {move || if component_type.get() == "bar" {
+            {move || if component_type.get() == "bar" && !comparison_field.get().trim().is_empty() {
                 view! { <FieldHelpLabel label="Series Labels" help="Set optional display labels and colors for each Series Field value."/> }.into_any()
             } else {
                 view! { <FieldHelpLabel label="Category Labels" help="Set optional display labels and colors for each Category Field value."/> }.into_any()
@@ -875,7 +878,10 @@ fn CategoryLabelsControl(
                 } else {
                     let values = category_values.get();
                     if values.is_empty() {
-                        let message = if component_type.get() == "bar" && display_field.get().trim().is_empty() {
+                        let message = if component_type.get() == "bar"
+                            && !comparison_field.get().trim().is_empty()
+                            && display_field.get().trim().is_empty()
+                        {
                             "Select a Comparison Field to customize comparison labels and colors."
                         } else {
                             "Select a Category Field to load its values."
@@ -884,7 +890,9 @@ fn CategoryLabelsControl(
                     } else {
                         let selected_field_label = field_label_for_key(&fields.get(), &display_field.get())
                             .unwrap_or_else(|| "Category".into());
-                        let table_label = if component_type.get() == "bar" {
+                        let table_label = if component_type.get() == "bar"
+                            && !comparison_field.get().trim().is_empty()
+                        {
                             "Series Labels"
                         } else {
                             "Category Labels"

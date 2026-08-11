@@ -1014,12 +1014,22 @@
 }
 
 @media (max-width: 48rem) {
-  .module-scope--tessara-components .component-directory__desktop-filters,
-  .module-scope--tessara-components .components-list-responsive-table {
+  .module-scope--tessara-components .components-list-responsive-table .searchable-data-table {
+    display: contents;
+  }
+
+  .module-scope--tessara-components .components-list-responsive-table .searchable-data-table > .table-wrap {
     display: none;
   }
 
-  .module-scope--tessara-components .component-directory__mobile-filter {
+  .module-scope--tessara-components .components-list__toolbar {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-bottom: 0.75rem;
+  }
+
+  .module-scope--tessara-components .components-list__mobile-filter-button {
     display: inline-flex;
   }
 
