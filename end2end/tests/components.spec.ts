@@ -824,10 +824,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     ).toBeVisible();
     await expect(versionsTable).toContainText("Published");
     await expect(versionsTable).toContainText("Updated draft");
-    const actions = versionsTable.getByText(
-      `Open actions for ${current.versions[0].version_label}`,
-      { exact: true },
-    );
+    const actions = versionsTable.getByRole("button", {
+      name: `Open actions for ${current.versions[0].version_label}`,
+      exact: true,
+    });
     await expect(actions).toBeVisible();
     await actions.click();
     await versionsTable
@@ -894,6 +894,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     const fieldKey = field.key;
 
     await page.goto("/components/new");
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     const unsavedName = `Playwright structured editor ${RUN_ID}`;
     await page
       .getByRole("textbox", { name: "Name", exact: true })
