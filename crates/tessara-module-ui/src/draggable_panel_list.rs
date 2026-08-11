@@ -72,12 +72,12 @@ pub fn DraggablePanelList(
                 data_transfer_type,
             )}
             <div class=list_class>
-                <For
-                    each=move || {
-                        items.get().into_iter().enumerate().collect::<Vec<_>>()
-                    }
-                    key=|(_, item)| item.id.clone()
-                    children=move |(index, item)| {
+                {move || {
+                    items
+                    .get()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, item)| {
                         let item_id = item.id;
                         let list_id_for_item = list_id.clone();
                         let list_id_for_insert = list_id.clone();
@@ -108,8 +108,9 @@ pub fn DraggablePanelList(
                                 data_transfer_type,
                             )}
                         }
-                    }
-                />
+                    })
+                    .collect_view()
+                }}
             </div>
         </div>
     }
