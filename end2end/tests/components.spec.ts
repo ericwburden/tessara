@@ -297,13 +297,18 @@ function attachConsoleGuard(page: Page) {
       `Component routes must not emit browser console or hydration errors:\n${errors.join("\n")}`,
     ).toEqual([]);
   };
-  assertNoConsoleErrors.consumeExpected = (expected: string) => {
-    const index = errors.indexOf(expected);
+  assertNoConsoleErrors.consumeExpected = (
+    expected: string,
+    expectedCount = 1,
+  ) => {
+    const observedCount = errors.filter((error) => error === expected).length;
     expect(
-      index,
-      `Expected browser console error was not observed: ${expected}`,
-    ).not.toBe(-1);
-    errors.splice(index, 1);
+      observedCount,
+      `Expected ${expectedCount} browser console error occurrence(s): ${expected}`,
+    ).toBe(expectedCount);
+    for (let index = errors.length - 1; index >= 0; index -= 1) {
+      if (errors[index] === expected) errors.splice(index, 1);
+    }
   };
   return assertNoConsoleErrors;
 }
@@ -464,7 +469,8 @@ async function selectComponentKind(page: Page, label: string) {
   });
   await expect
     .poll(
-      async () => (await option.isChecked()) || (await confirmation.isVisible()),
+      async () =>
+        (await option.isChecked()) || (await confirmation.isVisible()),
       { message: `Wait for the ${label} kind change or its confirmation` },
     )
     .toBe(true);
@@ -1108,6 +1114,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await expect(page).toHaveURL(/\/components\/new$/);
     assertNoConsoleErrors.consumeExpected(
       "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      2,
     );
     await calculation.selectOption("count");
     await expect(page.locator(".component-editor-preview__badge")).toHaveText(
