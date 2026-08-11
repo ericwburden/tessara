@@ -1139,7 +1139,15 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: unsavedName }),
     ).toBeVisible();
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     await expect(
       page.getByRole("heading", { level: 1, name: "Edit Component" }),
     ).toBeVisible();
@@ -1252,6 +1260,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       expect(rendered.materialization_state).toBe("ready");
 
       await page.goto(`/components/${definition.slug}/view`);
+      await expect(page.locator("#module-content")).toHaveAttribute(
+        "data-hydration",
+        "ready",
+      );
       await expect(
         page.getByRole("heading", { level: 1, name: definition.name }),
       ).toBeVisible();
@@ -1341,6 +1353,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     });
 
     await page.goto(`/components/${roundTrip.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     const noOpEditor = page.locator('[data-component-config-section="visual"]');
     await expect(
       noOpEditor.getByLabel("Sort Field", { exact: true }),
