@@ -30,6 +30,14 @@ use tessara_web_data_ops::{
     DatasetFieldDraft as DataOpsDatasetFieldDraft, DatasetRowFilterDraft as DataOpsRowFilterDraft,
 };
 
+#[test]
+fn versions_route_preserves_the_pre_extraction_heading() {
+    assert_eq!(
+        super::component_versions_title("Delivery health"),
+        "Delivery health versions"
+    );
+}
+
 fn dataset(major_versions: Vec<i32>, current_version_major: Option<i32>) -> DatasetSummary {
     DatasetSummary {
         reference: serde_json::Value::Null,

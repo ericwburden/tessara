@@ -129,13 +129,14 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
                 } else if let Some(component) = component.get() {
                     let edit_href = format!("/components/{}/edit", component.slug);
                     let view_href = format!("/components/{}", component.slug);
+                    let versions_title = component_versions_title(&component.name);
                     view! {
                         <ComponentNestedBreadcrumb
                             component_href=view_href.clone()
                             component_label=component.name.clone()
                             current="Versions"
                         />
-                        <PageHeader title=component.name.clone()>
+                        <PageHeader title=versions_title>
                             {can_manage_component.get().then(|| view! {
                                 <a class="button button--secondary" href=edit_href>"Edit"</a>
                             })}
@@ -163,6 +164,10 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
             />
         </section>
     }
+}
+
+fn component_versions_title(component_name: &str) -> String {
+    format!("{component_name} versions")
 }
 
 #[component]

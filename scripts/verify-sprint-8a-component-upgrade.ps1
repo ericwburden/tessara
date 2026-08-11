@@ -21,7 +21,7 @@ $composePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ComposeFile))
 $expectedProject = "tessara-sprint-8a"
 $componentDefinition = "tessara.components"
 $baselineRelease = "0.9.0"
-$candidateRelease = "1.0.0"
+$candidateRelease = "1.0.1"
 
 function Resolve-RepositoryPath([string]$Path) {
     if ([IO.Path]::IsPathRooted($Path)) { return [IO.Path]::GetFullPath($Path) }
@@ -62,6 +62,10 @@ function Get-RunningContainerId([string]$Service) {
 
 if ($SelfTest) {
     Test-Sprint8AHealthContract | Out-Null
+    $selfTestManifest = Get-Content -LiteralPath (Join-Path $repoRoot "crates/tessara-component-module/manifest.json") -Raw | ConvertFrom-Json
+    if ([string]$selfTestManifest.release_version -cne $candidateRelease) {
+        throw "Component upgrade verifier candidate release $candidateRelease differs from the current Component Manifest."
+    }
     $mock = [pscustomobject]@{
         materialization_plan = [pscustomobject]@{
             actions = @(
@@ -152,7 +156,7 @@ if ($LASTEXITCODE -ne 0 -or [string]$baselineExecutableOutput[0] -cnotmatch '^(?
 $candidateManifest = Get-Content -LiteralPath $candidateManifestFullPath -Raw | ConvertFrom-Json
 if ([string]$candidateManifest.definition_id -cne $componentDefinition -or
     [string]$candidateManifest.release_version -cne $candidateRelease) {
-    throw "Candidate Component Manifest does not identify the intended 1.0.0 release."
+    throw "Candidate Component Manifest does not identify the intended $candidateRelease release."
 }
 $candidateManifestDigestOutput = @(& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $candidateManifestFullPath)
 if ($LASTEXITCODE -ne 0) { throw "Could not compute the candidate Component Manifest digest." }

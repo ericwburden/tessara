@@ -2367,7 +2367,7 @@ test.describe.serial("Sprint 8A Module Management", () => {
       expect(diagnostics).toMatchObject({
         schema_version: 1,
         module: COMPONENTS_DEFINITION,
-        release: "1.0.0",
+        release: "1.0.1",
         manifest_schema: 3,
         contracts: {
           components: "3.0.0",

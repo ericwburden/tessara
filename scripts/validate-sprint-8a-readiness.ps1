@@ -501,11 +501,35 @@ function Test-Sprint8AR33CorrectionAuthorizationQualification {
         ($expectedCorrectionSource | ConvertTo-Json -Depth 30 -Compress)) {
         throw "R33 evidence-correction self-test is not bound to the source that consumed the bridge."
     }
-    $rejectedAttempt = if ($null -eq $r33Link.consumed_by_readiness) { 45 } else { 46 }
+    $rejectedAttempt = 45
+    $reservationState = $state
+    if ($null -ne $r33Link.consumed_by_readiness) {
+        # Later correction links can legitimately authorize newer Readiness
+        # attempts. Isolate the authenticated R33 lineage prefix so this
+        # historical regression proves that R33 itself cannot authorize any
+        # successor after its one permitted Readiness 44 consumption.
+        $reservationState = $state | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+        $reservationState.correction_lineage.links = @(
+            $reservationState.correction_lineage.links |
+                Where-Object { [int]$_.ordinal -le [int]$r33Link.ordinal }
+        )
+        $reservationState.readiness = [pscustomobject][ordered]@{
+            attempt = [int]$r33Link.consumed_by_readiness.attempt
+            state = [string]$r33Link.consumed_by_readiness.receipt.state
+            receipt = [string]$r33Link.consumed_by_readiness.receipt.path
+            sha256 = [string]$r33Link.consumed_by_readiness.receipt.sha256
+        }
+        $reservationState.rehearsal = [pscustomobject][ordered]@{
+            attempt = [int]$r33Link.predecessor.attempt
+            state = "failed"
+            receipt = [string]$r33Link.predecessor.receipt.path
+            sha256 = [string]$r33Link.predecessor.receipt.sha256
+        }
+    }
     $wrongAttemptRejected = $false
     try {
         [void](Get-Sprint8AReadinessAttemptReservation `
-            -StateDocument $state `
+            -StateDocument $reservationState `
             -AttemptNumber $rejectedAttempt `
             -RepositoryRoot $repoRoot `
             -EvidenceRoot $evidenceRootPath)

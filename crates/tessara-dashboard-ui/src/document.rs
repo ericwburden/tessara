@@ -25,11 +25,11 @@ pub const DASHBOARD_CSS_SHA256: &str =
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "838136485a2d0a547d95e520076a039189c2d3fb24d9f15d23a977f98ca0cef3";
 pub const DASHBOARD_JS_SHA256: &str =
-    "3c0f0390e32b62235865a98ed696dfb20e1c3f347cec9d3ec9d735122be30b3f";
+    "24fc0176b75fe04151e3d4d2a0dc712cc0e2c3f330d7bc269b95e451acfdb0d5";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "2c32514efd6b7d68c6d9de2bb47574b86499a215d0dce8a0c9eb07980d9cd82f";
+    "b730edeb6243a78dbd41bf02c3ff95263240804eb02699cebacc613039a37b34";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "cb17d6d3b92b7154cafef893daa7cc5b8824f84d1170cb73ea83629baa96ff98";
+    "7ffa0035a974311c6cf8d3d30ac915b6e5fff312a5d7378f2f25c6c0b8dcce0c";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")

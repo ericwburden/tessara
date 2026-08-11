@@ -2252,6 +2252,8 @@ Runtime chronology:
 | 2026-08-10 | UAT 9 / canonical result publication | Eight manual receipts, all three retained restoration receipts, and final aggregate chronology passed; canonical lifecycle publication then stopped | same frozen candidate/environment; chronology source `97b987af...` | concentrated `harness` validation-platform incident | The canonical UAT result paired the frozen candidate fingerprint with the newer UAT validation-harness source, so lifecycle publication correctly rejected the mismatched pair. The correction publishes against the frozen candidate source and records the newer validation source plus its authenticated UAT-only advance in result details. | UAT result publication only; all UAT checks, product source, and upstream gates remain valid | Pass the focused UAT/lifecycle/acceptance/link checks; commit cleanly; retry UAT publication/finalization only |
 | 2026-08-10 | UAT 9 / result-reference recording | The canonical result content and its commit artifact were prepared; recording their references on the mutable attempt then stopped | same frozen candidate/environment; canonical-publication source `b10a1656...` | concentrated `evidence-finalization` validation-platform incident | Strict mode rejected direct assignment of the two new attempt properties after the state had advanced to `passed/result-committed`, leaving an exact partial commit with no canonical result published. The correction adds both fields explicitly and extends the append-only recovery path to archive only this exact partial shape, reuse the authenticated UAT checks, and rebuild publication. | UAT result publication only; all UAT checks, product source, and upstream gates remain valid | Pass the focused partial-commit/UAT/lifecycle/acceptance/link checks; commit cleanly; retry UAT finalization/publication only |
 | 2026-08-11 | Readiness 52 / complete fail-late harvest | 12 checks passed, 2 failed, and 1 was dependency-blocked | corrected UI SDK source `d95e32e6` / `b5ea99f2`; environment identity not issued | `environment` and `harness` | The launch omitted the same-process `TEST_API_DATABASE_URL`, blocking final environment identity. Independent Playwright discovery also found the newly added lifecycle-title regression as test 84 while the durable manifest and Preflight traceability contract still declared 83. Raw evidence, harvest `a85b5592...`, consolidated two-defect batch `77ab46c7...`, and one-use successor authorization `2b6aa315...` are retained. | Readiness and all downstream phases | Add the exact test identity and 84-count to every canonical acceptance consumer, export six fresh database URLs in the successor process, pass both focused reproducers, commit cleanly, then consume the authorization in complete Readiness 53. |
+| 2026-08-11 | Readiness 53 / complete gate | All 15 checks passed | `4436fb71` / `d1753210`; environment `878fa8fc...` | N/A — passed, superseded by the Rehearsal 41 correction | The complete readiness gate authenticated the clean source, six isolated databases, environment contract, exact 84-test inventory, implementation evidence, and validation-runner self-tests. | Rehearsal 41 only; the receipt remains valid history but cannot authorize the corrected source. | Correct the complete R41 batch, commit cleanly, then run a successor complete Readiness and Rehearsal against one new source/environment identity. |
+| 2026-08-11 | Rehearsal 41 / complete conservative fail-late harvest | 28 lanes passed, 3 failed, 1 was dependency-blocked, and 0 were deferred; cleanup, restoration, and final health passed | `4436fb71` / `d1753210`; environment `878fa8fc...` | `product` as recorded; diagnosed as product, harness, and acceptance-regression roots | Workspace tests exposed the Component SSR renderer's missing native all-features executor initialization. Playwright exposed one external-font 404 root shared by two scenarios, a collapsed Dashboard visibility accessible name, the lost pre-extraction Components versions heading, and one stale `1.0.0` diagnostic assertion. Upgrade/rollback exposed the same stale `1.0.0` candidate expectation in its verifier. Harvest `bcb62626...`, consolidated batch `563e17fc...`, and correction authorization `7e23a4d7...` are retained; UAT diagnostics were blocked by the failed upgrade and Playwright prerequisites. | R41 and every downstream phase | Correct the batch together, regenerate source-exact Component and Dashboard browser assets/digests, pass focused reproducers for every failed lane, then run complete successor Readiness and Rehearsal. |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
@@ -2572,8 +2574,9 @@ ownership. Focused visual parity must additionally prove direct-load versus
 lifecycle navigation title, active navigation, computed tokens, background,
 typography, controls, tables/dialogs, responsive behavior, accessibility,
 hydration, and clean console output. Formal Readiness, Candidate Rehearsal,
-Preflight, SIT, and UAT have not run for this corrected identity and remain
-required before closeout.
+Preflight, SIT, and UAT remain required before closeout. Readiness 53 passed for
+the first corrected identity, but complete Rehearsal 41 invalidated it with the
+consolidated correction batch recorded in the runtime history above.
 
 The first focused browser parity run also exposed that Core's signed module
 shell contexts still forced `dark` even when Core itself resolved the user's
@@ -2594,3 +2597,24 @@ The focused browser reproducer exercises in-app Dashboard and Components
 navigation at 1594 px and asserts the exact displayed labels. The same review
 removed the redundant Components directory eyebrow while retaining the page
 title and accepted descriptive copy.
+
+Rehearsal 41 then closed five gaps in the implementation-to-validation map:
+
+- AC-07 and the SDK architecture contract require typed SSR to work under the
+  workspace's all-features test profile, so Component document rendering now
+  initializes the same native test executor as Dashboard;
+- AC-15 and UI SDK conformance require repository-owned presentation with a
+  clean browser console, so Core no longer loads its heading font from an
+  unauthenticated external network dependency;
+- UAT-8A-01 and the accepted pre-extraction baseline require the Component
+  versions route to retain the exact `<Component name> versions` heading and
+  the Dashboard visibility disclosure to expose the spaced accessible name
+  `Visibility <count> Node(s)`; and
+- the immutable Components `1.0.1` identity is now asserted consistently by
+  Module Management acceptance and the `0.9.0` upgrade/rollback verifier. The
+  verifier self-test authenticates that expectation directly against the
+  current Component Manifest so another stale candidate literal fails before
+  formal rehearsal; and
+- the Readiness lineage self-test isolates its authenticated historical R33
+  prefix before testing one-use consumption. Later valid correction links can
+  no longer make that historical negative test inspect the wrong active tip.

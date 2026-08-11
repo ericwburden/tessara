@@ -23,11 +23,11 @@ pub const COMPONENT_CSS_SHA256: &str =
 pub const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
     "17eac83dcf01b4d39808474e7f58b5d4188d784f077d61f9d0a09021cb612724";
 pub const COMPONENT_JS_SHA256: &str =
-    "303249862f1c4c63f4d1ecd93f51b66555626e8a1d0e7d8c13d14e7c7f45fc76";
+    "bc5237617aec365549741171d86da5557cbde4936e862ccf438cf763e646d221";
 pub const COMPONENT_BINDINGS_JS_SHA256: &str =
     "078447da476b377cdf26d4f7351723377e5a041e3206cb39c62af0e77203c033";
 pub const COMPONENT_WASM_SHA256: &str =
-    "bf254d8707e7ae2226a7ae41fcf46873035c00f3f67c20a5d9212f11962b7b6d";
+    "29b8b29a4ac6ddb4366aa18ce889a8bd50b18c14f7a6002d1147a77e1d670d15";
 
 pub fn component_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.components/{release}/sha256:{digest}/{name}")
@@ -40,6 +40,13 @@ pub fn render_component_document(
     bootstrap: &ComponentRouteBootstrap,
     release: &str,
 ) -> String {
+    // Workspace-wide `--all-features` builds intentionally unify `ssr` and
+    // `hydrate`. Browser-only components can therefore construct Effects while
+    // this native renderer is exercised in tests; give those Effects a local
+    // executor without changing the normal SSR-only production feature set.
+    #[cfg(all(feature = "hydrate", not(target_arch = "wasm32")))]
+    let _ = any_spawner::Executor::init_futures_executor();
+
     let presentation = ShellPresentation::from_verified_context(context, path, title);
     let bootstrap_for_view = bootstrap.clone();
     render_module_view_document(
