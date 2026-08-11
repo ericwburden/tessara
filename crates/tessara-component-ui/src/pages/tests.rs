@@ -4,7 +4,8 @@ use super::{
     BarConfigDraft, ComponentConfigDraft, ComponentDefinition, ComponentVersionSummary,
     DatasetSummary, LineConfigDraft, PieDonutConfigDraft, StatCardConfigDraft, TableConfigDraft,
     VisualSharedDraft, build_table_component_config, dataset_fields_for_major,
-    dataset_picker_majors, toggle_csv_key, toggle_visible_column,
+    dataset_picker_majors, table_projection_fields_for_dataset, toggle_csv_key,
+    toggle_visible_column,
 };
 use super::{ComponentPublishAction, ComponentSaveIntent, component_save_version_identities};
 use super::{
@@ -52,6 +53,38 @@ fn dataset_field(key: &str) -> DatasetFieldDefinition {
         field_type: "text".into(),
         restriction_tier: None,
     }
+}
+
+#[test]
+fn saved_table_projection_uses_canonical_dataset_metadata_before_rendering() {
+    let config = json!({
+        "visible_columns": ["program", "amount"],
+        "display_labels": {"program": "Program name"}
+    });
+    let mut program = dataset_field("program");
+    program.label = "Program".into();
+    let mut amount = dataset_field("amount");
+    amount.field_type = "number".into();
+
+    assert_eq!(
+        table_projection_fields_for_dataset(&config, &[program, amount]),
+        vec![
+            DataOpsDatasetFieldDraft {
+                key: "program".into(),
+                label: "Program name".into(),
+                source_alias: "dataset".into(),
+                source_field_key: "program".into(),
+                field_type: "text".into(),
+            },
+            DataOpsDatasetFieldDraft {
+                key: "amount".into(),
+                label: "amount".into(),
+                source_alias: "dataset".into(),
+                source_field_key: "amount".into(),
+                field_type: "number".into(),
+            },
+        ]
+    );
 }
 
 #[test]

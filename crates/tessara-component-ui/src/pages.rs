@@ -200,7 +200,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let message = RwSignal::new(None::<String>);
     let error = RwSignal::new(None::<String>);
     let validation_findings = RwSignal::new(Vec::<ComponentValidationFinding>::new());
-    let datasets = RwSignal::new(initial_datasets);
+    let datasets = RwSignal::new(initial_datasets.clone());
     let dataset_error = RwSignal::new(initial_dataset_error);
     let name = RwSignal::new(String::new());
     let slug = RwSignal::new(String::new());
@@ -263,6 +263,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     if let Some(component) = initial_component {
         apply_component_for_edit(
             component,
+            &initial_datasets,
             editing_component_id,
             editing_version_id,
             current_published_version_id,
@@ -347,6 +348,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
             if !bootstrapped && let Some(component_ref) = component_ref.clone() {
                 load_component_for_edit(
                     component_ref,
+                    datasets,
                     editing_component_id,
                     editing_version_id,
                     current_published_version_id,
@@ -2285,6 +2287,26 @@ fn component_data_ops_field(field: &DatasetFieldDefinition) -> DataOpsDatasetFie
     }
 }
 
+fn table_projection_fields_for_dataset(
+    config: &serde_json::Value,
+    available_fields: &[DatasetFieldDefinition],
+) -> Vec<DataOpsDatasetFieldDraft> {
+    table_projection_fields_from_config_keys(config)
+        .into_iter()
+        .map(|configured_field| {
+            let Some(available_field) = available_fields
+                .iter()
+                .find(|available_field| available_field.key == configured_field.key)
+            else {
+                return configured_field;
+            };
+            let mut resolved_field = component_data_ops_field(available_field);
+            resolved_field.label = configured_field.label;
+            resolved_field
+        })
+        .collect()
+}
+
 fn dataset_catalog_option_label(dataset: &DatasetSummary, major: i32) -> String {
     let mut parts = vec![format!("{} · v{}", dataset.name, major)];
     if !dataset.tags.is_empty() {
@@ -2547,6 +2569,7 @@ async fn fetch_authoring_or_reader_component(
 #[allow(clippy::too_many_arguments)]
 fn load_component_for_edit(
     component_ref: String,
+    datasets: RwSignal<Vec<DatasetSummary>>,
     editing_component_id: RwSignal<Option<String>>,
     editing_version_id: RwSignal<Option<String>>,
     current_published_version_id: RwSignal<Option<String>>,
@@ -2591,48 +2614,52 @@ fn load_component_for_edit(
     leptos::task::spawn_local(async move {
         error.set(None);
         match api::fetch_admin_component(&component_ref).await {
-            Ok(Some(component)) => apply_component_for_edit(
-                component,
-                editing_component_id,
-                editing_version_id,
-                current_published_version_id,
-                name,
-                slug,
-                description,
-                dataset_id,
-                dataset_major,
-                component_type,
-                columns,
-                filters,
-                sort_field,
-                sort_direction,
-                page_size,
-                visual_summary_field,
-                visual_summary_type,
-                visual_category_field,
-                visual_category_labels,
-                visual_category_colors,
-                visual_legend_title,
-                visual_comparison_field,
-                visual_bar_orientation,
-                visual_bar_comparison_layout,
-                visual_x_axis_label,
-                visual_y_axis_label,
-                visual_x_field,
-                visual_line_smoothing,
-                visual_sort_field,
-                visual_sort_direction,
-                visual_limit,
-                visual_value_format,
-                visual_category_missing_policy,
-                visual_comparison_missing_policy,
-                visual_missing_policy,
-                stat_label,
-                stat_supporting_text,
-                stat_panel_style,
-                version_note,
-                slug_manually_edited,
-            ),
+            Ok(Some(component)) => {
+                let available_datasets = datasets.get_untracked();
+                apply_component_for_edit(
+                    component,
+                    &available_datasets,
+                    editing_component_id,
+                    editing_version_id,
+                    current_published_version_id,
+                    name,
+                    slug,
+                    description,
+                    dataset_id,
+                    dataset_major,
+                    component_type,
+                    columns,
+                    filters,
+                    sort_field,
+                    sort_direction,
+                    page_size,
+                    visual_summary_field,
+                    visual_summary_type,
+                    visual_category_field,
+                    visual_category_labels,
+                    visual_category_colors,
+                    visual_legend_title,
+                    visual_comparison_field,
+                    visual_bar_orientation,
+                    visual_bar_comparison_layout,
+                    visual_x_axis_label,
+                    visual_y_axis_label,
+                    visual_x_field,
+                    visual_line_smoothing,
+                    visual_sort_field,
+                    visual_sort_direction,
+                    visual_limit,
+                    visual_value_format,
+                    visual_category_missing_policy,
+                    visual_comparison_missing_policy,
+                    visual_missing_policy,
+                    stat_label,
+                    stat_supporting_text,
+                    stat_panel_style,
+                    version_note,
+                    slug_manually_edited,
+                );
+            }
             Ok(None) => error.set(Some("Component could not be loaded.".into())),
             Err(message) => error.set(Some(message)),
         }
@@ -2642,6 +2669,7 @@ fn load_component_for_edit(
 #[allow(clippy::too_many_arguments)]
 fn apply_component_for_edit(
     component: ComponentDefinition,
+    datasets: &[DatasetSummary],
     editing_component_id: RwSignal<Option<String>>,
     editing_version_id: RwSignal<Option<String>>,
     current_published_version_id: RwSignal<Option<String>>,
@@ -2695,6 +2723,11 @@ fn apply_component_for_edit(
     slug_manually_edited.set(true);
     description.set(component.description.clone().unwrap_or_default());
     if let Some(version) = editable_component_version(&component) {
+        let available_fields = datasets
+            .iter()
+            .find(|dataset| dataset.id == version.dataset_id)
+            .map(|dataset| dataset_fields_for_major(dataset, version.dataset_version_major))
+            .unwrap_or_default();
         editing_version_id.set((version.status == "draft").then(|| version.id.clone()));
         version_note.set(version.version_note.clone());
         dataset_id.set(version.dataset_id);
@@ -2704,7 +2737,10 @@ fn apply_component_for_edit(
         sort_field.set(loaded_sort_field);
         sort_direction.set(loaded_sort_direction);
         page_size.set(table_page_size_from_config(&version.config));
-        columns.set(table_projection_fields_from_config_keys(&version.config));
+        columns.set(table_projection_fields_for_dataset(
+            &version.config,
+            &available_fields,
+        ));
         filters.set(table_filter_drafts_from_config(&version.config));
         load_visual_config_signals(
             &version.component_type,
@@ -2740,6 +2776,7 @@ fn apply_component_for_edit(
 #[allow(clippy::too_many_arguments)]
 fn load_component_for_edit(
     _component_ref: String,
+    _datasets: RwSignal<Vec<DatasetSummary>>,
     _editing_component_id: RwSignal<Option<String>>,
     _editing_version_id: RwSignal<Option<String>>,
     _current_published_version_id: RwSignal<Option<String>>,

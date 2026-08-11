@@ -7,6 +7,10 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
+use crate::state::{
+    session::shell_navigation_state,
+    shell_navigation::{ShellNavigationLoadState, ShellNavigationResponseV1},
+};
 use crate::ui::AppShell;
 
 pub const MODULE_OUTLET_ID: &str = "tessara-module-outlet";
@@ -25,13 +29,18 @@ enum HostState {
 #[component]
 pub fn ModuleLifecyclePage() -> impl IntoView {
     let state = RwSignal::new(HostState::Loading);
+    let location = leptos_router::hooks::use_location();
+    let shell_title = module_navigation_title(
+        &location.pathname.get_untracked(),
+        &shell_navigation_state().get_untracked(),
+    )
+    .unwrap_or_else(|| "Module".into());
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     let activation_revision = Arc::new(AtomicU64::new(0));
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     let page_active = Arc::new(AtomicBool::new(true));
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     {
-        let location = leptos_router::hooks::use_location();
         let activation_revision = Arc::clone(&activation_revision);
         let page_active = Arc::clone(&page_active);
         let cleanup_page_active = Arc::clone(&page_active);
@@ -63,7 +72,7 @@ pub fn ModuleLifecyclePage() -> impl IntoView {
     }
 
     view! {
-        <AppShell active_route="module" title="Module">
+        <AppShell active_route="module" title=shell_title>
             <section class="module-lifecycle-host">
                 {move || match state.get() {
                     HostState::Loading => view! {
@@ -93,10 +102,71 @@ pub fn ModuleLifecyclePage() -> impl IntoView {
     }
 }
 
+fn module_navigation_title(path: &str, navigation: &ShellNavigationLoadState) -> Option<String> {
+    let ShellNavigationLoadState::Ready(ShellNavigationResponseV1 { groups, .. }) = navigation
+    else {
+        return None;
+    };
+    groups
+        .iter()
+        .flat_map(|group| group.items.iter())
+        .filter(|item| tessara_module_ui::navigation_path_matches(path, &item.href))
+        .max_by_key(|item| item.href.trim_end_matches('/').len())
+        .map(|item| item.label.clone())
+}
+
 #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
 mod browser {
     pub(super) fn document_fallback_href() -> String {
         "/".into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::module_navigation_title;
+    use crate::state::shell_navigation::{
+        ShellNavigationGroupV1, ShellNavigationItemOwnerV1, ShellNavigationItemV1,
+        ShellNavigationLoadState, ShellNavigationModeV1, ShellNavigationResponseV1,
+        ShellNavigationStateV1,
+    };
+
+    #[test]
+    fn lifecycle_shell_title_uses_the_longest_matching_navigation_destination() {
+        let navigation = ShellNavigationLoadState::Ready(ShellNavigationResponseV1 {
+            schema_version: 3,
+            policy_revision: Some(1),
+            state: ShellNavigationStateV1::Available,
+            groups: vec![ShellNavigationGroupV1 {
+                id: "modules".into(),
+                name: "Modules".into(),
+                items: vec![
+                    navigation_item("Module Alpha", "/module-alpha"),
+                    navigation_item("Module Beta", "/module-beta"),
+                ],
+            }],
+            unavailable: None,
+        });
+
+        assert_eq!(
+            module_navigation_title("/module-beta/reference/edit", &navigation).as_deref(),
+            Some("Module Beta")
+        );
+        assert_eq!(module_navigation_title("/missing", &navigation), None);
+    }
+
+    fn navigation_item(label: &str, href: &str) -> ShellNavigationItemV1 {
+        ShellNavigationItemV1 {
+            key: label.to_lowercase().replace(' ', "-"),
+            label: label.into(),
+            href: href.into(),
+            owner: ShellNavigationItemOwnerV1::Contribution,
+            contribution_id: Some(format!(
+                "example.{}",
+                label.to_lowercase().replace(' ', "-")
+            )),
+            navigation_mode: ShellNavigationModeV1::Shell,
+        }
     }
 }
 
@@ -112,12 +182,14 @@ mod browser {
 
     use super::MODULE_OUTLET_ID;
 
+    type NavigateCallback = Closure<dyn FnMut(String)>;
+
     struct ActiveModule {
         definition_id: String,
         release_version: String,
         instance: JsValue,
         stylesheet_ids: Vec<String>,
-        _navigate: Closure<dyn FnMut(String)>,
+        _navigate: NavigateCallback,
         _click_guard: Closure<dyn FnMut(web_sys::MouseEvent)>,
     }
 
@@ -156,6 +228,7 @@ mod browser {
         if !bootstrap.is_supported() || bootstrap.path != path {
             return Err("Module bootstrap is incompatible with lifecycle ABI v1.".into());
         }
+        update_shell_document(&bootstrap);
 
         let existing = ACTIVE.with(|slot| {
             slot.borrow().as_ref().and_then(|active| {
@@ -172,7 +245,7 @@ mod browser {
                 return Err(error);
             }
             ensure_current(generation)?;
-            update_document(&bootstrap);
+            update_module_document(&bootstrap);
             return Ok(());
         }
 
@@ -254,7 +327,7 @@ mod browser {
                 _click_guard: click_guard,
             });
         });
-        update_document(&bootstrap);
+        update_module_document(&bootstrap);
         Ok(())
     }
 
@@ -320,7 +393,7 @@ mod browser {
         Ok(input.into())
     }
 
-    fn host_api() -> Result<(JsValue, Closure<dyn FnMut(String)>), String> {
+    fn host_api() -> Result<(JsValue, NavigateCallback), String> {
         let host = Object::new();
         Reflect::set(
             &host,
@@ -439,10 +512,9 @@ mod browser {
             .history()
             .and_then(|history| history.push_state_with_url(&JsValue::NULL, "", Some(href)))
             .is_ok()
+            && let Ok(event) = web_sys::Event::new("popstate")
         {
-            if let Ok(event) = web_sys::Event::new("popstate") {
-                let _ = window.dispatch_event(&event);
-            }
+            let _ = window.dispatch_event(&event);
         }
     }
 
@@ -521,15 +593,20 @@ mod browser {
         JsFuture::from(raced).await.map_err(js_error)
     }
 
-    fn update_document(bootstrap: &BrowserLifecycleBootstrapV1) {
+    fn update_shell_document(bootstrap: &BrowserLifecycleBootstrapV1) {
         if let Some(document) = web_sys::window().and_then(|window| window.document()) {
-            set_module_scope(&document, bootstrap.definition_id.as_str());
-            document.set_title(&format!("{} · Tessara", bootstrap.title));
             let navigation_title = update_active_navigation(&document, &bootstrap.path)
                 .unwrap_or_else(|| bootstrap.title.clone());
+            document.set_title(&format!("{navigation_title} · Tessara"));
             if let Ok(Some(title)) = document.query_selector(".top-app-bar__title") {
                 title.set_text_content(Some(&navigation_title));
             }
+        }
+    }
+
+    fn update_module_document(bootstrap: &BrowserLifecycleBootstrapV1) {
+        if let Some(document) = web_sys::window().and_then(|window| window.document()) {
+            set_module_scope(&document, bootstrap.definition_id.as_str());
             if let Some(outlet) = document.get_element_by_id(MODULE_OUTLET_ID) {
                 let _ = outlet.set_attribute("aria-busy", "false");
                 let _ = outlet

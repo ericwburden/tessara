@@ -819,6 +819,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`/components/${definition.slug}/versions`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       definition.name,
     );
@@ -861,6 +865,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await expect(actionDialog).not.toBeVisible();
 
     await page.goto(`/components/${definition.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     await expect(
       page.getByRole("heading", { level: 1, name: "Edit Component" }),
     ).toBeVisible();
