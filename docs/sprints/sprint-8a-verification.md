@@ -2258,6 +2258,7 @@ Runtime chronology:
 | 2026-08-11 | Rehearsal 42 / complete fail-late harvest | 29 lanes passed, 2 failed, 1 was dependency-blocked, and 0 were deferred; cleanup, restoration, final health, source, and environment checks passed | `92ac039f` / `f719ea71`; environment `25550ff1...` | Raw lane defaults retained; diagnosed as `harness`, acceptance-regression, and test-fixture roots | Workspace linking stopped with Windows `LNK1318`; Playwright passed 82 of 84 scenarios, exposing one intentionally changed title baseline and one first-page pagination assumption. Harvest, batch `acd48e91...`, and one-use correction authorization are retained; UAT diagnostics were blocked only by failed Playwright. | R42 and all downstream phases | Correct together, pass clean focused reproducers, commit, then run successor complete Readiness and Rehearsal. |
 | 2026-08-11 | Readiness 55 and Rehearsal 43 / complete gates | Readiness passed 15/15; Rehearsal passed all 32 lanes with 0 failures, blocks, or deferrals, including all 84 Playwright scenarios | `4ba03222` / `f0f44681`; environment `f8c66c6...` | N/A — both passed | Canonical Readiness SHA-256 `ada86945...`; canonical Rehearsal SHA-256 `7756b4c3...`. Source-exact materialization/no-op, failure recovery, workspace tests, browser acceptance, upgrade/rollback, restoration, health, and final identity all passed. | Preflight and downstream authorized for the same identity | Run Preflight against the authenticated receipts. |
 | 2026-08-11 | Preflight 23 / complete fail-late harvest | 7 checks passed, 2 failed, and 1 was dependency-blocked; no candidate was frozen | corrected product source with passing Readiness 55/Rehearsal 43 | Raw: `product` and `harness`; consolidated diagnosis: 2 `harness` roots | The traceability check searched TypeScript source for literal title fragments and rejected valid loop-generated Playwright identities already authenticated by discovery. The path check had no safe archive transition for an earlier fully certified candidate invalidated by the later UI SDK correction. Attempt 23 and raw classifications remain immutable. | Preflight only; Readiness 55 and Rehearsal 43 remain valid because no product, fixture, deployment, acceptance inventory, or upstream runner input changes | Replace source-text matching with exact Playwright discovery; archive the authenticated prior Preflight→SIT→UAT chain with hashes and diagnostic-only status; pass focused self-tests and discovery; commit; rerun Preflight only. |
+| 2026-08-11 | Preflight 24 / passing checks, failed final publication | All 10 checks passed; final candidate publication failed; no candidate was frozen | Preflight-only correction `7aa104c4`; Readiness 55/Rehearsal 43 unchanged | `evidence-finalization` | The new discovery and completed-candidate archive both passed, and the prior candidate was preserved in its authenticated immutable archive. Final lifecycle publication exposed a duplicate exact-four-path comparison that rejected the legitimate two-file correction subset. The terminal attempt and archive mapping remain immutable. | Preflight publication only; all checks and both upstream gates remain valid evidence | Apply the same bounded allowed-subset rule at lifecycle publication, pass lifecycle/Preflight self-tests, commit, then run a new Preflight attempt without repeating the already-completed archive transition. |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
@@ -2692,3 +2693,16 @@ all 84 exact identities. These changes affect only Preflight validation and
 evidence handling; Readiness 55 and Rehearsal 43 remain authoritative and need
 not be rerun. Focused proof does not replace the required successor Preflight,
 SIT, or UAT.
+
+Preflight 24 subsequently passed all ten declared checks. Exact Playwright
+discovery and the authenticated archive transition both succeeded, preserving
+the earlier completed candidate as immutable diagnostic history. Candidate
+publication then failed before freeze because the shared lifecycle publisher
+still duplicated the older exact-four-file comparison. Its terminal attempt
+records one `evidence-finalization` failure and no blocked checks. The focused
+correction makes that publisher accept any non-empty subset of the same four
+Preflight-only paths, requires the Preflight runner itself to be present, and
+continues rejecting product, fixture, deployment, acceptance, and other
+validation changes. Lifecycle and Preflight adversarial self-tests cover the
+allowed subset, empty set, and outside-path cases. This remains a Preflight-
+only correction; Readiness 55 and Rehearsal 43 remain valid.

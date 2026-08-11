@@ -47,6 +47,21 @@ function Get-Sprint8APreflightCheckNames {
     )
 }
 
+function Test-Sprint8APreflightHarnessAdvancePaths {
+    param([AllowEmptyCollection()][string[]]$ChangedPaths = @())
+
+    $allowedPaths = @(
+        "docs/sprints/sprint-8a-verification.md",
+        "scripts/run-sprint-8a-sit.ps1",
+        "scripts/run-sprint-8a-validation-preflight.ps1",
+        "scripts/sprint-8a-lifecycle-chain.ps1"
+    )
+    $normalized = @($ChangedPaths | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+    $normalized.Count -gt 0 -and
+        $normalized -ccontains "scripts/run-sprint-8a-validation-preflight.ps1" -and
+        @($normalized | Where-Object { $allowedPaths -cnotcontains $_ }).Count -eq 0
+}
+
 function Get-Sprint8ASitLaneNames {
     @("static-and-boundaries", "rust-workspace", "playwright", "deployed-acceptance-smoke")
 }
@@ -833,18 +848,12 @@ function Assert-Sprint8ALifecyclePrerequisiteSet {
             if (-not $AllowPreflightHarnessOnlySourceAdvance -or $Phase -cne "validation-preflight" -or $null -eq $receiptSource) {
                 throw "Lifecycle prerequisite '$($prerequisite.receipt.phase)' carries another source identity."
             }
-            $allowedPaths = @(
-                "docs/sprints/sprint-8a-verification.md",
-                "scripts/run-sprint-8a-sit.ps1",
-                "scripts/run-sprint-8a-validation-preflight.ps1",
-                "scripts/sprint-8a-lifecycle-chain.ps1"
-            )
             & git -C $RepositoryRoot merge-base --is-ancestor ([string]$receiptSource.Value.commit) ([string]$Source.commit)
             $ancestorExit = $LASTEXITCODE
             $changedPaths = @(& git -C $RepositoryRoot diff --name-only "$([string]$receiptSource.Value.commit)..$([string]$Source.commit)" |
                 ForEach-Object { $_.Replace("\", "/") })
             if ($ancestorExit -ne 0 -or $LASTEXITCODE -ne 0 -or
-                (($changedPaths | Sort-Object) -join "`n") -cne (($allowedPaths | Sort-Object) -join "`n")) {
+                -not (Test-Sprint8APreflightHarnessAdvancePaths -ChangedPaths $changedPaths)) {
                 throw "Lifecycle preflight harness-only advance contains a path outside the exact authorized correction set."
             }
         }
@@ -4489,6 +4498,17 @@ function Test-Sprint8AManualUatAttemptAuthority {
 }
 
 function Test-Sprint8ALifecycleChain {
+    if (-not (Test-Sprint8APreflightHarnessAdvancePaths -ChangedPaths @(
+                "docs/sprints/sprint-8a-verification.md",
+                "scripts/run-sprint-8a-validation-preflight.ps1"
+            )) -or
+        (Test-Sprint8APreflightHarnessAdvancePaths -ChangedPaths @()) -or
+        (Test-Sprint8APreflightHarnessAdvancePaths -ChangedPaths @(
+                "scripts/run-sprint-8a-validation-preflight.ps1",
+                "crates/tessara-app/src/lib.rs"
+            ))) {
+        throw "Sprint 8A lifecycle self-test found a stale preflight harness correction path policy."
+    }
     $advancedCheckpoint = [pscustomobject][ordered]@{
         source_verification_state = "verified_uat_harness_only_advance"
         candidate_source_identity = [pscustomobject]@{ commit = "a" * 40 }
