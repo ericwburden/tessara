@@ -480,11 +480,13 @@
       return;
     }
     const currentHelp = target.closest(".component-field-help");
-    document.querySelectorAll(".component-field-help[open]").forEach((details) => {
-      if (details !== currentHelp) {
-        details.removeAttribute("open");
-      }
-    });
+    if (currentHelp) {
+      document.querySelectorAll(".component-field-help[open]").forEach((details) => {
+        if (details !== currentHelp) {
+          details.removeAttribute("open");
+        }
+      });
+    }
     const currentColorPicker = target.closest(".component-category-labels__color-picker");
     document.querySelectorAll(".component-category-labels__color-picker.is-open").forEach((picker) => {
       if (picker !== currentColorPicker) {

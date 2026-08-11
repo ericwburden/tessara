@@ -112,6 +112,8 @@ mod tests {
 
         assert_eq!(asset.content_type, "application/javascript; charset=utf-8");
         assert!(asset.content.contains("TessaraCharts"));
+        assert!(asset.content.contains("if (currentHelp)"));
+        assert!(asset.content.contains("details !== currentHelp"));
         assert!(static_asset("missing.js").is_none());
     }
 }

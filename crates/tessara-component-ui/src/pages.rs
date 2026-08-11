@@ -1612,7 +1612,7 @@ fn ComponentVersionsSection(
                         <th>"Lifecycle"</th>
                         <th>"Kind"</th>
                         <th>"Dataset Version"</th>
-                        <th>"Note"</th>
+                        <th>"Version Note"</th>
                         <th>"Actions"</th>
                     </tr>
                 </thead>
