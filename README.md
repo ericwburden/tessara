@@ -44,8 +44,7 @@ tessara-jobs
 tessara-module-contract
 tessara-submissions
 tessara-web
-tessara-web-component-viewer
-tessara-web-components
+tessara-dashboard-placement-renderer
 tessara-web-dashboards
 tessara-web-data-ops
 tessara-web-datasets

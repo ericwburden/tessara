@@ -223,10 +223,19 @@ try {
 $adminToken = Get-ApiToken -Email "admin@tessara.local" -Password "tessara-dev-admin"
 $headers = @{ Authorization = "Bearer $adminToken" }
 $moduleInventory = Invoke-RestMethod -Uri "$BaseUrl/api/admin/modules" -Headers $headers -TimeoutSec 30
-$independentDashboard = $moduleInventory.entries | Where-Object {
+$independentDashboards = @($moduleInventory.entries | Where-Object {
     $_.kind -eq "independently_deployed" -and
     $_.definition.id -eq "tessara.dashboards"
-} | Select-Object -First 1
+})
+$independentComponents = @($moduleInventory.entries | Where-Object {
+    $_.kind -eq "independently_deployed" -and
+    $_.definition.id -eq "tessara.components"
+})
+if ($independentDashboards.Count -ne 1 -or $independentComponents.Count -ne 1 -or
+    [string]$independentDashboards[0].release.version -cne "3.0.1" -or
+    [string]$independentComponents[0].release.version -cne "1.0.1") {
+    throw "Sprint UAT failure: Sprint 8A requires exactly one real Components 1.0.1 and Dashboard 3.0.1 Release/Instance."
+}
 $seedSummary = $null
 if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {
     try {
@@ -246,8 +255,7 @@ if ($null -eq $seedSummary) {
     $sessionDataset = $datasets | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
     $sessionTableComponent = $components | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
     $sessionDashboard = $dashboards | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
-    if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or
-        (-not $independentDashboard -and -not $sessionDashboard)) {
+    if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or -not $sessionDashboard) {
         throw "Sprint UAT failure: required existing Demo Session Log assets could not be found."
     }
 
@@ -259,16 +267,15 @@ if ($null -eq $seedSummary) {
         dashboard_id         = if ($sessionDashboard) { $sessionDashboard.id } else { $null }
     }
 }
-if ($independentDashboard) {
-    $sprint6cSeedScript = Join-Path $PSScriptRoot "seed-sprint-6c-demo.ps1"
-    $sprint6cSeed = (& $sprint6cSeedScript -BaseUrl $BaseUrl | Out-String) | ConvertFrom-Json
-    if (
-        $sprint6cSeed.seed_version -ne "sprint-6c-demo-v1" -or
-        [int]$sprint6cSeed.dashboard_placements -ne 9
-    ) {
-        throw "Sprint UAT failure: Sprint 6C Dashboard seed did not produce nine placements."
-    }
-    $seedSummary.dashboard_id = $sprint6cSeed.dashboard_id
+$ownerDashboards = Invoke-RestMethod -Uri "$BaseUrl/api/dashboards" -Headers $headers -TimeoutSec 30
+$ownerDashboard = @($ownerDashboards | Where-Object { $_.name -eq "Demo Operations Dashboard" })
+if ($ownerDashboard.Count -ne 1) {
+    throw "Sprint UAT failure: Dashboard owner bootstrap did not produce exactly one Demo Operations Dashboard."
+}
+if ($seedSummary.PSObject.Properties.Name -contains "dashboard_id") {
+    $seedSummary.dashboard_id = $ownerDashboard[0].id
+} else {
+    $seedSummary | Add-Member -NotePropertyName dashboard_id -NotePropertyValue $ownerDashboard[0].id
 }
 if ($seedSummary.seed_version -ne "uat-demo-v2") {
     throw "Sprint UAT failure: demo seed did not confirm expected uat-demo-v2."
@@ -276,9 +283,19 @@ if ($seedSummary.seed_version -ne "uat-demo-v2") {
 $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
 $transitionEntries = @($moduleInventory.entries | Where-Object { $_.kind -eq "transitional_in_process" })
-$expectedTransitionCount = if ($independentDashboard) { 6 } else { 7 }
-if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne $expectedTransitionCount) {
-    throw "Sprint UAT failure: Module inventory did not expose the expected deduplicated transition contributions alongside real modules."
+$expectedTransitionIdentities = @(
+    "tessara.datasets",
+    "tessara.forms",
+    "tessara.migration",
+    "tessara.responses",
+    "tessara.workflows"
+) | Sort-Object
+$actualTransitionIdentities = @($transitionEntries | ForEach-Object {
+    [string]$_.descriptor.reserved_definition_id
+} | Sort-Object)
+if ($moduleInventory.schema_version -ne 1 -or
+    ($actualTransitionIdentities -join "`n") -cne ($expectedTransitionIdentities -join "`n")) {
+    throw "Sprint UAT failure: Core must expose exactly Forms, Workflows, Responses, Datasets, and Migration as transitions; Components and Dashboard must appear only as real modules."
 }
 $migrationContribution = $moduleInventory.entries | Where-Object {
     $_.descriptor.reserved_definition_id -eq "tessara.migration"
@@ -471,16 +488,31 @@ $visualDatasetMajor = $datasetDefinition.current_version_major
 if (-not $visualDatasetMajor) {
     throw "Sprint UAT failure: seeded dataset did not expose a current major version for visual component coverage."
 }
+$visualDatasetResourceId = "$($seedSummary.dataset_id)@$visualDatasetMajor"
+$componentDatasetCatalog = Invoke-RestMethod -Uri "$BaseUrl/api/admin/components/datasets" -Headers $headers -TimeoutSec 30
+$visualDatasetOptions = @($componentDatasetCatalog.datasets | Where-Object {
+    [string]$_.reference.reference.resource_id -ceq $visualDatasetResourceId
+})
+if ($componentDatasetCatalog.schema_version -ne 1 -or $visualDatasetOptions.Count -ne 1) {
+    throw "Sprint UAT failure: Component authoring catalog did not expose exact Dataset major line '$visualDatasetResourceId'."
+}
+$visualDatasetReference = $visualDatasetOptions[0].reference
+if ([string]$visualDatasetReference.reference.resource_type -cne "tessara.transition.dataset_major_line" -or
+    [string]$visualDatasetReference.reference.owner.kind -cne "core_installation" -or
+    [string]$visualDatasetReference.reference.owner.installation_id -cne [string]$visualDatasetReference.reference.installation_id) {
+    throw "Sprint UAT failure: Component authoring catalog returned a noncanonical Dataset major-line reference."
+}
 $visualSlug = "uat-visual-bar-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 $visualCreateBody = @{
+    schema_version = 1
     name        = "UAT Visual Bar"
     slug        = $visualSlug
     description = "Sprint 4B UAT visual component fixture."
     version     = @{
-        dataset_id            = $seedSummary.dataset_id
-        dataset_version_major = $visualDatasetMajor
-        component_type        = "bar"
-        config                = @{
+        dataset_reference = $visualDatasetReference
+        component_type    = "bar"
+        version_note      = "UAT visual permission fixture"
+        config            = @{
             mode             = "summary"
             summary_field    = $visualField.key
             summary_type     = "count"
@@ -495,7 +527,13 @@ $visualCreateBody = @{
 $visualCreated = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components" -Headers $headers -ContentType "application/json" -Body $visualCreateBody -TimeoutSec 30
 $visualDetail = Invoke-RestMethod -Uri "$BaseUrl/api/admin/components/$visualSlug" -Headers $headers -TimeoutSec 30
 $visualVersion = $visualDetail.versions | Select-Object -First 1
-Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components/$($visualCreated.id)/versions/$($visualVersion.id)/publish" -Headers $headers -TimeoutSec 30 | Out-Null
+if ($visualCreated.schema_version -ne 1 -or
+    [string]$visualDetail.component_id -cne [string]$visualCreated.component_id -or
+    -not $visualVersion -or
+    [string]$visualVersion.dataset_reference.reference.resource_id -cne $visualDatasetResourceId) {
+    throw "Sprint UAT failure: visual Component create/read-back did not retain exact canonical identities."
+}
+Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/admin/components/$($visualCreated.component_id)/versions/$($visualVersion.component_version_id)/publish" -Headers $headers -TimeoutSec 30 | Out-Null
 $visualBar = Invoke-RestMethod -Uri "$BaseUrl/api/components/$visualSlug/bar" -Headers $headers -TimeoutSec 30
 if ($visualBar.materialization_state -ne "ready" -or $visualBar.component_type -ne "bar" -or -not $visualBar.points -or $visualBar.points.Count -lt 1) {
     throw "Sprint UAT failure: visual Bar component did not return ready points."

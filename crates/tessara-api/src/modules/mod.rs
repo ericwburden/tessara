@@ -1,7 +1,5 @@
-//! Core-owned module discovery persistence boundary.
-//!
-//! Sprint 6A synchronizes transition descriptors only. It deliberately exposes
-//! no Module Release/Instance repository or mutation path.
+//! Core-owned module discovery, enrolled release/instance inventory, and the
+//! frozen transition-catalog boundary.
 
 mod catalog;
 mod destination;
@@ -16,7 +14,10 @@ mod service;
 mod shell_navigation;
 
 pub(crate) use native::{detail as native_detail, directory as native_directory};
-pub(crate) use service::{project_composition_modules, synchronize_catalog};
+pub(crate) use service::{
+    CompositionProjectionDocuments, project_composition_modules, synchronize_catalog,
+};
+pub(crate) use shell_navigation::load_context_navigation;
 
 pub(crate) fn routes() -> axum::Router<crate::db::AppState> {
     routes::routes().merge(shell_navigation::routes())

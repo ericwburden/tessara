@@ -1,6 +1,10 @@
 # API And Module Wire Types
 
-Tessara's current single-service implementation keeps many request and response DTOs in `tessara-api` and mirrors JSON shapes near the Leptos screens that consume them. That remains acceptable for untouched transitional routes. It is not the target contract model for independently deployed modules.
+Tessara's current mixed topology keeps many Core and still-in-process request
+and response DTOs in `tessara-api` and mirrors JSON shapes near the Leptos
+screens that consume them. That remains acceptable for untouched transitional
+routes. Extracted Components and Dashboard wire shapes are module-owned; the
+Core DTO pattern is not their contract model.
 
 ## Direction
 
@@ -10,6 +14,7 @@ Tessara's current single-service implementation keeps many request and response 
 - Consumers should use generated clients or narrow contract crates produced from the provider's schema. Sharing a contract type does not transfer product or persistence ownership.
 - API and event envelopes must carry contract version, correlation identity, and stable success or error variants where appropriate.
 - Cross-module requests must carry verifiable application-installation, original-actor when present, and presenting-service context plus audience-bound grants that preserve each security-capability-to-scope binding and declared dependency/contract/action, or an exact Core authorization-decision receipt. Wire types must not expose independent capability and scope sets, reusable browser session secrets, or another module's database credentials. A caller exchanges authority through Core for each downstream audience rather than forwarding an upstream audience credential; service-only authority is limited to explicitly authorized system jobs.
+- `AuthorizationGrantV3.correlation_id` is a required non-nil UUID. Core preserves it unchanged through every downstream-audience exchange, each module forwards it as `x-tessara-correlation-id`, and the signed `ModuleServiceRequestV1.correlation_id` must equal the inbound grant correlation exactly. A module must not mint a new correlation identity for an exchange or provider hop.
 - Cross-boundary resource relationships must use the platform `ResourceReference` shape: installation, tagged owner kind (`core_installation` or `module_instance`), authoritative owner identifier, resource type, and resource identifier.
 - Cross-boundary links must use semantic destination owners, names, and typed parameters rather than absolute or deployment-relative URLs saved as product data.
 - Provider contracts must expose access plus tagged owner, owner-data where applicable, resource-identity, provider-defined resource-lifecycle, compatibility, and runtime-availability outcomes as separate fields with `undisclosed` and `not_evaluated` variants. Core-owned references use the Core-owner variant rather than Module Instance fields; evaluated unknown or cross-installation owners use explicit unknown/mismatch values. A tombstoned/destroyed Module Instance must not share one generic `tombstoned` value with a product resource whose live provider reports a tombstoned lifecycle state.
@@ -43,6 +48,22 @@ Additive schema evolution is not automatically safe. Compatibility must account 
 - This read contract does not expose node values, scoped Forms, node-type relationship administration, or any mutation authority. The complete `GET /api/admin/node-types/{node_type_id}` definition and every node-type/metadata mutation remain `admin:all`-only.
 - Unknown node types return the normal not-found envelope; anonymous and insufficient-capability requests retain the established authentication/authorization envelopes.
 
+## Sprint 8A Dataset Compatibility Contract
+
+- `tessara-datasets-contract` owns the exact-current Dataset v1 compatibility
+  types consumed by the extracted Component module. One
+  `DatasetMajorLineMetadata` value represents one Dataset major line and carries
+  its canonical typed reference, Dataset name and slug, grain, ordered tags,
+  compact direct-source provenance, materialization state, field preview, and
+  authorized scope-node projection.
+- Compact provenance separates direct Form sources from direct upstream Dataset
+  sources. Each item contains its stable UUID, display name, and optional slug.
+  These picker fields are discoverability context only; they grant no authority
+  and do not participate in reference identity or compatibility decisions.
+- The metadata and provenance structs reject unknown fields. Catalog and schema
+  responses populate the same required shape; first-party consumers do not
+  maintain copied counts, labels, fallback metadata, or a legacy picker shape.
+
 ## Sprint 6A Concrete Platform Types
 
 - `tessara-module-contract` owns the framework-neutral v1 identities, Manifest/transition declarations, typed resource-reference and semantic-destination primitives, and `ResourceResolutionV1`.
@@ -54,10 +75,28 @@ Additive schema evolution is not automatically safe. Compatibility must account 
 - Sprint 6A defines `ModuleRelease` and `ModuleInstance` public types only. Persistence, mutation, materialization, and a supported real Module Manifest artifact begin in Sprint 6B.
 - The transitional Migration descriptor is `retired`, with no route, navigation, provider, resource, or executable destination. Its continued discovery is historical/support context and does not authorize restoration.
 
-## Transitional Migration Rule
+## Transitional Extraction Rule
 
 Do not introduce route-local raw fetch logic for mutations or authenticated JSON parsing. For current in-process feature routes, add typed client functions over the existing policy-neutral HTTP helper. When a feature becomes a module, move its stable public shapes into the module-owned contract package or schema and generate/adapt clients from that source.
 
-An in-process `transitional_in_process` descriptor creates no Module Release or Module Instance. A first-party extracted consumer may temporarily use a versioned Core Release compatibility contract, but returned references must stay `core_installation`-owned with transition-specific resource types. Extraction requires a provider old-to-new mapping, consumer-owned rebinding contract, completeness receipts, and an explicit migrated/retired old-reference result; wire code must never reinterpret the old owner/type as the new module owner/type.
+An in-process `transitional_in_process` descriptor creates no Module Release
+or Module Instance. A first-party extracted consumer may temporarily use a
+versioned Core Release compatibility contract, but returned references must
+stay `core_installation`-owned with transition-specific resource types.
+Pre-production Phase 8 extraction uses a fresh, source-exact owner database and
+owner-controlled bootstrap/read-back contracts; consumers create new Module
+Instance references directly, and the old storage, adapter, readers, and
+payload shapes are removed in the same cutover. Historical transition
+references remain immutable evidence but are unsupported runtime inputs. Wire
+code must neither reinterpret them nor require mapping, rebinding,
+completeness receipts, a retained adapter, or a migration ledger. Those
+supported legacy-import concerns belong to Phase 9.
+
+The Sprint 8A Core transition wire inventory contains exactly
+`tessara.forms`, `tessara.workflows`, `tessara.responses`,
+`tessara.datasets`, and `tessara.migration`. Components and Dashboard are
+represented only by their enrolled Module Releases/Instances and manifest
+contributions; their reference navigation order, after Scoped Records at `7`,
+is Components at `8` and Dashboard at `9`.
 
 Do not extract a type merely to eliminate duplicate Rust definitions. Extract it when it is a genuine supported wire contract with a clear owner, compatibility policy, and consumer-test obligation.

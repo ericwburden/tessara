@@ -7,10 +7,7 @@ pub(crate) use crate::state::theme::{DARK_THEME_COLOR, LIGHT_THEME_COLOR, STORAG
 
 pub(crate) fn stylesheet_links() -> String {
     format!(
-        "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\
-<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\
-<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,500;9..40,650;9..40,750&display=swap\">\
-<link rel=\"stylesheet\" href=\"{}\">",
+        "<link rel=\"stylesheet\" href=\"{}\">",
         pipeline::css_path()
     )
 }
@@ -47,4 +44,18 @@ pub(crate) fn bootstrap_script() -> String {
   }}
 }})();"#,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stylesheet_links;
+
+    #[test]
+    fn native_documents_load_only_repository_owned_stylesheets() {
+        let links = stylesheet_links();
+        assert!(links.contains("/pkg/tessara-web.css"));
+        assert!(!links.contains("https://"));
+        assert!(!links.contains("fonts.googleapis.com"));
+        assert!(!links.contains("fonts.gstatic.com"));
+    }
 }

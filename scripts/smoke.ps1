@@ -3,9 +3,12 @@ param(
     [switch]$ComposeApi,
     [switch]$UseExistingService,
     [string]$BaseUrl = "http://127.0.0.1:8080",
+    [string]$SupervisorUrl = "http://127.0.0.1:8098",
     [int]$ApiTimeoutSeconds = 600,
     [string]$DeploymentEvidencePath,
     [ValidateSet("fresh")][string]$ExpectedDataState,
+    [ValidateSet("sprint-6a", "sprint-8a")]
+    [string]$TransitionCatalogProfile = "sprint-6a",
     [string]$AcceptanceEvidencePath,
     [switch]$OverwriteAcceptanceEvidence,
     [switch]$DevelopmentMode
@@ -378,7 +381,8 @@ try {
             -RepositoryRoot $repoRoot `
             -EvidencePath $DeploymentEvidencePath `
             -BaseUrl $baseUrl `
-            -ExpectedDataState $ExpectedDataState
+            -ExpectedDataState $ExpectedDataState `
+            -TransitionCatalogProfile $TransitionCatalogProfile
     }
 
     $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
@@ -459,8 +463,24 @@ try {
         $_.definition.id -eq "tessara.dashboards"
     } | Select-Object -First 1
     $transitionEntries = @($moduleInventory.entries | Where-Object { $_.kind -eq "transitional_in_process" })
-    $expectedTransitionCount = if ($independentDashboard) { 6 } else { 7 }
-    if ($moduleInventory.schema_version -ne 1 -or $transitionEntries.Count -ne $expectedTransitionCount) {
+    $expectedTransitionIdentities = if ($TransitionCatalogProfile -ceq "sprint-8a") {
+        @("tessara.datasets", "tessara.forms", "tessara.migration", "tessara.responses", "tessara.workflows")
+    } else {
+        @(
+            "tessara.components",
+            "tessara.dashboards",
+            "tessara.datasets",
+            "tessara.forms",
+            "tessara.migration",
+            "tessara.responses",
+            "tessara.workflows"
+        ) | Where-Object { -not ($independentDashboard -and $_ -ceq "tessara.dashboards") }
+    }
+    $actualTransitionIdentities = @($transitionEntries | ForEach-Object {
+        [string]$_.descriptor.reserved_definition_id
+    } | Sort-Object)
+    if ($moduleInventory.schema_version -ne 1 -or
+        ($actualTransitionIdentities -join ",") -cne (($expectedTransitionIdentities | Sort-Object) -join ",")) {
         throw "Smoke failure: Module inventory did not expose the expected deduplicated transition contributions alongside real modules"
     }
     $migrationContribution = $moduleInventory.entries | Where-Object {
@@ -548,6 +568,40 @@ try {
         -or $descriptorEtag -cne $expectedDescriptorEtag
     ) {
         throw "Smoke failure: Forms descriptor did not expose a quoted HTTP ETag whose opaque value exactly matched inventory provenance"
+    }
+    if ($TransitionCatalogProfile -ceq "sprint-8a") {
+        if (-not [string]::IsNullOrWhiteSpace($acceptanceEvidenceFullPath)) {
+            throw "Sprint 8A general rehearsal smoke cannot publish the Sprint 6A acceptance-evidence schema; use the Sprint 8A SIT runner for authoritative smoke."
+        }
+        $sprint8AResult = (& (Join-Path $PSScriptRoot "smoke-sprint-8a.ps1") `
+            -BaseUrl $baseUrl `
+            -SupervisorUrl $SupervisorUrl | Out-String) | ConvertFrom-Json
+        if (-not $sprint8AResult.passed) {
+            throw "Sprint 8A profile smoke did not pass."
+        }
+        if (-not $DevelopmentMode) {
+            $deploymentEvidence = Assert-Sprint6ADeploymentEvidence `
+                -RepositoryRoot $repoRoot `
+                -EvidencePath $deploymentEvidenceFullPath `
+                -BaseUrl $baseUrl `
+                -ExpectedDataState $ExpectedDataState `
+                -TransitionCatalogProfile $TransitionCatalogProfile
+        }
+        [pscustomobject]@{
+            status = "passed"
+            transition_catalog_profile = $TransitionCatalogProfile
+            platform_inventory_entries = @($moduleInventory.entries).Count
+            sprint_8a_checks = @($sprint8AResult.checks).Count
+            deployment = if ($null -eq $deploymentEvidence) { $null } else {
+                [pscustomobject]@{
+                    data_state = [string]$deploymentEvidence.snapshot.data.state
+                    image_id = [string]$deploymentEvidence.snapshot.release_image.image_id
+                    source_commit = [string]$deploymentEvidence.snapshot.source.commit
+                    database_name = [string]$deploymentEvidence.snapshot.database_runtime.current_database
+                }
+            }
+        } | ConvertTo-Json -Depth 10
+        return
     }
     $seed = $null
     if (Test-Sprint6AShouldInvokeDemoSeed -ExpectedDataState $ExpectedDataState) {
@@ -727,20 +781,35 @@ try {
     if (-not $visualField -or -not $visualField.key) {
         throw "Expected seeded dataset to expose an output field for visual component coverage"
     }
+    $visualDatasetResourceId = "$($seed.dataset_id)@$($datasetDetail.current_version_major)"
+    $componentDatasetCatalog = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/components/datasets" -Headers $headers
+    $visualDatasetOptions = @($componentDatasetCatalog.datasets | Where-Object {
+        [string]$_.reference.reference.resource_id -ceq $visualDatasetResourceId
+    })
+    if ($componentDatasetCatalog.schema_version -ne 1 -or $visualDatasetOptions.Count -ne 1) {
+        throw "Expected Component authoring catalog to expose exact Dataset major line '$visualDatasetResourceId'"
+    }
+    $visualDatasetReference = $visualDatasetOptions[0].reference
+    if ([string]$visualDatasetReference.reference.resource_type -cne "tessara.transition.dataset_major_line" -or
+        [string]$visualDatasetReference.reference.owner.kind -cne "core_installation" -or
+        [string]$visualDatasetReference.reference.owner.installation_id -cne [string]$visualDatasetReference.reference.installation_id) {
+        throw "Expected Component authoring catalog to return one canonical Core-owned Dataset major-line reference"
+    }
     $visualSlug = "smoke-visual-bar-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
     $visualComponent = Invoke-Json `
         -Method "Post" `
         -Uri "$baseUrl/api/admin/components" `
         -Headers $headers `
         -Body @{
+            schema_version = 1
             name        = "Smoke Visual Bar"
             slug        = $visualSlug
             description = "Sprint 4B smoke visual component fixture."
             version     = @{
-                dataset_id            = $seed.dataset_id
-                dataset_version_major = $datasetDetail.current_version_major
-                component_type        = "bar"
-                config                = @{
+                dataset_reference = $visualDatasetReference
+                component_type    = "bar"
+                version_note      = "Smoke visual permission fixture"
+                config            = @{
                     mode             = "summary"
                     summary_field    = $visualField.key
                     summary_type     = "count"
@@ -754,9 +823,15 @@ try {
         }
     $visualDetail = Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/components/$visualSlug" -Headers $headers
     $visualVersion = $visualDetail.versions | Select-Object -First 1
+    if ($visualComponent.schema_version -ne 1 -or
+        [string]$visualDetail.component_id -cne [string]$visualComponent.component_id -or
+        -not $visualVersion -or
+        [string]$visualVersion.dataset_reference.reference.resource_id -cne $visualDatasetResourceId) {
+        throw "Expected visual Component create/read-back to retain exact canonical identities"
+    }
     Invoke-Json `
         -Method "Post" `
-        -Uri "$baseUrl/api/admin/components/$($visualComponent.id)/versions/$($visualVersion.id)/publish" `
+        -Uri "$baseUrl/api/admin/components/$($visualComponent.component_id)/versions/$($visualVersion.component_version_id)/publish" `
         -Headers $headers | Out-Null
     $visualBar = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/$visualSlug/bar" -Headers $headers
     if ($visualBar.materialization_state -ne "ready" -or $visualBar.component_type -ne "bar" -or $visualBar.points.Count -lt 1) {
@@ -841,7 +916,8 @@ try {
             -RepositoryRoot $repoRoot `
             -EvidencePath $deploymentEvidenceFullPath `
             -BaseUrl $baseUrl `
-            -ExpectedDataState $ExpectedDataState
+            -ExpectedDataState $ExpectedDataState `
+            -TransitionCatalogProfile $TransitionCatalogProfile
     }
 
     $result = [pscustomobject]@{

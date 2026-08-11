@@ -29,6 +29,17 @@ type DashboardSummary = {
 };
 
 type ComponentVersionOption = {
+  component_reference: {
+    reference: {
+      installation_id: string;
+      owner: {
+        kind: "module_instance";
+        module_instance_id: string;
+      };
+      resource_type: string;
+      resource_id: string;
+    };
+  };
   component_version_id: string;
   component_slug: string;
   component_type: string;
@@ -265,7 +276,7 @@ function bindGeometryCommand(
   return {
     operation: "bind",
     client_key: clientKey,
-    component_version_id: option.component_version_id,
+    component_reference: option.component_reference,
     geometry,
   };
 }
@@ -754,11 +765,11 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
 
     try {
       const tableOption = fixture.composition.available_component_versions.find(
-        (option) => option.component_type === "table",
+        (option) => option.component_slug === "sprint-8a-record-table",
       );
       expect(
         tableOption,
-        "the reference composition should expose a placeable Table",
+        "the Sprint 8A seed should expose the exact module-owned multi-page record Table",
       ).toBeTruthy();
       await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
@@ -795,33 +806,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(page.getByRole("button", { name: "Reset table controls" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Choose visible columns" })).toBeVisible();
 
-      if (tableOption!.component_slug === "sprint-7a-record-table") {
-        const rows = tableViewer.locator("tbody tr[data-row-id]");
-        await expect(rows).not.toHaveCount(0);
-        await expect.poll(() => executionUrls.length).toBeGreaterThanOrEqual(1);
-        const requestCountBeforeFullscreen = executionUrls.length;
-        const fullscreenTrigger = page.getByRole("button", {
-          name: "View fullscreen",
-        });
-        await fullscreenTrigger.click();
-        const fullscreenDialog = page.getByRole("dialog", {
-          name: /fullscreen Table$/,
-        });
-        await expect(fullscreenDialog).toBeVisible();
-        await expect(fullscreenDialog.locator("tbody tr[data-row-id]")).not.toHaveCount(0);
-        expect(
-          executionUrls.length,
-          "opening fullscreen must not create a second Table request state machine",
-        ).toBe(requestCountBeforeFullscreen);
-        await page.keyboard.press("Escape");
-        await expect(fullscreenDialog).toBeHidden();
-        expect(
-          allExecutionPaths.length >= 1 &&
-            allExecutionPaths.every((path) => mediatedTablePath.test(path)),
-          "the reference Table must stay bound to its Dashboard placement endpoint",
-        ).toBe(true);
-      } else {
-        const pagination = page.locator(
+      const pagination = page.locator(
         '.interactive-data-table__pagination[aria-label="Table pagination"]',
       );
       await expect(pagination).toBeVisible();
@@ -988,7 +973,6 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
           allExecutionPaths.every((path) => mediatedTablePath.test(path)),
         "embedded Table controls must stay bound to the Dashboard placement endpoint",
       ).toBe(true);
-      }
       assertNoConsoleErrors();
     } finally {
       await deleteDashboardFixture(page, fixture.id);
@@ -1284,13 +1268,18 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         (placement) => placement.component === undefined,
       );
 
-      const hiddenBindings = redactedPlacements.map((hidden) => {
-        const adminPlacement = adminDefinition.placements.find(
+      const adminPlacementsForRedacted = redactedPlacements.map((hidden) =>
+        adminDefinition.placements.find(
           (placement) => placement.placement_id === hidden.placement_id,
-        );
-        expect(adminPlacement?.component, "admin projection should identify hidden binding").toBeTruthy();
-        return adminPlacement!.component!;
-      });
+        ),
+      );
+      expect(
+        adminPlacementsForRedacted.filter((placement) => placement?.component === undefined),
+        "a cross-scope Component binding must remain nondisclosed even to the Dashboard projection",
+      ).not.toHaveLength(0);
+      const hiddenBindings = adminPlacementsForRedacted.flatMap((placement) =>
+        placement?.component === undefined ? [] : [placement.component],
+      );
 
       await page.goto("/dashboards");
       await expect(page.locator(`[data-dashboard-id="${dashboard!.id}"]`)).toContainText(

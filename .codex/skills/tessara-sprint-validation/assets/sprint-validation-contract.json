@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "contract": "tessara.validation-contract",
+  "policy_version": "tessara-validation-v2",
+  "sprint": "sprint-0a-template",
+  "implementation_profile": {
+    "kind": "standard"
+  },
+  "requirements": [
+    {
+      "id": "replace-requirement",
+      "implementation_targets": ["replace-implementation-target"],
+      "validation_lanes": [
+        "replace-readiness-lane",
+        "replace-rehearsal-lane",
+        "replace-preflight-lane",
+        "replace-sit-lane",
+        "replace-uat-lane"
+      ]
+    }
+  ],
+  "dependency_domains": [
+    { "name": "product-source", "tracked_inputs": ["crates/**"], "environment_sections": [] },
+    { "name": "build-dependencies", "tracked_inputs": ["Cargo.toml", "Cargo.lock", "package.json", "end2end/package*.json"], "environment_sections": ["toolchain"] },
+    { "name": "migrations-seeds", "tracked_inputs": ["migrations/**", "**/migrations/**", "scripts/seed*.ps1"], "environment_sections": ["databases"] },
+    { "name": "deployment-materialization", "tracked_inputs": ["deploy/**", "Dockerfile", "docker-compose*.yml", "scripts/materialize*.ps1"], "environment_sections": ["compose", "ports", "topology"] },
+    { "name": "fixtures", "tracked_inputs": ["**/fixtures/**", "scripts/prepare*-fixtures.ps1"], "environment_sections": ["accounts", "fixtures"] },
+    { "name": "acceptance-inventory", "tracked_inputs": ["end2end/**", "docs/sprints/*-uat/**", "docs/sprints/*-validation-contract.json"], "environment_sections": ["browser"] },
+    { "name": "environment-contract", "tracked_inputs": [".env.example", "rust-toolchain*", "scripts/*environment*.ps1"], "environment_sections": ["toolchain", "databases", "compose", "ports"] },
+    { "name": "validation-shared", "tracked_inputs": ["scripts/tessara-validation-policy.psm1", ".codex/skills/tessara-sprint-validation/references/validation-policy-v2.md", ".codex/skills/tessara-sprint-validation/references/*.schema.json", "docs/architecture/module-extraction-playbook.md"], "environment_sections": [] },
+    { "name": "readiness-runner", "tracked_inputs": ["scripts/*readiness*.ps1"], "environment_sections": [] },
+    { "name": "rehearsal-runner", "tracked_inputs": ["scripts/*rehearsal*.ps1"], "environment_sections": [] },
+    { "name": "preflight-runner", "tracked_inputs": ["scripts/*preflight*.ps1"], "environment_sections": [] },
+    { "name": "sit-runner", "tracked_inputs": ["scripts/*sit*.ps1"], "environment_sections": [] },
+    { "name": "uat-runner", "tracked_inputs": ["scripts/*uat*.ps1"], "environment_sections": [] },
+    { "name": "evidence-publication", "tracked_inputs": ["scripts/*evidence*.ps1", "scripts/*lifecycle*.ps1"], "environment_sections": ["evidence-root"] },
+    { "name": "documentation", "tracked_inputs": ["docs/**"], "environment_sections": [] }
+  ],
+  "implementation_targets": [
+    {
+      "id": "replace-implementation-target",
+      "command": "replace with an exact repository-owned command",
+      "dependency_domains": ["product-source"],
+      "proof_classes": ["static-quality"],
+      "required": true,
+      "clean_environment": false
+    }
+  ],
+  "lanes": [
+    { "id": "replace-readiness-lane", "phase": "validation-readiness", "dependency_domains": ["validation-shared", "readiness-runner", "environment-contract"], "prerequisites": [], "touches_live_state": false },
+    { "id": "replace-rehearsal-lane", "phase": "candidate-rehearsal", "dependency_domains": ["validation-shared", "product-source", "rehearsal-runner"], "prerequisites": [], "touches_live_state": false },
+    { "id": "replace-preflight-lane", "phase": "validation-preflight", "dependency_domains": ["validation-shared", "preflight-runner"], "prerequisites": [], "touches_live_state": false },
+    { "id": "replace-sit-lane", "phase": "sit", "dependency_domains": ["validation-shared", "product-source", "sit-runner"], "prerequisites": [], "touches_live_state": true },
+    { "id": "replace-uat-lane", "phase": "uat", "dependency_domains": ["validation-shared", "acceptance-inventory", "uat-runner"], "prerequisites": [], "touches_live_state": true }
+  ],
+  "evidence_policy": {
+    "root": "artifacts/sprint-0a-template-closeout",
+    "tracked": false,
+    "successful_raw": "retained_cold",
+    "phase_local_indexes": true,
+    "final_full_integrity_audit": true
+  }
+}

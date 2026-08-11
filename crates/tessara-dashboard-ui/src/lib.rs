@@ -31,19 +31,16 @@ pub use types::{
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 thread_local! {
-    static LIFECYCLE_ROOT: std::cell::RefCell<tessara_module_ui::LeptosLifecycleRoot> =
+    static LIFECYCLE: std::cell::RefCell<tessara_module_ui::LeptosLifecycleAdapter<DashboardRouteBootstrap>> =
+        const { std::cell::RefCell::new(tessara_module_ui::LeptosLifecycleAdapter::new()) };
+    static DIRECT_ROOT: std::cell::RefCell<tessara_module_ui::LeptosLifecycleRoot> =
         const { std::cell::RefCell::new(tessara_module_ui::LeptosLifecycleRoot::new()) };
-    static LIFECYCLE_BOOTSTRAP: std::cell::RefCell<Option<leptos::prelude::RwSignal<DashboardRouteBootstrap>>> =
-        const { std::cell::RefCell::new(None) };
-    static LIFECYCLE_ROOT_ID: std::cell::RefCell<Option<String>> =
-        const { std::cell::RefCell::new(None) };
-    static LIFECYCLE_DIRTY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate_dashboard() {
-    use leptos::{context::Provider, mount::hydrate_from, prelude::*};
+    use leptos::{context::Provider, prelude::*};
     use wasm_bindgen::JsCast;
 
     let _ = any_spawner::Executor::init_wasm_bindgen();
@@ -64,14 +61,15 @@ pub fn hydrate_dashboard() {
         return;
     };
     let bootstrap_for_view = bootstrap.clone();
-    let handle = hydrate_from(root.clone(), move || {
-        view! {
-            <Provider value=bootstrap_for_view.clone()>
-                {document::dashboard_content(&bootstrap_for_view)}
-            </Provider>
-        }
+    DIRECT_ROOT.with(|direct| {
+        direct.borrow_mut().hydrate(root.clone(), move || {
+            view! {
+                <Provider value=bootstrap_for_view.clone()>
+                    {document::dashboard_content(&bootstrap_for_view)}
+                </Provider>
+            }
+        })
     });
-    handle.forget();
     let _ = root.set_attribute("data-hydration", "ready");
 }
 
@@ -92,27 +90,19 @@ pub fn mount_dashboard(root_id: &str, bootstrap_json: &str) -> Result<(), wasm_b
         .get_element_by_id(root_id)
         .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok())
         .ok_or_else(|| wasm_bindgen::JsValue::from_str("module outlet is unavailable"))?;
-    root.set_inner_html("");
-    let state = RwSignal::new(bootstrap);
-    LIFECYCLE_ROOT.with(|lifecycle| {
-        lifecycle.borrow_mut().mount(root.clone(), move || {
-            view! {
-                {move || {
-                    let current = state.get();
-                    let provided = current.clone();
-                    view! {
-                        <Provider value=provided>
-                            {document::dashboard_content(&current)}
-                        </Provider>
-                    }
-                }}
-            }
-        });
+    LIFECYCLE.with(|lifecycle| {
+        lifecycle
+            .borrow_mut()
+            .mount(root_id, root, bootstrap, move |current| {
+                let provided = current.clone();
+                view! {
+                    <Provider value=provided>
+                        {document::dashboard_content(&current)}
+                    </Provider>
+                }
+                .into_any()
+            });
     });
-    LIFECYCLE_BOOTSTRAP.with(|slot| *slot.borrow_mut() = Some(state));
-    LIFECYCLE_ROOT_ID.with(|slot| *slot.borrow_mut() = Some(root_id.to_string()));
-    LIFECYCLE_DIRTY.with(|dirty| dirty.set(false));
-    let _ = root.set_attribute("data-module-lifecycle", "active");
     Ok(())
 }
 
@@ -120,23 +110,20 @@ pub fn mount_dashboard(root_id: &str, bootstrap_json: &str) -> Result<(), wasm_b
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn navigate_dashboard(bootstrap_json: &str) -> Result<(), wasm_bindgen::JsValue> {
-    use leptos::prelude::Set;
-
     let bootstrap = serde_json::from_str::<DashboardRouteBootstrap>(bootstrap_json)
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))?;
-    LIFECYCLE_BOOTSTRAP.with(|slot| {
-        let signal = *slot.borrow();
-        signal
-            .ok_or_else(|| wasm_bindgen::JsValue::from_str("Dashboard is not mounted"))?
-            .set(bootstrap);
-        Ok(())
+    LIFECYCLE.with(|lifecycle| {
+        lifecycle
+            .borrow()
+            .navigate(bootstrap)
+            .map_err(wasm_bindgen::JsValue::from_str)
     })
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn can_deactivate_dashboard() -> bool {
-    LIFECYCLE_DIRTY.with(|dirty| !dirty.get())
+    LIFECYCLE.with(|lifecycle| lifecycle.borrow().can_deactivate())
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
@@ -153,37 +140,18 @@ pub fn resume_dashboard() {
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 fn set_lifecycle_visibility(hidden: bool) {
-    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
-        return;
-    };
-    LIFECYCLE_ROOT_ID.with(|slot| {
-        if let Some(root) = slot
-            .borrow()
-            .as_deref()
-            .and_then(|id| document.get_element_by_id(id))
-        {
-            let _ = root.set_attribute(
-                "data-module-lifecycle",
-                if hidden { "suspended" } else { "active" },
-            );
-            let _ = root.toggle_attribute_with_force("hidden", hidden);
-            let _ = root.toggle_attribute_with_force("inert", hidden);
-        }
-    });
+    LIFECYCLE.with(|lifecycle| lifecycle.borrow().set_suspended(hidden));
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn unmount_dashboard() {
-    LIFECYCLE_ROOT.with(|lifecycle| lifecycle.borrow_mut().unmount());
-    LIFECYCLE_BOOTSTRAP.with(|slot| *slot.borrow_mut() = None);
-    LIFECYCLE_ROOT_ID.with(|slot| *slot.borrow_mut() = None);
-    LIFECYCLE_DIRTY.with(|dirty| dirty.set(false));
+    LIFECYCLE.with(|lifecycle| lifecycle.borrow_mut().unmount());
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 pub(crate) fn set_lifecycle_dirty(dirty: bool) {
-    LIFECYCLE_DIRTY.with(|state| state.set(dirty));
+    LIFECYCLE.with(|lifecycle| lifecycle.borrow_mut().set_dirty(dirty));
 }
 
 #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]

@@ -53,6 +53,8 @@ param(
     [string]$OutputPath,
     [string]$DeploymentEvidencePath,
     [ValidateSet("fresh")][string]$ExpectedDataState,
+    [ValidateSet("sprint-6a", "sprint-8a")]
+    [string]$TransitionCatalogProfile = "sprint-6a",
     [switch]$Overwrite,
     [switch]$SelfTest
 )
@@ -2053,6 +2055,7 @@ $deploymentEvidence = Assert-Sprint6ADeploymentEvidence `
     -EvidencePath $resolvedDeploymentEvidencePath `
     -BaseUrl $baseUrl `
     -ExpectedDataState $ExpectedDataState `
+    -TransitionCatalogProfile $TransitionCatalogProfile `
     -AdminEmail $AdminEmail `
     -AdminPassword $AdminPassword
 

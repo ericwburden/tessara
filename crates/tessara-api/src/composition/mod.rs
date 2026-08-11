@@ -12,15 +12,22 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::Row;
+use sqlx::{Postgres, Row, Transaction};
 use tessara_composition::{
     AUTHORIZATION_API_V1, ActorEvidenceV1, ApplicationBlueprintV1, ApplicationLockfileV1,
-    ApplyAuthorizationV1, ApplyOperationKindV1, ApprovedEffectV1, CompositionError,
-    CompositionOperationV1, InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1,
-    ReleaseCatalogV1, canonical_digest, required_effects, resolve,
+    ApplyAuthorizationV1, ApplyOperationKindV1, ApprovedEffectV1,
+    BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
+    BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+    BootstrapDependencyValidationAuthorizationIssueRequestV1,
+    BootstrapDependencyValidationAuthorizationIssueResponseV1,
+    BootstrapDependencyValidationAuthorizationV1, BootstrapDependencyValidationInvocationV1,
+    BootstrapDependencyValidationRequestV1, CompositionError, CompositionOperationV1,
+    InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1, ReleaseCatalogV1,
+    canonical_digest, required_effects, resolve_against, resolve_bootstrap_dependency_validation,
 };
 use tessara_module_contract::{
-    ModuleManifest, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
+    ArtifactDigest, AuthorizationAudienceV1, ModuleManifest, ProtocolSignaturePurposeV1,
+    PurposeBoundSigningKeyV1,
 };
 use uuid::Uuid;
 
@@ -60,6 +67,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route(
             "/api/internal/composition/bootstrap/core",
             post(apply_core_bootstrap),
+        )
+        .route(
+            "/api/internal/composition/bootstrap/dependency-authorization",
+            post(issue_bootstrap_dependency_authorization),
         )
         .route(
             "/api/admin/composition/drift/{finding_id}/adopt",
@@ -177,20 +188,44 @@ struct CoreBootstrapV1 {
     root_node_external_key: String,
     root_node_name: String,
     dataset_id: Uuid,
+    #[serde(default)]
+    dataset_revision_id: Option<Uuid>,
     dataset_external_key: String,
-    components: Vec<CoreBootstrapComponentV1>,
+    #[serde(default)]
+    dataset_rows: Vec<CoreBootstrapDatasetRowV1>,
+    #[serde(default)]
+    additional_nodes: Vec<CoreBootstrapNodeV1>,
+    #[serde(default)]
+    additional_datasets: Vec<CoreBootstrapDatasetV1>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct CoreBootstrapComponentV1 {
+struct CoreBootstrapNodeV1 {
+    node_id: Uuid,
+    node_type_id: Uuid,
+    parent_node_id: Option<Uuid>,
     external_key: String,
-    component_id: Uuid,
-    component_version_id: Uuid,
     name: String,
-    slug: String,
-    component_type: String,
-    config: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CoreBootstrapDatasetV1 {
+    dataset_id: Uuid,
+    dataset_revision_id: Uuid,
+    external_key: String,
+    name: String,
+    scope_node_ids: Vec<Uuid>,
+    rows: Vec<CoreBootstrapDatasetRowV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CoreBootstrapDatasetRowV1 {
+    row_id: String,
+    restriction_tier: String,
+    label: String,
 }
 
 async fn summary(
@@ -345,6 +380,45 @@ async fn create_blueprint(
     Ok((StatusCode::CREATED, Json(blueprint)))
 }
 
+async fn current_applied_lockfile(
+    state: &AppState,
+    installation_id: Uuid,
+) -> ApiResult<Option<ApplicationLockfileV1>> {
+    let projected = sqlx::query(
+        "SELECT lockfile,receipt
+         FROM composition_receipt_projections
+         WHERE installation_id=$1
+         ORDER BY revision DESC
+         LIMIT 1",
+    )
+    .bind(installation_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    let Some(projected) = projected else {
+        return Ok(None);
+    };
+    let mut lockfile: ApplicationLockfileV1 =
+        serde_json::from_value(projected.try_get("lockfile")?)
+            .map_err(|error| ApiError::Internal(error.into()))?;
+    let receipt: InstallationReceiptV1 = serde_json::from_value(projected.try_get("receipt")?)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    if lockfile.installation_id != installation_id || receipt.installation_id != installation_id {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "current composition projection belongs to another installation"
+        )));
+    }
+    // Emergency enablement is an observed override rather than a mutation of
+    // the desired Module selection. Feed the observed state into delta
+    // planning so the next ordinary revision explicitly reconciles it instead
+    // of silently leaving the owner disabled.
+    for module in &mut lockfile.modules {
+        if let Some(enabled) = receipt.observed_enablement.get(&module.definition_id) {
+            module.enabled = *enabled;
+        }
+    }
+    Ok(Some(lockfile))
+}
+
 async fn resolve_blueprint(
     State(state): State<AppState>,
     auth: AuthenticatedRequest,
@@ -363,7 +437,9 @@ async fn resolve_blueprint(
     .ok_or_else(|| ApiError::NotFound("Blueprint revision was not found".into()))?;
     let blueprint: ApplicationBlueprintV1 =
         serde_json::from_value(document).map_err(|error| ApiError::Internal(error.into()))?;
-    let lockfile = resolve(&blueprint, &request.catalog).map_err(findings_error)?;
+    let current = current_applied_lockfile(&state, installation_id).await?;
+    let lockfile =
+        resolve_against(&blueprint, &request.catalog, current.as_ref()).map_err(findings_error)?;
     let lockfile_digest = canonical_digest(&lockfile)
         .map_err(|error| ApiError::Internal(error.into()))?
         .to_string();
@@ -533,15 +609,7 @@ async fn apply_blueprint(
         approved_effects,
         reason: Some("Approved through Application Composition".into()),
     };
-    let signer = PurposeBoundSigningKeyV1::from_secret_bytes(
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER")
-            .unwrap_or_else(|_| "tessara.local.sprint-6f".into()),
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID")
-            .unwrap_or_else(|_| "apply-dev-v1".into()),
-        ProtocolSignaturePurposeV1::ApplyAuthorization,
-        decode_secret_hex("TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX")?,
-    )
-    .map_err(|error| ApiError::Internal(error.into()))?;
+    let signer = apply_authorization_signer()?;
     let signed = signer
         .sign(authorization)
         .map_err(|error| ApiError::Internal(error.into()))?;
@@ -581,6 +649,18 @@ fn decode_secret_hex(name: &str) -> ApiResult<[u8; 32]> {
             .map_err(|_| ApiError::Internal(anyhow::anyhow!("{name} is not hexadecimal")))?;
     }
     Ok(bytes)
+}
+
+fn apply_authorization_signer() -> ApiResult<PurposeBoundSigningKeyV1> {
+    PurposeBoundSigningKeyV1::from_secret_bytes(
+        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER")
+            .unwrap_or_else(|_| "tessara.local.sprint-6f".into()),
+        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID")
+            .unwrap_or_else(|_| "apply-dev-v1".into()),
+        ProtocolSignaturePurposeV1::ApplyAuthorization,
+        decode_secret_hex("TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX")?,
+    )
+    .map_err(|error| ApiError::Internal(error.into()))
 }
 
 async fn operation(
@@ -648,6 +728,16 @@ async fn project_receipt(
                 .into(),
         ));
     }
+    let previous_lockfile: Option<ApplicationLockfileV1> = sqlx::query_scalar::<_, Value>(
+        "SELECT lockfile FROM composition_receipt_projections
+         WHERE installation_id=$1 ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(request.receipt.installation_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .map(serde_json::from_value)
+    .transpose()
+    .map_err(|error| ApiError::Internal(error.into()))?;
     let lockfile = request.lockfile;
     let endpoints = module_control_endpoints()?;
     let client = reqwest::Client::new();
@@ -684,22 +774,27 @@ async fn project_receipt(
         }
         manifests.insert(module.definition_id.clone(), manifest);
     }
+    let receipt_digest = canonical_digest(&request.receipt)
+        .map_err(|error| ApiError::Internal(error.into()))?
+        .to_string();
+    let receipt_value =
+        serde_json::to_value(&request.receipt).map_err(|error| ApiError::Internal(error.into()))?;
+    let lockfile_value =
+        serde_json::to_value(&lockfile).map_err(|error| ApiError::Internal(error.into()))?;
     crate::modules::project_composition_modules(
         &state.pool,
         &lockfile,
         &request.receipt,
         &manifests,
+        previous_lockfile.as_ref(),
+        crate::modules::CompositionProjectionDocuments {
+            digest: &receipt_digest,
+            lockfile: &lockfile_value,
+            receipt: &receipt_value,
+        },
     )
     .await
     .map_err(ApiError::Internal)?;
-    let digest = canonical_digest(&request.receipt)
-        .map_err(|error| ApiError::Internal(error.into()))?
-        .to_string();
-    let value =
-        serde_json::to_value(&request.receipt).map_err(|error| ApiError::Internal(error.into()))?;
-    sqlx::query("INSERT INTO composition_receipt_projections(installation_id,revision,digest,receipt) VALUES($1,$2,$3,$4) ON CONFLICT(installation_id,revision) DO UPDATE SET digest=EXCLUDED.digest,receipt=EXCLUDED.receipt,observed_at=now()")
-        .bind(request.receipt.installation_id).bind(request.receipt.revision as i64).bind(digest).bind(value)
-        .execute(&state.pool).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -741,6 +836,258 @@ fn is_constrained_emergency_lockfile(
     Ok(&expected == projected)
 }
 
+async fn issue_bootstrap_dependency_authorization(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<BootstrapDependencyValidationAuthorizationIssueRequestV1>,
+) -> ApiResult<Json<BootstrapDependencyValidationAuthorizationIssueResponseV1>> {
+    require_projection_token(&headers)?;
+    apply_authorization_signer()?
+        .verifier()
+        .verify(&request.apply_authorization)
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+
+    let lockfile_value: Value = sqlx::query_scalar(
+        "SELECT document FROM composition_lockfiles
+         WHERE installation_id=$1 AND blueprint_revision=$2",
+    )
+    .bind(request.installation_id)
+    .bind(request.desired_revision as i64)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| {
+        ApiError::BadRequest("Bootstrap authorization lockfile is unavailable".into())
+    })?;
+    let lockfile: ApplicationLockfileV1 =
+        serde_json::from_value(lockfile_value).map_err(|error| ApiError::Internal(error.into()))?;
+    let current_receipt_digest = sqlx::query_scalar::<_, String>(
+        "SELECT digest FROM composition_receipt_projections
+         WHERE installation_id=$1 ORDER BY revision DESC LIMIT 1",
+    )
+    .bind(request.installation_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .map(ArtifactDigest::new)
+    .transpose()
+    .map_err(|error| ApiError::Internal(error.into()))?;
+    let now = Utc::now();
+    request
+        .apply_authorization
+        .payload
+        .validate_for(
+            &lockfile.materialization_plan,
+            &lockfile.materialization_plan_digest,
+            current_receipt_digest.as_ref(),
+            now,
+        )
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    if request.apply_authorization.payload.operation != ApplyOperationKindV1::Materialize
+        || !request
+            .apply_authorization
+            .payload
+            .approved_effects
+            .contains(&ApprovedEffectV1::Bootstrap)
+        || request.installation_id != lockfile.installation_id
+        || request.desired_revision != lockfile.blueprint_revision
+        || request.apply_sequence != request.apply_authorization.payload.apply_sequence
+        || request.desired_revision != request.apply_authorization.payload.desired_revision
+        || !lockfile.materialization_plan.actions.iter().any(|action| {
+            matches!(action, MaterializationActionV1::Bootstrap { owner, .. }
+                if owner == &request.owner_definition_id)
+        })
+    {
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
+
+    let module = lockfile
+        .modules
+        .iter()
+        .find(|module| module.definition_id == request.owner_definition_id && module.enabled)
+        .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let module_instance_id = tessara_composition::module_instance_id(
+        request.installation_id,
+        &request.owner_definition_id,
+    );
+    let endpoint = module_control_endpoints()?
+        .remove(&request.owner_definition_id)
+        .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let manifest = reqwest::Client::new()
+        .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+        .header("x-tessara-module-control-key", module_control_key()?)
+        .send()
+        .await
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
+        .error_for_status()
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
+        .json::<ModuleManifest>()
+        .await
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let validation = resolve_bootstrap_dependency_validation(&lockfile, module, &manifest)
+        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    let Some(validation) = validation else {
+        return Ok(Json(
+            BootstrapDependencyValidationAuthorizationIssueResponseV1 { validation: None },
+        ));
+    };
+    require_bootstrap_validation_provider_target(&lockfile, &validation.target).await?;
+    if canonical_digest(
+        module
+            .bootstrap
+            .as_ref()
+            .and_then(|bootstrap| match bootstrap {
+                tessara_composition::BootstrapInputV1::Inline { value, .. } => Some(value),
+                tessara_composition::BootstrapInputV1::LocalCas { .. } => None,
+            })
+            .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?,
+    )
+    .map_err(|error| ApiError::Internal(error.into()))?
+        != request.input_digest
+        || crate::module_service_requests::configured_registry()
+            .map_err(ApiError::Internal)?
+            .and_then(|registry| registry.identity(&manifest.definition_id).cloned())
+            .is_none()
+    {
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
+    let expires_at = std::cmp::min(
+        now + Duration::seconds(30),
+        request.apply_authorization.payload.expires_at,
+    );
+    if expires_at <= now {
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
+    let validation_request = BootstrapDependencyValidationRequestV1 {
+        schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+        input_digest: request.input_digest.clone(),
+        desired_revision: request.desired_revision,
+        apply_sequence: request.apply_sequence,
+        target_plan_digest: request
+            .apply_authorization
+            .payload
+            .target_plan_digest
+            .clone(),
+        payload: validation.payload,
+    };
+    let request_digest =
+        canonical_digest(&validation_request).map_err(|error| ApiError::Internal(error.into()))?;
+    let authorization = crate::core_security::protocol_signer(
+        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
+    )?
+    .sign(BootstrapDependencyValidationAuthorizationV1 {
+        schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
+        installation_id: request.installation_id,
+        module_instance_id,
+        module_definition_id: request.owner_definition_id,
+        input_digest: request.input_digest,
+        desired_revision: request.desired_revision,
+        apply_sequence: request.apply_sequence,
+        target_plan_digest: validation_request.target_plan_digest.clone(),
+        dependency_binding: validation.target.dependency_binding.clone(),
+        functional_contract: validation.target.functional_contract.clone(),
+        functional_contract_version: validation.target.functional_contract_version.clone(),
+        action: validation.target.action.clone(),
+        method: validation.target.method,
+        path: validation.target.path.clone(),
+        audience: validation.target.audience.clone(),
+        request_digest,
+        correlation_id: Uuid::new_v4(),
+        jti: Uuid::new_v4(),
+        issued_at: now,
+        expires_at,
+    })
+    .map_err(|error| ApiError::Internal(error.into()))?;
+    Ok(Json(
+        BootstrapDependencyValidationAuthorizationIssueResponseV1 {
+            validation: Some(BootstrapDependencyValidationInvocationV1 {
+                target: validation.target,
+                request: validation_request,
+                authorization,
+            }),
+        },
+    ))
+}
+
+async fn require_bootstrap_validation_provider_target(
+    lockfile: &ApplicationLockfileV1,
+    target: &tessara_composition::BootstrapDependencyValidationTargetV1,
+) -> ApiResult<()> {
+    let invalid = || ApiError::Forbidden("bootstrap:authorize".into());
+    match &target.audience {
+        AuthorizationAudienceV1::CoreInstallation { installation_id } => {
+            if *installation_id != lockfile.installation_id {
+                return Err(invalid());
+            }
+            let action = crate::core_service_providers::resolve_service_action(
+                &target.functional_contract,
+                &target.action,
+            )
+            .ok_or_else(invalid)?;
+            let contract_version =
+                crate::core_service_providers::contract_version(&target.functional_contract)
+                    .ok_or_else(invalid)?;
+            if action.path != target.path
+                || action.method != target.method
+                || action.functional_contract != target.functional_contract
+                || contract_version != target.functional_contract_version
+            {
+                return Err(invalid());
+            }
+        }
+        AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id,
+            module_definition_id,
+        } => {
+            let provider = lockfile
+                .modules
+                .iter()
+                .find(|module| {
+                    module.enabled && module.definition_id == module_definition_id.as_str()
+                })
+                .ok_or_else(invalid)?;
+            if *module_instance_id
+                != tessara_composition::module_instance_id(
+                    lockfile.installation_id,
+                    &provider.definition_id,
+                )
+            {
+                return Err(invalid());
+            }
+            let endpoint = module_control_endpoints()?
+                .remove(&provider.definition_id)
+                .ok_or_else(invalid)?;
+            let manifest = reqwest::Client::new()
+                .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+                .header("x-tessara-module-control-key", module_control_key()?)
+                .send()
+                .await
+                .map_err(|_| invalid())?
+                .error_for_status()
+                .map_err(|_| invalid())?
+                .json::<ModuleManifest>()
+                .await
+                .map_err(|_| invalid())?;
+            if manifest.definition_id != *module_definition_id
+                || manifest.release_version != provider.version
+                || canonical_digest(&manifest).map_err(|error| ApiError::Internal(error.into()))?
+                    != provider.manifest_digest
+                || !manifest.provided_contracts.iter().any(|contract| {
+                    contract.id.as_str() == target.functional_contract
+                        && contract.version == target.functional_contract_version
+                })
+                || !manifest.provided_service_actions.iter().any(|action| {
+                    action.functional_contract.as_str() == target.functional_contract
+                        && action.authorization_action == target.action
+                        && action.method == target.method
+                        && action.path == target.path
+                })
+            {
+                return Err(invalid());
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn apply_core_bootstrap(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -748,6 +1095,8 @@ async fn apply_core_bootstrap(
 ) -> ApiResult<Json<tessara_composition::OwnerBootstrapResponseV1>> {
     require_projection_token(&headers)?;
     if request.input.schema_version != "tessara.io/core-bootstrap/v1"
+        || request.apply_sequence == 0
+        || request.dependency_validation.is_some()
         || request.idempotency_key.trim().is_empty()
         || !request
             .validate_input_digest()
@@ -778,14 +1127,6 @@ async fn apply_core_bootstrap(
     if installation_id != request.installation_id
         || request.input.root_node_type_name.trim().is_empty()
         || request.input.root_node_name.trim().is_empty()
-        || request.input.components.iter().any(|component| {
-            component.external_key.trim().is_empty()
-                || component.name.trim().is_empty()
-                || !matches!(
-                    component.component_type.as_str(),
-                    "table" | "bar" | "line" | "pie" | "donut" | "stat_card"
-                )
-        })
     {
         return Err(ApiError::BadRequest(
             "Core bootstrap input is invalid".into(),
@@ -799,72 +1140,39 @@ async fn apply_core_bootstrap(
     sqlx::query("INSERT INTO nodes(id,node_type_id,parent_node_id,name) VALUES($1,$2,NULL,$3) ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,name=EXCLUDED.name")
         .bind(request.input.root_node_id).bind(request.input.root_node_type_id).bind(request.input.root_node_name.trim())
         .execute(&mut *transaction).await?;
-    sqlx::query("INSERT INTO datasets(id,name,slug,grain) VALUES($1,$2,$3,'node') ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug")
-        .bind(request.input.dataset_id).bind("Composition Bootstrap Dataset").bind(&request.input.dataset_external_key)
-        .execute(&mut *transaction).await?;
-    sqlx::query(
-        "INSERT INTO dataset_scope_nodes(dataset_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
-    )
-    .bind(request.input.dataset_id)
-    .bind(request.input.root_node_id)
-    .execute(&mut *transaction)
-    .await?;
-    let generated_sql = "SELECT 'composition-bootstrap'::text AS __row_id, \
-                         'public'::text AS __restriction_tier, \
-                         'Reference row'::text AS label";
-    let dataset_revision_id: Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, version_major, version_minor,
-             version_patch, semantic_bump, started_new_major_line, status, published_at,
-             initial_source, operations, generated_sql, output_fields, definition_metadata)
-        VALUES ($1, 1, '1.0.0', 1, 0, 0, 'INITIAL', true, 'published', now(),
-                '{"kind":"composition_bootstrap"}'::jsonb, '[]'::jsonb, $2,
-                jsonb_build_array(jsonb_build_object(
-                    'id', '01980000-0002-7000-8000-000000000006'::uuid,
-                    'key', 'label',
-                    'label', 'Label',
-                    'source_alias', 'composition_bootstrap',
-                    'source_field_key', 'label',
-                    'field_type', 'text',
-                    'position', 0)),
-                jsonb_build_object('name', 'Composition Bootstrap Dataset',
-                                   'slug', $3::text,
-                                   'grain', 'node',
-                                   'visibility_node_ids', jsonb_build_array($4::uuid)))
-        ON CONFLICT (dataset_id, version_number)
-        DO UPDATE SET version_label = EXCLUDED.version_label,
-                      version_major = EXCLUDED.version_major,
-                      version_minor = EXCLUDED.version_minor,
-                      version_patch = EXCLUDED.version_patch,
-                      status = EXCLUDED.status,
-                      published_at = EXCLUDED.published_at,
-                      generated_sql = EXCLUDED.generated_sql,
-                      output_fields = EXCLUDED.output_fields,
-                      definition_metadata = EXCLUDED.definition_metadata
-        RETURNING id
-        "#,
-    )
-    .bind(request.input.dataset_id)
-    .bind(generated_sql)
-    .bind(&request.input.dataset_external_key)
-    .bind(request.input.root_node_id)
-    .fetch_one(&mut *transaction)
-    .await?;
-    crate::datasets::materialize_composition_bootstrap_dataset(
-        &mut transaction,
-        request.input.dataset_id,
-        dataset_revision_id,
-        generated_sql,
-    )
-    .await?;
-    for component in &request.input.components {
-        sqlx::query("INSERT INTO components(id,name,slug,description) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,description=EXCLUDED.description")
-            .bind(component.component_id).bind(component.name.trim()).bind(&component.slug)
-            .bind("Application composition bootstrap fixture").execute(&mut *transaction).await?;
-        sqlx::query("INSERT INTO component_versions(id,component_id,dataset_id,dataset_version_major,binding_mode,component_type,version_number,version_label,version_note,status,lifecycle_state,config,published_at) VALUES($1,$2,$3,1,'major_line',$4::component_type,1,'1.0.0','Application composition bootstrap','published','active',$5,now()) ON CONFLICT(id) DO UPDATE SET component_id=EXCLUDED.component_id,dataset_id=EXCLUDED.dataset_id,component_type=EXCLUDED.component_type,lifecycle_state='active',config=EXCLUDED.config")
-            .bind(component.component_version_id).bind(component.component_id).bind(request.input.dataset_id)
-            .bind(&component.component_type).bind(&component.config).execute(&mut *transaction).await?;
+    for node in &request.input.additional_nodes {
+        if node.external_key.trim().is_empty() || node.name.trim().is_empty() {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap node input is invalid".into(),
+            ));
+        }
+        sqlx::query("INSERT INTO nodes(id,node_type_id,parent_node_id,name) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,parent_node_id=EXCLUDED.parent_node_id,name=EXCLUDED.name")
+            .bind(node.node_id).bind(node.node_type_id).bind(node.parent_node_id).bind(node.name.trim())
+            .execute(&mut *transaction).await?;
+    }
+    let primary_rows = if request.input.dataset_rows.is_empty() {
+        vec![CoreBootstrapDatasetRowV1 {
+            row_id: "composition-bootstrap".into(),
+            restriction_tier: "public".into(),
+            label: "Reference row".into(),
+        }]
+    } else {
+        request.input.dataset_rows.clone()
+    };
+    let primary_dataset = CoreBootstrapDatasetV1 {
+        dataset_id: request.input.dataset_id,
+        dataset_revision_id: request
+            .input
+            .dataset_revision_id
+            .unwrap_or_else(Uuid::new_v4),
+        external_key: request.input.dataset_external_key.clone(),
+        name: "Composition Bootstrap Dataset".into(),
+        scope_node_ids: vec![request.input.root_node_id],
+        rows: primary_rows,
+    };
+    seed_core_bootstrap_dataset(&mut transaction, &primary_dataset).await?;
+    for dataset in &request.input.additional_datasets {
+        seed_core_bootstrap_dataset(&mut transaction, dataset).await?;
     }
     let mut resource_ids = std::collections::BTreeMap::from([
         (
@@ -876,12 +1184,12 @@ async fn apply_core_bootstrap(
             request.input.dataset_id.to_string(),
         ),
     ]);
-    resource_ids.extend(request.input.components.iter().map(|component| {
-        (
-            component.external_key.clone(),
-            component.component_version_id.to_string(),
-        )
-    }));
+    for node in &request.input.additional_nodes {
+        resource_ids.insert(node.external_key.clone(), node.node_id.to_string());
+    }
+    for dataset in &request.input.additional_datasets {
+        resource_ids.insert(dataset.external_key.clone(), dataset.dataset_id.to_string());
+    }
     let result_digest =
         canonical_digest(&resource_ids).map_err(|error| ApiError::Internal(error.into()))?;
     let response = tessara_composition::OwnerBootstrapResponseV1 {
@@ -900,6 +1208,101 @@ async fn apply_core_bootstrap(
         .execute(&mut *transaction).await?;
     transaction.commit().await?;
     Ok(Json(response))
+}
+
+async fn seed_core_bootstrap_dataset(
+    transaction: &mut Transaction<'_, Postgres>,
+    dataset: &CoreBootstrapDatasetV1,
+) -> ApiResult<()> {
+    if dataset.external_key.trim().is_empty()
+        || dataset.name.trim().is_empty()
+        || dataset.scope_node_ids.is_empty()
+        || dataset.rows.is_empty()
+        || dataset.rows.len() > 1_000
+    {
+        return Err(ApiError::BadRequest(
+            "Core bootstrap Dataset input is invalid".into(),
+        ));
+    }
+    let mut row_ids = BTreeSet::new();
+    for row in &dataset.rows {
+        if row.row_id.trim().is_empty()
+            || row.label.trim().is_empty()
+            || !row_ids.insert(row.row_id.as_str())
+            || !matches!(
+                row.restriction_tier.as_str(),
+                "public" | "internal" | "restricted" | "confidential"
+            )
+        {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap Dataset row input is invalid".into(),
+            ));
+        }
+    }
+    let generated_sql = format!(
+        "SELECT * FROM (VALUES {}) AS fixture(__row_id,__restriction_tier,label)",
+        dataset
+            .rows
+            .iter()
+            .map(|row| format!(
+                "({}::text,{}::text,{}::text)",
+                sql_text_literal(&row.row_id),
+                sql_text_literal(&row.restriction_tier),
+                sql_text_literal(&row.label)
+            ))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    sqlx::query("INSERT INTO datasets(id,name,slug,grain,authority_revision) VALUES($1,$2,$3,'node',2) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,authority_revision=GREATEST(datasets.authority_revision,2)")
+        .bind(dataset.dataset_id).bind(dataset.name.trim()).bind(dataset.external_key.trim())
+        .execute(&mut **transaction).await?;
+    for node_id in &dataset.scope_node_ids {
+        sqlx::query("INSERT INTO dataset_scope_nodes(dataset_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING")
+            .bind(dataset.dataset_id).bind(node_id).execute(&mut **transaction).await?;
+    }
+    let revision_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO dataset_revisions
+            (id,dataset_id,version_number,version_label,version_major,version_minor,
+             version_patch,semantic_bump,started_new_major_line,status,published_at,
+             initial_source,operations,generated_sql,output_fields,definition_metadata,
+             restriction_policy)
+        VALUES ($1,$2,1,'1.0.0',1,0,0,'INITIAL',true,'published',now(),
+                '{"kind":"composition_bootstrap"}'::jsonb,'[]'::jsonb,$3,
+                jsonb_build_array(jsonb_build_object(
+                    'id','01980000-0002-7000-8000-000000000006'::uuid,
+                    'key','label','label','Label','source_alias','composition_bootstrap',
+                    'source_field_key','label','field_type','text','position',0)),
+                jsonb_build_object('name',$4::text,'slug',$5::text,'grain','node',
+                    'visibility_node_ids',to_jsonb($6::uuid[])),
+                NULL)
+        ON CONFLICT (dataset_id,version_number)
+        DO UPDATE SET status=EXCLUDED.status,published_at=EXCLUDED.published_at,
+                      generated_sql=EXCLUDED.generated_sql,output_fields=EXCLUDED.output_fields,
+                      definition_metadata=EXCLUDED.definition_metadata,
+                      restriction_policy=EXCLUDED.restriction_policy
+        RETURNING id
+        "#,
+    )
+    .bind(dataset.dataset_revision_id)
+    .bind(dataset.dataset_id)
+    .bind(&generated_sql)
+    .bind(dataset.name.trim())
+    .bind(dataset.external_key.trim())
+    .bind(&dataset.scope_node_ids)
+    .fetch_one(&mut **transaction)
+    .await?;
+    crate::datasets::materialize_composition_bootstrap_dataset(
+        transaction,
+        dataset.dataset_id,
+        revision_id,
+        &generated_sql,
+    )
+    .await
+}
+
+fn sql_text_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 async fn adopt_drift(
@@ -1092,15 +1495,7 @@ async fn emergency_disable(
         approved_effects: BTreeSet::from([ApprovedEffectV1::Disable]),
         reason: Some(request.reason.trim().into()),
     };
-    let signer = PurposeBoundSigningKeyV1::from_secret_bytes(
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER")
-            .unwrap_or_else(|_| "tessara.local.sprint-6f".into()),
-        std::env::var("TESSARA_COMPOSITION_APPLY_SIGNING_KEY_ID")
-            .unwrap_or_else(|_| "apply-dev-v1".into()),
-        ProtocolSignaturePurposeV1::ApplyAuthorization,
-        decode_secret_hex("TESSARA_COMPOSITION_APPLY_SIGNING_SECRET_HEX")?,
-    )
-    .map_err(|error| ApiError::Internal(error.into()))?;
+    let signer = apply_authorization_signer()?;
     let signed = signer
         .sign(authorization)
         .map_err(|error| ApiError::Internal(error.into()))?;
@@ -1304,13 +1699,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sprint_8a_core_bootstrap_is_typed_and_owns_the_exact_semantic_seed() {
+        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8a/blueprints/reference.json"
+        )))
+        .expect("valid Sprint 8A Blueprint");
+        let tessara_composition::BootstrapInputV1::Inline { value, .. } =
+            blueprint.core.bootstrap.expect("Core bootstrap")
+        else {
+            panic!("Sprint 8A Core bootstrap must be inline");
+        };
+        let bootstrap: CoreBootstrapV1 =
+            serde_json::from_value(value).expect("typed Core bootstrap");
+        assert_eq!(bootstrap.dataset_rows.len(), 30);
+        assert_eq!(
+            bootstrap
+                .dataset_rows
+                .iter()
+                .filter(|row| row.row_id.starts_with("uat7a-page-"))
+                .count(),
+            26
+        );
+        assert_eq!(bootstrap.additional_nodes.len(), 1);
+        assert_eq!(bootstrap.additional_datasets.len(), 1);
+        assert_eq!(bootstrap.additional_datasets[0].rows.len(), 1);
+    }
+
+    #[test]
     fn checked_catalog_manifest_digests_match_runtime_manifests() {
         let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../deploy/sprint-7a/catalogs/local-release-catalog.json"
+            "/../../deploy/sprint-8a/catalogs/local-release-catalog.json"
         )))
-        .expect("valid Sprint 7A catalog");
+        .expect("valid Sprint 8A catalog");
         let manifests = [
+            serde_json::from_str::<ModuleManifest>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tessara-component-module/manifest.json"
+            )))
+            .expect("valid Component manifest"),
             serde_json::from_str::<ModuleManifest>(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../tessara-dashboard-module/manifest.json"
@@ -1349,7 +1777,8 @@ mod tests {
             "/../../deploy/sprint-6f/catalogs/local-release-catalog.json"
         )))
         .expect("valid Sprint 6F catalog");
-        let resolved = resolve(&blueprint, &catalog).expect("reference composition resolves");
+        let resolved = tessara_composition::resolve(&blueprint, &catalog)
+            .expect("reference composition resolves");
         let definition_id = "tessara.reference.scoped-records".to_string();
         let mut emergency = resolved.clone();
         emergency.materialization_plan = tessara_composition::MaterializationPlanV1 {

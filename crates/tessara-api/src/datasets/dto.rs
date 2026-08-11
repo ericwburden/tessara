@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+pub use tessara_datasets_contract::{DatasetProvenanceItem, DatasetProvenanceSummary};
 use uuid::Uuid;
 
 /// Payload for creating or replacing a dataset definition and revision.
@@ -275,21 +276,6 @@ pub struct DatasetDefinition {
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
 }
 
-/// Searchable direct-source provenance for Dataset catalog surfaces.
-#[derive(Clone, Default, Serialize)]
-pub struct DatasetProvenanceSummary {
-    pub(crate) forms: Vec<DatasetProvenanceItem>,
-    pub(crate) datasets: Vec<DatasetProvenanceItem>,
-}
-
-/// One compact upstream source reference for Dataset provenance.
-#[derive(Clone, Serialize)]
-pub struct DatasetProvenanceItem {
-    pub(crate) id: Uuid,
-    pub(crate) name: String,
-    pub(crate) slug: Option<String>,
-}
-
 /// Recursive upstream lineage for a dataset detail provenance tree.
 #[derive(Clone, Serialize)]
 pub struct DatasetLineageNode {
@@ -341,8 +327,6 @@ pub enum DatasetCompatibilityState {
 #[serde(rename_all = "snake_case")]
 pub enum DatasetDependencyKind {
     Dataset,
-    ComponentVersion,
-    Dashboard,
 }
 
 /// Binding mode used by a downstream dependency.
@@ -409,8 +393,6 @@ pub enum DatasetSemanticBump {
 pub struct DatasetDependencySummary {
     pub(crate) dependency_count: usize,
     pub(crate) dataset_count: usize,
-    pub(crate) component_version_count: usize,
-    pub(crate) dashboard_count: usize,
     pub(crate) carry_forward_state: DatasetCarryForwardState,
 }
 

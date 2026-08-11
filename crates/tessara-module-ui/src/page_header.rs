@@ -7,12 +7,15 @@ use leptos::prelude::*;
 #[component]
 pub fn PageHeader(
     #[prop(into)] title: String,
+    #[prop(optional, into)] eyebrow: Option<String>,
     #[prop(optional, into)] description: Option<String>,
     #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     view! {
         <header class="page-header">
             <div>
+                {eyebrow
+                    .map(|eyebrow| view! { <p class="page-header__eyebrow">{eyebrow}</p> })}
                 <h1>{title}</h1>
                 {description
                     .map(|description| view! { <p>{description}</p> })}

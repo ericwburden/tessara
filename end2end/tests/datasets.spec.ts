@@ -1592,7 +1592,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
       .filter({ hasText: "Dependency Review" })
       .first();
     await expect(revisionSummary).toContainText("Draft");
-    await expect(revisionSummary).toContainText("1 total");
+    await expect(revisionSummary).toContainText("1 downstream datasets");
     await expect(page.getByRole("heading", { name: "Changelog" })).toBeVisible();
     await expect(page.locator("table.data-table").filter({ hasText: "Version Impact" })).toContainText(/added/i);
     await expect(page.getByRole("heading", { name: "Downstream Dependencies" })).toBeVisible();

@@ -1,6 +1,5 @@
-//! Shell navigation model and capability filtering.
-//!
-//! Keep route labels, navigation sections, icon selection, and permission checks here; feature modules should not duplicate sidebar metadata.
+//! Shell navigation composition for permanent Core destinations and enrolled
+//! manifest contributions.
 
 #[derive(Clone, Copy)]
 pub struct NavItem {
@@ -9,123 +8,6 @@ pub struct NavItem {
     pub label: &'static str,
     pub section: &'static str,
     pub capabilities: &'static [&'static str],
-}
-
-pub const NAV_ITEMS: [NavItem; 10] = [
-    NavItem {
-        key: "home",
-        href: "/",
-        label: "Home",
-        section: "Main",
-        capabilities: &[],
-    },
-    NavItem {
-        key: "organization",
-        href: "/organization",
-        label: "Organization",
-        section: "Main",
-        capabilities: &["hierarchy:read", "hierarchy:manage"],
-    },
-    NavItem {
-        key: "forms",
-        href: "/forms",
-        label: "Forms",
-        section: "Main",
-        capabilities: &["forms:read", "forms:manage"],
-    },
-    NavItem {
-        key: "workflows",
-        href: "/workflows",
-        label: "Workflows",
-        section: "Main",
-        capabilities: &["workflows:read", "workflows:manage"],
-    },
-    NavItem {
-        key: "responses",
-        href: "/responses",
-        label: "Responses",
-        section: "Main",
-        capabilities: &[
-            "submissions:read_own",
-            "submissions:respond",
-            "submissions:manage",
-        ],
-    },
-    NavItem {
-        key: "operations",
-        href: "/operations",
-        label: "Operations",
-        section: "Main",
-        capabilities: &["operations:view"],
-    },
-    NavItem {
-        key: "components",
-        href: "/components",
-        label: "Components",
-        section: "Main",
-        capabilities: &["components:read", "components:manage"],
-    },
-    NavItem {
-        key: "dashboards",
-        href: "/dashboards",
-        label: "Dashboards",
-        section: "Main",
-        capabilities: &["dashboards:read", "dashboards:manage"],
-    },
-    NavItem {
-        key: "administration",
-        href: "/administration",
-        label: "Administration",
-        section: "Admin",
-        capabilities: &["admin:all"],
-    },
-    NavItem {
-        key: "datasets",
-        href: "/datasets",
-        label: "Datasets",
-        section: "Admin",
-        capabilities: &["datasets:read", "datasets:manage"],
-    },
-];
-
-pub fn nav_item_for_route(route_key: &str) -> Option<&'static NavItem> {
-    NAV_ITEMS.iter().find(|item| item.key == route_key)
-}
-
-pub fn nav_item_is_allowed(item: &NavItem, capabilities: &[String]) -> bool {
-    item.capabilities.is_empty()
-        || capabilities
-            .iter()
-            .any(|capability| capability == "admin:all")
-        || item
-            .capabilities
-            .iter()
-            .any(|required| capabilities.iter().any(|capability| capability == required))
-}
-
-/// Whether a permitted route also has a useful directory entrypoint.
-///
-/// Object-scoped Dashboard managers can open an editor URL issued for a
-/// Dashboard they manage, but `/dashboards` itself is a reader directory. Do
-/// not advertise that reader link when the account only has manage access.
-pub fn nav_item_is_visible(item: &NavItem, capabilities: &[String]) -> bool {
-    if item.key == "dashboards" {
-        return capabilities
-            .iter()
-            .any(|capability| capability == "dashboards:read" || capability == "admin:all");
-    }
-    nav_item_is_allowed(item, capabilities)
-}
-
-pub fn nav_items_for_section(
-    section: &'static str,
-    capabilities: &[String],
-) -> Vec<&'static NavItem> {
-    NAV_ITEMS
-        .iter()
-        .filter(move |item| item.section == section)
-        .filter(|item| nav_item_is_visible(item, capabilities))
-        .collect::<Vec<_>>()
 }
 
 /// A shell navigation group supported by the Sprint 6A composition contract.
@@ -263,10 +145,34 @@ pub struct ResolvedNavigation {
 }
 
 const CORE_NAV_ITEMS: [NavItem; 5] = [
-    NAV_ITEMS[0],
-    NAV_ITEMS[1],
-    NAV_ITEMS[5],
-    NAV_ITEMS[8],
+    NavItem {
+        key: "home",
+        href: "/",
+        label: "Home",
+        section: "Main",
+        capabilities: &[],
+    },
+    NavItem {
+        key: "organization",
+        href: "/organization",
+        label: "Organization",
+        section: "Main",
+        capabilities: &["hierarchy:read", "hierarchy:manage"],
+    },
+    NavItem {
+        key: "operations",
+        href: "/operations",
+        label: "Operations",
+        section: "Main",
+        capabilities: &["operations:view"],
+    },
+    NavItem {
+        key: "administration",
+        href: "/administration",
+        label: "Administration",
+        section: "Admin",
+        capabilities: &["admin:all"],
+    },
     NavItem {
         key: "module_management",
         href: "/administration/modules",
@@ -616,10 +522,9 @@ fn actor_has_effective_capability(capabilities: &[String], required: &str) -> bo
 #[cfg(test)]
 mod tests {
     use super::{
-        ContributedNavigationItem, ModuleNavigationAvailability, NAV_ITEMS, NavigationBand,
+        ContributedNavigationItem, ModuleNavigationAvailability, NavigationBand,
         NavigationCompositionError, NavigationItemOwner, NavigationPolicy, NavigationPolicyEntry,
-        NavigationSection, ResolvedNavigation, nav_item_for_route, nav_item_is_allowed,
-        nav_item_is_visible, nav_items_for_section, resolve_navigation,
+        NavigationSection, ResolvedNavigation, resolve_navigation,
     };
 
     struct NavigationActorCase {
@@ -631,13 +536,6 @@ mod tests {
 
     fn owned_capabilities(keys: &[&str]) -> Vec<String> {
         keys.iter().map(|key| (*key).to_string()).collect()
-    }
-
-    fn visible_keys(section: &'static str, capabilities: &[String]) -> Vec<&'static str> {
-        nav_items_for_section(section, capabilities)
-            .into_iter()
-            .map(|item| item.key)
-            .collect()
     }
 
     fn contributed_item(
@@ -662,65 +560,65 @@ mod tests {
         }
     }
 
-    fn default_contributions() -> Vec<ContributedNavigationItem> {
+    fn synthetic_contributions() -> Vec<ContributedNavigationItem> {
         vec![
             contributed_item(
-                "tessara.forms.navigation",
-                "forms",
-                "Forms",
+                "example.alpha.navigation",
+                "alpha",
+                "Alpha",
                 NavigationSection::Main,
                 NavigationBand::MainBetweenOrganizationAndOperations,
                 0,
-                &["forms:read", "forms:manage"],
+                &["example.alpha:read", "example.alpha:manage"],
             ),
             contributed_item(
-                "tessara.workflows.navigation",
-                "workflows",
-                "Workflows",
+                "example.beta.navigation",
+                "beta",
+                "Beta",
                 NavigationSection::Main,
                 NavigationBand::MainBetweenOrganizationAndOperations,
                 1,
-                &["workflows:read", "workflows:manage"],
+                &["example.beta:read", "example.beta:manage"],
             ),
             contributed_item(
-                "tessara.responses.navigation",
-                "responses",
-                "Responses",
+                "example.gamma.navigation",
+                "gamma",
+                "Gamma",
                 NavigationSection::Main,
                 NavigationBand::MainBetweenOrganizationAndOperations,
                 2,
                 &[
-                    "submissions:read_own",
-                    "submissions:respond",
-                    "submissions:manage",
+                    "example.gamma:read_own",
+                    "example.gamma:respond",
+                    "example.gamma:manage",
                 ],
             ),
             contributed_item(
-                "tessara.components.navigation",
-                "components",
-                "Components",
+                "example.delta.navigation",
+                "delta",
+                "Delta",
                 NavigationSection::Main,
                 NavigationBand::MainAfterOperations,
                 0,
-                &["components:read", "components:manage"],
+                &["example.delta:read", "example.delta:manage"],
             ),
             contributed_item(
-                "tessara.dashboards.navigation",
-                "dashboards",
-                "Dashboards",
+                "example.epsilon.navigation",
+                "epsilon",
+                "Epsilon",
                 NavigationSection::Main,
                 NavigationBand::MainAfterOperations,
                 1,
-                &["dashboards:read"],
+                &["example.epsilon:read"],
             ),
             contributed_item(
-                "tessara.datasets.navigation",
-                "datasets",
-                "Datasets",
+                "example.zeta.navigation",
+                "zeta",
+                "Zeta",
                 NavigationSection::Admin,
                 NavigationBand::AdminBetweenAdministrationAndModuleManagement,
                 0,
-                &["datasets:read", "datasets:manage"],
+                &["example.zeta:read", "example.zeta:manage"],
             ),
         ]
     }
@@ -757,264 +655,8 @@ mod tests {
     }
 
     #[test]
-    fn static_navigation_contract_freezes_labels_routes_groups_order_and_capabilities() {
-        let actual = NAV_ITEMS
-            .iter()
-            .map(|item| {
-                (
-                    item.key,
-                    item.href,
-                    item.label,
-                    item.section,
-                    item.capabilities,
-                )
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            actual,
-            vec![
-                ("home", "/", "Home", "Main", &[][..]),
-                (
-                    "organization",
-                    "/organization",
-                    "Organization",
-                    "Main",
-                    &["hierarchy:read", "hierarchy:manage"][..],
-                ),
-                (
-                    "forms",
-                    "/forms",
-                    "Forms",
-                    "Main",
-                    &["forms:read", "forms:manage"][..],
-                ),
-                (
-                    "workflows",
-                    "/workflows",
-                    "Workflows",
-                    "Main",
-                    &["workflows:read", "workflows:manage"][..],
-                ),
-                (
-                    "responses",
-                    "/responses",
-                    "Responses",
-                    "Main",
-                    &[
-                        "submissions:read_own",
-                        "submissions:respond",
-                        "submissions:manage",
-                    ][..],
-                ),
-                (
-                    "operations",
-                    "/operations",
-                    "Operations",
-                    "Main",
-                    &["operations:view"][..],
-                ),
-                (
-                    "components",
-                    "/components",
-                    "Components",
-                    "Main",
-                    &["components:read", "components:manage"][..],
-                ),
-                (
-                    "dashboards",
-                    "/dashboards",
-                    "Dashboards",
-                    "Main",
-                    &["dashboards:read", "dashboards:manage"][..],
-                ),
-                (
-                    "administration",
-                    "/administration",
-                    "Administration",
-                    "Admin",
-                    &["admin:all"][..],
-                ),
-                (
-                    "datasets",
-                    "/datasets",
-                    "Datasets",
-                    "Admin",
-                    &["datasets:read", "datasets:manage"][..],
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn named_actor_navigation_sequences_are_frozen_before_dynamic_navigation() {
-        let cases = [
-            NavigationActorCase {
-                name: "admin_all",
-                capabilities: &["admin:all"],
-                main: &[
-                    "home",
-                    "organization",
-                    "forms",
-                    "workflows",
-                    "responses",
-                    "operations",
-                    "components",
-                    "dashboards",
-                ],
-                admin: &["administration", "datasets"],
-            },
-            NavigationActorCase {
-                name: "operator",
-                capabilities: &[
-                    "hierarchy:read",
-                    "forms:read",
-                    "workflows:read",
-                    "workflows:manage",
-                    "submissions:respond",
-                    "submissions:manage",
-                    "operations:view",
-                    "datasets:read",
-                    "components:read",
-                    "dashboards:read",
-                ],
-                main: &[
-                    "home",
-                    "organization",
-                    "forms",
-                    "workflows",
-                    "responses",
-                    "operations",
-                    "components",
-                    "dashboards",
-                ],
-                admin: &["datasets"],
-            },
-            NavigationActorCase {
-                name: "respondent",
-                capabilities: &["submissions:read_own", "submissions:respond"],
-                main: &["home", "responses"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "forms_manage_only",
-                capabilities: &["forms:manage"],
-                main: &["home", "forms"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "workflows_manage_only",
-                capabilities: &["workflows:manage"],
-                main: &["home", "workflows"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "submissions_manage_only",
-                capabilities: &["submissions:manage"],
-                main: &["home", "responses"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "components_manage_only",
-                capabilities: &["components:manage"],
-                main: &["home", "components"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "dashboards_manage_only",
-                capabilities: &["dashboards:manage"],
-                main: &["home"],
-                admin: &[],
-            },
-            NavigationActorCase {
-                name: "datasets_manage_only",
-                capabilities: &["datasets:manage"],
-                main: &["home"],
-                admin: &["datasets"],
-            },
-            NavigationActorCase {
-                name: "no_access",
-                capabilities: &[],
-                main: &["home"],
-                admin: &[],
-            },
-        ];
-
-        for case in cases {
-            let capabilities = owned_capabilities(case.capabilities);
-            assert_eq!(
-                visible_keys("Main", &capabilities),
-                case.main,
-                "{} Main navigation changed",
-                case.name
-            );
-            assert_eq!(
-                visible_keys("Admin", &capabilities),
-                case.admin,
-                "{} Admin navigation changed",
-                case.name
-            );
-        }
-    }
-
-    #[test]
-    fn manage_only_dashboard_access_keeps_route_permission_without_reader_link() {
-        let dashboards = nav_item_for_route("dashboards").expect("Dashboard nav item");
-        let capabilities = vec!["dashboards:manage".to_string()];
-
-        assert!(nav_item_is_allowed(dashboards, &capabilities));
-        assert!(!nav_item_is_visible(dashboards, &capabilities));
-    }
-
-    #[test]
-    fn dashboard_readers_and_admins_receive_the_directory_link() {
-        let dashboards = nav_item_for_route("dashboards").expect("Dashboard nav item");
-
-        assert!(nav_item_is_visible(
-            dashboards,
-            &["dashboards:read".to_string()]
-        ));
-        assert!(nav_item_is_visible(dashboards, &["admin:all".to_string()]));
-    }
-
-    #[test]
-    fn product_manage_capabilities_allow_routes_and_keep_current_link_rules() {
-        for (route_key, capability, expected_visible) in [
-            ("organization", "hierarchy:manage", true),
-            ("forms", "forms:manage", true),
-            ("workflows", "workflows:manage", true),
-            ("responses", "submissions:manage", true),
-            ("components", "components:manage", true),
-            ("dashboards", "dashboards:manage", false),
-            ("datasets", "datasets:manage", true),
-        ] {
-            let item = nav_item_for_route(route_key).expect("characterized route item");
-            let capabilities = vec![capability.to_string()];
-
-            assert!(
-                nav_item_is_allowed(item, &capabilities),
-                "{capability} should continue allowing the {route_key} route family"
-            );
-            assert_eq!(
-                nav_item_is_visible(item, &capabilities),
-                expected_visible,
-                "{capability} visibility changed for {route_key}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_visible_product_link_does_not_authorize_an_unrelated_actor() {
-        let forms = nav_item_for_route("forms").expect("Forms nav item");
-        let unrelated_capabilities = vec!["datasets:read".to_string()];
-
-        assert!(!nav_item_is_allowed(forms, &unrelated_capabilities));
-        assert!(!nav_item_is_visible(forms, &unrelated_capabilities));
-    }
-
-    #[test]
-    fn default_dynamic_composition_preserves_every_old_item_and_appends_module_management() {
-        let contributions = default_contributions();
+    fn generic_dynamic_composition_preserves_exact_owner_and_band_order() {
+        let contributions = synthetic_contributions();
         let navigation = resolve_defaults(&contributions, &["admin:all".to_string()]);
 
         assert_eq!(navigation.unavailable, None);
@@ -1023,17 +665,17 @@ mod tests {
             [
                 "home",
                 "organization",
-                "forms",
-                "workflows",
-                "responses",
+                "alpha",
+                "beta",
+                "gamma",
                 "operations",
-                "components",
-                "dashboards",
+                "delta",
+                "epsilon",
             ]
         );
         assert_eq!(
             resolved_keys(&navigation, NavigationSection::Admin),
-            ["administration", "datasets", "module_management"]
+            ["administration", "zeta", "module_management"]
         );
 
         let actual = navigation
@@ -1067,23 +709,23 @@ mod tests {
                     NavigationItemOwner::Core,
                 ),
                 (
-                    "forms",
-                    "/forms",
-                    "Forms",
+                    "alpha",
+                    "/alpha",
+                    "Alpha",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
                 (
-                    "workflows",
-                    "/workflows",
-                    "Workflows",
+                    "beta",
+                    "/beta",
+                    "Beta",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
                 (
-                    "responses",
-                    "/responses",
-                    "Responses",
+                    "gamma",
+                    "/gamma",
+                    "Gamma",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
@@ -1095,16 +737,16 @@ mod tests {
                     NavigationItemOwner::Core,
                 ),
                 (
-                    "components",
-                    "/components",
-                    "Components",
+                    "delta",
+                    "/delta",
+                    "Delta",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
                 (
-                    "dashboards",
-                    "/dashboards",
-                    "Dashboards",
+                    "epsilon",
+                    "/epsilon",
+                    "Epsilon",
                     NavigationSection::Main,
                     NavigationItemOwner::Contribution,
                 ),
@@ -1116,9 +758,9 @@ mod tests {
                     NavigationItemOwner::Core,
                 ),
                 (
-                    "datasets",
-                    "/datasets",
-                    "Datasets",
+                    "zeta",
+                    "/zeta",
+                    "Zeta",
                     NavigationSection::Admin,
                     NavigationItemOwner::Contribution,
                 ),
@@ -1167,15 +809,15 @@ mod tests {
 
     #[test]
     fn policy_reorders_only_within_each_core_assigned_band() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let mut policy = default_policy(&contributions);
         for entry in &mut policy.entries {
             entry.order = match entry.contribution_id.as_str() {
-                "tessara.responses.navigation" | "tessara.dashboards.navigation" => 0,
-                "tessara.workflows.navigation" | "tessara.components.navigation" => 1,
-                "tessara.forms.navigation" => 2,
-                "tessara.datasets.navigation" => 0,
-                _ => unreachable!("known default contribution"),
+                "example.gamma.navigation" | "example.epsilon.navigation" => 0,
+                "example.beta.navigation" | "example.delta.navigation" => 1,
+                "example.alpha.navigation" => 2,
+                "example.zeta.navigation" => 0,
+                _ => unreachable!("known synthetic contribution"),
             };
         }
 
@@ -1187,23 +829,23 @@ mod tests {
             [
                 "home",
                 "organization",
-                "responses",
-                "workflows",
-                "forms",
+                "gamma",
+                "beta",
+                "alpha",
                 "operations",
-                "dashboards",
-                "components",
+                "epsilon",
+                "delta",
             ]
         );
         assert_eq!(
             resolved_keys(&navigation, NavigationSection::Admin),
-            ["administration", "datasets", "module_management"]
+            ["administration", "zeta", "module_management"]
         );
     }
 
     #[test]
     fn equal_policy_orders_use_contribution_id_as_a_deterministic_tie_breaker() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let mut policy = default_policy(&contributions);
         for entry in &mut policy.entries {
             entry.order = 0;
@@ -1217,91 +859,91 @@ mod tests {
             [
                 "home",
                 "organization",
-                "forms",
-                "responses",
-                "workflows",
+                "alpha",
+                "beta",
+                "gamma",
                 "operations",
-                "components",
-                "dashboards",
+                "delta",
+                "epsilon",
             ]
         );
     }
 
     #[test]
-    fn dynamic_actor_filtering_preserves_product_and_dashboard_display_rules() {
-        let contributions = default_contributions();
+    fn dynamic_actor_filtering_uses_each_contribution_capability_contract() {
+        let contributions = synthetic_contributions();
         let cases = [
             NavigationActorCase {
-                name: "operator",
+                name: "all_contributions",
                 capabilities: &[
                     "hierarchy:read",
-                    "forms:read",
-                    "workflows:manage",
-                    "submissions:respond",
+                    "example.alpha:read",
+                    "example.beta:manage",
+                    "example.gamma:respond",
                     "operations:view",
-                    "components:read",
-                    "dashboards:read",
-                    "datasets:read",
+                    "example.delta:read",
+                    "example.epsilon:read",
+                    "example.zeta:read",
                 ],
                 main: &[
                     "home",
                     "organization",
-                    "forms",
-                    "workflows",
-                    "responses",
+                    "alpha",
+                    "beta",
+                    "gamma",
                     "operations",
-                    "components",
-                    "dashboards",
+                    "delta",
+                    "epsilon",
                 ],
-                admin: &["datasets"],
+                admin: &["zeta"],
             },
             NavigationActorCase {
-                name: "respondent",
-                capabilities: &["submissions:read_own", "submissions:respond"],
-                main: &["home", "responses"],
+                name: "gamma_reader",
+                capabilities: &["example.gamma:read_own", "example.gamma:respond"],
+                main: &["home", "gamma"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "forms_manage_only",
-                capabilities: &["forms:manage"],
-                main: &["home", "forms"],
+                name: "alpha_manage_only",
+                capabilities: &["example.alpha:manage"],
+                main: &["home", "alpha"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "workflows_manage_only",
-                capabilities: &["workflows:manage"],
-                main: &["home", "workflows"],
+                name: "beta_manage_only",
+                capabilities: &["example.beta:manage"],
+                main: &["home", "beta"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "submissions_manage_only",
-                capabilities: &["submissions:manage"],
-                main: &["home", "responses"],
+                name: "gamma_manage_only",
+                capabilities: &["example.gamma:manage"],
+                main: &["home", "gamma"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "components_manage_only",
-                capabilities: &["components:manage"],
-                main: &["home", "components"],
+                name: "delta_manage_only",
+                capabilities: &["example.delta:manage"],
+                main: &["home", "delta"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "dashboards_manage_only",
-                capabilities: &["dashboards:manage"],
+                name: "epsilon_manage_only",
+                capabilities: &["example.epsilon:manage"],
                 main: &["home"],
                 admin: &[],
             },
             NavigationActorCase {
-                name: "datasets_manage_only",
-                capabilities: &["datasets:manage"],
+                name: "zeta_manage_only",
+                capabilities: &["example.zeta:manage"],
                 main: &["home"],
-                admin: &["datasets"],
+                admin: &["zeta"],
             },
             NavigationActorCase {
-                name: "unrelated_product",
-                capabilities: &["datasets:read"],
+                name: "zeta_read_only",
+                capabilities: &["example.zeta:read"],
                 main: &["home"],
-                admin: &["datasets"],
+                admin: &["zeta"],
             },
             NavigationActorCase {
                 name: "no_access",
@@ -1331,36 +973,40 @@ mod tests {
 
     #[test]
     fn contribution_requires_module_availability_policy_visibility_and_actor_capability() {
-        let mut contributions = default_contributions();
+        let mut contributions = synthetic_contributions();
         contributions
             .iter_mut()
-            .find(|contribution| contribution.key == "forms")
-            .expect("Forms contribution")
+            .find(|contribution| contribution.key == "alpha")
+            .expect("Alpha contribution")
             .module_availability = ModuleNavigationAvailability::Unavailable;
         let mut policy = default_policy(&contributions);
         policy
             .entries
             .iter_mut()
-            .find(|entry| entry.contribution_id == "tessara.workflows.navigation")
-            .expect("Workflows policy")
+            .find(|entry| entry.contribution_id == "example.beta.navigation")
+            .expect("Beta policy")
             .visible = false;
 
         let navigation = resolve_navigation(
             &contributions,
             Some(&policy),
-            &owned_capabilities(&["forms:read", "workflows:read", "submissions:read_own"]),
+            &owned_capabilities(&[
+                "example.alpha:read",
+                "example.beta:read",
+                "example.gamma:read_own",
+            ]),
         );
 
         assert_eq!(
             resolved_keys(&navigation, NavigationSection::Main),
-            ["home", "responses"]
+            ["home", "gamma"]
         );
         assert_eq!(navigation.unavailable, None);
     }
 
     #[test]
     fn manage_navigation_implies_module_read_without_implying_administration() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
 
         for capability in ["modules:read", "modules:manage_navigation"] {
             let navigation = resolve_defaults(&contributions, &[capability.to_string()]);
@@ -1371,7 +1017,7 @@ mod tests {
             );
         }
 
-        let product_only = resolve_defaults(&contributions, &["forms:read".to_string()]);
+        let product_only = resolve_defaults(&contributions, &["example.alpha:read".to_string()]);
         assert!(
             !resolved_keys(&product_only, NavigationSection::Admin).contains(&"module_management")
         );
@@ -1379,13 +1025,13 @@ mod tests {
         let admin = resolve_defaults(&contributions, &["admin:all".to_string()]);
         assert_eq!(
             resolved_keys(&admin, NavigationSection::Admin),
-            ["administration", "datasets", "module_management"]
+            ["administration", "zeta", "module_management"]
         );
     }
 
     #[test]
     fn policy_cannot_target_or_displace_any_fixed_core_item() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
 
         for core_key in [
             "home",
@@ -1430,7 +1076,7 @@ mod tests {
 
     #[test]
     fn missing_policy_for_a_non_empty_catalog_fails_closed() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let navigation = resolve_navigation(&contributions, None, &["admin:all".to_string()]);
 
         assert_eq!(
@@ -1449,7 +1095,7 @@ mod tests {
 
     #[test]
     fn supplied_policy_must_be_a_complete_unique_known_collection() {
-        let contributions = default_contributions();
+        let contributions = synthetic_contributions();
         let mut partial = default_policy(&contributions);
         let missing = partial.entries.pop().expect("policy member");
         let navigation =
@@ -1475,7 +1121,7 @@ mod tests {
 
         let mut unknown = default_policy(&contributions);
         unknown.entries.push(NavigationPolicyEntry {
-            contribution_id: "tessara.unknown.navigation".to_string(),
+            contribution_id: "example.unknown.navigation".to_string(),
             visible: true,
             order: 0,
         });
@@ -1484,18 +1130,18 @@ mod tests {
         assert_eq!(
             navigation.unavailable,
             Some(NavigationCompositionError::UnknownPolicyContribution {
-                contribution_id: "tessara.unknown.navigation".to_string(),
+                contribution_id: "example.unknown.navigation".to_string(),
             })
         );
     }
 
     #[test]
     fn malformed_or_core_colliding_contributions_fail_closed_as_a_collection() {
-        let baseline = default_contributions();
+        let baseline = synthetic_contributions();
         let mut malformed_cases = Vec::new();
 
         let mut malformed_id = baseline.clone();
-        malformed_id[0].contribution_id = "Tessara.Forms".to_string();
+        malformed_id[0].contribution_id = "Example.Alpha".to_string();
         malformed_cases.push(malformed_id);
 
         let mut wrong_band = baseline.clone();
@@ -1507,16 +1153,16 @@ mod tests {
         malformed_cases.push(no_capability);
 
         let mut deployment_url = baseline.clone();
-        deployment_url[0].href = "https://forms.example.invalid/forms".to_string();
+        deployment_url[0].href = "https://alpha.example.invalid/alpha".to_string();
         malformed_cases.push(deployment_url);
 
         let mut padded_label = baseline.clone();
-        padded_label[0].label = " Forms ".to_string();
+        padded_label[0].label = " Alpha ".to_string();
         malformed_cases.push(padded_label);
 
         let mut core_key_collision = baseline.clone();
         core_key_collision[0].key = "home".to_string();
-        core_key_collision[0].href = "/forms".to_string();
+        core_key_collision[0].href = "/alpha".to_string();
         malformed_cases.push(core_key_collision);
 
         let mut core_href_collision = baseline.clone();

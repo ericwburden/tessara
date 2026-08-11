@@ -55,6 +55,7 @@ pub fn DashboardDetailContent(dashboard_id: String) -> impl IntoView {
                 let visibility_nodes = loaded.visibility_nodes.clone();
                 let visibility_count = visibility_nodes.len();
                 let visibility_label = visibility_count_label(visibility_count);
+                let visibility_accessible_label = visibility_accessible_label(visibility_count);
                 let can_manage = loaded.can_manage;
                 view! {
                     <PageHeader title description=description>
@@ -73,6 +74,7 @@ pub fn DashboardDetailContent(dashboard_id: String) -> impl IntoView {
                                 id="dashboard-detail-visibility-trigger"
                                 class="metric-card metric-card--button"
                                 type="button"
+                                aria-label=visibility_accessible_label
                                 aria-haspopup="dialog"
                                 aria-controls=DASHBOARD_DETAIL_VISIBILITY_SHEET_ID
                                 aria-expanded=move || visibility_sheet_open.get().to_string()
@@ -154,6 +156,10 @@ fn visibility_count_label(count: usize) -> String {
     }
 }
 
+fn visibility_accessible_label(count: usize) -> String {
+    format!("Visibility {}", visibility_count_label(count))
+}
+
 pub(super) fn placement_style(row: i32, column: i32, width: i32, height: i32) -> String {
     format!("grid-row: {row} / span {height}; grid-column: {column} / span {width};")
 }
@@ -225,7 +231,7 @@ fn delete_dashboard(_: String, _: RwSignal<Option<String>>) {}
 
 #[cfg(test)]
 mod tests {
-    use super::{placement_style, visibility_count_label};
+    use super::{placement_style, visibility_accessible_label, visibility_count_label};
 
     #[test]
     fn saved_geometry_maps_directly_to_css_grid() {
@@ -240,5 +246,11 @@ mod tests {
         assert_eq!(visibility_count_label(0), "0 Nodes");
         assert_eq!(visibility_count_label(1), "1 Node");
         assert_eq!(visibility_count_label(42), "42 Nodes");
+    }
+
+    #[test]
+    fn visibility_disclosure_has_an_unambiguous_accessible_name() {
+        assert_eq!(visibility_accessible_label(1), "Visibility 1 Node");
+        assert_eq!(visibility_accessible_label(2), "Visibility 2 Nodes");
     }
 }

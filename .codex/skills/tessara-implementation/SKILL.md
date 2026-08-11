@@ -25,6 +25,21 @@ validation skills.
 5. Treat an approved user decision, requirement, or sprint plan as authority
    over an older implementation description. Reconcile affected stale
    documentation in the same slice.
+6. When `docs/sprints/<sprint-slug>-validation-contract.json` declares
+   `policy_version: tessara-validation-v2`, read
+   `../tessara-sprint-validation/references/validation-policy-v2.md` and use the
+   contract's exact dependency domains and implementation targets. Sprint 8A
+   and earlier remain governed by their retained sprint-specific plans and
+   runners; never retrofit their evidence to v2.
+7. When that contract declares
+   `implementation_profile.kind: phase8-module-extraction`, read
+   `docs/architecture/module-extraction-playbook.md` completely. Treat its
+   ordered slices, subtraction inventory, and proof classes as governing
+   implementation requirements rather than optional validation suggestions.
+8. For module UI work, read the accepted pre-extraction visual/interaction
+   baseline and the UI ownership inventory. Map markup, SDK primitives,
+   tokens/styles, product assets, SSR/hydration, lifecycle navigation, dirty
+   state, and responsive behavior to their canonical owners before editing.
 
 ## Define the forward-only end state
 
@@ -37,6 +52,28 @@ Before editing, identify:
 - the directly affected producers, consumers, tests, seeds, migrations,
   harnesses, and documentation; and
 - focused proof that the resulting behavior and boundary are correct.
+- for a module UI, the accepted baseline, SDK primitive mapping, allowed
+  namespaced product styling, and direct-document/lifecycle parity target.
+
+Map every implementation work item to the exact governing sprint-plan,
+acceptance, architecture, or validation-spec clause it satisfies. Keep that
+mapping in the implementation notes or sprint verification document so the
+handoff can show which behavior proves each clause; a list of changed files or
+test counts is not a substitute.
+
+Under validation policy v2, the tracked validation contract is the executable
+mapping. Identify changed paths and affected dependency domains before editing,
+then select every required or intersecting implementation target from that
+contract. An unmapped path or uncertain consumer expands the implementation
+verification cone; it is not deferred to formal validation.
+
+For a Phase 8 module extraction, maintain the plan's owner/consumer/subtraction
+inventories as code moves. Do not declare the slice complete until each
+required playbook proof class is bound to a required exact target and has
+passing focused evidence. The module starting successfully is not sufficient:
+consumer cutover, Core subtraction, inventory/navigation, fresh seed,
+materialization, no-op, recovery, fixtures, runners, smoke, upgrade/rollback,
+and UAT readiness are part of implementation.
 
 Use the touched dependency cone as the cleanup boundary. Remove obsolete paths
 from the changed capability and its directly affected consumers without turning
@@ -82,6 +119,19 @@ that cone instead of silently expanding scope.
 - Consolidate genuinely shared, policy-neutral behavior under one owner. Do
   not copy implementations or create module-definition-specific branches in
   generic platform code.
+- Build module documents and lifecycle views through `tessara-module-ui` and
+  typed Leptos views. The SDK alone owns the outer document, reset, design
+  tokens, themes, shell, and generic primitives. Product CSS must be rooted in
+  its module namespace and may contain only product-specific layout or
+  visualization rules. Raw structural HTML assembly, DOM construction, copied
+  SDK CSS, and product token declarations are forbidden.
+- Core imports the same canonical SDK asset used by direct module documents.
+  Lifecycle navigation loads only namespaced product CSS and must derive the
+  top-bar title and active navigation item from the authenticated route.
+- Generate and source-check first-party module browser assets with
+  `scripts/build-module-ui-browser-assets.ps1`; never hand-copy unverified WASM
+  or bindings into an immutable release, and reconcile every digest before
+  implementation completion.
 
 ### Organize for cohesion and simplicity
 
@@ -117,6 +167,15 @@ that cone instead of silently expanding scope.
   coverage.
 - Update focused tests, fixtures, harnesses, and affected documentation in the
   same implementation slice as the behavior.
+- Deliver a behavior change together with every directly affected
+  materialization, semantic no-op, rollback/recovery, fixture, runner, smoke,
+  acceptance-contract, and evidence-schema change. Do not leave validation
+  consumers to discover an already-known producer/contract mismatch during a
+  full candidate run.
+- Treat formal validation as certification of a completed implementation, not
+  as the ordinary debugging loop. Reproduce and resolve every known failure in
+  the implementation phase. Do not launch Readiness or Rehearsal merely to find
+  out whether a known target now passes.
 - Require formatting, compilation, and Clippy with warnings denied. Do not add
   blanket warning allowlists or suppressions to defer cleanup.
 
@@ -134,6 +193,10 @@ Before handoff, answer from the diff and repository rather than intention:
   deleted or reconciled?
 - Are required resilience and fail-closed states still explicit?
 - Are tests at least as strong, and are warnings still denied?
+- Does the implementation-to-validation-clause mapping have passing focused
+  proof for every affected clause?
+- For module UI, does the focused visual reproducer show continuity with the
+  accepted baseline, and does `ui-sdk-conformance` pass without exceptions?
 
 Resolve findings inside the touched cone before declaring implementation
 complete.
@@ -142,16 +205,48 @@ complete.
 
 1. Run the narrowest relevant format check, compile, Clippy with `-D warnings`,
    and focused tests during implementation.
-2. Run applicable repository boundary checks such as
+2. When migrations, seeds, bootstrap, deployment inputs, materialization, or
+   owner health changed, complete a source-exact materialization from a clean
+   disposable environment and its exact semantic no-op/idempotence pass before
+   declaring implementation complete. When rollback, failure containment, or
+   recovery changed, also prove focused recovery to the canonical topology.
+   Retain the resulting evidence as non-authoritative implementation
+   diagnostics; it does not replace Validation Readiness or Candidate
+   Rehearsal.
+3. Run every focused reproducer for the known product, harness, fixture,
+   runner, smoke, acceptance, and evidence-contract regressions in the touched
+   cone. If the same formal validation lane has failed twice consecutively, do
+   not launch it again until its clean focused reproducer passes. After three
+   consecutive failures, treat the lane as a concentrated validation-platform
+   incident and resolve its root cause before another full launch.
+4. Run applicable repository boundary checks such as
    `scripts/check-web-crate-boundaries.ps1`,
    `scripts/verify-module-sdk-boundaries.ps1`, or
    `scripts/verify-module-sdk-compatibility.ps1` when their contracts are
    affected.
-3. Run `git diff --check` and inspect `git status --short`. Identify preserved
+   For every module UI or Phase 8 extraction change, also run
+   `pwsh -NoProfile -File scripts/ui-sdk-conformance.ps1` and focused
+   direct-load versus lifecycle-navigation visual/semantic checks before
+   formal validation.
+5. Run `git diff --check` and inspect `git status --short`. Identify preserved
    unrelated user changes explicitly.
-4. Run broader repository checks in proportion to the change and the sprint
+6. Run broader repository checks in proportion to the change and the sprint
    plan. Do not claim checks that were skipped or silently filtered.
-5. Hand the clean implementation commit to `tessara-validation-preflight` when
-   formal sprint validation is requested. Let `tessara-sprint-validation`,
+7. Under validation policy v2, write a compact non-authoritative
+   `implementation-readiness-result.json` under the ignored sprint evidence
+   root. Validate it against the tracked contract and
+   `implementation-readiness.schema.json` with
+   `scripts/tessara-validation-policy.psm1`. It must bind the clean source and
+   contract hash, enumerate every selected exact target, retain clean-
+   environment proof where required, report zero known failures, and record
+   required materialization/no-op/recovery and restoration results. A missing,
+   blocked, or failing selected target forbids formal Readiness entry.
+   For `phase8-module-extraction`, also verify that every playbook proof class
+   is represented by a required passing target and that the three clean-
+   environment classes were actually executed from the declared disposable
+   environment.
+8. Hand the clean implementation commit and passing implementation-readiness
+   result to `tessara-sprint-validation` when formal sprint validation is
+   requested. Let `tessara-sprint-validation`,
    `tessara-sit`, `tessara-uat`, and `tessara-sprint-closeout` retain authority
    over candidate freeze, SIT, UAT, evidence, and closeout.

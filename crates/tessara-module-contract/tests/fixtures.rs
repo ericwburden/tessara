@@ -11,7 +11,7 @@ use tessara_module_contract::{
 const VALID_MANIFEST: &str = include_str!("fixtures/valid-manifest.json");
 const VALID_MANIFEST_DIGEST_SIDECAR: &str = include_str!("fixtures/valid-manifest.json.sha256");
 const VALID_MANIFEST_SHA256: &str =
-    "sha256:2f3b838209a45fd51efb437b7a3e88ed1cdd7a97f65f65b571de2837215da9bc";
+    "sha256:fd622759394354caee198d27f5cfd780207e6311eb165176a455eeda32f33b43";
 const INVALID_MANIFEST_PROFILE: &str =
     include_str!("fixtures/invalid-manifest-unsupported-profile.json");
 const INVALID_TRANSITION_DEPLOYMENT: &str =
@@ -38,7 +38,9 @@ struct FixtureSource {
     expected_digest: &'static str,
 }
 
-const TRANSITION_SOURCES: &[FixtureSource] = &[
+// Accepted Sprint 6A fixture bytes are immutable historical evidence. The
+// current Core transition catalog is the narrower identity contract below.
+const HISTORICAL_SPRINT_6A_TRANSITION_SOURCES: &[FixtureSource] = &[
     FixtureSource {
         name: "Forms",
         bytes: include_bytes!("fixtures/transition-forms-v1.json"),
@@ -81,6 +83,14 @@ const TRANSITION_SOURCES: &[FixtureSource] = &[
         digest_sidecar: include_str!("fixtures/transition-migration-v1.json.sha256"),
         expected_digest: "sha256:de48eeb3edb4a432e5060b817ef50c34c5316879b44aef0ad3d6877c5895b42e",
     },
+];
+
+const CURRENT_CORE_TRANSITION_IDENTITIES: [&str; 5] = [
+    "tessara.forms",
+    "tessara.workflows",
+    "tessara.responses",
+    "tessara.datasets",
+    "tessara.migration",
 ];
 
 fn assert_exact_utf8_lf_fixture<'a>(
@@ -185,7 +195,7 @@ struct ExpectedCatalogEntry {
     capabilities: &'static [ExpectedCapability],
 }
 
-const EXPECTED_CATALOG: &[ExpectedCatalogEntry] = &[
+const HISTORICAL_SPRINT_6A_EXPECTED_CATALOG: &[ExpectedCatalogEntry] = &[
     ExpectedCatalogEntry {
         display_name: "Forms",
         definition_id: "tessara.forms",
@@ -1080,11 +1090,42 @@ fn canonical_valid_manifest_fixture_round_trips_and_validates() {
 }
 
 #[test]
-fn canonical_transition_sources_are_byte_pinned_valid_and_exact() {
-    assert_eq!(TRANSITION_SOURCES.len(), 7);
-    assert_eq!(EXPECTED_CATALOG.len(), 7);
+fn historical_sprint_6a_transition_sources_are_byte_pinned_valid_and_exact() {
+    assert_eq!(
+        HISTORICAL_SPRINT_6A_TRANSITION_SOURCES
+            .iter()
+            .map(|source| source.name)
+            .collect::<Vec<_>>(),
+        [
+            "Forms",
+            "Workflows",
+            "Responses",
+            "Datasets",
+            "Components",
+            "Dashboards",
+            "Migration",
+        ]
+    );
+    assert_eq!(
+        HISTORICAL_SPRINT_6A_EXPECTED_CATALOG
+            .iter()
+            .map(|entry| entry.definition_id)
+            .collect::<Vec<_>>(),
+        [
+            "tessara.forms",
+            "tessara.workflows",
+            "tessara.responses",
+            "tessara.datasets",
+            "tessara.components",
+            "tessara.dashboards",
+            "tessara.migration",
+        ]
+    );
 
-    for (source, expected) in TRANSITION_SOURCES.iter().zip(EXPECTED_CATALOG) {
+    for (source, expected) in HISTORICAL_SPRINT_6A_TRANSITION_SOURCES
+        .iter()
+        .zip(HISTORICAL_SPRINT_6A_EXPECTED_CATALOG)
+    {
         assert_eq!(source.name, expected.display_name);
         let source_text = assert_exact_utf8_lf_fixture(
             source.name,
@@ -1120,8 +1161,36 @@ fn canonical_transition_sources_are_byte_pinned_valid_and_exact() {
 }
 
 #[test]
-fn migration_is_the_only_retired_empty_transition_source() {
-    for (source, expected) in TRANSITION_SOURCES.iter().zip(EXPECTED_CATALOG) {
+fn current_core_transition_identity_contract_is_exact() {
+    assert_eq!(
+        CURRENT_CORE_TRANSITION_IDENTITIES,
+        [
+            "tessara.forms",
+            "tessara.workflows",
+            "tessara.responses",
+            "tessara.datasets",
+            "tessara.migration",
+        ]
+    );
+    assert!(!CURRENT_CORE_TRANSITION_IDENTITIES.contains(&"tessara.components"));
+    assert!(!CURRENT_CORE_TRANSITION_IDENTITIES.contains(&"tessara.dashboards"));
+    let historical_identities = HISTORICAL_SPRINT_6A_EXPECTED_CATALOG
+        .iter()
+        .map(|entry| entry.definition_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        CURRENT_CORE_TRANSITION_IDENTITIES
+            .iter()
+            .all(|identity| historical_identities.contains(identity))
+    );
+}
+
+#[test]
+fn historical_sprint_6a_migration_is_the_only_retired_empty_source() {
+    for (source, expected) in HISTORICAL_SPRINT_6A_TRANSITION_SOURCES
+        .iter()
+        .zip(HISTORICAL_SPRINT_6A_EXPECTED_CATALOG)
+    {
         let descriptor: TransitionalContributionDescriptorV1 =
             serde_json::from_slice(source.bytes).unwrap();
         assert_ne!(descriptor.availability, TransitionAvailability::Unavailable);

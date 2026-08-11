@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/implementation-readiness-v1.json",
+  "title": "Tessara implementation readiness result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract",
+    "policy_version",
+    "sprint",
+    "state",
+    "authoritative",
+    "source_identity",
+    "validation_contract",
+    "affected_domains",
+    "targets",
+    "known_failure_count",
+    "materialization",
+    "cleanup_restoration",
+    "evidence_index"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.implementation-readiness-result" },
+    "policy_version": { "const": "tessara-validation-v2" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "state": { "enum": ["passed", "failed"] },
+    "authoritative": { "const": false },
+    "source_identity": { "$ref": "#/$defs/sourceIdentity" },
+    "validation_contract": { "$ref": "#/$defs/reference" },
+    "affected_domains": { "$ref": "#/$defs/ids" },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "state", "command", "clean_environment", "evidence"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "state": { "enum": ["passed", "failed", "blocked"] },
+          "command": { "type": "string", "minLength": 1 },
+          "clean_environment": { "type": "boolean" },
+          "evidence": { "$ref": "#/$defs/reference" }
+        }
+      }
+    },
+    "known_failure_count": { "type": "integer", "minimum": 0 },
+    "materialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "first_apply", "semantic_no_op", "recovery"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "first_apply": { "$ref": "#/$defs/optionalState" },
+        "semantic_no_op": { "$ref": "#/$defs/optionalState" },
+        "recovery": { "$ref": "#/$defs/optionalState" }
+      }
+    },
+    "cleanup_restoration": { "$ref": "#/$defs/optionalState" },
+    "evidence_index": { "$ref": "#/$defs/reference" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tree", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "dirty": { "type": "boolean" },
+        "branch": { "type": "string", "minLength": 1 },
+        "acceptance_inventory_sha256": { "$ref": "#/$defs/sha256" },
+        "deployment_inputs_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "optionalState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "state", "evidence"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "state": { "enum": ["passed", "failed", "blocked", "not_applicable"] },
+        "evidence": { "oneOf": [{ "$ref": "#/$defs/reference" }, { "type": "null" }] }
+      }
+    }
+  }
+}

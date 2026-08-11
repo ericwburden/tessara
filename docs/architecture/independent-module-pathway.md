@@ -1,21 +1,27 @@
 # Independent Module Pathway
 
-Status: Sprint 6D current module-authoring contract. Dashboard completes its
-adoption in Sprint 6E.
+Status: current Phase 8 module-authoring and extraction contract. Dashboard
+completed this pathway in Sprint 6E; Components applies it in Sprint 8A.
+
+The architecture checklist below is paired with the required
+[Phase 8 Module Extraction Playbook](./module-extraction-playbook.md). Future
+extraction sprints use the pathway to define the end state and the playbook to
+plan ordered delivery and prove implementation readiness before certification.
 
 The non-product `tessara.reference.module-sdk` release is the canonical
-source/build conformance fixture. Scoped Records proves adoption while
-retaining real product persistence. Dashboard proves the independent
-process/database boundary but remains explicitly nonconforming at the
-source/runtime edge until Sprint 6E. A later module must use the same generic
-path without adding a definition-ID branch to Core or Module Management.
+source/build conformance fixture. Scoped Records proves adoption with real
+product persistence. Dashboard and Components prove that existing product
+areas can use the same independently built, deployed, routed, and enrolled
+path. A later module must use this generic path without adding a definition-ID
+branch to Core or Module Management.
 
-Sprint 6C proved the independent process, database, control, product, and
-operational boundary. Sprint 6D makes the canonical source/build contract
+Sprint 6C proved Dashboard's independent process, database, control, product,
+and operational boundary. Sprint 6D made the canonical source/build contract
 concrete in the
 [Module SDK Implementation Contract](./module-sdk-implementation-contract.md).
-Dashboard still links root `tessara-web`; that explicit nonconforming finding
-is removed in Sprint 6E and must not be copied by later modules.
+Sprint 6E removed Dashboard's root `tessara-web` dependency and completed its
+source/build independence. Sprint 8A uses that completed structure for
+Components; the older Sprint 6C root-linked transition must not be copied.
 
 ## Shared Boundary
 
@@ -49,6 +55,45 @@ Core owns:
 Core does not own module product tables, module configuration types, or
 definition-specific Module Management components.
 
+## Canonical Module UI Contract
+
+Core and every independently deployed module consume the same exact
+`tessara-module-ui` CSS asset. That asset is the sole owner of resets, design
+tokens, light/dark themes, application canvas, shell, navigation, page headers,
+panels, buttons, forms, tables, dialogs, status states, accessibility helpers,
+and responsive primitives. Core may add Core-product styles; a module may add
+only namespace-rooted product layout or visualization styles. Neither may copy
+or redefine SDK tokens or generic primitives.
+
+Module products are typed Leptos views. Only the SDK assembles a complete HTML
+document and composes authenticated shell presentation, exact release metadata,
+bootstrap data, SDK assets, and optional product assets. Direct documents load
+the SDK plus product CSS; lifecycle navigation reuses Core's identical SDK CSS
+and loads only product CSS. The shared lifecycle adapter owns mount, navigate,
+suspend/resume, dirty-state protection, and unmount. The lifecycle host derives
+the active manifest navigation item and top-bar title from the authenticated
+current route, so the title always matches the navigation label.
+
+`scripts/ui-sdk-conformance.ps1` enumerates every first-party manifest and
+rejects raw module HTML/DOM construction, copied or missing SDK assets,
+unnamespaced product selectors, product design-token declarations, unstyled SDK
+primitives, and mismatched SDK/design/conformance identities.
+
+## Catalog And Navigation Ownership
+
+An independently deployed module is represented by its enrolled Module
+Release/Instance and manifest contributions, never by a duplicate
+`transitional_in_process` Core descriptor. In Sprint 8A the frozen Core
+transition catalog contains exactly `tessara.forms`, `tessara.workflows`,
+`tessara.responses`, `tessara.datasets`, and `tessara.migration`. Components
+and Dashboard are absent from it and appear exactly once in inventory and
+navigation through their real enrollments.
+
+The reference manifest navigation order is Scoped Records `7`, Components
+`8`, and Dashboard `9`. The generic projection preserves that ordering after
+availability, authorization, and policy filters; Core does not synthesize a
+second Components or Dashboard destination.
+
 ## Required Module Runtime And Control Contract
 
 Every independently deployed module implements the canonical runtime provider
@@ -75,12 +120,14 @@ registry is deployment wiring, not product behavior:
 {
   "tessara.reference.scoped-records": "http://scoped-records:8090",
   "tessara.dashboards": "http://dashboards:8091",
-  "example.third-module": "http://third-module:8092"
+  "tessara.components": "http://components:8092",
+  "example.additional-module": "http://additional-module:8093"
 }
 ```
 
-The two legacy per-module URL variables remain temporary compatibility
-fallbacks. New modules must use the registry.
+The registry is the sole current routing path for extracted modules. Current
+Components and Dashboard deployments do not retain definition-specific URL
+fallbacks.
 
 ## Managed Configuration Contract
 
@@ -93,6 +140,13 @@ configuration fields. The shared renderer supports:
 - JSON Schema `title` for an explicit UI label, otherwise a label derived from
   the property name;
 - `required`.
+
+Defaults are part of that same Manifest contract; they must not exist only in
+module source or deployment environment. The deployment declaration must also
+name runtime and migration commands that exist at those exact paths in the
+published image. Sprint 8A Components demonstrates both rules with defaults
+`Components` and `5` and `/usr/local/bin/component-module` for its `serve` and
+`migrate` commands.
 
 Core coerces the submitted HTML form according to the persisted schema,
 rejects unknown or unsupported fields, sends the result to the module-owned
@@ -119,11 +173,24 @@ Every independent module receives the same:
   sections;
 - sanitized diagnostics download.
 
+Dependency diagnostics identify the selected binding, provider and functional
+contract/version, current compatibility result, health observation, observation
+time, and stable result/failure codes. Raw typed resource references, product
+rows/counts, actor grants, credentials, and secrets remain excluded. Sprint 8A
+Components exercises compatibility through the versioned Dataset operation and
+reports the sanitized result through this generic template.
+
 Definition-specific display names, property values, dependencies, routes,
 capabilities, and other manifest facts are data. Definition-specific control
 flow or markup is a conformance failure.
 
 ## Adoption Checklist
+
+For a Core-to-module extraction, instantiate the playbook's planning package
+and `phase8-module-extraction` validation-contract profile before using this
+checklist. Every item below must map to an implementation proof class and exact
+command; formal Candidate Rehearsal is not the discovery loop for missing
+adoption work.
 
 1. Create a module crate/service with its own database baseline and distinct
    owner, migration, and runtime identities.
@@ -136,23 +203,34 @@ flow or markup is a conformance failure.
 4. Register the service endpoint in `TESSARA_MODULE_CONTROL_ENDPOINTS`.
 5. Materialize the Module Release and Module Instance through the deployment
    receipt/bootstrap path.
-6. Route approved GET/HEAD documents and immutable assets through the generic
+6. When extracting an in-process provider during pre-production Phase 8,
+   materialize its owner database and seed from empty, let consumers create new
+   Module Instance references from typed read-back, and remove its Core
+   descriptor, product storage, adapter, readers, and old payload shapes in the
+   same source-exact cutover. Do not add migration, mapping, rebinding, retained
+   adapter, or resume behavior.
+7. Route approved GET/HEAD documents and immutable assets through the generic
    manifest-driven Core seam. Product APIs remain explicitly owned/routed by
    the module until a later generic API contract exists.
-7. Add the module to the parameterized independent-module acceptance fixture;
+8. Add the module to the parameterized independent-module acceptance fixture;
    do not add a module-specific Module Management test branch.
-8. Pass manifest, configuration, enablement, navigation, diagnostics,
+9. Pass manifest, configuration, enablement, navigation, diagnostics,
    no-JavaScript, outage-containment, and database-isolation gates.
-9. Pass native/WASM source/package-graph checks proving the module does not depend on the
+10. Pass native/WASM source/package-graph checks proving the module does not depend on the
    Core application binary, root `tessara-web`, Core-private DTOs, or another
    module implementation; repeated compiled SDK/runtime code and assets are
    allowed.
-10. Prove an image-only module upgrade and rollback while Core, gateway, and
-   unrelated module image digests remain unchanged.
-11. Search Core and the web shell for the new definition ID. Matches in
+11. Prove a real release-aware module upgrade and rollback through a resolved
+    one-owner Blueprint delta and the Supervisor's deployment adapter while
+    Core, gateway, and unrelated module images, container identities, restart
+    counts, data, navigation, and availability remain unchanged. Sprint 8A
+    builds a distinct compatible Component `0.9.0` binary/Manifest, upgrades to
+    `1.0.1`, rolls back to `0.9.0`, and restores intended `1.0.1` through the
+    Compose adapter; relabeling the candidate image is not release evidence.
+12. Search Core and the web shell for the new definition ID. Matches in
     fixtures, seed, or routing registration must be explainable; Module
     Management and control-plane branches are not allowed.
-12. When the current manifest or SDK tuple advances before production, update
+13. When the current manifest or SDK tuple advances before production, update
     and rebuild the module. Do not add an old-manifest reader, compatibility
     facade, or deprecated API to avoid that update.
 
@@ -160,11 +238,15 @@ flow or markup is a conformance failure.
 
 The pathway is reusable only while this check remains true:
 
-> Adding a conforming third module requires deployment registration and
+> Adding a conforming independently deployed module requires deployment registration and
 > module-owned implementation built on the canonical SDK/runtime, but no
 > definition-specific changes to Core's configuration, enablement,
 > diagnostics, Module Management rendering, or root web application and no
 > dependency from the module back to those Core implementations.
 
-The Sprint 6D reference module is the conformance fixture for this statement.
-Dashboard remains an expected failing transition until Sprint 6E.
+The Sprint 6D reference module remains the canonical conformance fixture for
+this statement. Scoped Records, Dashboard, and Components are current
+conforming product exemplars.
+
+The reusable delivery proof is the playbook profile, not a copy of Sprint 8A's
+sprint-specific validation state machine or evidence history.

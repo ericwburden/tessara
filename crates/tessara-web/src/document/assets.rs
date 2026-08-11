@@ -112,6 +112,12 @@ mod tests {
 
         assert_eq!(asset.content_type, "application/javascript; charset=utf-8");
         assert!(asset.content.contains("TessaraCharts"));
+        assert!(asset.content.contains("if (currentHelp)"));
+        assert!(asset.content.contains("details !== currentHelp"));
+        assert!(asset.content.contains("focus.tessara-tooltip"));
+        assert!(asset.content.contains("mouseenter.tessara-tooltip"));
+        assert!(asset.content.contains("aria-describedby"));
+        assert_eq!(asset.content.matches("appendAxisLabels(svg").count(), 3);
         assert!(static_asset("missing.js").is_none());
     }
 }

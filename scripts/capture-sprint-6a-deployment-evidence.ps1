@@ -8,6 +8,8 @@ param(
     [string]$ApiContainerId,
     [string]$GatewayContainerId,
     [string]$DatabaseContainerId,
+    [ValidateSet("sprint-6a", "sprint-8a")]
+    [string]$TransitionCatalogProfile = "sprint-6a",
     [switch]$Overwrite,
     [switch]$SelfTest
 )
@@ -217,8 +219,46 @@ if ($SelfTest) {
         }
     )
     $seedContract = Get-Sprint6ASeedContract -SeedRoles $seedRows
-    if ($seedContract.canonical_sha256 -cne "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600") {
+    if ($seedContract.version -cne "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68" -or
+        $seedContract.canonical_sha256 -cne "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600") {
         throw "Self-test failed: built-in seed canonical digest changed."
+    }
+    $sprint8SeedRows = @(
+        [pscustomobject]@{ name = "admin"; capabilities = @("admin:all") },
+        [pscustomobject]@{
+            name = "operator"
+            capabilities = @(
+                "datasets:read", "forms:read", "hierarchy:read", "operations:view",
+                "submissions:manage", "submissions:respond", "workflows:manage", "workflows:read"
+            )
+        },
+        [pscustomobject]@{
+            name = "respondent"
+            capabilities = @("submissions:read_own", "submissions:respond")
+        }
+    )
+    $sprint8SeedContract = Get-Sprint6ASeedContract `
+        -SeedRoles $sprint8SeedRows `
+        -TransitionCatalogProfile sprint-8a
+    if ($sprint8SeedContract.version -cne "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c" -or
+        $sprint8SeedContract.canonical_sha256 -cne "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609") {
+        throw "Self-test failed: Sprint 8A built-in seed canonical identity changed."
+    }
+    foreach ($crossProfileCase in @(
+        [pscustomobject]@{ rows = $seedRows; profile = "sprint-8a" },
+        [pscustomobject]@{ rows = $sprint8SeedRows; profile = "sprint-6a" }
+    )) {
+        $crossProfileSeedRejected = $false
+        try {
+            [void](Get-Sprint6ASeedContract `
+                -SeedRoles $crossProfileCase.rows `
+                -TransitionCatalogProfile $crossProfileCase.profile)
+        } catch {
+            $crossProfileSeedRejected = $true
+        }
+        if (-not $crossProfileSeedRejected) {
+            throw "Self-test failed: a built-in seed was accepted under the wrong transition-catalog profile."
+        }
     }
     $compositionAdminCapabilities = @("admin:all", "composition:approve", "composition:plan", "composition:read")
     $compositionRows = @($seedRows | ForEach-Object {
@@ -234,6 +274,21 @@ if ($SelfTest) {
     if (($compositionSeedContract.composition_owned_roles -join ",") -cne "admin" -or
         $compositionSeedContract.canonical_sha256 -cne $seedContract.canonical_sha256) {
         throw "Self-test failed: composition ownership did not preserve the immutable built-in seed identity."
+    }
+    $sprint8CompositionRows = @($sprint8SeedRows | ForEach-Object {
+        if ($_.name -ceq "admin") {
+            [pscustomobject]@{ name = "admin"; capabilities = $compositionAdminCapabilities }
+        } else {
+            $_
+        }
+    })
+    $sprint8CompositionSeedContract = Get-Sprint6ASeedContract `
+        -SeedRoles $sprint8CompositionRows `
+        -CompositionRoles @([pscustomobject]@{ name = "admin"; capabilities = $compositionAdminCapabilities }) `
+        -TransitionCatalogProfile sprint-8a
+    if (($sprint8CompositionSeedContract.composition_owned_roles -join ",") -cne "admin" -or
+        $sprint8CompositionSeedContract.canonical_sha256 -cne $sprint8SeedContract.canonical_sha256) {
+        throw "Self-test failed: Sprint 8A composition ownership did not preserve the immutable built-in seed identity."
     }
     $compositionRows[0].capabilities = @("admin:all")
     $projectionMismatchRejected = $false
@@ -401,6 +456,7 @@ if ($SelfTest) {
                 version = "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68"
                 canonical_sha256 = "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600"
             }
+            catalog = [pscustomobject]@{ transition_catalog_profile = "sprint-6a" }
             data = [pscustomobject]@{ state = "fresh" }
         }
     }
@@ -408,6 +464,48 @@ if ($SelfTest) {
         -Evidence $sample `
         -ExpectedDataState fresh `
         -BaseUrl "http://127.0.0.1:8080"
+    $sprint8Sample = $sample | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+    $sprint8Sample.snapshot.built_in_seed.version = "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c"
+    $sprint8Sample.snapshot.built_in_seed.canonical_sha256 = "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609"
+    $sprint8Sample.snapshot.catalog.transition_catalog_profile = "sprint-8a"
+    Assert-Sprint6ADeploymentEvidenceDocument `
+        -Evidence $sprint8Sample `
+        -ExpectedDataState fresh `
+        -BaseUrl "http://127.0.0.1:8080" `
+        -TransitionCatalogProfile sprint-8a
+    foreach ($crossProfileEvidenceCase in @(
+        [pscustomobject]@{ evidence = $sample; profile = "sprint-8a" },
+        [pscustomobject]@{ evidence = $sprint8Sample; profile = "sprint-6a" }
+    )) {
+        $crossProfileEvidenceRejected = $false
+        try {
+            Assert-Sprint6ADeploymentEvidenceDocument `
+                -Evidence $crossProfileEvidenceCase.evidence `
+                -ExpectedDataState fresh `
+                -BaseUrl "http://127.0.0.1:8080" `
+                -TransitionCatalogProfile $crossProfileEvidenceCase.profile
+        } catch {
+            $crossProfileEvidenceRejected = $true
+        }
+        if (-not $crossProfileEvidenceRejected) {
+            throw "Self-test failed: deployment evidence was accepted under the wrong seed/catalog profile."
+        }
+    }
+    $missingSprint8ProfileSample = $sprint8Sample | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+    $missingSprint8ProfileSample.snapshot.PSObject.Properties.Remove("catalog")
+    $missingSprint8ProfileRejected = $false
+    try {
+        Assert-Sprint6ADeploymentEvidenceDocument `
+            -Evidence $missingSprint8ProfileSample `
+            -ExpectedDataState fresh `
+            -BaseUrl "http://127.0.0.1:8080" `
+            -TransitionCatalogProfile sprint-8a
+    } catch {
+        $missingSprint8ProfileRejected = $true
+    }
+    if (-not $missingSprint8ProfileRejected) {
+        throw "Self-test failed: Sprint 8A deployment evidence without an explicit catalog profile was accepted."
+    }
     $rejected = $false
     try {
         Assert-Sprint6ADeploymentEvidenceDocument `
@@ -469,7 +567,8 @@ $snapshot = Get-Sprint6ADeploymentSnapshot `
     -AdminPassword $AdminPassword `
     -ApiContainerId $ApiContainerId `
     -GatewayContainerId $GatewayContainerId `
-    -DatabaseContainerId $DatabaseContainerId
+    -DatabaseContainerId $DatabaseContainerId `
+    -TransitionCatalogProfile $TransitionCatalogProfile
 if ([string]$snapshot.data.state -cne $ExpectedDataState) {
     throw "The database-derived data state is '$($snapshot.data.state)', not requested '$ExpectedDataState'."
 }
@@ -495,7 +594,8 @@ try {
         -BaseUrl $BaseUrl `
         -ExpectedDataState $ExpectedDataState `
         -AdminEmail $AdminEmail `
-        -AdminPassword $AdminPassword | Out-Null
+        -AdminPassword $AdminPassword `
+        -TransitionCatalogProfile $TransitionCatalogProfile | Out-Null
     Publish-Sprint6AEvidencePair `
         -TemporaryEvidencePath $temporaryPath `
         -TemporaryDigestPath $temporaryDigestPath `

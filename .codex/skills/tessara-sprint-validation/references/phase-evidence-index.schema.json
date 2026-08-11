@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/phase-evidence-index-v1.json",
+  "title": "Tessara phase-local evidence index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "policy_version", "sprint", "phase", "attempt", "evidence_root", "sealed_at", "entry_count", "entries"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.validation.phase-evidence-index" },
+    "policy_version": { "const": "tessara-validation-v2" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "phase": { "enum": ["implementation-readiness", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat", "closeout"] },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "evidence_root": { "$ref": "#/$defs/path" },
+    "sealed_at": { "type": "string", "format": "date-time" },
+    "entry_count": { "type": "integer", "minimum": 0 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "size", "kind"],
+        "properties": {
+          "path": { "$ref": "#/$defs/path" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "size": { "type": "integer", "minimum": 0 },
+          "kind": { "enum": ["receipt", "log", "structured", "screenshot", "trace", "report", "other"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" }
+  }
+}

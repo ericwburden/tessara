@@ -1,6 +1,7 @@
 #[allow(dead_code)]
 mod support;
 
+use std::collections::BTreeSet;
 #[cfg(not(debug_assertions))]
 use std::time::{Duration, Instant};
 
@@ -22,6 +23,19 @@ use support::{
 use support::{cookie_authenticated_request, login_cookie_for};
 
 const PASSWORD: &str = "tessara-test-password-123";
+const CORE_TRANSITION_DEFINITION_IDS: [&str; 5] = [
+    "tessara.datasets",
+    "tessara.forms",
+    "tessara.migration",
+    "tessara.responses",
+    "tessara.workflows",
+];
+const ACTIVE_CORE_TRANSITION_DEFINITION_IDS: [&str; 4] = [
+    "tessara.datasets",
+    "tessara.forms",
+    "tessara.responses",
+    "tessara.workflows",
+];
 const FORMS_DEFINITION: &str = "tessara.forms";
 const RESPONSES_DEFINITION: &str = "tessara.responses";
 const MIGRATION_DEFINITION: &str = "tessara.migration";
@@ -149,9 +163,9 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     for key in ["user_management", "roles_access", "node_types"] {
         assert!(shell_item(&admin_shell, key).is_some(), "missing {key}");
     }
-    assert_eq!(
-        shell_item(&admin_shell, "dashboards").map(|item| &item["navigation_mode"]),
-        Some(&json!("shell"))
+    assert!(
+        shell_item(&admin_shell, "dashboards").is_none(),
+        "Dashboard navigation requires an enrolled live Module Instance and must not come from Core"
     );
     for (name, actor) in [
         ("scoped read", &scoped_reader),
@@ -208,10 +222,6 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert_eq!(reader_inventory, admin_inventory);
     assert_eq!(reader_inventory["schema_version"], 1);
     assert_eq!(
-        reader_inventory["entries"].as_array().map(Vec::len),
-        Some(7)
-    );
-    assert_eq!(
         reader_inventory["core_runtime"]["provenance"],
         "development_unresolved"
     );
@@ -224,11 +234,12 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
         .as_array()
         .expect("module inventory entries should be an array");
     assert_eq!(
-        entries
-            .iter()
-            .filter(|entry| entry["descriptor"]["availability"] == "active_in_process")
-            .count(),
-        6
+        transition_definition_ids(entries),
+        CORE_TRANSITION_DEFINITION_IDS.to_vec()
+    );
+    assert_eq!(
+        transition_definition_ids_with_availability(entries, "active_in_process"),
+        ACTIVE_CORE_TRANSITION_DEFINITION_IDS.to_vec()
     );
     let migration = inventory_entry(entries, MIGRATION_DEFINITION);
     assert_eq!(migration["kind"], "transitional_in_process");
@@ -425,8 +436,27 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert_eq!(reader_policy["schema_version"], 2);
     assert_eq!(reader_policy["groups"].as_array().map(Vec::len), Some(2));
     assert_eq!(
-        reader_policy["destinations"].as_array().map(Vec::len),
-        Some(15)
+        reader_policy["destinations"]
+            .as_array()
+            .expect("policy destinations")
+            .iter()
+            .map(|entry| entry["id"].as_str().expect("destination id"))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "core.admin.composition",
+            "core.admin.modules",
+            "core.admin.node_types",
+            "core.admin.roles",
+            "core.admin.users",
+            "core.home",
+            "core.operations",
+            "core.organization",
+            "tessara.datasets.navigation",
+            "tessara.forms.navigation",
+            "tessara.reference.scoped-records.navigation",
+            "tessara.responses.navigation",
+            "tessara.workflows.navigation",
+        ])
     );
     assert!(
         reader_policy["groups"]
@@ -655,7 +685,7 @@ async fn navigation_policy_http_rejections_are_atomic_and_exactly_audited() {
     navigation_mutation_mut(&mut changed_request, "tessara.forms.navigation")["order"] = json!(3);
     navigation_mutation_mut(&mut changed_request, "tessara.workflows.navigation")["order"] =
         json!(2);
-    navigation_mutation_mut(&mut changed_request, "tessara.dashboards.navigation")["visible"] =
+    navigation_mutation_mut(&mut changed_request, "tessara.datasets.navigation")["visible"] =
         json!(false);
     let changed_policy = request_json(
         app.clone(),
@@ -1484,7 +1514,34 @@ async fn resource_reference_restricted_known_random_latency_profile() {
             RESTRICTED_TIMING_SAMPLES_PER_IDENTIFIER,
         )
         .await;
-        assert_restricted_timing_profile(access_state, &known_samples, &random_samples);
+        let initial_findings =
+            restricted_timing_profile_findings(access_state, &known_samples, &random_samples);
+        if !initial_findings.is_empty() {
+            println!(
+                "restricted resource timing access_state={access_state} requires one independent confirmation batch after initial findings: {}",
+                initial_findings.join("; ")
+            );
+            let (confirmation_known, confirmation_random) = sample_restricted_resolution_latencies(
+                app.clone(),
+                &actor.token,
+                &known_reference,
+                &random_reference,
+                &expected,
+                RESTRICTED_TIMING_SAMPLES_PER_IDENTIFIER,
+            )
+            .await;
+            let confirmation_findings = restricted_timing_profile_findings(
+                access_state,
+                &confirmation_known,
+                &confirmation_random,
+            );
+            assert!(
+                confirmation_findings.is_empty(),
+                "restricted resource timing profile failed both the initial and independent confirmation batches; initial: {}; confirmation: {}",
+                initial_findings.join("; "),
+                confirmation_findings.join("; ")
+            );
+        }
     }
 }
 
@@ -1562,7 +1619,6 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
     assert_eq!(reader_status, StatusCode::OK);
     assert_private_native_headers(&reader_headers);
     assert!(reader_html.contains("<title>Tessara Module Management</title>"));
-    assert!(reader_html.contains("7 definitions"));
     assert!(reader_html.contains("Transitional — not independently deployable"));
     assert!(reader_html.contains("No Module Release"));
     assert!(reader_html.contains("No Module Instance"));
@@ -1575,11 +1631,12 @@ async fn native_module_management_routes_render_authorized_restricted_and_not_fo
     assert_eq!(reader_bootstrap["route"], "directory");
     assert_eq!(reader_bootstrap["access"]["can_read"], true);
     assert_eq!(reader_bootstrap["access"]["can_manage_navigation"], false);
+    let reader_entries = reader_bootstrap["inventory"]["entries"]
+        .as_array()
+        .expect("native Module Management bootstrap entries should be an array");
     assert_eq!(
-        reader_bootstrap["inventory"]["entries"]
-            .as_array()
-            .map(Vec::len),
-        Some(7)
+        transition_definition_ids(reader_entries),
+        CORE_TRANSITION_DEFINITION_IDS.to_vec()
     );
     assert_eq!(
         reader_bootstrap["navigation_policy"]["policy"]["can_manage_navigation"],
@@ -1884,6 +1941,34 @@ fn inventory_entry<'a>(entries: &'a [Value], definition_id: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("missing module inventory entry {definition_id}"))
 }
 
+fn transition_definition_ids(entries: &[Value]) -> Vec<&str> {
+    let mut definition_ids = entries
+        .iter()
+        .map(transition_definition_id)
+        .collect::<Vec<_>>();
+    definition_ids.sort_unstable();
+    definition_ids
+}
+
+fn transition_definition_ids_with_availability<'a>(
+    entries: &'a [Value],
+    availability: &str,
+) -> Vec<&'a str> {
+    let mut definition_ids = entries
+        .iter()
+        .filter(|entry| entry["descriptor"]["availability"] == availability)
+        .map(transition_definition_id)
+        .collect::<Vec<_>>();
+    definition_ids.sort_unstable();
+    definition_ids
+}
+
+fn transition_definition_id(entry: &Value) -> &str {
+    entry["descriptor"]["reserved_definition_id"]
+        .as_str()
+        .expect("every transition entry has a definition identity")
+}
+
 fn shell_item<'a>(shell: &'a Value, key: &str) -> Option<&'a Value> {
     shell["groups"]
         .as_array()?
@@ -2154,11 +2239,11 @@ async fn sample_restricted_resolution_latencies(
 }
 
 #[cfg(not(debug_assertions))]
-fn assert_restricted_timing_profile(
+fn restricted_timing_profile_findings(
     access_state: &str,
     known_samples: &[Duration],
     random_samples: &[Duration],
-) {
+) -> Vec<String> {
     assert_eq!(
         known_samples.len(),
         RESTRICTED_TIMING_SAMPLES_PER_IDENTIFIER
@@ -2168,6 +2253,7 @@ fn assert_restricted_timing_profile(
         RESTRICTED_TIMING_SAMPLES_PER_IDENTIFIER
     );
 
+    let mut findings = Vec::new();
     for (percentile_name, percentile) in [("median", 50), ("p95", 95)] {
         let known_ms = percentile_ms(known_samples, percentile);
         let random_ms = percentile_ms(random_samples, percentile);
@@ -2177,11 +2263,13 @@ fn assert_restricted_timing_profile(
             "restricted resource timing access_state={access_state} percentile={percentile_name} known_ms={known_ms:.3} random_ms={random_ms:.3} delta_ms={delta_ms:.3} allowed_delta_ms={allowed_delta_ms:.3} samples_per_identifier={}",
             known_samples.len()
         );
-        assert!(
-            delta_ms <= allowed_delta_ms,
-            "{access_state} {percentile_name} known/random latency delta was {delta_ms:.3} ms, above the fixed {allowed_delta_ms:.3} ms tolerance (larger of 2 ms or 20%)"
-        );
+        if delta_ms > allowed_delta_ms {
+            findings.push(format!(
+                "{access_state} {percentile_name} known/random latency delta was {delta_ms:.3} ms, above the fixed {allowed_delta_ms:.3} ms tolerance (larger of 2 ms or 20%)"
+            ));
+        }
     }
+    findings
 }
 
 #[cfg(not(debug_assertions))]

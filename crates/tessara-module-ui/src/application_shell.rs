@@ -149,7 +149,7 @@ fn ThemeToggle() -> impl IntoView {
 fn read_theme_preference() -> &'static str {
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     {
-        return match web_sys::window()
+        match web_sys::window()
             .and_then(|window| window.local_storage().ok().flatten())
             .and_then(|storage| storage.get_item(STORAGE_KEY).ok().flatten())
             .as_deref()
@@ -157,7 +157,7 @@ fn read_theme_preference() -> &'static str {
             Some("light") => "light",
             Some("dark") => "dark",
             _ => "system",
-        };
+        }
     }
     #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
     "system"

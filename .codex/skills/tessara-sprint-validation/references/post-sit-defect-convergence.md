@@ -4,6 +4,13 @@ This reference defines the mandatory convergence cycle after authoritative SIT
 has passed and formal UAT exposes a candidate-invalidating defect. The
 `tessara-sprint-validation` coordinator owns every authorization decision.
 
+For a sprint selecting `tessara-validation-v2`, read
+`validation-policy-v2.md` first. Its compact certificates, dependency
+fingerprints, pre-freeze affected-lane recertification, phase-local evidence
+indexes, and evidence chain replace conflicting full-Readiness/Rehearsal and
+global-manifest language below. Complete successor-candidate SIT and UAT remain
+mandatory. Sprint 8A and earlier evidence stays on the legacy path.
+
 ## Contents
 
 - Trigger and invariants
@@ -35,8 +42,10 @@ Preserve these invariants:
 - Unsafe, dependent, or uninterpretable scenarios do not run.
 - Focused repair validation never constitutes SIT or UAT authorization.
 - Product decisions pause for user direction.
-- Final certification always reruns complete readiness, rehearsal, SIT, and
-  UAT for a new source-exact fingerprint.
+- Legacy final certification reruns complete readiness, rehearsal, SIT, and
+  UAT for a new source-exact fingerprint. V2 recertifies affected pre-freeze
+  lanes with authenticated unaffected-lane inheritance, then runs complete SIT
+  and UAT for the successor candidate.
 
 ## Fail-late UAT defect harvest
 
@@ -127,11 +136,12 @@ writes `final-certification-entry.json`. This record permits only a return to
 the complete Test Readiness Gate and Candidate Rehearsal. It does not freeze a
 candidate or authorize any phase.
 
-After complete readiness and rehearsal pass for the final clean mutable
-source, preflight may freeze a new source-exact candidate. Run authoritative
-SIT in full, then formal UAT in full from the beginning. Never reuse
-pre-correction SIT, UAT, harvest, or focused evidence as authoritative evidence
-for the successor fingerprint. Closeout requires this final complete chain.
+After the required legacy full pass or v2 affected-lane pre-freeze
+recertification passes for the final clean mutable source, preflight may freeze
+a new source-exact candidate. Run authoritative SIT in full, then formal UAT in
+full from the beginning. Never reuse pre-correction SIT, UAT, harvest, or
+focused evidence as authoritative evidence for the successor fingerprint.
+Closeout requires this final candidate-bound chain.
 
 ## Structured record contracts
 

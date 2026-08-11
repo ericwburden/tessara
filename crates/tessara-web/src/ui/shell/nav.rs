@@ -81,16 +81,16 @@ fn navigation_loading_view() -> impl IntoView {
             aria-label="Loading navigation"
             aria-busy="true"
         >
-            {navigation_loading_section("Main", 9)}
-            {navigation_loading_section("Admin", 4)}
+            {navigation_loading_section("Main")}
+            {navigation_loading_section("Admin")}
         </div>
     }
 }
 
-fn navigation_loading_section(label: &'static str, item_count: usize) -> impl IntoView {
+fn navigation_loading_section(label: &'static str) -> impl IntoView {
     view! {
         <p class="sidebar-section">{label}</p>
-        {(0..item_count)
+        {(0..3)
             .map(|index| {
                 let width_class = match index % 3 {
                     0 => "skeleton--wide",

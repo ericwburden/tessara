@@ -15,8 +15,9 @@ use axum::{
 };
 use serde_json::{Value, json};
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, SecurityCapabilityId,
+    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
+    ModuleDefinitionId, ModuleServicePrincipalV1, SecurityCapabilityId,
     ShellContextValidationContextV1,
 };
 use tessara_module_runtime::{
@@ -25,13 +26,13 @@ use tessara_module_runtime::{
     RuntimeProviderError, SecurityStateProvider, decode_signed_envelope_header,
     request_correlation_id, verify_shell_context,
 };
-use tessara_module_ui::{MODULE_SHELL_CSS, ShellPresentation};
+use tessara_module_ui::{MODULE_UI_CSS, ShellPresentation};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    DEFINITION_ID, MODULE_SHELL_CSS_DIGEST, MODULE_SHELL_CSS_PATH, MODULE_SHELL_JS_DIGEST,
-    MODULE_SHELL_JS_PATH, READ_CAPABILITY, RELEASE_VERSION, ROOT_PATH, ReferenceConfiguration,
+    DEFINITION_ID, MODULE_SHELL_JS_DIGEST, MODULE_SHELL_JS_PATH, MODULE_UI_CSS_DIGEST,
+    MODULE_UI_CSS_PATH, READ_CAPABILITY, RELEASE_VERSION, ROOT_PATH, ReferenceConfiguration,
     ReferenceSecurityState, ReferenceState, manifest, render_reference_document,
 };
 
@@ -80,16 +81,14 @@ impl ModuleDefinitionProvider for ReferenceRuntime {
 
     fn asset_manifest(&self) -> BTreeMap<String, String> {
         BTreeMap::from([
-            (MODULE_SHELL_CSS_PATH.into(), MODULE_SHELL_CSS_DIGEST.into()),
+            (MODULE_UI_CSS_PATH.into(), MODULE_UI_CSS_DIGEST.into()),
             (MODULE_SHELL_JS_PATH.into(), MODULE_SHELL_JS_DIGEST.into()),
         ])
     }
 
     fn asset_bytes(&self, digest: &str) -> Option<(&'static str, &'static [u8])> {
         match digest {
-            MODULE_SHELL_CSS_DIGEST => {
-                Some(("text/css; charset=utf-8", MODULE_SHELL_CSS.as_bytes()))
-            }
+            MODULE_UI_CSS_DIGEST => Some(("text/css; charset=utf-8", MODULE_UI_CSS.as_bytes())),
             MODULE_SHELL_JS_DIGEST => Some((
                 "text/javascript; charset=utf-8",
                 tessara_module_ui::MODULE_SHELL_JS.as_bytes(),
@@ -244,7 +243,7 @@ pub fn router(runtime: Arc<ReferenceRuntime>) -> Router {
             "/reference/module-sdk/diagnostics",
             get(diagnostics_document),
         )
-        .route(MODULE_SHELL_CSS_PATH, get(stylesheet))
+        .route(MODULE_UI_CSS_PATH, get(stylesheet))
         .route(MODULE_SHELL_JS_PATH, get(hydration_script))
         .merge(tessara_module_runtime::standard_control_router::<
             ReferenceRuntime,
@@ -327,22 +326,27 @@ async fn diagnostics_document(
         return (StatusCode::FORBIDDEN, "module action unavailable").into_response();
     };
     let findings = runtime.diagnostic_findings().await;
-    let body = format!(
-        "<section aria-labelledby=\"diagnostics-title\"><h1 id=\"diagnostics-title\">Module SDK diagnostics</h1><p>Release {} · health {}</p><p>{} active finding(s). No credentials or policy payloads are exposed.</p><p><a href=\"{}\">Return to reference module</a></p></section>",
-        RELEASE_VERSION,
-        if findings.is_empty() {
-            "passing"
-        } else {
-            "failing"
-        },
-        findings.len(),
-        ROOT_PATH,
-    );
-    Html(tessara_module_ui::render_module_document(
+    use leptos::prelude::*;
+    let health = if findings.is_empty() {
+        "passing"
+    } else {
+        "failing"
+    };
+    let finding_count = findings.len();
+    Html(tessara_module_ui::render_module_view_document(
         &presentation,
-        MODULE_SHELL_CSS_PATH,
-        Some(MODULE_SHELL_JS_PATH),
-        &body,
+        &tessara_module_ui::ModuleDocumentAssets {
+            stylesheets: vec![MODULE_UI_CSS_PATH.into()],
+            deferred_scripts: Vec::new(),
+            hydration_script: Some(MODULE_SHELL_JS_PATH.into()),
+        },
+        &tessara_module_ui::ModuleReleaseMetadata {
+            definition_id: DEFINITION_ID.into(),
+            release_version: RELEASE_VERSION.into(),
+            asset_digest: MODULE_UI_CSS_DIGEST.into(),
+        },
+        None,
+        || view! { <section class="route-panel reference-module" aria-labelledby="diagnostics-title"><h1 id="diagnostics-title">"Module SDK diagnostics"</h1><p>{format!("Release {RELEASE_VERSION} · health {health}")}</p><p>{format!("{finding_count} active finding(s). No credentials or policy payloads are exposed.")}</p><p><a class="button" href=ROOT_PATH>"Return to reference module"</a></p></section> },
     ))
     .into_response()
 }
@@ -377,7 +381,7 @@ async fn verify_authorization(
     action: &str,
     organization_id: Option<Uuid>,
 ) -> Result<(), ()> {
-    let envelope: tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2> =
+    let envelope: tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3> =
         decode_signed_envelope_header(headers, "x-tessara-authorization").map_err(|_| ())?;
     runtime
         .verifiers
@@ -385,12 +389,18 @@ async fn verify_authorization(
         .verify(&envelope)
         .map_err(|_| ())?;
     let security = runtime.current_security_state().await.map_err(|_| ())?;
+    let correlation_id = request_correlation_id(headers).map_err(|_| ())?;
     envelope
         .payload
-        .validate_for(&AuthorizationValidationContextV2 {
+        .validate_for(&AuthorizationValidationContextV3 {
             installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").map_err(|_| ())?,
-            audience_module_instance_id: security.module_instance_id,
+            correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: security.module_instance_id,
+                module_definition_id: ModuleDefinitionId::new("tessara.reference.module-sdk")
+                    .map_err(|_| ())?,
+            },
             dependency_binding: DependencyBindingKey::new("tessara.core.module-document")
                 .map_err(|_| ())?,
             functional_contract: FunctionalContractId::new(
@@ -428,7 +438,7 @@ async fn stylesheet() -> Response {
             (header::CONTENT_TYPE, "text/css; charset=utf-8"),
             (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
         ],
-        Body::from(MODULE_SHELL_CSS),
+        Body::from(MODULE_UI_CSS),
     )
         .into_response()
 }
@@ -553,7 +563,7 @@ mod tests {
         let ready = request(&app, "GET", "/health/ready", json!({}), false).await;
         assert_eq!(ready.status(), StatusCode::OK);
 
-        let asset = request(&app, "GET", MODULE_SHELL_CSS_PATH, json!({}), false).await;
+        let asset = request(&app, "GET", MODULE_UI_CSS_PATH, json!({}), false).await;
         assert_eq!(asset.status(), StatusCode::OK);
         assert_eq!(
             asset.headers()[header::CACHE_CONTROL],

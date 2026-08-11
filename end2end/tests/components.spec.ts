@@ -1,163 +1,103 @@
-import { expect, test, type APIResponse, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIResponse,
+  type Page,
+  type Response,
+} from "@playwright/test";
 import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 
-const BENIGN_NAVIGATION_ABORT_ERRORS = [
-  "WebAssembly compilation aborted: Network error: Response body loading was aborted",
-  "Failed to fetch",
-  "Failed to load resource: the server responded with a status of 404 (Not Found)",
-];
+const RUN_ID = `pw-components-${Date.now()}`;
+const TWO_HUNDRED_PERCENT_ZOOM_VIEWPORT = { width: 640, height: 450 };
+const COMPONENT_VIEWPORT_MATRIX = [
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "tablet", width: 768, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+] as const;
+const COMPONENT_SURFACES = ["directory", "editor", "detail", "viewer"] as const;
+const RENDERED_COMPONENT_CONTENT = [
+  ".component-table-viewer__table",
+  ".component-d3-chart__surface",
+  ".component-stat-card",
+].join(", ");
 
-const COMPONENT_PREFIX = "pw-components-";
-const RUN_ID = Date.now();
-
-type IdResponse = { id: string };
-
-type DatasetFieldDefinition = {
-  key: string;
-  label: string;
-  field_type: string;
-};
-
-type DatasetSummary = {
-  id: string;
-  name: string;
-  slug?: string;
-  grain?: string;
-  tags?: string[];
-  provenance?: {
-    forms?: Array<{ id: string; name: string; slug?: string | null }>;
-    datasets?: Array<{ id: string; name: string; slug?: string | null }>;
+type DatasetReference = {
+  reference: {
+    installation_id: string;
+    owner: {
+      kind: "core_installation";
+      installation_id: string;
+    };
+    resource_type: "tessara.transition.dataset_major_line";
+    resource_id: string;
   };
-  visibility_nodes: Array<{ node_id: string; node_name: string }>;
-  current_version_major?: number | null;
-  major_versions?: number[];
-  output_fields: DatasetFieldDefinition[];
 };
 
-type ComponentVersionSummary = {
-  id: string;
-  component_id: string;
-  dataset_id: string;
-  dataset_version_major: number;
-  binding_mode: string;
+type DatasetOption = {
+  reference: DatasetReference;
+  dataset_name: string;
+  dataset_slug: string;
+  grain: string;
+  tags: string[];
+  provenance: {
+    forms: Array<{ id: string; name: string; slug?: string | null }>;
+    datasets: Array<{ id: string; name: string; slug?: string | null }>;
+  };
+  materialization_state?: string;
+  fields: Array<{
+    key: string;
+    label: string;
+    field_type: string;
+    restriction_tier: string;
+  }>;
+  scope_node_ids: string[];
+};
+
+type DatasetCatalog = {
+  schema_version: number;
+  datasets: DatasetOption[];
+};
+
+type ComponentVersion = {
+  component_version_id: string;
+  dataset_reference: DatasetReference;
   component_type: string;
-  status: string;
-  version_label: string;
+  publication_state: string;
+  lifecycle_state: string;
+  version_note: string;
   config: Record<string, unknown>;
 };
 
 type ComponentDefinition = {
-  id: string;
+  schema_version: number;
+  component_id: string;
   name: string;
   slug: string;
   description?: string | null;
-  versions: ComponentVersionSummary[];
+  versions: ComponentVersion[];
 };
 
 type ComponentSummary = {
+  schema_version: number;
+  component_id: string;
+  name: string;
   slug: string;
-  current_component_type?: string | null;
+  current_version: ComponentVersion;
 };
 
-type ComponentTable = {
-  component_version_id: string;
-  materialization_state: string;
-  component_type: string;
-  columns: Array<{ key: string; label: string; field_type: string }>;
-  rows: Array<{ values: Record<string, string | null> }>;
-  pagination: {
-    page_size: number;
-    next_cursor?: string | null;
-    has_more: boolean;
-  };
+type DashboardSummary = {
+  id: string;
+  name: string;
+  placement_count: number;
 };
 
-type ComponentVisual = {
-  component_version_id: string;
-  materialization_state: string;
-  component_type: string;
-  bar_orientation?: string | null;
-  bar_comparison_layout?: string | null;
-  x_axis_label?: string | null;
-  y_axis_label?: string | null;
-  stat?: { label: string; display_value?: string | null } | null;
-  points: Array<{ x: string; value: number; display_value: string }>;
-  slices: Array<{ category: string; value: number; display_value: string }>;
-};
-
-type ComponentValidationResponse = {
+type ValidationResponse = {
+  schema_version: number;
   valid: boolean;
-  findings: Array<{
-    code: string;
-    severity: string;
-    field_path?: string | null;
-    message: string;
-  }>;
+  findings: Array<{ code: string; field_path?: string | null }>;
 };
 
-type ApiErrorBody = {
-  code: string;
-  message: string;
-  error: string;
-};
-
-type ComponentFilterConfig = {
-  field_key: string;
-  operator: string;
-  value?: string;
-};
-
-function isBenignNavigationAbort(message: string) {
-  return BENIGN_NAVIGATION_ABORT_ERRORS.some((pattern) =>
-    message.includes(pattern),
-  );
-}
-
-function attachConsoleGuard(page: Page) {
-  const errors: string[] = [];
-  const httpErrors: string[] = [];
-  page.on("response", (response) => {
-    if (response.status() >= 400) {
-      httpErrors.push(`${response.status()} ${response.url()}`);
-    }
-  });
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      const text = message.text();
-      if (!isBenignNavigationAbort(text)) {
-        errors.push(text);
-      }
-    }
-  });
-  page.on("pageerror", (error) => {
-    if (!isBenignNavigationAbort(error.message)) {
-      errors.push(error.message);
-    }
-  });
-  const assertClean = async () => {
-    expect(
-      errors,
-      `browser console should stay clean: ${errors.join("\n")}\nPage HTTP errors: ${httpErrors.join("\n")}`,
-    ).toEqual([]);
-  };
-  assertClean.reset = () => {
-    errors.splice(0, errors.length);
-    httpErrors.splice(0, httpErrors.length);
-  };
-  return assertClean;
-}
-
-async function signInAsAdmin(page: Page) {
-  const response = await page.request.post("/api/auth/login", {
-    data: {
-      email: "admin@tessara.local",
-      password: "tessara-dev-admin",
-    },
-  });
-  expect(response.ok()).toBeTruthy();
-}
-
-async function expectJson<T>(response: APIResponse) {
+async function expectJson<T>(response: APIResponse): Promise<T> {
   const text = await response.text();
   expect(
     response.ok(),
@@ -166,113 +106,78 @@ async function expectJson<T>(response: APIResponse) {
   return JSON.parse(text) as T;
 }
 
-async function expectStatus(response: APIResponse, expectedStatus: number) {
-  const text = await response.text();
+async function expectBrowserResponseOk(response: Response): Promise<void> {
+  let detail = "";
+  if (!response.ok()) {
+    detail = await response.text().catch(() => "<response body unavailable>");
+  }
   expect(
-    response.status(),
-    `${response.url()} returned ${response.status()}: ${text}`,
-  ).toBe(expectedStatus);
-  return text;
+    response.ok(),
+    `${response.url()} returned ${response.status()}: ${detail}`,
+  ).toBeTruthy();
+}
+
+async function signInAsAdmin(page: Page) {
+  await expectJson(
+    await page.request.post("/api/auth/login", {
+      data: { email: "admin@tessara.local", password: "tessara-dev-admin" },
+    }),
+  );
 }
 
 async function ensureDemoSeed(page: Page) {
   const response = await invokeDemoSeedEndpoint(page.request);
-  if (response === null) {
-    return;
-  }
+  if (response === null) return;
   const text = await response.text();
-  if (
+  expect(
     response.ok() ||
-    (response.status() === 400 &&
-      text.includes("Demo seed requires an empty database"))
-  ) {
-    return;
+      (response.status() === 400 &&
+        text.includes("Demo seed requires an empty database")),
+    text,
+  ).toBeTruthy();
+}
+
+async function datasetOption(page: Page) {
+  const catalog = await expectJson<DatasetCatalog>(
+    await page.request.get("/api/admin/components/datasets"),
+  );
+  const datasets = catalog.datasets;
+  const dataset =
+    datasets.find((candidate) =>
+      candidate.fields.some(
+        (field) => field.field_type.toLowerCase() !== "number",
+      ),
+    ) ?? datasets.find((candidate) => candidate.fields.length > 0);
+  expect(
+    dataset,
+    "Component authoring requires one ready Dataset major line",
+  ).toBeTruthy();
+  expect(dataset!.reference.reference.resource_type).toBe(
+    "tessara.transition.dataset_major_line",
+  );
+  expect(dataset!.reference.reference.owner).toEqual({
+    kind: "core_installation",
+    installation_id: dataset!.reference.reference.installation_id,
+  });
+  expect(datasetMajor(dataset!.reference)).toBeGreaterThan(0);
+  return dataset!;
+}
+
+function datasetMajor(reference: DatasetReference): number {
+  const match = reference.reference.resource_id.match(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@([1-9][0-9]*)$/,
+  );
+  if (match === null) {
+    throw new Error(
+      `Dataset major-line reference has a non-canonical resource identity: ${reference.reference.resource_id}`,
+    );
   }
-  expect(response.ok(), `${response.url()} returned ${response.status()}: ${text}`).toBeTruthy();
+  return Number.parseInt(match[1], 10);
 }
 
-async function pickDatasetMajor(page: Page) {
-  const datasets = await expectJson<DatasetSummary[]>(
-    await page.request.get("/api/datasets"),
-  );
-  const dataset = datasets.find(
-    (candidate) =>
-      candidate.output_fields.some((field) => isTextLikeField(field)) &&
-      (candidate.major_versions?.length || candidate.current_version_major),
-  );
-  expect(dataset, "a published dataset with a text-like output field should exist").toBeTruthy();
-  const major =
-    dataset!.major_versions?.[0] ?? dataset!.current_version_major ?? undefined;
-  expect(major, "dataset should expose a major version").toBeTruthy();
-  return { dataset: dataset!, major: major! };
-}
-
-async function pickDemoSessionLogDataset(page: Page) {
-  const datasets = await expectJson<DatasetSummary[]>(
-    await page.request.get("/api/datasets"),
-  );
-  const dataset = datasets.find(
-    (candidate) =>
-      candidate.slug === "demo-session-log" ||
-      candidate.name === "Demo Session Log Dataset",
-  );
-  expect(dataset, "Demo Session Log Dataset should exist").toBeTruthy();
-  const major =
-    dataset!.major_versions?.[0] ?? dataset!.current_version_major ?? undefined;
-  expect(major, "Demo Session Log Dataset should expose a major version").toBeTruthy();
-  return { dataset: dataset!, major: major! };
-}
-
-async function selectDatasetVersion(
-  page: Page,
-  dataset: DatasetSummary,
-  major: number,
-) {
-  const picker = page.getByRole("combobox", { name: "Dataset Version" });
-  await expect(async () => {
-    await picker.click();
-    await expect(picker).toHaveAttribute("aria-expanded", "true", {
-      timeout: 1_000,
-    });
-  }).toPass({ timeout: 10_000 });
-  const filter = page.getByRole("searchbox", { name: "Filter dataset versions" });
-  await expect(filter).toBeVisible();
-  await filter.fill(dataset.name);
-  const row = page
-    .getByRole("option")
-    .filter({ hasText: dataset.name })
-    .filter({ hasText: `v${major}` });
-  await expect(row).toHaveCount(1);
-  await row.getByRole("button", { name: dataset.name }).click();
-  await expect(picker).toContainText(`${dataset.name} · v${major}`);
-}
-
-function isTextLikeField(field: DatasetFieldDefinition) {
-  return field.field_type === "text" || field.field_type === "static_text";
-}
-
-function textLikeField(fields: DatasetFieldDefinition[]) {
-  const field = fields.find((candidate) => isTextLikeField(candidate));
-  expect(field, "dataset should expose a text-like output field").toBeTruthy();
-  return field!;
-}
-
-function tableConfig(
-  fieldKeys: string[],
-  pageSize = 25,
-  filters: ComponentFilterConfig[] = [],
-) {
-  return {
-    visible_columns: fieldKeys,
-    filters,
-    default_sort: fieldKeys[0]
-      ? {
-          field_key: fieldKeys[0],
-          direction: "asc",
-        }
-      : null,
-    page_size: pageSize,
-  };
+function tableConfig(dataset: DatasetOption) {
+  const visible = dataset.fields.slice(0, 3).map((field) => field.key);
+  return { visible_columns: visible, search_fields: visible, page_size: 25 };
 }
 
 function visualConfig(kind: string, fieldKey: string) {
@@ -282,13 +187,10 @@ function visualConfig(kind: string, fieldKey: string) {
       summary_field: fieldKey,
       summary_type: "count",
       category_field: fieldKey,
-      orientation: "horizontal",
       sort_field: "summary_value",
       sort_direction: "desc",
       number_of_points: 20,
       value_format: "integer",
-      x_axis_label: "Submissions",
-      y_axis_label: "Category",
     };
   }
   if (kind === "line") {
@@ -296,7 +198,12 @@ function visualConfig(kind: string, fieldKey: string) {
       summary_field: fieldKey,
       summary_type: "count",
       x_field: fieldKey,
+      sort_field: "summary_value",
+      sort_direction: "desc",
       number_of_points: 20,
+      value_format: "integer",
+      x_axis_label: "Category",
+      y_axis_label: "Responses",
     };
   }
   if (kind === "pie" || kind === "donut") {
@@ -305,246 +212,361 @@ function visualConfig(kind: string, fieldKey: string) {
       summary_type: "count",
       category_field: fieldKey,
       max_slices: 20,
+      value_format: "integer",
     };
   }
   return {
     summary_field: fieldKey,
     summary_type: "count",
-    label: "Submission count",
+    label: "Row count",
     value_format: "integer",
-    panel_style: "accent",
   };
 }
 
-function visualPath(kind: string) {
-  return kind === "stat_card" ? "stat-card" : kind;
+function versionInput(
+  dataset: DatasetOption,
+  componentType: string,
+  config: Record<string, unknown>,
+  versionNote: string,
+) {
+  return {
+    dataset_reference: dataset.reference,
+    component_type: componentType,
+    config,
+    version_note: versionNote,
+  };
 }
 
-async function createComponentDraft(
+function idempotencyHeaders(action: string) {
+  return { "x-idempotency-key": `${RUN_ID}-${action}` };
+}
+
+async function createComponent(
   page: Page,
-  name: string,
-  slug: string,
-  dataset: DatasetSummary,
-  major: number,
-  fieldKeys: string[],
-  filters: ComponentFilterConfig[] = [],
+  dataset: DatasetOption,
+  componentType: string,
+  config: Record<string, unknown>,
+  suffix: string,
 ) {
-  return expectJson<IdResponse>(
+  const slug = `${RUN_ID}-${suffix}`;
+  const name = `Playwright ${suffix} ${RUN_ID}`;
+  const definition = await expectJson<ComponentDefinition>(
     await page.request.post("/api/admin/components", {
+      headers: idempotencyHeaders(`create-${suffix}`),
       data: {
+        schema_version: 1,
         name,
         slug,
-        description: "Playwright Sprint 4A table component workflow fixture.",
-        version: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "table",
-          config: tableConfig(fieldKeys, 25, filters),
-        },
+        description: "Extracted Component module acceptance fixture.",
+        version: versionInput(dataset, componentType, config, "Initial draft"),
       },
     }),
   );
+  expect(definition).toMatchObject({ schema_version: 1, name, slug });
+  expect(definition.versions).toHaveLength(1);
+  return definition;
 }
 
-async function createVisualComponentDraft(
+async function publish(
   page: Page,
-  name: string,
-  slug: string,
-  dataset: DatasetSummary,
-  major: number,
-  kind: string,
-  fieldKey: string,
+  definition: ComponentDefinition,
+  action: string,
 ) {
-  return expectJson<IdResponse>(
-    await page.request.post("/api/admin/components", {
-      data: {
-        name,
-        slug,
-        description: "Playwright Sprint 4B visual component workflow fixture.",
-        version: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: kind,
-          config: visualConfig(kind, fieldKey),
-        },
-      },
-    }),
-  );
-}
-
-async function saveVisualDraft(
-  page: Page,
-  componentId: string,
-  dataset: DatasetSummary,
-  major: number,
-  kind: string,
-  fieldKey: string,
-) {
-  return expectJson<IdResponse>(
-    await page.request.post(`/api/admin/components/${componentId}/versions`, {
-      data: {
-        dataset_id: dataset.id,
-        dataset_version_major: major,
-        component_type: kind,
-        config: visualConfig(kind, fieldKey),
-        version_note: "Playwright visual replacement version.",
-      },
-    }),
-  );
-}
-
-async function createAndPublishVisualComponentThroughUi(
-  page: Page,
-  dataset: DatasetSummary,
-  major: number,
-  kind: string,
-  fieldKey: string,
-) {
-  const slug = `${COMPONENT_PREFIX}${RUN_ID}-ui-${kind}`;
-  const name = `Playwright UI Visual ${kind} ${RUN_ID}`;
-
-  await page.goto("/components/new");
-  await page.waitForLoadState("networkidle");
-  await expect(page.getByRole("button", { name: "Save Draft" })).toBeVisible();
-  const nameInput = page.getByRole("textbox", { name: "Name", exact: true });
-  const slugInput = page.getByRole("textbox", { name: "Slug" });
-  await nameInput.fill(name);
-  await nameInput.blur();
-  await slugInput.fill(slug);
-  await page
-    .getByRole("textbox", { name: "Description" })
-    .fill(`UI-created ${kind} visual component.`);
-  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(name);
-  await expect(slugInput).toHaveValue(slug);
-  await selectDatasetVersion(page, dataset, major);
-  const kindLabel = kind === "stat_card" ? "Stat Card" : `${kind[0].toUpperCase()}${kind.slice(1)}`;
-  await page.getByRole("radio", { name: kindLabel, exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(name);
-  await expect(slugInput).toHaveValue(slug);
-  if (kind === "bar") {
-    await page.locator(".component-editor__role-card--measure select").first().selectOption("count");
-    await page
-      .locator(".component-editor__role-card--measure .component-editor__measure-grid label.form-field")
-      .nth(1)
-      .locator("select")
-      .selectOption(fieldKey);
-    await page.getByLabel("Value format").selectOption("integer");
-    await page.getByLabel("Missing categories").selectOption("explicit_missing");
-    await page.getByLabel("Missing values").selectOption("zero");
-  } else {
-    await page.locator(".component-editor__value-field select").selectOption(fieldKey);
-    await page.getByLabel("Calculation", { exact: true }).selectOption("count");
-    await page.getByLabel("Format", { exact: true }).selectOption("integer");
-    await page.getByLabel("Missing measure values", { exact: true }).selectOption("omit");
-  }
-
-  if (kind === "bar") {
-    await page
-      .locator(".component-editor__role-grid > .component-editor__role-card")
-      .first()
-      .locator("select")
-      .first()
-      .selectOption(fieldKey);
-  } else if (kind === "pie" || kind === "donut") {
-    await page.locator(".component-editor__category-field select").selectOption(fieldKey);
-  } else if (kind === "line") {
-    await page.locator(".component-editor__category-field select").selectOption(fieldKey);
-  } else {
-    await page.getByLabel("Label", { exact: true }).fill("Submission count");
-    await page.getByLabel("Panel Style", { exact: true }).selectOption("accent");
-  }
-
-  await page.locator(".component-editor__publish-button").click();
-  await page.getByRole("menuitem", { name: "Create New Version" }).click();
-  const consumerDialog = page.getByRole("dialog", { name: "Review component consumers" });
-  await expect(consumerDialog).toBeVisible();
-  await consumerDialog
-    .getByLabel("New Version Note")
-    .fill(`Initial UI publish for ${kind}.`);
-  const saveResponsePromise = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/admin/components/save") &&
-        response.request().method() === "POST",
-      { timeout: 15_000 },
-    );
-  await consumerDialog.getByRole("button", { name: "Create New Version" }).click();
-  const saveResponse = await saveResponsePromise.catch(async (error) => {
-    const visibleErrors = await page.locator(".form-status.is-error").allTextContents();
-    throw new Error(`${String(error)}\nVisible form errors: ${visibleErrors.join(" | ")}`);
-  });
-  expect(saveResponse.status(), `${saveResponse.url()} returned ${saveResponse.status()}`).toBe(
-    200,
-  );
-  await page.waitForURL(`**/components/${slug}`);
-  await page.goto(`/components/${slug}/view`);
-  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-  await expect(page.locator(".component-visual-preview")).toBeVisible();
-
-  return { name, slug };
-}
-
-async function saveTableDraft(
-  page: Page,
-  componentId: string,
-  dataset: DatasetSummary,
-  major: number,
-  fieldKeys: string[],
-) {
-  return expectJson<IdResponse>(
-    await page.request.post(`/api/admin/components/${componentId}/versions`, {
-      data: {
-        dataset_id: dataset.id,
-        dataset_version_major: major,
-        component_type: "table",
-        config: tableConfig(fieldKeys),
-      },
-    }),
-  );
-}
-
-async function patchTableDraft(
-  page: Page,
-  componentId: string,
-  versionId: string,
-  dataset: DatasetSummary,
-  major: number,
-  fieldKeys: string[],
-) {
-  return expectJson<IdResponse>(
-    await page.request.patch(
-      `/api/admin/components/${componentId}/versions/${versionId}`,
-      {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "table",
-          config: tableConfig(fieldKeys),
-        },
-      },
-    ),
-  );
-}
-
-async function loadComponent(page: Page, slug: string) {
-  return expectJson<ComponentDefinition>(
-    await page.request.get(`/api/admin/components/${slug}`),
-  );
-}
-
-async function publishComponentVersion(
-  page: Page,
-  componentId: string,
-  versionId: string,
-) {
-  return expectJson<IdResponse>(
+  const version = definition.versions[0];
+  await expectJson(
     await page.request.post(
-      `/api/admin/components/${componentId}/versions/${versionId}/publish`,
-      { data: {} },
+      `/api/admin/components/${definition.component_id}/versions/${version.component_version_id}/publish`,
+      { headers: idempotencyHeaders(action), data: {} },
     ),
   );
 }
 
-test.describe.serial("Sprint 4A component workflow", () => {
+function renderPath(slug: string, kind: string) {
+  return `/api/components/${slug}/${kind === "stat_card" ? "stat-card" : kind}`;
+}
+
+function attachConsoleGuard(page: Page) {
+  const errors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  page.on("pageerror", (error) => errors.push(error.message));
+  const assertNoConsoleErrors = () => {
+    expect(
+      errors,
+      `Component routes must not emit browser console or hydration errors:\n${errors.join("\n")}`,
+    ).toEqual([]);
+  };
+  assertNoConsoleErrors.consumeExpected = (
+    expected: string,
+    expectedCount = 1,
+  ) => {
+    const observedCount = errors.filter((error) => error === expected).length;
+    expect(
+      observedCount,
+      `Expected ${expectedCount} browser console error occurrence(s): ${expected}`,
+    ).toBe(expectedCount);
+    for (let index = errors.length - 1; index >= 0; index -= 1) {
+      if (errors[index] === expected) errors.splice(index, 1);
+    }
+  };
+  return assertNoConsoleErrors;
+}
+
+async function chooseThemeWithKeyboard(page: Page, theme: "light" | "dark") {
+  const themeTrigger = page.getByRole("button", { name: "Theme options" });
+  await themeTrigger.focus();
+  await page.keyboard.press("Enter");
+  const themeOption = page.getByRole("menuitemradio", {
+    name: theme === "light" ? "Light" : "Dark",
+    exact: true,
+  });
+  await expect(themeOption).toBeVisible();
+  await themeOption.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-theme-preference",
+    theme,
+  );
+  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+}
+
+async function expectHorizontalContainment(
+  page: Page,
+  selector: string,
+  description: string,
+) {
+  const targets = page.locator(selector);
+  await expect(
+    targets.first(),
+    `${description} should expose a visible containment target`,
+  ).toBeVisible();
+  const metrics = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    devicePixelRatio: window.devicePixelRatio,
+    innerWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(
+    metrics.innerWidth,
+    "200% zoom should expose the 640 CSS-pixel layout viewport",
+  ).toBe(TWO_HUNDRED_PERCENT_ZOOM_VIEWPORT.width);
+  expect(
+    metrics.devicePixelRatio,
+    "200% zoom should render at two device pixels per CSS pixel",
+  ).toBe(2);
+  expect(
+    metrics.scrollWidth <= metrics.clientWidth + 1,
+    `${description} should not create document-level horizontal overflow`,
+  ).toBe(true);
+
+  const outOfBounds = await targets.evaluateAll((elements) =>
+    elements.flatMap((element, index) => {
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") return [];
+      const bounds = element.getBoundingClientRect();
+      return bounds.left < -1 || bounds.right > window.innerWidth + 1
+        ? [
+            {
+              index,
+              left: bounds.left,
+              right: bounds.right,
+              viewport: window.innerWidth,
+            },
+          ]
+        : [];
+    }),
+  );
+  expect(
+    outOfBounds,
+    `${description} should remain within the layout viewport`,
+  ).toEqual([]);
+}
+
+async function expectViewportContainment(
+  page: Page,
+  selector: string,
+  expectedWidth: number,
+  description: string,
+) {
+  const target = page.locator(selector).first();
+  await expect(
+    target,
+    `${description} should expose its canonical surface`,
+  ).toBeVisible();
+  const metrics = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    innerWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(
+    metrics.innerWidth,
+    `${description} should use the requested viewport`,
+  ).toBe(expectedWidth);
+  expect(
+    metrics.scrollWidth <= metrics.clientWidth + 1,
+    `${description} should not create document-level horizontal overflow`,
+  ).toBe(true);
+  const bounds = await target.boundingBox();
+  expect(bounds, `${description} should have measurable bounds`).not.toBeNull();
+  expect(
+    bounds!.x,
+    `${description} should not escape the left viewport edge`,
+  ).toBeGreaterThanOrEqual(-1);
+  expect(
+    bounds!.x + bounds!.width,
+    `${description} should not escape the right viewport edge`,
+  ).toBeLessThanOrEqual(expectedWidth + 1);
+}
+
+async function selectDatasetMajorLine(page: Page, dataset: DatasetOption) {
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
+  const major = datasetMajor(dataset.reference);
+  const picker = page.getByRole("combobox", { name: "Dataset Version" });
+  await expect(picker).toBeVisible();
+  await picker.click();
+  const datasetTable = page
+    .getByRole("table")
+    .filter({ hasText: "Provenance" });
+  for (const heading of ["Dataset", "Version", "Grain", "Tags", "Provenance"]) {
+    await expect(
+      datasetTable.getByRole("columnheader", { name: heading }),
+    ).toBeVisible();
+  }
+  const search = page.getByRole("searchbox", {
+    name: "Filter dataset versions",
+  });
+  await expect(search).toBeVisible();
+  await search.fill(dataset.dataset_name);
+  const option = page
+    .getByRole("option")
+    .filter({ hasText: dataset.dataset_name })
+    .first();
+  await expect(option).toContainText(`v${major}`);
+  await expect(option).toContainText(dataset.grain || "—");
+  await option.getByRole("button", { name: dataset.dataset_name }).click();
+  await expect(picker).toContainText(dataset.dataset_name);
+  await expect(
+    page.getByRole("heading", {
+      name: `${dataset.dataset_name} v${major} field preview`,
+    }),
+  ).toBeVisible();
+}
+
+async function selectComponentKind(page: Page, label: string) {
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
+  const option = page.getByRole("radio", { name: label, exact: true });
+  await option.click();
+  const confirmation = page.getByRole("button", {
+    name: `Change to ${label}`,
+    exact: true,
+  });
+  await expect
+    .poll(
+      async () =>
+        (await option.isChecked()) || (await confirmation.isVisible()),
+      { message: `Wait for the ${label} kind change or its confirmation` },
+    )
+    .toBe(true);
+  if (await confirmation.isVisible()) {
+    await confirmation.click();
+  }
+  await expect(option).toBeChecked();
+}
+
+test.describe("Sprint 8A extracted Component UI parity", () => {
+  test("Core and enrolled modules share the SDK canvas, tokens, navigation state, and title", async ({
+    page,
+  }) => {
+    const assertNoConsoleErrors = attachConsoleGuard(page);
+    await signInAsAdmin(page);
+
+    const presentation = async () =>
+      page.evaluate(() => {
+        const styles = getComputedStyle(document.documentElement);
+        return {
+          canvas: styles.getPropertyValue("--color-bg").trim(),
+          primary: styles.getPropertyValue("--semantic-primary").trim(),
+          font: styles.getPropertyValue("--font-sans").trim(),
+          bodyBackground: getComputedStyle(document.body).backgroundColor,
+          mainBackground: getComputedStyle(document.querySelector(".app-main")!)
+            .backgroundColor,
+          resolvedTheme: document.documentElement.dataset.theme,
+          themePreference: document.documentElement.dataset.themePreference,
+          storedTheme: window.localStorage.getItem("tessara.themePreference"),
+          systemDark: window.matchMedia("(prefers-color-scheme: dark)").matches,
+        };
+      });
+
+    await page.goto("/");
+    await expect(page.locator("#app-root")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    const core = await presentation();
+    expect(core.mainBackground).toBe(core.bodyBackground);
+    await expect(page.locator(".top-app-bar__title")).toHaveText("Home");
+
+    for (const route of [
+      { path: "/components", label: "Components" },
+      { path: "/dashboards", label: "Dashboards" },
+      { path: "/reference/scoped-records", label: "Scoped Records" },
+    ]) {
+      await test.step(`${route.label} uses the Core shell presentation`, async () => {
+        await page.goto(route.path);
+        await expect(page.locator(".top-app-bar__title")).toHaveText(
+          route.label,
+        );
+        const active = page.locator(
+          `.sidebar-link.is-active[href="${route.path}"]`,
+        );
+        await expect(active).toHaveCount(2);
+        await expect(active.first()).toHaveText(route.label);
+        expect(await presentation()).toEqual(core);
+        if (route.path === "/components" || route.path === "/dashboards") {
+          await expect(page.locator("#module-content")).toHaveAttribute(
+            "data-hydration",
+            "ready",
+          );
+        }
+      });
+    }
+    assertNoConsoleErrors();
+  });
+
+  test("wide lifecycle navigation uses only the displayed navigation label as the title", async ({
+    page,
+  }) => {
+    const assertNoConsoleErrors = attachConsoleGuard(page);
+    await page.setViewportSize({ width: 1594, height: 912 });
+    await signInAsAdmin(page);
+    await page.goto("/");
+    await expect(page.locator("#app-root")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+
+    for (const route of [
+      { path: "/dashboards", label: "Dashboards" },
+      { path: "/components", label: "Components" },
+    ]) {
+      const link = page.locator(`.sidebar a[href="${route.path}"]`);
+      await expect(link.locator(".sidebar-link__label")).toHaveText(route.label);
+      await link.click();
+      await expect(page).toHaveURL(new RegExp(`${route.path}$`));
+      await expect(page.locator(".top-app-bar__title")).toHaveText(route.label);
+    }
+
+    await expect(page.locator(".page-header__eyebrow")).toHaveCount(0);
+    assertNoConsoleErrors();
+  });
+
   test("admin can create, update, publish, and view a major-line table component", async ({
     page,
   }) => {
@@ -552,507 +574,422 @@ test.describe.serial("Sprint 4A component workflow", () => {
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
     await ensureDemoSeed(page);
-    const { dataset, major } = await pickDatasetMajor(page);
-    const firstField = textLikeField(dataset.output_fields);
-    const slug = `${COMPONENT_PREFIX}${RUN_ID}`;
-    const name = `Playwright Component Workflow ${RUN_ID}`;
+    const dataset = await datasetOption(page);
 
     await page.goto("/components/new");
-    await selectDatasetVersion(page, dataset, major);
-    await expect(page.getByRole("group", { name: "Dataset Context" })).toHaveCount(0);
-    const displayedFields = page.getByRole("group", { name: "Displayed Fields" });
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Create Component" }),
+    ).toBeVisible();
+    await selectDatasetMajorLine(page, dataset);
+    await expect(
+      page.getByRole("group", { name: "Dataset Context" }),
+    ).toHaveCount(0);
+    const displayedFields = page.getByRole("group", {
+      name: "Displayed Fields",
+    });
     await expect(displayedFields).toBeVisible();
-    const availableFields = displayedFields.getByRole("listbox", { name: "Available fields" });
-    await expect(availableFields.locator(".dataset-projection-builder__option")).not.toHaveCount(0);
-    const invalidValidation = await expectJson<ComponentValidationResponse>(
+    const availableFields = displayedFields.getByRole("listbox", {
+      name: "Available fields",
+    });
+    await expect(
+      availableFields.locator(".dataset-projection-builder__option"),
+    ).not.toHaveCount(0);
+    await expect(
+      page.getByRole("textbox", { name: "Configuration JSON" }),
+    ).toHaveCount(0);
+
+    const invalid = await expectJson<ValidationResponse>(
       await page.request.post("/api/admin/components/validate", {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "table",
-          config: tableConfig([`missing_${RUN_ID}`]),
-        },
+        data: versionInput(
+          dataset,
+          "table",
+          { visible_columns: [`missing_${RUN_ID}`] },
+          "Invalid field probe",
+        ),
       }),
     );
-    expect(invalidValidation.valid).toBe(false);
-    expect(invalidValidation.findings[0]).toMatchObject({
-      code: "COMPONENT_FIELD_NOT_IN_MAJOR_LINE",
-      field_path: "config",
+    expect(invalid.valid).toBe(false);
+    expect(invalid.findings[0]).toMatchObject({
+      code: "config.field_unavailable",
     });
 
-    const created = await createComponentDraft(
+    const definition = await createComponent(
       page,
-      name,
-      slug,
       dataset,
-      major,
-      [firstField.key],
+      "table",
+      tableConfig(dataset),
+      "table",
     );
-    let component = await loadComponent(page, slug);
-    expect(component.versions).toHaveLength(1);
-    expect(component.versions[0]).toMatchObject({
-      dataset_id: dataset.id,
-      dataset_version_major: major,
-      binding_mode: "major_line",
-      component_type: "table",
-      status: "draft",
-    });
-    expect(component.versions[0]).not.toHaveProperty("dataset_revision_id");
-
-    const readerComponentsBeforePublish = await expectJson<Array<{ slug: string }>>(
-      await page.request.get("/api/components"),
-    );
-    expect(readerComponentsBeforePublish.some((item) => item.slug === slug)).toBe(false);
-
-    await page.goto(`/components/${slug}`);
-    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "No published version" })).toBeVisible();
-    await expect(page.getByText("Component unavailable")).toHaveCount(0);
-
-    const draftDashboard = await expectJson<IdResponse>(
-      await page.request.post("/api/admin/dashboards", {
-        data: {
-          name: `Playwright Component Workflow Dashboard ${RUN_ID}`,
-          description: "Dashboard placement guard fixture.",
-          visibility_node_ids: dataset.visibility_nodes.map((node) => node.node_id),
-        },
-      }),
-    );
-    const draftDashboardPlacement = await expectStatus(
-      await page.request.put(`/api/admin/dashboards/${draftDashboard.id}/composition`, {
-        data: {
-          commands: [
-            {
-              operation: "bind",
-              client_key: "draft-version",
-              component_version_id: component.versions[0].id,
-              geometry: {
-                grid_row: 1,
-                grid_column: 1,
-                grid_width: 6,
-                grid_height: 4,
-              },
-            },
-          ],
-        },
-      }),
-      409,
-    );
-    const draftDashboardPlacementBody = JSON.parse(draftDashboardPlacement) as ApiErrorBody;
-    expect(draftDashboardPlacementBody).toMatchObject({
-      error: expect.stringContaining("cannot be bound in its current state"),
-    });
-    await expectStatus(
-      await page.request.delete(`/api/admin/dashboards/${draftDashboard.id}`),
-      200,
-    );
-
-    const validValidation = await expectJson<ComponentValidationResponse>(
-      await page.request.post("/api/admin/components/validate", {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "table",
-          config: tableConfig([firstField.key]),
-        },
-      }),
-    );
-    expect(validValidation.valid).toBe(true);
-    expect(validValidation.findings).toEqual([]);
-
-    const unsupportedKindValidation = await expectJson<ComponentValidationResponse>(
-      await page.request.post("/api/admin/components/validate", {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "aggregate_table",
-          config: tableConfig([firstField.key]),
-        },
-      }),
-    );
-    expect(unsupportedKindValidation.valid).toBe(false);
-    expect(unsupportedKindValidation.findings[0]).toMatchObject({
-      code: "COMPONENT_UNSUPPORTED_KIND",
-      severity: "error",
-    });
-
-    await publishComponentVersion(page, created.id, component.versions[0].id);
-    component = await loadComponent(page, slug);
-    expect(component.versions[0].status).toBe("published");
-    const firstPublishedVersionId = component.versions[0].id;
-
-    const table = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          page_size: "25",
-          visible_columns: firstField.key,
-          sort: `${firstField.key}:asc`,
-        },
-      }),
-    );
-    expect(table.materialization_state).toBe("ready");
-    expect(table.component_version_id).toBe(firstPublishedVersionId);
-    expect(table.component_type).toBe("table");
-    expect(table.columns.map((column) => column.key)).toEqual([firstField.key]);
-    expect(table.rows.length).toBeGreaterThan(0);
-
-    const filterValue = table.rows
-      .map((row) => row.values[firstField.key])
-      .find((value): value is string => Boolean(value));
-    expect(filterValue, `component table should include a value for ${firstField.key}`).toBeTruthy();
-    const filteredTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: firstField.key,
-          [`filter[${firstField.key}][operator]`]: "equals",
-          [`filter[${firstField.key}][value]`]: filterValue!,
-        },
-      }),
-    );
-    expect(filteredTable.rows.length).toBeGreaterThan(0);
-    expect(
-      filteredTable.rows.every((row) => row.values[firstField.key] === filterValue),
-    ).toBe(true);
-
-    const savedFilterSlug = `${slug}_saved_filter`;
-    const savedFilterCreated = await createComponentDraft(
-      page,
-      `${name} Saved Filter`,
-      savedFilterSlug,
-      dataset,
-      major,
-      [firstField.key],
-      [
+    const draft = definition.versions[0];
+    await expectJson(
+      await page.request.put(
+        `/api/admin/components/${definition.component_id}/versions/${draft.component_version_id}`,
         {
-          field_key: firstField.key,
-          operator: "equals",
-          value: filterValue!,
+          headers: idempotencyHeaders("update-table"),
+          data: {
+            schema_version: 1,
+            version: versionInput(
+              dataset,
+              "table",
+              tableConfig(dataset),
+              "Updated draft",
+            ),
+          },
         },
-      ],
-    );
-    const savedFilterComponent = await loadComponent(page, savedFilterSlug);
-    await publishComponentVersion(
-      page,
-      savedFilterCreated.id,
-      savedFilterComponent.versions[0].id,
-    );
-    const savedFilterTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${savedFilterSlug}/table`, {
-        params: {
-          visible_columns: firstField.key,
-        },
-      }),
-    );
-    expect(savedFilterTable.rows.length).toBeGreaterThan(0);
-    expect(
-      savedFilterTable.rows.every((row) => row.values[firstField.key] === filterValue),
-    ).toBe(true);
-
-    const searchTerm = filterValue!.slice(0, Math.min(4, filterValue!.length));
-    const searchedTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          q: searchTerm,
-          visible_columns: firstField.key,
-        },
-      }),
-    );
-    expect(searchedTable.rows.length).toBeGreaterThan(0);
-    expect(
-      searchedTable.rows.every((row) =>
-        (row.values[firstField.key] ?? "")
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()),
       ),
-    ).toBe(true);
-
-    const pagedTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          page_size: "1",
-          visible_columns: firstField.key,
-          sort: `${firstField.key}:asc`,
-        },
-      }),
     );
-    expect(pagedTable.pagination.page_size).toBe(1);
-    expect(pagedTable.columns.map((column) => column.key)).toEqual([firstField.key]);
-    expect(pagedTable.rows.length).toBeLessThanOrEqual(1);
-    if (pagedTable.pagination.has_more) {
-      expect(pagedTable.pagination.next_cursor).toMatch(/^offset:/);
-    }
+    await publish(page, definition, "publish-table");
+    const versionTablePath = `/api/components/${definition.slug}/versions/${draft.component_version_id}/table`;
 
-    const badVisibleColumns = await expectStatus(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: `${firstField.key},missing_${RUN_ID}`,
-        },
-      }),
-      400,
+    const current = await expectJson<ComponentDefinition>(
+      await page.request.get(`/api/admin/components/${definition.slug}`),
     );
-    const badVisibleColumnsBody = JSON.parse(badVisibleColumns) as ApiErrorBody;
-    expect(badVisibleColumnsBody).toMatchObject({
-      code: "bad_request",
-      error: expect.stringContaining("visible column"),
+    expect(current.versions[0]).toMatchObject({
+      component_version_id: draft.component_version_id,
+      publication_state: "published",
+      component_type: "table",
+      version_note: "Updated draft",
+    });
+    const rendered = await expectJson<{
+      materialization_state: string;
+      component_type: string;
+    }>(await page.request.get(renderPath(definition.slug, "table")));
+    expect(rendered).toMatchObject({
+      materialization_state: "ready",
+      component_type: "table",
     });
 
-    await page.goto(`/components/${slug}`);
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(name);
-    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-    await expect(page.getByRole("searchbox", { name: "Search component rows" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Choose visible columns" })).toBeVisible();
-    await expect(page.getByRole("table").filter({ hasText: firstField.label })).toBeVisible();
+    await page.goto(`/components/${definition.slug}/view`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: definition.name }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("searchbox", { name: "Search component rows" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Choose visible columns" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reset table controls" }),
+    ).toBeVisible();
+    await expect(page.locator(".component-table-viewer__table")).toBeVisible();
+    await expect(
+      page.getByRole("table").filter({ hasText: dataset.fields[0].label }),
+    ).toBeVisible();
 
-    const renamedName = `${name} Updated`;
-    const renamedDescription = "Updated by the Sprint 4A component workflow.";
-    await expectJson<IdResponse>(
-      await page.request.patch(`/api/admin/components/${created.id}`, {
-        data: {
-          name: renamedName,
-          slug,
-          description: renamedDescription,
-        },
+    const firstField = dataset.fields[0];
+    const filterTrigger = page.getByRole("button", {
+      name: `Filter ${firstField.label}`,
+    });
+    await filterTrigger.click();
+    const filterDialog = page.getByRole("dialog", {
+      name: `Filter ${firstField.label}`,
+    });
+    await filterDialog.getByLabel("Operator").selectOption("equals");
+    await filterDialog
+      .getByRole("searchbox", { name: "Value", exact: true })
+      .fill(`unlikely-${RUN_ID}`);
+    const filterResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(
+            `filter%5B${encodeURIComponent(firstField.key)}%5D%5Boperator%5D=equals`,
+          ) && response.request().method() === "GET",
+    );
+    await filterDialog.getByRole("button", { name: "Apply filter" }).click();
+    await filterResponse;
+
+    const rowSearch = page.getByRole("searchbox", {
+      name: "Search component rows",
+    });
+    await Promise.all([
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === versionTablePath &&
+          url.searchParams.get("search") === RUN_ID
+        );
       }),
-    );
-    component = await loadComponent(page, slug);
-    expect(component.name).toBe(renamedName);
-    expect(component.description).toBe(renamedDescription);
-
-    const secondDraft = await saveTableDraft(
-      page,
-      created.id,
-      dataset,
-      major,
-      [firstField.key],
-    );
-    const patchedDraft = await patchTableDraft(
-      page,
-      created.id,
-      secondDraft.id,
-      dataset,
-      major,
-      [firstField.key],
-    );
-    expect(patchedDraft.id).toBe(secondDraft.id);
-    component = await loadComponent(page, slug);
-    expect(component.versions.some((version) => version.status === "draft")).toBe(true);
-    expect(component.versions.some((version) => version.status === "published")).toBe(true);
-
-    const readerComponentWhileDraftExists = await expectJson<ComponentDefinition>(
-      await page.request.get(`/api/components/${slug}`),
-    );
-    expect(
-      readerComponentWhileDraftExists.versions.every(
-        (version) => version.status === "published",
-      ),
-    ).toBe(true);
-    const tableWhileDraftExists = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: firstField.key,
-        },
-      }),
-    );
-    expect(tableWhileDraftExists.component_version_id).toBe(firstPublishedVersionId);
-    expect(tableWhileDraftExists.component_type).toBe("table");
-    expect(tableWhileDraftExists.columns.map((column) => column.key)).toEqual([
-      firstField.key,
+      rowSearch.fill(RUN_ID),
     ]);
+    const clearedSearch = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === versionTablePath &&
+        !url.searchParams.has("search") &&
+        url.searchParams.get(`filter[${firstField.key}][operator]`) === "equals"
+      );
+    });
+    await rowSearch.fill("");
+    await clearedSearch;
+
+    if (dataset.fields.length > 1) {
+      await page
+        .getByRole("button", { name: "Choose visible columns" })
+        .click();
+      const secondField = dataset.fields[1];
+      const projectionResponse = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === versionTablePath &&
+          url.searchParams.has("visible_columns") &&
+          !url.searchParams
+            .get("visible_columns")!
+            .split(",")
+            .includes(secondField.key)
+        );
+      });
+      await page
+        .getByRole("group", { name: "Visible columns" })
+        .getByLabel(secondField.label, { exact: false })
+        .uncheck();
+      await projectionResponse;
+    }
+    const invalidProjection = await page.request.get(
+      `${renderPath(definition.slug, "table")}?visible_columns=missing_${RUN_ID}`,
+    );
+    expect(invalidProjection.status()).toBe(400);
+
+    await page.goto(`/components/${definition.slug}`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: definition.name }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("searchbox", { name: "Search component rows" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reset table controls" }),
+    ).toBeVisible();
+    await expect(page.locator(".component-table-viewer__table")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: "Versions" }),
+    ).toHaveCount(0);
 
     await page.goto("/components");
-    await expect(page.getByRole("link", { name: "Create Component" })).toBeVisible();
-    await page.getByRole("searchbox", { name: "Search components by name" }).fill(renamedName);
-    await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Edit" }).first()).toHaveAttribute(
-      "href",
-      `/components/${slug}/edit`,
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
     );
-    await expect(page.getByRole("link", { name: "Versions" }).first()).toHaveAttribute(
+    await expect(
+      page.getByRole("link", { name: "Create Component" }),
+    ).toBeVisible();
+    await page
+      .getByRole("searchbox", { name: "Search components by name" })
+      .fill(definition.name);
+    const componentLink = page
+      .getByRole("link", { name: definition.name })
+      .first();
+    await expect(componentLink).toBeVisible();
+    await expect(componentLink).toHaveAttribute(
       "href",
-      `/components/${slug}/versions`,
+      `/components/${definition.slug}`,
+    );
+    await expect(componentLink).not.toHaveAttribute(
+      "href",
+      new RegExp(definition.component_id),
     );
     await page.getByRole("button", { name: "Filter Kind" }).click();
     await page.getByRole("menuitemradio", { name: "Table" }).click();
     await page.getByRole("button", { name: "Filter Status" }).click();
-    await page.getByRole("menuitemradio", { name: "Updating" }).click();
-    await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
-    await page.setViewportSize({ width: 544, height: 912 });
-    await page.getByRole("button", { name: "Open component filters" }).click();
-    await expect(page.getByRole("dialog", { name: "Component filters" })).toBeVisible();
-    await page.getByLabel("Filter components by kind").selectOption("Table");
-    await page.getByLabel("Filter components by status").selectOption("Published");
+    await page.getByRole("menuitemradio", { name: "Published" }).click();
+    await expect(
+      page.getByRole("link", { name: definition.name }),
+    ).toBeVisible();
+
+    await page.setViewportSize({ width: 768, height: 900 });
+    await expect(
+      page.getByRole("searchbox", { name: "Search components by name" }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth >
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(false);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const openFilters = page.getByRole("button", {
+      name: "Open component filters",
+    });
+    await openFilters.focus();
+    await page.keyboard.press("Enter");
+    const filtersDialog = page.getByRole("dialog", {
+      name: "Component filters",
+    });
+    await expect(filtersDialog).toBeVisible();
+    await page.getByLabel("Filter components by kind").selectOption("table");
+    await page
+      .getByLabel("Filter components by status")
+      .selectOption("published");
     await page.getByRole("button", { name: "Clear All" }).click();
-    await expect(page.getByLabel("Filter components by kind")).toHaveValue("all");
-    await expect(page.getByLabel("Filter components by status")).toHaveValue("all");
-    await page.getByLabel("Filter components by kind").selectOption("Table");
-    await page.getByLabel("Filter components by status").selectOption("Updating");
+    await expect(page.getByLabel("Filter components by kind")).toHaveValue(
+      "all",
+    );
+    await expect(page.getByLabel("Filter components by status")).toHaveValue(
+      "all",
+    );
+    await page.getByLabel("Filter components by kind").selectOption("table");
+    await page
+      .getByLabel("Filter components by status")
+      .selectOption("published");
     await page.getByTitle("Close component filters").click();
-    await expect(page.locator(".components-list-mobile-card").filter({ hasText: renamedName })).toBeVisible();
-    await expect(page.locator(".components-list-responsive-table .table-wrap")).toBeHidden();
-    await page.setViewportSize({ width: 1491, height: 912 });
+    await expect(
+      page
+        .locator(".components-list-mobile-card")
+        .filter({ hasText: definition.name }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".components-list-responsive-table .table-wrap"),
+    ).toBeHidden();
 
-    await page.goto(`/components/${slug}`);
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(renamedName);
-    await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
-    await expect(page.getByRole("searchbox", { name: "Search component rows" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Reset table controls" })).toBeVisible();
-    await expect(page.getByRole("table").filter({ hasText: firstField.label })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Versions" })).toHaveCount(0);
-
-    await page.goto(`/components/${slug}/versions`);
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(renamedName);
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Versions");
-    await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "View" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Publish" })).toHaveCount(0);
-    let versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
-    await expect(versionsTable.getByRole("columnheader", { name: "Publication" })).toBeVisible();
-    await expect(versionsTable.getByRole("columnheader", { name: "Lifecycle" })).toBeVisible();
-    await expect(versionsTable.getByRole("columnheader", { name: "Actions" })).toBeVisible();
-    await expect(versionsTable).toContainText("Draft");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(`/components/${definition.slug}/versions`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+      definition.name,
+    );
+    const versionsTable = page
+      .getByRole("table")
+      .filter({ hasText: "Publication" });
+    await expect(
+      versionsTable.getByRole("columnheader", { name: "Publication" }),
+    ).toBeVisible();
+    await expect(
+      versionsTable.getByRole("columnheader", { name: "Lifecycle" }),
+    ).toBeVisible();
+    await expect(
+      versionsTable.getByRole("columnheader", { name: "Dataset Version" }),
+    ).toBeVisible();
+    await expect(
+      versionsTable.getByRole("columnheader", { name: "Version Note" }),
+    ).toBeVisible();
+    await expect(
+      versionsTable.getByRole("columnheader", { name: "Actions" }),
+    ).toBeVisible();
     await expect(versionsTable).toContainText("Published");
-    await expect(versionsTable).toContainText(`v${major}`);
-    const lifecycleMenu = versionsTable.getByRole("button", { name: /Open actions for/ }).first();
-    await expect(lifecycleMenu).toBeVisible();
-    const lifecycleMenuBox = await lifecycleMenu.boundingBox();
-    expect(lifecycleMenuBox?.width).toBeLessThanOrEqual(44);
-    await lifecycleMenu.click();
-    await expect(page.getByRole("menuitem", { name: "Deactivate" })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Archive" })).toBeVisible();
+    await expect(versionsTable).toContainText("Updated draft");
+    const actions = versionsTable.getByRole("button", {
+      name: `Open actions for ${current.versions[0].version_label}`,
+      exact: true,
+    });
+    await expect(actions).toBeVisible();
+    await actions.click();
+    await versionsTable
+      .getByRole("menuitem", { name: "Archive", exact: true })
+      .click();
+    const actionDialog = page.getByRole("dialog", {
+      name: "Archive Component version?",
+    });
+    await expect(actionDialog).toContainText("cannot be reactivated");
+    await actionDialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    await expect(actionDialog).not.toBeVisible();
 
-    await page.goto(`/components/${slug}/edit`);
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Edit Component");
-    await expect(page.getByRole("heading", { level: 1, name: "Edit Component" })).toBeVisible();
-    await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(renamedName);
-    await expect(page.getByRole("textbox", { name: "Slug" })).toHaveValue(slug);
-    await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue(
-      renamedDescription,
+    await page.goto(`/components/${definition.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
     );
-    await expect(page.getByRole("group", { name: "Dataset Context" })).toHaveCount(0);
-
-    await page.goto(`/components/${slug}/edit`);
-    await page.waitForLoadState("networkidle");
-    const publishMenu = page.locator(".component-editor__publish-menu");
-    await publishMenu.locator(".component-editor__publish-button").click();
-    await expect(publishMenu).toHaveClass(/is-open/);
-    await publishMenu.getByRole("menuitem", { name: "Create New Version" }).click();
-    await expect(page.getByRole("dialog", { name: "Review component consumers" })).toBeVisible();
-    await page.getByLabel("New Version Note").fill("Playwright replacement version.");
-    await Promise.all([
-      page.waitForResponse(
-        (response) =>
-          response.url().endsWith("/api/admin/components/save") &&
-          response.request().method() === "POST" &&
-          response.ok(),
-      ),
-      page.getByRole("button", { name: "Create New Version" }).click(),
-    ]);
-    await page.waitForURL(`**/components/${slug}`);
-    await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
-
-    component = await loadComponent(page, slug);
-    expect(component.versions.find((version) => version.id === secondDraft.id)?.status).toBe(
-      "published",
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Edit Component" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Name", exact: true }),
+    ).toHaveValue(definition.name);
+    await expect(
+      page.getByRole("group", { name: "Displayed Fields" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Configuration JSON" }),
+    ).toHaveCount(0);
+    await page.locator(".component-editor__publish-button").click();
+    const createNewVersion = page.getByRole("menuitem", {
+      name: "Create New Version",
+      exact: true,
+    });
+    await expect(createNewVersion).toBeVisible();
+    await createNewVersion.click();
+    const consumerReview = page.getByRole("dialog", {
+      name: "Review component consumers",
+    });
+    await expect(consumerReview).toContainText(
+      "Existing consumers remain pinned",
     );
-    expect(component.versions.some((version) => version.status === "superseded")).toBe(true);
-
-    const supersededTable = await expectJson<ComponentTable>(
-      await page.request.get(
-        `/api/components/${slug}/versions/${firstPublishedVersionId}/table`,
-        {
-          params: {
-            visible_columns: firstField.key,
-          },
-        },
-      ),
+    await consumerReview
+      .getByRole("button", { name: "Create New Version" })
+      .click();
+    await expect(consumerReview.getByRole("alert")).toContainText(
+      "New versions require",
     );
-    expect(supersededTable.materialization_state).toBe("ready");
-    expect(supersededTable.component_version_id).toBe(firstPublishedVersionId);
-    expect(supersededTable.component_type).toBe("table");
-
-    await expectStatus(
-      await page.request.patch(
-        `/api/admin/components/${created.id}/versions/${secondDraft.id}`,
-        {
-          data: {
-            dataset_id: dataset.id,
-            dataset_version_major: major,
-            component_type: "table",
-            config: tableConfig([firstField.key]),
-          },
-        },
-      ),
-      400,
-    );
-    await expectStatus(
-      await page.request.post(
-        `/api/admin/components/${created.id}/versions/${firstPublishedVersionId}/publish`,
-        { data: {} },
-      ),
-      400,
-    );
-
-    await assertNoConsoleErrors();
+    await consumerReview
+      .getByLabel("New Version Note")
+      .fill("Behavioral review only");
+    await consumerReview.getByRole("button", { name: "Cancel" }).click();
+    assertNoConsoleErrors();
   });
 
-  test("admin can author, publish, and view visual components", async ({ page }) => {
+  test("admin can author, publish, and view visual components", async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
-    const bridgeRequests: string[] = [];
-    page.on("request", (request) => {
-      if (request.url().includes("/bridge/")) {
-        bridgeRequests.push(request.url());
-      }
-    });
     await signInAsAdmin(page);
     await ensureDemoSeed(page);
-
-    const { dataset, major } = await pickDatasetMajor(page);
-    const field = textLikeField(dataset.output_fields);
+    const dataset = await datasetOption(page);
+    const field =
+      dataset.fields.find(
+        (candidate) => candidate.field_type.toLowerCase() !== "number",
+      ) ?? dataset.fields[0];
+    const fieldKey = field.key;
 
     await page.goto("/components/new");
-    await page.waitForLoadState("networkidle");
-    await expect(page.getByRole("button", { name: "Save Draft" })).toBeVisible();
-    await page.getByRole("textbox", { name: "Name", exact: true }).fill(`Draft Slug Behavior ${RUN_ID}`);
-    await expect(page.getByRole("textbox", { name: "Slug" })).toHaveValue("");
-    await page.getByRole("textbox", { name: "Name", exact: true }).blur();
-    await expect(page.getByRole("textbox", { name: "Slug" })).toHaveValue(
-      `draft_slug_behavior_${String(RUN_ID).toLowerCase()}`,
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
     );
-    await selectDatasetVersion(page, dataset, major);
-    await page.getByRole("radio", { name: "Bar", exact: true }).click();
-    await expect(page.getByRole("group", { name: "Fields & Calculation" })).toBeVisible();
-    const barCalculation = page.locator(".component-editor__role-card--measure select").first();
-    const barValueField = page
-      .locator(".component-editor__role-card--measure .component-editor__measure-grid label.form-field")
-      .nth(1)
-      .locator("select");
-    const barCategoryField = page
-      .locator(".component-editor__role-grid > .component-editor__role-card")
-      .first()
-      .locator("select")
-      .first();
-    await barCalculation.selectOption("count");
-    await expect(barValueField).toBeVisible();
-    await expect(barCategoryField).toBeVisible();
-    await barCategoryField.selectOption(field.key);
-    await barValueField.selectOption(field.key);
-    await page.getByLabel("Split bars", { exact: true }).check();
-    await page.getByLabel("Series field").selectOption(field.key);
-    await expect(page.getByLabel("Missing categories")).toBeVisible();
-    await expect(page.getByLabel("Missing series")).toBeVisible();
-    await expect(page.getByLabel("Missing values")).toBeVisible();
-    await page.getByLabel("Missing series").selectOption("explicit_missing");
-    const comparisonLayout = page
-      .locator(".component-editor__bar-display label.form-field", { hasText: "Comparison Layout" })
-      .locator("select");
-    await expect(comparisonLayout).toBeVisible();
-    await expect(barCalculation.locator("option")).toHaveText([
+    const unsavedName = `Playwright structured editor ${RUN_ID}`;
+    await page
+      .getByRole("textbox", { name: "Name", exact: true })
+      .fill(unsavedName);
+    await page
+      .getByRole("textbox", { name: "Slug" })
+      .fill(`${RUN_ID}-structured-editor`);
+    await selectDatasetMajorLine(page, dataset);
+    await expect(
+      page.getByRole("group", { name: "Component Kind" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Configuration JSON" }),
+    ).toHaveCount(0);
+
+    await selectComponentKind(page, "Bar");
+    await expect(
+      page.getByRole("heading", { name: "Build the bars" }),
+    ).toBeVisible();
+    for (const role of ["Category", "Series", "Measure"]) {
+      await expect(
+        page
+          .locator(".component-editor__role-card")
+          .filter({ hasText: role })
+          .first(),
+      ).toBeVisible();
+    }
+    const fieldsAndCalculation = page.getByRole("group", {
+      name: "Fields & Calculation",
+    });
+    await expect(fieldsAndCalculation).toBeVisible();
+    const calculation = fieldsAndCalculation.getByRole("combobox", {
+      name: "Calculation",
+      exact: true,
+    });
+    await expect(calculation).toBeVisible();
+    await expect(calculation.locator("option")).toHaveText([
       "Count rows",
       "Count non-empty values",
       "Count unique values",
@@ -1061,384 +998,755 @@ test.describe.serial("Sprint 4A component workflow", () => {
       "Median",
       "Do not summarize",
     ]);
-    await barCalculation.selectOption("row_count");
-    await expect(barValueField).toHaveCount(0);
-    const invalidNonePreview = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/admin/components/preview") &&
-        response.request().method() === "POST" &&
-        response.status() === 400,
+    const visualEditor = page.locator(
+      '[data-component-config-section="visual"]',
     );
-    await barCalculation.selectOption("none");
-    await expect(barValueField).toBeVisible();
-    await expect(page.locator(".component-editor__calculation-warning")).toBeVisible();
-    await expect(page.locator(".component-editor-preview__badge")).toHaveText("Needs attention");
-    await expect(comparisonLayout.locator('option[value="stacked"]')).toHaveAttribute(
-      "disabled",
-      "",
+    const valueField = visualEditor.locator("[data-component-value-field]");
+    const valueFieldSelect = valueField.locator(
+      'select[data-config-control="summary_field"]',
     );
-    await invalidNonePreview;
-    assertNoConsoleErrors.reset();
-    const invalidSumPreview = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/admin/components/preview") &&
-        response.request().method() === "POST" &&
-        response.status() === 400,
+    const valueMissingPolicy = visualEditor.locator(
+      "[data-component-value-missing-policy]",
     );
-    await barCalculation.selectOption("sum");
-    await expect(page.locator(".component-editor-preview__badge")).toHaveText("Needs attention");
-    await invalidSumPreview;
-    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
-    const validationFindings = page.getByRole("region", { name: "Validation Findings" });
-    await expect(validationFindings).toBeVisible();
-    await expect(validationFindings).toHaveAttribute("aria-live", "polite");
-    await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(`Draft Slug Behavior ${RUN_ID}`);
-    await expect(page).toHaveURL(/\/components\/new$/);
-    assertNoConsoleErrors.reset();
-    await barCalculation.selectOption("count");
-    await comparisonLayout.selectOption("stacked");
-    await barCalculation.selectOption("unique_count");
-    await expect(comparisonLayout).toHaveValue("grouped");
-    await expect(comparisonLayout.locator('option[value="stacked"]')).toHaveAttribute(
-      "disabled",
-      "",
+    const calculationWarning = visualEditor.locator(
+      "[data-component-calculation-warning]",
     );
-    await barCalculation.selectOption("count");
-    await comparisonLayout.selectOption("stacked");
-    await page.getByLabel("Category axis title").fill("Submission status");
-    await page.getByLabel("Value axis title").fill("Responses");
-    await page.getByLabel("Orientation").selectOption("vertical");
-    await expect(page.getByLabel("Category axis title")).toHaveValue("Submission status");
-    await expect(page.getByLabel("Value axis title")).toHaveValue("Responses");
-    await expect(page.locator(".component-editor-preview svg")).toBeVisible();
-    await expect(page.locator(".component-editor-preview__badge")).toHaveText("Valid config");
-    await page.getByRole("radio", { name: "Donut", exact: true }).click();
-    await page.getByRole("button", { name: "Change to Donut", exact: true }).click();
-    await expect(page.locator("[data-component-kind-editor]")).toBeFocused();
-    await expect(page.getByText("A donut chart is a pie chart with a hole in the center.")).toBeVisible();
-    await page.locator(".component-editor__value-field select").selectOption(field.key);
-    await page.locator(".component-editor__category-field select").selectOption(field.key);
-    await expect(page.getByLabel("Legend Title", { exact: true })).toHaveValue(field.label);
-    await expect(page.getByRole("table", { name: "Category Labels" })).toBeVisible();
-    await expect(page.getByLabel("Sort Field", { exact: true }).locator("option")).toHaveText([
+    await calculation.selectOption("row_count");
+    await expect(valueField).toBeHidden();
+    await expect(valueFieldSelect).toBeDisabled();
+    await expect(valueMissingPolicy).toBeHidden();
+
+    await calculation.selectOption("none");
+    await expect(valueField).toBeVisible();
+    await expect(valueFieldSelect).toBeEnabled();
+    await expect(calculationWarning).toBeVisible();
+    await expect(calculationWarning).toHaveText(
+      "Every category and series group must resolve to exactly one row. " +
+        "Preview and execution will report an error when duplicates exist.",
+    );
+    const visualSort = visualEditor.getByLabel("Sort Field", { exact: true });
+    await expect(visualSort.locator("option")).toHaveText([
       "Default",
       "Category",
       "Summary Value",
     ]);
-    const sortFieldHelp = page.locator("label.form-field", { hasText: "Sort Field" }).locator(".component-field-help");
-    await sortFieldHelp.locator("summary").click();
-    const sortFieldTooltip = sortFieldHelp.locator(".component-field-help__content");
-    await expect(sortFieldTooltip).toBeVisible();
-    await expect(sortFieldTooltip).toContainText("Summary Value: sorts by the summarized numeric value.");
-    await expect(sortFieldTooltip).not.toContainText("X:");
-    await expect(sortFieldTooltip).not.toContainText("Comparison:");
-
-    const {
-      dataset: demoSessionDataset,
-      major: demoSessionMajor,
-    } = await pickDemoSessionLogDataset(page);
-    const participantsField = demoSessionDataset.output_fields.find(
-      (candidate) => candidate.key === "session__participants",
+    const sortHelpTrigger = visualEditor.locator(
+      'summary[aria-label="Show help for Sort Field"]',
     );
-    const completedField = demoSessionDataset.output_fields.find(
-      (candidate) => candidate.key === "session__completed_as_planned",
+    await sortHelpTrigger.focus();
+    await page.keyboard.press("Enter");
+    const sortHelp = visualEditor.getByRole("tooltip");
+    await expect(sortHelp).toBeVisible();
+    expect(await sortHelp.textContent()).toBe(
+      "Default: uses the order produced by the current grouping and summarization.\n" +
+        "Category: sorts by the displayed category label.\n" +
+        "Summary Value: sorts by the summarized numeric value.",
     );
-    const topicsField = demoSessionDataset.output_fields.find(
-      (candidate) => candidate.key === "session__topics_covered",
+
+    await calculation.selectOption("count");
+    await expect(calculationWarning).toBeHidden();
+    await valueFieldSelect.selectOption(fieldKey);
+    const barOptions = page.locator('[data-component-config-section="bar"]');
+    const categoryField = barOptions.locator(
+      'select[data-config-control="category_field"]',
     );
-    expect(participantsField).toBeTruthy();
-    expect(completedField).toBeTruthy();
-    expect(topicsField).toBeTruthy();
-
-    await page.goto("/components/demo-session-log-bar/edit");
-    await expect(page.getByLabel("Series field")).toHaveValue(completedField!.key);
-    await expect(page.getByLabel("Legend Title", { exact: true })).toHaveValue("Completion Status");
-    await expect(page.getByRole("table", { name: "Series Labels" })).toBeVisible();
-    await expect
-      .poll(async () =>
-        page
-          .locator("table.component-category-labels__table tbody th")
-          .allTextContents(),
-      )
-      .toEqual(["false", "true"]);
-
-    await page.goto("/components/demo-session-log-bar");
-    const barSurface = page.locator(".component-d3-chart__surface");
-    await expect(barSurface.locator(":scope > .component-d3-chart__legend + svg.component-d3-svg--bar")).toBeVisible();
-    await expect(barSurface.locator("svg .component-d3-legend")).toHaveCount(0);
-
-    const staleCategorySlug = `${COMPONENT_PREFIX}${RUN_ID}-category-reset`;
-    await expectJson<IdResponse>(
-      await page.request.post("/api/admin/components", {
-        data: {
-          name: `Playwright Category Reset ${RUN_ID}`,
-          slug: staleCategorySlug,
-          description: "Regression fixture for category display field changes.",
-          version: {
-            dataset_id: demoSessionDataset.id,
-            dataset_version_major: demoSessionMajor,
-            component_type: "donut",
-            config: {
-              summary_field: participantsField!.key,
-              summary_type: "sum",
-              category_field: completedField!.key,
-              category_labels: {
-                false: "No",
-                true: "Yes",
-              },
-              category_colors: {
-                false: "var(--semantic-secondary)",
-                true: "var(--semantic-warning)",
-              },
-              sort_field: "summary_value",
-              sort_direction: "desc",
-              max_slices: 10,
-              value_format: "integer",
-            },
-          },
-        },
-      }),
+    const splitBars = barOptions.locator(
+      'input[data-config-control="split_bars"]',
     );
-    await page.goto(`/components/${staleCategorySlug}/edit`);
-    await expect(page.locator(".component-editor__category-field select")).toHaveValue(completedField!.key);
-    await expect(page.getByRole("row", { name: /false\s+No/i })).toBeVisible();
-    await page.locator(".component-editor__category-field select").selectOption(topicsField!.key);
-    await expect(page.getByLabel("Legend Title", { exact: true })).toHaveValue(topicsField!.label);
-    await expect
-      .poll(async () =>
-        page
-          .locator("table.component-category-labels__table tbody th")
-          .allTextContents(),
-      )
-      .toEqual([
-        "[\"attendance\", \"check_in\"]",
-        "[\"family_support\", \"wellness\"]",
-        "[\"intake\", \"welcome\"]",
-        "[\"mentoring\", \"onboarding\"]",
-        "[\"nutrition\", \"follow_up\"]",
-        "[\"resume\", \"job_search\"]",
-      ]);
-
-    await page.getByRole("radio", { name: "Stat Card", exact: true }).click();
-    await page.getByRole("button", { name: "Change to Stat Card", exact: true }).click();
-        await expect(page.getByLabel("Panel Style", { exact: true })).toBeVisible();
-
-    const validVisualValidation = await expectJson<ComponentValidationResponse>(
-      await page.request.post("/api/admin/components/validate", {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "bar",
-          config: visualConfig("bar", field.key),
-        },
-      }),
+    await categoryField.selectOption(fieldKey);
+    await splitBars.check();
+    await expect(visualSort.locator("option")).toHaveText([
+      "Default",
+      "Category",
+      "Comparison",
+      "Summary Value",
+    ]);
+    expect(await sortHelp.textContent()).toBe(
+      "Default: uses the order produced by the current grouping and summarization.\n" +
+        "Category: sorts by the displayed category label.\n" +
+        "Comparison: sorts by the displayed comparison group label.\n" +
+        "Summary Value: sorts by the summarized numeric value.",
     );
-    expect(validVisualValidation.valid).toBe(true);
-
-    const draftPreview = await expectJson<{
-      component_type: string;
-      materialization_state: string;
-      points: Array<{ x: string; value: number }>;
-    }>(
-      await page.request.post("/api/admin/components/preview", {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "bar",
-          config: visualConfig("bar", field.key),
-        },
-      }),
+    await sortHelpTrigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(sortHelp).toBeHidden();
+    const seriesField = barOptions.locator(
+      'select[data-config-control="comparison_field"]',
     );
-    expect(draftPreview.component_type).toBe("bar");
-    expect(["ready", "pending"]).toContain(draftPreview.materialization_state);
-
-    const invalidVisualValidation = await expectJson<ComponentValidationResponse>(
-      await page.request.post("/api/admin/components/validate", {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "bar",
-          config: {
-            ...visualConfig("bar", field.key),
-            category_field: `missing_${RUN_ID}`,
-          },
-        },
-      }),
-    );
-    expect(invalidVisualValidation.valid).toBe(false);
-    expect(invalidVisualValidation.findings[0]).toMatchObject({
-      code: "COMPONENT_CATEGORY_FIELD_NOT_IN_MAJOR_LINE",
-      severity: "error",
+    await expect(seriesField).toBeVisible();
+    await seriesField.selectOption(fieldKey);
+    const seriesLabels = page.getByRole("table", { name: "Series Labels" });
+    await expect(seriesLabels).toBeVisible();
+    const firstSeriesLabel = seriesLabels
+      .locator("[data-category-display-label]")
+      .first();
+    await firstSeriesLabel.fill("Custom series label");
+    await splitBars.uncheck();
+    const categoryOverrideTable = page.getByRole("table", {
+      name: "Category Labels",
     });
+    await expect(categoryOverrideTable).toBeVisible();
+    await expect(
+      categoryOverrideTable.locator("[data-category-display-label]").first(),
+    ).not.toHaveValue("Custom series label");
+    await splitBars.check();
+    await seriesField.selectOption(fieldKey);
+    await expect(
+      page.getByRole("table", { name: "Series Labels" }),
+    ).toBeVisible();
+    await expect(
+      barOptions.locator(
+        'select[data-config-control="category_missing_policy"]',
+      ),
+    ).toBeVisible();
+    await expect(
+      barOptions.locator(
+        'select[data-config-control="comparison_missing_policy"]',
+      ),
+    ).toBeVisible();
+    await expect(
+      visualEditor.locator(
+        'select[data-config-control="value_missing_policy"]',
+      ),
+    ).toBeVisible();
+    await expect(
+      barOptions.locator('select[data-config-control="comparison_layout"]'),
+    ).toBeVisible();
+    await barOptions
+      .locator('input[data-config-control="x_axis_label"]')
+      .fill("Category");
+    await barOptions
+      .locator('input[data-config-control="y_axis_label"]')
+      .fill("Responses");
+    await expect(calculation).toHaveValue("count");
+    await expect(valueFieldSelect).toHaveValue(fieldKey);
+    await expect(categoryField).toHaveValue(fieldKey);
+    await expect(seriesField).toHaveValue(fieldKey);
+    await expect(page.locator(".component-editor-preview__badge")).toHaveText(
+      "Valid config",
+    );
+    await expect(page.locator(".component-editor-preview svg")).toBeVisible();
+
+    await calculation.selectOption("sum");
+    await expect(page.locator(".component-editor-preview__badge")).toHaveText(
+      "Needs attention",
+    );
+    const rejectedSave = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/components/save") &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    expect((await rejectedSave).status()).toBe(400);
+    const validationFindings = page.getByRole("region", {
+      name: "Validation Findings",
+    });
+    await expect(validationFindings).toBeVisible();
+    await expect(validationFindings).toHaveAttribute("aria-live", "polite");
+    await expect(
+      page.getByRole("textbox", { name: "Name", exact: true }),
+    ).toHaveValue(unsavedName);
+    await expect(page).toHaveURL(/\/components\/new$/);
+    assertNoConsoleErrors.consumeExpected(
+      "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      2,
+    );
+    await calculation.selectOption("count");
+    await expect(page.locator(".component-editor-preview__badge")).toHaveText(
+      "Valid config",
+    );
+
+    const canonicalSave = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/components/save") &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await expectBrowserResponseOk(await canonicalSave);
+    await expect(
+      page.getByRole("heading", { level: 1, name: unsavedName }),
+    ).toBeVisible();
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Edit Component" }),
+    ).toBeVisible();
+
+    await selectComponentKind(page, "Donut");
+    await expect(page.locator("[data-component-kind-editor]")).toBeFocused();
+    await expect(
+      page.getByText("A donut chart is a pie chart with a hole in the center."),
+    ).toBeVisible();
+    const pieOptions = page.locator('[data-component-config-section="pie"]');
+    await visualEditor
+      .locator('select[data-config-control="summary_field"]')
+      .selectOption(fieldKey);
+    await pieOptions
+      .locator('select[data-config-control="pie_category_field"]')
+      .selectOption(fieldKey);
+    await expect(
+      pieOptions.locator('input[data-config-control="max_slices"]'),
+    ).toBeVisible();
+    await expect(
+      visualEditor.locator('input[data-config-control="legend_title"]'),
+    ).toBeVisible();
+    const categoryLabels = page.getByRole("table", { name: "Category Labels" });
+    await expect(categoryLabels).toBeVisible();
+    await expect(categoryLabels).not.toContainText(
+      "Choose a category field to load values.",
+    );
+    await expect(categoryLabels.locator("tbody tr")).not.toHaveCount(0);
+
+    await selectComponentKind(page, "Pie");
+    await expect(
+      pieOptions.locator('input[data-config-control="max_slices"]'),
+    ).toBeVisible();
+    await selectComponentKind(page, "Line");
+    const lineOptions = page.locator('[data-component-config-section="line"]');
+    await expect(
+      lineOptions.locator('select[data-config-control="x_field"]'),
+    ).toBeVisible();
+    await expect(
+      lineOptions.locator('input[data-config-control="smoothing"]'),
+    ).toBeVisible();
+    await expect(
+      lineOptions.locator('input[data-config-control="line_x_axis_label"]'),
+    ).toBeVisible();
+    await expect(
+      lineOptions.locator('input[data-config-control="line_y_axis_label"]'),
+    ).toBeVisible();
+    await expect(
+      lineOptions.locator('input[data-config-control="line_number_of_points"]'),
+    ).toBeVisible();
+    await selectComponentKind(page, "Stat Card");
+    const statOptions = page.locator(
+      '[data-component-config-section="stat_card"]',
+    );
+    await expect(
+      statOptions.locator('select[data-config-control="panel_style"]'),
+    ).toBeVisible();
+    await expect(
+      statOptions.locator('input[data-config-control="stat_label"]'),
+    ).toBeVisible();
+    await expect(
+      statOptions.locator('input[data-config-control="supporting_text"]'),
+    ).toBeVisible();
+    await selectComponentKind(page, "Table");
+    await expect(
+      page.getByRole("group", { name: "Displayed Fields" }),
+    ).toBeVisible();
 
     for (const kind of ["bar", "line", "pie", "donut", "stat_card"]) {
-      const uiComponent = await createAndPublishVisualComponentThroughUi(
-        page,
-        dataset,
-        major,
-        kind,
-        field.key,
-      );
+      const config = visualConfig(kind, fieldKey);
       if (kind === "bar") {
-        await page.goto(`/components/${uiComponent.slug}/edit`);
-        await expect(
-          page
-            .locator(".component-editor__role-card--measure .component-editor__measure-grid label.form-field")
-            .nth(1)
-            .locator("select"),
-        ).toHaveValue(field.key);
-        await expect(page.locator(".component-editor__role-card--measure select").first()).toHaveValue("count");
-        await expect(
-          page
-            .locator(".component-editor__role-grid > .component-editor__role-card")
-            .first()
-            .locator("select")
-            .first(),
-        ).toHaveValue(field.key);
-        await expect(page.getByLabel("Missing categories")).toHaveValue("explicit_missing");
-        await expect(page.getByLabel("Missing values")).toHaveValue("zero");
+        Object.assign(config, {
+          mode: "comparison",
+          comparison_field: fieldKey,
+          comparison_layout: "grouped",
+          legend_title: field.label,
+        });
       }
-    }
+      const validation = await expectJson<ValidationResponse>(
+        await page.request.post("/api/admin/components/validate", {
+          data: versionInput(dataset, kind, config, `${kind} validation`),
+        }),
+      );
+      expect(validation.valid, JSON.stringify(validation.findings)).toBe(true);
 
-    for (const kind of ["bar", "line", "pie", "donut", "stat_card"]) {
-      const slug = `${COMPONENT_PREFIX}${RUN_ID}-${kind}`;
-      const name = `Playwright Visual Component ${kind} ${RUN_ID}`;
-      const created = await createVisualComponentDraft(
+      const preview = await expectJson<{
+        component_type: string;
+        materialization_state: string;
+      }>(
+        await page.request.post("/api/admin/components/preview", {
+          data: versionInput(dataset, kind, config, `${kind} preview`),
+        }),
+      );
+      expect(preview.component_type).toBe(kind);
+      expect(["ready", "pending"]).toContain(preview.materialization_state);
+
+      const definition = await createComponent(
         page,
-        name,
-        slug,
         dataset,
-        major,
         kind,
-        field.key,
+        config,
+        kind,
       );
-      const component = await loadComponent(page, slug);
-      expect(component.versions[0]).toMatchObject({
-        component_type: kind,
-        status: "draft",
-        binding_mode: "major_line",
-      });
-      await publishComponentVersion(page, created.id, component.versions[0].id);
-      const visual = await expectJson<ComponentVisual>(
-        await page.request.get(`/api/components/${slug}/${visualPath(kind)}`),
+      await publish(page, definition, `publish-${kind}`);
+      const rendered = await expectJson<{
+        component_type: string;
+        materialization_state: string;
+      }>(await page.request.get(renderPath(definition.slug, kind)));
+      expect(rendered.component_type).toBe(kind);
+      expect(rendered.materialization_state).toBe("ready");
+
+      await page.goto(`/components/${definition.slug}/view`);
+      await expect(page.locator("#module-content")).toHaveAttribute(
+        "data-hydration",
+        "ready",
       );
-      expect(visual).toMatchObject({
-        component_version_id: component.versions[0].id,
-        component_type: kind,
-        materialization_state: "ready",
-      });
+      await expect(
+        page.getByRole("heading", { level: 1, name: definition.name }),
+      ).toBeVisible();
+      await expect(page.locator(".component-visual-preview")).toBeVisible();
       if (kind === "stat_card") {
-        expect(visual.stat?.label).toBe("Submission count");
-      } else if (kind === "pie" || kind === "donut") {
-        expect(visual.slices.length).toBeGreaterThan(0);
+        await expect(page.locator(".component-stat-card")).toBeVisible();
       } else {
-        expect(visual.points.length).toBeGreaterThan(0);
+        await expect(page.locator(".component-d3-svg")).toBeVisible({
+          timeout: 15_000,
+        });
         if (kind === "bar") {
-          expect(visual.bar_orientation).toBe("horizontal");
-          expect(visual.x_axis_label).toBe("Submissions");
-          expect(visual.y_axis_label).toBe("Category");
+          await expect(
+            page.locator(
+              ".component-d3-chart__surface > .component-d3-chart__legend + svg.component-d3-svg--bar",
+            ),
+          ).toBeVisible();
+          const mark = page.locator("svg.component-d3-svg--bar rect").first();
+          await mark.focus();
+          await expect(page.locator(".component-d3-tooltip")).toBeVisible();
+        }
+        if (kind === "line") {
+          await expect(
+            page.locator("svg.component-d3-svg--line"),
+          ).toContainText("Category");
+          await expect(
+            page.locator("svg.component-d3-svg--line"),
+          ).toContainText("Responses");
+          await expect(
+            page
+              .locator("svg.component-d3-svg--line .component-d3-axis")
+              .first()
+              .locator(".tick text")
+              .first(),
+          ).toBeVisible();
         }
       }
+    }
 
-      await page.goto(`/components/${slug}/view`);
-      await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Versions" })).toHaveAttribute(
-        "href",
-        `/components/${slug}/versions`,
-      );
-      await expect(page.locator(".component-visual-preview")).toBeVisible();
-      if (kind !== "stat_card") {
-        await expect(page.locator(".component-d3-svg")).toBeVisible({ timeout: 15_000 });
+    const distinctValues = await expectJson<{ values: unknown[] }>(
+      await page.request.post(
+        "/api/admin/components/datasets/distinct-values",
+        {
+          data: {
+            schema_version: 1,
+            action: "distinct_values",
+            reference: dataset.reference,
+            field_key: fieldKey,
+            limit: 12,
+          },
+        },
+      ),
+    );
+    expect(distinctValues.values.length).toBeGreaterThan(0);
+    const rawCategory = distinctValues.values
+      .map(String)
+      .find((value) => value.length > 0);
+    expect(
+      rawCategory,
+      "distinct category fixture should expose a non-empty value",
+    ).toBeTruthy();
+    const semanticWarning = "var(--semantic-warning)";
+    const noOpConfig: Record<string, unknown> = {
+      summary_field: fieldKey,
+      summary_type: "count",
+      value_format: "integer",
+      value_missing_policy: "omit",
+      sort_direction: "asc",
+      filters: [],
+      category_field: fieldKey,
+      category_missing_policy: "omit",
+      max_slices: 20,
+      category_labels: {},
+      category_colors: { [rawCategory!]: semanticWarning },
+      legend_title: null,
+    };
+    const roundTrip = await createComponent(
+      page,
+      dataset,
+      "donut",
+      noOpConfig,
+      "semantic-color-round-trip",
+    );
+    const storedConfig = roundTrip.versions[0].config;
+    expect(storedConfig).not.toHaveProperty("sort_field");
+    expect(storedConfig.category_colors).toEqual({
+      [rawCategory!]: semanticWarning,
+    });
+
+    await page.goto(`/components/${roundTrip.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    const noOpEditor = page.locator('[data-component-config-section="visual"]');
+    await expect(
+      noOpEditor.getByLabel("Sort Field", { exact: true }),
+    ).toHaveValue("");
+    const noOpOverrides = page.getByRole("table", { name: "Category Labels" });
+    const originalValue = noOpOverrides.getByRole("rowheader", {
+      name: rawCategory!,
+      exact: true,
+    });
+    await expect(originalValue).toBeVisible();
+    await expect(originalValue).toHaveAttribute("scope", "row");
+    const noOpRow = originalValue.locator("..");
+    const labelOverride = noOpRow.getByLabel(
+      `Display label for ${rawCategory!}`,
+      {
+        exact: true,
+      },
+    );
+    await expect(labelOverride).toHaveValue("");
+    await expect(labelOverride).toHaveAttribute("placeholder", rawCategory!);
+    const colorOverride = noOpRow.getByRole("button", {
+      name: `Color for ${rawCategory!}`,
+      exact: true,
+    });
+    await colorOverride.click();
+    const colorOptions = noOpRow.getByRole("radiogroup", {
+      name: `Color options for ${rawCategory!}`,
+      exact: true,
+    });
+    await expect(colorOptions).toBeVisible();
+    await expect(
+      colorOptions.getByRole("radio", { name: "Warning", exact: true }),
+    ).toBeChecked();
+    await expect(
+      colorOptions.getByRole("radio", { name: "Default", exact: true }),
+    ).not.toBeChecked();
+
+    const noOpSave = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/components/save") &&
+        response.request().method() === "POST" &&
+        response.ok(),
+    );
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await noOpSave;
+    const roundTripped = await expectJson<ComponentDefinition>(
+      await page.request.get(`/api/admin/components/${roundTrip.slug}`),
+    );
+    const roundTrippedVersion = roundTripped.versions.find(
+      (version) =>
+        version.component_version_id ===
+        roundTrip.versions[0].component_version_id,
+    );
+    expect(roundTrippedVersion).toBeDefined();
+    expect(roundTrippedVersion!.config).toEqual(storedConfig);
+    expect(roundTrippedVersion!.config).not.toHaveProperty("sort_field");
+    expect(roundTrippedVersion!.config.category_colors).toEqual({
+      [rawCategory!]: semanticWarning,
+    });
+    assertNoConsoleErrors();
+  });
+
+  test("exact viewport and theme matrix preserves directory editor detail and viewer usability", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const assertNoConsoleErrors = attachConsoleGuard(page);
+    await signInAsAdmin(page);
+    await ensureDemoSeed(page);
+
+    const components = await expectJson<ComponentSummary[]>(
+      await page.request.get("/api/components"),
+    );
+    const component = components.find(
+      (candidate) =>
+        candidate.current_version.publication_state === "published" &&
+        candidate.current_version.lifecycle_state === "active",
+    );
+    expect(
+      component,
+      "the viewport matrix requires one active published Component",
+    ).toBeTruthy();
+
+    const paths: Record<(typeof COMPONENT_SURFACES)[number], string> = {
+      directory: "/components",
+      editor: `/components/${component!.slug}/edit`,
+      detail: `/components/${component!.slug}`,
+      viewer: `/components/${component!.slug}/view`,
+    };
+    const containmentTargets: Record<
+      (typeof COMPONENT_SURFACES)[number],
+      string
+    > = {
+      directory: ".components-page[data-component-directory]",
+      editor: "[data-component-editor-root]",
+      detail: ".components-page",
+      viewer: ".components-page",
+    };
+
+    for (const viewport of COMPONENT_VIEWPORT_MATRIX) {
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
+      for (const theme of ["light", "dark"] as const) {
+        for (const surface of COMPONENT_SURFACES) {
+          await test.step(`${surface} at ${viewport.width}px in ${theme}`, async () => {
+            await page.goto(paths[surface]);
+            await expect(page.locator("#module-content")).toHaveAttribute(
+              "data-hydration",
+              "ready",
+            );
+            await chooseThemeWithKeyboard(page, theme);
+
+            const heading =
+              surface === "directory"
+                ? "Components"
+                : surface === "editor"
+                  ? "Edit Component"
+                  : component!.name;
+            await expect(
+              page.getByRole("heading", {
+                level: 1,
+                name: heading,
+                exact: true,
+              }),
+            ).toBeVisible();
+
+            const requiredAction =
+              surface === "directory"
+                ? page.getByRole("link", {
+                    name: "Create Component",
+                    exact: true,
+                  })
+                : surface === "editor"
+                  ? page.getByRole("button", {
+                      name: "Save Draft",
+                      exact: true,
+                    })
+                  : surface === "detail"
+                    ? page.getByRole("link", { name: "Edit", exact: true })
+                    : page.getByRole("link", { name: "Versions", exact: true });
+            await expect(requiredAction).toBeVisible();
+            await requiredAction.focus();
+            await expect(requiredAction).toBeFocused();
+
+            if (surface === "viewer") {
+              await expect(
+                page.locator(RENDERED_COMPONENT_CONTENT).first(),
+              ).toBeVisible({ timeout: 15_000 });
+            }
+            await expectViewportContainment(
+              page,
+              containmentTargets[surface],
+              viewport.width,
+              `${surface} at ${viewport.width}px in ${theme}`,
+            );
+          });
+        }
       }
     }
 
-    const historySlug = `${COMPONENT_PREFIX}${RUN_ID}-visual-history`;
-    const historyName = `Playwright Visual History ${RUN_ID}`;
-    const historyCreated = await createVisualComponentDraft(
-      page,
-      historyName,
-      historySlug,
-      dataset,
-      major,
-      "bar",
-      field.key,
-    );
-    let historyComponent = await loadComponent(page, historySlug);
-    const firstVisualVersionId = historyComponent.versions[0].id;
-    await publishComponentVersion(page, historyCreated.id, firstVisualVersionId);
-    const replacementDraft = await saveVisualDraft(
-      page,
-      historyCreated.id,
-      dataset,
-      major,
-      "line",
-      field.key,
-    );
-    await publishComponentVersion(page, historyCreated.id, replacementDraft.id);
-    historyComponent = await loadComponent(page, historySlug);
-    expect(historyComponent.versions.some((version) => version.status === "superseded")).toBe(
-      true,
-    );
-
-    await page.goto(`/components/${historySlug}/versions`);
-    await expect(page.getByRole("heading", { level: 1, name: historyName })).toBeVisible();
-    const visualVersionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
-    await expect(visualVersionsTable).toContainText("Bar");
-    await expect(visualVersionsTable).toContainText("Line");
-    await expect(visualVersionsTable).toContainText("Superseded");
-    await expect(visualVersionsTable).toContainText("Published");
-
-    const supersededVisual = await expectJson<ComponentVisual>(
-      await page.request.get(
-        `/api/components/${historySlug}/versions/${firstVisualVersionId}/bar`,
-      ),
-    );
-    expect(supersededVisual).toMatchObject({
-      component_version_id: firstVisualVersionId,
-      component_type: "bar",
-      materialization_state: "ready",
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/components");
+    await chooseThemeWithKeyboard(page, "light");
+    const createAction = page.getByRole("link", {
+      name: "Create Component",
+      exact: true,
     });
-    const currentReplacementVisual = await expectJson<ComponentVisual>(
-      await page.request.get(`/api/components/${historySlug}/line`),
-    );
-    expect(currentReplacementVisual).toMatchObject({
-      component_version_id: replacementDraft.id,
-      component_type: "line",
-      materialization_state: "ready",
-    });
-
-    const wrongKindStatus = await expectStatus(
-      await page.request.get(`/api/components/${COMPONENT_PREFIX}${RUN_ID}-bar/line`),
-      400,
-    );
-    const wrongKindBody = JSON.parse(wrongKindStatus) as ApiErrorBody;
-    expect(wrongKindBody.error).toContain("expected component type 'line'");
-    await expectStatus(
-      await page.request.get(`/api/components/${COMPONENT_PREFIX}${RUN_ID}-stat_card/stat_card`),
-      404,
-    );
-
-    expect(bridgeRequests).toEqual([]);
-    await assertNoConsoleErrors();
+    await createAction.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/components\/new$/);
+    const nameInput = page.getByRole("textbox", { name: "Name", exact: true });
+    const slugInput = page.getByRole("textbox", { name: "Slug", exact: true });
+    await nameInput.focus();
+    await page.keyboard.press("Tab");
+    await expect(slugInput).toBeFocused();
+    assertNoConsoleErrors();
   });
 
-  test("component editor remains contained and uses an accessible mobile preview drawer", async ({
+  test("Dataset provider outage retains unsaved editor state and one retry mutation", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await signInAsAdmin(page);
+    await ensureDemoSeed(page);
+    const dataset = await datasetOption(page);
+    const definition = await createComponent(
+      page,
+      dataset,
+      "table",
+      tableConfig(dataset),
+      "outage-retry",
+    );
+    await publish(page, definition, "publish-outage-retry");
+
+    await page.goto(`/components/${definition.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    await expect(page.locator(".component-editor-preview__badge")).toHaveText(
+      "Valid config",
+    );
+
+    let providerUnavailable = true;
+    let interceptedProviderFailures = 0;
+    let saveRequests = 0;
+    let successfulSaveResponses = 0;
+    // Intercept only the browser-visible preview boundary. The recovered save
+    // still reaches the real module backend; product_integration's
+    // extracted_component_product_owns_crud_versions_lifecycle_render_and_nondisclosure
+    // test retains authoritative atomicity, replay, and nondisclosure proof.
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/api/admin/components/save"
+      ) {
+        saveRequests += 1;
+      }
+    });
+    page.on("response", (response) => {
+      if (
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/admin/components/save" &&
+        response.ok()
+      ) {
+        successfulSaveResponses += 1;
+      }
+    });
+    await page.route("**/api/admin/components/preview", async (route) => {
+      if (!providerUnavailable) {
+        await route.continue();
+        return;
+      }
+      interceptedProviderFailures += 1;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "component.dependency_unavailable",
+          message: "Dataset provider unavailable for deterministic acceptance.",
+          retryable: true,
+        }),
+      });
+    });
+
+    const unsavedName = `${definition.name} unsaved`;
+    const unsavedDescription = `Unsaved outage description ${RUN_ID}`;
+    const unsavedVersionNote = `Unsaved outage note ${RUN_ID}`;
+    await page
+      .getByRole("textbox", { name: "Name", exact: true })
+      .fill(unsavedName);
+    await page
+      .getByRole("textbox", { name: "Description", exact: true })
+      .fill(unsavedDescription);
+    await page
+      .getByRole("textbox", { name: "Version note", exact: true })
+      .fill(unsavedVersionNote);
+
+    const outage = page.locator("[data-component-dataset-outage]");
+    await expect(outage).toBeVisible();
+    await expect(outage).toContainText(
+      "Dataset metadata is temporarily unavailable. Your unsaved Component changes are preserved.",
+    );
+    expect(interceptedProviderFailures).toBeGreaterThan(0);
+    await expect(
+      page.getByRole("textbox", { name: "Name", exact: true }),
+    ).toHaveValue(unsavedName);
+    await expect(
+      page.getByRole("textbox", { name: "Description", exact: true }),
+    ).toHaveValue(unsavedDescription);
+    await expect(
+      page.getByRole("textbox", { name: "Version note", exact: true }),
+    ).toHaveValue(unsavedVersionNote);
+
+    const dependentMutations = page.locator(
+      "[data-component-save-action], [data-component-open-consumer-review]",
+    );
+    expect(await dependentMutations.count()).toBeGreaterThan(0);
+    for (const mutation of await dependentMutations.all()) {
+      await expect(mutation).toBeDisabled();
+    }
+    await dependentMutations.evaluateAll((elements) => {
+      for (const element of elements) (element as HTMLButtonElement).click();
+    });
+    expect(saveRequests).toBe(0);
+    expect(successfulSaveResponses).toBe(0);
+
+    const duringOutage = await expectJson<ComponentDefinition>(
+      await page.request.get(`/api/admin/components/${definition.slug}`),
+    );
+    expect(duringOutage.name).toBe(definition.name);
+    expect(duringOutage.description).toBe(
+      "Extracted Component module acceptance fixture.",
+    );
+
+    providerUnavailable = false;
+    const recoveredPreview = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/admin/components/preview",
+    );
+    await outage
+      .getByRole("button", { name: "Retry Dataset metadata", exact: true })
+      .click();
+    await expectBrowserResponseOk(await recoveredPreview);
+    await expect(outage).toBeHidden();
+    await expect(
+      page.getByRole("textbox", { name: "Name", exact: true }),
+    ).toHaveValue(unsavedName);
+    await expect(
+      page.getByRole("textbox", { name: "Description", exact: true }),
+    ).toHaveValue(unsavedDescription);
+    await expect(
+      page.getByRole("textbox", { name: "Version note", exact: true }),
+    ).toHaveValue(unsavedVersionNote);
+    await expect(
+      page.getByRole("button", { name: "Save Draft", exact: true }),
+    ).toBeEnabled();
+
+    const successfulMutation = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/admin/components/save",
+    );
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await expectBrowserResponseOk(await successfulMutation);
+    expect(saveRequests).toBe(1);
+    expect(successfulSaveResponses).toBe(1);
+
+    const saved = await expectJson<ComponentDefinition>(
+      await page.request.get(`/api/admin/components/${definition.slug}`),
+    );
+    expect(saved.name).toBe(unsavedName);
+    expect(saved.description).toBe(unsavedDescription);
+    expect(
+      saved.versions.find((version) => version.publication_state === "draft")
+        ?.version_note,
+    ).toBe(unsavedVersionNote);
+    await page.unroute("**/api/admin/components/preview");
+  });
+
+  test("component editor remains contained and uses an accessible mobile preview dialog", async ({
     page,
   }) => {
     test.setTimeout(60_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
-    await page.setViewportSize({ width: 600, height: 900 });
     await signInAsAdmin(page);
     await ensureDemoSeed(page);
-    const components = await expectJson<ComponentSummary[]>(
-      await page.request.get("/api/components"),
+    const dataset = await datasetOption(page);
+    const fieldKey = dataset.fields[0].key;
+    const definition = await createComponent(
+      page,
+      dataset,
+      "line",
+      visualConfig("line", fieldKey),
+      "mobile-line",
     );
-    const line = components.find(
-      (component) => component.current_component_type === "line",
-    );
-    expect(line, "the demo seed should include a line component").toBeTruthy();
+    await publish(page, definition, "publish-mobile-line");
 
-    await page.goto(`/components/${line!.slug}/edit`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/components/${definition.slug}/edit`);
     const kindPanel = page.getByRole("group", { name: "Component Kind" });
     const filtersPanel = page.getByRole("group", { name: "Filters" });
     await expect(kindPanel).toBeVisible();
@@ -1449,30 +1757,139 @@ test.describe.serial("Sprint 4A component workflow", () => {
           kindPanel.boundingBox(),
           filtersPanel.boundingBox(),
         ]);
-        return kindBox !== null && filtersBox !== null && kindBox.y < filtersBox.y;
+        return (
+          kindBox !== null && filtersBox !== null && kindBox.y < filtersBox.y
+        );
       })
       .toBe(true);
 
     const hasHorizontalOverflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     );
     expect(hasHorizontalOverflow).toBe(false);
 
     const previewButton = page.getByRole("button", { name: "Open preview" });
     await expect(previewButton).toBeVisible();
     await previewButton.click();
-    const previewDialog = page.getByRole("dialog", { name: "Component preview" });
+    const previewDialog = page.getByRole("dialog", {
+      name: "Component preview",
+    });
     await expect(previewDialog).toBeVisible();
     await expect(previewDialog).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(previewDialog).not.toBeVisible();
     await expect(previewButton).toBeFocused();
 
-    const calculationHelp = page.locator('summary[aria-label="Show help for Calculation"]');
-    await calculationHelp.click();
-    await expect(page.getByRole("tooltip")).toBeVisible();
-    await page.locator("main").click({ position: { x: 2, y: 2 } });
-    await expect(page.getByRole("tooltip")).not.toBeVisible();
-    await assertNoConsoleErrors();
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Edit Component" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "Component Kind" }),
+    ).toBeVisible();
+    assertNoConsoleErrors();
+  });
+});
+
+test.describe("Sprint 8A extracted Component UI parity", () => {
+  // Playwright controls the post-zoom CSS viewport and output scale separately.
+  // A 1280 x 900 browser viewport at 200% is 640 x 450 CSS pixels at 2x output.
+  test.use({
+    viewport: TWO_HUNDRED_PERCENT_ZOOM_VIEWPORT,
+    deviceScaleFactor: 2,
+    colorScheme: "light",
+  });
+
+  test("Component and Dashboard visuals stay contained at 200% zoom in light and dark themes", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const assertNoConsoleErrors = attachConsoleGuard(page);
+    await signInAsAdmin(page);
+    await ensureDemoSeed(page);
+
+    const components = await expectJson<ComponentSummary[]>(
+      await page.request.get("/api/components"),
+    );
+    const component = components.find(
+      (candidate) =>
+        candidate.current_version.publication_state === "published" &&
+        candidate.current_version.lifecycle_state === "active" &&
+        candidate.current_version.component_type !== "table",
+    );
+    expect(
+      component,
+      "demo seed should expose an active published visual Component",
+    ).toBeTruthy();
+
+    const dashboards = await expectJson<DashboardSummary[]>(
+      await page.request.get("/api/dashboards"),
+    );
+    const dashboard = dashboards
+      .filter((candidate) => candidate.placement_count > 0)
+      .sort((left, right) => right.placement_count - left.placement_count)[0];
+    expect(
+      dashboard,
+      "demo seed should expose a Dashboard with Component placements",
+    ).toBeTruthy();
+
+    for (const theme of ["light", "dark"] as const) {
+      await page.goto(`/components/${component!.slug}/view`);
+      await expect(page.locator("#module-content")).toHaveAttribute(
+        "data-hydration",
+        "ready",
+      );
+      await chooseThemeWithKeyboard(page, theme);
+      await expect(
+        page.getByRole("heading", { level: 1, name: component!.name }),
+      ).toBeVisible();
+      await expect(page.locator(".component-visual-preview")).toBeVisible();
+      await expect(
+        page
+          .locator(".component-visual-preview")
+          .locator(RENDERED_COMPONENT_CONTENT)
+          .first(),
+      ).toBeVisible({ timeout: 15_000 });
+      await expectHorizontalContainment(
+        page,
+        ".component-visual-preview",
+        `${theme} Component visual at 200% zoom`,
+      );
+
+      await page.goto(`/dashboards/${dashboard!.id}/view`);
+      await expect(page.locator("#module-content")).toHaveAttribute(
+        "data-hydration",
+        "ready",
+      );
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-theme-preference",
+        theme,
+      );
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expect(
+        page.getByRole("heading", { level: 1, name: dashboard!.name }),
+      ).toBeVisible();
+      await expect(page.locator(".dashboard-viewer-placement")).toHaveCount(
+        dashboard!.placement_count,
+      );
+      await page
+        .locator(".dashboard-viewer-placement")
+        .first()
+        .scrollIntoViewIfNeeded();
+      const renderedPlacement = page
+        .locator(".dashboard-viewer-placement")
+        .locator(RENDERED_COMPONENT_CONTENT)
+        .first();
+      await expect(renderedPlacement).toBeVisible({ timeout: 15_000 });
+      await expectHorizontalContainment(
+        page,
+        ".dashboard-viewer-placement",
+        `${theme} Dashboard placements at 200% zoom`,
+      );
+    }
+
+    assertNoConsoleErrors();
   });
 });

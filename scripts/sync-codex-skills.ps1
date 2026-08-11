@@ -17,8 +17,12 @@ $globalRoot = if ($env:CODEX_HOME) {
 }
 
 $skillNames = @(
+    "tessara-implementation",
     "tessara-sprint-kickoff",
     "tessara-sprint-validation",
+    "tessara-validation-preflight",
+    "tessara-sit",
+    "tessara-uat",
     "tessara-sprint-closeout"
 )
 

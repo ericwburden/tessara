@@ -31,7 +31,6 @@ enum ResourceKind {
     Dataset,
     DatasetRevision,
     DatasetMajorLine,
-    ComponentVersion,
 }
 
 #[derive(Clone, Copy)]
@@ -48,7 +47,6 @@ const RESPONSES: &[&str] = &[
     "submissions:manage",
 ];
 const DATASETS: &[&str] = &["datasets:read", "datasets:manage"];
-const COMPONENTS: &[&str] = &["components:read", "components:manage"];
 
 pub(crate) fn construct(
     request: CreateResourceReferenceRequestV1,
@@ -233,17 +231,6 @@ pub(crate) async fn observe(
             .fetch_optional(pool)
             .await?
         }
-        ResourceKind::ComponentVersion => {
-            let Some(id) = parse_canonical_uuid(reference.resource_id()) else {
-                return Ok((resolution, None));
-            };
-            sqlx::query_scalar::<_, i64>(
-                "SELECT resource_revision FROM component_versions WHERE id = $1",
-            )
-            .bind(id)
-            .fetch_optional(pool)
-            .await?
-        }
         _ => return Ok((resolution, None)),
     };
     let Some(revision) = revision else {
@@ -273,10 +260,6 @@ pub(crate) async fn observe(
 fn observation_contract(kind: ResourceKind) -> Option<(&'static str, &'static str)> {
     match kind {
         ResourceKind::DatasetRevision => Some(("tessara.datasets.dataset-revision", "1.0.0")),
-        ResourceKind::ComponentVersion => Some((
-            tessara_components_contract::COMPONENT_CONTRACT_ID,
-            tessara_components_contract::COMPONENT_CONTRACT_VERSION,
-        )),
         _ => None,
     }
 }
@@ -365,7 +348,6 @@ fn resource_spec(resource_type: &str) -> Option<ResourceSpec> {
         "tessara.transition.dataset" => (ResourceKind::Dataset, DATASETS),
         "tessara.transition.dataset_revision" => (ResourceKind::DatasetRevision, DATASETS),
         "tessara.transition.dataset_major_line" => (ResourceKind::DatasetMajorLine, DATASETS),
-        "tessara.transition.component_version" => (ResourceKind::ComponentVersion, COMPONENTS),
         _ => return None,
     };
     Some(ResourceSpec {
@@ -387,14 +369,18 @@ fn parse_canonical_uuid(resource_id: &str) -> Option<Uuid> {
 }
 
 fn parse_dataset_major_line(resource_id: &str) -> Option<(Uuid, i32)> {
-    let (dataset_id, major) = resource_id.split_once(':')?;
-    let dataset_id = parse_canonical_uuid(dataset_id)?;
-    let major = major.parse::<i32>().ok()?;
-    if major < 0 {
+    let (dataset_id, major) = resource_id.split_once('@')?;
+    if major.contains('@') {
         return None;
     }
-    // Reject alternate integer spellings such as +1 and 01.
-    let (_, source_major) = resource_id.split_once(':')?;
+    let dataset_id = parse_canonical_uuid(dataset_id)?;
+    let major = major.parse::<i32>().ok()?;
+    if major <= 0 {
+        return None;
+    }
+    // Match the Dataset compatibility contract and reject alternate integer
+    // spellings such as +1 and 01.
+    let (_, source_major) = resource_id.split_once('@')?;
     (source_major == major.to_string()).then_some((dataset_id, major))
 }
 
@@ -459,30 +445,20 @@ async fn load_lifecycle(
             .fetch_optional(pool)
             .await
         }
-        ResourceKind::ComponentVersion => {
-            sqlx::query_scalar("SELECT status::text FROM component_versions WHERE id = $1")
-                .bind(uuid())
-                .fetch_optional(pool)
-                .await
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use semver::Version;
     use tessara_module_contract::{
-        FunctionalContractId, ProviderContractIdentity, ResourceAccessState,
-        ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceRevision,
-        ResourceTypeId, TypedResourceReference,
+        ResourceAccessState, ResourceOwner, ResourceTypeId, TypedResourceReference,
     };
     use uuid::Uuid;
 
     use crate::auth::{AccountContext, CapabilityScope};
 
     use super::{
-        CreateResourceReferenceRequestV1, ResourceKind, construct, observation_contract,
-        parse_dataset_major_line, resource_spec,
+        CreateResourceReferenceRequestV1, construct, parse_dataset_major_line, resource_spec,
     };
 
     #[test]
@@ -496,7 +472,6 @@ mod tests {
             "tessara.transition.dataset",
             "tessara.transition.dataset_revision",
             "tessara.transition.dataset_major_line",
-            "tessara.transition.component_version",
         ] {
             assert!(resource_spec(resource_type).is_some(), "{resource_type}");
         }
@@ -530,12 +505,14 @@ mod tests {
     fn dataset_major_line_identifier_is_canonical_and_unambiguous() {
         let dataset_id = Uuid::new_v4();
         assert_eq!(
-            parse_dataset_major_line(&format!("{dataset_id}:12")),
+            parse_dataset_major_line(&format!("{dataset_id}@12")),
             Some((dataset_id, 12))
         );
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:01")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:-1")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:1:2")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@0")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@01")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@-1")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@1@2")), None);
+        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:1")), None);
     }
 
     #[test]
@@ -545,8 +522,8 @@ mod tests {
             let reference = TypedResourceReference::new(
                 installation_id,
                 ResourceOwner::CoreInstallation { installation_id },
-                ResourceTypeId::new("tessara.transition.dashboard").expect("type"),
-                resource_id,
+                ResourceTypeId::new("tessara.transition.dataset_major_line").expect("type"),
+                format!("{resource_id}@1"),
             )
             .expect("reference");
             assert_eq!(reference.installation_id(), installation_id);
@@ -598,53 +575,6 @@ mod tests {
             assert_eq!(wires[0]["owner_state"]["kind"], "undisclosed");
             assert_eq!(wires[0]["resource_identity_state"], "undisclosed");
         }
-    }
-
-    #[test]
-    fn dataset_and_component_adapters_share_observation_semantics_but_not_provider_identity() {
-        let installation_id = Uuid::new_v4();
-        let owner = ResourceOwner::CoreInstallation { installation_id };
-        let resource_id = Uuid::new_v4().to_string();
-        let make = |kind: ResourceKind, resource_type: &str, revision: u64| {
-            let (contract_id, contract_version) =
-                observation_contract(kind).expect("observable transition kind");
-            ResourceObservationV1::new(
-                TypedResourceReference::new(
-                    installation_id,
-                    owner.clone(),
-                    ResourceTypeId::new(resource_type).expect("resource type"),
-                    resource_id.clone(),
-                )
-                .expect("reference"),
-                ProviderContractIdentity::new(
-                    FunctionalContractId::new(contract_id).expect("contract id"),
-                    Version::parse(contract_version).expect("contract version"),
-                ),
-                ResourceObservationStrategy::LiveResolutionWithRevision,
-                ResourceRevision::new(revision).expect("revision"),
-            )
-        };
-        let dataset = make(
-            ResourceKind::DatasetRevision,
-            "tessara.transition.dataset_revision",
-            4,
-        );
-        let component = make(
-            ResourceKind::ComponentVersion,
-            "tessara.transition.component_version",
-            4,
-        );
-        assert_eq!(dataset.strategy(), component.strategy());
-        assert_eq!(dataset.resource_revision(), component.resource_revision());
-        assert_eq!(dataset.reference().owner(), component.reference().owner());
-        assert_eq!(
-            dataset.reference().resource_id(),
-            component.reference().resource_id()
-        );
-        assert_ne!(
-            dataset.provider_contract().contract_id(),
-            component.provider_contract().contract_id()
-        );
     }
 
     fn account(capability: &str, global: bool) -> AccountContext {

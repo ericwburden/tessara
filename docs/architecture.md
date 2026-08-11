@@ -1,6 +1,10 @@
 # Tessara Architecture
 
-This document defines Tessara's target technical architecture and the transition from the current single-service implementation. The product-level module contract and terminology are defined in [modular-application-platform.md](./modular-application-platform.md).
+This document defines Tessara's target technical architecture and the
+transition from the original modular-monolith baseline through the current
+mixed Core/module topology. The product-level module contract and terminology
+are defined in
+[modular-application-platform.md](./modular-application-platform.md).
 
 ## Architectural Direction
 
@@ -32,24 +36,188 @@ The normal deployment unit is a full-stack module with its own product or admini
 
 The current codebase is a useful transition baseline:
 
-- Core, Dashboard, and Scoped Records run as separate processes with separate
-  databases, while the remaining feature areas still run through the Core
-  Axum/Leptos application and Core database
-- `tessara-web` still owns the root shell, route adapters, authentication
-  policy, Core document integration, hydration entrypoint, CSS, and public
-  assets
+- Core, Components, Dashboard, and Scoped Records run as separate processes
+  with separate databases, while Forms, Workflows, Responses, and Datasets
+  still run through the Core Axum/Leptos application and Core database
+- `tessara-web` owns the Core shell, authentication policy, and document,
+  hydration, CSS, asset, and route adapters for Core and still-in-process
+  feature areas; Components and Dashboard own their release documents,
+  hydration entrypoints, and versioned assets behind the generic same-origin
+  gateway seam
 - focused `tessara-web-*` and domain crates separate several feature areas at
   compile time
-- most remaining feature routes and DTOs are still registered at the root
+- remaining in-process feature routes and DTOs are still registered at the
+  root application
+- Components, Dashboard, and Scoped Records use the canonical module contract,
+  runtime, and UI packages without depending on the root `tessara-web`
   application
-- Dashboard and Scoped Records use the canonical module contract, runtime, and
-  UI packages without depending on the root `tessara-web` application
 
 These are descriptions of current implementation, not target deployment constraints. Feature crates are extraction seams. They should first acquire explicit manifests and contracts, then move behind module-owned APIs and routes, and finally into independent processes and databases.
 
 No production consumer depends on the current internal database layout. The transition may therefore restructure tables, references, and route ownership directly when doing so establishes the target boundary cleanly.
 
-`transitional_in_process` contribution descriptors reserve discovery metadata and possibly a future Module Definition identity, but create no Module Release or Module Instance. If an extracted first-party module must consume a still-in-process provider, it binds to an explicitly versioned Core Release compatibility contract. Resources returned by that adapter remain `core_installation`-owned with transition-specific types. Provider extraction later creates a real Module Instance and performs an explicit old-to-new data/reference migration through provider mappings, consumer-owned rebinding contracts, and completeness receipts; references are never silently reinterpreted.
+`transitional_in_process` contribution descriptors reserve discovery metadata and possibly a future Module Definition identity, but create no Module Release or Module Instance. If an extracted first-party module must consume a still-in-process provider, it binds to an explicitly versioned Core Release compatibility contract. Resources returned by that adapter remain `core_installation`-owned with transition-specific types. Tessara is pre-production throughout Phase 8, so provider extraction does not preserve transition product data or references: it materializes fresh owner databases, rebuilds the disposable reference-application seed through owner-controlled bootstrap contracts, creates new Module Instance references directly, and removes the old adapter and readers in the same source-exact cutover. Old transition references are unsupported after their provider is extracted and are never silently reinterpreted. Supported legacy import, mapping, rebinding, partial-failure resume, and audit behavior belongs to Phase 9 rather than the Phase 8 extraction path.
+
+An independently deployed module must not also appear in Core's frozen
+transition catalog. In the Sprint 8A baseline the exact Core transition
+identities are `tessara.forms`, `tessara.workflows`, `tessara.responses`,
+`tessara.datasets`, and `tessara.migration`. Dashboard and Components are
+represented only by their real Module Releases and Module Instances, and their
+navigation is contributed only by their enrolled manifests. The reference
+navigation order is Scoped Records `7`, Components `8`, and Dashboard `9`.
+
+### Sprint 8A container view
+
+This view shows the current deployable and persistence boundaries. Dataset is
+still a Core-hosted transition provider; Component and Dashboard are real
+Module Releases and Module Instances and never share a database or forwarded
+module grant. Every signed service request binds the exact outbound body bytes.
+For JSON-bearing calls the receiver verifies the declared media type,
+authorization and service envelopes, correlation identity, and raw-body digest
+before deserializing the payload; parsing and re-encoding semantically
+equivalent JSON is not request verification.
+
+```mermaid
+flowchart LR
+    browser[Browser]
+
+    subgraph control[Installation control plane]
+        supervisor[Installation Supervisor]
+        ledger[(Supervisor ledger)]
+        supervisor --> ledger
+    end
+
+    subgraph installation[One application installation]
+        gateway[Same-origin gateway]
+
+        subgraph coreBoundary[Core Release]
+            core[Core API, shell, authentication,<br/>composition and authorization exchange]
+            dataset[Core-hosted Dataset<br/>transition provider]
+            coreDb[(Core database)]
+            core --> coreDb
+            dataset --> coreDb
+        end
+
+        subgraph componentBoundary[Components Module Instance]
+            components[Component process<br/>documents, APIs and assets]
+            componentDb[(Component database)]
+            components --> componentDb
+        end
+
+        subgraph dashboardBoundary[Dashboard Module Instance]
+            dashboards[Dashboard process<br/>documents, APIs and assets]
+            dashboardDb[(Dashboard database)]
+            dashboards --> dashboardDb
+        end
+
+        subgraph scopedBoundary[Scoped Records Module Instance]
+            scoped[Scoped Records process]
+            scopedDb[(Scoped Records database)]
+            scoped --> scopedDb
+        end
+
+        gateway --> core
+        gateway --> components
+        gateway --> dashboards
+        gateway --> scoped
+
+        dashboards -->|exchange inbound authority<br/>plus exact ComponentVersion assertion| core
+        core -->|Components-audience grant<br/>bound to resource assertion| dashboards
+        dashboards -->|exact signed body;<br/>joint governing-node scope| components
+        components -->|exchange inbound authority<br/>for Dataset audience| core
+        core -->|audience-bound grant| components
+        components -->|exact signed body;<br/>Dataset service action| dataset
+    end
+
+    browser --> gateway
+    supervisor -. materializes and health-gates .-> gateway
+    supervisor -. materializes and health-gates .-> core
+    supervisor -. materializes and health-gates .-> components
+    supervisor -. materializes and health-gates .-> dashboards
+    supervisor -. materializes and health-gates .-> scoped
+```
+
+The Sprint 8A release exercise uses this control path rather than replacing a
+container directly: a separately compiled compatible Component `0.9.0`
+release and the intended `1.0.0` release resolve as exact Component-only
+Blueprint deltas, and the Supervisor applies each delta through its Compose
+deployment adapter. Upgrade, rollback, and intended-release restoration must
+leave every unrelated container and semantic projection unchanged.
+
+### Sprint 8A Rust module view
+
+Arrows are compile-time dependencies or typed contract use. In particular,
+neither extracted product depends on the root Core API or web application.
+Dashboard consumes Component implementation-neutral contracts only: its
+placement renderer uses the canonical Component execution response types from
+`tessara-components-contract`, does not depend directly on
+`tessara-datasets-contract`, and does not own copied Component response DTOs.
+The Component render envelope carries presentation data and exact Component
+identity only; it does not disclose the unused Dataset provider reference.
+Persisted execution requires non-nil Component and ComponentVersion identities
+that match the request. Unsaved authoring preview is the one explicit sentinel:
+both identities are nil and validation uses the preview-only path; a partial
+nil identity is never valid. Table and visual response branches are exact, and
+each visual kind rejects fields or payload branches owned by another kind.
+
+```mermaid
+flowchart TB
+    subgraph platform[Canonical platform and public contracts]
+        contract[tessara-module-contract]
+        runtime[tessara-module-runtime]
+        ui[tessara-module-ui]
+        testkit[tessara-module-testkit]
+        componentContract[tessara-components-contract]
+        datasetContract[tessara-datasets-contract]
+    end
+
+    subgraph coreCrates[Core Release crates]
+        api[tessara-api]
+        web[tessara-web]
+        coreDomain[tessara-core and<br/>Core-owned domain crates]
+    end
+
+    subgraph componentCrates[Components release]
+        componentModule[tessara-component-module]
+    end
+
+    subgraph dashboardCrates[Dashboard release]
+        dashboardModule[tessara-dashboard-module]
+        dashboardUi[tessara-dashboard-ui]
+        placementRenderer[tessara-dashboard-placement-renderer]
+        dashboardModule --> dashboardUi
+        dashboardUi --> placementRenderer
+    end
+
+    subgraph controlCrates[Composition and materialization]
+        composition[tessara-composition]
+        supervisorCrate[tessara-supervisor]
+        supervisorCrate --> composition
+    end
+
+    api --> coreDomain
+    web --> coreDomain
+    api --> contract
+    api --> datasetContract
+    web --> contract
+    web --> runtime
+    web --> ui
+
+    componentModule --> contract
+    componentModule --> runtime
+    componentModule --> ui
+    componentModule --> componentContract
+    componentModule --> datasetContract
+
+    dashboardModule --> contract
+    dashboardModule --> runtime
+    dashboardModule --> componentContract
+    dashboardUi --> ui
+    placementRenderer -->|Component execution response DTOs| componentContract
+
+    composition --> contract
+    testkit --> contract
+```
 
 ## Platform Components
 
@@ -137,7 +305,7 @@ Each Module Release publishes a versioned manifest described in [modular-applica
 - namespaced security capabilities
 - configuration and secret-reference schemas
 - readiness, health, compatibility, and migration contracts
-- optional module-owned bootstrap schema plus typed validation/apply/read-back and receipt contracts for reproducible catalogs or initial product records
+- optional module-owned bootstrap schema plus typed validation/apply/read-back and receipt contracts for reproducible catalogs or initial product records, including an optional manifest-declared dependency-validation target
 
 Core validates the manifest and Deployment Profile compatibility before a module becomes ready or enabled. The Supervisor conformance suite proves the image can migrate, start, register, become ready, shut down, and stay within declared identity/resource rules. Feature Declarations, functional contracts, and security capabilities remain separate: discovery metadata does not prove provider equivalence, dependency resolution cannot grant permissions, and a security capability cannot satisfy a functional dependency.
 
@@ -153,6 +321,9 @@ Rules:
 - Core validates dependency closure, version compatibility, cycles, and explicit bindings
 - callers use generated or typed clients and stable error envelopes
 - calls carry installation, service, actor, and audience-bound scope-bound grants or Core decision receipts as appropriate
+- signed service requests digest the exact transmitted body bytes, which the
+  provider verifies before typed deserialization; a parsed-and-reserialized
+  body is not an equivalent signed request
 - commands use idempotency keys where retries are possible
 - long-running or fan-out operations expose durable job or reconciliation state
 - cross-module workflows use retry and compensation rather than distributed transactions
@@ -232,6 +403,26 @@ Core owns descendant expansion and attaches Organization and authorization revis
 
 For service-to-service calls, modules use dedicated service identity. A context intended for one module cannot be forwarded as downstream authority: the caller exchanges it through Core for the downstream audience, preserving original actor, installation, correlation, and delegation basis while binding the presenting service and declared dependency/contract/action. Core reevaluates current role, Organization, and caller-service authority. The provider validates both the actor's scoped authority and the presenting service's permission to call that contract. Service-only grants are restricted to explicitly authorized system jobs. Modules verify all received context and enforce their own authorization.
 
+Signed service-request verification covers the exact wire body, not a typed
+round trip. For a JSON-bearing call the provider checks the media type and
+body-size boundary, verifies the authorization grant and service-request
+envelope against the raw bytes and correlation identity, and only then
+deserializes the product request. Changing whitespace, field order, or any
+other byte without issuing a matching service request therefore fails closed
+even when the JSON meaning is unchanged.
+
+Dashboard-mediated Component rendering additionally requires one common
+governing Organization node. Dashboard forwards only the intersection of the
+stored Dashboard scope and the actor's inbound Dashboard authority. Its
+Components-audience exchange carries an exact ComponentVersion resource
+assertion containing resource type, version identity, authority revision, and
+the canonical Component governing scope. Dashboard checks the common node
+against both inbound Dashboard and downstream Component grants; Component
+compares the assertion with its authoritative row and repeats the common-node
+check before Dataset execution. A disjoint Component is projected as restricted
+without title, Component metadata, scope, or Dataset identity even when the
+actor independently has authority in both non-overlapping scopes.
+
 No module receives:
 
 - another module's database credentials
@@ -295,6 +486,8 @@ Apply runs in the out-of-process Installation Supervisor through its versioned d
 
 Declared module bootstraps are validated, applied, read back, and checked for drift only through the owning module's typed, idempotent contract. Before apply, referenced inputs are acquired from a configured durable content-addressed source and verified against the locked digest. The receipt records module-specific results; adopting a later UI edit requires a new Blueprint/bootstrap input revision. This is the only Blueprint-managed product-record path and does not create a shared content-package abstraction.
 
+When bootstrap depends on provider-owned validation, the exact locked Manifest selects the dependency target and an opaque payload from the canonical inline input. Generic platform code binds the exact request to a short-lived, one-use signed authorization and passes it unchanged; only the provider interprets the payload, and validation must complete before the owner writes product state. No Core or Supervisor product-specific branch is permitted.
+
 Module enablement, configuration, navigation, role-definition, or Administrator Enrollment Role designation changes made through UI create a new desired Blueprint revision or appear as explicit drift with adopt/reconcile actions. Emergency disablement may apply immediately only through a constrained, non-destructive Apply Authorization Envelope recorded in the Supervisor Ledger; it is a named, audited, optionally expiring operational override and remains drift until adopted or reconciled. Installation receipts record desired and observed enablement/digests so a release cannot claim reproducibility while silently diverging from its lockfile. Reproduction uses the lockfile's resolved non-secret values plus externally resolved secret references.
 
 Human administration, CLI tooling, deployment automation, and LLM clients use the same catalog, validation, plan, apply, and module-owned configuration APIs. An agent never needs direct database access or undocumented deployment glue to assemble an application.
@@ -339,6 +532,10 @@ Component currently owns:
 - versioned presentation over a Dataset major line
 - a thin Table type with last-mile projection, one saved default filter set, display labels, default sort, page size, and viewer affordances
 - chart and stat presentation types added by the current reference application
+- the exact typed Table/visual execution response, render-kind vocabulary, and
+  per-kind payload shape; persisted output carries exact non-nil Component and
+  ComponentVersion identity, while unsaved preview uses the explicit both-nil
+  preview sentinel
 
 Analytical shaping, aggregation, grouping, and bucketing remain Dataset responsibilities rather than separate table-component backends unless those module requirements are deliberately changed.
 
@@ -362,23 +559,32 @@ Dataset major-line sources currently use an append-all contract. A source labele
 
 These rules demonstrate the distinction between platform and module semantics: typed references preserve owner and resource type, while the Dataset and Component modules decide whether payloads are immutable, which operations preserve an id, and how publication affects consumers.
 
-### Current shared relational baseline
+### Current Core relational transition baseline
 
-The transition database still contains these table families together:
+The Core database contains these still-in-process table families together:
 
 - Core candidates: `accounts`, `roles`, `capabilities`, `role_capabilities`, `role_assignments`, `account_delegations`, and `nodes`
 - Forms: option, lookup, field, form, form-version, and field-placement tables
 - Workflows: workflow, version, step, transition, assignment, and instance tables
 - Responses: form-response and response-runtime tables
 - Datasets: dataset, revision, source, and major-materialization tables
-- Components: component and component-version tables
-- Dashboards: dashboard and placement tables
 
-This inventory is an extraction map, not permission for new cross-area relationships. As each feature becomes a module, its tables move into the module database and all remaining consumers switch to public contracts before direct access is removed.
+Components and Dashboards own their product tables in their respective module
+databases and are absent from the Core relational baseline. This Core inventory
+is an extraction map, not permission for new cross-area relationships. As each
+remaining feature becomes a module, its tables move into the module database
+and all consumers switch to public contracts before direct access is removed.
 
 ### Current flat API baseline
 
-Current root API families for users, roles, role assignments, Organization, fields/options/lookups, Forms, Workflows, Responses, Datasets, Components, and Dashboards remain transitional adapters. A feature's module extraction moves the canonical endpoints, schemas, authentication enforcement, and diagnostics to that module. Core may retain a temporary compatibility adapter, but new consumers must bind to the advertised module contract.
+Current root API families for users, roles, role assignments, Organization,
+fields/options/lookups, Forms, Workflows, Responses, and Datasets remain Core
+or transitional endpoints. Components and Dashboard own their product APIs
+and same-origin routes through their enrolled modules. While a provider remains
+in process, a first-party extracted consumer may use its narrowly versioned
+Core Release compatibility contract. Provider extraction removes that adapter
+with the old storage and readers; no adapter for extracted Components or
+Dashboard remains.
 
 ## Frontend And SDK Direction
 
@@ -411,14 +617,13 @@ assets. An SDK update reaches a running module through a new release of that
 module; it does not implicitly replace code inside deployed images or require
 Core and unrelated modules to be redeployed.
 
-Sprint 6C established the Dashboard process and database boundary, but its
-release remains a source/build transition while `tessara-dashboard-module`
-links root `tessara-web` and Core constructs Dashboard-specific web bootstrap
-types. The next transition extracts the canonical SDK/runtime from the current
-`cargo-leptos`, `tessara-web`, `tessara-web-ui`, `tessara-web-http`, module
-contract, and conformance code. Dashboards then adopts that boundary and
-removes its root application dependencies before the same pass is applied to
-the remaining feature modules.
+Sprint 6C established the Dashboard process and database boundary. Sprint 6D
+extracted the canonical contract, runtime, UI SDK/design-system, asset, and
+testkit packages; Sprint 6E completed Dashboard adoption and removed its root
+application dependencies. Sprint 8A applies that completed boundary to
+Components, whose release likewise owns its documents, hydration, assets,
+product APIs, and persistence. Forms, Workflows, Responses, and Datasets remain
+the in-process feature areas awaiting the same pass.
 
 The SDK/runtime dependency graph must not lead from a module to the Core
 application binary, root route tree, Core API state, Core-private DTOs, or
@@ -451,7 +656,10 @@ The installation must remain locally operable without a mandatory central Tessar
 6. Finish Dashboard source/build independence by adopting those packages, owning its routes/assets, and removing root Core/web application dependencies.
 7. Add deterministic Blueprint, lockfile, plan, apply, and read-back tooling.
 8. Prove cross-module scope and resource lifecycle behavior.
-9. Apply the proven SDK/runtime and full-stack extraction pass to Components, Datasets, Responses, Workflows, and Forms.
+9. Apply the proven SDK/runtime and full-stack extraction pass to Components,
+   Datasets, Responses, Workflows, and Forms through the
+   [Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md),
+   completing its implementation proof classes before formal certification.
 10. Harden migration, upgrades, backup/restore, diagnostics, and multiple independently supported application compositions.
 
 This sequence deliberately establishes the platform contract before many applications depend on the current shared structure.

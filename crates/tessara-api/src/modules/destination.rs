@@ -54,15 +54,6 @@ const DATASET_REVISION_ID: &[ParameterSpec] = &[
         value_type: RouteParameterType::Uuid,
     },
 ];
-const COMPONENT_REF: &[ParameterSpec] = &[ParameterSpec {
-    name: "component_ref",
-    value_type: RouteParameterType::String,
-}];
-const DASHBOARD_ID: &[ParameterSpec] = &[ParameterSpec {
-    name: "dashboard_id",
-    value_type: RouteParameterType::Uuid,
-}];
-
 const FORMS_READ: &[&str] = &["forms:read", "forms:manage"];
 const FORMS_MANAGE: &[&str] = &["forms:manage"];
 const WORKFLOWS_READ: &[&str] = &["workflows:read", "workflows:manage"];
@@ -75,10 +66,6 @@ const RESPONSES_READ: &[&str] = &[
 const RESPONSES_WRITE: &[&str] = &["submissions:respond", "submissions:manage"];
 const DATASETS_READ: &[&str] = &["datasets:read", "datasets:manage"];
 const DATASETS_MANAGE: &[&str] = &["datasets:manage"];
-const COMPONENTS_READ: &[&str] = &["components:read", "components:manage"];
-const COMPONENTS_MANAGE: &[&str] = &["components:manage"];
-const DASHBOARDS_READ: &[&str] = &["dashboards:read"];
-const DASHBOARDS_MANAGE: &[&str] = &["dashboards:manage"];
 const SCOPED_RECORDS_READ: &[&str] = &[
     "tessara.reference.scoped-records:read",
     "tessara.reference.scoped-records:manage",
@@ -224,15 +211,6 @@ fn route_spec(name: &str) -> Option<RouteSpec> {
         "datasets.create" | "datasets.edit" | "datasets.revision_edit" => {
             (dataset_parameters(name), DATASETS_MANAGE)
         }
-        "components.directory"
-        | "components.detail"
-        | "components.versions"
-        | "components.view" => (COMPONENT_REF_OR_NONE(name), COMPONENTS_READ),
-        "components.create" | "components.edit" => (COMPONENT_REF_OR_NONE(name), COMPONENTS_MANAGE),
-        "dashboards.directory" | "dashboards.detail" | "dashboards.view" => {
-            (DASHBOARD_ID_OR_NONE(name), DASHBOARDS_READ)
-        }
-        "dashboards.create" | "dashboards.edit" => (DASHBOARD_ID_OR_NONE(name), DASHBOARDS_MANAGE),
         "tessara.reference.scoped-records.directory" => (NONE, SCOPED_RECORDS_READ),
         _ => return None,
     };
@@ -269,17 +247,6 @@ fn route_name(name: &str) -> &'static str {
         "datasets.revision_detail" => "datasets.revision_detail",
         "datasets.revision_edit" => "datasets.revision_edit",
         "datasets.edit" => "datasets.edit",
-        "components.directory" => "components.directory",
-        "components.create" => "components.create",
-        "components.detail" => "components.detail",
-        "components.edit" => "components.edit",
-        "components.versions" => "components.versions",
-        "components.view" => "components.view",
-        "dashboards.directory" => "dashboards.directory",
-        "dashboards.create" => "dashboards.create",
-        "dashboards.detail" => "dashboards.detail",
-        "dashboards.edit" => "dashboards.edit",
-        "dashboards.view" => "dashboards.view",
         "tessara.reference.scoped-records.directory" => {
             "tessara.reference.scoped-records.directory"
         }
@@ -324,30 +291,6 @@ fn dataset_parameters(name: &str) -> &'static [ParameterSpec] {
     }
 }
 
-#[allow(non_snake_case)]
-fn COMPONENT_REF_OR_NONE(name: &str) -> &'static [ParameterSpec] {
-    if matches!(
-        name,
-        "components.detail" | "components.edit" | "components.versions" | "components.view"
-    ) {
-        COMPONENT_REF
-    } else {
-        NONE
-    }
-}
-
-#[allow(non_snake_case)]
-fn DASHBOARD_ID_OR_NONE(name: &str) -> &'static [ParameterSpec] {
-    if matches!(
-        name,
-        "dashboards.detail" | "dashboards.edit" | "dashboards.view"
-    ) {
-        DASHBOARD_ID
-    } else {
-        NONE
-    }
-}
-
 fn render_path(
     route: &str,
     parameters: &std::collections::BTreeMap<String, SemanticParameterValue>,
@@ -356,11 +299,6 @@ fn render_path(
         Some(SemanticParameterValue::Uuid(value)) => Some(value.to_string()),
         _ => None,
     };
-    let string = |name: &str| match parameters.get(name) {
-        Some(SemanticParameterValue::String(value)) => Some(encode_path_segment(value)),
-        _ => None,
-    };
-
     Some(match route {
         "forms.directory" => "/forms".to_string(),
         "forms.create" => "/forms/new".to_string(),
@@ -391,35 +329,9 @@ fn render_path(
             uuid("revision_id")?
         ),
         "datasets.edit" => format!("/datasets/{}/edit", uuid("dataset_id")?),
-        "components.directory" => "/components".to_string(),
-        "components.create" => "/components/new".to_string(),
-        "components.detail" => format!("/components/{}", string("component_ref")?),
-        "components.edit" => format!("/components/{}/edit", string("component_ref")?),
-        "components.versions" => {
-            format!("/components/{}/versions", string("component_ref")?)
-        }
-        "components.view" => format!("/components/{}/view", string("component_ref")?),
-        "dashboards.directory" => "/dashboards".to_string(),
-        "dashboards.create" => "/dashboards/new".to_string(),
-        "dashboards.detail" => format!("/dashboards/{}", uuid("dashboard_id")?),
-        "dashboards.edit" => format!("/dashboards/{}/edit", uuid("dashboard_id")?),
-        "dashboards.view" => format!("/dashboards/{}/view", uuid("dashboard_id")?),
         "tessara.reference.scoped-records.directory" => "/reference/scoped-records".to_string(),
         _ => return None,
     })
-}
-
-fn encode_path_segment(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
-            encoded.push(char::from(byte));
-        } else {
-            use std::fmt::Write as _;
-            write!(&mut encoded, "%{byte:02X}").expect("writing to String cannot fail");
-        }
-    }
-    encoded
 }
 
 #[cfg(test)]
@@ -434,26 +346,6 @@ mod tests {
     use crate::auth::{AccountContext, CapabilityScope};
 
     use super::{DestinationResolutionStatusV1, resolve};
-
-    #[test]
-    fn resolves_registered_path_and_encodes_caller_string_as_one_segment() {
-        let installation_id = Uuid::new_v4();
-        let destination = SemanticDestination {
-            owner: ResourceOwner::CoreInstallation { installation_id },
-            route: SemanticRouteName::new("components.detail").expect("route"),
-            parameters: BTreeMap::from([(
-                "component_ref".to_string(),
-                SemanticParameterValue::String("slug/../../admin?x=1".to_string()),
-            )]),
-        };
-
-        let result = resolve(&destination, installation_id, &account("components:read"));
-        assert_eq!(result.status, DestinationResolutionStatusV1::Resolved);
-        assert_eq!(
-            result.path.as_deref(),
-            Some("/components/slug%2F..%2F..%2Fadmin%3Fx%3D1")
-        );
-    }
 
     #[test]
     fn unknown_wrong_owner_and_unauthorized_destinations_never_return_a_path() {
@@ -502,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_manage_does_not_resolve_reader_destination() {
+    fn extracted_dashboard_destination_is_not_core_owned() {
         let installation_id = Uuid::new_v4();
         let destination = SemanticDestination {
             owner: ResourceOwner::CoreInstallation { installation_id },
@@ -510,11 +402,11 @@ mod tests {
             parameters: BTreeMap::new(),
         };
 
-        let result = resolve(&destination, installation_id, &account("dashboards:manage"));
+        let result = resolve(&destination, installation_id, &account("admin:all"));
         assert_eq!(result.status, DestinationResolutionStatusV1::Rejected);
         assert_eq!(
             result.finding.as_ref().map(|finding| finding.code),
-            Some("semantic_destination_unauthorized")
+            Some("semantic_destination_unknown")
         );
     }
 
@@ -582,26 +474,6 @@ mod tests {
                 "datasets.edit",
                 "/datasets/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit",
             ),
-            ("components.directory", "/components"),
-            ("components.create", "/components/new"),
-            ("components.detail", "/components/component-slug"),
-            ("components.edit", "/components/component-slug/edit"),
-            ("components.versions", "/components/component-slug/versions"),
-            ("components.view", "/components/component-slug/view"),
-            ("dashboards.directory", "/dashboards"),
-            ("dashboards.create", "/dashboards/new"),
-            (
-                "dashboards.detail",
-                "/dashboards/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            ),
-            (
-                "dashboards.edit",
-                "/dashboards/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit",
-            ),
-            (
-                "dashboards.view",
-                "/dashboards/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/view",
-            ),
             (
                 "tessara.reference.scoped-records.directory",
                 "/reference/scoped-records",
@@ -638,17 +510,6 @@ mod tests {
                         SemanticParameterValue::Uuid(resource_id),
                     ),
                 ]),
-                "components.detail"
-                | "components.edit"
-                | "components.versions"
-                | "components.view" => BTreeMap::from([(
-                    "component_ref".to_string(),
-                    SemanticParameterValue::String("component-slug".to_string()),
-                )]),
-                "dashboards.detail" | "dashboards.edit" | "dashboards.view" => BTreeMap::from([(
-                    "dashboard_id".to_string(),
-                    SemanticParameterValue::Uuid(resource_id),
-                )]),
                 _ => BTreeMap::new(),
             };
             let destination = SemanticDestination {

@@ -15,15 +15,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use tessara_module_contract::{
-    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AdministratorEligibilityDecisionV1,
-    AdministratorEnrollmentClaimKindV1, AuthorizationGrantOperationV1, AuthorizationGrantV2,
-    CONTRACT_SCHEMA_VERSION_V1, CapabilityScopeBindingV1, DependencyBindingKey,
-    EnrollmentRedemptionResultV1, EnrollmentReservationV1, ExternalIdentityAssertionV1,
-    FunctionalContractId, LocalOperatorAuthorizationV1, ModuleDefinitionId, ModuleManifest,
-    NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
-    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
-    ResourceAuthorizationAssertionV2, SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1,
-    ShellThemeV1, SignedEnvelopeV1,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AdministratorEligibilityDecisionV1,
+    AdministratorEnrollmentClaimKindV1, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
+    AuthorizationGrantV3, CONTRACT_SCHEMA_VERSION_V1, CapabilityScopeBindingV1,
+    DependencyBindingKey, EnrollmentRedemptionResultV1, EnrollmentReservationV1,
+    ExternalIdentityAssertionV1, FunctionalContractId, LocalOperatorAuthorizationV1,
+    ModuleDefinitionId, ModuleManifest, ModuleServicePrincipalV1, NavigationContributionId,
+    NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
+    PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV2,
+    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -562,8 +562,9 @@ struct AuthorizationExchangeRequest {
 async fn exchange_authorization(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
+    headers: HeaderMap,
     Json(payload): Json<AuthorizationExchangeRequest>,
-) -> ApiResult<Json<SignedEnvelopeV1<AuthorizationGrantV2>>> {
+) -> ApiResult<Json<SignedEnvelopeV1<AuthorizationGrantV3>>> {
     if payload.schema_version != 1 {
         return Err(restricted_authorization());
     }
@@ -638,13 +639,18 @@ async fn exchange_authorization(
         .await?;
     }
     let now = Utc::now();
-    let grant = AuthorizationGrantV2 {
-        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+    let correlation_id = request_correlation_id_or_new(&headers);
+    let grant = AuthorizationGrantV3 {
+        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
         installation_id: payload.installation_id,
         original_actor_id: request.account.account_id,
-        presenting_service: ModuleDefinitionId::new("tessara.core")
-            .map_err(|error| ApiError::Internal(error.into()))?,
-        audience_module_instance_id: payload.audience_module_instance_id,
+        correlation_id,
+        presenting_service: ModuleServicePrincipalV1::CoreGateway,
+        audience: AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: payload.audience_module_instance_id,
+            module_definition_id: ModuleDefinitionId::new(&target_definition)
+                .map_err(|error| ApiError::Internal(error.into()))?,
+        },
         dependency_binding: payload.dependency_binding,
         functional_contract: payload.functional_contract,
         action: payload.action,
@@ -862,6 +868,15 @@ fn restricted_authorization() -> ApiError {
     ApiError::Forbidden("module action unavailable".into())
 }
 
+pub(crate) fn request_correlation_id_or_new(headers: &HeaderMap) -> Uuid {
+    headers
+        .get("x-tessara-correlation-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .filter(|value| !value.is_nil())
+        .unwrap_or_else(Uuid::new_v4)
+}
+
 async fn proxy_scoped_records_root(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -1045,7 +1060,7 @@ async fn proxy_manifest_module_document(
                 display_name: request.account.display_name.clone(),
                 email: Some(request.account.email.clone()),
             },
-            theme: ShellThemeV1::Dark,
+            theme: ShellThemeV1::System,
             navigation,
             return_destination: "/".into(),
             locale: "en-US".into(),
@@ -1061,13 +1076,16 @@ async fn proxy_manifest_module_document(
         })
         .map_err(|error| ApiError::Internal(error.into()))?;
     let grant = protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
-        .sign(AuthorizationGrantV2 {
-            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+        .sign(AuthorizationGrantV3 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
             installation_id,
             original_actor_id: request.account.account_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core")
-                .map_err(|error| ApiError::Internal(error.into()))?,
-            audience_module_instance_id: instance_id,
+            correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: instance_id,
+                module_definition_id: manifest.definition_id.clone(),
+            },
             dependency_binding: DependencyBindingKey::new("tessara.core.module-document")
                 .map_err(|error| ApiError::Internal(error.into()))?,
             functional_contract: route.functional_contract,
@@ -1254,6 +1272,7 @@ async fn proxy_module_get(
             request,
             action,
             AuthorizationGrantOperationV1::Read,
+            correlation_id,
         )
         .await?;
         outbound = outbound.header(
@@ -1459,7 +1478,7 @@ async fn scoped_records_shell_context(
             display_name: request.account.display_name.clone(),
             email: Some(request.account.email.clone()),
         },
-        theme: ShellThemeV1::Dark,
+        theme: ShellThemeV1::System,
         navigation: vec![
             NavigationProjectionV1 {
                 contribution_id: NavigationContributionId::new("tessara.core.home")
@@ -1499,13 +1518,16 @@ async fn proxy_authorized_module_request(
     path: &str,
     body: Option<Bytes>,
 ) -> ApiResult<Response> {
-    let envelope = scoped_records_authorization(pool, request, action, operation).await?;
+    let correlation_id = Uuid::new_v4();
+    let envelope =
+        scoped_records_authorization(pool, request, action, operation, correlation_id).await?;
     let encoded = URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&envelope).map_err(|error| ApiError::Internal(error.into()))?);
     let client = reqwest::Client::new();
     let mut outbound = client
         .request(method, format!("{}/{}", scoped_records_url(), path))
         .header("x-tessara-authorization", encoded)
+        .header("x-tessara-correlation-id", correlation_id.to_string())
         .header(header::CONTENT_TYPE.as_str(), "application/json");
     if let Some(body) = body {
         outbound = outbound.body(body.to_vec());
@@ -1522,7 +1544,8 @@ async fn scoped_records_authorization(
     request: &AuthenticatedRequest,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> ApiResult<SignedEnvelopeV1<AuthorizationGrantV2>> {
+    correlation_id: Uuid,
+) -> ApiResult<SignedEnvelopeV1<AuthorizationGrantV3>> {
     let instance = sqlx::query(
         "SELECT id,installation_id,definition_id,enabled
          FROM module_instances
@@ -1576,13 +1599,19 @@ async fn scoped_records_authorization(
     )
     .await?;
     let now = Utc::now();
-    let grant = AuthorizationGrantV2 {
-        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+    let grant = AuthorizationGrantV3 {
+        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
         installation_id,
         original_actor_id: request.account.account_id,
-        presenting_service: ModuleDefinitionId::new("tessara.core")
+        correlation_id,
+        presenting_service: ModuleServicePrincipalV1::CoreGateway,
+        audience: AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: instance_id,
+            module_definition_id: ModuleDefinitionId::new(
+                tessara_reference_scoped_records::MODULE_DEFINITION_ID,
+            )
             .map_err(|error| ApiError::Internal(error.into()))?,
-        audience_module_instance_id: instance_id,
+        },
         dependency_binding: DependencyBindingKey::new("tessara.core.scoped-records")
             .map_err(|error| ApiError::Internal(error.into()))?,
         functional_contract: FunctionalContractId::new("tessara.reference.scoped-records.record")
@@ -1702,13 +1731,12 @@ fn module_control_url(definition: &str) -> ApiResult<String> {
         .map(|value| parse_module_control_endpoints(&value))
         .transpose()?
         .and_then(|endpoints| endpoints.get(definition).cloned());
-    let registration = definition.rsplit('.').next().unwrap_or(definition);
     let registered = std::env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .map(|value| parse_module_control_endpoints(&value))
         .transpose()?
-        .and_then(|endpoints| endpoints.get(registration).cloned());
+        .and_then(|endpoints| endpoints.get(definition).cloned());
     let endpoint = configured.or(registered).or_else(|| match definition {
         tessara_reference_scoped_records::MODULE_DEFINITION_ID => Some(scoped_records_url()),
         _ => None,
@@ -1882,7 +1910,7 @@ async fn persist_module_configuration(
             .await?
             .ok_or_else(|| ApiError::NotFound(format!("module instance {instance_id}")))?;
     let base_url = module_control_url(&definition)?;
-    let validation: Value = reqwest::Client::new()
+    let response = reqwest::Client::new()
         .post(format!("{base_url}/api/configuration/validate"))
         .header(
             "x-tessara-module-control-key",
@@ -1894,11 +1922,9 @@ async fn persist_module_configuration(
         .await
         .map_err(|_| {
             ApiError::ServiceUnavailable("module configuration validator unavailable".into())
-        })?
-        .error_for_status()
-        .map_err(|_| {
-            ApiError::ServiceUnavailable("module configuration validator unavailable".into())
-        })?
+        })?;
+    require_module_configuration_validation_status(response.status())?;
+    let validation: Value = response
         .json()
         .await
         .map_err(|error| ApiError::Internal(error.into()))?;
@@ -1943,6 +1969,23 @@ async fn persist_module_configuration(
         .await?;
     }
     Ok(validation)
+}
+
+fn require_module_configuration_validation_status(status: StatusCode) -> ApiResult<()> {
+    if status.is_success() {
+        return Ok(());
+    }
+    if matches!(
+        status,
+        StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY
+    ) {
+        return Err(ApiError::BadRequest(
+            "module configuration shape is invalid".into(),
+        ));
+    }
+    Err(ApiError::ServiceUnavailable(
+        "module configuration validator unavailable".into(),
+    ))
 }
 
 fn configuration_form_payload(
@@ -2618,6 +2661,20 @@ mod tests {
                 .to_string()
                 .contains("unknown module configuration fields")
         );
+    }
+
+    #[test]
+    fn module_configuration_shape_rejection_is_a_validation_error() {
+        for status in [StatusCode::BAD_REQUEST, StatusCode::UNPROCESSABLE_ENTITY] {
+            assert!(matches!(
+                require_module_configuration_validation_status(status),
+                Err(ApiError::BadRequest(_))
+            ));
+        }
+        assert!(matches!(
+            require_module_configuration_validation_status(StatusCode::INTERNAL_SERVER_ERROR),
+            Err(ApiError::ServiceUnavailable(_))
+        ));
     }
 
     #[test]

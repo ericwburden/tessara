@@ -1523,10 +1523,9 @@ fn ProjectionAvailableFields(
                             .collect_view()}
                     </div>
                     <div class="dataset-projection-builder__options">
-                        <For
-                            each=move || active_fields.clone()
-                            key=|field| field.key.clone()
-                            children=move |field| {
+                        {active_fields
+                            .into_iter()
+                            .map(|field| {
                                 view! {
                                     <ProjectionAvailableFieldOption
                                         field=field
@@ -1534,8 +1533,8 @@ fn ProjectionAvailableFields(
                                         on_toggle_field=on_toggle_field
                                     />
                                 }
-                            }
-                        />
+                            })
+                            .collect_view()}
                     </div>
                 }
                     .into_any()

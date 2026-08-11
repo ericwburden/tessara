@@ -163,25 +163,11 @@ pub fn App(initial_shell_navigation: Option<ShellNavigationResponseV1>) -> impl 
 
     view! {
         <Router>
-            <ModuleLifecycleRouteMonitor/>
             <Routes
                 fallback=|| view! { <routes::NotFoundPage/> }
                 children=ToChildren::to_children(routes::routes)
             />
         </Router>
-    }
-}
-
-#[component]
-fn ModuleLifecycleRouteMonitor() -> impl IntoView {
-    #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
-    {
-        let location = leptos_router::hooks::use_location();
-        Effect::new(move |_| {
-            if !location.pathname.get().starts_with("/dashboards") {
-                crate::features::module_lifecycle::deactivate_current();
-            }
-        });
     }
 }
 

@@ -34,6 +34,7 @@ This direction is designed for both human and machine composition. An LLM or oth
 - **Application Release** is a reproducible, supportable resolved software, module-enablement, configuration, navigation, role-policy, and declared-bootstrap composition represented by a lockfile and installation receipt.
 - **Feature Declaration** is versioned machine-readable discovery metadata with a stable namespaced feature identifier, description, use cases, inputs, outcomes, constraints, and links to the contracts, resources, routes, configuration, and security capabilities that realize it.
 - **Module Bootstrap Declaration** is an optional, module-owned, versioned and idempotent instruction for creating or reconciling that module's catalogs or initial product records through its supported API. Its locked input is either a normalized non-secret value or a durable content-addressed reference with a verified digest. It is not a generic or portable content package.
+- A Module Bootstrap Declaration may opt into one manifest-declared dependency validation before owner writes. The declaration names the locked dependency binding, functional contract/version, action, method/path, resolved-provider audience rule, and JSON Pointer selecting an opaque value from the canonical inline bootstrap input.
 - **Functional Contract** is a versioned API, event, resource, or behavior contract provided or required by a module.
 - **Security Capability** is a namespaced permission advertised by a module and incorporated into Core-owned RBAC.
 - **Authorization Grant** is a short-lived, verifiable assertion that binds one Security Capability and its scope to an Application Installation, target audience, route or dependency/contract action, original actor when acting on a user's behalf, and the presenting gateway or module service identity. Cross-module grants also bind the declared dependency. It carries authorization and Organization revision/freshness data; delegation or ownership authority is separately bound rather than inferred. A service-only grant is valid only for an explicitly authorized system job.
@@ -144,7 +145,7 @@ manifest containing at least:
 - typed configuration schema, secret-reference fields, and validation endpoint
 - health, readiness, compatibility, and status endpoints
 - database migration and data-retention metadata
-- optional module-owned bootstrap schema, validation/apply/read-back endpoints, and receipt contract
+- optional module-owned bootstrap schema, validation/apply/read-back endpoints and receipt contract, plus an optional dependency-validation target bound to a declared consumed service action
 - conformance suite version and support metadata
 
 Core validates trust, exact Core/platform tuple, dependency closure, contract
@@ -300,6 +301,8 @@ The desired composition cannot silently diverge from administrator changes. A mo
 
 Ongoing users, assignments, product records, and secret values are not copied into a lockfile. Administrator enrollment creates ordinary Core runtime user, role-assignment, and redemption records; only the Supervisor Ledger's one-way verifier, non-secret claim identifier/generation/kind/lifecycle, reservation, operator authorization, and outcome are retained outside the Blueprint and lockfile. A declared module bootstrap is the narrow product-record exception: the lockfile records its module-specific schema version and normalized value or durable content-addressed input reference plus digest, and the installation receipt records the module's idempotent result. The owning module alone validates, applies, and reports drift for it; adopting a later UI edit into desired bootstrap state requires a new Blueprint/input revision. This supports reproducible Form catalogs or similar initialization without inventing a platform-wide content-pack type.
 
+For a declared bootstrap dependency validation, the platform resolves the target only from the source-exact Manifest and lockfile, selects the declared value from the canonical inline bootstrap input, and digests the exact request. A short-lived signed authorization binds installation, owner definition/instance, input digest, desired revision, apply sequence, target-plan digest, dependency binding, contract/version, action, method/path, audience, and request digest. The Supervisor conveys that invocation unchanged; Core and the Supervisor neither branch on product identity nor interpret the payload. The selected provider verifies the materializing service identity and exact binding, consumes the authorization once, and alone applies provider-owned semantics. Missing, mismatched, expired, replayed, or rejected validation fails before owner product writes.
+
 LLMs use Feature Declarations plus the same versioned catalog, schema, plan, apply, and module-owned configuration or product APIs as other clients. They do not write databases, improvise unrecorded deployment steps, or bypass validation. Future MCP or agent adapters are thin clients over these ordinary platform contracts, not a separate source of product truth.
 
 ## Deployment And Support Model
@@ -336,13 +339,24 @@ Forms/Workflows -> Responses -> Datasets -> Components -> Dashboards
 
 That diagram describes product capability and data flow, not deployment topology. Forms, Workflows, Responses, Datasets, Components, and Dashboards become separate full-stack modules. Organization, users, sessions, RBAC, the shell, and the module control plane remain in Core.
 
-The original Rust crates, single Axum service, shared database, and root-owned
-feature routes remain the transition baseline for areas not yet extracted.
-Sprint 6C moved Dashboard runtime and data into a real Module Release/Instance,
-but Dashboard remains in a source/build transition until it adopts the
-canonical module SDK/runtime and no longer links the root web application or
-Core-private bootstrap types. Existing feature-crate boundaries are useful
-extraction seams, but compile-time separation inside Core is not the target.
+The original Rust crates, Core Axum service, Core database, and root-owned
+feature routes remain the transition baseline only for areas not yet
+extracted. Sprint 6C established Dashboard's process and database boundary,
+and Sprint 6E completed its canonical SDK/runtime adoption and source/build
+independence. Sprint 8A applies that completed pathway to Components, which now
+has its own independently built and deployed Module Release/Instance,
+database, product routes, and assets. Existing in-process feature-crate
+boundaries remain useful extraction seams, but compile-time separation inside
+Core is not the target.
+
+Neither Components nor Dashboard appears in Core's frozen transition catalog.
+That catalog contains exactly `tessara.forms`, `tessara.workflows`,
+`tessara.responses`, `tessara.datasets`, and `tessara.migration`. Components
+and Dashboard appear only through their enrolled Module Releases/Instances and
+manifest contributions. The reference navigation order is Scoped Records `7`,
+Components `8`, and Dashboard `9`; Core must not add duplicate inventory or
+navigation entries for either extracted product module.
+
 During Sprint 6A, current areas could publish explicitly non-installable
 `transitional_in_process` contribution descriptors for discovery, contracts,
 security capabilities, and navigation. A descriptor may reserve a future
@@ -352,9 +366,29 @@ by the Supervisor.
 
 When a first extracted module temporarily consumes an in-process provider, the current Core Release may expose a narrowly versioned, first-party Core Release compatibility contract. That binding is trusted as a Core Release contract, not as a module provider, and is prohibited in new external application Blueprints. Typed references to its records use `core_installation` ownership and a transition-specific resource type; they never pretend the descriptor owns a Module Instance.
 
-Physical extraction creates a real Module Release/Instance and explicitly migrates both data and references. The new provider emits an old-to-new mapping; each consumer rewrites its own stored references through a versioned rebinding/migration contract; receipts prove completeness; and the Core compatibility adapter remains read-only until all consumers have moved. Old Core-owned references retain their original owner/type and resolve with an explicit migrated/retired outcome rather than silently becoming module-owned. This deliberate pre-pilot migration is permitted because no production application depends on the transition layout.
+During pre-production Phase 8, physical extraction creates a real Module
+Release/Instance through one offline, destructive, source-exact
+materialization. Each owner initializes its fresh database and rebuilds the
+disposable reference-application seed through its typed bootstrap contract;
+consumers create new Module Instance references directly from provider
+read-back. The cutover removes the old product storage, adapter, readers, and
+payload shapes together. Old transition references remain owner/type-stable
+historical evidence but are unsupported normal-runtime inputs and are never
+silently reinterpreted or reported through a migration ledger. A failed
+attempt retains evidence, destroys its exact partial disposable topology and
+volumes, and reruns from empty rather than repairing or resuming it. Supported
+legacy import, mapping, rebinding, partial-failure resume, and migration audit
+belong to Phase 9.
 
-Because no production application depends on the current internal database layout, Tessara may restructure data and references directly during this transition. The project should use that freedom to establish clean ownership boundaries instead of preserving accidental coupling.
+Sprint 8B and later extractions apply this architecture through the
+[Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md).
+The playbook makes Core subtraction, consumer cutover, fresh seed ownership,
+materialization/no-op/recovery, fixtures, runners, smoke, and acceptance part
+of implementation readiness rather than late certification discovery.
+
+Because no production application depends on the current internal database
+layout, Tessara uses this fresh policy to establish clean ownership boundaries
+instead of preserving accidental coupling.
 
 ## Explicit Non-Goals
 

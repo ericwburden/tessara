@@ -104,11 +104,7 @@ pub fn dashboard_route_bootstrap() -> Option<DashboardRouteBootstrap> {
     let bootstrap = use_context::<DashboardRouteBootstrap>();
     #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
     {
-        return INITIAL_BOOTSTRAP_AVAILABLE.with(
-            |available| {
-                if available.get() { bootstrap } else { None }
-            },
-        );
+        INITIAL_BOOTSTRAP_AVAILABLE.with(|available| if available.get() { bootstrap } else { None })
     }
     #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
     bootstrap

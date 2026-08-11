@@ -41,7 +41,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-module-runtime = { path = "../tessara-module-runtime", optional = true }
-tessara-module-ui = { path = "../tessara-module-ui", default-features = false }
+tessara-module-ui = { path = "../tessara-module-ui", default-features = false, features = ["components"] }
+leptos = { workspace = true }
 tokio = { workspace = true, optional = true }
 uuid = { workspace = true }
 wasm-bindgen = { workspace = true, optional = true }

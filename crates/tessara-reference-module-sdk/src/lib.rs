@@ -2,19 +2,22 @@
 
 use serde::{Deserialize, Serialize};
 use tessara_module_contract::ModuleManifest;
-use tessara_module_ui::{ShellPresentation, escape_text, render_module_document};
+use tessara_module_ui::{
+    MODULE_UI_CSS_SHA256, ModuleDocumentAssets, ModuleReleaseMetadata, ShellPresentation,
+    render_module_view_document,
+};
 use uuid::Uuid;
 
 pub const DEFINITION_ID: &str = "tessara.reference.module-sdk";
-pub const RELEASE_VERSION: &str = "1.0.0";
+pub const RELEASE_VERSION: &str = "1.0.1";
 pub const READ_CAPABILITY: &str = "tessara.reference.module-sdk:read";
 pub const ROOT_PATH: &str = "/reference/module-sdk";
-pub const MODULE_SHELL_CSS_DIGEST: &str =
-    "sha256:ca238aca616f242bfa144764a09ae4a76d0b6f075a288604cbb333d90859af46";
-pub const MODULE_SHELL_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:ca238aca616f242bfa144764a09ae4a76d0b6f075a288604cbb333d90859af46/module-shell.css";
+pub const MODULE_UI_CSS_DIGEST: &str =
+    "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe/module-ui.css";
 pub const MODULE_SHELL_JS_DIGEST: &str =
     "sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
-pub const MODULE_SHELL_JS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.0/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js";
+pub const MODULE_SHELL_JS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js";
 
 pub fn manifest() -> ModuleManifest {
     serde_json::from_str(include_str!("../manifest.json"))
@@ -74,14 +77,22 @@ pub fn render_reference_document(
     presentation: &ShellPresentation,
     configuration: &ReferenceConfiguration,
 ) -> String {
-    render_module_document(
+    use leptos::prelude::*;
+    let display_label = configuration.display_label.clone();
+    render_module_view_document(
         presentation,
-        MODULE_SHELL_CSS_PATH,
-        Some(MODULE_SHELL_JS_PATH),
-        &format!(
-            "<section aria-labelledby=\"reference-title\"><h1 id=\"reference-title\">{}</h1><p>This non-product module proves independent manifest, runtime, UI, configuration, health, diagnostics, asset, outage, and shutdown behavior.</p><p><a href=\"/reference/module-sdk/diagnostics\">Open sanitized diagnostics</a></p></section>",
-            escape_text(&configuration.display_label)
-        ),
+        &ModuleDocumentAssets {
+            stylesheets: vec![MODULE_UI_CSS_PATH.into()],
+            deferred_scripts: Vec::new(),
+            hydration_script: Some(MODULE_SHELL_JS_PATH.into()),
+        },
+        &ModuleReleaseMetadata {
+            definition_id: DEFINITION_ID.into(),
+            release_version: RELEASE_VERSION.into(),
+            asset_digest: format!("sha256:{MODULE_UI_CSS_SHA256}"),
+        },
+        None,
+        || view! { <section class="route-panel reference-module" aria-labelledby="reference-title"><h1 id="reference-title">{display_label}</h1><p>"This non-product module proves independent manifest, runtime, UI, configuration, health, diagnostics, asset, outage, and shutdown behavior."</p><p><a class="button" href="/reference/module-sdk/diagnostics">"Open sanitized diagnostics"</a></p></section> },
     )
 }
 
@@ -146,8 +157,8 @@ mod tests {
             .unwrap();
         assert_eq!(manifest.browser_routes.len(), 3);
         assert_eq!(
-            MODULE_SHELL_CSS_DIGEST,
-            format!("sha256:{}", tessara_module_ui::MODULE_SHELL_CSS_SHA256)
+            MODULE_UI_CSS_DIGEST,
+            format!("sha256:{}", tessara_module_ui::MODULE_UI_CSS_SHA256)
         );
         assert_eq!(
             MODULE_SHELL_JS_DIGEST,

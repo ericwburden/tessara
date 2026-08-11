@@ -28,8 +28,6 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
             "submissions:manage",
             "operations:view",
             "datasets:read",
-            "components:read",
-            "dashboards:read",
         ],
     ),
     (
@@ -44,11 +42,11 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
 /// [`BUILT_IN_ROLE_CAPABILITY_SEED_SHA256`]. This coupling makes a membership
 /// change require both a new digest and an intentional version change.
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_VERSION: &str =
-    "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68";
+    "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c";
 
 /// SHA-256 of [`built_in_role_capability_seed_canonical_bytes`].
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_SHA256: &str =
-    "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600";
+    "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609";
 
 /// Returns the canonical bytes covered by the built-in membership digest.
 ///
@@ -310,10 +308,6 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
             "datasets:read_confidential",
             "Read confidential and restricted dataset rows when dataset visibility allows access",
         ),
-        ("components:manage", "Manage component definitions"),
-        ("components:read", "Inspect component definitions"),
-        ("dashboards:manage", "Manage dashboard definitions"),
-        ("dashboards:read", "Inspect dashboard definitions"),
         (
             "composition:read",
             "Inspect application composition and receipts",
@@ -502,11 +496,11 @@ mod tests {
     fn built_in_role_capability_seed_contract_is_exact_and_review_versioned() {
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_VERSION,
-            "sprint-6a-role-capabilities-v1+sha256.2c21a9ebed68"
+            "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c"
         );
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_SHA256,
-            "2c21a9ebed6870c0245a2b1b131e2b053533b0cbae698e8594295eeba92be600"
+            "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609"
         );
         assert_eq!(
             super::sha256_hex(&built_in_role_capability_seed_canonical_bytes()),
@@ -533,28 +527,20 @@ mod tests {
     }
 
     #[test]
-    fn squashed_baseline_migration_remains_immutable() {
-        assert_eq!(fnv1a(BASELINE), 0x40b7_f317_ba89_3ea3);
+    fn sprint_8a_core_fresh_baseline_excludes_component_product_storage() {
+        assert_eq!(fnv1a(BASELINE), 0x0d13_468c_0638_877f);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
-        assert!(baseline.contains(
-            "CREATE TYPE component_type AS ENUM ('table', 'bar', 'line', 'pie', 'donut', 'stat_card');"
-        ));
-        assert!(baseline.contains("component_versions_component_type_supported_chk"));
-        assert!(baseline.contains("CREATE TYPE component_lifecycle_state"));
-        assert!(baseline.contains("CREATE TABLE component_version_change_events"));
-        assert!(baseline.contains("component_version_change_events_immutable"));
-        assert!(baseline.contains("component_versions_resource_revision"));
-        for kind in ["table", "bar", "line", "pie", "donut", "stat_card"] {
-            assert!(baseline.contains(&format!("'{kind}'::component_type")));
-        }
-        assert!(!baseline.contains("component_versions_component_type_table_chk"));
+        assert!(!baseline.contains("CREATE TABLE components ("));
+        assert!(!baseline.contains("CREATE TABLE component_versions ("));
+        assert!(!baseline.contains("CREATE TABLE component_version_change_events ("));
+        assert!(!baseline.contains("CREATE TYPE component_type AS ENUM"));
     }
 
     #[test]
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "09427738d3cf5496c91904f578a63725bc867a3d0e16f75f9bd92a74a3d305c0"
+            "49d1b2af75c5a31335e5cc855a615e571c05d7b352a3e0de96b4aa6829ff8926"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));
@@ -568,7 +554,20 @@ mod tests {
         assert!(baseline.contains("CREATE TABLE core_security_revisions"));
         assert!(baseline.contains("CREATE TABLE administrator_enrollment_handoffs"));
         assert!(baseline.contains("CREATE TABLE core_module_action_declarations"));
+        assert!(baseline.contains("CREATE TABLE consumed_bootstrap_validation_authorizations"));
         assert!(baseline.contains("manifest JSONB"));
+    }
+
+    #[test]
+    fn independent_module_action_declarations_are_manifest_driven() {
+        let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
+        assert!(baseline.contains("CREATE TABLE core_module_action_declarations"));
+        assert!(!baseline.contains("INSERT INTO core_module_action_declarations"));
+        assert!(
+            !baseline.contains("'tessara.reference.scoped-records', 'tessara.core.scoped-records'")
+        );
+        assert!(!baseline.contains("'tessara.dashboards', 'tessara.core.dashboards'"));
+        assert!(!baseline.contains("'tessara.dashboards', 'tessara.dashboards.component-version'"));
     }
 
     #[test]

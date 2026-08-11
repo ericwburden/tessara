@@ -710,13 +710,7 @@ fn compatibility_state_label(summary: &DatasetCompatibilitySummary) -> &'static 
 }
 
 fn dependency_label(summary: &DatasetDependencySummary) -> String {
-    format!(
-        "{} total · {} datasets · {} components · {} dashboards",
-        summary.dependency_count,
-        summary.dataset_count,
-        summary.component_version_count,
-        summary.dashboard_count
-    )
+    format!("{} downstream datasets", summary.dataset_count)
 }
 
 fn version_impact_label(impact: &DatasetVersionImpact) -> &'static str {

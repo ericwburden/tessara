@@ -161,7 +161,7 @@ async fn account_for(
     Ok(account_from_grant(&grant.payload))
 }
 
-fn account_from_grant(grant: &tessara_module_contract::AuthorizationGrantV2) -> SessionAccount {
+fn account_from_grant(grant: &tessara_module_contract::AuthorizationGrantV3) -> SessionAccount {
     let mut capabilities = grant
         .capability_scope_bindings
         .iter()
@@ -309,7 +309,7 @@ mod tests {
             "dashboard-lifecycle.css",
             "text/css; charset=utf-8",
         );
-        assert!(asset.url.contains("/tessara.dashboards/2.1.0/"));
+        assert!(asset.url.contains("/tessara.dashboards/3.0.1/"));
         assert!(asset.url.contains(asset.digest.as_str()));
     }
 }

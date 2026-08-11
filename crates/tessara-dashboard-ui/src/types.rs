@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tessara_components_contract::ComponentVersionReference;
 pub use tessara_dashboards::{DashboardPlacementConfigState, DashboardPlacementOperation};
 
 fn is_false(value: &bool) -> bool {
@@ -235,6 +236,8 @@ impl DashboardPlacement {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DashboardComponentVersion {
+    #[serde(rename = "reference")]
+    pub component_reference: ComponentVersionReference,
     pub component_version_id: String,
     pub component_id: String,
     pub component_name: String,
@@ -247,6 +250,7 @@ pub struct DashboardComponentVersion {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DashboardComponentVersionOption {
+    pub component_reference: ComponentVersionReference,
     pub component_version_id: String,
     pub component_id: String,
     pub component_name: String,
@@ -314,7 +318,7 @@ pub struct DashboardDependencyActionRequest {
     pub action: String,
     pub expected_finding_revision: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub replacement_component_version_id: Option<String>,
+    pub replacement_component_reference: Option<ComponentVersionReference>,
 }
 
 #[cfg(feature = "hydrate")]
@@ -363,7 +367,7 @@ pub enum DashboardCompositionCommand {
         placement_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         client_key: Option<String>,
-        component_version_id: String,
+        component_reference: ComponentVersionReference,
         geometry: DashboardPlacementGeometry,
         #[serde(skip_serializing_if = "Option::is_none")]
         title: Option<String>,
@@ -446,8 +450,20 @@ mod tests {
     use super::DashboardComponentVersion;
 
     #[test]
-    fn placement_component_accepts_the_current_components_v2_metadata_shape() {
+    fn placement_component_accepts_only_the_current_components_v3_reference_shape() {
         let component: DashboardComponentVersion = serde_json::from_value(serde_json::json!({
+            "reference": {
+                "reference": {
+                    "installation_id": "11111111-1111-4111-8111-111111111111",
+                    "owner": {
+                        "kind": "module_instance",
+                        "installation_id": "11111111-1111-4111-8111-111111111111",
+                        "module_instance_id": "22222222-2222-4222-8222-222222222222"
+                    },
+                    "resource_type": "tessara.components.component_version",
+                    "resource_id": "01980000-0001-7000-8000-000000000001"
+                }
+            },
             "component_version_id": "01980000-0001-7000-8000-000000000001",
             "component_id": "01980000-0001-7000-8000-000000000010",
             "component_name": "Reference Metric Card",
@@ -460,8 +476,20 @@ mod tests {
             "authority_revision": 1,
             "scope_node_ids": ["01980000-0002-7000-8000-000000000002"]
         }))
-        .expect("current Components V2 metadata should deserialize");
+        .expect("current Components V3 metadata should deserialize");
 
         assert_eq!(component.publication_state, "published");
+
+        let old_core_shape = serde_json::json!({
+            "component_version_id": "01980000-0001-7000-8000-000000000001",
+            "component_id": "01980000-0001-7000-8000-000000000010",
+            "component_name": "Reference Metric Card",
+            "component_slug": "reference-metric-card",
+            "component_type": "stat_card",
+            "version_number": 1,
+            "version_label": "1.0.0",
+            "publication_state": "published"
+        });
+        assert!(serde_json::from_value::<DashboardComponentVersion>(old_core_shape).is_err());
     }
 }

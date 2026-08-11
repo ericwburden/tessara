@@ -192,6 +192,214 @@ function Assert-Sprint7A {
     }
 }
 
+function Test-Sprint7AEvidencePair {
+    param(
+        [Parameter(Mandatory)][string]$ArtifactPath,
+        [Parameter(Mandatory)][string]$SidecarPath
+    )
+
+    if (-not (Test-Path -LiteralPath $ArtifactPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $SidecarPath -PathType Leaf)) {
+        return $false
+    }
+    try {
+        $expected = (Get-Content -LiteralPath $SidecarPath -Raw).Trim()
+        $expected -match '^[0-9a-f]{64}$' -and
+            (Get-Sprint7AFileSha256 -Path $ArtifactPath) -ceq $expected
+    } catch { $false }
+}
+
+function Get-Sprint7AEvidencePublicationTransients {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $directory = Split-Path -Parent $fullPath
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+        return @()
+    }
+    $leaf = [regex]::Escape([IO.Path]::GetFileName($fullPath))
+    $publisherTemporaryPattern = "^\.$leaf\.[0-9a-f]{32}\.tmp(?:\.sha256)?$"
+    $partialPairTemporaryPattern = "^\.$leaf\.[0-9a-f]{32}\.(?:json|sha256)\.tmp$"
+    $journalTemporaryPattern = "^\.$leaf\.publish-journal\.json\.[0-9a-f]{32}\.tmp$"
+    @(
+        Get-ChildItem -LiteralPath $directory -Force -File | Where-Object {
+            $_.Name -cmatch $publisherTemporaryPattern -or
+                $_.Name -cmatch $partialPairTemporaryPattern -or
+                $_.Name -cmatch $journalTemporaryPattern
+        } | ForEach-Object { [IO.Path]::GetFullPath($_.FullName) }
+    )
+}
+
+function Remove-Sprint7AEvidencePublicationTransients {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string[]]$AdditionalPaths = @()
+    )
+
+    $ownedPaths = @((Get-Sprint7AEvidencePublicationTransients -Path $Path)) + @($AdditionalPaths)
+    foreach ($ownedPath in @($ownedPaths | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string]$_)
+    } | Select-Object -Unique)) {
+        Remove-Item -LiteralPath ([string]$ownedPath) -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Set-Sprint7AEvidencePublicationPair {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$ArtifactPath,
+        [Parameter(Mandatory)][string]$SidecarPath
+    )
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $fullSidecarPath = "$fullPath.sha256"
+    $recoveryArtifactPath = [IO.Path]::GetFullPath($ArtifactPath)
+    $recoverySidecarPath = [IO.Path]::GetFullPath($SidecarPath)
+    if (-not (Test-Sprint7AEvidencePair -ArtifactPath $recoveryArtifactPath -SidecarPath $recoverySidecarPath)) {
+        throw "Evidence publication recovery source is not authenticated for '$fullPath'."
+    }
+    if (-not [string]::Equals($recoveryArtifactPath, $fullPath, [StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $fullPath -Force -ErrorAction SilentlyContinue
+        Move-Item -LiteralPath $recoveryArtifactPath -Destination $fullPath
+    }
+    if (-not [string]::Equals($recoverySidecarPath, $fullSidecarPath, [StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $fullSidecarPath -Force -ErrorAction SilentlyContinue
+        Move-Item -LiteralPath $recoverySidecarPath -Destination $fullSidecarPath
+    }
+    if (-not (Test-Sprint7AEvidencePair -ArtifactPath $fullPath -SidecarPath $fullSidecarPath)) {
+        throw "Evidence publication recovery produced an unauthenticated pair for '$fullPath'."
+    }
+}
+
+function Repair-Sprint7AEvidencePublication {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $sidecar = "$fullPath.sha256"
+    $journalPath = "$fullPath.publish-journal.json"
+    $rollbackPath = "$fullPath.rollback"
+    $rollbackSidecarPath = "$sidecar.rollback"
+    $transients = @(Get-Sprint7AEvidencePublicationTransients -Path $fullPath)
+    $leaf = [regex]::Escape([IO.Path]::GetFileName($fullPath))
+    $publisherTemporaryPattern = "^\.$leaf\.[0-9a-f]{32}\.tmp$"
+    $publisherTemporarySidecarPattern = "^\.$leaf\.[0-9a-f]{32}\.tmp\.sha256$"
+    $temporaryArtifacts = @($transients | Where-Object {
+        [IO.Path]::GetFileName([string]$_) -cmatch $publisherTemporaryPattern
+    })
+    $temporarySidecars = @($transients | Where-Object {
+        [IO.Path]::GetFileName([string]$_) -cmatch $publisherTemporarySidecarPattern
+    })
+    $rollbackCandidates = @(
+        [pscustomobject]@{ artifact = $rollbackPath; sidecar = $rollbackSidecarPath },
+        [pscustomobject]@{ artifact = $rollbackPath; sidecar = $sidecar },
+        [pscustomobject]@{ artifact = $fullPath; sidecar = $rollbackSidecarPath }
+    )
+    $completionCandidates = [Collections.Generic.List[object]]::new()
+    foreach ($temporaryArtifact in $temporaryArtifacts) {
+        $temporaryArtifactSidecar = "$temporaryArtifact.sha256"
+        $completionCandidates.Add([pscustomobject]@{ artifact = $temporaryArtifact; sidecar = $temporaryArtifactSidecar })
+        $completionCandidates.Add([pscustomobject]@{ artifact = $fullPath; sidecar = $temporaryArtifactSidecar })
+        $completionCandidates.Add([pscustomobject]@{ artifact = $temporaryArtifact; sidecar = $sidecar })
+    }
+    foreach ($temporaryPublicationSidecar in $temporarySidecars) {
+        $completionCandidates.Add([pscustomobject]@{ artifact = $fullPath; sidecar = $temporaryPublicationSidecar })
+    }
+    $fixedControls = @($rollbackPath, $rollbackSidecarPath, $journalPath)
+    if (Test-Sprint7AEvidencePair -ArtifactPath $fullPath -SidecarPath $sidecar) {
+        Remove-Sprint7AEvidencePublicationTransients -Path $fullPath -AdditionalPaths $fixedControls
+        return
+    }
+
+    $journalExists = Test-Path -LiteralPath $journalPath -PathType Leaf
+    $journal = $null
+    $journalValid = $false
+    $temporary = $null
+    $temporarySidecar = $null
+    if ($journalExists) {
+        try {
+            $journal = Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
+            $temporary = [IO.Path]::GetFullPath([string]$journal.temporary)
+            $temporarySidecar = [IO.Path]::GetFullPath([string]$journal.temporary_sidecar)
+            $journalValid = [int]$journal.schema_version -eq 1 -and
+                [string]::Equals([string]$journal.path, $fullPath, [StringComparison]::OrdinalIgnoreCase) -and
+                [string]::Equals([string]$journal.sidecar, $sidecar, [StringComparison]::OrdinalIgnoreCase) -and
+                [IO.Path]::GetFileName($temporary) -cmatch $publisherTemporaryPattern -and
+                [string]::Equals((Split-Path -Parent $temporary), (Split-Path -Parent $fullPath), [StringComparison]::OrdinalIgnoreCase) -and
+                [string]::Equals($temporarySidecar, "$temporary.sha256", [StringComparison]::OrdinalIgnoreCase) -and
+                $journal.PSObject.Properties.Name -contains "had_prior" -and
+                $journal.had_prior -is [bool] -and
+                [string]$journal.intended_sha256 -cmatch '^[0-9a-f]{64}$'
+        } catch {
+            $journalValid = $false
+        }
+    }
+
+    if (-not $journalExists) {
+        $rollbackRecovery = @($rollbackCandidates | Where-Object {
+            Test-Sprint7AEvidencePair -ArtifactPath ([string]$_.artifact) -SidecarPath ([string]$_.sidecar)
+        } | Select-Object -First 1)
+        if ($rollbackRecovery.Count -eq 1) {
+            Set-Sprint7AEvidencePublicationPair `
+                -Path $fullPath `
+                -ArtifactPath ([string]$rollbackRecovery[0].artifact) `
+                -SidecarPath ([string]$rollbackRecovery[0].sidecar)
+        }
+        Remove-Sprint7AEvidencePublicationTransients `
+            -Path $fullPath `
+            -AdditionalPaths @($rollbackPath, $rollbackSidecarPath)
+        return
+    }
+
+    $recovery = @()
+    if ($journalValid) {
+        $journalCompletionCandidates = @(
+            [pscustomobject]@{ artifact = $temporary; sidecar = $temporarySidecar; intended = $true },
+            [pscustomobject]@{ artifact = $fullPath; sidecar = $temporarySidecar; intended = $true },
+            [pscustomobject]@{ artifact = $temporary; sidecar = $sidecar; intended = $true }
+        )
+        $journalRollbackCandidates = @($rollbackCandidates | ForEach-Object {
+            [pscustomobject]@{ artifact = $_.artifact; sidecar = $_.sidecar; intended = $false }
+        })
+        $recoveryCandidates = if ([bool]$journal.had_prior) {
+            @($journalRollbackCandidates) + @($journalCompletionCandidates)
+        } else {
+            @($journalCompletionCandidates) + @($journalRollbackCandidates)
+        }
+        $recovery = @($recoveryCandidates | Where-Object {
+            (Test-Sprint7AEvidencePair -ArtifactPath ([string]$_.artifact) -SidecarPath ([string]$_.sidecar)) -and
+                (-not [bool]$_.intended -or
+                    (Get-Sprint7AFileSha256 -Path ([string]$_.artifact)) -ceq [string]$journal.intended_sha256)
+        } | Select-Object -First 1)
+    } else {
+        $recovery = @($rollbackCandidates | Where-Object {
+            Test-Sprint7AEvidencePair -ArtifactPath ([string]$_.artifact) -SidecarPath ([string]$_.sidecar)
+        } | Select-Object -First 1)
+        if ($recovery.Count -eq 0) {
+            $authenticatedCompletions = @($completionCandidates | Where-Object {
+                Test-Sprint7AEvidencePair -ArtifactPath ([string]$_.artifact) -SidecarPath ([string]$_.sidecar)
+            })
+            $completionDigests = @($authenticatedCompletions | ForEach-Object {
+                Get-Sprint7AFileSha256 -Path ([string]$_.artifact)
+            } | Select-Object -Unique)
+            if ($completionDigests.Count -eq 1) {
+                $recovery = @($authenticatedCompletions | Select-Object -First 1)
+            }
+        }
+    }
+
+    if ($recovery.Count -eq 1) {
+        Set-Sprint7AEvidencePublicationPair `
+            -Path $fullPath `
+            -ArtifactPath ([string]$recovery[0].artifact) `
+            -SidecarPath ([string]$recovery[0].sidecar)
+    } else {
+        # A committed but unauthenticated publication is fail-closed to a clean retry boundary.
+        Remove-Item -LiteralPath $fullPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $sidecar -Force -ErrorAction SilentlyContinue
+    }
+    Remove-Sprint7AEvidencePublicationTransients -Path $fullPath -AdditionalPaths $fixedControls
+}
+
 function Publish-Sprint7AEvidence {
     param(
         [Parameter(Mandatory)][object]$Document,
@@ -204,6 +412,7 @@ function Publish-Sprint7AEvidence {
         [IO.Path]::GetFullPath((Join-Path $script:Sprint7ARepositoryRoot $OutputPath))
     }
     $sidecar = "$fullPath.sha256"
+    Repair-Sprint7AEvidencePublication -Path $fullPath
     $artifactExists = Test-Path -LiteralPath $fullPath -PathType Leaf
     $sidecarExists = Test-Path -LiteralPath $sidecar -PathType Leaf
     if (($artifactExists -or $sidecarExists) -and -not $Overwrite) {
@@ -213,24 +422,63 @@ function Publish-Sprint7AEvidence {
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     $temporary = Join-Path $directory ".$([IO.Path]::GetFileName($fullPath)).$([guid]::NewGuid().ToString('N')).tmp"
     $temporarySidecar = "$temporary.sha256"
+    $journalPath = "$fullPath.publish-journal.json"
+    $rollbackPath = "$fullPath.rollback"
+    $rollbackSidecarPath = "$sidecar.rollback"
+    $journalTemporary = Join-Path $directory ".$([IO.Path]::GetFileName($fullPath)).publish-journal.json.$([guid]::NewGuid().ToString('N')).tmp"
     try {
         $json = ($Document | ConvertTo-Json -Depth 30) + "`n"
         [IO.File]::WriteAllText($temporary, $json, [Text.UTF8Encoding]::new($false))
         $digest = Get-Sprint7AFileSha256 -Path $temporary
         [IO.File]::WriteAllText($temporarySidecar, "$digest`n", [Text.UTF8Encoding]::new($false))
-        if ($Overwrite) {
-            Remove-Item -LiteralPath $fullPath -Force -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $sidecar -Force -ErrorAction SilentlyContinue
+        if ($Overwrite -and (-not $artifactExists -or -not $sidecarExists -or
+            -not (Test-Sprint7AEvidencePair -ArtifactPath $fullPath -SidecarPath $sidecar))) {
+            throw "Intentional evidence replacement requires one authenticated prior JSON/sidecar pair: $fullPath"
         }
-        Move-Item -LiteralPath $temporary -Destination $fullPath
-        Move-Item -LiteralPath $temporarySidecar -Destination $sidecar
+        $journal = [pscustomobject][ordered]@{
+            schema_version = 1
+            path = $fullPath
+            sidecar = $sidecar
+            temporary = $temporary
+            temporary_sidecar = $temporarySidecar
+            had_prior = [bool]$artifactExists
+            intended_sha256 = $digest
+        }
+        [IO.File]::WriteAllText(
+            $journalTemporary,
+            (($journal | ConvertTo-Json -Depth 10) + "`n"),
+            [Text.UTF8Encoding]::new($false)
+        )
+        Move-Item -LiteralPath $journalTemporary -Destination $journalPath
+        if ($Overwrite) {
+            [IO.File]::Replace($temporary, $fullPath, $rollbackPath, $true)
+            [IO.File]::Replace($temporarySidecar, $sidecar, $rollbackSidecarPath, $true)
+        } else {
+            Move-Item -LiteralPath $temporary -Destination $fullPath
+            Move-Item -LiteralPath $temporarySidecar -Destination $sidecar
+        }
         if ((Get-Sprint7AFileSha256 -Path $fullPath) -cne $digest) {
             throw "Published evidence digest changed for '$fullPath'."
         }
+        if (-not (Test-Sprint7AEvidencePair -ArtifactPath $fullPath -SidecarPath $sidecar)) {
+            throw "Published evidence pair is not authenticated for '$fullPath'."
+        }
+        Remove-Sprint7AEvidencePublicationTransients `
+            -Path $fullPath `
+            -AdditionalPaths @($rollbackPath, $rollbackSidecarPath, $journalPath)
         [pscustomobject]@{ path = $fullPath; sha256 = $digest }
+    } catch {
+        $publicationError = $_
+        try {
+            Repair-Sprint7AEvidencePublication -Path $fullPath
+        } catch {
+            throw "Evidence publication failed and recovery could not authenticate a pair for '$fullPath': $($publicationError.Exception.Message); recovery: $($_.Exception.Message)"
+        }
+        throw $publicationError
     } finally {
-        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $temporarySidecar -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) {
+            Remove-Sprint7AEvidencePublicationTransients -Path $fullPath
+        }
     }
 }
 
@@ -249,6 +497,135 @@ function Test-Sprint7AAcceptanceContract {
         $parsed = Get-Content -LiteralPath $published.path -Raw | ConvertFrom-Json
         if ($parsed.schema_version -ne 1 -or -not $parsed.passed) {
             throw "Sprint 7A evidence publication self-test did not retain the exact document."
+        }
+        $replacement = Publish-Sprint7AEvidence `
+            -Document ([ordered]@{ schema_version = 1; passed = $false; revision = 2 }) `
+            -OutputPath $path `
+            -Overwrite
+        $replacementParsed = Get-Content -LiteralPath $replacement.path -Raw | ConvertFrom-Json
+        if ($replacementParsed.revision -ne 2 -or $replacementParsed.passed -ne $false -or
+            -not (Test-Sprint7AEvidencePair -ArtifactPath $path -SidecarPath "$path.sha256")) {
+            throw "Sprint 7A recoverable evidence replacement self-test failed."
+        }
+        $interruptedPath = Join-Path $root "interrupted.json"
+        Publish-Sprint7AEvidence -Document ([ordered]@{ generation = "old" }) -OutputPath $interruptedPath | Out-Null
+        $temporary = Join-Path $root ".interrupted.json.$([guid]::NewGuid().ToString('N')).tmp"
+        $temporarySidecar = "$temporary.sha256"
+        [IO.File]::WriteAllText($temporary, (([ordered]@{ generation = "new" } | ConvertTo-Json -Depth 30) + "`n"), [Text.UTF8Encoding]::new($false))
+        $temporaryDigest = Get-Sprint7AFileSha256 -Path $temporary
+        [IO.File]::WriteAllText($temporarySidecar, "$temporaryDigest`n", [Text.UTF8Encoding]::new($false))
+        $journalPath = "$interruptedPath.publish-journal.json"
+        [IO.File]::WriteAllText(
+            $journalPath,
+            (([ordered]@{
+                schema_version = 1; path = $interruptedPath; sidecar = "$interruptedPath.sha256"
+                temporary = $temporary; temporary_sidecar = $temporarySidecar
+                had_prior = $true; intended_sha256 = $temporaryDigest
+            } | ConvertTo-Json -Depth 10) + "`n"),
+            [Text.UTF8Encoding]::new($false)
+        )
+        [IO.File]::Replace($temporary, $interruptedPath, "$interruptedPath.rollback", $true)
+        Repair-Sprint7AEvidencePublication -Path $interruptedPath
+        $recovered = Get-Content -LiteralPath $interruptedPath -Raw | ConvertFrom-Json
+        if ([string]$recovered.generation -cne "old" -or
+            -not (Test-Sprint7AEvidencePair -ArtifactPath $interruptedPath -SidecarPath "$interruptedPath.sha256") -or
+            (Test-Path -LiteralPath $journalPath)) {
+            throw "Sprint 7A interrupted evidence replacement did not restore its authenticated prior pair."
+        }
+
+        $preJournalPath = Join-Path $root "pre-journal.json"
+        $preJournalTemporary = Join-Path $root ".pre-journal.json.$([guid]::NewGuid().ToString('N')).tmp"
+        $preJournalTemporarySidecar = "$preJournalTemporary.sha256"
+        [IO.File]::WriteAllText($preJournalTemporary, "{`"generation`":`"uncommitted`"}`n", [Text.UTF8Encoding]::new($false))
+        $preJournalDigest = Get-Sprint7AFileSha256 -Path $preJournalTemporary
+        [IO.File]::WriteAllText($preJournalTemporarySidecar, "$preJournalDigest`n", [Text.UTF8Encoding]::new($false))
+        $orphanJournalTemporary = Join-Path $root ".pre-journal.json.publish-journal.json.$([guid]::NewGuid().ToString('N')).tmp"
+        [IO.File]::WriteAllText($orphanJournalTemporary, "{", [Text.UTF8Encoding]::new($false))
+        Repair-Sprint7AEvidencePublication -Path $preJournalPath
+        if ((Test-Path -LiteralPath $preJournalPath) -or
+            (Test-Path -LiteralPath $preJournalTemporary) -or
+            (Test-Path -LiteralPath $preJournalTemporarySidecar) -or
+            (Test-Path -LiteralPath $orphanJournalTemporary)) {
+            throw "Sprint 7A pre-journal publication recovery did not discard only its uncommitted transients."
+        }
+
+        $malformedPath = Join-Path $root "malformed.json"
+        $malformedTemporary = Join-Path $root ".malformed.json.$([guid]::NewGuid().ToString('N')).tmp"
+        $malformedTemporarySidecar = "$malformedTemporary.sha256"
+        [IO.File]::WriteAllText($malformedTemporary, "{`"generation`":`"recoverable`"}`n", [Text.UTF8Encoding]::new($false))
+        $malformedDigest = Get-Sprint7AFileSha256 -Path $malformedTemporary
+        [IO.File]::WriteAllText($malformedTemporarySidecar, "$malformedDigest`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText("$malformedPath.publish-journal.json", "{", [Text.UTF8Encoding]::new($false))
+        Repair-Sprint7AEvidencePublication -Path $malformedPath
+        $malformedRecovered = Get-Content -LiteralPath $malformedPath -Raw | ConvertFrom-Json
+        if ([string]$malformedRecovered.generation -cne "recoverable" -or
+            -not (Test-Sprint7AEvidencePair -ArtifactPath $malformedPath -SidecarPath "$malformedPath.sha256") -or
+            (Test-Path -LiteralPath "$malformedPath.publish-journal.json")) {
+            throw "Sprint 7A malformed-journal recovery did not complete its sole authenticated pair."
+        }
+
+        $malformedMovedPath = Join-Path $root "malformed-moved.json"
+        $malformedMovedTemporary = Join-Path $root ".malformed-moved.json.$([guid]::NewGuid().ToString('N')).tmp"
+        $malformedMovedTemporarySidecar = "$malformedMovedTemporary.sha256"
+        [IO.File]::WriteAllText($malformedMovedTemporary, "{`"generation`":`"moved`"}`n", [Text.UTF8Encoding]::new($false))
+        $malformedMovedDigest = Get-Sprint7AFileSha256 -Path $malformedMovedTemporary
+        [IO.File]::WriteAllText($malformedMovedTemporarySidecar, "$malformedMovedDigest`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText("$malformedMovedPath.publish-journal.json", "{", [Text.UTF8Encoding]::new($false))
+        Move-Item -LiteralPath $malformedMovedTemporary -Destination $malformedMovedPath
+        Repair-Sprint7AEvidencePublication -Path $malformedMovedPath
+        if (-not (Test-Sprint7AEvidencePair -ArtifactPath $malformedMovedPath -SidecarPath "$malformedMovedPath.sha256") -or
+            [string](Get-Content -LiteralPath $malformedMovedPath -Raw | ConvertFrom-Json).generation -cne "moved") {
+            throw "Sprint 7A malformed-journal recovery did not authenticate a partially moved publication."
+        }
+
+        $partialPath = Join-Path $root "partial-journal.json"
+        $partialTemporary = Join-Path $root ".partial-journal.json.$([guid]::NewGuid().ToString('N')).tmp"
+        $partialTemporarySidecar = "$partialTemporary.sha256"
+        [IO.File]::WriteAllText($partialTemporary, "{`"generation`":`"partial`"}`n", [Text.UTF8Encoding]::new($false))
+        $partialDigest = Get-Sprint7AFileSha256 -Path $partialTemporary
+        [IO.File]::WriteAllText($partialTemporarySidecar, "$partialDigest`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText(
+            "$partialPath.publish-journal.json",
+            (([ordered]@{
+                schema_version = 1; path = $partialPath; sidecar = "$partialPath.sha256"
+                temporary = $partialTemporary; had_prior = $false; intended_sha256 = $partialDigest
+            } | ConvertTo-Json -Depth 10) + "`n"),
+            [Text.UTF8Encoding]::new($false)
+        )
+        Repair-Sprint7AEvidencePublication -Path $partialPath
+        if (-not (Test-Sprint7AEvidencePair -ArtifactPath $partialPath -SidecarPath "$partialPath.sha256") -or
+            [string](Get-Content -LiteralPath $partialPath -Raw | ConvertFrom-Json).generation -cne "partial") {
+            throw "Sprint 7A partial-journal recovery did not complete its sole authenticated pair."
+        }
+
+        $malformedOverwritePath = Join-Path $root "malformed-overwrite.json"
+        Publish-Sprint7AEvidence -Document ([ordered]@{ generation = "prior" }) -OutputPath $malformedOverwritePath | Out-Null
+        $malformedOverwriteTemporary = Join-Path $root ".malformed-overwrite.json.$([guid]::NewGuid().ToString('N')).tmp"
+        $malformedOverwriteTemporarySidecar = "$malformedOverwriteTemporary.sha256"
+        [IO.File]::WriteAllText($malformedOverwriteTemporary, "{`"generation`":`"replacement`"}`n", [Text.UTF8Encoding]::new($false))
+        $malformedOverwriteDigest = Get-Sprint7AFileSha256 -Path $malformedOverwriteTemporary
+        [IO.File]::WriteAllText($malformedOverwriteTemporarySidecar, "$malformedOverwriteDigest`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText("$malformedOverwritePath.publish-journal.json", "{`"schema_version`":1", [Text.UTF8Encoding]::new($false))
+        [IO.File]::Replace(
+            $malformedOverwriteTemporary,
+            $malformedOverwritePath,
+            "$malformedOverwritePath.rollback",
+            $true
+        )
+        Repair-Sprint7AEvidencePublication -Path $malformedOverwritePath
+        $malformedOverwriteRecovered = Get-Content -LiteralPath $malformedOverwritePath -Raw | ConvertFrom-Json
+        if ([string]$malformedOverwriteRecovered.generation -cne "prior" -or
+            -not (Test-Sprint7AEvidencePair -ArtifactPath $malformedOverwritePath -SidecarPath "$malformedOverwritePath.sha256")) {
+            throw "Sprint 7A malformed overwrite journal did not restore its authenticated prior pair."
+        }
+
+        $journalOnlyPath = Join-Path $root "journal-only.json"
+        [IO.File]::WriteAllText("$journalOnlyPath.publish-journal.json", "{", [Text.UTF8Encoding]::new($false))
+        Repair-Sprint7AEvidencePublication -Path $journalOnlyPath
+        if ((Test-Path -LiteralPath $journalOnlyPath) -or
+            (Test-Path -LiteralPath "$journalOnlyPath.sha256") -or
+            (Test-Path -LiteralPath "$journalOnlyPath.publish-journal.json")) {
+            throw "Sprint 7A journal-only recovery did not return to a clean retry boundary."
         }
     } finally {
         Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

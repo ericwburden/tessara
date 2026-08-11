@@ -9,10 +9,17 @@ Prepare and freeze a candidate for `tessara-sit`. Do not execute SIT, deployed
 acceptance smoke, scripted UAT, manual UAT, Test Readiness, or Candidate
 Rehearsal in this skill.
 
-Before acting, read
+Inspect the tracked sprint validation contract before loading a protocol. When
+it declares `policy_version: tessara-validation-v2`, read
+[`../tessara-sprint-validation/references/validation-policy-v2.md`](../tessara-sprint-validation/references/validation-policy-v2.md)
+completely. Consume compact Readiness/Rehearsal certificates and an
+authenticated impact assessment. Do not reopen their raw evidence or reject
+them merely because an unrelated repository commit changed.
+
+Otherwise read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
-completely. It defines receipt schemas, fingerprints, classifications, and
-invalidation authority.
+completely. It defines the legacy receipt schemas, fingerprints,
+classifications, and invalidation authority.
 
 When an earlier candidate was invalidated after SIT, also read
 [`../tessara-sprint-validation/references/post-sit-defect-convergence.md`](../tessara-sprint-validation/references/post-sit-defect-convergence.md)
@@ -43,8 +50,9 @@ completely and validate its records against
 4. When an earlier candidate was invalidated after SIT, parse and hash the
    defect-harvest, defect-batch, correction-impact, focused repair,
    restoration, and final-certification-entry records. Require the coordinator
-   to have authorized return to complete readiness/rehearsal, and require the
-   passing readiness/rehearsal receipts to postdate the final corrected source.
+   to have authorized return to the legacy complete pass or v2 affected-lane
+   pre-freeze recertification, and require the resulting certificates to bind
+   the final corrected source and authenticated inherited coverage.
 5. Audit all changes and require one clean implementation commit.
 6. Reconcile every roadmap exit condition with automated, smoke, and manual
    UAT coverage in the validation record.
@@ -66,7 +74,14 @@ completely and validate its records against
 13. Record source commit/tree/dirty state, configuration and inventory hashes,
    migration identity, and expected provenance as the frozen candidate.
 14. Write `preflight-result.json`, then `candidate.json`, only after all checks
-   pass. Update the human verification record with the same identities.
+    pass. Update the human verification record with the same identities.
+
+For v2, step 3 validates the current dependency-domain fingerprints and the
+coordinator's impact decision instead of requiring unrelated whole-tree
+identity equality. An intersecting Readiness/Rehearsal dependency requires the
+corresponding affected-lane recertification certificate; a Preflight-only
+runner change does not reopen either upstream phase. Unknown or unauthenticated
+impact still returns to complete affected-phase execution.
 
 ## Executable preflight contract
 
@@ -89,6 +104,11 @@ deployment configuration for expected keys; SIT confirms the built values.
 Do not repeat the complete readiness gate or rehearsal here. Perform only the
 freeze-boundary audit and inexpensive prerequisite reconfirmation needed to
 prove nothing changed since their passing receipts.
+
+For v2, validate only the compact certificate documents, prerequisite hashes,
+declared coverage, dependency fingerprints, and sealed phase evidence-index
+hashes. Raw evidence remains cold unless a certificate fails authentication or
+an explicit audit is requested.
 
 ## Receipts
 

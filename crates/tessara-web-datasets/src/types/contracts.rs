@@ -196,8 +196,6 @@ pub(crate) enum DatasetSemanticBump {
 pub(crate) struct DatasetDependencySummary {
     pub(crate) dependency_count: usize,
     pub(crate) dataset_count: usize,
-    pub(crate) component_version_count: usize,
-    pub(crate) dashboard_count: usize,
     pub(crate) carry_forward_state: DatasetCarryForwardState,
 }
 

@@ -12,7 +12,7 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use tessara_composition::{
     ApplyAuthorizationV1, ApplyOperationKindV1, BootstrapReceiptV1, CompositionFindingV1,
-    CompositionOperationStateV1, CompositionOperationV1, InstallationReceiptV1,
+    CompositionOperationStateV1, CompositionOperationV1, FindingSeverityV1, InstallationReceiptV1,
     MaterializationActionV1, MaterializationPlanV1, OPERATION_API_V1, RECEIPT_API_V1,
     canonical_digest,
 };
@@ -193,10 +193,11 @@ impl SupervisorLedger {
         if replay {
             return Err(SupervisorError::Replay);
         }
-        let latest_sequence: Option<u64> =
-            transaction.query_row("SELECT MAX(apply_sequence) FROM operations", [], |row| {
-                row.get(0)
-            })?;
+        let latest_sequence: Option<u64> = transaction.query_row(
+            "SELECT MAX(apply_sequence) FROM operations WHERE state != 'failed'",
+            [],
+            |row| row.get(0),
+        )?;
         if latest_sequence
             .is_some_and(|latest| signed_authorization.payload.apply_sequence <= latest)
         {
@@ -247,20 +248,65 @@ impl SupervisorLedger {
             .operation(operation_id)?
             .ok_or(SupervisorError::OperationMissing)?;
         let plan = self.plan(operation_id)?;
-        let mut bootstrap_receipts = Vec::new();
-        for action in &plan.actions {
+        let authorization = self.authorization(operation_id)?;
+        let emergency = authorization.payload.operation == ApplyOperationKindV1::EmergencyDisable;
+        let emergency_definition_id = if emergency {
+            let mut targets = plan.actions.iter().filter_map(|action| match action {
+                MaterializationActionV1::SetEnablement {
+                    definition_id,
+                    enabled: false,
+                } => Some(definition_id.clone()),
+                _ => None,
+            });
+            let target = targets.next();
+            if target.is_none() || targets.next().is_some() {
+                let error = SupervisorError::Materialization(
+                    "emergency authorization must contain exactly one disable target".into(),
+                );
+                self.fail_operation(
+                    operation_id,
+                    CompositionFindingV1 {
+                        code: "emergency_disable_target_invalid".into(),
+                        severity: FindingSeverityV1::Error,
+                        path: "/actions".into(),
+                        message: error.to_string(),
+                    },
+                    now,
+                )?;
+                return Err(error);
+            }
+            target
+        } else {
+            None
+        };
+        let mut action_bootstrap_receipts = Vec::new();
+        for (index, action) in plan.actions.iter().enumerate() {
             let state = state_for_action(action);
             self.transition(operation_id, state, Utc::now(), None)?;
-            if let Some(receipt) = adapter.execute(action)? {
-                bootstrap_receipts.push(receipt);
+            match adapter.execute(action) {
+                Ok(Some(receipt)) => action_bootstrap_receipts.push(receipt),
+                Ok(None) => {}
+                Err(error) => {
+                    self.fail_operation(
+                        operation_id,
+                        CompositionFindingV1 {
+                            code: "materialization_action_failed".into(),
+                            severity: FindingSeverityV1::Error,
+                            path: format!("/actions/{index}"),
+                            message: error.to_string(),
+                        },
+                        Utc::now(),
+                    )?;
+                    return Err(error);
+                }
             }
         }
         let previous = self.current_receipt()?;
-        let authorization = self.authorization(operation_id)?;
-        let emergency = authorization.payload.operation == ApplyOperationKindV1::EmergencyDisable;
-        let no_op = previous
-            .as_ref()
-            .is_some_and(|receipt| receipt.plan_digest == operation.plan_digest);
+        let no_op = previous.is_some()
+            && matches!(
+                plan.actions.as_slice(),
+                [MaterializationActionV1::VerifyReadBack]
+            );
         let mut desired_enablement = previous
             .as_ref()
             .map(|receipt| receipt.desired_enablement.clone())
@@ -294,12 +340,43 @@ impl SupervisorLedger {
             .map(|receipt| receipt.configuration_digests.clone())
             .unwrap_or_default();
         configuration_digests.extend(adapter.configuration_digests());
-        if emergency {
-            bootstrap_receipts = previous
-                .as_ref()
-                .map(|receipt| receipt.bootstrap_receipts.clone())
-                .unwrap_or_default();
+        let mut bootstrap_receipts = previous
+            .as_ref()
+            .map(|receipt| {
+                receipt
+                    .bootstrap_receipts
+                    .iter()
+                    .cloned()
+                    .map(|receipt| (receipt.owner.clone(), receipt))
+                    .collect::<BTreeMap<_, _>>()
+            })
+            .unwrap_or_default();
+        if !emergency {
+            for receipt in action_bootstrap_receipts {
+                bootstrap_receipts.insert(receipt.owner.clone(), receipt);
+            }
         }
+        if no_op {
+            for receipt in bootstrap_receipts.values_mut() {
+                receipt.changed = false;
+            }
+        }
+        let emergency_override = emergency_definition_id.map(|definition_id| EmergencyOverrideV1 {
+            override_id: Uuid::new_v4(),
+            definition_id,
+            reason: authorization
+                .payload
+                .reason
+                .clone()
+                .unwrap_or_else(|| "Emergency disable".into()),
+            actor: serde_json::to_value(&authorization.payload.initiator)
+                .expect("actor evidence always serializes to JSON"),
+            issued_at: authorization.payload.issued_at,
+            expires_at: Some(authorization.payload.expires_at),
+            authorization_digest: operation.authorization_digest.clone(),
+            reconciled_at: None,
+            expired: false,
+        });
         let receipt = InstallationReceiptV1 {
             api_version: RECEIPT_API_V1.into(),
             installation_id: operation.installation_id,
@@ -314,24 +391,50 @@ impl SupervisorLedger {
             observed_enablement,
             observed_artifacts,
             configuration_digests,
-            bootstrap_receipts,
+            bootstrap_receipts: bootstrap_receipts.into_values().collect(),
             applied_at: now,
             previous_receipt_digest: previous.as_ref().map(canonical_digest).transpose()?,
             no_op,
         };
         let receipt_digest = canonical_digest(&receipt)?;
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| SupervisorError::LedgerPoisoned)?;
-        connection.execute("INSERT INTO receipts(revision,receipt_digest,receipt_json,applied_at) VALUES(?1,?2,?3,?4)", params![receipt.revision, receipt_digest.to_string(), serde_json::to_string(&receipt)?, now.to_rfc3339()])?;
-        connection.execute("UPDATE operations SET state='succeeded',updated_at=?2,receipt_digest=?3 WHERE operation_id=?1", params![operation_id.to_string(), now.to_rfc3339(), receipt_digest.to_string()])?;
-        if !emergency {
-            for (definition_id, enabled) in action_enablement {
-                if enabled {
-                    connection.execute("UPDATE emergency_overrides SET reconciled_at=?2 WHERE definition_id=?1 AND reconciled_at IS NULL", params![definition_id, now.to_rfc3339()])?;
+        let finalization = (|| -> Result<(), SupervisorError> {
+            let mut connection = self
+                .connection
+                .lock()
+                .map_err(|_| SupervisorError::LedgerPoisoned)?;
+            let transaction = connection.transaction()?;
+            transaction.execute("INSERT INTO receipts(revision,receipt_digest,receipt_json,applied_at) VALUES(?1,?2,?3,?4)", params![receipt.revision, receipt_digest.to_string(), serde_json::to_string(&receipt)?, now.to_rfc3339()])?;
+            transaction.execute("UPDATE operations SET state='succeeded',updated_at=?2,receipt_digest=?3 WHERE operation_id=?1", params![operation_id.to_string(), now.to_rfc3339(), receipt_digest.to_string()])?;
+            if let Some(override_record) = emergency_override.as_ref() {
+                transaction.execute(
+                    "INSERT INTO emergency_overrides(override_id,definition_id,reason,actor_json,issued_at,expires_at,authorization_digest,reconciled_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+                    params![override_record.override_id.to_string(), override_record.definition_id,
+                        override_record.reason, serde_json::to_string(&override_record.actor)?,
+                        override_record.issued_at.to_rfc3339(), override_record.expires_at.map(|value| value.to_rfc3339()),
+                        override_record.authorization_digest.to_string(), override_record.reconciled_at.map(|value| value.to_rfc3339())],
+                )?;
+            } else {
+                for (definition_id, enabled) in &action_enablement {
+                    if *enabled {
+                        transaction.execute("UPDATE emergency_overrides SET reconciled_at=?2 WHERE definition_id=?1 AND reconciled_at IS NULL", params![definition_id, now.to_rfc3339()])?;
+                    }
                 }
             }
+            transaction.commit()?;
+            Ok(())
+        })();
+        if let Err(error) = finalization {
+            self.fail_operation(
+                operation_id,
+                CompositionFindingV1 {
+                    code: "ledger_finalization_failed".into(),
+                    severity: FindingSeverityV1::Error,
+                    path: "/receipt".into(),
+                    message: error.to_string(),
+                },
+                now,
+            )?;
+            return Err(error);
         }
         Ok(receipt)
     }
@@ -370,21 +473,75 @@ impl SupervisorLedger {
             .transpose()
     }
 
-    pub fn record_emergency_override(
+    pub fn fail_operation(
         &self,
-        override_record: &EmergencyOverrideV1,
+        operation_id: Uuid,
+        finding: CompositionFindingV1,
+        now: DateTime<Utc>,
     ) -> Result<(), SupervisorError> {
-        let connection = self
+        if self.operation(operation_id)?.is_none() {
+            return Err(SupervisorError::OperationMissing);
+        }
+        self.transition(
+            operation_id,
+            CompositionOperationStateV1::Failed,
+            now,
+            Some(&finding),
+        )
+    }
+
+    /// Atomically retires the just-created current receipt when Core could not
+    /// commit its matching inventory/lockfile projection, and terminalizes the
+    /// operation. Runtime effects may already have occurred, so the next apply
+    /// intentionally plans from the prior receipt and replays the same semantic
+    /// delta idempotently instead of treating unprojected state as current.
+    pub fn rollback_projection_failure(
+        &self,
+        operation_id: Uuid,
+        finding: CompositionFindingV1,
+        now: DateTime<Utc>,
+    ) -> Result<(), SupervisorError> {
+        let mut connection = self
             .connection
             .lock()
             .map_err(|_| SupervisorError::LedgerPoisoned)?;
-        connection.execute(
-            "INSERT INTO emergency_overrides(override_id,definition_id,reason,actor_json,issued_at,expires_at,authorization_digest,reconciled_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
-            params![override_record.override_id.to_string(), override_record.definition_id,
-                override_record.reason, serde_json::to_string(&override_record.actor)?,
-                override_record.issued_at.to_rfc3339(), override_record.expires_at.map(|value| value.to_rfc3339()),
-                override_record.authorization_digest.to_string(), override_record.reconciled_at.map(|value| value.to_rfc3339())],
+        let transaction = connection.transaction()?;
+        let (receipt_digest, authorization_digest): (Option<String>, String) = transaction
+            .query_row(
+                "SELECT receipt_digest,authorization_digest FROM operations WHERE operation_id=?1",
+                [operation_id.to_string()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?
+            .ok_or(SupervisorError::OperationMissing)?;
+        let receipt_digest = receipt_digest.ok_or(SupervisorError::CorruptLedger)?;
+        let current_digest: Option<String> = transaction
+            .query_row(
+                "SELECT receipt_digest FROM receipts ORDER BY revision DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if current_digest.as_deref() != Some(receipt_digest.as_str()) {
+            return Err(SupervisorError::CorruptLedger);
+        }
+        transaction.execute(
+            "DELETE FROM receipts WHERE receipt_digest=?1",
+            [&receipt_digest],
         )?;
+        transaction.execute(
+            "DELETE FROM emergency_overrides WHERE authorization_digest=?1",
+            [&authorization_digest],
+        )?;
+        transaction.execute(
+            "UPDATE operations SET state='failed',updated_at=?2,finding_json=?3,receipt_digest=NULL WHERE operation_id=?1",
+            params![
+                operation_id.to_string(),
+                now.to_rfc3339(),
+                serde_json::to_string(&finding)?
+            ],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -479,6 +636,9 @@ pub fn signature_purpose_name(purpose: ProtocolSignaturePurposeV1) -> &'static s
         ProtocolSignaturePurposeV1::ReleaseCatalog => "release_catalog",
         ProtocolSignaturePurposeV1::ResolvedComposition => "resolved_composition",
         ProtocolSignaturePurposeV1::ApplyAuthorization => "apply_authorization",
+        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization => {
+            "bootstrap_validation_authorization"
+        }
         ProtocolSignaturePurposeV1::SupervisorRequest => "supervisor_request",
         ProtocolSignaturePurposeV1::SupervisorResponse => "supervisor_response",
         ProtocolSignaturePurposeV1::InstallationReceipt => "installation_receipt",
@@ -743,6 +903,337 @@ mod tests {
         );
     }
 
+    struct FailingAdapter;
+
+    impl MaterializationAdapter for FailingAdapter {
+        fn execute(
+            &mut self,
+            _action: &MaterializationActionV1,
+        ) -> Result<Option<BootstrapReceiptV1>, SupervisorError> {
+            Err(SupervisorError::Materialization(
+                "injected adapter failure".into(),
+            ))
+        }
+
+        fn observed_artifacts(&self) -> BTreeMap<String, ArtifactDigest> {
+            BTreeMap::new()
+        }
+
+        fn configuration_digests(&self) -> BTreeMap<String, ArtifactDigest> {
+            BTreeMap::new()
+        }
+    }
+
+    #[test]
+    fn failed_materialization_is_terminal_and_does_not_block_a_successor_apply() {
+        let ledger = SupervisorLedger::open(":memory:").unwrap();
+        let installation = Uuid::new_v4();
+        let now = Utc::now();
+        ledger.initialize_installation(installation, now).unwrap();
+        let signer = signer();
+        let initial_plan = plan(installation);
+        let initial_authorization = signer
+            .sign(authorization(
+                installation,
+                &initial_plan,
+                now,
+                "failing-apply",
+            ))
+            .unwrap();
+        let failed = ledger
+            .accept_apply(
+                &initial_plan,
+                &initial_authorization,
+                &signer.verifier(),
+                now,
+            )
+            .unwrap();
+        assert!(matches!(
+            ledger.execute(failed.operation_id, digest('f'), &mut FailingAdapter, now),
+            Err(SupervisorError::Materialization(_))
+        ));
+        let failed = ledger.operation(failed.operation_id).unwrap().unwrap();
+        assert_eq!(failed.state, CompositionOperationStateV1::Failed);
+        assert_eq!(
+            failed.finding.as_ref().map(|finding| finding.code.as_str()),
+            Some("materialization_action_failed")
+        );
+
+        let mut successor_plan = plan(installation);
+        successor_plan.desired_revision = 2;
+        let mut successor_authorization = authorization(
+            installation,
+            &successor_plan,
+            now + Duration::seconds(1),
+            "successor-apply",
+        );
+        successor_authorization.desired_revision = 2;
+        successor_authorization.apply_sequence = 1;
+        let successor = signer.sign(successor_authorization).unwrap();
+        assert!(
+            ledger
+                .accept_apply(
+                    &successor_plan,
+                    &successor,
+                    &signer.verifier(),
+                    now + Duration::seconds(1),
+                )
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn failed_core_projection_retires_current_receipt_and_allows_same_sequence_retry() {
+        let ledger = SupervisorLedger::open(":memory:").unwrap();
+        let installation = Uuid::new_v4();
+        let now = Utc::now();
+        ledger.initialize_installation(installation, now).unwrap();
+        let signer = signer();
+        let initial_plan = plan(installation);
+        let initial_authorization = signer
+            .sign(authorization(
+                installation,
+                &initial_plan,
+                now,
+                "initial-projected-apply",
+            ))
+            .unwrap();
+        let initial_operation = ledger
+            .accept_apply(
+                &initial_plan,
+                &initial_authorization,
+                &signer.verifier(),
+                now,
+            )
+            .unwrap();
+        let initial_receipt = ledger
+            .execute(
+                initial_operation.operation_id,
+                digest('a'),
+                &mut RecordingAdapter::default(),
+                now,
+            )
+            .unwrap();
+
+        let mut delta_plan = plan(installation);
+        delta_plan.desired_revision = 2;
+        let mut delta_authorization = authorization(
+            installation,
+            &delta_plan,
+            now + Duration::seconds(1),
+            "projection-failure",
+        );
+        delta_authorization.desired_revision = 2;
+        delta_authorization.apply_sequence = 2;
+        delta_authorization.base_receipt_digest = Some(canonical_digest(&initial_receipt).unwrap());
+        let signed_delta = signer.sign(delta_authorization).unwrap();
+        let delta_operation = ledger
+            .accept_apply(
+                &delta_plan,
+                &signed_delta,
+                &signer.verifier(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+        ledger
+            .execute(
+                delta_operation.operation_id,
+                digest('b'),
+                &mut RecordingAdapter::default(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+        ledger
+            .rollback_projection_failure(
+                delta_operation.operation_id,
+                CompositionFindingV1 {
+                    code: "core_projection_failed".into(),
+                    severity: FindingSeverityV1::Error,
+                    path: "/projection".into(),
+                    message: "injected Core projection failure".into(),
+                },
+                now + Duration::seconds(2),
+            )
+            .unwrap();
+
+        assert_eq!(
+            ledger.current_receipt().unwrap(),
+            Some(initial_receipt.clone())
+        );
+        let failed = ledger
+            .operation(delta_operation.operation_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed.state, CompositionOperationStateV1::Failed);
+        assert!(failed.receipt_digest.is_none());
+
+        let mut retry_authorization = authorization(
+            installation,
+            &delta_plan,
+            now + Duration::seconds(3),
+            "projection-retry",
+        );
+        retry_authorization.desired_revision = 2;
+        retry_authorization.apply_sequence = 2;
+        retry_authorization.base_receipt_digest = Some(canonical_digest(&initial_receipt).unwrap());
+        let signed_retry = signer.sign(retry_authorization).unwrap();
+        assert!(
+            ledger
+                .accept_apply(
+                    &delta_plan,
+                    &signed_retry,
+                    &signer.verifier(),
+                    now + Duration::seconds(3),
+                )
+                .is_ok()
+        );
+    }
+
+    #[derive(Default)]
+    struct BootstrapAdapter {
+        receipt: Option<BootstrapReceiptV1>,
+        recording: RecordingAdapter,
+    }
+
+    impl MaterializationAdapter for BootstrapAdapter {
+        fn execute(
+            &mut self,
+            action: &MaterializationActionV1,
+        ) -> Result<Option<BootstrapReceiptV1>, SupervisorError> {
+            self.recording.execute(action)?;
+            Ok(matches!(action, MaterializationActionV1::Bootstrap { .. })
+                .then(|| self.receipt.clone())
+                .flatten())
+        }
+
+        fn observed_artifacts(&self) -> BTreeMap<String, ArtifactDigest> {
+            self.recording.observed_artifacts()
+        }
+
+        fn configuration_digests(&self) -> BTreeMap<String, ArtifactDigest> {
+            self.recording.configuration_digests()
+        }
+    }
+
+    #[test]
+    fn delta_receipt_carries_forward_unchanged_bootstrap_receipts() {
+        let ledger = SupervisorLedger::open(":memory:").unwrap();
+        let installation = Uuid::new_v4();
+        let now = Utc::now();
+        ledger.initialize_installation(installation, now).unwrap();
+        let signer = signer();
+        let mut initial_plan = plan(installation);
+        initial_plan.actions = vec![
+            MaterializationActionV1::AcquireImage {
+                component: "example.module".into(),
+                digest: digest('3'),
+            },
+            MaterializationActionV1::Configure {
+                owner: "example.module".into(),
+                digest: digest('4'),
+            },
+            MaterializationActionV1::Bootstrap {
+                owner: "example.module".into(),
+                input_digest: digest('1'),
+            },
+            MaterializationActionV1::SetEnablement {
+                definition_id: "example.module".into(),
+                enabled: true,
+            },
+            MaterializationActionV1::VerifyReadBack,
+        ];
+        let initial_authorization = signer
+            .sign(authorization(
+                installation,
+                &initial_plan,
+                now,
+                "initial-bootstrap",
+            ))
+            .unwrap();
+        let initial_operation = ledger
+            .accept_apply(
+                &initial_plan,
+                &initial_authorization,
+                &signer.verifier(),
+                now,
+            )
+            .unwrap();
+        let expected = BootstrapReceiptV1 {
+            owner: "example.module".into(),
+            schema_version: "example.bootstrap/v1".into(),
+            input_digest: digest('1'),
+            result_digest: digest('2'),
+            changed: true,
+            resource_ids: BTreeMap::new(),
+        };
+        let initial_receipt = ledger
+            .execute(
+                initial_operation.operation_id,
+                digest('a'),
+                &mut BootstrapAdapter {
+                    receipt: Some(expected.clone()),
+                    ..Default::default()
+                },
+                now,
+            )
+            .unwrap();
+
+        let mut delta_plan = plan(installation);
+        delta_plan.desired_revision = 2;
+        let mut delta_authorization = authorization(
+            installation,
+            &delta_plan,
+            now + Duration::seconds(1),
+            "delta-without-bootstrap",
+        );
+        delta_authorization.desired_revision = 2;
+        delta_authorization.apply_sequence = 2;
+        delta_authorization.base_receipt_digest = Some(canonical_digest(&initial_receipt).unwrap());
+        let signed_delta = signer.sign(delta_authorization).unwrap();
+        let delta_operation = ledger
+            .accept_apply(
+                &delta_plan,
+                &signed_delta,
+                &signer.verifier(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+        let delta_receipt = ledger
+            .execute(
+                delta_operation.operation_id,
+                digest('b'),
+                &mut RecordingAdapter::default(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+
+        let mut expected_no_op = expected;
+        expected_no_op.changed = false;
+        assert!(delta_receipt.no_op);
+        assert_ne!(delta_receipt.plan_digest, initial_receipt.plan_digest);
+        assert_ne!(
+            delta_receipt.lockfile_digest,
+            initial_receipt.lockfile_digest
+        );
+        assert_eq!(
+            delta_receipt.desired_enablement,
+            initial_receipt.desired_enablement
+        );
+        assert_eq!(
+            delta_receipt.observed_enablement,
+            initial_receipt.observed_enablement
+        );
+        assert_eq!(
+            delta_receipt.observed_artifacts,
+            initial_receipt.observed_artifacts
+        );
+        assert_eq!(
+            delta_receipt.configuration_digests,
+            initial_receipt.configuration_digests
+        );
+        assert_eq!(delta_receipt.bootstrap_receipts, vec![expected_no_op]);
+    }
+
     #[test]
     fn emergency_disable_preserves_desired_enablement_as_visible_drift() {
         let ledger = SupervisorLedger::open(":memory:").unwrap();
@@ -806,5 +1297,127 @@ mod tests {
             .unwrap();
         assert!(receipt.desired_enablement["example.module"]);
         assert!(!receipt.observed_enablement["example.module"]);
+        let overrides = ledger.emergency_overrides().unwrap();
+        assert_eq!(overrides.len(), 1);
+        assert_eq!(overrides[0].definition_id, "example.module");
+        assert_eq!(
+            overrides[0].authorization_digest,
+            operation.authorization_digest
+        );
+    }
+
+    #[test]
+    fn failed_emergency_override_finalization_does_not_publish_receipt_or_block_retry() {
+        let ledger = SupervisorLedger::open(":memory:").unwrap();
+        let installation = Uuid::new_v4();
+        let now = Utc::now();
+        ledger.initialize_installation(installation, now).unwrap();
+        let signer = signer();
+        let mut initial = plan(installation);
+        initial.actions.insert(
+            0,
+            MaterializationActionV1::SetEnablement {
+                definition_id: "example.module".into(),
+                enabled: true,
+            },
+        );
+        let signed_initial = signer
+            .sign(authorization(installation, &initial, now, "initial"))
+            .unwrap();
+        let initial_operation = ledger
+            .accept_apply(&initial, &signed_initial, &signer.verifier(), now)
+            .unwrap();
+        let initial_receipt = ledger
+            .execute(
+                initial_operation.operation_id,
+                digest('a'),
+                &mut RecordingAdapter::default(),
+                now,
+            )
+            .unwrap();
+
+        let emergency_plan = MaterializationPlanV1 {
+            api_version: PLAN_API_V1.into(),
+            installation_id: installation,
+            desired_revision: 1,
+            actions: vec![
+                MaterializationActionV1::SetEnablement {
+                    definition_id: "example.module".into(),
+                    enabled: false,
+                },
+                MaterializationActionV1::VerifyReadBack,
+            ],
+        };
+        let mut emergency = authorization(installation, &emergency_plan, now, "emergency");
+        emergency.operation = ApplyOperationKindV1::EmergencyDisable;
+        emergency.base_receipt_digest = Some(canonical_digest(&initial_receipt).unwrap());
+        emergency.apply_sequence = 2;
+        emergency.approved_effects =
+            std::collections::BTreeSet::from([tessara_composition::ApprovedEffectV1::Disable]);
+        emergency.reason = Some("Contain unsafe behavior".into());
+        let signed_emergency = signer.sign(emergency).unwrap();
+        let failed_operation = ledger
+            .accept_apply(&emergency_plan, &signed_emergency, &signer.verifier(), now)
+            .unwrap();
+        ledger
+            .connection
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER inject_emergency_override_failure
+                 BEFORE INSERT ON emergency_overrides
+                 BEGIN SELECT RAISE(ABORT, 'injected override persistence failure'); END;",
+            )
+            .unwrap();
+
+        assert!(
+            ledger
+                .execute(
+                    failed_operation.operation_id,
+                    digest('b'),
+                    &mut RecordingAdapter::default(),
+                    now,
+                )
+                .is_err()
+        );
+        assert_eq!(
+            ledger.current_receipt().unwrap(),
+            Some(initial_receipt.clone())
+        );
+        let failed = ledger
+            .operation(failed_operation.operation_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed.state, CompositionOperationStateV1::Failed);
+        assert!(failed.receipt_digest.is_none());
+        assert!(ledger.emergency_overrides().unwrap().is_empty());
+
+        ledger
+            .connection
+            .lock()
+            .unwrap()
+            .execute_batch("DROP TRIGGER inject_emergency_override_failure;")
+            .unwrap();
+        let mut retry = authorization(installation, &emergency_plan, now, "emergency-retry");
+        retry.operation = ApplyOperationKindV1::EmergencyDisable;
+        retry.base_receipt_digest = Some(canonical_digest(&initial_receipt).unwrap());
+        retry.apply_sequence = 2;
+        retry.approved_effects =
+            std::collections::BTreeSet::from([tessara_composition::ApprovedEffectV1::Disable]);
+        retry.reason = Some("Contain unsafe behavior".into());
+        let signed_retry = signer.sign(retry).unwrap();
+        let retry_operation = ledger
+            .accept_apply(&emergency_plan, &signed_retry, &signer.verifier(), now)
+            .unwrap();
+        let retry_receipt = ledger
+            .execute(
+                retry_operation.operation_id,
+                digest('c'),
+                &mut RecordingAdapter::default(),
+                now,
+            )
+            .unwrap();
+        assert_eq!(retry_receipt.revision, initial_receipt.revision + 1);
+        assert_eq!(ledger.emergency_overrides().unwrap().len(), 1);
     }
 }

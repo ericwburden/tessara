@@ -115,11 +115,11 @@ pub async fn fetch_module_directory()
                     NavigationPolicyBootstrapV1::unavailable(error.into_message()),
                 ),
             };
-        return Ok(ModuleDirectoryClientPayload {
+        Ok(ModuleDirectoryClientPayload {
             access,
             inventory,
             navigation_policy,
-        });
+        })
     }
     #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
     Err(ModuleManagementClientError::Unavailable(
@@ -165,11 +165,11 @@ pub async fn fetch_module_detail(
                     NavigationPolicyBootstrapV1::unavailable(error.into_message()),
                 ),
             };
-        return Ok(ModuleDetailClientPayload {
+        Ok(ModuleDetailClientPayload {
             access,
             detail,
             navigation_policy,
-        });
+        })
     }
     #[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
     {

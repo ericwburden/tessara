@@ -308,9 +308,9 @@ fn InteractiveTableHeader(
     let clear_click_key = key.clone();
     let menu_class = move || {
         if popover.open.get() {
-            "interactive-data-table__header-menu is-open"
+            "interactive-data-table__header-menu data-table-filter is-open"
         } else {
-            "interactive-data-table__header-menu"
+            "interactive-data-table__header-menu data-table-filter"
         }
     };
     let is_filtered = move || {

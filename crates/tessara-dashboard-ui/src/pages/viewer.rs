@@ -9,14 +9,14 @@ use std::{
 
 use leptos::html;
 use leptos::prelude::*;
+use tessara_dashboard_placement_renderer::{
+    ComponentRenderKind, ComponentRequestActivity, ComponentRequestActivityCallback,
+    ComponentTablePresentation, ComponentVersionExecutionContent, ComponentVersionTarget,
+    ComponentViewerMode,
+};
 use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
     EmptyState, PageHeader,
-};
-use tessara_web_component_viewer::{
-    ComponentRequestActivity, ComponentRequestActivityCallback, ComponentTablePresentation,
-    ComponentVersionExecutionContent, ComponentVersionKind, ComponentVersionTarget,
-    ComponentViewerMode,
 };
 
 use crate::types::{
@@ -530,19 +530,19 @@ fn DashboardViewerPlacement(dashboard_id: String, placement: DashboardPlacement)
     let component = placement.component.clone();
     let component_kind = component
         .as_ref()
-        .and_then(|component| ComponentVersionKind::from_api_kind(&component.component_type));
-    let is_table = available && component_kind == Some(ComponentVersionKind::Table);
+        .and_then(|component| ComponentRenderKind::from_api_kind(&component.component_type));
+    let is_table = available && component_kind == Some(ComponentRenderKind::Table);
     let is_chart = available
         && matches!(
             component_kind,
             Some(
-                ComponentVersionKind::Bar
-                    | ComponentVersionKind::Line
-                    | ComponentVersionKind::Pie
-                    | ComponentVersionKind::Donut
+                ComponentRenderKind::Bar
+                    | ComponentRenderKind::Line
+                    | ComponentRenderKind::Pie
+                    | ComponentRenderKind::Donut
             )
         );
-    let is_stat_card = available && component_kind == Some(ComponentVersionKind::StatCard);
+    let is_stat_card = available && component_kind == Some(ComponentRenderKind::StatCard);
     let has_panel_header = !is_table && !is_chart && !is_stat_card;
     let presentation = if !available {
         "unavailable"
@@ -572,7 +572,7 @@ fn DashboardViewerPlacement(dashboard_id: String, placement: DashboardPlacement)
     let active = ArcRwSignal::new(false);
     let busy = ArcRwSignal::new(false);
     let target = component.as_ref().and_then(|component| {
-        ComponentVersionKind::from_api_kind(&component.component_type).map(|kind| {
+        ComponentRenderKind::from_api_kind(&component.component_type).map(|kind| {
             let endpoint = format!(
                 "/api/dashboards/{dashboard_id}/placements/{placement_id}/render/{}",
                 kind.endpoint_segment()
@@ -967,6 +967,25 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     fn component_placement(kind: &str, title: &str) -> DashboardPlacement {
+        use tessara_module_contract::{ResourceOwner, TypedResourceReference};
+        use uuid::Uuid;
+
+        let installation_id = Uuid::from_u128(1);
+        let component_reference = tessara_components_contract::ComponentVersionReference::new(
+            TypedResourceReference::new(
+                installation_id,
+                ResourceOwner::ModuleInstance {
+                    installation_id,
+                    module_instance_id: Uuid::from_u128(2),
+                },
+                tessara_components_contract::COMPONENT_RESOURCE_TYPE
+                    .parse()
+                    .expect("resource type"),
+                Uuid::from_u128(3).to_string(),
+            )
+            .expect("typed reference"),
+        )
+        .expect("Component reference");
         DashboardPlacement {
             placement_id: "placement-1".into(),
             position: 0,
@@ -979,6 +998,7 @@ mod tests {
             config_state: None,
             title: Some(title.into()),
             component: Some(DashboardComponentVersion {
+                component_reference,
                 component_version_id: "version-1".into(),
                 component_id: "component-1".into(),
                 component_name: title.into(),

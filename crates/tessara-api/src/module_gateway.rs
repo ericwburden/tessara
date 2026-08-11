@@ -4,7 +4,7 @@
 //! service registration, projects current control state, and forwards only
 //! short-lived signed authority plus safe request metadata.
 
-use std::collections::BTreeMap;
+use std::{cmp::Reverse, collections::BTreeMap};
 
 use axum::{
     body::{Body, Bytes, to_bytes},
@@ -17,18 +17,18 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::Row;
 use tessara_module_contract::{
-    AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AuthorizationGrantOperationV1, AuthorizationGrantV2,
-    BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1, DependencyBindingKey, DeploymentProfile,
-    FunctionalContractId, ModuleDefinitionId, ModuleManifest, NavigationContributionId,
-    NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
-    PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId, ShellContextV1,
-    ShellDocumentStateV1, ShellThemeV1,
+    AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
+    AuthorizationGrantV3, BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1,
+    DependencyBindingKey, DeploymentProfile, FunctionalContractId, ModuleManifest,
+    ModuleServicePrincipalV1, NavigationProjectionV1, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId,
+    ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
 };
 use uuid::Uuid;
 
 use crate::{
     auth::AuthenticatedRequest,
-    core_security::{capability_bindings, protocol_signer},
+    core_security::{capability_bindings, protocol_signer, request_correlation_id_or_new},
     db::AppState,
     error::{ApiError, ApiResult},
 };
@@ -61,24 +61,37 @@ async fn dispatch_result(
 ) -> ApiResult<Response> {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
+    let correlation_id = request_correlation_id_or_new(request.headers());
     let installed = installed_modules(&state.pool).await?;
 
     for module in installed {
         if matches!(method, Method::GET | Method::HEAD)
-            && let Some(route) = module.manifest.browser_routes.iter().find(|route| {
-                route.methods.iter().any(|declared| {
-                    matches!(
-                        (declared, &method),
-                        (
-                            tessara_module_contract::BrowserDocumentMethod::Get,
-                            &Method::GET
-                        ) | (
-                            tessara_module_contract::BrowserDocumentMethod::Head,
-                            &Method::HEAD
+            && let Some(route) = module
+                .manifest
+                .browser_routes
+                .iter()
+                .enumerate()
+                .filter(|(_, route)| {
+                    route.methods.iter().any(|declared| {
+                        matches!(
+                            (declared, &method),
+                            (
+                                tessara_module_contract::BrowserDocumentMethod::Get,
+                                &Method::GET
+                            ) | (
+                                tessara_module_contract::BrowserDocumentMethod::Head,
+                                &Method::HEAD
+                            )
                         )
+                    }) && path_template_matches(&route.path_template, &path)
+                })
+                .max_by_key(|(index, route)| {
+                    (
+                        path_template_specificity(&route.path_template),
+                        Reverse(*index),
                     )
-                }) && path_template_matches(&route.path_template, &path)
-            })
+                })
+                .map(|(_, route)| route)
         {
             if !module.serving {
                 return Ok(crate::module_unavailable_fallback_response());
@@ -87,6 +100,7 @@ async fn dispatch_result(
                 state,
                 actor,
                 &module,
+                correlation_id,
                 AuthorizationRequest {
                     action: &route.authorization_action,
                     dependency_binding: &route.dependency_binding,
@@ -96,12 +110,19 @@ async fn dispatch_result(
                 },
             )
             .await?;
-            let shell = shell_context(actor, &module, &path)?;
+            let navigation = crate::modules::load_context_navigation(
+                state,
+                &actor.account,
+                module.installation_id,
+            )
+            .await?;
+            let shell = shell_context(actor, &module, &path, correlation_id, navigation)?;
             return forward(
                 &module,
                 ForwardRequest {
                     method,
                     path: &path,
+                    query: request.uri().query(),
                     inbound_headers: request.headers(),
                     body: Bytes::new(),
                     grant: Some(&grant),
@@ -113,15 +134,28 @@ async fn dispatch_result(
         }
 
         if module.serving
-            && let Some(route) = module.manifest.public_api_routes.iter().find(|route| {
-                api_method_matches(route.method, &method)
-                    && path_template_matches(&route.path_template, &path)
-            })
+            && let Some(route) = module
+                .manifest
+                .public_api_routes
+                .iter()
+                .enumerate()
+                .filter(|(_, route)| {
+                    api_method_matches(route.method, &method)
+                        && path_template_matches(&route.path_template, &path)
+                })
+                .max_by_key(|(index, route)| {
+                    (
+                        path_template_specificity(&route.path_template),
+                        Reverse(*index),
+                    )
+                })
+                .map(|(_, route)| route)
         {
             let grant = module_authorization(
                 state,
                 actor,
                 &module,
+                correlation_id,
                 AuthorizationRequest {
                     action: &route.authorization_action,
                     dependency_binding: &route.dependency_binding,
@@ -131,6 +165,7 @@ async fn dispatch_result(
                 },
             )
             .await?;
+            let query = request.uri().query().map(str::to_owned);
             let (parts, body) = request.into_parts();
             let bytes = to_bytes(body, 2 * 1024 * 1024)
                 .await
@@ -140,6 +175,7 @@ async fn dispatch_result(
                 ForwardRequest {
                     method,
                     path: &path,
+                    query: query.as_deref(),
                     inbound_headers: &parts.headers,
                     body: bytes,
                     grant: Some(&grant),
@@ -164,6 +200,7 @@ pub(crate) async fn asset(State(state): State<AppState>, request: Request) -> Re
                         ForwardRequest {
                             method: Method::GET,
                             path: &path,
+                            query: request.uri().query(),
                             inbound_headers: request.headers(),
                             body: Bytes::new(),
                             grant: None,
@@ -188,6 +225,8 @@ async fn installed_modules(pool: &sqlx::PgPool) -> ApiResult<Vec<InstalledModule
                 instances.ready,instances.healthy
          FROM module_instances instances
          JOIN module_releases releases ON releases.id=instances.release_id
+         JOIN application_installations installations
+           ON installations.id=instances.installation_id AND installations.singleton=true
          WHERE instances.identity_state='live' AND instances.installed
            AND releases.manifest IS NOT NULL
          ORDER BY instances.definition_id",
@@ -225,8 +264,9 @@ async fn module_authorization(
     state: &AppState,
     actor: &AuthenticatedRequest,
     module: &InstalledModule,
+    correlation_id: Uuid,
     request: AuthorizationRequest<'_>,
-) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2>> {
+) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>> {
     let revisions = sqlx::query(
         "SELECT authorization_revision,organization_revision
          FROM core_security_revisions WHERE singleton=true",
@@ -275,13 +315,16 @@ async fn module_authorization(
     }
 
     let now = Utc::now();
-    let grant = AuthorizationGrantV2 {
-        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V2,
+    let grant = AuthorizationGrantV3 {
+        schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
         installation_id: module.installation_id,
         original_actor_id: actor.account.account_id,
-        presenting_service: ModuleDefinitionId::new("tessara.core")
-            .map_err(|error| ApiError::Internal(error.into()))?,
-        audience_module_instance_id: module.instance_id,
+        correlation_id,
+        presenting_service: ModuleServicePrincipalV1::CoreGateway,
+        audience: AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: module.instance_id,
+            module_definition_id: module.manifest.definition_id.clone(),
+        },
         dependency_binding: request.dependency_binding.clone(),
         functional_contract: request.contract.clone(),
         action: request.action.into(),
@@ -311,28 +354,10 @@ fn shell_context(
     actor: &AuthenticatedRequest,
     module: &InstalledModule,
     path: &str,
+    correlation_id: Uuid,
+    navigation: Vec<NavigationProjectionV1>,
 ) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<ShellContextV1>> {
     let now = Utc::now();
-    let mut navigation = vec![NavigationProjectionV1 {
-        contribution_id: NavigationContributionId::new("tessara.core.home")
-            .map_err(|error| ApiError::Internal(error.into()))?,
-        label: "Home".into(),
-        href: "/".into(),
-    }];
-    for contribution in &module.manifest.navigation {
-        if let Some(route) = module
-            .manifest
-            .browser_routes
-            .iter()
-            .find(|route| route.destination == contribution.destination)
-        {
-            navigation.push(NavigationProjectionV1 {
-                contribution_id: contribution.id.clone(),
-                label: contribution.label.clone(),
-                href: route.path_template.clone(),
-            });
-        }
-    }
     let context = ShellContextV1 {
         schema_version: 1,
         installation_id: module.installation_id,
@@ -343,12 +368,12 @@ fn shell_context(
             display_name: actor.account.display_name.clone(),
             email: Some(actor.account.email.clone()),
         },
-        theme: ShellThemeV1::Dark,
+        theme: ShellThemeV1::System,
         navigation,
         return_destination: "/".into(),
         locale: "en-US".into(),
         time_zone: "UTC".into(),
-        correlation_id: Uuid::new_v4(),
+        correlation_id,
         document_state: ShellDocumentStateV1::Active,
         issued_at: now,
         expires_at: now + Duration::seconds(60),
@@ -435,9 +460,10 @@ async fn organization_projection(pool: &sqlx::PgPool) -> ApiResult<Vec<Value>> {
 struct ForwardRequest<'a> {
     method: Method,
     path: &'a str,
+    query: Option<&'a str>,
     inbound_headers: &'a HeaderMap,
     body: Bytes,
-    grant: Option<&'a tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV2>>,
+    grant: Option<&'a tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>>,
     shell: Option<&'a tessara_module_contract::SignedEnvelopeV1<ShellContextV1>>,
     idempotent: bool,
 }
@@ -445,10 +471,11 @@ struct ForwardRequest<'a> {
 async fn forward(module: &InstalledModule, request: ForwardRequest<'_>) -> ApiResult<Response> {
     let endpoint = service_endpoint(&module.manifest)?;
     let client = reqwest::Client::new();
+    let target = forwarded_target(&endpoint, request.path, request.query);
     let mut outbound = client.request(
         reqwest::Method::from_bytes(request.method.as_str().as_bytes())
             .map_err(|error| ApiError::Internal(error.into()))?,
-        format!("{endpoint}{}", request.path),
+        target,
     );
     if let Some(grant) = request.grant {
         outbound = outbound.header(
@@ -456,6 +483,10 @@ async fn forward(module: &InstalledModule, request: ForwardRequest<'_>) -> ApiRe
             URL_SAFE_NO_PAD.encode(
                 serde_json::to_vec(grant).map_err(|error| ApiError::Internal(error.into()))?,
             ),
+        );
+        outbound = outbound.header(
+            "x-tessara-correlation-id",
+            grant.payload.correlation_id.to_string(),
         );
     }
     if let Some(shell) = request.shell {
@@ -496,6 +527,13 @@ async fn forward(module: &InstalledModule, request: ForwardRequest<'_>) -> ApiRe
     }
     let response = outbound.send().await.map_err(|_| module_unavailable())?;
     module_response(response, &module.manifest, request.path).await
+}
+
+fn forwarded_target(endpoint: &str, path: &str, query: Option<&str>) -> String {
+    match query {
+        Some(query) if !query.is_empty() => format!("{endpoint}{path}?{query}"),
+        _ => format!("{endpoint}{path}"),
+    }
 }
 
 async fn module_response(
@@ -592,8 +630,22 @@ fn service_endpoint(manifest: &ModuleManifest) -> ApiResult<String> {
     let DeploymentProfile::TessaraOciV1(deployment) = &manifest.deployment;
     let configured = std::env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
         .ok()
-        .and_then(|value| serde_json::from_str::<BTreeMap<String, String>>(&value).ok())
-        .and_then(|map| map.get(&deployment.listen.registration_name).cloned());
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            serde_json::from_str::<BTreeMap<String, String>>(&value)
+                .map_err(|error| ApiError::Internal(error.into()))
+                .and_then(|map| {
+                    map.get(manifest.definition_id.as_str())
+                        .filter(|endpoint| !endpoint.trim().is_empty())
+                        .cloned()
+                        .ok_or_else(|| {
+                            ApiError::ServiceUnavailable(
+                                "module service endpoint is unavailable".into(),
+                            )
+                        })
+                })
+        })
+        .transpose()?;
     Ok(configured
         .unwrap_or_else(|| {
             format!(
@@ -624,6 +676,14 @@ fn path_template_matches(template: &str, path: &str) -> bool {
                     && !value.is_empty()
                     && !value.contains(['.', '/']))
         })
+}
+
+fn path_template_specificity(template: &str) -> usize {
+    template
+        .trim_matches('/')
+        .split('/')
+        .filter(|segment| !(segment.starts_with('{') && segment.ends_with('}')))
+        .count()
 }
 
 fn api_method_matches(declared: PublicApiMethod, actual: &Method) -> bool {
@@ -689,6 +749,18 @@ mod tests {
     }
 
     #[test]
+    fn manifest_route_specificity_places_static_siblings_before_parameters() {
+        assert!(
+            path_template_specificity("/api/admin/components/datasets")
+                > path_template_specificity("/api/admin/components/{component_id}")
+        );
+        assert!(
+            path_template_specificity("/api/admin/components/validate")
+                > path_template_specificity("/api/admin/components/{component_id}")
+        );
+    }
+
+    #[test]
     fn mutation_idempotency_is_header_preserving_or_generated() {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -697,6 +769,43 @@ mod tests {
         );
         assert_eq!(idempotency_key(&headers), "dashboard-save-42");
         assert!(!idempotency_key(&HeaderMap::new()).is_empty());
+    }
+
+    #[test]
+    fn request_correlation_preserves_valid_identity_and_replaces_invalid_values() {
+        let expected = Uuid::new_v4();
+        let mut valid = HeaderMap::new();
+        valid.insert(
+            "x-tessara-correlation-id",
+            HeaderValue::from_str(&expected.to_string()).unwrap(),
+        );
+        assert_eq!(request_correlation_id_or_new(&valid), expected);
+
+        for value in [Uuid::nil().to_string(), "not-a-uuid".to_string()] {
+            let mut invalid = HeaderMap::new();
+            invalid.insert(
+                "x-tessara-correlation-id",
+                HeaderValue::from_str(&value).unwrap(),
+            );
+            assert!(!request_correlation_id_or_new(&invalid).is_nil());
+        }
+        assert!(!request_correlation_id_or_new(&HeaderMap::new()).is_nil());
+    }
+
+    #[test]
+    fn module_gateway_preserves_the_exact_browser_query() {
+        assert_eq!(
+            forwarded_target(
+                "http://dashboards:8091",
+                "/api/dashboards/1/placements/2/render/table",
+                Some("page_size=10&cursor=offset%3A10"),
+            ),
+            "http://dashboards:8091/api/dashboards/1/placements/2/render/table?page_size=10&cursor=offset%3A10"
+        );
+        assert_eq!(
+            forwarded_target("http://components:8092", "/components", None),
+            "http://components:8092/components"
+        );
     }
 
     #[test]

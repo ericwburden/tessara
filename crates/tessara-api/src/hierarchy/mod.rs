@@ -4,10 +4,7 @@
 //! scoped node browse/detail projections used by forms, workflows, and access
 //! management.
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    str::FromStr,
-};
+use std::{collections::HashMap, str::FromStr};
 
 use axum::{
     Json, Router,
@@ -29,7 +26,7 @@ use crate::{
 mod dto;
 pub(crate) use dto::{
     CreateNodeMetadataFieldRequest, CreateNodeRequest, CreateNodeTypeRelationshipRequest,
-    CreateNodeTypeRequest, IdResponse, ListNodesQuery, NodeDashboardLink, NodeDetail, NodeFormLink,
+    CreateNodeTypeRequest, IdResponse, ListNodesQuery, NodeDetail, NodeFormLink,
     NodeMetadataFieldSummary, NodeResponse, NodeSubmissionLink, NodeTypeCatalogEntry,
     NodeTypeDefinition, NodeTypeFormLink, NodeTypePeerLink, NodeTypeRelationshipSummary,
     NodeTypeSummary, UpdateNodeMetadataFieldRequest, UpdateNodeRequest, UpdateNodeTypeRequest,
@@ -890,50 +887,6 @@ pub async fn get_node(
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
-    let related_component_versions = sqlx::query_scalar::<_, Uuid>(
-        r#"
-        SELECT DISTINCT component_versions.id
-        FROM component_versions
-        JOIN dataset_sources ON dataset_sources.dataset_id=component_versions.dataset_id
-        JOIN form_versions ON form_versions.id=dataset_sources.form_version_id
-        JOIN workflow_steps ON workflow_steps.form_version_id=form_versions.id
-        JOIN workflow_assignments ON workflow_assignments.workflow_step_id=workflow_steps.id
-        WHERE component_versions.status IN (
-                'published'::component_version_status,
-                'superseded'::component_version_status
-              )
-          AND form_versions.status='published'::form_version_status
-          AND workflow_assignments.node_id=$1
-        "#,
-    )
-    .bind(node_id)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .collect::<BTreeSet<_>>();
-    let related_dashboards = match crate::dashboard_dependencies::load().await {
-        Ok(projection) => projection
-            .dashboards
-            .into_iter()
-            .filter_map(|dashboard| {
-                let component_count = dashboard
-                    .placements
-                    .iter()
-                    .filter(|placement| {
-                        related_component_versions.contains(&placement.component_version_id)
-                    })
-                    .count();
-                (component_count > 0).then_some(NodeDashboardLink {
-                    dashboard_id: dashboard.dashboard_id,
-                    dashboard_name: dashboard.dashboard_name,
-                    component_count: component_count as i64,
-                    description: dashboard.description,
-                })
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-
     Ok(Json(NodeDetail {
         id: node.try_get("id")?,
         node_type_id: node.try_get("node_type_id")?,
@@ -952,7 +905,6 @@ pub async fn get_node(
         metadata: node.try_get("metadata")?,
         related_forms,
         related_responses,
-        related_dashboards,
     }))
 }
 

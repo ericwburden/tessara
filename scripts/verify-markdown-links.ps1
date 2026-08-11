@@ -35,8 +35,7 @@ try {
         }
     }
     if ($broken.Count -gt 0) {
-        $broken | ForEach-Object { Write-Error "Broken Markdown link: $_" }
-        exit 1
+        throw "Broken Markdown link(s): $($broken -join ' | ')"
     }
     Write-Host "Markdown local-link validation passed."
 } finally {

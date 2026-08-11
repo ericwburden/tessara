@@ -245,10 +245,11 @@ pub(crate) fn manage_dialog(
             if let Some(button) = close_button.get() {
                 let _ = button.focus();
             }
-        } else if !is_open && was_open_value {
-            if let Some(element) = update_dialog_environment(&effect_id, false) {
-                restore_dialog_focus(element);
-            }
+        } else if !is_open
+            && was_open_value
+            && let Some(element) = update_dialog_environment(&effect_id, false)
+        {
+            restore_dialog_focus(element);
         }
         was_open.set_value(is_open);
     });

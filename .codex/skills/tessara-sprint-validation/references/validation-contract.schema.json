@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/validation-contract-v2.json",
+  "title": "Tessara validation contract v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract",
+    "policy_version",
+    "sprint",
+    "implementation_profile",
+    "requirements",
+    "dependency_domains",
+    "implementation_targets",
+    "lanes",
+    "evidence_policy"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "contract": { "const": "tessara.validation-contract" },
+    "policy_version": { "const": "tessara-validation-v2" },
+    "sprint": { "type": "string", "pattern": "^sprint-[0-9]+[a-z][a-z0-9-]*$" },
+    "implementation_profile": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "standard" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "playbook", "module_definition", "transition_identity"],
+          "properties": {
+            "kind": { "const": "phase8-module-extraction" },
+            "playbook": { "const": "docs/architecture/module-extraction-playbook.md" },
+            "module_definition": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$" },
+            "transition_identity": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$" }
+          }
+        }
+      ]
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "implementation_targets", "validation_lanes"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "implementation_targets": { "$ref": "#/$defs/nonEmptyIds" },
+          "validation_lanes": { "$ref": "#/$defs/nonEmptyIds" }
+        }
+      }
+    },
+    "dependency_domains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "tracked_inputs"],
+        "properties": {
+          "name": { "$ref": "#/$defs/id" },
+          "tracked_inputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/repositoryPattern" }
+          },
+          "environment_sections": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "implementation_targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "command", "dependency_domains", "proof_classes", "required", "clean_environment"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "command": { "type": "string", "minLength": 1 },
+          "dependency_domains": { "$ref": "#/$defs/nonEmptyIds" },
+          "proof_classes": { "$ref": "#/$defs/nonEmptyIds" },
+          "required": { "type": "boolean" },
+          "clean_environment": { "type": "boolean" }
+        }
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "phase", "dependency_domains", "prerequisites"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "phase": {
+            "enum": ["validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"]
+          },
+          "dependency_domains": { "$ref": "#/$defs/nonEmptyIds" },
+          "prerequisites": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/id" }
+          },
+          "touches_live_state": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    "evidence_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "tracked", "successful_raw", "phase_local_indexes", "final_full_integrity_audit"],
+      "properties": {
+        "root": { "$ref": "#/$defs/repositoryPath" },
+        "tracked": { "const": false },
+        "successful_raw": { "const": "retained_cold" },
+        "phase_local_indexes": { "const": true },
+        "final_full_integrity_audit": { "const": true }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "nonEmptyIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "repositoryPattern": { "$ref": "#/$defs/repositoryPath" }
+  }
+}

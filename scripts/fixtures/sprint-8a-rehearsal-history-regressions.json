@@ -1,0 +1,293 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "tessara.sprint-8a.rehearsal-history-regressions",
+  "authority": "diagnostic_history_only",
+  "authenticated_for_deferral": false,
+  "expected_scheduler_behavior": "conservative_full_harvest",
+  "fixtures": [
+    {
+      "name": "r9-r11-materialization",
+      "observed_pattern": "source-exact-materialization-no-op failed in three consecutive rehearsals while four independent lanes passed and seven topology-dependent lanes were blocked",
+      "authentication_state": "legacy_receipts_unauthenticated_for_deferral",
+      "authentication_reason": "The legacy schema omits modern source and environment fingerprints, immutable ordering, per-lane passing receipt references, and deferral counters; R10 and R11 also lack receipt sidecars.",
+      "expected_scheduler_behavior": "conservative_full_harvest",
+      "attempts": [
+        {
+          "attempt": 9,
+          "source_identity": {
+            "commit": "e0bec15f105c2742c82b7e07ff991cca84191644",
+            "tree": "23543cc795f1e365baef91540b60540be7327539"
+          },
+          "receipts": {
+            "attempt": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-9.json",
+              "sha256": "844fbbf3f3e1849faaa700a4b2fe1378eedc751897e7aa18415d0e6bce4643d9",
+              "sidecar_present": true
+            },
+            "harvest": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-9-harvest.json",
+              "sha256": "7baf86d8d43ecaa7afbbc821fe2306139bf4c4be137db436cbd574e719853ae0",
+              "sidecar_present": true
+            },
+            "defect_batch": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-9-defect-batch.json",
+              "sha256": "9276cbd7dd8fe9a38c3eb604ea31a6fdb241178965a20cb046deae0d3b04cd6f",
+              "sidecar_present": true
+            }
+          },
+          "failed_lane": "source-exact-materialization-no-op",
+          "raw_evidence": {
+            "path": "artifacts/sprint-8a-closeout/rehearsal/materialization-attempt-3.log",
+            "sha256": "266a5992432e7f1208a7dc2e929fd145fef0ad08b9d1c5b36103b163c826e65e"
+          }
+        },
+        {
+          "attempt": 10,
+          "source_identity": {
+            "commit": "47bd5bf8ae8618a40bcbe81c76b7ea9e8d9bf5ee",
+            "tree": "ec036afe2af142c8d506102b9247b0dda82f1d47"
+          },
+          "receipts": {
+            "attempt": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-10.json",
+              "sha256": "d0739113bb372571c08b194376ce91d890290dda3e10ff6b14b9c3864c79aba1",
+              "sidecar_present": false
+            },
+            "harvest": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-10-harvest.json",
+              "sha256": "59274871199483b6cd584025f80f48db95815cd1432c52ca7135191aa4b7ee5b",
+              "sidecar_present": false
+            },
+            "defect_batch": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-10-defect-batch.json",
+              "sha256": "a962d0d10d03632f2904879ac4525d68f3d69280786455235a0f41cd635e11bc",
+              "sidecar_present": false
+            }
+          },
+          "failed_lane": "source-exact-materialization-no-op",
+          "raw_evidence": {
+            "path": "artifacts/sprint-8a-closeout/rehearsal/materialization-attempt-4.log",
+            "sha256": "0dd15c6a64881399dfbc64c6fa57c111642472935c84f521f1dd0b720831b5a4"
+          }
+        },
+        {
+          "attempt": 11,
+          "source_identity": {
+            "commit": "cc572d070689e9cfa052c0b129cc3521feffd426",
+            "tree": "204aa75e3a24876d8389325b0927c3eb8e23bb50"
+          },
+          "receipts": {
+            "attempt": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-11.json",
+              "sha256": "c0bfaadc068b7321361c2348c39799ded039c3ac812f105908cc13ed66529c38",
+              "sidecar_present": false
+            },
+            "harvest": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-11-harvest.json",
+              "sha256": "edf491d40e8183a9511aa243600699c23b52196d8fa2ba905a4c58b160b8cd79",
+              "sidecar_present": false
+            },
+            "defect_batch": {
+              "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-11-defect-batch.json",
+              "sha256": "4067bb8976e0aa9efc74ad4c89d631167d680f04fd7ac1513632af07ab606616",
+              "sidecar_present": false
+            }
+          },
+          "failed_lane": "source-exact-materialization-no-op",
+          "raw_evidence": {
+            "path": "artifacts/sprint-8a-closeout/rehearsal/materialization-attempt-5.log",
+            "sha256": "7ad6dede746dd6b82c65c6bf87df56bb0da6db5136dcf2ae1be1e584bd0415b4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "r19-r22-playwright-aggregate-sink",
+      "observed_pattern": "playwright-execution failed repeatedly while final-health-and-clean-source remained a blocked aggregate sink and must not expand failure-first execution to the whole graph",
+      "authentication_state": "legacy_receipts_unauthenticated_for_deferral",
+      "authentication_reason": "The aggregate receipts and Playwright logs are diagnostic history, not modern per-lane passing receipts; all four attempt, harvest, and defect-batch sidecars are absent.",
+      "expected_scheduler_behavior": "conservative_full_harvest",
+      "aggregate_sink": "final-health-and-clean-source",
+      "attempts": [
+        {
+          "attempt": 19,
+          "source_identity": {
+            "commit": "4eb7ef012bd9e0ef32c9941b0d08b338e9fdf79e",
+            "tree": "38057216d238f6879f77163af06ce1306af4e8d4"
+          },
+          "receipt": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-19.json",
+            "sha256": "6be95fe9c538345f5e5f248198eff65221e7c66bd93a77edf095bca19d9b61bb"
+          },
+          "harvest": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-19-harvest.json",
+            "sha256": "9bea3b9345b4ca88db30d680c02f1323302ebf0dd5057b1cbcf91d51756be060"
+          },
+          "defect_batch": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-19-defect-batch.json",
+            "sha256": "f73714b90a8cfdfc79298aa67bf5b03b312c1dbbecd7be3151307c372c98cce1"
+          },
+          "playwright_log": {
+            "path": "artifacts/sprint-8a-closeout/rehearsal/playwright-acceptance-attempt-19.log",
+            "sha256": "6cecb90d35fcd986608dacf4c695779ae0a2007734c1ab1a926a3c42b7a0764c"
+          },
+          "playwright_summary": {
+            "passed": 33,
+            "failed": 3,
+            "not_run": 34
+          }
+        },
+        {
+          "attempt": 20,
+          "source_identity": {
+            "commit": "327f65ed911bcdf84caf8103f5184232be86ad77",
+            "tree": "981d0b61b1fe76c51584a727835e05bfe18099be"
+          },
+          "receipt": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-20.json",
+            "sha256": "9981f44c8ebe9ad2e1dff9fbedb4541735b8453139f129081c1e97294ae19927"
+          },
+          "harvest": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-20-harvest.json",
+            "sha256": "9f35dd80586cdae5499824b14fbd2863173cbe1eea6a45b66e2e836143f1d8db"
+          },
+          "defect_batch": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-20-defect-batch.json",
+            "sha256": "84bac868a51d0a1942f3676dd551838b5e80fada817e4cd6d9100b0a9ef8fa50"
+          },
+          "playwright_log": {
+            "path": "artifacts/sprint-8a-closeout/rehearsal/playwright-acceptance-attempt-20.log",
+            "sha256": "a43d7c0e313f7ad7ca797cb778935ad5c123eb45ebdc2a325d5ed1a5eb051ba5"
+          },
+          "playwright_summary": {
+            "passed": 48,
+            "failed": 2,
+            "not_run": 20
+          }
+        },
+        {
+          "attempt": 21,
+          "source_identity": {
+            "commit": "1a644ccde84659c6e2be0031459cdfd055272895",
+            "tree": "7c438cf1ca0374e018df4491eb32067bba5a8ed3"
+          },
+          "receipt": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-21.json",
+            "sha256": "2aa5a76a87986e1237126c295cef74665db10a9b6974ae53159dd5512854613b"
+          },
+          "harvest": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-21-harvest.json",
+            "sha256": "feb933a2586e7bf18469f8d827769dadf4ca84b19abbff9a2eb941203ed64dba"
+          },
+          "defect_batch": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-21-defect-batch.json",
+            "sha256": "d4da134f2f0f962403065e5b01681fb7515c034e0533d76e4be3a86ea55b0dad"
+          },
+          "playwright_log": {
+            "path": "artifacts/sprint-8a-closeout/rehearsal/playwright-acceptance-attempt-21.log",
+            "sha256": "cba0a3b64959b30192a677dc87aed7e211df7531b4767dfd9622e4307c2e4b7b"
+          },
+          "playwright_summary": {
+            "passed": 48,
+            "failed": 2,
+            "not_run": 20
+          }
+        },
+        {
+          "attempt": 22,
+          "source_identity": {
+            "commit": "f5bfb0409f020fd9b14c4966e0ff60778bbba19a",
+            "tree": "abd416cfe529238f16f53d6c6cf2c11517e33868"
+          },
+          "receipt": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-22.json",
+            "sha256": "5d54d1b0fad2931d840a33b1ea126f31903696571b25b614fd8adea563245218"
+          },
+          "harvest": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-22-harvest.json",
+            "sha256": "55f5d65a60492dfc2eef6f101389cc727598002d072a066de8b9181071825ffa"
+          },
+          "defect_batch": {
+            "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-22-defect-batch.json",
+            "sha256": "9a9c4f89bce5da22abf06df7a6e408652371367c040ea11bd2ceeab557fcda7c"
+          },
+          "playwright_log": {
+            "path": "artifacts/sprint-8a-closeout/rehearsal/playwright-acceptance-attempt-22.log",
+            "sha256": "01299def162d20f403a1a580286fdd436bfaa388a984376cd71e0fd3c04ec2f9"
+          },
+          "playwright_summary": {
+            "passed": 52,
+            "failed": 2,
+            "not_run": 16
+          }
+        }
+      ]
+    },
+    {
+      "name": "r29-process-loss",
+      "observed_pattern": "eight lanes passed, three failed, optimized-resource-reference-timing remained executing, and twenty lanes were unexecuted when the controlling process ended",
+      "authentication_state": "incomplete_checkpoint_unauthenticated_for_deferral",
+      "authentication_reason": "The checkpoint and executing lane have valid sidecars, but the attempt omits the modern immutable declared graph, assertion-start accounting, ordering decision, and deferral counters.",
+      "expected_scheduler_behavior": "conservative_full_harvest",
+      "source_identity": {
+        "commit": "3f7e32cb7e1948a36185a68352901b873934c0b0",
+        "tree": "252e651e0d031c04d61547b6d6eac964bb04f84f",
+        "acceptance_inventory_sha256": "544ad4b90937965c8dd3b2a85b195445b48be3abc725a72f8dcb67fb2719f2fd",
+        "deployment_inputs_sha256": "053705b9385d6029fe3cab18b2fb3745d1816667df5eac246375f3fc962252a3"
+      },
+      "environment_fingerprint": "2e235b070dd2f3663242fe5b3f983f561b834161ed65847ad6dd399d35e01da0",
+      "attempt_receipt": {
+        "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-29-attempt.json",
+        "sha256": "b8be3c10178c09f104d6867a116720c71a9b0964a98edd43d677ef8a46c36edb",
+        "sidecar_present": true
+      },
+      "executing_lane_receipt": {
+        "path": "artifacts/sprint-8a-closeout/rehearsal/attempt-29/lanes/optimized-resource-reference-timing.json",
+        "sha256": "f0cf9b9cd11937ec99c66e6eeb73ac11eb43c701e710fa8cdc1ecca36e2b2a33",
+        "sidecar_present": true
+      },
+      "terminal_accounting": {
+        "passed": 8,
+        "failed": 3,
+        "executing": 1,
+        "unexecuted": 20
+      }
+    },
+    {
+      "name": "r31-first-use-fallback",
+      "observed_pattern": "the first rehearsal preceding the two-wave scheduler has authenticated source, environment, attempt, harvest, batch, authorization, and lane receipts but no immutable wave ordering or deferral-counter lineage",
+      "authentication_state": "identity_authenticated_scheduler_history_incomplete",
+      "authentication_reason": "Authenticated passing lane history alone cannot establish prior ordering, impact decisions, or consecutive deferral counters for the new protocol.",
+      "expected_scheduler_behavior": "conservative_full_harvest",
+      "source_identity": {
+        "commit": "ffe05aceb526c36023d4946c3f58be641378c50f",
+        "tree": "1d17533d93429e20e9de510a60cb413b38127797",
+        "acceptance_inventory_sha256": "101150436fbd32680602d04bf2c83f227d2912003d413bbebb000a9391cc7c1d",
+        "deployment_inputs_sha256": "33e9619df9ff4781e97e041bf28f044e4d30ad36507bf31773ebf88075d94d9e"
+      },
+      "environment_fingerprint": "96c2a32ed16dfb288a4ca2578c171413d727c16153f5fbed3dd6dff9c2b410b3",
+      "receipts": {
+        "attempt": {
+          "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-31-attempt.json",
+          "sha256": "e6efd0e5f480de39e4474e3a3e6c1bd13ae292885591ec10f5621e68ce3bd611"
+        },
+        "harvest": {
+          "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-31-harvest.json",
+          "sha256": "ac2aae8d20ab5d67ed244e73acd142a56e997904b72afafcb957e7adfd92c365"
+        },
+        "defect_batch": {
+          "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-31-defect-batch.json",
+          "sha256": "20109843c4e15a79792f7f8eb8a2521b6ae3ffea371996f98acad72bc9d365cf"
+        },
+        "correction_authorization": {
+          "path": "artifacts/sprint-8a-closeout/attempts/candidate-rehearsal-31-correction-authorization.json",
+          "sha256": "9f6c60a81d0ecb538a49113fc98b69e0f1d8ebb63f09f5424eef2b113f3b9aae"
+        },
+        "prior_passing_lane_example": {
+          "path": "artifacts/sprint-8a-closeout/rehearsal/attempt-31/lanes/formatting.json",
+          "sha256": "fbddbc9089513f4e4cc40f435b97b768b97911807f16292e3b396868d1734d14"
+        }
+      }
+    }
+  ]
+}

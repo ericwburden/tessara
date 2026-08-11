@@ -8,6 +8,141 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-11 - Sprint 8A Component Module Separation Closeout
+
+Sprint 8A is complete. Components now runs as an independently deployed
+module with its own process, database, release, instance, manifest, routes,
+assets, persistence, and lifecycle. Core retains exactly five transition
+entries: Forms, Workflows, Responses, Datasets, and Migration. Components and
+Dashboard each appear once through their real module enrollment, and both use
+the canonical Module UI SDK for shared construction and styling.
+
+The certified product source is commit
+`643516f9dfed1077720b6df362b1c3d5e3c1506b`, tree
+`c9d48fbb1c2f4b90816cb0ca98fdbd7142247f86`, candidate fingerprint
+`d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`,
+and environment fingerprint
+`f8c66c6c8f9a47a5cf134cbff4327086f0a58feba8987cab2b1e57dbefcbe0b5`.
+The closeout documentation commit is intentionally separate from that
+certified product commit.
+
+Validation completed cleanly:
+
+- Readiness 55 passed all 15 checks and Candidate Rehearsal 43 passed all 32
+  lanes, including clean materialization, semantic no-op, recovery, the full
+  Rust workspace, 84 browser scenarios, upgrade/rollback, restoration, and
+  final identity authentication.
+- Preflight 25 passed and froze the exact candidate above.
+- SIT 6 passed all four lanes: static/boundaries, the Rust workspace,
+  Playwright, and deployed acceptance smoke.
+- UAT 13 passed one scripted check and all eight manual scenarios with no
+  failures or blocks. Attempts 10 through 12 remain retained as superseded
+  evidence-finalization/tooling failures; they did not change the candidate.
+- The evidence audit authenticated 8,107 files, parsed all 3,068 JSON records,
+  passed Markdown-link verification, and authorized closeout in
+  `artifacts/sprint-8a-closeout/closeout-authorization.json`.
+
+The running handoff remains at `http://127.0.0.1:8088`. Core health is exact
+HTTP 200 `text/plain` with body `ok`; Supervisor readiness at
+`http://127.0.0.1:8098/health/ready` is exact HTTP 204 with an empty body.
+The active enrollment is Components `1.0.1` and Dashboard `3.0.1`; the shared
+platform tuple is Module SDK `0.3.0`, design-system ABI `2.0.0`, and
+conformance suite `1.2.0`.
+
+### Acceptance mapping
+
+| Roadmap commitment | Manual proof | Automated proof |
+| --- | --- | --- |
+| Preserve Component authoring, viewing, versions, execution, all six kinds, and accepted UI behavior through the shared SDK | UAT-8A-01 | SIT static/boundaries, Rust, Playwright, and smoke |
+| Materialize from empty with new Component references, exact five Core transitions, one Dashboard enrollment, and a semantic no-op | UAT-8A-02 | SIT deployed acceptance smoke and Rehearsal materialization lanes |
+| Keep configuration, diagnostics, module ownership, and sanitized operator behavior | UAT-8A-03 | SIT Playwright and Rust workspace |
+| Replace Component-to-Dataset storage coupling with typed contracts, exact shared-node scope, nondisclosure, and outage recovery | UAT-8A-04 | SIT Rust, Playwright, and deployed smoke |
+| Preserve Dashboard-to-Component lifecycle actions and coherent outage/recovery behavior through public contracts | UAT-8A-05 | SIT Playwright and deployed smoke |
+| Remove Core Component product storage/adapters and reject old owners, payloads, versions, and compatibility aliases | UAT-8A-06 | SIT static/boundaries and Rust workspace |
+| Contain a failed materialization, remove partial topology, recover cleanly, and prove the successor no-op | UAT-8A-07 | Rehearsal recovery/restoration and SIT deployed smoke |
+| Upgrade, roll back, and restore only Components while preserving state and unrelated module identity | UAT-8A-08 | Rehearsal and SIT upgrade/rollback coverage |
+
+### Handoff and demo
+
+1. As a Component manager, open `/components`; browse, create, edit, publish,
+   view versions, and render a Component. Confirm the Components title matches
+   navigation and the same SDK shell, theme, controls, and responsive behavior
+   used by `/dashboards`.
+2. As an operator, inspect `/administration/modules`, `/components`, and
+   `/dashboards`. Confirm Components `1.0.1` and Dashboard `3.0.1` each appear
+   once, while Core exposes only the five transition entries above.
+3. As an administrator, execute Components backed by Dataset compatibility
+   references and view their Dashboard placements. Confirm authorized shared-
+   scope rendering works and restricted/disjoint data remains undisclosed.
+4. Review the retained UAT-8A-06 through UAT-8A-08 receipts for isolation,
+   old-input rejection, failed-materialization recovery, and Component-only
+   upgrade/rollback proof. The authoritative result is
+   `artifacts/sprint-8a-closeout/uat-result.json`.
+
+Next focus: Sprint 8B applies the corrected, repeatable extraction playbook to
+Datasets, including an accepted UI baseline, explicit SDK ownership mapping,
+clean-environment materialization, and focused validation-target proof before
+formal certification.
+
+## 2026-08-05 - Sprint 8A Implementation Handoff
+
+- Implemented `tessara.components` 1.0.0 as an independently built, deployed,
+  configured, diagnosed, persisted, and rendered full-stack module with its
+  own database baseline, runtime, migration identity, routes, documents,
+  lifecycle assets, capabilities, seed, and all six Component kinds.
+- Replaced Core/Dashboard transition references with exact Components v3
+  module-instance references and introduced the typed Dataset v1 compatibility
+  boundary. Dashboard rendering is now Dashboard-owned and consumes the
+  Component provider directly.
+- Removed Core Component product routes, storage, seed, navigation fallback,
+  web package, and obsolete payload compatibility. Persistent Component
+  mutations use gateway-provided idempotency keys and durable replay receipts.
+- Added the disposable Sprint 8A Compose topology, canonical release catalog,
+  from-empty owner materialization with second-run no-op proof, semantic seed,
+  verified failed-attempt teardown, acceptance contract, deployed smoke runner,
+  and Component-only immutable-image upgrade/rollback/restoration runner.
+- Source readiness passed formatting, all-target/all-feature Clippy with
+  warnings denied, workspace library/binary tests (apart from two explicitly
+  environment-bound database tests), focused contract/module/UI suites, web
+  boundary audit, PowerShell parser/self-test, Compose rendering, and catalog
+  sign/verify/resolve.
+- Eight UAT scenarios are defined in `docs/sprints/sprint-8a-verification.md`.
+  Validation, deployed SIT, UAT execution, and closeout are Not Run and remain
+  assigned to their specialized lifecycle workflows.
+
+## 2026-08-05 - Sprint 8A Component Module Separation Kickoff
+
+- Status: kickoff and product-decision reconciliation complete; implementation
+  started with the exact Components V3 and Dataset compatibility contracts.
+- Branch: `codex/sprint-8a`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`.
+- Execution contract: `docs/sprints/sprint-8a-plan.md`.
+- Planned validation record: `docs/sprints/sprint-8a-verification.md` with
+  evidence rooted at `artifacts/sprint-8a-closeout/`.
+- Planned verification baseline:
+  - `cargo fmt --all -- --check`
+  - `cargo check --workspace --all-features --locked`
+  - `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  - `cargo test --workspace --locked`
+  - `npm --prefix .\end2end test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Decisions/blockers: no product blocker remains. Phase 8 uses destructive,
+  from-empty materialization while the whole reference app is offline. Owner
+  bootstraps rebuild all seed data in dependency order; Dashboard receives new
+  Component references from owner read-back. Old Core Component references and
+  payloads are unsupported, and no mapping, rebinding, transition ledger, or
+  Component compatibility adapter is in scope. Dataset access remains behind
+  its typed, versioned Core compatibility contract until Sprint 8B. Component
+  configuration adds the constrained navigation/admin label and Dataset
+  timeout. A failed attempt retains evidence, destroys its exact disposable
+  topology and volumes, and reruns from empty.
+- Recommended first implementation slice: lock Components V3 and the Dataset
+  compatibility contract, change first-party consumers directly to the
+  canonical shapes, reject old inputs, and add failing package, route, owner,
+  storage, and exact-contract boundary assertions before moving product code.
+
 ## 2026-08-05 - Sprint 7B Cross-Module Resource Lifecycle And Dependency Closeout
 
 - Completed:

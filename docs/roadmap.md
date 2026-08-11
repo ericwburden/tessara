@@ -64,15 +64,18 @@ The codebase already includes a substantial vertical foundation:
 - draft/save/submit response flows and review behavior
 - reporting/storage slices for datasets, reports, aggregations, charts, and dashboards
 - legacy fixture validation, dry-run, import rehearsal, and demo seed paths
-- a Leptos SSR shell with root-level native product routes for Home, Organization, Forms, Workflows, Responses, Components, Datasets, Dashboards, and Administration; the former Migration surface is retired and has no live route
-- extracted Leptos feature crates for shared UI, Datasets, Forms, Workflows, Responses, and Organization, with root-owned route adapters preserving shell, auth, route parsing, hydration, CSS, and cargo-leptos ownership
+- a coherent Leptos SSR shell with Core/root-owned routes for Home, Organization, Forms, Workflows, Responses, Datasets, and Administration plus generic same-origin module routing for Components and Dashboard; the former Migration surface is retired and has no live route
+- extracted Leptos feature crates for shared UI, Datasets, Forms, Workflows, Responses, and Organization, with root-owned adapters for those still-in-process routes and module-owned documents, hydration, assets, and product routes for Components and Dashboard
 - Sprint 2B authentication hardening: Argon2id credential storage, server-side session expiry/revocation/last-seen tracking, same-origin `HttpOnly` browser cookies, stable auth/session errors, and native SSR login/session behavior
 - UI Overhaul 2.0 detour work: approved shell navigation posture, access-denied redirect plus transient feedback, sidebar footer account/scope/theme context, queue-first home posture, explorer-oriented organization work, section-oriented form-builder UI, and section description/column-count persistence
 - Sprint 4A Dataset Catalog and Thin Table Components: searchable Dataset tags, Dataset provenance lineage, one thin Table Component over Dataset major-line outputs with last-mile projection/filter defaults, edit-screen component versioning/publishing, and shared interactive table rendering for Dataset previews and Component viewers
 - Sprint 5A Dashboard Composition: native directory/detail/editor/viewer flows over stable `ComponentVersion` identities, revisioned placement composition, bounded execution, and scoped redaction
-- Sprint 6A Module Contract and Core Control Plane: one stable Application Installation and Core runtime observation; exact Manifest, Feature Declaration, contract, semantic-destination, typed-reference, and real Release/Instance public types; seven versioned transition descriptors with six active in-process contributions and retired Migration; Core-owned module inventory/provenance APIs and native Module Management UI; and revisioned band-restricted navigation policy, without Release/Instance persistence, installation, execution, or mutation
+- Sprint 6A Module Contract and Core Control Plane, as the then-current baseline later superseded by extraction: one stable Application Installation and Core runtime observation; exact Manifest, Feature Declaration, contract, semantic-destination, typed-reference, and real Release/Instance public types; seven versioned transition descriptors with six active in-process contributions and retired Migration; Core-owned module inventory/provenance APIs and native Module Management UI; and revisioned band-restricted navigation policy, without Release/Instance persistence, installation, execution, or mutation
 - Sprint 6A-UI through 6B2: configuration-driven navigation and reusable Module Management; persisted Module Releases/Instances; same-origin gateway and installation-control services; per-module databases and identities; secure Shell Context, authorization, configuration, health, diagnostics, enablement, enrollment, upgrade, and rollback foundations; and independently deployed Scoped Records
 - Sprint 6C Dashboard runtime/data extraction: Dashboard service, database, identities, migrations, manifest, operations, APIs, SSR pages, same-origin routes, transition-only Components contract, and definition-independent Module Management controls, with root web source/build decoupling deliberately remaining for the post-closeout SDK adoption pass
+- Sprint 6D and 6E module SDK/runtime adoption: canonical module contract, runtime, UI/design-system, asset, and conformance packages plus completed Dashboard source/build independence, release-owned documents/assets, and Dashboard-only upgrade/rollback
+- Sprint 6F through 7B composition and cross-module correctness: deterministic Blueprint/lockfile/materialization operations, scoped cross-boundary authorization, typed resource lifecycle and dependency behavior, and the reusable extraction proofs that Phase 8 reruns
+- Sprint 8A Component separation implementation: independently built and deployed Component Module Release/Instance, owner database, product/API/document/asset ownership, typed Dataset compatibility consumption, and Dashboard consumption through the public Component contract; formal testing exited after Readiness 38 retained 12 passes, 2 failures, and 1 exact block, and the plan-to-source audit consolidated the environment-entry, harness, validation-lineage, exact Component configuration, and formal-UAT enforcement gaps before fresh complete gates
 
 ### Historical closed Sprint 6A UI baseline
 
@@ -91,38 +94,119 @@ are historical; unrelated route behavior remains useful transition context:
 
 ### Current implementation gaps
 
-The contract, control-plane, container runtime, secure module-operation, and
-first feature process/database boundaries are complete through Sprint 6C.
-Dashboard now runs as a real Module Release/Instance with its own service,
-database, runtime identities, migrations, manifest, operations, APIs, SSR
-pages, and same-origin routes. The reusable Module Management pathway is
-definition-independent.
+The contract, control plane, canonical SDK/runtime, composition automation,
+and cross-module authorization/lifecycle foundation are complete through
+Sprint 7B. Dashboard completed source/build independence in Sprint 6E and is
+an enrolled real Module Release/Instance. Sprint 8A applies that pathway to
+Components, which is likewise represented by its real enrollment rather than
+by a Core transition descriptor.
 
-The next gap is source/build independence. Dashboard still links root
-`tessara-web`, and Core still constructs Dashboard-specific web bootstrap
-types. Tessara must now:
+Readiness 37 passed and Candidate Rehearsal 30 completed all 32 declared lanes:
+18 passed, 4 raw lanes failed, and 10 were blocked by exact failed
+prerequisites. Their consolidated correction was committed. Readiness 38 then
+consumed R30's one-use authorization against clean commit `91c9936b`, tree
+`564493fd`, and completed all 15 checks with 12 passed, 2 failed, and 1 blocked.
+The failures are the missing same-process `TEST_API_DATABASE_URL` binding
+(`environment`) and a stale failure-containment self-test recovery sequence
+(`harness`); `environment-contract` is blocked by the former. Formal testing
+exited at that terminal boundary. The implementation audit added the failed-
+Readiness retry lineage, truthful Rehearsal checkpoints, retired Component
+`missing_policy` removal, and exact AC-18/AC-19 UAT/evidence contracts to one
+candidate-affecting correction. No corrected readiness, rehearsal pass,
+candidate, preflight, SIT, or UAT exists.
 
-- extract canonical, independently versioned platform contract, module
-  runtime, UI SDK/design-system, asset, and conformance source packages
-- allow repeated compiled code and assets in module images while prohibiting
-  copied shared source and shared module business implementations
-- finish Dashboard route, SSR/hydration, bootstrap, and asset ownership without
-  dependencies on the Core application binary, root web application, or
-  Core-private DTOs
-- prove Dashboard-only build, deployment, upgrade, and rollback while Core and
-  unrelated module image digests remain unchanged
-- define deterministic Application Blueprint, lockfile, validate, plan/diff,
-  apply, and read-back operations for human and LLM composition
-- prove scoped authorization, lifecycle observation, unavailable-state
-  behavior, and diagnostics across actual module boundaries
-- apply the completed SDK/runtime and module extraction pass to the remaining
-  non-Core feature areas before broad pilot hardening
+The Sprint 8A implementation lineage now:
+
+- make the Components contract own the exact render response DTOs and
+  render-kind discriminant, return them from Component provider/product routes,
+  omit the unused Dataset provider identity, validate and consume them in
+  Dashboard, and keep the Dashboard placement renderer free of direct
+  Dataset-contract dependencies and copied response types
+- reject cross-kind visual fields and distinguish exact non-nil persistent
+  render identity from the explicit both-nil unsaved-preview identity
+- verify every affected signed Component/Core/Dataset service request against
+  its raw body before deserialization, preserving JSON media-type enforcement
+- require one common governing node across Dashboard and Component scopes and
+  grants, bind render to the exact ComponentVersion resource assertion, forward
+  only actor-authorized Dashboard scope, and redact disjoint metadata/title
+- correct the Component integration fixture's required-field declaration
+  without weakening exact product validation, and bind each PowerShell
+  child-script exit result to its own invocation
+- remove active legacy Component normalization/flat-Dataset aliases from
+  first-party permissions, smoke, and UAT inputs; keep the exact 75-scenario
+  Playwright inventory and joint-scope UAT-8A-04 mapping
+- keep Core's frozen transition catalog at exactly `tessara.forms`,
+  `tessara.workflows`, `tessara.responses`, `tessara.datasets`, and
+  `tessara.migration`
+- present Components and Dashboard exactly once through their real Module
+  Releases/Instances and enrolled manifests, with reference navigation order
+  Scoped Records `7`, Components `8`, and Dashboard `9`
+- prove the fresh owner-controlled seed/materialization path from empty
+  databases, including new Component Module Instance references in Dashboard
+  placements and rejection of old Core Component references
+- remove stale Core Component storage, adapters, readers, routes, payloads,
+  fixtures, and copied-count expectations without adding migration, mapping,
+  rebinding, retained-adapter, or resume behavior
+- align the implementation, tests, fixtures, acceptance inventory, deployment
+  inputs, runners, and governing documentation before re-entering complete
+  validation readiness and candidate rehearsal
+- keep the public gateway offline through owner materialization, validate
+  Component bootstrap and authoring against the real Dataset contract before
+  writes, and bind Dashboard outage disclosure/actions to the exact current
+  semantic authorization context
+- carry the completed pathway into the remaining Forms, Workflows, Responses,
+  and Datasets extractions before broad pilot hardening
+- retain the full R30 fail-late result rather than restarting after the first
+  failure, and correct its three diagnosed harness roots as one batch
+- retain the full R38 fail-late result, including both raw failures and the
+  exact blocked environment-contract reason, and add a typed failed-Readiness
+  harvest/batch/authorization lineage instead of stranding a consumed
+  predecessor authorization
+- mark assertions per lane, prefer structured child classification, retain
+  comparable environment-mismatch detail, and canonicalize new evidence paths
+  so the next harvest is both terminally complete and diagnostically exact
+- remove the active Component `missing_policy` alias from validation, provider,
+  browser, and first-party fixtures; preserve only the four purpose-specific
+  missing-value policy fields and reject the retired key
+- bind all eight manual UAT scenarios to one canonical machine-readable
+  scenario, tester, precondition, evidence, acceptance-criterion, and semantic-
+  predicate contract; enforce AC-18 and AC-19 by exact identity
+- enter downstream validation only through the repository-owned ten-check
+  preflight runner, four-lane staged SIT runner, and staged formal-UAT runner;
+  their receipts bind the normalized Compose configuration digest in addition
+  to tracked deployment inputs
+- hold one evidence-root execution lease throughout each manual UAT scenario,
+  commit its receipt/completion pair through an immutable prepared-publication
+  checkpoint, reject an authoritative pass after process-lineage resume,
+  continue safe scenarios as non-authoritative diagnostic harvest after a
+  scripted or manual defect, pause on a product decision, and permit a
+  finalization-only publication retry only from a durable completed
+  scripted/manual/restoration checkpoint
+
+Before R37/R30, the then-corrected product source passed the complete all-feature
+workspace Rust suite against six freshly reset isolated databases,
+all-target/all-feature clippy with warnings denied, all-target/all-feature
+check, formatting, focused contract and integration checks, boundary and
+acceptance contracts, runner self-tests, the exact 75/75 acceptance inventory,
+TypeScript compilation, and 75-test Playwright discovery. Documentation-only
+handoff edits are covered by the final static audits. Those implementation
+results remain useful history, but R38 supersedes them for entry-state
+purposes. The current product, runner, evidence, UAT, and documentation
+correction requires focused implementation verification, an append-only R38
+harvest/batch/authorization finalization, and then fresh complete Readiness and
+Rehearsal gates. It does not authorize preflight or a later phase.
 
 ### Frontend transition baseline
 
-The completed web refactoring pass remains useful because it created explicit feature seams without changing route behavior. Sprint 6C then established the first real feature process/database boundary. The remaining root-linked crates are transitional inputs to the canonical module SDK/runtime and full source/build separation rather than the final architecture.
+The completed web refactoring pass remains useful because it created explicit
+feature seams without changing route behavior. Sprint 6E completed Dashboard's
+full source/build boundary, and Sprint 8A applies the same independently owned
+document, hydration, asset, API, and persistence structure to Components. The
+remaining root-linked Forms, Workflows, Responses, and Datasets crates are
+transitional extraction inputs rather than the final architecture.
 
 - Keep current root route adapters, shell, auth/session policy, hydration entrypoint, CSS, and assets stable for unextracted routes while the canonical module SDK/runtime replaces those responsibilities deliberately for route-owning modules.
+- Keep Component and Dashboard documents, hydration entrypoints, assets, and product routes in their enrolled module releases; Core supplies only generic same-origin gateway, shell-context, authorization, inventory, and navigation integration.
 - Avoid new dependencies from feature crates into root application policy or sibling feature internals.
 - Treat each non-Core feature area as a candidate module boundary owning UI, API, persistence, configuration, diagnostics, and contracts together.
 - Promote stable wire schemas into module-owned contract crates or generated clients; do not use shared DTO code as a shortcut to shared domain ownership.
@@ -906,7 +990,7 @@ reopening Sprint 6C or changing its retained evidence.
 - move Dashboard UI, API, persistence, migrations, configuration, and health/readiness into the Dashboard module
 - provision one Dashboard database per Dashboard module instance and remove Dashboard runtime access to Core or other module databases
 - replace Dashboard database relationships to Components with typed `core_installation`-owned transition `ComponentVersion` references resolved through a versioned, first-party Core Release compatibility contract; do not masquerade the in-process contribution as a Module Instance
-- expose required Component metadata and rendering/execution behavior through that typed adapter, mark the binding transition-only and unavailable to new external Blueprints, and require Sprint 8A to migrate data/references explicitly before retiring it
+- expose required Component metadata and rendering/execution behavior through that typed adapter, mark the binding transition-only and unavailable to new external Blueprints, and require Sprint 8A to replace it through the Phase 8 pre-production fresh-materialization policy before retiring it
 - obtain Core-issued, downstream-audience scope-bound grants or decisions bound to original actor, Dashboard service identity, the resolved Components dependency/contract/action, and installation rather than forwarding Dashboard authority
 - advertise Dashboard routes, navigation, functional contracts, resources, configuration, diagnostics, and security capabilities through its manifest
 - provide one definition-independent Core control-endpoint registry and shared configuration/diagnostics adapter for independently deployed modules; adding the next module must be deployment/manifest registration rather than a new module-ID branch
@@ -1129,45 +1213,81 @@ assets, and conformance coverage. Repeated compiled SDK/runtime code and assets
 are allowed; copied shared source is not.
 
 Cross-module relationships use APIs, events, exports, and typed references
-only. Each extraction must inventory Core-owned transition references, migrate
-data into the new Module Instance, publish a complete old-to-new mapping,
-invoke versioned consumer-owned rebinding, emit completeness receipts,
-preserve explicit migrated/retired resolution for old references, and remove
-the read-only Core compatibility adapter only after all consumers are
-verified. Each extraction reruns the Phase 7 scope, lifecycle, outage,
-compatibility, source-ownership, package-graph, independent-image-upgrade, and
-rollback proofs against the newly physical boundary.
+only. Tessara remains pre-production throughout this phase. Every extraction
+therefore uses one destructive, source-exact fresh materialization of the
+disposable reference application rather than migrating transition product data
+or preserving transition references. The owning Core/module bootstrap
+contracts rebuild canonical seed data in dependency order, consumers create
+new Module Instance references directly, and the old adapter, product storage,
+readers, and payload shapes are removed in the same cutover. Old transition
+references are unsupported after extraction. A failed materialization retains
+evidence, destroys the partial disposable topology and volumes, and restarts
+from empty; it does not resume or repair partial product data. Supported legacy
+import, mapping, rebinding, and resume behavior remains Phase 9 scope. Each
+extraction reruns the Phase 7 scope, lifecycle, outage, compatibility,
+source-ownership, package-graph, independent-image-upgrade, and rollback proofs
+against the newly physical boundary.
 
-### Sprint 8A: Component Module Separation Slice (Next)
+Sprint 8B and every later extraction instantiate the
+[Phase 8 Module Extraction Playbook](./architecture/module-extraction-playbook.md)
+and the validation contract's `phase8-module-extraction` implementation
+profile. The plan must enumerate Core subtraction, provider/consumer cutover,
+fresh owner-seed order, fixtures, an accepted UI baseline and ownership map,
+and exact commands for every required proof
+class. A passing implementation-readiness result must prove those targets on
+the current clean source before formal Readiness begins. Future sprints reuse
+the generic platform and policy contracts; they do not clone Sprint 8A's
+attempt lineage or use Candidate Rehearsal as the implementation loop.
+
+### Sprint 8A: Component Module Separation Slice (Complete)
+
+**Validation posture:** Complete. Readiness 55, Candidate Rehearsal 43,
+Preflight 25, SIT 6, and UAT 13 passed against certified source
+`643516f9dfed1077720b6df362b1c3d5e3c1506b`, candidate fingerprint
+`d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`,
+and one authenticated environment. Closeout authorization is retained under
+`artifacts/sprint-8a-closeout/`.
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 
 **Build:**
 
 - move Component UI, API, versions, execution, persistence, configuration, and diagnostics into the Component module
-- create the real Component Module Release/Instance; migrate Component data from Core; publish a complete old-Core-reference to new-Module-reference mapping; and invoke Dashboard-owned versioned rebinding so stored placements are rewritten with migration receipts before the Core adapter becomes read-only and is removed
-- keep old `core_installation` transition references owner/type-stable with explicit migrated/retired resolution rather than silently interpreting them as Component Module references
-- replace Component-to-Dataset database relationships with typed Core-compatibility Dataset references and versioned contracts until Dataset extraction performs the same explicit migration
-- keep Dashboard-to-Component behavior on the public contract introduced in Sprint 6C
-- migrate seed/test data and remove direct access to Dataset, Dashboard, or Core storage
+- remove Components from Core's frozen transition catalog so the exact five
+  remaining identities are Forms, Workflows, Responses, Datasets, and
+  Migration; enroll Components and preserve manifest-only reference navigation
+  order Scoped Records `7`, Components `8`, Dashboard `9`
+- create the real Component Module Release/Instance in a fresh Component database and remove the Core Component product tables, adapter, routes, and readers in the same offline cutover
+- rebuild the full disposable reference-application seed from empty through owning Core/module bootstrap contracts; create Dashboard placements directly with new Component Module Instance references and reject old `core_installation` Component references as unsupported exact-contract inputs
+- replace Component-to-Dataset database relationships with typed Core-compatibility Dataset references and versioned contracts until Dataset extraction rebuilds those references under the same Phase 8 fresh-materialization policy
+- keep Dashboard-to-Component behavior on the public contract introduced in
+  Sprint 6C, with exact render response DTOs and render kind owned by the
+  Components contract, returned by Component routes, and validated directly by
+  Dashboard without a renderer-to-Dataset contract edge or copied wire types;
+  enforce kind-specific fields and exact persistent/preview identity
+- bind signed Component/Core/Dataset service calls to exact raw body bytes and
+  require exact ComponentVersion resource assertion plus one common governing
+  node across Dashboard scope, Component scope, and both audience grants;
+  disjoint metadata and titles remain undisclosed
+- move Component and Dashboard seed/test ownership to their modules, rebuild all reference-application seed data in dependency order, and remove direct access to Dataset, Dashboard, or Core storage
 - add dependency outage, scope propagation, capability, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged Component authoring/viewing plus module-owned configuration and diagnostics through the shared shell.
 
-**User-testable exit condition:** a tester can prove every Dashboard placement was explicitly rebound from its Core-owned transition reference to the new Component Module Instance with receipts, then author and execute Components against Dataset compatibility contracts across separate processes/databases while Dashboards continue to consume Components and degrade coherently during outages.
+**User-testable exit condition:** from empty disposable databases, a tester can materialize and seed the reference application so every Dashboard placement is created directly with a new Component Module Instance reference, then author and execute Components against Dataset compatibility contracts across separate processes/databases while Dashboards continue to consume Components and degrade coherently during outages. The same tester can prove old Core Component references and payload shapes are rejected and no Core Component product adapter or storage remains.
 
-### Sprint 8B: Dataset Module Separation Slice
+### Sprint 8B: Dataset Module Separation Slice (Next)
 
 **Outcome:** Datasets is independently deployed and consumes source data through explicit provider contracts.
 
 **Build:**
 
 - move Dataset UI, API, revision, execution, materialization, persistence, configuration, and diagnostics into the Dataset module
-- migrate Dataset data and Component-owned Dataset references from the Core compatibility owner to the real Dataset Module Instance through mapping/rebinding receipts before retiring the adapter
+- materialize a fresh Dataset database, rebuild Dataset and downstream Component/Dashboard seed data through owning bootstrap contracts, create new Dataset Module Instance references directly, and remove the Core compatibility adapter without preserving old Dataset references
 - replace reads of Response or other source tables with versioned source APIs, exports, and events
 - preserve Dataset-to-Component contracts and scoped execution
 - keep batch operations and catalog/template semantics owned by Datasets unless a future module provides a declared operation contract
-- migrate seed/test data and remove direct access to Response, Component, or Core storage
+- rebuild canonical seed/test data from empty through owning provider/consumer bootstrap contracts and remove direct access to Response, Component, or Core storage
 - add materialization retry, dependency outage, scope, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged Dataset directory, authoring, preview, status, configuration, and diagnostics surfaces through the shared shell.
@@ -1184,7 +1304,7 @@ rollback proofs against the newly physical boundary.
 - consume typed FormVersion and Workflow context without reading Forms or Workflow tables
 - expose typed response/source contracts and events for Dataset and Workflow consumers
 - preserve assignment-only response starts and scoped review behavior
-- migrate seed/test data and remove direct access to Forms, Workflows, Datasets, or Core storage
+- rebuild canonical seed/test data from empty through owning provider/consumer bootstrap contracts and remove direct access to Forms, Workflows, Datasets, or Core storage
 - add cross-module authorization, idempotency, event, outage, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged response-entry, submission, review, configuration, and diagnostics flows through the shared shell.
@@ -1201,7 +1321,7 @@ rollback proofs against the newly physical boundary.
 - replace Form database relationships with typed FormVersion references and provider contracts
 - invoke Response runtime contracts and consume response events without sharing storage
 - keep publication, assignment, handoff, and version policy owned by Workflows
-- migrate seed/test data and remove direct access to Forms, Responses, or Core storage
+- rebuild canonical seed/test data from empty through owning provider/consumer bootstrap contracts and remove direct access to Forms, Responses, or Core storage
 - add authorization, retry/idempotency, outage, lifecycle, and compatibility coverage
 
 **Application UI delivered this sprint:** unchanged Workflow authoring, assignment, execution, configuration, and diagnostics surfaces through the shared shell.
@@ -1284,7 +1404,7 @@ new WorkflowVersion is published.
 - expose typed Form and FormVersion resolution, state observation, and collection/rendering contracts
 - keep decisions about mutations, publication, active/inactive/superseded behavior, and catalogs inside Forms
 - ensure Workflow and Response consumers use provider contracts and never access Forms storage
-- migrate seed/test data, remove Forms access to Core or consumer storage, and remove every other module's access to Forms storage
+- rebuild the complete canonical reference-application seed from empty through owning bootstrap contracts, remove Forms access to Core or consumer storage, and remove every other module's access to Forms storage
 - add lifecycle, authorization, outage, compatibility, and catalog-contract coverage
 
 **Application UI delivered this sprint:** unchanged Form directory, builder, version, publication, catalog, configuration, and diagnostics experiences through the shared shell.

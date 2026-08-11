@@ -1,4 +1,4 @@
-//! PostgreSQL persistence for the Core-owned transition catalog.
+//! PostgreSQL persistence for Core module control and transition inventory.
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;

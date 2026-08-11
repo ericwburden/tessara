@@ -1,12 +1,13 @@
 {
   "schema_version": 2,
-  "expected_total": 70,
+  "expected_total": 84,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
       "tests": [
         "Sprint 7A scoped analytics boundary › source-exact reference inventory exposes the canonical Dataset Components and Dashboard",
         "Sprint 7A scoped analytics boundary › real Dashboard mediation renders exact stat and table results",
+        "Sprint 7A scoped analytics boundary › Dashboard and Component scopes must share a governing node before disclosure or render",
         "Sprint 7A scoped analytics boundary › private compatibility endpoints reject browser authority without disclosing resources",
         "Sprint 7A scoped analytics boundary › mixed-scope Component lookups make known blocked and random identities indistinguishable"
       ]
@@ -32,9 +33,26 @@
     {
       "path": "components.spec.ts",
       "tests": [
-        "Sprint 4A component workflow › admin can create, update, publish, and view a major-line table component",
-        "Sprint 4A component workflow › admin can author, publish, and view visual components",
-        "Sprint 4A component workflow › component editor remains contained and uses an accessible mobile preview drawer"
+        "Sprint 8A extracted Component UI parity › Core and enrolled modules share the SDK canvas, tokens, navigation state, and title",
+        "Sprint 8A extracted Component UI parity › wide lifecycle navigation uses only the displayed navigation label as the title",
+        "Sprint 8A extracted Component UI parity › admin can create, update, publish, and view a major-line table component",
+        "Sprint 8A extracted Component UI parity › admin can author, publish, and view visual components",
+        "Sprint 8A extracted Component UI parity › exact viewport and theme matrix preserves directory editor detail and viewer usability",
+        "Sprint 8A extracted Component UI parity › Dataset provider outage retains unsaved editor state and one retry mutation",
+        "Sprint 8A extracted Component UI parity › component editor remains contained and uses an accessible mobile preview dialog",
+        "Sprint 8A extracted Component UI parity › Component and Dashboard visuals stay contained at 200% zoom in light and dark themes"
+      ]
+    },
+    {
+      "path": "module-ui-visual.spec.ts",
+      "tests": [
+        "canonical module UI visual baselines › Components directory at 1280 px (light)",
+        "canonical module UI visual baselines › Components editor at 390 px (light)",
+        "canonical module UI visual baselines › Components directory at 1280 px (dark)",
+        "canonical module UI visual baselines › Components editor at 390 px (dark)",
+        "canonical module UI visual baselines › Components versions at 768 px",
+        "canonical module UI visual baselines › Components viewer at 1280 px",
+        "canonical module UI visual baselines › Components, Dashboards, and Scoped Records share one module canvas"
       ]
     },
     {
@@ -75,7 +93,8 @@
         "Sprint 6A Module Management › scoped module authority, product-only authority, and no access stay hidden and restricted",
         "Sprint 6A Module Management › keyboard group and placement edits retain focus and persist in desktop and mobile shells",
         "Sprint 6A Module Management › native directory and detail remain useful without JavaScript or bridge requests",
-        "Sprint 6A Module Management › undeployed SDK reference stays absent from inventory, routes, and assets"
+        "Sprint 6A Module Management › undeployed SDK reference stays absent from inventory, routes, and assets",
+        "Sprint 8A Module Management › Components configuration enforces exact schema authority projection and sanitized diagnostics"
       ]
     },
     {
@@ -101,7 +120,7 @@
         "capability + scope + ownership permissions › scoped component manager cannot bind or publish out-of-scope dataset major lines",
         "capability + scope + ownership permissions › explicit historical component table checks selected version dataset scope",
         "capability + scope + ownership permissions › dashboard native routes and APIs exercise scoped manage permission",
-        "capability + scope + ownership permissions › dashboard viewer preserves a redacted footprint without executing the hidden Component",
+        "capability + scope + ownership permissions › dashboard composition excludes hidden Components before viewer execution",
         "capability + scope + ownership permissions › JavaScript-disabled Core, Organization, and direct Admin routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Form and Workflow routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Response and Dataset routes preserve native SSR ownership",

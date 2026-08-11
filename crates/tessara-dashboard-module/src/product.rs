@@ -13,9 +13,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Row, Transaction};
 use tessara_module_contract::{
-    AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
-    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, SecurityCapabilityId,
-    SignedEnvelopeV1,
+    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
+    ModuleDefinitionId, ModuleServicePrincipalV1, SecurityCapabilityId, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -410,7 +410,7 @@ pub(super) async fn authorize(
     headers: &HeaderMap,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> Result<SignedEnvelopeV1<AuthorizationGrantV2>, DashboardModuleError> {
+) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, DashboardModuleError> {
     let encoded = headers
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
@@ -425,7 +425,7 @@ pub(super) async fn authorize(
         tracing::warn!(%error, action, "Dashboard authorization envelope is not base64url");
         DashboardModuleError::Forbidden
     })?;
-    let envelope: SignedEnvelopeV1<AuthorizationGrantV2> =
+    let envelope: SignedEnvelopeV1<AuthorizationGrantV3> =
         serde_json::from_slice(&bytes).map_err(|error| {
             tracing::warn!(%error, action, "Dashboard authorization envelope is invalid");
             DashboardModuleError::Forbidden
@@ -446,12 +446,22 @@ pub(super) async fn authorize(
         ));
     }
     let expected_contract = contract_for_action(action);
+    let correlation_id = headers
+        .get("x-tessara-correlation-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(DashboardModuleError::Forbidden)?;
     envelope
         .payload
-        .validate_for(&AuthorizationValidationContextV2 {
+        .validate_for(&AuthorizationValidationContextV3 {
             installation_id: security.installation_id,
-            presenting_service: ModuleDefinitionId::new("tessara.core").expect("Core id"),
-            audience_module_instance_id: security.module_instance_id,
+            correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: security.module_instance_id,
+                module_definition_id: ModuleDefinitionId::new(crate::MODULE_DEFINITION_ID)
+                    .expect("Dashboard definition"),
+            },
             dependency_binding: DependencyBindingKey::new(CORE_DASHBOARD_BINDING).expect("binding"),
             functional_contract: FunctionalContractId::new(expected_contract).expect("contract"),
             action: action.into(),
@@ -475,7 +485,7 @@ pub(super) async fn authorize(
 }
 
 pub(super) fn authorized_organizations(
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     capability: &str,
 ) -> BTreeSet<Uuid> {
     grant
@@ -490,7 +500,7 @@ pub(super) fn authorized_organizations(
 }
 
 fn require_authorized_scope(
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     capability: &str,
     requested: &[Uuid],
 ) -> Result<(), DashboardModuleError> {
@@ -679,7 +689,7 @@ pub(super) fn mutation_digest<T: Serialize>(
 
 pub(super) async fn load_mutation_replay<T: DeserializeOwned>(
     tx: &mut Transaction<'_, Postgres>,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     action: &str,
     idempotency_key: &str,
     payload_digest: &str,
@@ -718,7 +728,7 @@ pub(super) async fn load_mutation_replay<T: DeserializeOwned>(
 
 pub(super) async fn record_mutation_replay<T: Serialize>(
     tx: &mut Transaction<'_, Postgres>,
-    grant: &AuthorizationGrantV2,
+    grant: &AuthorizationGrantV3,
     action: &str,
     idempotency_key: &str,
     payload_digest: &str,

@@ -1,0 +1,26 @@
+FROM rust:1.94-bookworm AS builder
+WORKDIR /app
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release -p tessara-component-module \
+    && cp /app/target/release/tessara-component-module /tmp/component-module
+
+FROM debian:trixie-slim
+ARG TESSARA_SOURCE_COMMIT=unknown
+ARG TESSARA_SOURCE_TREE=unknown
+ARG TESSARA_SOURCE_DIRTY=unknown
+ARG TESSARA_COMPONENT_RELEASE=1.0.1
+
+LABEL org.opencontainers.image.revision="$TESSARA_SOURCE_COMMIT" \
+      com.tessara.source-tree="$TESSARA_SOURCE_TREE" \
+      com.tessara.source-dirty="$TESSARA_SOURCE_DIRTY" \
+      com.tessara.build-profile="release" \
+      com.tessara.module-definition="tessara.components" \
+      com.tessara.module-release="$TESSARA_COMPONENT_RELEASE"
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /tmp/component-module /usr/local/bin/component-module
+EXPOSE 8092
+ENTRYPOINT ["component-module"]
