@@ -1239,20 +1239,14 @@ the current clean source before formal Readiness begins. Future sprints reuse
 the generic platform and policy contracts; they do not clone Sprint 8A's
 attempt lineage or use Candidate Rehearsal as the implementation loop.
 
-### Sprint 8A: Component Module Separation Slice (Implementation Correction)
+### Sprint 8A: Component Module Separation Slice (Complete)
 
-**Validation posture:** Readiness 38 is terminal with 12 passed, 2 failed, and
-1 blocked check against clean source `91c9936b`/`564493fd`. It consumed the
-Rehearsal 30 correction authorization exactly once. Its missing database
-binding and failure-containment self-test failures, blocked environment
-contract, and raw evidence remain immutable. Formal testing exited so one
-consolidated implementation batch could also close the failed-Readiness retry
-dead end, exact Rehearsal checkpoint gap, retired Component `missing_policy`
-alias, and incomplete AC-18/AC-19 UAT/evidence enforcement. After focused
-verification and a clean correction commit, R38 must be finalized into one
-harvest, one batch, and one exact-next-Readiness authorization. Fresh complete
-Readiness and Rehearsal gates must then pass against one source and fresh six-
-database environment identity. Preflight remains closed until both pass.
+**Validation posture:** Complete. Readiness 55, Candidate Rehearsal 43,
+Preflight 25, SIT 6, and UAT 13 passed against certified source
+`643516f9dfed1077720b6df362b1c3d5e3c1506b`, candidate fingerprint
+`d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`,
+and one authenticated environment. Closeout authorization is retained under
+`artifacts/sprint-8a-closeout/`.
 
 **Outcome:** Components is independently deployed and consumes Datasets only through a public contract.
 
@@ -1282,7 +1276,7 @@ database environment identity. Preflight remains closed until both pass.
 
 **User-testable exit condition:** from empty disposable databases, a tester can materialize and seed the reference application so every Dashboard placement is created directly with a new Component Module Instance reference, then author and execute Components against Dataset compatibility contracts across separate processes/databases while Dashboards continue to consume Components and degrade coherently during outages. The same tester can prove old Core Component references and payload shapes are rejected and no Core Component product adapter or storage remains.
 
-### Sprint 8B: Dataset Module Separation Slice
+### Sprint 8B: Dataset Module Separation Slice (Next)
 
 **Outcome:** Datasets is independently deployed and consumes source data through explicit provider contracts.
 

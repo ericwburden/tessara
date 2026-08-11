@@ -1,35 +1,46 @@
 # Sprint 8A: Component Module Separation Slice
 
-Status: Validation Readiness 43 passed, then Candidate Rehearsal 33 retained a
-complete 32-lane failed result with 29 passes, 2 failures, 1 exact dependency
-block, and 0 deferrals. Its final restoration actually completed a clean first
-apply, exact semantic no-op, exact Core and Supervisor health checks, exact
-five-entry Core transition inventory, one real Dashboard presentation, and a
-passing final environment check; the old comparison code misread the compact
-materialization source shape. R33 remains immutable and failed. The user has
-approved one append-only evidence-correction tuple that leaves those receipts
-unchanged and permits only complete Readiness 44. No candidate exists, and
-preflight, SIT, formal UAT, and closeout remain closed until Readiness 44 and
-complete Candidate Rehearsal 34 pass against the same corrected clean source
-and environment identity.
+Status: Complete. Readiness 55, Candidate Rehearsal 43, Preflight 25, SIT 6,
+and UAT 13 passed against certified source
+`643516f9dfed1077720b6df362b1c3d5e3c1506b`, candidate fingerprint
+`d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`,
+and environment
+`f8c66c6c8f9a47a5cf134cbff4327086f0a58feba8987cab2b1e57dbefcbe0b5`.
+SIT passed all four lanes and UAT passed all nine checks. The evidence set is
+complete and closeout is authorized.
 
 - Branch: `codex/sprint-8a`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8a`
 - Base commit: `37aa9c8da45491ef02dc4d62e5df5f3ece2af444`
-- Latest failed rehearsal source/tree:
-  `2cdbf5432f9a737e82ea470ebabe7b55e42cd4ec` /
-  `43c3b45c96b17b1fc3da9dabedcc36976ea97f8c`
-- Evidence-correction implementation base commit/tree:
-  `00442aae30028963ac791c2302bbfdc12f2a53f6` /
-  `cccdbd0255a6e691c119158ffb3a5fa331f544a4`
-- Latest rehearsal environment fingerprint:
-  `5576717182719a9e6f53ba0ffe9ecdaad4db230f8b62336b3bc26197a1e298a3`
+- Certified source/tree:
+  `643516f9dfed1077720b6df362b1c3d5e3c1506b` /
+  `c9d48fbb1c2f4b90816cb0ca98fdbd7142247f86`
+- Certified environment fingerprint:
+  `f8c66c6c8f9a47a5cf134cbff4327086f0a58feba8987cab2b1e57dbefcbe0b5`
 - Roadmap authority:
-  `Sprint 8A: Component Module Separation Slice (Implementation Correction)`
+  `Sprint 8A: Component Module Separation Slice (Complete)`
   and the reconciled
   Phase 8 fresh-materialization rules in `docs/roadmap.md`
-- Planned evidence root: `artifacts/sprint-8a-closeout/`
+- Evidence root: `artifacts/sprint-8a-closeout/`
 - Validation record: [Sprint 8A verification](./sprint-8a-verification.md)
+
+## Final Closeout
+
+- Product source: `643516f9dfed1077720b6df362b1c3d5e3c1506b`;
+  tree: `c9d48fbb1c2f4b90816cb0ca98fdbd7142247f86`.
+- Candidate fingerprint:
+  `d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`.
+- Readiness 55, Rehearsal 43, Preflight 25, SIT 6, and UAT 13 are the
+  authoritative passing chain. UAT attempts 10 through 12 are retained
+  evidence-finalization/tooling history and are not authoritative product
+  failures.
+- Closeout authorization:
+  `artifacts/sprint-8a-closeout/closeout-authorization.json`, SHA-256
+  `a298301d77259f35cb79716f8d3ad75d58c33df5f14f074d407a578c0317d91a`.
+- No product defect, product decision, or candidate invalidation remains open.
+- Sprint 8B is the next roadmap sprint and inherits the Phase 8 repeatable
+  extraction, UI SDK conformance, implementation-readiness, and consolidated
+  validation-evidence rules completed here.
 
 ## Sprint Summary, Outcome, And Roadmap Authority
 

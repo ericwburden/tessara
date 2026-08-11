@@ -1,20 +1,15 @@
 # Sprint 8A Validation Record
 
-Status: Validation Readiness 41 passed its complete 15-check graph against clean
-commit `d703e7a67c3f1177b621b0e14161e0661209ea42`, tree
-`889ddc5f784ea1e81686ce63dd22669aabde956d`, and environment fingerprint
-`53fbb1f74375f96abb292ba610fc030686fca55864a70ca8149932f1a4820e28`.
-Candidate Rehearsal 32 then completed its immutable 32-lane conservative
-full-harvest schedule with 19 passes, 2 raw `product` failures, 11 exact
-dependency blocks, and 0 deferrals. Cleanup/restoration was not proven and no
-`candidate-rehearsal-result.json` was created. Its immutable evidence, one
-harvest, and one raw two-defect batch remain unchanged. Append-only diagnosis
-and a separate source-exact restoration qualified the prematurely issued R32
-authorization for exactly one Readiness 42 start; that qualification does not
-make R32 pass or authorize preflight, freeze, SIT, UAT, or closeout. The
-consolidated product/harness/evidence correction is now mutable. After focused
-verification and a clean commit, complete Readiness 42 and complete Rehearsal
-33 remain the next coordinator-controlled gates.
+Status: Complete and closeout-authorized. Readiness 55, Candidate Rehearsal 43,
+Preflight 25, SIT 6, and UAT 13 passed against certified commit
+`643516f9dfed1077720b6df362b1c3d5e3c1506b`, tree
+`c9d48fbb1c2f4b90816cb0ca98fdbd7142247f86`, candidate fingerprint
+`d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`,
+and environment
+`f8c66c6c8f9a47a5cf134cbff4327086f0a58feba8987cab2b1e57dbefcbe0b5`.
+Historical failed attempts below remain immutable diagnostic history; this
+final summary supersedes their former planning-state labels without rewriting
+their results.
 
 - Sprint: Sprint 8A — Component Module Separation Slice
 - Branch: `codex/sprint-8a`
@@ -2282,12 +2277,13 @@ decisions pause for user direction.
 
 ## Evidence Integrity
 
-- Required files complete: Not Run.
-- Structured artifacts parse: Not Run.
-- Markdown links pass: Not Run.
-- Authoritative/superseded attempts distinguished: Not Run.
-- Manifest file count: Not Run.
-- Manifest SHA-256: Not Run.
+- Required files complete: Passed.
+- Structured artifacts parse: Passed; 3,068 JSON records parsed.
+- Markdown links pass: Passed.
+- Authoritative/superseded attempts distinguished: Passed.
+- Manifest file count: 8,107.
+- Manifest SHA-256:
+  `79a68ddd6ca5eec4a5ee580e2919cf45d586c5bd219e242bd257131b4149dbb9`.
 
 Superseded failures remain retained and explicitly excluded rather than
 overwritten. Every phase result names and hashes its prerequisites. One
@@ -2295,19 +2291,20 @@ immutable fingerprint covers all authoritative SIT and UAT evidence.
 
 ## Closeout Authorization
 
-- Status: Not Authorized.
+- Status: Authorized.
 - Authorization receipt:
-  `artifacts/sprint-8a-closeout/closeout-authorization.json` (not created).
-- Authorized candidate/fingerprint: None.
-- SIT passed: No.
-- UAT passed: No.
-- Acceptance mapping complete: Planned, not executed.
-- Invalidation decisions satisfied: No — R32 is terminal failed with two raw
-  `product` findings, eleven blocks, and no passing result. Its append-only
-  restoration qualifies correction only; the tracked product/harness/evidence
-  cone remains formally unverified. Complete Readiness 42 and complete
-  Candidate Rehearsal 33 remain required after the clean commit and fresh
-  database generations.
+  `artifacts/sprint-8a-closeout/closeout-authorization.json`, SHA-256
+  `a298301d77259f35cb79716f8d3ad75d58c33df5f14f074d407a578c0317d91a`.
+- Authorized candidate/fingerprint:
+  `d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`.
+- SIT passed: Yes, attempt 6, four of four lanes.
+- UAT passed: Yes, attempt 13, nine of nine checks.
+- Acceptance mapping complete: Yes; roadmap clauses map to UAT-8A-01 through
+  UAT-8A-08 and the four SIT lanes.
+- Invalidation decisions satisfied: Yes. No product defect, product decision,
+  or candidate-invalidating post-SIT correction remains open. Failed UAT
+  attempts 10 through 12 are retained, superseded evidence-finalization/tooling
+  history against the same candidate.
 - Unresolved product decisions: None.
 - Intended active route/slot: source-exact Sprint 8A gateway with current
   Component release and canonical fresh seed.
@@ -2706,3 +2703,36 @@ continues rejecting product, fixture, deployment, acceptance, and other
 validation changes. Lifecycle and Preflight adversarial self-tests cover the
 allowed subset, empty set, and outside-path cases. This remains a Preflight-
 only correction; Readiness 55 and Rehearsal 43 remain valid.
+
+### Final certification and closeout
+
+Preflight 25 passed and froze candidate
+`d6e4695dfd1bc5c1fd9a0ff727bd45886f440531427bf57ef288e6f38464628d`
+from source `643516f9dfed1077720b6df362b1c3d5e3c1506b`, tree
+`c9d48fbb1c2f4b90816cb0ca98fdbd7142247f86`, and environment
+`f8c66c6c8f9a47a5cf134cbff4327086f0a58feba8987cab2b1e57dbefcbe0b5`.
+Its result SHA-256 is
+`eab5277b6c2b5cb7d150b3e2eb264d5636caaa1db2a0e009672bb7fefc87cb81`;
+the candidate receipt SHA-256 is
+`213de8b352ce6a082e79db46d67a6b68e93e1c7f4b0ade3a2e04c44da7c23094`.
+
+SIT 6 passed all four declared lanes: static and boundaries, the serialized
+Rust workspace, all 84 Playwright scenarios, and deployed acceptance smoke.
+Its canonical receipt SHA-256 is
+`d152cfbdd4e0f4ad4f13f2852fd5c1ecbb8cb666df7d086bf3a7007dd652f093`.
+UAT 13 then passed scripted acceptance plus UAT-8A-01 through UAT-8A-08, nine
+of nine checks with no failures or blocks. Canonical restoration re-applied the
+source-exact topology, passed the inventory audit and smoke, and left exact
+Core 200/text/plain/`ok` and Supervisor 204/empty health. Its canonical receipt
+SHA-256 is
+`8479dd3e21afa53a5f0831199a0a22393e298fdfb5f659d8ec36a6fa1deff6c5`.
+
+UAT attempts 10, 11, and 12 remain immutable failed history. Each failed in
+evidence finalization/tooling rather than product behavior, made no tracked
+source or candidate change, and is excluded from authoritative proof. The
+evidence manifest seals 8,107 files at SHA-256
+`79a68ddd6ca5eec4a5ee580e2919cf45d586c5bd219e242bd257131b4149dbb9`.
+All manifested hashes matched, all 3,068 structured JSON records parsed, and
+Markdown links passed. Closeout authorization is therefore recorded at
+`artifacts/sprint-8a-closeout/closeout-authorization.json`, SHA-256
+`a298301d77259f35cb79716f8d3ad75d58c33df5f14f074d407a578c0317d91a`.
