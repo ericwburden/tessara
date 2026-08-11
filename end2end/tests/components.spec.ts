@@ -1265,7 +1265,11 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
             page.locator("svg.component-d3-svg--line"),
           ).toContainText("Responses");
           await expect(
-            page.locator(".component-d3-chart__category-label").first(),
+            page
+              .locator("svg.component-d3-svg--line .component-d3-axis")
+              .first()
+              .locator(".tick text")
+              .first(),
           ).toBeVisible();
         }
       }
@@ -1342,16 +1346,22 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     );
     await expect(labelOverride).toHaveValue("");
     await expect(labelOverride).toHaveAttribute("placeholder", rawCategory!);
-    const colorOverride = noOpRow.getByLabel(`Color for ${rawCategory!}`, {
+    const colorOverride = noOpRow.getByRole("button", {
+      name: `Color for ${rawCategory!}`,
       exact: true,
     });
-    await expect(colorOverride).toHaveValue(semanticWarning);
-    await expect(colorOverride.locator('option[value=""]')).toHaveText(
-      "Default",
-    );
+    await colorOverride.click();
+    const colorOptions = noOpRow.getByRole("radiogroup", {
+      name: `Color options for ${rawCategory!}`,
+      exact: true,
+    });
+    await expect(colorOptions).toBeVisible();
     await expect(
-      colorOverride.locator(`option[value="${semanticWarning}"]`),
-    ).toHaveText("Warning");
+      colorOptions.getByRole("radio", { name: "Warning", exact: true }),
+    ).toBeChecked();
+    await expect(
+      colorOptions.getByRole("radio", { name: "Default", exact: true }),
+    ).not.toBeChecked();
 
     const noOpSave = page.waitForResponse(
       (response) =>

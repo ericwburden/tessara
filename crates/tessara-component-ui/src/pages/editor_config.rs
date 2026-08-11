@@ -349,15 +349,22 @@ pub(super) fn insert_visual_display_overrides(
     colors: &str,
     legend_title: &str,
 ) {
-    let labels = category_labels_config(labels);
-    if !labels.is_empty() {
-        config.insert("category_labels".into(), Value::Object(labels));
-    }
-    let colors = category_colors_config(colors);
-    if !colors.is_empty() {
-        config.insert("category_colors".into(), Value::Object(colors));
-    }
-    insert_nonempty_string(config, "legend_title", legend_title);
+    config.insert(
+        "category_labels".into(),
+        Value::Object(category_labels_config(labels)),
+    );
+    config.insert(
+        "category_colors".into(),
+        Value::Object(category_colors_config(colors)),
+    );
+    config.insert(
+        "legend_title".into(),
+        if legend_title.trim().is_empty() {
+            Value::Null
+        } else {
+            Value::String(legend_title.trim().into())
+        },
+    );
 }
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]

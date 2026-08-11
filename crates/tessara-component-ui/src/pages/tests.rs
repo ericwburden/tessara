@@ -23,6 +23,7 @@ use crate::types::{
     ComponentSummary, DatasetFieldDefinition, DatasetProvenanceItem, DatasetProvenanceSummary,
     DatasetRevisionFieldSummary,
 };
+use serde_json::{Value, json};
 use tessara_component_viewer_ui::ComponentVersionKind;
 use tessara_web_data_ops::{
     DatasetFieldDraft as DataOpsDatasetFieldDraft, DatasetRowFilterDraft as DataOpsRowFilterDraft,
@@ -178,6 +179,9 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     })
     .into_json();
     assert_eq!(pie["max_slices"], 12);
+    assert_eq!(pie["category_labels"], json!({}));
+    assert_eq!(pie["category_colors"], json!({}));
+    assert_eq!(pie["legend_title"], Value::Null);
     assert!(pie.get("orientation").is_none());
     assert!(pie.get("missing_policy").is_none());
 
@@ -191,6 +195,9 @@ fn typed_component_drafts_serialize_only_kind_specific_contracts() {
     })
     .into_json();
     assert_eq!(donut["max_slices"], 12);
+    assert_eq!(donut["category_labels"], json!({}));
+    assert_eq!(donut["category_colors"], json!({}));
+    assert_eq!(donut["legend_title"], Value::Null);
     assert!(donut.get("missing_policy").is_none());
 
     let stat = ComponentConfigDraft::StatCard(StatCardConfigDraft {
