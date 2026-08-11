@@ -8,12 +8,12 @@ use super::{
 };
 use super::{ComponentPublishAction, ComponentSaveIntent, component_save_version_identities};
 use super::{
-    component_dependency_unavailable, component_redirect_ref, component_summary_kind_label,
-    component_summary_revision_label, component_summary_status_label, dataset_catalog_option_label,
-    dataset_picker_rows, dataset_provenance_label, editable_component_version,
-    published_component_target, selected_dataset_major_value, selected_dataset_picker_label,
-    snake_case_component_slug, table_page_size_from_config, table_sort_from_config,
-    table_visible_columns_from_config, visual_summary_field_ready,
+    component_dependency_unavailable, component_redirect_path, component_redirect_ref,
+    component_summary_kind_label, component_summary_revision_label, component_summary_status_label,
+    dataset_catalog_option_label, dataset_picker_rows, dataset_provenance_label,
+    editable_component_version, published_component_target, selected_dataset_major_value,
+    selected_dataset_picker_label, snake_case_component_slug, table_page_size_from_config,
+    table_sort_from_config, table_visible_columns_from_config, visual_summary_field_ready,
 };
 use super::{
     component_kind_filter_options, component_matches_filters, component_status_filter_options,
@@ -478,6 +478,14 @@ fn component_redirect_ref_uses_trimmed_slug() {
     assert_eq!(
         component_redirect_ref("  family-outreach-table  "),
         "family-outreach-table"
+    );
+}
+
+#[test]
+fn successful_component_saves_return_to_the_component_detail_route() {
+    assert_eq!(
+        component_redirect_path("  family-outreach-table  "),
+        "/components/family-outreach-table"
     );
 }
 

@@ -3178,7 +3178,7 @@ fn create_component_from_form(
         } else {
             Some(values.description.trim().to_string())
         };
-        let redirect_ref = component_redirect_ref(&values.slug);
+        let redirect_path = component_redirect_path(&values.slug);
         let action = match intent.publish_action {
             ComponentPublishAction::SaveDraft => "save_draft",
             ComponentPublishAction::UpdateExistingVersion => "update_existing_version",
@@ -3209,12 +3209,7 @@ fn create_component_from_form(
                 };
                 feedback.message.set(Some(saved_message.into()));
                 if let Some(window) = web_sys::window() {
-                    let target = if intent.publish_action == ComponentPublishAction::SaveDraft {
-                        format!("/components/{redirect_ref}/edit")
-                    } else {
-                        format!("/components/{redirect_ref}")
-                    };
-                    let _ = window.location().set_href(&target);
+                    let _ = window.location().set_href(&redirect_path);
                 }
             }
             Err(message) => feedback.error.set(Some(message)),
@@ -3239,6 +3234,11 @@ fn component_save_version_identities(
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
 fn component_redirect_ref(slug: &str) -> String {
     slug.trim().to_string()
+}
+
+#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+fn component_redirect_path(slug: &str) -> String {
+    format!("/components/{}", component_redirect_ref(slug))
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]

@@ -837,7 +837,9 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       name: "Archive Component version?",
     });
     await expect(actionDialog).toContainText("cannot be reactivated");
-    await actionDialog.getByRole("button", { name: "Cancel" }).click();
+    await actionDialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
     await expect(actionDialog).not.toBeVisible();
 
     await page.goto(`/components/${definition.slug}/edit`);
