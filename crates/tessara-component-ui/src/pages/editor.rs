@@ -293,6 +293,7 @@ pub(super) fn BarConfigEditor(
                             <span>"Split bars"</span>
                             <input
                                 type="checkbox"
+                                data-config-control="split_bars"
                                 prop:checked=move || split_bars.get()
                                 on:change=move |event| {
                                     let enabled = event_target_checked(&event);

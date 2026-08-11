@@ -488,7 +488,11 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
         <section
             class="route-panel components-page"
             data-component-editor-root
-            on:click=move |_| dataset_picker_open.set(false)
+            on:click=move |event| {
+                if !component_dataset_picker_click_is_inside(&event) {
+                    dataset_picker_open.set(false);
+                }
+            }
         >
             <ComponentsBreadcrumb current=title/>
             <PageHeader title/>
@@ -583,10 +587,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     <span>"Description"</span>
                     <textarea prop:value=move || description.get() on:input=move |event| description.set(event_target_value(&event))></textarea>
                 </label>
-                <div
-                    class="form-field form-field--wide component-dataset-picker"
-                    on:click=move |event| event.stop_propagation()
-                >
+                <div class="form-field form-field--wide component-dataset-picker">
                     <span id="component-dataset-picker-label">"Dataset Version"</span>
                     <button
                         id="component-dataset-picker-trigger"
@@ -2787,6 +2788,20 @@ fn load_datasets(datasets: RwSignal<Vec<DatasetSummary>>, error: RwSignal<Option
 
 #[cfg(not(feature = "hydrate"))]
 fn load_datasets(_: RwSignal<Vec<DatasetSummary>>, _: RwSignal<Option<String>>) {}
+
+#[cfg(feature = "hydrate")]
+fn component_dataset_picker_click_is_inside(event: &leptos::ev::MouseEvent) -> bool {
+    event
+        .target()
+        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+        .and_then(|target| target.closest(".component-dataset-picker").ok().flatten())
+        .is_some()
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn component_dataset_picker_click_is_inside(_: &leptos::ev::MouseEvent) -> bool {
+    false
+}
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn component_preview_ready(values: &ComponentFormValues) -> bool {
