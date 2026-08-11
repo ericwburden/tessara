@@ -394,9 +394,10 @@ async function expectViewportContainment(
     innerWidth: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
   }));
-  expect(metrics.innerWidth, `${description} should use the requested viewport`).toBe(
-    expectedWidth,
-  );
+  expect(
+    metrics.innerWidth,
+    `${description} should use the requested viewport`,
+  ).toBe(expectedWidth);
   expect(
     metrics.scrollWidth <= metrics.clientWidth + 1,
     `${description} should not create document-level horizontal overflow`,
@@ -476,9 +477,8 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
           primary: styles.getPropertyValue("--semantic-primary").trim(),
           font: styles.getPropertyValue("--font-sans").trim(),
           bodyBackground: getComputedStyle(document.body).backgroundColor,
-          mainBackground: getComputedStyle(
-            document.querySelector(".app-main")!,
-          ).backgroundColor,
+          mainBackground: getComputedStyle(document.querySelector(".app-main")!)
+            .backgroundColor,
           resolvedTheme: document.documentElement.dataset.theme,
           themePreference: document.documentElement.dataset.themePreference,
           storedTheme: window.localStorage.getItem("tessara.themePreference"),
@@ -487,7 +487,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       });
 
     await page.goto("/");
-    await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+    await expect(page.locator("#app-root")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     const core = await presentation();
     expect(core.mainBackground).toBe(core.bodyBackground);
     await expect(page.locator(".top-app-bar__title")).toHaveText("Home");
@@ -499,8 +502,12 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     ]) {
       await test.step(`${route.label} uses the Core shell presentation`, async () => {
         await page.goto(route.path);
-        await expect(page.locator(".top-app-bar__title")).toHaveText(route.label);
-        const active = page.locator(`.sidebar-link.is-active[href="${route.path}"]`);
+        await expect(page.locator(".top-app-bar__title")).toHaveText(
+          route.label,
+        );
+        const active = page.locator(
+          `.sidebar-link.is-active[href="${route.path}"]`,
+        );
         await expect(active).toHaveCount(2);
         await expect(active.first()).toHaveText(route.label);
         expect(await presentation()).toEqual(core);
@@ -654,7 +661,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await Promise.all([
       page.waitForResponse((response) => {
         const url = new URL(response.url());
-        return url.pathname === versionTablePath && url.searchParams.get("search") === RUN_ID;
+        return (
+          url.pathname === versionTablePath &&
+          url.searchParams.get("search") === RUN_ID
+        );
       }),
       rowSearch.fill(RUN_ID),
     ]);
@@ -712,6 +722,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     ).toHaveCount(0);
 
     await page.goto("/components");
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     await expect(
       page.getByRole("link", { name: "Create Component" }),
     ).toBeVisible();
@@ -1022,13 +1036,19 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       page.getByRole("table", { name: "Series Labels" }),
     ).toBeVisible();
     await expect(
-      barOptions.locator('select[data-config-control="category_missing_policy"]'),
+      barOptions.locator(
+        'select[data-config-control="category_missing_policy"]',
+      ),
     ).toBeVisible();
     await expect(
-      barOptions.locator('select[data-config-control="comparison_missing_policy"]'),
+      barOptions.locator(
+        'select[data-config-control="comparison_missing_policy"]',
+      ),
     ).toBeVisible();
     await expect(
-      visualEditor.locator('select[data-config-control="value_missing_policy"]'),
+      visualEditor.locator(
+        'select[data-config-control="value_missing_policy"]',
+      ),
     ).toBeVisible();
     await expect(
       barOptions.locator('select[data-config-control="comparison_layout"]'),
@@ -1374,7 +1394,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     };
 
     for (const viewport of COMPONENT_VIEWPORT_MATRIX) {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
       for (const theme of ["light", "dark"] as const) {
         for (const surface of COMPONENT_SURFACES) {
           await test.step(`${surface} at ${viewport.width}px in ${theme}`, async () => {
@@ -1392,14 +1415,24 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
                   ? "Edit Component"
                   : component!.name;
             await expect(
-              page.getByRole("heading", { level: 1, name: heading, exact: true }),
+              page.getByRole("heading", {
+                level: 1,
+                name: heading,
+                exact: true,
+              }),
             ).toBeVisible();
 
             const requiredAction =
               surface === "directory"
-                ? page.getByRole("link", { name: "Create Component", exact: true })
+                ? page.getByRole("link", {
+                    name: "Create Component",
+                    exact: true,
+                  })
                 : surface === "editor"
-                  ? page.getByRole("button", { name: "Save Draft", exact: true })
+                  ? page.getByRole("button", {
+                      name: "Save Draft",
+                      exact: true,
+                    })
                   : surface === "detail"
                     ? page.getByRole("link", { name: "Edit", exact: true })
                     : page.getByRole("link", { name: "Versions", exact: true });
@@ -1587,9 +1620,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === "/api/admin/components/save",
     );
-    await page
-      .getByRole("button", { name: "Save Draft", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
     await expectBrowserResponseOk(await successfulMutation);
     expect(saveRequests).toBe(1);
     expect(successfulSaveResponses).toBe(1);

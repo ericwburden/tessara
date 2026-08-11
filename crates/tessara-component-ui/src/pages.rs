@@ -3148,8 +3148,12 @@ fn create_component_from_form(
         match api::validate_component_version(version.clone()).await {
             Ok(response) if response.valid => {}
             Ok(response) => {
+                // The preview validation is advisory for the editor. Preserve
+                // its structured findings, but still send the complete edit to
+                // the authoritative save endpoint so server-side validation,
+                // atomicity, and failure evidence follow the same path as the
+                // pre-modular Components workflow.
                 feedback.findings.set(response.findings);
-                return;
             }
             Err(message) => {
                 feedback.error.set(Some(message));
