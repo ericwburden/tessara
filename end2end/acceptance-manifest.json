@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 83,
+  "expected_total": 84,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
@@ -34,6 +34,7 @@
       "path": "components.spec.ts",
       "tests": [
         "Sprint 8A extracted Component UI parity › Core and enrolled modules share the SDK canvas, tokens, navigation state, and title",
+        "Sprint 8A extracted Component UI parity › wide lifecycle navigation uses only the displayed navigation label as the title",
         "Sprint 8A extracted Component UI parity › admin can create, update, publish, and view a major-line table component",
         "Sprint 8A extracted Component UI parity › admin can author, publish, and view visual components",
         "Sprint 8A extracted Component UI parity › exact viewport and theme matrix preserves directory editor detail and viewer usability",

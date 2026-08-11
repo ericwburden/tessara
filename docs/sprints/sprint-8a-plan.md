@@ -818,7 +818,7 @@ The implementation lineage that produced the R37/R30 source covers:
   Dashboard appears only through its real Release/Instance and manifest at
   reference navigation order 9; and
 - advance boundary, integration, acceptance, and documentation expectations
-  together. The current acceptance inventory has 75 exact Playwright identities
+  together. The current acceptance inventory has 84 exact Playwright identities
   and UAT-8A-04 includes the shared-node success/disjoint-node nondisclosure
   scenario. These changes are candidate-affecting and remain formally
   unverified until a new complete Readiness and complete Rehearsal pass on the
