@@ -250,6 +250,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let consumer_modal_open = RwSignal::new(false);
     let consumer_search = RwSignal::new(String::new());
     let new_version_note = RwSignal::new(String::new());
+    let consumer_review_error = RwSignal::new(None::<String>);
     let version_note = RwSignal::new(String::new());
     let draft_preview = RwSignal::new(None::<ComponentRenderResponse>);
     let draft_preview_error = RwSignal::new(None::<String>);
@@ -1045,6 +1046,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                 publish_menu_open.set(false);
                                 consumer_search.set(String::new());
                                 new_version_note.set(String::new());
+                                consumer_review_error.set(None);
                                 consumer_modal_open.set(true);
                             }>
                                 "Create New Version"
@@ -1060,7 +1062,10 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                             class="component-consumers-modal__scrim"
                             type="button"
                             aria-label="Close consumer review"
-                            on:click=move |_| consumer_modal_open.set(false)
+                            on:click=move |_| {
+                                consumer_review_error.set(None);
+                                consumer_modal_open.set(false);
+                            }
                         ></button>
                         <aside class="component-consumers-modal__panel blurred-surface" role="dialog" aria-modal="true" aria-label="Review component consumers">
                             <header class="component-consumers-modal__header">
@@ -1072,7 +1077,10 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                     class="icon-button"
                                     type="button"
                                     aria-label="Close consumer review"
-                                    on:click=move |_| consumer_modal_open.set(false)
+                                    on:click=move |_| {
+                                        consumer_review_error.set(None);
+                                        consumer_modal_open.set(false);
+                                    }
                                 >
                                     <X class="icon-button__icon"/>
                                 </button>
@@ -1100,22 +1108,32 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                 <textarea
                                     placeholder="Summarize what changed in this version"
                                     prop:value=move || new_version_note.get()
-                                    on:input=move |event| new_version_note.set(event_target_value(&event))
+                                    on:input=move |event| {
+                                        consumer_review_error.set(None);
+                                        new_version_note.set(event_target_value(&event));
+                                    }
                                 ></textarea>
                             </label>
+                            {move || consumer_review_error.get().map(|message| view! {
+                                <p class="form-status is-error" role="alert">{message}</p>
+                            })}
                             <footer class="component-consumers-modal__footer">
                                 <button
                                     class="button button--secondary"
                                     type="button"
-                                    on:click=move |_| consumer_modal_open.set(false)
+                                    on:click=move |_| {
+                                        consumer_review_error.set(None);
+                                        consumer_modal_open.set(false);
+                                    }
                                 >
                                     "Cancel"
                                 </button>
                                 <button class="button" type="button" on:click=move |_| {
                                     if new_version_note.get_untracked().trim().is_empty() {
-                                        error.set(Some("New versions require a version note.".into()));
+                                        consumer_review_error.set(Some("New versions require a version note.".into()));
                                         return;
                                     }
+                                    consumer_review_error.set(None);
                                     consumer_modal_open.set(false);
                                     create_component_from_form(
                                         ComponentSaveIntent {
