@@ -7,6 +7,7 @@ param(
     [string]$ExpectedBranch = "codex/sprint-8a",
     [string]$HandoffUrl = "http://127.0.0.1:8088",
     [switch]$AuthorizePreflightHarnessOnlySourceAdvance,
+    [switch]$AuthorizeSupersededCertifiedCandidateArchive,
     [switch]$SelfTest
 )
 
@@ -55,7 +56,7 @@ function Get-Sprint8APreflightDeclarations {
             name = "acceptance-traceability"
             depends_on = @("receipt-chain", "repository-scope")
             command = "reconcile Sprint 8A clauses with 84 browser identities, smoke, and UAT-8A-01 through UAT-8A-08"
-            failure_classification = "product"
+            failure_classification = "harness"
         }
         [pscustomobject][ordered]@{
             name = "environment-contract"
@@ -316,6 +317,215 @@ function Move-Sprint8ASupersededFreezeEvidence {
             [IO.Directory]::Delete($archiveRoot, $true)
         }
         throw
+    }
+}
+
+function Move-Sprint8ASupersededCertifiedCandidateEvidence {
+    param(
+        [Parameter(Mandatory)][string]$EvidenceRootPath,
+        [Parameter(Mandatory)][int]$CurrentAttempt,
+        [Parameter(Mandatory)][string]$PreflightPath,
+        [Parameter(Mandatory)][string]$CandidatePath,
+        [Parameter(Mandatory)][string]$ManifestPath
+    )
+
+    $resultPaths = [ordered]@{
+        preflight = $PreflightPath
+        candidate = $CandidatePath
+        manifest = $ManifestPath
+        sit = Join-Path $EvidenceRootPath "sit-result.json"
+        uat = Join-Path $EvidenceRootPath "uat-result.json"
+    }
+    $closeoutPath = Join-Path $EvidenceRootPath "closeout-authorization.json"
+    $closeoutFiles = @($closeoutPath, "$closeoutPath.sha256")
+    $closeoutExisting = @($closeoutFiles | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+    if ($closeoutExisting.Count -notin @(0, 2)) {
+        throw "The prior Sprint 8A closeout authorization is only partially present and cannot be archived safely."
+    }
+    if ($closeoutExisting.Count -eq 2) {
+        $resultPaths.closeout = $closeoutPath
+    }
+
+    $canonicalFiles = @($resultPaths.Values | ForEach-Object { $_; "$_.sha256" })
+    $existing = @($canonicalFiles | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+    if ($existing.Count -ne $canonicalFiles.Count) {
+        throw "A prior completed Sprint 8A candidate chain is only partially present and cannot be archived safely."
+    }
+
+    $hashes = [ordered]@{}
+    $documents = [ordered]@{}
+    foreach ($entry in $resultPaths.GetEnumerator()) {
+        $hashes[$entry.Key] = Assert-Sprint8APreflightSidecar -Path ([string]$entry.Value)
+        if ($entry.Key -cne "manifest") {
+            $documents[$entry.Key] = Get-Content -LiteralPath ([string]$entry.Value) -Raw | ConvertFrom-Json
+        }
+    }
+    $priorPreflight = $documents.preflight
+    $priorCandidate = $documents.candidate
+    $priorSit = $documents.sit
+    $priorUat = $documents.uat
+    if ([string]$priorPreflight.phase -cne "validation-preflight" -or
+        [string]$priorPreflight.state -cne "passed" -or
+        [string]$priorCandidate.phase -cne "candidate-freeze" -or
+        [string]$priorCandidate.state -cne "passed" -or
+        [int]$priorPreflight.attempt -ne [int]$priorCandidate.attempt -or
+        [string]$priorSit.phase -cne "sit" -or [string]$priorSit.state -cne "passed" -or
+        [string]$priorUat.phase -cne "uat" -or [string]$priorUat.state -cne "passed") {
+        throw "The existing canonical lifecycle outputs are not one completed passing candidate chain."
+    }
+    $candidateFingerprint = [string]$priorCandidate.candidate_fingerprint
+    if ($candidateFingerprint -notmatch '^[0-9a-f]{64}$' -or
+        [string]$priorSit.candidate_fingerprint -cne $candidateFingerprint -or
+        [string]$priorUat.candidate_fingerprint -cne $candidateFingerprint) {
+        throw "The prior SIT and UAT results do not bind the exact frozen candidate fingerprint."
+    }
+    $requiredLinks = @(
+        [pscustomobject]@{ document = $priorCandidate; path = "$evidenceRootRelative/preflight-result.json"; sha256 = $hashes.preflight },
+        [pscustomobject]@{ document = $priorSit; path = "$evidenceRootRelative/candidate.json"; sha256 = $hashes.candidate },
+        [pscustomobject]@{ document = $priorUat; path = "$evidenceRootRelative/candidate.json"; sha256 = $hashes.candidate },
+        [pscustomobject]@{ document = $priorUat; path = "$evidenceRootRelative/sit-result.json"; sha256 = $hashes.sit }
+    )
+    foreach ($link in $requiredLinks) {
+        $matches = @($link.document.prerequisite_receipts | Where-Object {
+            [string]$_.path -ceq [string]$link.path -and [string]$_.sha256 -ceq [string]$link.sha256
+        })
+        if ($matches.Count -ne 1) {
+            throw "The prior completed candidate chain has a stale prerequisite link to '$($link.path)'."
+        }
+    }
+    if ($null -eq $script:runtimeContext.source -or
+        [string]$script:runtimeContext.source.commit -ceq [string]$priorCandidate.source_identity.commit) {
+        throw "A completed candidate may be archived only for an authenticated successor source."
+    }
+
+    $priorAttempt = [int]$priorCandidate.attempt
+    $archiveRoot = Join-Path $EvidenceRootPath (
+        "preflight/superseded/certified-candidate-$priorAttempt-$($candidateFingerprint.Substring(0, 12))"
+    )
+    if (Test-Path -LiteralPath $archiveRoot) {
+        throw "The immutable archive for completed candidate '$candidateFingerprint' already exists."
+    }
+    [IO.Directory]::CreateDirectory($archiveRoot) | Out-Null
+    $moved = [Collections.Generic.List[object]]::new()
+    try {
+        foreach ($path in $canonicalFiles) {
+            $destination = Join-Path $archiveRoot ([IO.Path]::GetFileName($path))
+            [IO.File]::Move($path, $destination)
+            $moved.Add([pscustomobject][ordered]@{
+                prior_path = [IO.Path]::GetRelativePath($repoRoot, $path).Replace("\", "/")
+                archived_path = [IO.Path]::GetRelativePath($repoRoot, $destination).Replace("\", "/")
+                sha256 = Get-Sprint8APreflightFileSha256 -Path $destination
+            })
+        }
+        $receiptPath = Join-Path $structuredRoot "certified-candidate-supersession.json"
+        $receiptSha256 = Write-Sprint8APreflightJsonReceipt -Path $receiptPath -Document ([pscustomobject][ordered]@{
+            schema_version = 1
+            sprint = "sprint-8a"
+            contract = "tessara.sprint-8a.certified-candidate-supersession"
+            prior_preflight_attempt = $priorAttempt
+            successor_preflight_attempt = $CurrentAttempt
+            prior_candidate_fingerprint = $candidateFingerprint
+            prior_source_identity = $priorCandidate.source_identity
+            successor_source_identity = $script:runtimeContext.source
+            reason = "candidate_invalidated_by_later_ui_sdk_product_correction"
+            authenticated_result_sha256 = $hashes
+            archived_files = @($moved)
+            historical_evidence_is_diagnostic_only = $true
+        })
+        [pscustomobject][ordered]@{
+            receipt = [pscustomobject][ordered]@{
+                path = [IO.Path]::GetRelativePath($repoRoot, $receiptPath).Replace("\", "/")
+                sha256 = $receiptSha256
+            }
+            archived_files = @($moved | Where-Object { $_.archived_path -notmatch '\.sha256$' } | ForEach-Object {
+                [pscustomobject][ordered]@{ path = [string]$_.archived_path; sha256 = [string]$_.sha256 }
+            })
+        }
+    } catch {
+        foreach ($entry in @($moved | Select-Object -Last 100)) {
+            $source = Join-Path $repoRoot ([string]$entry.archived_path)
+            $destination = Join-Path $repoRoot ([string]$entry.prior_path)
+            if ((Test-Path -LiteralPath $source) -and -not (Test-Path -LiteralPath $destination)) {
+                [IO.File]::Move($source, $destination)
+            }
+        }
+        if (Test-Path -LiteralPath $archiveRoot) {
+            [IO.Directory]::Delete($archiveRoot, $true)
+        }
+        throw
+    }
+}
+
+function Test-Sprint8ACertifiedCandidateSupersession {
+    $selfTestRoot = Join-Path $repoRoot "artifacts/sprint-8a-certified-supersession-selftest-$([guid]::NewGuid().ToString('N'))"
+    $priorEvidenceRoot = Get-Variable -Name evidenceRootPath -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    $priorEvidenceRootRelative = Get-Variable -Name evidenceRootRelative -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    $priorStructuredRoot = Get-Variable -Name structuredRoot -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    $priorRuntimeContext = Get-Variable -Name runtimeContext -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    try {
+        [IO.Directory]::CreateDirectory((Join-Path $selfTestRoot "preflight/current/evidence")) | Out-Null
+        $script:evidenceRootPath = $selfTestRoot
+        $script:evidenceRootRelative = [IO.Path]::GetRelativePath($repoRoot, $selfTestRoot).Replace("\", "/")
+        $script:structuredRoot = Join-Path $selfTestRoot "preflight/current/evidence"
+        $priorSource = [pscustomobject][ordered]@{
+            commit = "1" * 40; tree = "2" * 40; dirty = $false; branch = "self-test"
+        }
+        $script:runtimeContext = [pscustomobject]@{
+            source = [pscustomobject][ordered]@{
+                commit = "3" * 40; tree = "4" * 40; dirty = $false; branch = "self-test"
+            }
+        }
+        $fingerprint = "5" * 64
+        $preflightPath = Join-Path $selfTestRoot "preflight-result.json"
+        $candidatePath = Join-Path $selfTestRoot "candidate.json"
+        $manifestPath = Join-Path $selfTestRoot "evidence-manifest.json"
+        $sitPath = Join-Path $selfTestRoot "sit-result.json"
+        $uatPath = Join-Path $selfTestRoot "uat-result.json"
+        $preflightSha256 = Write-Sprint8APreflightJsonReceipt -Path $preflightPath -Document ([pscustomobject]@{
+            phase = "validation-preflight"; state = "passed"; attempt = 7; source_identity = $priorSource
+        })
+        $candidateSha256 = Write-Sprint8APreflightJsonReceipt -Path $candidatePath -Document ([pscustomobject]@{
+            phase = "candidate-freeze"; state = "passed"; attempt = 7
+            candidate_fingerprint = $fingerprint; source_identity = $priorSource
+            prerequisite_receipts = @([pscustomobject]@{
+                path = "$($script:evidenceRootRelative)/preflight-result.json"; sha256 = $preflightSha256
+            })
+        })
+        Write-Sprint8APreflightJsonReceipt -Path $manifestPath -Document ([pscustomobject]@{ schema_version = 1 }) | Out-Null
+        $sitSha256 = Write-Sprint8APreflightJsonReceipt -Path $sitPath -Document ([pscustomobject]@{
+            phase = "sit"; state = "passed"; attempt = 3; candidate_fingerprint = $fingerprint
+            prerequisite_receipts = @([pscustomobject]@{
+                path = "$($script:evidenceRootRelative)/candidate.json"; sha256 = $candidateSha256
+            })
+        })
+        Write-Sprint8APreflightJsonReceipt -Path $uatPath -Document ([pscustomobject]@{
+            phase = "uat"; state = "passed"; attempt = 4; candidate_fingerprint = $fingerprint
+            prerequisite_receipts = @(
+                [pscustomobject]@{ path = "$($script:evidenceRootRelative)/candidate.json"; sha256 = $candidateSha256 },
+                [pscustomobject]@{ path = "$($script:evidenceRootRelative)/sit-result.json"; sha256 = $sitSha256 }
+            )
+        }) | Out-Null
+
+        $result = Move-Sprint8ASupersededCertifiedCandidateEvidence `
+            -EvidenceRootPath $selfTestRoot `
+            -CurrentAttempt 8 `
+            -PreflightPath $preflightPath `
+            -CandidatePath $candidatePath `
+            -ManifestPath $manifestPath
+        if ($null -eq $result -or @($result.archived_files).Count -ne 5 -or
+            (Test-Path -LiteralPath $preflightPath) -or
+            -not (Test-Path -LiteralPath (Join-Path $repoRoot ([string]$result.receipt.path)) -PathType Leaf)) {
+            throw "Sprint 8A completed-candidate supersession self-test did not archive one exact chain."
+        }
+    } finally {
+        $script:evidenceRootPath = $priorEvidenceRoot
+        $script:evidenceRootRelative = $priorEvidenceRootRelative
+        $script:structuredRoot = $priorStructuredRoot
+        $script:runtimeContext = $priorRuntimeContext
+        if ((Test-Sprint8APreflightContainedPath -Parent (Join-Path $repoRoot "artifacts") -Child $selfTestRoot) -and
+            (Test-Path -LiteralPath $selfTestRoot)) {
+            [IO.Directory]::Delete($selfTestRoot, $true)
+        }
     }
 }
 
@@ -902,6 +1112,7 @@ function Test-Sprint8AValidationPreflightRunner {
     $checks = @(Get-Sprint8APreflightDeclarations)
     Assert-Sprint8APreflightGraph -Checks $checks
     Test-Sprint8APreflightSchedulerContract -Checks $checks
+    Test-Sprint8ACertifiedCandidateSupersession
 
     $inventory = Get-Sprint8APlannedEvidenceInventory -PreflightAttempt 7
     $expectedRequiredPaths = @(
@@ -1222,6 +1433,7 @@ function Test-Sprint8AValidationPreflightRunner {
         "Get-Sprint8ADownstreamCommandSets",
         "Assert-Sprint8APreflightDownstreamCommands",
         "Move-Sprint8ASupersededFreezeEvidence",
+        "Move-Sprint8ASupersededCertifiedCandidateEvidence",
         "Assert-Sprint8APreflightEvidencePaths",
         "Publish-Sprint8APreflightInventory",
         "Initialize-Sprint8APreflightEvidenceManifest"
@@ -1611,8 +1823,11 @@ function Test-Sprint8AValidationPreflightRunner {
         -not $sourceText.Contains('mutable_attempt_checkpoints_are_overwritten_only_by_the_owning_runner = $true') -or
         -not $sourceText.Contains('immutable_snapshots_and_terminal_receipts_are_never_overwritten = $true') -or
         -not $sourceText.Contains('[switch]$AuthorizePreflightHarnessOnlySourceAdvance') -or
+        -not $sourceText.Contains('[switch]$AuthorizeSupersededCertifiedCandidateArchive') -or
         -not $sourceText.Contains('tessara.sprint-8a.failed-sit-freeze-supersession') -or
+        -not $sourceText.Contains('tessara.sprint-8a.certified-candidate-supersession') -or
         -not $sourceText.Contains('failed_sit_harness_correction_requires_refreeze') -or
+        -not $sourceText.Contains('candidate_invalidated_by_later_ui_sdk_product_correction') -or
         -not $sourceText.Contains('user_directed_preflight_with_corrected_validation_code') -or
         -not $sourceText.Contains('product_test_fixture_deployment_changes = $false') -or
         -not $sourceText.Contains('$script:runtimeContext.rehearsal.mutable_source_identity')) {
@@ -2354,8 +2569,9 @@ function Assert-Sprint8APreflightCleanSource {
             throw "Authorized preflight harness advance is not a descendant of the passing Rehearsal source."
         }
         $changedPaths = @(& git diff --name-only "$([string]$rehearsalSource.commit)..$([string]$source.commit)" | ForEach-Object { $_.Replace("\", "/") })
-        if ($LASTEXITCODE -ne 0 -or
-            (($changedPaths | Sort-Object) -join "`n") -cne (($allowedPaths | Sort-Object) -join "`n")) {
+        if ($LASTEXITCODE -ne 0 -or $changedPaths.Count -lt 1 -or
+            @($changedPaths | Where-Object { $allowedPaths -cnotcontains $_ }).Count -ne 0 -or
+            $changedPaths -cnotcontains "scripts/run-sprint-8a-validation-preflight.ps1") {
             throw "Authorized preflight harness advance contains a path outside the exact approved correction set."
         }
         $sourceAdvance = [pscustomobject][ordered]@{
@@ -2410,20 +2626,13 @@ function Assert-Sprint8APreflightAcceptanceTraceability {
     if ($identities.Count -ne 84 -or @($identities | Sort-Object -Unique).Count -ne 84) {
         throw "Sprint 8A Playwright acceptance identities are incomplete or duplicated."
     }
-    foreach ($file in @($manifest.files)) {
-        $specPath = Join-Path $repoRoot "end2end/tests/$($file.path)"
-        if (-not (Test-Path -LiteralPath $specPath -PathType Leaf)) {
-            throw "Sprint 8A acceptance manifest names missing specification '$($file.path)'."
-        }
-        $specText = Get-Content -LiteralPath $specPath -Raw
-        foreach ($identity in @($file.tests)) {
-            $identitySegments = @([string]$identity -split ' › ')
-            if ($identitySegments.Count -lt 1 -or
-                @($identitySegments | Where-Object { -not $specText.Contains([string]$_) }).Count -ne 0) {
-                throw "Sprint 8A acceptance identity '$identity' is not present in '$($file.path)'."
-            }
-        }
-    }
+    $discoveryRelative = "$evidenceRootRelative/preflight/attempt-$Attempt/evidence/acceptance-playwright-discovery.json"
+    & (Join-Path $PSScriptRoot "validate-e2e.ps1") `
+        -InventoryOnly `
+        -AcceptanceManifestPath "end2end/acceptance-manifest.json" `
+        -EvidencePath $discoveryRelative
+    $discoveryPath = Join-Path $repoRoot $discoveryRelative
+    $discoverySha256 = Assert-Sprint8APreflightSidecar -Path $discoveryPath
 
     $scopeStart = $verification.IndexOf("## Scope And Acceptance Inventory", [StringComparison]::Ordinal)
     $scopeEnd = $verification.IndexOf("## Required Evidence Inventory", [StringComparison]::Ordinal)
@@ -2457,7 +2666,7 @@ function Assert-Sprint8APreflightAcceptanceTraceability {
         }
     }
 
-    Publish-Sprint8APreflightStructuredEvidence -CheckName "acceptance-traceability" -Document ([pscustomobject][ordered]@{
+    $traceabilityReference = Publish-Sprint8APreflightStructuredEvidence -CheckName "acceptance-traceability" -Document ([pscustomobject][ordered]@{
         schema_version = 1
         sprint = "sprint-8a"
         contract = "tessara.sprint-8a.preflight-acceptance-traceability"
@@ -2467,6 +2676,8 @@ function Assert-Sprint8APreflightAcceptanceTraceability {
             manifest_path = "end2end/acceptance-manifest.json"
             manifest_sha256 = Get-Sprint8APreflightFileSha256 -Path $manifestPath
             identity_count = $identities.Count
+            discovery_path = $discoveryRelative
+            discovery_sha256 = $discoverySha256
         }
         manual_uat = @($uatContracts | ForEach-Object {
             [pscustomobject]@{
@@ -2477,7 +2688,11 @@ function Assert-Sprint8APreflightAcceptanceTraceability {
             }
         })
         smoke_runner = "scripts/smoke-sprint-8a.ps1"
-    }) | Out-Null
+    })
+    $script:producedEvidenceByCheck["acceptance-traceability"] = @(
+        $traceabilityReference,
+        [pscustomobject][ordered]@{ path = $discoveryRelative; sha256 = $discoverySha256 }
+    )
     "acceptance traceability retains 19 clauses, 84 browser identities, smoke, and eight manual scenarios"
 }
 
@@ -3176,6 +3391,7 @@ function Assert-Sprint8APreflightEvidencePaths {
     }
 
     $freezeSupersession = $null
+    $certifiedCandidateSupersession = $null
     $freezePaths = @(
         $preflightResultPath,
         "$preflightResultPath.sha256",
@@ -3184,14 +3400,22 @@ function Assert-Sprint8APreflightEvidencePaths {
         $manifestPath,
         "$manifestPath.sha256"
     )
-    if (@($freezePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0 -and
-        $AuthorizePreflightHarnessOnlySourceAdvance) {
-        $freezeSupersession = Move-Sprint8ASupersededFreezeEvidence `
-            -EvidenceRootPath $script:evidenceRootPath `
-            -CurrentAttempt $Attempt `
-            -PreflightPath $preflightResultPath `
-            -CandidatePath $candidatePath `
-            -ManifestPath $manifestPath
+    if (@($freezePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) {
+        if ($AuthorizeSupersededCertifiedCandidateArchive) {
+            $certifiedCandidateSupersession = Move-Sprint8ASupersededCertifiedCandidateEvidence `
+                -EvidenceRootPath $script:evidenceRootPath `
+                -CurrentAttempt $Attempt `
+                -PreflightPath $preflightResultPath `
+                -CandidatePath $candidatePath `
+                -ManifestPath $manifestPath
+        } elseif ($AuthorizePreflightHarnessOnlySourceAdvance) {
+            $freezeSupersession = Move-Sprint8ASupersededFreezeEvidence `
+                -EvidenceRootPath $script:evidenceRootPath `
+                -CurrentAttempt $Attempt `
+                -PreflightPath $preflightResultPath `
+                -CandidatePath $candidatePath `
+                -ManifestPath $manifestPath
+        }
     }
 
     $reserved = @(
@@ -3234,15 +3458,16 @@ function Assert-Sprint8APreflightEvidencePaths {
         })
         collision_count = 0
         superseded_freeze = if ($null -eq $freezeSupersession) { $null } else { $freezeSupersession.receipt }
+        superseded_certified_candidate = if ($null -eq $certifiedCandidateSupersession) { $null } else { $certifiedCandidateSupersession.receipt }
         absolute_path_exception = $legacyException
     })
-    if ($null -ne $freezeSupersession) {
+    if ($null -ne $freezeSupersession -or $null -ne $certifiedCandidateSupersession) {
         $script:producedEvidenceByCheck["evidence-path-contract"] = @(
             $contractReference,
-            $freezeSupersession.receipt
-        ) + @($freezeSupersession.archived_files)
+            $(if ($null -ne $freezeSupersession) { $freezeSupersession.receipt } else { $certifiedCandidateSupersession.receipt })
+        ) + @($(if ($null -ne $freezeSupersession) { $freezeSupersession.archived_files } else { $certifiedCandidateSupersession.archived_files }))
     }
-    "canonical paths are contained, unsupported paths rejected, and any failed-SIT freeze was archived before replacement"
+    "canonical paths are contained, unsupported paths rejected, and any superseded candidate evidence was archived before replacement"
 }
 
 function Publish-Sprint8APreflightInventory {
