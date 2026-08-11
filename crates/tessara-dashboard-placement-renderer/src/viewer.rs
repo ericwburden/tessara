@@ -346,7 +346,7 @@ impl ComponentTableViewState {
 
     fn query(&self) -> String {
         let mut params = Vec::new();
-        push_query_param(&mut params, "q", &self.search);
+        push_query_param(&mut params, "search", &self.search);
         if let Some(page_size) = self.requested_page_size {
             push_query_param(&mut params, "page_size", &page_size.to_string());
         }
@@ -1459,7 +1459,7 @@ mod tests {
 
         assert_eq!(
             state.query(),
-            "q=family%20outreach&page_size=25&cursor=offset%3A25&sort=program%3Adesc&filter%5Bprogram%5D%5Boperator%5D=contains&filter%5Bprogram%5D%5Bvalue%5D=demo&filter%5Brow_count%5D%5Boperator%5D=between&filter%5Brow_count%5D%5Bvalue%5D=1%2C10&visible_columns=program%2Crow_count"
+            "search=family%20outreach&page_size=25&cursor=offset%3A25&sort=program%3Adesc&filter%5Bprogram%5D%5Boperator%5D=contains&filter%5Bprogram%5D%5Bvalue%5D=demo&filter%5Brow_count%5D%5Boperator%5D=between&filter%5Brow_count%5D%5Bvalue%5D=1%2C10&visible_columns=program%2Crow_count"
         );
     }
 
@@ -1489,7 +1489,7 @@ mod tests {
 
         assert_eq!(state.cursor, None);
         assert!(state.previous_cursors.is_empty());
-        assert_eq!(state.query(), "q=updated");
+        assert_eq!(state.query(), "search=updated");
     }
 
     #[test]

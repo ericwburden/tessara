@@ -969,11 +969,14 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await calculation.selectOption("count");
     await expect(calculationWarning).toBeHidden();
     await valueFieldSelect.selectOption(fieldKey);
+    const barFields = page.getByRole("group", {
+      name: "Fields & Calculation",
+    });
     const barOptions = page.locator('[data-component-config-section="bar"]');
-    await barOptions
+    await barFields
       .getByLabel("Category field", { exact: true })
       .selectOption(fieldKey);
-    await barOptions.getByLabel("Split bars", { exact: true }).check();
+    await barFields.getByLabel("Split bars", { exact: true }).check();
     await expect(visualSort.locator("option")).toHaveText([
       "Default",
       "Category",
@@ -1000,7 +1003,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       .locator("[data-category-display-label]")
       .first();
     await firstSeriesLabel.fill("Custom series label");
-    await barOptions.getByLabel("Split bars", { exact: true }).uncheck();
+    await barFields.getByLabel("Split bars", { exact: true }).uncheck();
     const categoryOverrideTable = page.getByRole("table", {
       name: "Category Labels",
     });
@@ -1008,7 +1011,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await expect(
       categoryOverrideTable.locator("[data-category-display-label]").first(),
     ).not.toHaveValue("Custom series label");
-    await barOptions.getByLabel("Split bars", { exact: true }).check();
+    await barFields.getByLabel("Split bars", { exact: true }).check();
     await seriesField.selectOption(fieldKey);
     await expect(
       page.getByRole("table", { name: "Series Labels" }),
