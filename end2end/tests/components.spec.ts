@@ -540,6 +540,33 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     assertNoConsoleErrors();
   });
 
+  test("wide lifecycle navigation uses only the displayed navigation label as the title", async ({
+    page,
+  }) => {
+    const assertNoConsoleErrors = attachConsoleGuard(page);
+    await page.setViewportSize({ width: 1594, height: 912 });
+    await signInAsAdmin(page);
+    await page.goto("/");
+    await expect(page.locator("#app-root")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+
+    for (const route of [
+      { path: "/dashboards", label: "Dashboards" },
+      { path: "/components", label: "Components" },
+    ]) {
+      const link = page.locator(`.sidebar a[href="${route.path}"]`);
+      await expect(link.locator(".sidebar-link__label")).toHaveText(route.label);
+      await link.click();
+      await expect(page).toHaveURL(new RegExp(`${route.path}$`));
+      await expect(page.locator(".top-app-bar__title")).toHaveText(route.label);
+    }
+
+    await expect(page.locator(".page-header__eyebrow")).toHaveCount(0);
+    assertNoConsoleErrors();
+  });
+
   test("admin can create, update, publish, and view a major-line table component", async ({
     page,
   }) => {

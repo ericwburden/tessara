@@ -2583,3 +2583,13 @@ the SDK's one theme bootstrap resolves the same stored or operating-system
 preference for Core, Components, Dashboard, and Scoped Records. The parity
 reproducer records the resolved preference, computed tokens, and body canvas
 for every route; this focused evidence remains non-authoritative.
+
+A subsequent wide-desktop lifecycle review found Core deriving the activated
+module title from the complete navigation link text, which included hidden icon
+metadata, instead of the displayed navigation label. Core now selects the
+longest matching route but reads its title exclusively from the visible
+`.sidebar-link__label`, and active-state identity is matched by the exact route.
+The focused browser reproducer exercises in-app Dashboard and Components
+navigation at 1594 px and asserts the exact displayed labels. The same review
+removed the redundant Components directory eyebrow while retaining the page
+title and accepted descriptive copy.

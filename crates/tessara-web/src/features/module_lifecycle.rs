@@ -664,7 +664,7 @@ mod browser {
             .split(['?', '#'])
             .next()
             .unwrap_or(current_path);
-        let mut best: Option<(usize, String)> = None;
+        let mut best: Option<(usize, String, String)> = None;
         for index in 0..links.length() {
             let Some(link) = links
                 .item(index)
@@ -691,15 +691,22 @@ mod browser {
             if matches
                 && best
                     .as_ref()
-                    .is_none_or(|(length, _)| href_path.len() > *length)
+                    .is_none_or(|(length, _, _)| href_path.len() > *length)
             {
-                best = Some((
-                    href_path.len(),
-                    link.text_content().unwrap_or_default().trim().to_string(),
-                ));
+                let Some(label) = link
+                    .query_selector(".sidebar-link__label")
+                    .ok()
+                    .flatten()
+                    .and_then(|label| label.text_content())
+                    .map(|label| label.trim().to_string())
+                    .filter(|label| !label.is_empty())
+                else {
+                    continue;
+                };
+                best = Some((href_path.len(), href_path.to_string(), label));
             }
         }
-        let (best_length, label) = best?;
+        let (_, best_path, label) = best?;
         for index in 0..links.length() {
             let Some(link) = links
                 .item(index)
@@ -713,9 +720,7 @@ mod browser {
                 .next()
                 .unwrap_or(&href)
                 .trim_end_matches('/');
-            if href_path.len() == best_length
-                && link.text_content().unwrap_or_default().trim() == label
-            {
+            if href_path == best_path {
                 let class = link
                     .get_attribute("class")
                     .unwrap_or_else(|| "sidebar-link".into());

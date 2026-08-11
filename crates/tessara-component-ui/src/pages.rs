@@ -62,7 +62,6 @@ pub fn ComponentsIndexContent() -> impl IntoView {
     view! {
         <section class="route-panel components-page" data-component-directory="true">
             <PageHeader
-                eyebrow="Reusable presentation"
                 title="Components"
                 description="Find, inspect, and reuse published Component definitions."
             >
