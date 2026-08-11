@@ -733,8 +733,8 @@ function Get-Sprint8ASitLaneSpecifications {
                     -Command "reset the six exact preflight-approved disposable database identities" `
                     -Kind "database-reset" -Classification "environment" -EvidencePaths @($resetEvidence)
                 New-Sprint8ASitSpec -Name "workspace-tests" `
-                    -Command "cargo test --workspace --all-features --locked --offline" `
-                    -Statement "& cargo test --workspace --all-features --locked --offline$nativeGuard" `
+                    -Command "cargo test --workspace --all-features --locked --offline --jobs 1" `
+                    -Statement "& cargo test --workspace --all-features --locked --offline --jobs 1$nativeGuard" `
                     -DependsOn @("reset-six-databases")
                 New-Sprint8ASitSpec -Name "optimized-resource-reference-timing" `
                     -Command "cargo test -p tessara-api --test modules --release --locked --offline resource_reference_restricted_known_random_latency_profile -- --exact --nocapture" `
@@ -1888,7 +1888,7 @@ function Test-Sprint8ASitRunner {
         'cargo fmt --all -- --check',
         'cargo check --workspace --all-features --locked --offline',
         'cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings',
-        'cargo test --workspace --all-features --locked --offline',
+        'cargo test --workspace --all-features --locked --offline --jobs 1',
         'resource_reference_restricted_known_random_latency_profile',
         'tessara-components-contract', 'tessara-dashboard-module',
         'tessara-component-module', 'tessara-module-testkit',

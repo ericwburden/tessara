@@ -2376,7 +2376,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   }) => {
     const draftOnly = await postJson<ComponentDefinition>(fixtures.admin, "/api/admin/components", {
       schema_version: 1,
-      name: `${RUN_ID} Native Draft Component`,
+      // The no-JavaScript directory is server-rendered with the same ten-row
+      // pagination contract as the hydrated view. Keep this scenario-owned
+      // identity deterministically on the first page even after sibling tests
+      // have created additional Components.
+      name: `000 ${RUN_ID} Native Draft Component`,
       slug: `${RUN_ID}-native-draft-component`,
       description: "Isolated native-route draft visibility fixture.",
       version: componentVersionInput(

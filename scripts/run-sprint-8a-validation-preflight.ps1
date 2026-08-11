@@ -2956,7 +2956,7 @@ function Get-Sprint8ADownstreamCommandSets {
             ".\scripts\verify-markdown-links.ps1"
         )
         rust_workspace = @(
-            "cargo test --workspace --all-features --locked --offline",
+            "cargo test --workspace --all-features --locked --offline --jobs 1",
             "cargo test -p tessara-api --test modules --release --locked --offline resource_reference_restricted_known_random_latency_profile -- --exact --nocapture",
             "cargo test --locked --offline -p tessara-components-contract",
             "cargo test --locked --offline -p tessara-dashboard-module",

@@ -730,6 +730,7 @@ function Test-Sprint8ACandidateTwoWaveRunnerContract {
         'active_lane_started_at',
         'declared_checks = $declaredChecks',
         'Assert-Sprint8ADeclaredEvidencePaths',
+        'cargo test --workspace --all-features --locked --offline --jobs 1',
         'pre_authentication_lifecycle_placeholder',
         'identity_binding = Get-RehearsalLaneIdentityBinding -Name $Name',
         'foreach ($name in @($selectedSchedule.wave_a))',
@@ -1438,7 +1439,7 @@ $declaredChecks = @(
     [ordered]@{ name = "module-sdk-boundaries"; depends_on = @(); command = "verify-module-sdk-boundaries.ps1 native/WASM/package/source audit"; classification = "product"; evidence_paths = @() },
     [ordered]@{ name = "dashboard-source-boundaries"; depends_on = @(); command = "verify-sprint-6e-boundaries.ps1 Dashboard source/package/gateway ownership"; classification = "product"; evidence_paths = @() },
     [ordered]@{ name = "markdown-links"; depends_on = @(); command = "verify-markdown-links.ps1"; classification = "product"; evidence_paths = @() },
-    [ordered]@{ name = "workspace-tests"; depends_on = @(); command = "cargo test --workspace --all-features --locked --offline"; classification = "product"; evidence_paths = @() },
+    [ordered]@{ name = "workspace-tests"; depends_on = @(); command = "cargo test --workspace --all-features --locked --offline --jobs 1"; classification = "product"; evidence_paths = @() },
     [ordered]@{ name = "optimized-resource-reference-timing"; depends_on = @(); command = "cargo test -p tessara-api --test modules --release --locked --offline resource_reference_restricted_known_random_latency_profile -- --exact --nocapture"; classification = "product"; evidence_paths = @() },
     [ordered]@{ name = "components-contract-tests"; depends_on = @(); command = "cargo test --locked --offline -p tessara-components-contract"; classification = "product"; evidence_paths = @() },
     [ordered]@{ name = "dashboard-module-tests"; depends_on = @(); command = "cargo test --locked --offline -p tessara-dashboard-module"; classification = "product"; evidence_paths = @() },
@@ -2713,7 +2714,7 @@ try {
         } -FailureMessage "Markdown-link audit failed."
     }
     Invoke-RehearsalLane "workspace-tests" {
-        & cargo test --workspace --all-features --locked --offline; if ($LASTEXITCODE -ne 0) { throw "Full workspace tests failed." }
+        & cargo test --workspace --all-features --locked --offline --jobs 1; if ($LASTEXITCODE -ne 0) { throw "Full workspace tests failed." }
     }
     Invoke-RehearsalLane "optimized-resource-reference-timing" {
         & cargo test -p tessara-api --test modules --release --locked --offline resource_reference_restricted_known_random_latency_profile -- --exact --nocapture

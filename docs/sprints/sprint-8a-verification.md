@@ -1866,7 +1866,7 @@ After resetting the six exact preflight-approved database identities, the
 runner executes the Rust lane serially in one Cargo target directory:
 
 ```powershell
-cargo test --workspace --all-features --locked --offline
+cargo test --workspace --all-features --locked --offline --jobs 1
 cargo test -p tessara-api --test modules --release --locked --offline resource_reference_restricted_known_random_latency_profile -- --exact --nocapture
 cargo test --locked --offline -p tessara-components-contract
 cargo test --locked --offline -p tessara-dashboard-module
@@ -2254,6 +2254,8 @@ Runtime chronology:
 | 2026-08-11 | Readiness 52 / complete fail-late harvest | 12 checks passed, 2 failed, and 1 was dependency-blocked | corrected UI SDK source `d95e32e6` / `b5ea99f2`; environment identity not issued | `environment` and `harness` | The launch omitted the same-process `TEST_API_DATABASE_URL`, blocking final environment identity. Independent Playwright discovery also found the newly added lifecycle-title regression as test 84 while the durable manifest and Preflight traceability contract still declared 83. Raw evidence, harvest `a85b5592...`, consolidated two-defect batch `77ab46c7...`, and one-use successor authorization `2b6aa315...` are retained. | Readiness and all downstream phases | Add the exact test identity and 84-count to every canonical acceptance consumer, export six fresh database URLs in the successor process, pass both focused reproducers, commit cleanly, then consume the authorization in complete Readiness 53. |
 | 2026-08-11 | Readiness 53 / complete gate | All 15 checks passed | `4436fb71` / `d1753210`; environment `878fa8fc...` | N/A — passed, superseded by the Rehearsal 41 correction | The complete readiness gate authenticated the clean source, six isolated databases, environment contract, exact 84-test inventory, implementation evidence, and validation-runner self-tests. | Rehearsal 41 only; the receipt remains valid history but cannot authorize the corrected source. | Correct the complete R41 batch, commit cleanly, then run a successor complete Readiness and Rehearsal against one new source/environment identity. |
 | 2026-08-11 | Rehearsal 41 / complete conservative fail-late harvest | 28 lanes passed, 3 failed, 1 was dependency-blocked, and 0 were deferred; cleanup, restoration, and final health passed | `4436fb71` / `d1753210`; environment `878fa8fc...` | `product` as recorded; diagnosed as product, harness, and acceptance-regression roots | Workspace tests exposed the Component SSR renderer's missing native all-features executor initialization. Playwright exposed one external-font 404 root shared by two scenarios, a collapsed Dashboard visibility accessible name, the lost pre-extraction Components versions heading, and one stale `1.0.0` diagnostic assertion. Upgrade/rollback exposed the same stale `1.0.0` candidate expectation in its verifier. Harvest `bcb62626...`, consolidated batch `563e17fc...`, and correction authorization `7e23a4d7...` are retained; UAT diagnostics were blocked by the failed upgrade and Playwright prerequisites. | R41 and every downstream phase | Correct the batch together, regenerate source-exact Component and Dashboard browser assets/digests, pass focused reproducers for every failed lane, then run complete successor Readiness and Rehearsal. |
+| 2026-08-11 | Readiness 54 / complete gate | All 15 checks passed | `92ac039f` / `f719ea71`; environment `25550ff1...` | N/A — passed, superseded by the Rehearsal 42 correction | The complete gate authenticated clean source, six isolated databases, the environment contract, exact 84-test inventory, implementation evidence, and runner self-tests. | Rehearsal 42 only; retained as immutable history | Correct the complete R42 batch, commit, then run successor complete Readiness and Rehearsal on one identity. |
+| 2026-08-11 | Rehearsal 42 / complete fail-late harvest | 29 lanes passed, 2 failed, 1 was dependency-blocked, and 0 were deferred; cleanup, restoration, final health, source, and environment checks passed | `92ac039f` / `f719ea71`; environment `25550ff1...` | Raw lane defaults retained; diagnosed as `harness`, acceptance-regression, and test-fixture roots | Workspace linking stopped with Windows `LNK1318`; Playwright passed 82 of 84 scenarios, exposing one intentionally changed title baseline and one first-page pagination assumption. Harvest, batch `acd48e91...`, and one-use correction authorization are retained; UAT diagnostics were blocked only by failed Playwright. | R42 and all downstream phases | Correct together, pass clean focused reproducers, commit, then run successor complete Readiness and Rehearsal. |
 
 Classifications are exactly `preflight/setup`, `product`, `harness`,
 `environment`, `flaky`, `evidence-finalization`, or `product-decision`.
@@ -2618,3 +2620,41 @@ Rehearsal 41 then closed five gaps in the implementation-to-validation map:
 - the Readiness lineage self-test isolates its authenticated historical R33
   prefix before testing one-use consumption. Later valid correction links can
   no longer make that historical negative test inspect the wrong active tip.
+
+### Rehearsal 42 result and correction boundary
+
+Readiness 54 passed all 15 checks for commit
+`92ac039f1cb3c0fe5753b1f86e312d995b09d546`. Rehearsal 42 then completed its
+fail-late harvest with 29 passing lanes, two failed lanes, one dependent
+blocked UAT-diagnostics lane, and no deferrals. Source-exact materialization,
+the semantic no-op, failure recovery, module boundaries, product smoke,
+upgrade/rollback, canonical restoration, Core and Supervisor health, and final
+source/environment identity all passed. The retained harvest and consolidated
+batch remain immutable diagnostic history; no rehearsal result or preflight
+authority was issued.
+
+The consolidated correction addresses four exact roots:
+
+- the Windows workspace-test lane now uses `--jobs 1` in Candidate Rehearsal
+  and SIT, preventing concurrent MSVC PDB writes that produced `LNK1318`; the
+  command inventory and runner self-tests require that exact stable form;
+- the Component versions visual baseline now reflects the accepted exact
+  `<Component name> versions` route title introduced by the Rehearsal 41
+  correction;
+- the no-JavaScript ownership scenario keeps its exact scenario-owned draft
+  Component on the first alphabetically sorted ten-row SSR page, preserving
+  rather than bypassing the product's pagination contract; and
+- the module-contract valid-manifest test builder and byte-pinned fixture now
+  use the exact current `0.3.0 / 2.0.0 / 1.2.0` platform tuple instead of the
+  superseded SDK tuple.
+
+Focused, non-authoritative verification passed on fresh disposable databases:
+the complete serialized Rust workspace including integration and doc tests;
+the module-contract crate and canonical fixture digest; both failed Playwright
+scenarios together without snapshot-update mode; formatting, workspace check,
+zero-warning Clippy, the acceptance contract, Module SDK boundaries; and the
+Readiness, Candidate Rehearsal, Preflight, SIT, and Playwright runner self-tests.
+These focused results prove correction readiness but do not replace formal
+certification. A successor complete Readiness and Candidate Rehearsal must pass
+against one new committed source/environment identity before Preflight, freeze,
+SIT, or UAT may start.
