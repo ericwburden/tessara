@@ -9,7 +9,7 @@ import init, {
   unmount_component,
 } from "/_tessara/modules/tessara.components/1.0.1/sha256:8647b25ef0ac193922ceed4446a43ea18d8bb61e77298e10c05a4d370166b633/component-bindings.js";
 
-await init("/_tessara/modules/tessara.components/1.0.1/sha256:59aadffd389c50e21e8b7b23817377a88ea91be6f1abdcb01bf926c8294abb45/component.wasm");
+await init("/_tessara/modules/tessara.components/1.0.1/sha256:ee6918f1f4fb3b7d0c8f2411c216d95ce435194e15f25d0377805047bd7289de/component.wasm");
 
 if (document.getElementById("module-content")) {
   hydrate_component();

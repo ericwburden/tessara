@@ -17,7 +17,7 @@
   "module_releases":[
     {
       "definition_id":"tessara.components","version":"1.0.1",
-      "manifest_digest":"sha256:020d419f5643a8a6b17918a04a98d7b2bc54f0816e26d00a7ef884da1e659521",
+      "manifest_digest":"sha256:4388ea1a7d1cda14e180abfd4ef37769217bc83e5d1c9aec73e99909ec127324",
       "runtime_image":"sha256:8a11111111111111111111111111111111111111111111111111111111111111",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/component-configuration/v1",

@@ -855,7 +855,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     await expect(
       page.getByRole("textbox", { name: "Configuration JSON" }),
     ).toHaveCount(0);
-    await page.locator("[data-component-open-consumer-review]").click();
+    await page.locator(".component-editor__publish-button").click();
     const createNewVersion = page.getByRole("menuitem", {
       name: "Create New Version",
       exact: true,

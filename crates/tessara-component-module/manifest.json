@@ -672,7 +672,7 @@
     },
     {
       "path": "/component.js",
-      "digest": "sha256:bd9cdfb8b181b66cee94689936fe62ec53bbf63ebc44aec7296b42d5d369266f",
+      "digest": "sha256:14e5a62101903e7a3b2558a5c797c931520bf349416f4a19f7f32d02f7218ef7",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
@@ -682,7 +682,7 @@
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:59aadffd389c50e21e8b7b23817377a88ea91be6f1abdcb01bf926c8294abb45",
+      "digest": "sha256:ee6918f1f4fb3b7d0c8f2411c216d95ce435194e15f25d0377805047bd7289de",
       "content_type": "application/wasm"
     }
   ]
