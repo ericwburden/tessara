@@ -35,13 +35,42 @@ async function visit(page: Page, path: string, theme: "light" | "dark") {
 test.describe("canonical module UI visual baselines", () => {
   test.beforeEach(async ({ page }) => signIn(page));
 
+  const referenceComponents = [
+    "Reference Label Bar",
+    "Reference Label Donut",
+    "Reference Label Line",
+    "Reference Label Pie",
+    "Reference Records Table",
+    "Reference Row Count",
+  ];
+
+  async function showReferenceComponents(page: Page) {
+    await page.getByPlaceholder("Search components").fill("Reference");
+    await expect(page.locator('tbody tr [scope="row"]')).toHaveText(
+      referenceComponents,
+    );
+    for (const name of referenceComponents) {
+      const row = page
+        .locator("tbody tr")
+        .filter({ has: page.getByText(name, { exact: true }) });
+      await expect(row).toHaveCount(1);
+      await expect(
+        row.getByRole("link", { name: "Edit component", exact: true }),
+      ).toBeVisible();
+      await expect(
+        row.getByRole("link", {
+          name: "View component versions",
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
+  }
+
   for (const theme of ["light", "dark"] as const) {
     test(`Components directory at 1280 px (${theme})`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 900 });
       await visit(page, "/components", theme);
-      const actions = page.locator(".data-table__action-group .icon-button");
-      await expect(actions).toHaveCount(14);
-      await expect(actions.first().locator("svg")).toBeVisible();
+      await showReferenceComponents(page);
       await expect(page.locator(".components-list-mobile-cards")).toBeHidden();
       await expect(page.locator(".mobile-nav__toggle")).toBeHidden();
       await expect(page.locator(".mobile-nav__panel")).toBeHidden();
@@ -88,11 +117,24 @@ test.describe("canonical module UI visual baselines", () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     for (const module of [
-      { path: "/components", name: "components" },
-      { path: "/dashboards", name: "dashboards" },
-      { path: "/reference/scoped-records", name: "scoped-records" },
+      { path: "/components", name: "components", title: "Components" },
+      { path: "/dashboards", name: "dashboards", title: "Dashboards" },
+      {
+        path: "/reference/scoped-records",
+        name: "scoped-records",
+        title: "Scoped Records",
+      },
     ]) {
       await visit(page, module.path, "dark");
+      await expect(page.locator(".top-app-bar__title")).toHaveText(module.title);
+      if (module.name === "components") {
+        await showReferenceComponents(page);
+      }
+      if (module.name === "scoped-records") {
+        await page.locator("tbody tr td:nth-child(3)").evaluate((cell) => {
+          cell.textContent = "Pinned fixture time";
+        });
+      }
       await expect(page.locator(".app-main")).toHaveScreenshot(
         `module-parity-${module.name}-dark-1280.png`,
         { animations: "disabled" },
