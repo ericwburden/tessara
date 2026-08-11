@@ -490,6 +490,7 @@ function Test-Sprint8AAcceptanceContract {
         'org.opencontainers.image.revision="$TESSARA_SOURCE_COMMIT"',
         'com.tessara.source-tree="$TESSARA_SOURCE_TREE"',
         'com.tessara.source-dirty="$TESSARA_SOURCE_DIRTY"',
+        'ARG TESSARA_COMPONENT_RELEASE=1.0.1',
         'com.tessara.module-definition="tessara.components"',
         'COPY --from=builder /tmp/component-module /usr/local/bin/component-module'
     )) {
@@ -538,6 +539,8 @@ function Test-Sprint8AAcceptanceContract {
     $dashboardDockerfile = Get-Content -LiteralPath (Join-Path $repoRoot "Dockerfile.dashboard") -Raw
     foreach ($fragment in @(
         "cargo build --release -p tessara-dashboard-module",
+        'ARG TESSARA_DASHBOARD_RELEASE=3.0.1',
+        'ARG TESSARA_DASHBOARD_ASSET_DIGEST=sha256:afebfa379f4c809513e5225c163f010e64f164938f56e237d2b75070c249737d',
         'COPY --from=builder /tmp/dashboard-module /usr/local/bin/dashboard-module',
         'ENTRYPOINT ["dashboard-module"]'
     )) {
