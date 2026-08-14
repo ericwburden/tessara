@@ -18,6 +18,7 @@ param(
     [string[]]$AdditionalBuildServices = @(),
     [string[]]$AdditionalExpectedNavigationHrefs = @(),
     [switch]$SkipLegacySeed,
+    [switch]$UseCoreApplyAuthorization,
     [switch]$SemanticNoOp,
     [switch]$ExcludePublicGateway,
     [switch]$SelfTest
@@ -492,8 +493,10 @@ try {
     $approvedEffects = @(Get-Sprint7AApprovedEffects -Actions @($lockfile.materialization_plan.actions))
 
     # Persist the same desired state and explicit approval through Core before
-    # the operator-authorized Supervisor apply. This keeps Core read-back
-    # complete while retaining the offline/detached CLI execution boundary.
+    # the authorized Supervisor apply. New owner-bootstrap protocols use the
+    # authenticated Core apply boundary so the signed initiator is the exact
+    # account UUID; the legacy detached CLI path remains available to the
+    # historical Sprint 7A harness.
     $compositionSummary = Invoke-RestMethod `
         -Uri "$CoreUrl/api/admin/composition" `
         -Method Get `
@@ -552,8 +555,18 @@ try {
             } | ConvertTo-Json -Depth 20) | Out-Null
     }
 
-    $now = [DateTimeOffset]::UtcNow
-    if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
+    if ($UseCoreApplyAuthorization) {
+        $coreApplyResponse = Invoke-WebRequest `
+            -Uri "$CoreUrl/api/admin/composition/blueprints/$($lockfile.blueprint_revision)/apply" `
+            -Method Post `
+            -WebSession $coreSession `
+            -SkipHttpErrorCheck
+        $response = @([string]$coreApplyResponse.Content)
+        $applyExitCode = if ([int]$coreApplyResponse.StatusCode -ge 200 -and
+            [int]$coreApplyResponse.StatusCode -lt 300) { 0 } else { 1 }
+    } else {
+        $now = [DateTimeOffset]::UtcNow
+        if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
         $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
         if ($pendingAuthorization.payload.target_plan_digest -eq $lockfile.materialization_plan_digest -and `
             (ConvertTo-Sprint7ABootstrapDateTimeOffset `
@@ -569,10 +582,10 @@ try {
                 return
             }
         }
-    }
-    $baseReceiptDigest = $null
-    $applySequence = [uint64]1
-    try {
+        }
+        $baseReceiptDigest = $null
+        $applySequence = [uint64]1
+        try {
         $currentReceipt = Invoke-RestMethod -Uri "$SupervisorUrl/v1/receipts/current" -Method Get
         $currentReceiptPath = Join-Path $runtimeDirectory "receipt-current.json"
         [IO.File]::WriteAllText(
@@ -582,11 +595,11 @@ try {
         )
         $baseReceiptDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $currentReceiptPath).Trim()
         $applySequence = [uint64]$currentReceipt.revision + 1
-    } catch {
-        if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
-    }
-    $reuseAuthorization = $false
-    if (Test-Path -LiteralPath $signedAuthorizationPath) {
+        } catch {
+            if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
+        }
+        $reuseAuthorization = $false
+        if (Test-Path -LiteralPath $signedAuthorizationPath) {
         $existingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
         $existingBase = $existingAuthorization.payload.base_receipt_digest
         $baseMatches = ($null -eq $existingBase -and $null -eq $baseReceiptDigest) -or `
@@ -598,8 +611,8 @@ try {
             (ConvertTo-Sprint7ABootstrapDateTimeOffset `
                 -Value $existingAuthorization.payload.expires_at `
                 -Label "Existing authorization expiry") -gt $now.AddMinutes(1)
-    }
-    if (-not $reuseAuthorization) {
+        }
+        if (-not $reuseAuthorization) {
         $authorization = [ordered]@{
         api_version = "tessara.io/apply-authorization/v1"
         operation = "materialize"
@@ -630,11 +643,12 @@ try {
         & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
             authorization-sign $authorizationPath $signedAuthorizationPath
         if ($LASTEXITCODE -ne 0) { throw "Apply authorization signing failed." }
-    }
+        }
 
-    $response = @(& cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-        apply $SupervisorUrl $lockfilePath $signedAuthorizationPath 2>&1 | ForEach-Object { [string]$_ })
-    $applyExitCode = $LASTEXITCODE
+        $response = @(& cargo run -q -p tessara-supervisor --bin tessara-compose -- `
+            apply $SupervisorUrl $lockfilePath $signedAuthorizationPath 2>&1 | ForEach-Object { [string]$_ })
+        $applyExitCode = $LASTEXITCODE
+    }
     if ($applyExitCode -ne 0) {
         $failureResponsePath = Join-Path $runtimeDirectory "apply-failure-response.log"
         [IO.File]::WriteAllLines($failureResponsePath, $response, [Text.UTF8Encoding]::new($false))
