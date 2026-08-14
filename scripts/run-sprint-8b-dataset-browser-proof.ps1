@@ -197,7 +197,12 @@ function Add-Sprint8BPlaywrightSuiteResults {
     if (-not [string]::IsNullOrWhiteSpace($suiteTitle) -and $suiteTitle -cne $file) {
         $titles += $suiteTitle
     }
-    foreach ($spec in @($Suite.specs)) {
+    $specs = if ($null -eq $Suite.PSObject.Properties['specs']) {
+        @()
+    } else {
+        @($Suite.specs)
+    }
+    foreach ($spec in $specs) {
         $specTitle = [string]$spec.title
         if ([string]::IsNullOrWhiteSpace($specTitle)) {
             throw "Focused Dataset Playwright report contains an untitled test."
@@ -217,7 +222,12 @@ function Add-Sprint8BPlaywrightSuiteResults {
             })
         }
     }
-    foreach ($child in @($Suite.suites)) {
+    $children = if ($null -eq $Suite.PSObject.Properties['suites']) {
+        @()
+    } else {
+        @($Suite.suites)
+    }
+    foreach ($child in $children) {
         Add-Sprint8BPlaywrightSuiteResults -Suite $child -Parents $titles `
             -InheritedFile $file -Tests $Tests
     }
@@ -339,10 +349,14 @@ function New-Sprint8BPlaywrightSelfTestReport {
             updateSnapshots = "none"
         }
         suites = @([pscustomobject][ordered]@{
-            title = $describeTitle
+            title = $File
             file = $File
-            specs = @($specs)
-            suites = @()
+            specs = @()
+            suites = @([pscustomobject][ordered]@{
+                title = $describeTitle
+                file = $File
+                specs = @($specs)
+            })
         })
         stats = [pscustomobject][ordered]@{
             expected = $Identities.Count
@@ -408,7 +422,7 @@ test("Datasets, Components, Dashboards, and Scoped Records share one module canv
         $visualProof = Assert-Sprint8BFocusedPlaywrightReport -Report $visualReport `
             -ExpectedFile "module-ui-visual.spec.ts" -ExpectedIdentities $identity.visual
         $retryRejected = $false
-        $visualReport.suites[0].specs[0].tests[0].results[0].retry = 1
+        $visualReport.suites[0].suites[0].specs[0].tests[0].results[0].retry = 1
         try {
             Assert-Sprint8BFocusedPlaywrightReport -Report $visualReport `
                 -ExpectedFile "module-ui-visual.spec.ts" -ExpectedIdentities $identity.visual | Out-Null
@@ -416,7 +430,7 @@ test("Datasets, Components, Dashboards, and Scoped Records share one module canv
         if (-not $retryRejected) {
             throw "Dataset browser proof self-test accepted a retried visual predicate."
         }
-        $visualReport.suites[0].specs[0].tests[0].results[0].retry = 0
+        $visualReport.suites[0].suites[0].specs[0].tests[0].results[0].retry = 0
         $visualReport.config.updateSnapshots = "missing"
         $snapshotUpdateRejected = $false
         try {
