@@ -248,6 +248,34 @@ function Assert-Sprint8BRefreshClosureTransition {
     }
 }
 
+function Assert-Sprint8BDashboardDocumentHealthy {
+    param(
+        [Parameter(Mandatory)]$DashboardResponse,
+        [Parameter(Mandatory)][string]$AvailablePlacementId,
+        [Parameter(Mandatory)][string]$ExpectedPresentation
+    )
+
+    $availablePattern = '<article\b(?=[^>]*\bdata-placement-id="' +
+        [regex]::Escape($AvailablePlacementId) +
+        '")(?=[^>]*\bdata-placement-presentation="' +
+        [regex]::Escape($ExpectedPresentation) + '")[^>]*>'
+    $availableMatches = [regex]::Matches([string]$DashboardResponse.body, $availablePattern)
+    $unavailableMatches = [regex]::Matches(
+        [string]$DashboardResponse.body,
+        'data-placement-presentation="unavailable"'
+    )
+    if ([string]$DashboardResponse.body -notmatch 'Dashboard' -or
+        $availableMatches.Count -ne 1 -or $unavailableMatches.Count -ne 1) {
+        throw "Dashboard document does not expose the expected available and redacted placement states."
+    }
+    [pscustomobject][ordered]@{
+        state = "passed"
+        available_placement_id = $AvailablePlacementId
+        expected_presentation = $ExpectedPresentation
+        unavailable_placement_count = $unavailableMatches.Count
+    }
+}
+
 function Invoke-Sprint8BSmokeRequest {
     param(
         [Parameter(Mandatory)][string]$BaseUrl,
@@ -308,7 +336,10 @@ function Invoke-Sprint8BInternalDatasetRequest {
     if ($ControlKey) {
         $arguments += @("-H", "x-tessara-module-control-key: development-module-control-only")
     }
-    if ($null -ne $Body) {
+    if ($PSBoundParameters.ContainsKey('Body')) {
+        if ([string]::IsNullOrEmpty($Body)) {
+            throw "Internal Dataset request body cannot be null or empty when supplied."
+        }
         $arguments += @("-H", "content-type: application/json", "--data-binary", $Body)
     }
     $arguments += @("-w", "`n%{http_code}", "http://127.0.0.1:8093$Path")
@@ -340,23 +371,38 @@ function Get-Sprint8BSmokeTopologySnapshot {
         "scoped-records", "response-provider-proxy", "form-provider-proxy",
         "scope-provider-proxy", "principal-provider-proxy", "gateway"
     )
+    $composeStates = @(Get-Sprint8BComposeServiceState -ComposePath $ComposePath)
     @($services | ForEach-Object {
         $service = $_
-        $containerId = ((Invoke-Sprint8BDockerCompose -ComposePath $ComposePath `
-            -Arguments @("ps", "-q", $service)).output -join "").Trim()
-        if ([string]::IsNullOrWhiteSpace($containerId)) { throw "Smoke topology omits '$service'." }
-        $line = @(& docker inspect --format `
-            '{{.Id}}|{{.Image}}|{{.RestartCount}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' `
-            $containerId 2>&1)
-        if ($LASTEXITCODE -ne 0 -or $line.Count -ne 1) { throw "Could not inspect '$service'." }
-        $parts = ([string]$line[0]).Split('|')
-        if ($parts.Count -ne 5 -or $parts[3] -cne "running" -or
-            (-not [string]::IsNullOrWhiteSpace($parts[4]) -and $parts[4] -cne "healthy")) {
+        $state = @($composeStates | Where-Object { [string]$_.Service -ceq $service })
+        if ($state.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$state[0].ID)) {
+            throw "Smoke topology does not expose exactly one '$service' container."
+        }
+        $inspectionOutput = @(& docker inspect --format '{{json .}}' -- ([string]$state[0].ID) 2>&1 |
+            ForEach-Object { [string]$_ })
+        $inspectionExitCode = $LASTEXITCODE
+        $inspectionJson = @($inspectionOutput | Where-Object { $_.TrimStart().StartsWith('{') })
+        if ($inspectionExitCode -ne 0 -or $inspectionJson.Count -ne 1) {
+            throw "Could not inspect exactly one '$service' container."
+        }
+        try {
+            $inspection = $inspectionJson[0] | ConvertFrom-Json -Depth 30
+        } catch {
+            throw "Could not decode the '$service' container inspection."
+        }
+        $healthProperty = $inspection.State.PSObject.Properties['Health']
+        $health = if ($null -eq $healthProperty -or $null -eq $healthProperty.Value) { "" } else {
+            [string]$healthProperty.Value.Status
+        }
+        if ([string]$inspection.State.Status -cne "running" -or
+            (-not [string]::IsNullOrWhiteSpace($health) -and $health -cne "healthy")) {
             throw "Smoke topology service '$service' is not running/healthy."
         }
         [pscustomobject][ordered]@{
-            service = $service; container_id = $parts[0]; image_id = $parts[1]
-            restart_count = [int]$parts[2]; state = $parts[3]; health = $parts[4]
+            service = $service; container_id = [string]$inspection.Id
+            image_id = [string]$inspection.Image
+            restart_count = [int]$inspection.RestartCount
+            state = [string]$inspection.State.Status; health = $health
         }
     })
 }
@@ -579,6 +625,18 @@ function Test-Sprint8BDeployedSmokeHarness {
     } catch {
         if ($_.Exception.Message -notmatch 'complete closure and downstream') { throw }
     }
+    $dashboardProjection = [pscustomobject]@{
+        body = '<main>Dashboard<article data-placement-presentation="table" data-placement-id="table-placement"></article><article data-placement-id="redacted" data-placement-presentation="unavailable"></article></main>'
+    }
+    Assert-Sprint8BDashboardDocumentHealthy -DashboardResponse $dashboardProjection `
+        -AvailablePlacementId "table-placement" -ExpectedPresentation "table" | Out-Null
+    try {
+        Assert-Sprint8BDashboardDocumentHealthy -DashboardResponse $dashboardProjection `
+            -AvailablePlacementId "substituted-placement" -ExpectedPresentation "table" | Out-Null
+        throw "Deployed smoke self-test accepted a substituted available Dashboard placement."
+    } catch {
+        if ($_.Exception.Message -notmatch 'expected available and redacted') { throw }
+    }
     [pscustomobject][ordered]@{
         schema_version = 1
         sprint = "sprint-8b"
@@ -795,8 +853,9 @@ try {
     $dashboardDetail = Invoke-Sprint8BSmokeRequest -BaseUrl $ports.gateway_url `
         -Path "/api/dashboards/$($fixtureIdentity.dashboard_id)" -Session $session
     $dashboardPlacements = @($dashboardDetail.document.placements | Where-Object {
-        $null -ne $_.component -and
-        [string]$_.component.component_version_id -ceq $fixtureIdentity.component_version_id
+        $componentProperty = $_.PSObject.Properties['component']
+        $null -ne $componentProperty -and $null -ne $componentProperty.Value -and
+        [string]$componentProperty.Value.component_version_id -ceq $fixtureIdentity.component_version_id
     })
     if ($dashboardPlacements.Count -ne 1 -or
         [string]$dashboardPlacements[0].availability -cne "available" -or
@@ -809,8 +868,11 @@ try {
         -Path $dashboardRenderPath -Session $session
     $dashboardView = Invoke-Sprint8BSmokeRequest -BaseUrl $ports.gateway_url `
         -Path "/dashboards/$($fixtureIdentity.dashboard_id)/view" -Session $session
+    $dashboardDocument = Assert-Sprint8BDashboardDocumentHealthy `
+        -DashboardResponse $dashboardView -AvailablePlacementId $dashboardPlacementId `
+        -ExpectedPresentation $componentKind
     if (@($dashboardList.document | Where-Object { [string]$_.id -ceq $fixtureIdentity.dashboard_id }).Count -ne 1 -or
-        $dashboardView.body -notmatch 'Dashboard') {
+        [string]$dashboardDocument.state -cne "passed") {
         throw "Dashboard did not resolve the canonical Component-backed fixture."
     }
     $checks.cross_module = [pscustomobject][ordered]@{
@@ -898,9 +960,11 @@ try {
         -AfterComponentSha256 $promotedComponent.body_sha256 `
         -BeforeDashboardSha256 $dashboardExecution.body_sha256 `
         -AfterDashboardSha256 $promotedDashboardExecution.body_sha256
+    $promotedDashboardDocument = Assert-Sprint8BDashboardDocumentHealthy `
+        -DashboardResponse $promotedDashboard -AvailablePlacementId $dashboardPlacementId `
+        -ExpectedPresentation $componentKind
     if ([string]$promotedBaseDetail.document.freshness.state -cne "current" -or
-        $promotedDashboard.body -notmatch 'Dashboard' -or
-        $promotedDashboard.body -match '(?i)unavailable|temporarily') {
+        [string]$promotedDashboardDocument.state -cne "passed") {
         throw "Response provider recovery did not restore a current Dataset and healthy downstream view."
     }
     $checks.provider_outage = [pscustomobject][ordered]@{
@@ -978,12 +1042,14 @@ try {
         -Path $dashboardRenderPath -Session $session
     $recoveredDashboard = Invoke-Sprint8BSmokeRequest -BaseUrl $ports.gateway_url `
         -Path "/dashboards/$($fixtureIdentity.dashboard_id)/view" -Session $session
+    $recoveredDashboardDocument = Assert-Sprint8BDashboardDocumentHealthy `
+        -DashboardResponse $recoveredDashboard -AvailablePlacementId $dashboardPlacementId `
+        -ExpectedPresentation $componentKind
     if (($recoveredDataset.document | ConvertTo-Json -Depth 100 -Compress) -cne
             ($promotedBaseDetail.document | ConvertTo-Json -Depth 100 -Compress) -or
         $recoveredComponent.body_sha256 -cne $promotedComponent.body_sha256 -or
         $recoveredDashboardExecution.body_sha256 -cne $promotedDashboardExecution.body_sha256 -or
-        $recoveredDashboard.body -notmatch 'Dashboard' -or
-        $recoveredDashboard.body -match '(?i)unavailable|temporarily') {
+        [string]$recoveredDashboardDocument.state -cne "passed") {
         throw "Dataset/Component/Dashboard did not recover exact last-good behavior."
     }
     $checks.outage_recovery = [pscustomobject][ordered]@{
