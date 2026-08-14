@@ -318,7 +318,6 @@ function Invoke-Sprint8BCompositionBootstrap {
         AdditionalBuildServices = @("datasets", "components")
         AdditionalExpectedNavigationHrefs = @("/datasets", "/components")
         SkipLegacySeed = $true
-        UseCoreApplyAuthorization = $true
         SemanticNoOp = [bool]$NoOp
         ExcludePublicGateway = [bool]$ExcludeGateway
         SkipBuild = $BuildSkipped
@@ -397,10 +396,10 @@ function Test-Sprint8BMaterializationHarness {
     $compositionBootstrapSource = Get-Content -Raw -LiteralPath (
         Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1"
     )
-    if ($materializerSource -cnotmatch '(?m)^\s*UseCoreApplyAuthorization = \$true$' -or
-        $compositionBootstrapSource -cnotmatch '\[switch\]\$UseCoreApplyAuthorization' -or
-        $compositionBootstrapSource -cnotmatch '/api/admin/composition/blueprints/\$\(\$lockfile\.blueprint_revision\)/apply') {
-        throw "Sprint 8B materialization must acquire its signed apply authorization through authenticated Core."
+    if ($compositionBootstrapSource -cnotmatch '-Uri "\$CoreUrl/api/me"' -or
+        $compositionBootstrapSource -cnotmatch 'actor_id = \$authenticatedAccountId\.ToString\(\)' -or
+        $compositionBootstrapSource -cmatch 'actor_id = "local:\$RuntimeLabel-(?:bootstrap|approver)"') {
+        throw "Sprint 8B materialization must bind its signed apply authorization to the authenticated Core account UUID."
     }
     $datasetMigration = Get-Content -Raw -LiteralPath (
         Join-Path $repoRoot "crates/tessara-dataset-module/migrations/001_dataset_module.sql"
