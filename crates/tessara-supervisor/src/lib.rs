@@ -340,6 +340,16 @@ impl SupervisorLedger {
             .map(|receipt| receipt.configuration_digests.clone())
             .unwrap_or_default();
         configuration_digests.extend(adapter.configuration_digests());
+        let previous_bootstrap_order = previous
+            .as_ref()
+            .map(|receipt| {
+                receipt
+                    .bootstrap_receipts
+                    .iter()
+                    .map(|receipt| receipt.owner.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let mut bootstrap_receipts = previous
             .as_ref()
             .map(|receipt| {
@@ -385,9 +395,16 @@ impl SupervisorLedger {
                 ordered_bootstrap_receipts.push(receipt);
             }
         }
-        // Delta plans can carry forward receipts for owners they do not
-        // bootstrap. Append those deterministically after the owners whose
-        // order was explicitly executed by this plan.
+        // Delta and no-op plans can carry forward receipts for owners they do
+        // not bootstrap. Preserve their previously certified dependency order
+        // after the owners whose order was explicitly executed by this plan.
+        for owner in previous_bootstrap_order {
+            if let Some(receipt) = bootstrap_receipts.remove(&owner) {
+                ordered_bootstrap_receipts.push(receipt);
+            }
+        }
+        // Any receipt that did not exist in the previous certificate and was
+        // not represented by a Bootstrap action is appended deterministically.
         ordered_bootstrap_receipts.extend(bootstrap_receipts.into_values());
         let receipt = InstallationReceiptV1 {
             api_version: RECEIPT_API_V1.into(),
@@ -1222,6 +1239,46 @@ mod tests {
 
         assert_eq!(
             receipt
+                .bootstrap_receipts
+                .iter()
+                .map(|receipt| receipt.owner.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tessara.datasets", "tessara.components"]
+        );
+
+        let mut no_op_plan = plan(installation);
+        no_op_plan.desired_revision = 2;
+        no_op_plan.actions = vec![MaterializationActionV1::VerifyReadBack];
+        let mut no_op_authorization = authorization(
+            installation,
+            &no_op_plan,
+            now + Duration::seconds(1),
+            "ordered-bootstrap-no-op",
+        );
+        no_op_authorization.desired_revision = 2;
+        no_op_authorization.apply_sequence = 2;
+        no_op_authorization.base_receipt_digest = Some(canonical_digest(&receipt).unwrap());
+        let signed_no_op = signer.sign(no_op_authorization).unwrap();
+        let no_op_operation = ledger
+            .accept_apply(
+                &no_op_plan,
+                &signed_no_op,
+                &signer.verifier(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+        let no_op_receipt = ledger
+            .execute(
+                no_op_operation.operation_id,
+                digest('b'),
+                &mut RecordingAdapter::default(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+
+        assert!(no_op_receipt.no_op);
+        assert_eq!(
+            no_op_receipt
                 .bootstrap_receipts
                 .iter()
                 .map(|receipt| receipt.owner.as_str())
