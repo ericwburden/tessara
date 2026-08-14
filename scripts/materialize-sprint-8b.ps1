@@ -636,6 +636,26 @@ try {
     }
 } catch {
     $failure = $_
+    try {
+        $diagnosticServices = @(
+            "core", "gateway", "datasets", "components", "dashboards",
+            "scoped-records", "supervisor", "response-provider-proxy",
+            "form-provider-proxy", "scope-provider-proxy", "principal-provider-proxy"
+        )
+        $serviceLogs = @(Invoke-Sprint8BDockerCompose -ComposePath $composePath `
+            -Arguments (@("logs", "--no-color", "--timestamps") + $diagnosticServices) `
+            -AllowFailure).output
+        if ($serviceLogs.Count -gt 0) {
+            [IO.File]::WriteAllLines(
+                (Join-Path $runtimeRoot "materialization-failure-service-logs.log"),
+                $serviceLogs,
+                [Text.UTF8Encoding]::new($false)
+            )
+        }
+    } catch {
+        # The original materialization failure remains authoritative when
+        # bounded service-log capture is itself unavailable.
+    }
 } finally {
     try {
         if ($null -eq $failure -and $KeepTopology) {
