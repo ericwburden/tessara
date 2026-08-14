@@ -78,10 +78,10 @@ async fn execute_owner_action(
     if raw_body.is_empty() || raw_body.len() > MAX_OWNER_ACTION_BODY_BYTES {
         return Err(OwnerActionFailure::MalformedRequest);
     }
-    if headers
+    if !headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
-        != Some(RESPONSE_OWNER_ACTION_MEDIA_TYPE)
+        .is_some_and(is_owner_action_content_type)
     {
         return Err(OwnerActionFailure::MalformedRequest);
     }
@@ -186,6 +186,14 @@ async fn execute_owner_action(
         replayed: false,
         signed_receipt,
     })
+}
+
+fn is_owner_action_content_type(value: &str) -> bool {
+    let Some((media_type, version)) = value.split_once(';') else {
+        return false;
+    };
+    media_type == "application/vnd.tessara.responses.owner-action+json"
+        && version.trim_ascii() == "version=1"
 }
 
 fn parse_idempotency_key(headers: &HeaderMap) -> Result<&str, OwnerActionFailure> {
@@ -1208,6 +1216,23 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn owner_action_media_type_accepts_only_insignificant_parameter_whitespace() {
+        assert!(is_owner_action_content_type(
+            RESPONSE_OWNER_ACTION_MEDIA_TYPE
+        ));
+        assert!(is_owner_action_content_type(
+            "application/vnd.tessara.responses.owner-action+json; version=1"
+        ));
+        assert!(!is_owner_action_content_type("application/json"));
+        assert!(!is_owner_action_content_type(
+            "application/vnd.tessara.responses.owner-action+json;version=1;charset=utf-8"
+        ));
+        assert!(!is_owner_action_content_type(
+            "application/vnd.tessara.responses.owner-action+json;version=2"
+        ));
+    }
 
     #[test]
     fn idempotency_keys_are_strict_and_digest_exact_bytes() {

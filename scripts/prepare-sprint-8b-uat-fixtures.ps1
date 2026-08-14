@@ -281,7 +281,14 @@ function Invoke-Sprint8BFixtureHttpRequest {
     $content = [string]$response.Content
     if ([int]$response.StatusCode -ne 200) {
         $errorCode = ""
-        try { $errorCode = [string]($content | ConvertFrom-Json -Depth 30).code } catch {}
+        try {
+            $errorDocument = $content | ConvertFrom-Json -Depth 30
+            $errorCode = if ($null -ne $errorDocument.error) {
+                [string]$errorDocument.error.code
+            } else {
+                [string]$errorDocument.code
+            }
+        } catch {}
         throw "Core fixture request 'POST $Path' returned HTTP $([int]$response.StatusCode) ($errorCode)."
     }
     try { $document = $content | ConvertFrom-Json -Depth 100 } catch {
