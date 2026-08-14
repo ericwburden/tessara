@@ -2147,7 +2147,7 @@ async fn run_dataset_table(
     headers: HeaderMap,
     Path(dataset_id): Path<Uuid>,
 ) -> Result<Json<DatasetProductTableV1>, DatasetModuleError> {
-    let grant = authorize_read(&state, &headers, "datasets.table").await?;
+    let grant = authorize_read(&state, &headers, "datasets.preview_table").await?;
     Ok(Json(
         dataset_table(&state, &grant.payload, dataset_id).await?,
     ))

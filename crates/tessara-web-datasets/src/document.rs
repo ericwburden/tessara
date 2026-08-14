@@ -12,7 +12,7 @@ pub const DATASET_CSS: &str = include_str!("../assets/dataset.css");
 pub const DATASET_LIFECYCLE_CSS: &str = include_str!("../assets/dataset-lifecycle.css");
 pub const DATASET_JS: &str = include_str!("../assets/dataset.js");
 pub const DATASET_CSS_SHA256: &str =
-    "4004f8b4af04595493511d28cc16855c410f15c92613ddab77f7a7480dc3e7c0";
+    "7dd795cde57e7772cb3670988d660fdacea823888059e9d8ccaecdd70472e511";
 pub const DATASET_LIFECYCLE_CSS_SHA256: &str =
     "da84cc6e3e0f359be1e7f3276e73ae11fa21963f948ad15c30df32dcdeecadfa";
 pub const DATASET_JS_SHA256: &str =

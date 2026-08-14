@@ -182,6 +182,7 @@ async fn validate_inbound_grant(
             grant.dependency_binding.as_str(),
             grant.functional_contract.as_str(),
             &grant.action,
+            grant.operation,
         )?,
         ModuleServicePrincipalV1::ModuleInstance {
             module_instance_id,
@@ -242,19 +243,23 @@ fn resolve_manifest_entry_action(
     dependency_binding: &str,
     functional_contract: &str,
     action: &str,
+    operation: AuthorizationGrantOperationV1,
 ) -> ApiResult<(AuthorizationGrantOperationV1, String)> {
     if let Some(route) = manifest.public_api_routes.iter().find(|route| {
         route.dependency_binding.as_str() == dependency_binding
             && route.functional_contract.as_str() == functional_contract
             && route.authorization_action == action
+            && route.operation == operation
     }) {
         return Ok((route.operation, route.required_capability.to_string()));
     }
-    if let Some(route) = manifest.browser_routes.iter().find(|route| {
-        route.dependency_binding.as_str() == dependency_binding
-            && route.functional_contract.as_str() == functional_contract
-            && route.authorization_action == action
-    }) {
+    if operation == AuthorizationGrantOperationV1::Read
+        && let Some(route) = manifest.browser_routes.iter().find(|route| {
+            route.dependency_binding.as_str() == dependency_binding
+                && route.functional_contract.as_str() == functional_contract
+                && route.authorization_action == action
+        })
+    {
         return Ok((
             AuthorizationGrantOperationV1::Read,
             route.required_capability.to_string(),

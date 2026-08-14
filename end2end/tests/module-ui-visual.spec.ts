@@ -304,8 +304,8 @@ test.describe("canonical module UI visual baselines", () => {
       await visit(page, module.path, "dark");
       await expect(page.locator(".top-app-bar__title")).toHaveText(module.title);
       await expect(page.locator(".app-main")).toHaveAttribute(
-        "data-module-canvas",
-        "canonical",
+        "aria-label",
+        "Application content",
       );
       if (module.name === "components") {
         await showSprint8BDatasetComponents(page);

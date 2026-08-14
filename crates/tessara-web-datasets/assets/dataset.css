@@ -7,3 +7,47 @@
 .module-scope--tessara-datasets [data-dataset-preview] {
   overflow: auto;
 }
+
+.module-scope--tessara-datasets .related-work-mobile-cards {
+  display: none;
+}
+
+.module-scope--tessara-datasets .related-work-mobile-card {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 1rem;
+}
+
+.module-scope--tessara-datasets .related-work-mobile-card h4 {
+  margin: 0;
+}
+
+.module-scope--tessara-datasets .related-work-mobile-card dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: 0.4rem 0.75rem;
+  margin: 0;
+}
+
+.module-scope--tessara-datasets .related-work-mobile-card dt {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.module-scope--tessara-datasets .related-work-mobile-card dd {
+  margin: 0;
+}
+
+@media (max-width: 780px) {
+  .module-scope--tessara-datasets .dataset-table-section .table-wrap {
+    display: none;
+  }
+
+  .module-scope--tessara-datasets .related-work-mobile-cards {
+    display: grid;
+    gap: 0.75rem;
+  }
+}
