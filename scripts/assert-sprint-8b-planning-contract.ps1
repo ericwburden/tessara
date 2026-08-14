@@ -196,6 +196,7 @@ foreach ($helperPath in $helperPaths) {
 
 $additionalTrackedPaths = @(
     [pscustomobject]@{ Path = "README.md"; Domains = @("documentation") },
+    [pscustomobject]@{ Path = "deploy/sprint-8b/catalogs/catalog-dev-v1.public.hex"; Domains = @("deployment-materialization", "environment-contract") },
     [pscustomobject]@{ Path = "scripts/assert-sprint-8b-planning-contract.ps1"; Domains = @("implementation-harness", "implementation-runner") },
     [pscustomobject]@{ Path = "scripts/bootstrap-sprint-7a-composition.ps1"; Domains = @("deployment-materialization", "implementation-harness") },
     [pscustomobject]@{ Path = "scripts/build-sprint-8b-dataset-upgrade-baseline.ps1"; Domains = @("deployment-materialization", "implementation-harness") },

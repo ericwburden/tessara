@@ -70,6 +70,19 @@ $processEnvironmentVariableNames = @(
     "TESSARA_SIGNING_SECRET_HEX"
 )
 
+function Assert-Sprint7ACatalogSourceContract {
+    if (-not (Test-Path -LiteralPath $catalogTemplatePath -PathType Leaf)) {
+        throw "Release catalog template not found: $catalogTemplatePath"
+    }
+    if (-not (Test-Path -LiteralPath $catalogKeyPath -PathType Leaf)) {
+        throw "Release catalog public key not found: $catalogKeyPath"
+    }
+    $catalogPublicKey = (Get-Content -LiteralPath $catalogKeyPath -Raw).Trim()
+    if ($catalogPublicKey -cnotmatch '^[0-9a-f]{64}$') {
+        throw "Release catalog public key must be one exact lowercase Ed25519 key."
+    }
+}
+
 function Get-Sprint7AProcessEnvironmentSnapshot {
     param([Parameter(Mandatory)][string[]]$Names)
 
@@ -162,6 +175,7 @@ function Get-Sprint7ARuntimeServiceName {
 }
 
 function Test-Sprint7ABootstrapHelpers {
+    Assert-Sprint7ACatalogSourceContract
     $effects = @(Get-Sprint7AApprovedEffects -Actions @(
         [pscustomobject]@{ action = "acquire_image" },
         [pscustomobject]@{ action = "provision_database" },
@@ -277,6 +291,7 @@ if (-not (Test-Path -LiteralPath $composePath)) { throw "Compose file not found:
 if (-not (Test-Path -LiteralPath $resolvedBlueprintPath -PathType Leaf)) {
     throw "Blueprint not found: $resolvedBlueprintPath"
 }
+Assert-Sprint7ACatalogSourceContract
 [IO.Directory]::CreateDirectory($runtimeDirectory) | Out-Null
 $processEnvironmentSnapshot = Get-Sprint7AProcessEnvironmentSnapshot -Names $processEnvironmentVariableNames
 
