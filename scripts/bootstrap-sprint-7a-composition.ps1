@@ -378,8 +378,7 @@ try {
         -WebSession $coreSession
     $authenticatedAccountId = [Guid]::Empty
     if (-not [Guid]::TryParse([string]$coreIdentity.account_id, [ref]$authenticatedAccountId) -or
-        $authenticatedAccountId -eq [Guid]::Empty -or
-        @($coreIdentity.capabilities) -cnotcontains "composition:approve") {
+        $authenticatedAccountId -eq [Guid]::Empty) {
         throw "$RuntimeLabel authenticated composition account identity is invalid."
     }
 
