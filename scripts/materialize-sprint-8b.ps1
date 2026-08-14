@@ -220,24 +220,36 @@ function Get-Sprint8BRuntimeTopologySnapshot {
         if ([string]::IsNullOrWhiteSpace($containerId)) {
             throw "Sprint 8B topology omits running service '$service'."
         }
-        $inspection = @(& docker inspect --format `
-            '{{.Id}}|{{.Image}}|{{.RestartCount}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' `
-            $containerId 2>&1)
-        if ($LASTEXITCODE -ne 0 -or $inspection.Count -ne 1) {
+        $inspectionOutput = @(& docker inspect $containerId 2>&1)
+        if ($LASTEXITCODE -ne 0) {
             throw "Could not inspect Sprint 8B service '$service'."
         }
-        $parts = ([string]$inspection[0]).Split('|')
-        if ($parts.Count -ne 5 -or $parts[3] -cne "running" -or
-            (-not [string]::IsNullOrWhiteSpace($parts[4]) -and $parts[4] -cne "healthy")) {
+        try {
+            $inspection = @(($inspectionOutput -join "`n") | ConvertFrom-Json -Depth 100)
+        } catch {
+            throw "Could not decode the Sprint 8B service '$service' inspection."
+        }
+        if ($inspection.Count -ne 1 -or $null -eq $inspection[0].State) {
+            throw "Could not inspect exactly one Sprint 8B service '$service'."
+        }
+        $container = $inspection[0]
+        $healthProperty = $container.State.PSObject.Properties['Health']
+        $health = if ($null -eq $healthProperty -or $null -eq $healthProperty.Value) {
+            ''
+        } else {
+            [string]$healthProperty.Value.Status
+        }
+        if ([string]$container.State.Status -cne "running" -or
+            (-not [string]::IsNullOrWhiteSpace($health) -and $health -cne "healthy")) {
             throw "Sprint 8B service '$service' is not exactly running/healthy."
         }
         [pscustomobject][ordered]@{
             service = $service
-            container_id = $parts[0]
-            image_id = $parts[1]
-            restart_count = [int]$parts[2]
-            state = $parts[3]
-            health = $parts[4]
+            container_id = [string]$container.Id
+            image_id = [string]$container.Image
+            restart_count = [int]$container.RestartCount
+            state = [string]$container.State.Status
+            health = $health
         }
     })
 }
