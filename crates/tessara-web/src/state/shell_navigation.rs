@@ -323,6 +323,13 @@ mod tests {
                         ),
                         core_item("operations"),
                         contribution(
+                            "datasets",
+                            "Datasets",
+                            "/datasets",
+                            "tessara.datasets.navigation",
+                            ShellNavigationModeV1::Shell,
+                        ),
+                        contribution(
                             "dashboards",
                             "Dashboards",
                             "/dashboards",
@@ -342,13 +349,6 @@ mod tests {
                     id: "core.admin".into(),
                     name: "Admin".into(),
                     items: vec![
-                        contribution(
-                            "datasets",
-                            "Datasets",
-                            "/datasets",
-                            "tessara.datasets.navigation",
-                            ShellNavigationModeV1::Shell,
-                        ),
                         core_item("user_management"),
                         core_item("roles_access"),
                         core_item("node_types"),

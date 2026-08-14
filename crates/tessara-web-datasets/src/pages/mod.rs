@@ -4,6 +4,7 @@
 
 use leptos::prelude::*;
 
+use crate::bootstrap::{DatasetRouteBootstrap, dataset_route_bootstrap};
 use crate::text::text_matches;
 use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
@@ -20,9 +21,12 @@ use super::types::*;
 
 #[component]
 pub fn DatasetsIndexContent() -> impl IntoView {
-    let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
+    let initial_datasets = dataset_route_bootstrap()
+        .and_then(|bootstrap| bootstrap.directory_datasets().map(<[_]>::to_vec));
+    let has_initial_datasets = initial_datasets.is_some();
+    let datasets = RwSignal::new(initial_datasets.unwrap_or_default());
     let account = RwSignal::new(None::<SessionAccount>);
-    let is_loading = RwSignal::new(true);
+    let is_loading = RwSignal::new(!has_initial_datasets);
     let load_error = RwSignal::new(None::<String>);
     let search = RwSignal::new(String::new());
     let page_index = RwSignal::new(0usize);
@@ -114,11 +118,22 @@ pub fn DatasetDetailContent(dataset_id: String) -> impl IntoView {
 
 #[component]
 pub fn DatasetRevisionHistoryContent(dataset_id: String) -> impl IntoView {
-    let dataset = RwSignal::new(None::<DatasetDefinition>);
-    let revisions = RwSignal::new(Vec::<DatasetRevisionSummary>::new());
-    let is_loading = RwSignal::new(true);
+    let bootstrap = dataset_route_bootstrap();
+    let initial_dataset = bootstrap
+        .as_ref()
+        .and_then(DatasetRouteBootstrap::dataset)
+        .cloned();
+    let initial_revisions = bootstrap
+        .as_ref()
+        .and_then(DatasetRouteBootstrap::revisions)
+        .map(<[_]>::to_vec);
+    let has_initial_dataset = initial_dataset.is_some();
+    let has_initial_revisions = initial_revisions.is_some();
+    let dataset = RwSignal::new(initial_dataset);
+    let revisions = RwSignal::new(initial_revisions.unwrap_or_default());
+    let is_loading = RwSignal::new(!has_initial_revisions);
     let load_error = RwSignal::new(None::<String>);
-    let dataset_is_loading = RwSignal::new(true);
+    let dataset_is_loading = RwSignal::new(!has_initial_dataset);
     let dataset_load_error = RwSignal::new(None::<String>);
     let detail_href = format!("/datasets/{dataset_id}");
     let detail_href_for_breadcrumb = detail_href.clone();
@@ -213,8 +228,11 @@ pub fn DatasetRevisionHistoryContent(dataset_id: String) -> impl IntoView {
 
 #[component]
 pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> impl IntoView {
-    let revision = RwSignal::new(None::<DatasetRevisionDetail>);
-    let is_loading = RwSignal::new(true);
+    let initial_revision =
+        dataset_route_bootstrap().and_then(|bootstrap| bootstrap.revision().cloned());
+    let has_initial_revision = initial_revision.is_some();
+    let revision = RwSignal::new(initial_revision);
+    let is_loading = RwSignal::new(!has_initial_revision);
     let load_error = RwSignal::new(None::<String>);
     let publish_error = RwSignal::new(None::<String>);
     let publish_message = RwSignal::new(None::<String>);
@@ -548,11 +566,22 @@ pub fn DatasetRevisionEditorContent(dataset_id: String, revision_id: String) -> 
 
 #[component]
 pub fn DatasetPreviewContent(dataset_id: String) -> impl IntoView {
-    let dataset = RwSignal::new(None::<DatasetDefinition>);
-    let table = RwSignal::new(None::<DatasetTable>);
-    let is_loading = RwSignal::new(true);
+    let bootstrap = dataset_route_bootstrap();
+    let initial_dataset = bootstrap
+        .as_ref()
+        .and_then(DatasetRouteBootstrap::dataset)
+        .cloned();
+    let (initial_table, initial_table_error) = bootstrap
+        .as_ref()
+        .and_then(DatasetRouteBootstrap::table)
+        .map(|(table, error)| (table.clone(), error.clone()))
+        .unwrap_or_default();
+    let has_initial_dataset = initial_dataset.is_some();
+    let dataset = RwSignal::new(initial_dataset);
+    let table = RwSignal::new(initial_table);
+    let is_loading = RwSignal::new(!has_initial_dataset);
     let load_error = RwSignal::new(None::<String>);
-    let table_error = RwSignal::new(None::<String>);
+    let table_error = RwSignal::new(initial_table_error);
 
     Effect::new({
         let dataset_id = dataset_id.clone();

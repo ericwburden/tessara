@@ -25,10 +25,11 @@ type DatasetReference = {
   reference: {
     installation_id: string;
     owner: {
-      kind: "core_installation";
+      kind: "module_instance";
       installation_id: string;
+      module_instance_id: string;
     };
-    resource_type: "tessara.transition.dataset_major_line";
+    resource_type: "tessara.datasets.dataset_major_line";
     resource_id: string;
   };
 };
@@ -125,7 +126,7 @@ async function signInAsAdmin(page: Page) {
   );
 }
 
-async function ensureDemoSeed(page: Page) {
+async function ensureReferenceOrLocalFixture(page: Page) {
   const response = await invokeDemoSeedEndpoint(page.request);
   if (response === null) return;
   const text = await response.text();
@@ -153,12 +154,16 @@ async function datasetOption(page: Page) {
     "Component authoring requires one ready Dataset major line",
   ).toBeTruthy();
   expect(dataset!.reference.reference.resource_type).toBe(
-    "tessara.transition.dataset_major_line",
+    "tessara.datasets.dataset_major_line",
   );
-  expect(dataset!.reference.reference.owner).toEqual({
-    kind: "core_installation",
+  expect(dataset!.reference.reference.owner).toMatchObject({
+    kind: "module_instance",
     installation_id: dataset!.reference.reference.installation_id,
   });
+  expect(
+    dataset!.reference.reference.owner.module_instance_id,
+    "Dataset major-line reference must name its owning Dataset Module Instance",
+  ).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   expect(datasetMajor(dataset!.reference)).toBeGreaterThan(0);
   return dataset!;
 }
@@ -573,7 +578,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(120_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
 
     await page.goto("/components/new");
@@ -940,7 +945,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(180_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
     const field =
       dataset.fields.find(
@@ -1452,7 +1457,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(240_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
 
     const components = await expectJson<ComponentSummary[]>(
       await page.request.get("/api/components"),
@@ -1569,7 +1574,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
   }) => {
     test.setTimeout(90_000);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
     const definition = await createComponent(
       page,
@@ -1733,7 +1738,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(60_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
     const fieldKey = dataset.fields[0].key;
     const definition = await createComponent(
@@ -1808,7 +1813,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(90_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
 
     const components = await expectJson<ComponentSummary[]>(
       await page.request.get("/api/components"),
@@ -1821,7 +1826,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     );
     expect(
       component,
-      "demo seed should expose an active published visual Component",
+      "Reference or local fixture should expose an active published visual Component",
     ).toBeTruthy();
 
     const dashboards = await expectJson<DashboardSummary[]>(
@@ -1832,7 +1837,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       .sort((left, right) => right.placement_count - left.placement_count)[0];
     expect(
       dashboard,
-      "demo seed should expose a Dashboard with Component placements",
+      "Reference or local fixture should expose a Dashboard with Component placements",
     ).toBeTruthy();
 
     for (const theme of ["light", "dark"] as const) {

@@ -10,8 +10,8 @@ use tessara_composition::{
     canonical_digest, resolve, semantic_diff,
 };
 use tessara_module_contract::{
-    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
-    SignedEnvelopeV1,
+    ModuleManifest, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
+    PurposeBoundVerifyingKeyV1, SignedEnvelopeV1,
 };
 use tessara_supervisor::{SupervisorLedger, signature_purpose_name};
 use uuid::Uuid;
@@ -94,6 +94,10 @@ async fn main() -> anyhow::Result<()> {
             let value: Value = read_json(input)?;
             println!("{}", canonical_digest(&value)?);
         }
+        [command, input] if command == "manifest-digest" => {
+            let manifest: ModuleManifest = read_json(input)?;
+            println!("{}", canonical_digest(&manifest)?);
+        }
         [command, input, output] if command == "authorization-sign" => {
             let authorization: ApplyAuthorizationV1 = read_json(input)?;
             let signer = signer(ProtocolSignaturePurposeV1::ApplyAuthorization)?;
@@ -139,7 +143,7 @@ async fn main() -> anyhow::Result<()> {
             print_response(response).await?;
         }
         _ => bail!(
-            "usage: tessara-compose <catalog-sign|catalog-verify|resolve|resolved-sign|resolved-verify|diff|authorization-sign|init|trust-register|apply|status|read-back> ..."
+            "usage: tessara-compose <catalog-sign|catalog-verify|resolve|resolved-sign|resolved-verify|diff|digest|manifest-digest|authorization-sign|init|trust-register|apply|status|read-back> ..."
         ),
     }
     Ok(())

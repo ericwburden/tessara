@@ -1,6 +1,5 @@
 //! Source operation helpers for the dataset editor pipeline.
 
-#[cfg(feature = "hydrate")]
 use super::types::{DatasetSourceDraft, DatasetSourcePayload};
 
 /// Converts a source draft into a dataset source payload.
@@ -40,7 +39,6 @@ pub(crate) fn source_payload(source: &DatasetSourceDraft) -> Option<DatasetSourc
     }
 }
 
-#[cfg(feature = "hydrate")]
 pub(crate) fn source_payload_to_draft(source: &DatasetSourcePayload) -> DatasetSourceDraft {
     match source {
         DatasetSourcePayload::Form {

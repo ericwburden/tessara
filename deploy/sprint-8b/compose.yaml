@@ -1,0 +1,9 @@
+name: tessara-sprint-8b
+
+# Disposable, fresh-only Sprint 8B topology. The profile advances the retained
+# Sprint 8A stack with an independently built Dataset owner, isolated database,
+# and one separately stoppable proxy for each consumed provider binding.
+include:
+  - path:
+      - ../sprint-8a/compose.yaml
+      - ./compose.override.yaml

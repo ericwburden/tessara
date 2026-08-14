@@ -1,0 +1,236 @@
+x-provider-fault-environment: &provider-fault-environment
+  NGINX_ENVSUBST_FILTER: ^TESSARA_SPRINT_8B_
+  NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+  TESSARA_SPRINT_8B_FAULT_CONTRACT: tessara.sprint-8b.failure-control/v1
+  TESSARA_SPRINT_8B_FAULT_SCOPE: disposable-sprint-8b-only
+  TESSARA_SPRINT_8B_FAULT_CORRELATION_ID: ${TESSARA_SPRINT_8B_FAULT_CORRELATION_ID:-00000000-0000-0000-0000-000000000000}
+  TESSARA_SPRINT_8B_FAULT_ATTEMPT_LIMIT: ${TESSARA_SPRINT_8B_FAULT_ATTEMPT_LIMIT:-0}
+
+services:
+  gateway:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=${COMPOSE_PROJECT_NAME:-tessara-sprint-8b}_tessara-edge
+      - --providers.docker.constraints=Label(`com.docker.compose.project`,`${COMPOSE_PROJECT_NAME:-tessara-sprint-8b}`)
+      - --entrypoints.web.address=:8080
+      - --api.dashboard=false
+    ports: !override ["127.0.0.1:${TESSARA_GATEWAY_PORT:-8089}:8080"]
+
+  postgres:
+    environment:
+      TESSARA_DATASET_OWNER_PASSWORD: ${TESSARA_DATASET_OWNER_PASSWORD:-local-dataset-owner}
+      TESSARA_DATASET_MIGRATION_PASSWORD: ${TESSARA_DATASET_MIGRATION_PASSWORD:-local-dataset-migration}
+      TESSARA_DATASET_RUNTIME_PASSWORD: ${TESSARA_DATASET_RUNTIME_PASSWORD:-local-dataset-runtime}
+    volumes:
+      - ../sprint-8b/postgres-init.sh:/docker-entrypoint-initdb.d/10-tessara-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U tessara_bootstrap -d postgres"]
+
+  core:
+    image: ${TESSARA_CORE_IMAGE:-tessara-sprint-8b-core}
+    ports: !override ["127.0.0.1:${TESSARA_CORE_CONTROL_PORT:-18089}:8080"]
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008b}
+      TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER: ${TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER:-tessara.local.sprint-8b}
+      TESSARA_MODULE_SERVICE_IDENTITIES: &module-service-identities '{"schema_version":1,"identities":{"tessara.components":{"key_id":"component-development-v1","public_key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"},"tessara.dashboards":{"key_id":"dashboard-development-v1","public_key":"Aj3Yn25zFNp2K7PJZlqC2JapsIt2mdj-HO55ltKYygw"},"tessara.datasets":{"key_id":"dataset-development-v1","public_key":"oJql9HpnWYAv-VX43C0qFKXJnSO-l_hkEn_5ODRVpPA"},"tessara.reference.scoped-records":{"key_id":"scoped-records-development-v1","public_key":"hA9gif24vm7UTPtnXSL_HzcrDxbb66vSaSHW9-0pZ0s"}}}'
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.datasets":"http://datasets:8093","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"tessara.datasets":"http://datasets:8093","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091","tessara.reference.scoped-records":"http://scoped-records:8090"}'
+    depends_on: !override
+      core-migrate: { condition: service_completed_successfully }
+      supervisor: { condition: service_healthy }
+
+  core-migrate:
+    image: ${TESSARA_CORE_IMAGE:-tessara-sprint-8b-core}
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008b}
+
+  supervisor:
+    image: ${TESSARA_SUPERVISOR_IMAGE:-tessara-sprint-8b-supervisor}
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008b}
+      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8b-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-8b-scoped-records","tessara.datasets":["tessara-sprint-8b-datasets","tessara-sprint-8b-datasets-upgrade-baseline:latest"],"tessara.components":"tessara-sprint-8b-components","tessara.dashboards":"tessara-sprint-8b-dashboards"}'
+      TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-8b}
+      TESSARA_CORE_INTERNAL_URL: http://core:8080
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_CORE_AUTHORIZATION_KEY_ID: ${TESSARA_CORE_AUTHORIZATION_KEY_ID:-core-development-v1}
+      TESSARA_MODULE_SERVICE_IDENTITIES: *module-service-identities
+      TESSARA_MODULE_CONTROL_ENDPOINTS: '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.datasets":"http://datasets:8093","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+      TESSARA_DEPLOYMENT_COMPOSE_FILE: /workspace/deploy/sprint-8b/compose.yaml
+      TESSARA_DEPLOYMENT_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-tessara-sprint-8b}
+      TESSARA_DEPLOYMENT_TARGETS: '{"core":{"image_environment":"TESSARA_CORE_IMAGE","migration_service":"core-migrate","runtime_service":"core"},"tessara.datasets":{"image_environment":"TESSARA_DATASET_IMAGE","migration_service":"datasets-migrate","runtime_service":"datasets"},"tessara.components":{"image_environment":"TESSARA_COMPONENT_IMAGE","migration_service":"components-migrate","runtime_service":"components"},"tessara.dashboards":{"image_environment":"TESSARA_DASHBOARD_IMAGE","migration_service":"dashboards-migrate","runtime_service":"dashboards"},"tessara.reference.scoped-records":{"image_environment":"TESSARA_REFERENCE_MODULE_IMAGE","migration_service":"scoped-records-migrate","runtime_service":"scoped-records"}}'
+    ports: !override ["127.0.0.1:${TESSARA_SUPERVISOR_PORT:-8099}:8090"]
+
+  datasets-migrate:
+    image: ${TESSARA_DATASET_IMAGE:-tessara-sprint-8b-datasets}
+    build:
+      context: ../..
+      dockerfile: deploy/sprint-8b/Dockerfile.dataset
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://tessara_dataset_migration:${TESSARA_DATASET_MIGRATION_PASSWORD:-local-dataset-migration}@postgres:5432/tessara_module_datasets
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+    profiles: ["reference"]
+
+  datasets:
+    image: ${TESSARA_DATASET_IMAGE:-tessara-sprint-8b-datasets}
+    command: ["serve"]
+    stop_grace_period: 30s
+    build:
+      context: ../..
+      dockerfile: deploy/sprint-8b/Dockerfile.dataset
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    environment:
+      DATABASE_URL: postgres://tessara_dataset_runtime:${TESSARA_DATASET_RUNTIME_PASSWORD:-local-dataset-runtime}@postgres:5432/tessara_module_datasets
+      DATASET_MODULE_BIND_ADDR: 0.0.0.0:8093
+      TESSARA_CORE_INTERNAL_URL: http://core:8080
+      TESSARA_DATASET_PROVIDER_ENDPOINTS: '{"tessara.datasets.response-export":"http://response-provider-proxy:8080","tessara.datasets.form-version-schema":"http://form-provider-proxy:8080","tessara.datasets.scope-catalog":"http://scope-provider-proxy:8080","tessara.datasets.principal-display-catalog":"http://principal-provider-proxy:8080"}'
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_CORE_AUTHORIZATION_KEY_ID: ${TESSARA_CORE_AUTHORIZATION_KEY_ID:-core-development-v1}
+      TESSARA_DATASET_SERVICE_SIGNING_KEY: ${TESSARA_DATASET_SERVICE_SIGNING_KEY:-IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI}
+      TESSARA_DATASET_SERVICE_SIGNING_KEY_ID: ${TESSARA_DATASET_SERVICE_SIGNING_KEY_ID:-dataset-development-v1}
+      TESSARA_MODULE_SERVICE_IDENTITIES: *module-service-identities
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+      TESSARA_SPRINT_8B_FAULT_CONTRACT: tessara.sprint-8b.failure-control/v1
+      TESSARA_SPRINT_8B_FAULT_SCOPE: disposable-sprint-8b-only
+      TESSARA_SPRINT_8B_FAULT_KEY: ${TESSARA_SPRINT_8B_DATASET_FAULT_KEY:-none}
+      TESSARA_SPRINT_8B_FAULT_CORRELATION_ID: ${TESSARA_SPRINT_8B_FAULT_CORRELATION_ID:-00000000-0000-0000-0000-000000000000}
+      TESSARA_SPRINT_8B_FAULT_ATTEMPT_LIMIT: ${TESSARA_SPRINT_8B_FAULT_ATTEMPT_LIMIT:-0}
+    depends_on: !override
+      datasets-migrate: { condition: service_completed_successfully }
+      response-provider-proxy: { condition: service_started }
+      form-provider-proxy: { condition: service_started }
+      scope-provider-proxy: { condition: service_started }
+      principal-provider-proxy: { condition: service_started }
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-data, tessara-services]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8093/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    profiles: ["reference"]
+
+  response-provider-proxy:
+    image: ${TESSARA_PROVIDER_PROXY_IMAGE:-nginx:1.29.8-alpine}
+    environment:
+      <<: *provider-fault-environment
+      TESSARA_SPRINT_8B_FAULT_KEY: ${TESSARA_SPRINT_8B_RESPONSE_FAULT_KEY:-none}
+    volumes:
+      - ../sprint-8b/provider-proxy.conf:/etc/nginx/templates/nginx.conf.template:ro
+    depends_on:
+      core: { condition: service_started }
+    networks: [tessara-services]
+    restart: unless-stopped
+    healthcheck: &provider-proxy-health
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/live"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    profiles: ["reference"]
+
+  form-provider-proxy:
+    image: ${TESSARA_PROVIDER_PROXY_IMAGE:-nginx:1.29.8-alpine}
+    environment:
+      <<: *provider-fault-environment
+      TESSARA_SPRINT_8B_FAULT_KEY: none
+    volumes:
+      - ../sprint-8b/provider-proxy.conf:/etc/nginx/templates/nginx.conf.template:ro
+    depends_on:
+      core: { condition: service_started }
+    networks: [tessara-services]
+    restart: unless-stopped
+    healthcheck: *provider-proxy-health
+    profiles: ["reference"]
+
+  scope-provider-proxy:
+    image: ${TESSARA_PROVIDER_PROXY_IMAGE:-nginx:1.29.8-alpine}
+    environment:
+      <<: *provider-fault-environment
+      TESSARA_SPRINT_8B_FAULT_KEY: none
+    volumes:
+      - ../sprint-8b/provider-proxy.conf:/etc/nginx/templates/nginx.conf.template:ro
+    depends_on:
+      core: { condition: service_started }
+    networks: [tessara-services]
+    restart: unless-stopped
+    healthcheck: *provider-proxy-health
+    profiles: ["reference"]
+
+  principal-provider-proxy:
+    image: ${TESSARA_PROVIDER_PROXY_IMAGE:-nginx:1.29.8-alpine}
+    environment:
+      <<: *provider-fault-environment
+      TESSARA_SPRINT_8B_FAULT_KEY: none
+    volumes:
+      - ../sprint-8b/provider-proxy.conf:/etc/nginx/templates/nginx.conf.template:ro
+    depends_on:
+      core: { condition: service_started }
+    networks: [tessara-services]
+    restart: unless-stopped
+    healthcheck: *provider-proxy-health
+    profiles: ["reference"]
+
+  components-migrate:
+    image: ${TESSARA_COMPONENT_IMAGE:-tessara-sprint-8b-components}
+    build:
+      args:
+        TESSARA_COMPONENT_RELEASE: "1.1.0"
+
+  components:
+    image: ${TESSARA_COMPONENT_IMAGE:-tessara-sprint-8b-components}
+    build:
+      args:
+        TESSARA_COMPONENT_RELEASE: "1.1.0"
+    environment:
+      TESSARA_CORE_AUTHORIZATION_KEY_ID: ${TESSARA_CORE_AUTHORIZATION_KEY_ID:-core-development-v1}
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"tessara.datasets":"http://datasets:8093","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091","tessara.reference.scoped-records":"http://scoped-records:8090"}'
+      TESSARA_MODULE_SERVICE_IDENTITIES: *module-service-identities
+    depends_on:
+      datasets: { condition: service_started }
+
+  dashboards:
+    image: ${TESSARA_DASHBOARD_IMAGE:-tessara-sprint-8b-dashboards}
+    environment:
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"tessara.datasets":"http://datasets:8093","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091","tessara.reference.scoped-records":"http://scoped-records:8090"}'
+      TESSARA_CORE_AUTHORIZATION_KEY_ID: ${TESSARA_CORE_AUTHORIZATION_KEY_ID:-core-development-v1}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8091/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  dashboards-migrate:
+    image: ${TESSARA_DASHBOARD_IMAGE:-tessara-sprint-8b-dashboards}
+
+  scoped-records-migrate:
+    image: ${TESSARA_REFERENCE_MODULE_IMAGE:-tessara-sprint-8b-scoped-records}
+
+  scoped-records:
+    image: ${TESSARA_REFERENCE_MODULE_IMAGE:-tessara-sprint-8b-scoped-records}
+    environment:
+      TESSARA_CORE_AUTHORIZATION_KEY_ID: ${TESSARA_CORE_AUTHORIZATION_KEY_ID:-core-development-v1}
+      TESSARA_SCOPED_RECORDS_SERVICE_SIGNING_KEY: ${TESSARA_SCOPED_RECORDS_SERVICE_SIGNING_KEY:-tqIq7pl7fdDBQ4JYpd14sLh8tmK9PASn1qQma89Lkfk}
+      TESSARA_SCOPED_RECORDS_SERVICE_SIGNING_KEY_ID: ${TESSARA_SCOPED_RECORDS_SERVICE_SIGNING_KEY_ID:-scoped-records-development-v1}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s

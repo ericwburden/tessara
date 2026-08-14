@@ -129,14 +129,17 @@ mod tests {
     #[test]
     fn lifecycle_host_route_is_policy_neutral_and_covers_unowned_paths() {
         initialize_test_executor();
-        for path in ["/example", "/example/new", "/example/item/edit"] {
+        for path in [
+            "/example",
+            "/example/new",
+            "/example/item/edit",
+            "/datasets",
+            "/datasets/new",
+        ] {
             let html = application_html(path, "Module", "Lifecycle module host.");
             assert!(html.contains(r#"id="tessara-module-outlet""#), "{path}");
             assert!(!html.contains("data-module-definition"), "{path}");
         }
-
-        let core_html = application_html("/datasets", "Datasets", "Core-owned route.");
-        assert!(!core_html.contains(r#"id="tessara-module-outlet""#));
     }
 
     #[test]

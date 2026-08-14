@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "components", "dashboards")]
+    [ValidateSet("all", "components", "dashboards", "datasets")]
     [string]$Module = "all",
     [switch]$Check,
     [switch]$DeclarationsOnly,
@@ -15,7 +15,7 @@ $modules = @(
     [pscustomobject]@{
         Name = "components"
         Definition = "tessara.components"
-        Release = "1.0.1"
+        Release = "1.1.0"
         Package = "tessara-component-ui"
         Wasm = "tessara_component_ui.wasm"
         OutputName = "component-bindings"
@@ -26,7 +26,7 @@ $modules = @(
         WasmName = "component.wasm"
         DigestContract = "crates/tessara-component-ui/src/document.rs"
         Manifest = "crates/tessara-component-module/manifest.json"
-        ReleaseCatalog = "deploy/sprint-8a/catalogs/local-release-catalog.json"
+        ReleaseCatalog = "deploy/sprint-8b/catalogs/local-release-catalog.json"
         AssetSpecs = @(
             [pscustomobject]@{ Path = "/component.css"; Constant = "COMPONENT_CSS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.css") }
             [pscustomobject]@{ Path = "/component-lifecycle.css"; Constant = "COMPONENT_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.css", "crates/tessara-component-ui/assets/component-lifecycle.css") }
@@ -56,6 +56,29 @@ $modules = @(
             [pscustomobject]@{ Path = "/dashboard.js"; Constant = "DASHBOARD_JS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.js") }
             [pscustomobject]@{ Path = "/dashboard-bindings.js"; Constant = "DASHBOARD_BINDINGS_JS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard-bindings.js") }
             [pscustomobject]@{ Path = "/dashboard.wasm"; Constant = "DASHBOARD_WASM_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.wasm") }
+        )
+    },
+    [pscustomobject]@{
+        Name = "datasets"
+        Definition = "tessara.datasets"
+        Release = "1.0.0"
+        Package = "tessara-dataset-ui"
+        Wasm = "tessara_dataset_ui.wasm"
+        OutputName = "dataset-bindings"
+        EntryAsset = "crates/tessara-web-datasets/assets/dataset.js"
+        BindingsAsset = "crates/tessara-web-datasets/assets/dataset-bindings.js"
+        WasmAsset = "crates/tessara-web-datasets/assets/dataset.wasm"
+        BindingsName = "dataset-bindings.js"
+        WasmName = "dataset.wasm"
+        DigestContract = "crates/tessara-web-datasets/src/document.rs"
+        Manifest = "crates/tessara-dataset-module/manifest.json"
+        ReleaseCatalog = "deploy/sprint-8b/catalogs/local-release-catalog.json"
+        AssetSpecs = @(
+            [pscustomobject]@{ Path = "/dataset.css"; Constant = "DATASET_CSS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.css") }
+            [pscustomobject]@{ Path = "/dataset-lifecycle.css"; Constant = "DATASET_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset-lifecycle.css") }
+            [pscustomobject]@{ Path = "/dataset.js"; Constant = "DATASET_JS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.js") }
+            [pscustomobject]@{ Path = "/dataset-bindings.js"; Constant = "DATASET_BINDINGS_JS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset-bindings.js") }
+            [pscustomobject]@{ Path = "/dataset.wasm"; Constant = "DATASET_WASM_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.wasm") }
         )
     }
 )
@@ -124,7 +147,7 @@ function Sync-ModuleAssetDigests([pscustomobject]$ModuleDefinition, [switch]$Che
 
 function Sync-ReleaseCatalogManifestDigest([pscustomobject]$ModuleDefinition, [switch]$CheckOnly) {
     $manifestPath = Join-Path $repoRoot $ModuleDefinition.Manifest
-    $digestOutput = @(& cargo run --manifest-path (Join-Path $repoRoot "Cargo.toml") --locked --offline -q -p tessara-supervisor --bin tessara-compose -- digest $manifestPath)
+    $digestOutput = @(& cargo run --manifest-path (Join-Path $repoRoot "Cargo.toml") --locked --offline -q -p tessara-supervisor --bin tessara-compose -- manifest-digest $manifestPath)
     if ($LASTEXITCODE -ne 0) {
         throw "$($ModuleDefinition.Name) manifest canonical digest could not be computed."
     }
@@ -229,7 +252,7 @@ $wasmBindgen = Get-Command "wasm-bindgen" -ErrorAction Stop
 Push-Location $repoRoot
 try {
     foreach ($item in $modules) {
-        & cargo build -p $item.Package --target wasm32-unknown-unknown --release --features hydrate
+        & cargo build -p $item.Package --target wasm32-unknown-unknown --release --features hydrate --locked --offline
         if ($LASTEXITCODE -ne 0) {
             throw "The $($item.Name) browser WASM build failed."
         }

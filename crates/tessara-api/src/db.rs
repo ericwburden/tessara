@@ -27,7 +27,6 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
             "submissions:respond",
             "submissions:manage",
             "operations:view",
-            "datasets:read",
         ],
     ),
     (
@@ -42,11 +41,11 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
 /// [`BUILT_IN_ROLE_CAPABILITY_SEED_SHA256`]. This coupling makes a membership
 /// change require both a new digest and an intentional version change.
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_VERSION: &str =
-    "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c";
+    "sprint-8b-role-capabilities-v1+sha256.592a7f5359b6";
 
 /// SHA-256 of [`built_in_role_capability_seed_canonical_bytes`].
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_SHA256: &str =
-    "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609";
+    "592a7f5359b6a86864f7fda1265360f2a411a087ffe209baaf5d1f41a5725621";
 
 /// Returns the canonical bytes covered by the built-in membership digest.
 ///
@@ -298,16 +297,6 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
             "operations:view",
             "Inspect workflow assignment and dataset readiness status",
         ),
-        ("datasets:manage", "Manage dataset definitions"),
-        ("datasets:read", "Inspect dataset definitions"),
-        (
-            "datasets:read_restricted",
-            "Read restricted dataset rows when dataset visibility allows access",
-        ),
-        (
-            "datasets:read_confidential",
-            "Read confidential and restricted dataset rows when dataset visibility allows access",
-        ),
         (
             "composition:read",
             "Inspect application composition and receipts",
@@ -496,11 +485,11 @@ mod tests {
     fn built_in_role_capability_seed_contract_is_exact_and_review_versioned() {
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_VERSION,
-            "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c"
+            "sprint-8b-role-capabilities-v1+sha256.592a7f5359b6"
         );
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_SHA256,
-            "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609"
+            "592a7f5359b6a86864f7fda1265360f2a411a087ffe209baaf5d1f41a5725621"
         );
         assert_eq!(
             super::sha256_hex(&built_in_role_capability_seed_canonical_bytes()),
@@ -527,20 +516,23 @@ mod tests {
     }
 
     #[test]
-    fn sprint_8a_core_fresh_baseline_excludes_component_product_storage() {
-        assert_eq!(fnv1a(BASELINE), 0x0d13_468c_0638_877f);
+    fn sprint_8b_core_fresh_baseline_excludes_independent_module_product_storage() {
+        assert_eq!(fnv1a(BASELINE), 0x4913_d74d_dd95_46e2);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(!baseline.contains("CREATE TABLE components ("));
         assert!(!baseline.contains("CREATE TABLE component_versions ("));
         assert!(!baseline.contains("CREATE TABLE component_version_change_events ("));
         assert!(!baseline.contains("CREATE TYPE component_type AS ENUM"));
+        assert!(!baseline.contains("CREATE TABLE datasets ("));
+        assert!(!baseline.contains("CREATE TABLE dataset_revisions ("));
+        assert!(!baseline.contains("CREATE TYPE dataset_revision_status AS ENUM"));
     }
 
     #[test]
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "49d1b2af75c5a31335e5cc855a615e571c05d7b352a3e0de96b4aa6829ff8926"
+            "b35d55a0bb502a966f88b8f73856d3cebc30d2d17d8eb6db750c66a02208add4"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));

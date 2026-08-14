@@ -2,9 +2,9 @@
 
 use crate::{FormAttachmentLink, status_badge_class};
 use crate::{
-    FormDatasetSourceLink, FormDefinition, FormVersionsTable, FormWorkflowLink, RenderedForm,
-    active_form_definition_version, form_attached_nodes, form_definition_scope_label,
-    form_field_count_label, form_status_label, form_version_label,
+    FormDatasetSourceLink, FormDatasetSourcesState, FormDefinition, FormVersionsTable,
+    FormWorkflowLink, RenderedForm, active_form_definition_version, form_attached_nodes,
+    form_definition_scope_label, form_field_count_label, form_status_label, form_version_label,
 };
 use leptos::prelude::*;
 use tessara_module_ui::{
@@ -40,6 +40,7 @@ pub(crate) fn FormDetailBody(
     let version_count = form.versions.len().to_string();
     let versions = form.versions.clone();
     let workflows = form.workflows.clone();
+    let dataset_sources_state = form.dataset_sources_state;
     let dataset_sources = form.dataset_sources.clone();
 
     view! {
@@ -131,6 +132,7 @@ pub(crate) fn FormDetailBody(
                     <FormRelatedLinks
                         attached_nodes=attached_nodes
                         workflows=workflows
+                        dataset_sources_state=dataset_sources_state
                         dataset_sources=dataset_sources
                     />
                 </section>
@@ -143,12 +145,14 @@ pub(crate) fn FormDetailBody(
 fn FormRelatedLinks(
     attached_nodes: Vec<FormAttachmentLink>,
     workflows: Vec<FormWorkflowLink>,
+    dataset_sources_state: FormDatasetSourcesState,
     dataset_sources: Vec<FormDatasetSourceLink>,
 ) -> impl IntoView {
     let active_tab = RwSignal::new("attached".to_string());
     let attached_count = attached_nodes.len();
     let workflows_count = workflows.len();
-    let dataset_sources_count = dataset_sources.len();
+    let dataset_sources_label =
+        dataset_sources_tab_label(dataset_sources_state, dataset_sources.len());
 
     view! {
         <div class="related-work-summary form-detail-related">
@@ -161,7 +165,7 @@ fn FormRelatedLinks(
                         {format!("Workflows ({workflows_count})")}
                     </TabsTrigger>
                     <TabsTrigger active=active_tab value="dataset-sources">
-                        {format!("Dataset Sources ({dataset_sources_count})")}
+                        {dataset_sources_label}
                     </TabsTrigger>
                 </TabsList>
                 <TabsContent active=active_tab value="attached">
@@ -171,9 +175,43 @@ fn FormRelatedLinks(
                     <FormRelatedWorkflowsTable workflows=workflows/>
                 </TabsContent>
                 <TabsContent active=active_tab value="dataset-sources">
-                    <FormRelatedDatasetSourcesTable dataset_sources=dataset_sources/>
+                    <FormRelatedDatasetSourcesTable
+                        state=dataset_sources_state
+                        dataset_sources=dataset_sources
+                    />
                 </TabsContent>
             </Tabs>
         </div>
+    }
+}
+
+fn dataset_sources_tab_label(state: FormDatasetSourcesState, item_count: usize) -> String {
+    match state {
+        FormDatasetSourcesState::Available => format!("Dataset Sources ({item_count})"),
+        FormDatasetSourcesState::Empty => "Dataset Sources (0)".into(),
+        FormDatasetSourcesState::Unavailable => "Dataset Sources (Unavailable)".into(),
+        FormDatasetSourcesState::Undisclosed => "Dataset Sources".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dataset_sources_tab_label;
+    use crate::FormDatasetSourcesState;
+
+    #[test]
+    fn dataset_sources_tab_never_projects_outage_as_zero() {
+        assert_eq!(
+            dataset_sources_tab_label(FormDatasetSourcesState::Empty, 0),
+            "Dataset Sources (0)"
+        );
+        assert_eq!(
+            dataset_sources_tab_label(FormDatasetSourcesState::Unavailable, 0),
+            "Dataset Sources (Unavailable)"
+        );
+        assert_eq!(
+            dataset_sources_tab_label(FormDatasetSourcesState::Undisclosed, 0),
+            "Dataset Sources"
+        );
     }
 }

@@ -35,7 +35,8 @@ tessara-analytics
 tessara-auth
 tessara-core
 tessara-data-ops
-tessara-datasets
+tessara-datasets-contract
+tessara-dataset-module
 tessara-dashboards
 tessara-db
 tessara-forms

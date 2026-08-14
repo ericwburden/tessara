@@ -32,15 +32,13 @@ const DASHBOARD_CAPACITY: &[u8] =
 const POPULATED_SPRINT_5A: &str = include_str!("fixtures/sprint_5a_populated.sql");
 const POPULATED_SPRINT_5A_SHA256: &str =
     "29db015ddcd7206a548c5839b958a937c03aab78d2c53047a55483a7aef31172";
-const CURRENT_CORE_TRANSITION_DEFINITION_IDS: [&str; 5] = [
-    "tessara.datasets",
+const CURRENT_CORE_TRANSITION_DEFINITION_IDS: [&str; 4] = [
     "tessara.forms",
     "tessara.migration",
     "tessara.responses",
     "tessara.workflows",
 ];
-const CURRENT_CORE_TRANSITION_NAVIGATION_IDS: [&str; 4] = [
-    "tessara.datasets.navigation",
+const CURRENT_CORE_TRANSITION_NAVIGATION_IDS: [&str; 3] = [
     "tessara.forms.navigation",
     "tessara.responses.navigation",
     "tessara.workflows.navigation",
@@ -275,9 +273,9 @@ const SPRINT_5A_SEED_VERSION: &str = "sprint-5a-role-capabilities-v1+sha256.7725
 const SPRINT_5A_SEED_SHA256: &str =
     "7725e889996a73a5655c57106aca6e12d9a5f95e9103f14d7b0fd50fbac96988";
 
-const CURRENT_SEED_VERSION: &str = "sprint-8a-role-capabilities-v1+sha256.4f607b6f428c";
+const CURRENT_SEED_VERSION: &str = "sprint-8b-role-capabilities-v1+sha256.592a7f5359b6";
 const CURRENT_SEED_SHA256: &str =
-    "4f607b6f428c0de70901dd119f7026b4c700c9e86309e76a3f5085a4da366609";
+    "592a7f5359b6a86864f7fda1265360f2a411a087ffe209baaf5d1f41a5725621";
 
 const FIXTURE_ACCOUNT_ID: &str = "60000000-0000-0000-0000-000000000002";
 const FIXTURE_SESSION_TOKEN: &str = "60000000-0000-0000-0000-000000000301";
@@ -1198,9 +1196,9 @@ async fn assert_control_plane_shape(pool: &PgPool) {
     ]);
     assert_eq!(counts["installations"], 1);
     assert_eq!(counts["policies"], 1);
-    assert_eq!(counts["policy_entries"], 4);
+    assert_eq!(counts["policy_entries"], 3);
     assert_eq!(counts["groups"], 2);
-    assert_eq!(counts["placements"], 13);
+    assert_eq!(counts["placements"], 12);
     assert_eq!(counts["sync_audits"], 2);
 
     let expected_transition_ids = CURRENT_CORE_TRANSITION_DEFINITION_IDS

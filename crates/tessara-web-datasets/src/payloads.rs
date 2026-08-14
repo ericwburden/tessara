@@ -79,6 +79,7 @@ pub(super) fn dataset_payload_from_drafts(
         name,
         slug,
         grain: "submission".into(),
+        version_label: None,
         force_new_major_version,
         visibility_node_ids,
         initial_source,

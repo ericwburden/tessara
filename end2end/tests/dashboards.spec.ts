@@ -3,6 +3,9 @@ import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-dashboards-${Date.now()}`;
+const REFERENCE_DASHBOARD_NAME = "Dataset Components";
+const REFERENCE_FULL_READER_EMAIL = "full-reader@tessara.local";
+const REFERENCE_FULL_READER_PASSWORD = "sprint-8b-full-reader";
 let fixtureSequence = 0;
 
 const BENIGN_NAVIGATION_ABORT =
@@ -189,7 +192,7 @@ async function signInAsAdmin(page: Page) {
   await signIn(page, "admin@tessara.local", "tessara-dev-admin");
 }
 
-async function ensureDemoSeed(page: Page) {
+async function ensureReferenceOrLocalFixture(page: Page) {
   const response = await invokeDemoSeedEndpoint(page.request);
   if (response === null) {
     return;
@@ -213,7 +216,7 @@ async function createDashboardFixture(page: Page): Promise<DashboardFixture> {
   );
   expect(
     visibilitySource,
-    "demo seed should expose a Dashboard with visibility nodes",
+    "Reference or local fixture should expose a Dashboard with visibility nodes",
   ).toBeTruthy();
 
   fixtureSequence += 1;
@@ -233,7 +236,7 @@ async function createDashboardFixture(page: Page): Promise<DashboardFixture> {
     );
     expect(
       composition.available_component_versions.length,
-      "demo seed should expose at least one placeable published Component version",
+      "Reference or local fixture should expose at least one placeable published Component version",
     ).toBeGreaterThan(0);
     return { id: created.id, name, composition };
   } catch (error) {
@@ -294,7 +297,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     const executionPaths = attachComponentExecutionTracker(page);
     const successfulExecutionPaths = attachSuccessfulComponentExecutionTracker(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
 
     try {
@@ -482,7 +485,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     test.setTimeout(120_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
 
     try {
@@ -495,12 +498,12 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const statCardOption = fixture.composition.available_component_versions.find(
         (option) => option.component_type === "stat_card",
       );
-      expect(tableOption, "demo seed should expose a placeable Table").toBeTruthy();
+      expect(tableOption, "Reference or local fixture should expose a placeable Table").toBeTruthy();
       expect(
         chartOption,
         "the Sprint 7A reference inventory should expose a placeable chart Component",
       ).toBeTruthy();
-      expect(statCardOption, "demo seed should expose a placeable stat card").toBeTruthy();
+      expect(statCardOption, "Reference or local fixture should expose a placeable stat card").toBeTruthy();
 
       // This focused fixture intentionally binds only Table and Stat Card so the
       // viewer can prove their intrinsic presentation without a chart placement.
@@ -583,7 +586,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     test.setTimeout(120_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
     const allExecutionPaths = attachComponentExecutionTracker(page);
     const executionRoutePattern = `**/api/dashboards/${fixture.id}/placements/**/render/stat-card**`;
@@ -599,7 +602,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const statCard = fixture.composition.available_component_versions.find(
         (option) => option.component_type === "stat_card",
       );
-      expect(statCard, "demo seed should expose a published Stat Card").toBeTruthy();
+      expect(statCard, "Reference or local fixture should expose a published Stat Card").toBeTruthy();
       await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
           data: {
@@ -686,14 +689,14 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     page,
   }) => {
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
 
     try {
       const statCard = fixture.composition.available_component_versions.find(
         (option) => option.component_type === "stat_card",
       );
-      expect(statCard, "demo seed should expose a published Stat Card").toBeTruthy();
+      expect(statCard, "Reference or local fixture should expose a published Stat Card").toBeTruthy();
       const composition = await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
           data: {
@@ -758,7 +761,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     test.setTimeout(120_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
     const allExecutionPaths = attachComponentExecutionTracker(page);
     const executionUrls: string[] = [];
@@ -985,7 +988,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     test.setTimeout(120_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
 
     try {
@@ -1087,7 +1090,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     test.setTimeout(120_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
 
     try {
@@ -1188,19 +1191,19 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     try {
       const page = await context.newPage();
       await signInAsAdmin(page);
-      await ensureDemoSeed(page);
+      await ensureReferenceOrLocalFixture(page);
       const adminDashboards = await expectJson<DashboardSummary[]>(
         await page.request.get("/api/dashboards"),
       );
       const dashboard = adminDashboards.find(
-        (candidate) =>
-          candidate.placement_count > 0 && candidate.visibility_nodes.length > 0,
+        (candidate) => candidate.name === REFERENCE_DASHBOARD_NAME,
       );
       expect(
         dashboard,
-        "reference composition should expose a visible Dashboard with placements",
+        "Reference materialization should expose the exact Dataset Components Dashboard",
       ).toBeTruthy();
-      expect(dashboard!.placement_count).toBeGreaterThan(0);
+      expect(dashboard!.placement_count).toBe(4);
+      expect(dashboard!.visibility_nodes).toHaveLength(1);
       const adminDefinition = await expectJson<DashboardDefinition>(
         await page.request.get(`/api/dashboards/${dashboard!.id}`),
       );
@@ -1239,8 +1242,8 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
 
       await signIn(
         page,
-        "scoped-sprint7a@tessara.local",
-        "tessara-sprint-7a-scoped",
+        REFERENCE_FULL_READER_EMAIL,
+        REFERENCE_FULL_READER_PASSWORD,
       );
       const operatorDashboards = await expectJson<DashboardSummary[]>(
         await page.request.get("/api/dashboards"),
@@ -1250,7 +1253,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       );
       expect(
         operatorDashboard,
-        "scoped operator should see the reference Dashboard",
+        "Reference full reader should see the source-exact Dashboard",
       ).toBeTruthy();
       expect(operatorDashboard!.placement_count).toBe(dashboard!.placement_count);
       const operatorDefinition = await expectJson<DashboardDefinition>(
@@ -1262,11 +1265,15 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       );
       expect(
         unavailablePlacements.length,
-        "reference operator should receive at least one unavailable placement footprint",
-      ).toBeGreaterThan(0);
+        "Reference full reader should receive the one disjoint placement as unavailable",
+      ).toBe(1);
       const redactedPlacements = unavailablePlacements.filter(
         (placement) => placement.component === undefined,
       );
+      expect(
+        redactedPlacements,
+        "The disjoint Component placement must retain only its opaque Dashboard footprint",
+      ).toHaveLength(1);
 
       const adminPlacementsForRedacted = redactedPlacements.map((hidden) =>
         adminDefinition.placements.find(
@@ -1274,12 +1281,13 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         ),
       );
       expect(
-        adminPlacementsForRedacted.filter((placement) => placement?.component === undefined),
-        "a cross-scope Component binding must remain nondisclosed even to the Dashboard projection",
-      ).not.toHaveLength(0);
+        adminPlacementsForRedacted.filter((placement) => placement?.component !== undefined),
+        "Admin read-back should resolve the exact Component hidden from the scoped reader",
+      ).toHaveLength(1);
       const hiddenBindings = adminPlacementsForRedacted.flatMap((placement) =>
         placement?.component === undefined ? [] : [placement.component],
       );
+      expect(hiddenBindings).toHaveLength(1);
 
       await page.goto("/dashboards");
       await expect(page.locator(`[data-dashboard-id="${dashboard!.id}"]`)).toContainText(
@@ -1324,7 +1332,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     const executionPaths = attachComponentExecutionTracker(page);
     const successfulExecutionPaths = attachSuccessfulComponentExecutionTracker(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const fixture = await createDashboardFixture(page);
     const mediatedExecutionPath = new RegExp(
       `^/api/dashboards/${fixture.id}/placements/[^/]+/render/(?:table|bar|line|pie|donut|stat-card)$`,
@@ -1339,7 +1347,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const editorOption = fixture.composition.available_component_versions.find(
         (option) => option.component_type === "stat_card",
       );
-      expect(editorOption, "demo seed should expose a Stat Card").toBeTruthy();
+      expect(editorOption, "Reference or local fixture should expose a Stat Card").toBeTruthy();
       const exactUnsavedPreviewPath =
         `/api/components/${editorOption!.component_slug}/versions/${editorOption!.component_version_id}/stat-card`;
       const isEditorPreviewExecutionPath = (path: string) =>

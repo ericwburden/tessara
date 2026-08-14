@@ -1,0 +1,607 @@
+{
+  "api_version": "tessara.io/application-blueprint/v1",
+  "installation_id": "01980000-0000-7000-8000-00000000008b",
+  "revision": 1,
+  "core": {
+    "version_requirement": "=0.1.0",
+    "configuration": {
+      "deployment_profile": "sprint-8b-reference",
+      "gateway_mode": "core_owned"
+    },
+    "bootstrap": {
+      "source": "inline",
+      "schema_version": "tessara.io/core-bootstrap/v1",
+      "value": {
+        "schema_version": "tessara.io/core-bootstrap/v1",
+        "root_node_type_external_key": "scope.organization",
+        "root_node_type_name": "Organization",
+        "root_node_external_key": "scope.full",
+        "root_node_name": "Reference Organization",
+        "additional_nodes": [
+          {
+            "external_key": "scope.restricted",
+            "name": "Restricted Division",
+            "parent_node_key": "scope.full"
+          },
+          {
+            "external_key": "scope.confidential",
+            "name": "Confidential Team",
+            "parent_node_key": "scope.restricted"
+          },
+          {
+            "external_key": "scope.disjoint",
+            "name": "Disjoint Organization",
+            "parent_node_key": null
+          }
+        ],
+        "forms": [
+          {
+            "resource_key": "form.primary/v1",
+            "source_alias": "primary",
+            "name": "Primary Responses",
+            "slug": "primary-responses",
+            "version_label": "1.0.0",
+            "published_at": "2026-08-01T12:00:00Z",
+            "scope_node_keys": ["scope.full"],
+            "fields": [
+              {
+                "key": "label",
+                "label": "Label",
+                "field_type": "text",
+                "required": true,
+                "position": 0,
+                "grid_row": 1,
+                "grid_column": 1
+              },
+              {
+                "key": "amount",
+                "label": "Amount",
+                "field_type": "number",
+                "required": true,
+                "position": 1,
+                "grid_row": 1,
+                "grid_column": 2
+              },
+              {
+                "key": "category",
+                "label": "Category",
+                "field_type": "text",
+                "required": true,
+                "position": 2,
+                "grid_row": 2,
+                "grid_column": 1
+              }
+            ]
+          },
+          {
+            "resource_key": "form.secondary/v1",
+            "source_alias": "secondary",
+            "name": "Secondary Responses",
+            "slug": "secondary-responses",
+            "version_label": "1.0.0",
+            "published_at": "2026-08-01T12:00:00Z",
+            "scope_node_keys": ["scope.full"],
+            "fields": [
+              {
+                "key": "label",
+                "label": "Label",
+                "field_type": "text",
+                "required": true,
+                "position": 0,
+                "grid_row": 1,
+                "grid_column": 1
+              },
+              {
+                "key": "amount",
+                "label": "Amount",
+                "field_type": "number",
+                "required": true,
+                "position": 1,
+                "grid_row": 1,
+                "grid_column": 2
+              }
+            ]
+          },
+          {
+            "resource_key": "form.disjoint/v1",
+            "source_alias": "disjoint",
+            "name": "Disjoint Responses",
+            "slug": "disjoint-responses",
+            "version_label": "1.0.0",
+            "published_at": "2026-08-01T12:00:00Z",
+            "scope_node_keys": ["scope.disjoint"],
+            "fields": [
+              {
+                "key": "label",
+                "label": "Label",
+                "field_type": "text",
+                "required": true,
+                "position": 0,
+                "grid_row": 1,
+                "grid_column": 1
+              }
+            ]
+          }
+        ],
+        "responses": [
+          {
+            "resource_key": "response.initial",
+            "form_resource_key": "form.primary/v1",
+            "node_key": "scope.full",
+            "created_at": "2026-08-01T12:01:00Z",
+            "submitted_at": "2026-08-01T12:02:00Z",
+            "values": {"label": "Initial", "amount": 10, "category": "A"}
+          },
+          {
+            "resource_key": "response.same-time-a",
+            "form_resource_key": "form.primary/v1",
+            "node_key": "scope.restricted",
+            "created_at": "2026-08-01T12:03:00Z",
+            "submitted_at": "2026-08-01T12:04:00Z",
+            "values": {"label": "Same time A", "amount": 20, "category": "B"}
+          },
+          {
+            "resource_key": "response.same-time-b",
+            "form_resource_key": "form.primary/v1",
+            "node_key": "scope.restricted",
+            "created_at": "2026-08-01T12:03:00Z",
+            "submitted_at": "2026-08-01T12:04:00Z",
+            "values": {"label": "Same time B", "amount": 30, "category": "B"}
+          },
+          {
+            "resource_key": "response.outside-scope",
+            "form_resource_key": "form.disjoint/v1",
+            "node_key": "scope.disjoint",
+            "created_at": "2026-08-01T12:05:00Z",
+            "submitted_at": "2026-08-01T12:06:00Z",
+            "values": {"label": "Outside scope"}
+          }
+        ],
+        "actors": [
+          {
+            "resource_key": "actor.dataset-manager",
+            "email": "dataset-manager@tessara.local",
+            "display_name": "Dataset Manager",
+            "password": "sprint-8b-dataset-manager",
+            "capabilities": ["datasets:read", "datasets:manage"],
+            "scope_node_keys": ["scope.full"]
+          },
+          {
+            "resource_key": "actor.operations",
+            "email": "operations@tessara.local",
+            "display_name": "Operations Reader",
+            "password": "sprint-8b-operations",
+            "capabilities": ["operations:view"],
+            "scope_node_keys": ["scope.full"]
+          },
+          {
+            "resource_key": "actor.full",
+            "email": "full-reader@tessara.local",
+            "display_name": "Full Dataset Reader",
+            "password": "sprint-8b-full-reader",
+            "capabilities": ["components:read", "dashboards:read", "datasets:read"],
+            "scope_node_keys": ["scope.full"]
+          },
+          {
+            "resource_key": "actor.restricted",
+            "email": "restricted-reader@tessara.local",
+            "display_name": "Restricted Dataset Reader",
+            "password": "sprint-8b-restricted-reader",
+            "capabilities": ["datasets:read", "datasets:read_restricted"],
+            "scope_node_keys": ["scope.restricted"]
+          },
+          {
+            "resource_key": "actor.confidential",
+            "email": "confidential-reader@tessara.local",
+            "display_name": "Confidential Dataset Reader",
+            "password": "sprint-8b-confidential-reader",
+            "capabilities": ["datasets:read", "datasets:read_restricted", "datasets:read_confidential"],
+            "scope_node_keys": ["scope.confidential"]
+          },
+          {
+            "resource_key": "actor.disjoint",
+            "email": "disjoint-reader@tessara.local",
+            "display_name": "Disjoint Dataset Reader",
+            "password": "sprint-8b-disjoint-reader",
+            "capabilities": ["datasets:read"],
+            "scope_node_keys": ["scope.disjoint"]
+          }
+        ]
+      }
+    }
+  },
+  "modules": [
+    {
+      "definition_id": "tessara.datasets",
+      "version_requirement": "=1.0.0",
+      "enabled": true,
+      "dependency_bindings": {
+        "tessara.datasets.response-export": "core",
+        "tessara.datasets.form-version-schema": "core",
+        "tessara.datasets.scope-catalog": "core",
+        "tessara.datasets.principal-display-catalog": "core"
+      },
+      "configuration": {
+        "schema_version": 1,
+        "display_label": "Datasets",
+        "provider_request_timeout_seconds": 5,
+        "provider_retry_limit": 1,
+        "response_export_page_size": 250
+      },
+      "bootstrap": {
+        "source": "inline",
+        "schema_version": "tessara.io/dataset-bootstrap/v1",
+        "value": {
+          "schema_version": "tessara.io/dataset-bootstrap/v1",
+          "datasets": [
+            {
+              "resource_key": "dataset.base",
+              "definition": {
+                "name": "Base Responses",
+                "slug": "base-responses",
+                "grain": "submission",
+                "version_label": "Initial",
+                "force_new_major_version": false,
+                "visibility_node_ids": [null],
+                "initial_source": null,
+                "operations": [
+                  {
+                    "kind": "projection",
+                    "fields": [
+                      {"key": "label", "label": "Label", "input_field_key": "primary__label", "position": 0},
+                      {"key": "amount", "label": "Amount", "input_field_key": "primary__amount", "position": 1},
+                      {"key": "category", "label": "Category", "input_field_key": "primary__category", "position": 2}
+                    ],
+                    "position": 0
+                  }
+                ]
+              },
+              "reference_bindings": []
+            },
+            {
+              "resource_key": "dataset.derived",
+              "definition": {
+                "name": "Derived Responses",
+                "slug": "derived-responses",
+                "grain": "submission",
+                "version_label": "Initial",
+                "force_new_major_version": false,
+                "visibility_node_ids": [null],
+                "initial_source": null,
+                "operations": [
+                  {
+                    "kind": "projection",
+                    "fields": [
+                      {"key": "label", "label": "Label", "input_field_key": "base__label", "position": 0},
+                      {"key": "amount", "label": "Amount", "input_field_key": "base__amount", "position": 1},
+                      {"key": "category", "label": "Category", "input_field_key": "base__category", "position": 2}
+                    ],
+                    "position": 0
+                  }
+                ]
+              },
+              "reference_bindings": [
+                {
+                  "target_pointer": "/initial_source",
+                  "source_resource_key": "dataset.base",
+                  "source_alias": "base",
+                  "selector": {"kind": "major_line", "version_major": 1}
+                }
+              ]
+            },
+            {
+              "resource_key": "dataset.derived-second-hop",
+              "definition": {
+                "name": "Derived Second Hop",
+                "slug": "derived-second-hop",
+                "grain": "submission",
+                "version_label": "Initial",
+                "force_new_major_version": false,
+                "visibility_node_ids": [null],
+                "initial_source": null,
+                "operations": [
+                  {
+                    "kind": "projection",
+                    "fields": [
+                      {"key": "label", "label": "Label", "input_field_key": "derived__label", "position": 0},
+                      {"key": "amount", "label": "Amount", "input_field_key": "derived__amount", "position": 1},
+                      {"key": "category", "label": "Category", "input_field_key": "derived__category", "position": 2}
+                    ],
+                    "position": 0
+                  }
+                ]
+              },
+              "reference_bindings": [
+                {
+                  "target_pointer": "/initial_source",
+                  "source_resource_key": "dataset.derived",
+                  "source_alias": "derived",
+                  "selector": {"kind": "major_line", "version_major": 1}
+                }
+              ]
+            },
+            {
+              "resource_key": "dataset.independent-binding",
+              "definition": {
+                "name": "Independent Responses",
+                "slug": "independent-responses",
+                "grain": "submission",
+                "version_label": "Initial",
+                "force_new_major_version": false,
+                "visibility_node_ids": [null],
+                "initial_source": null,
+                "operations": [
+                  {
+                    "kind": "projection",
+                    "fields": [
+                      {"key": "label", "label": "Label", "input_field_key": "secondary__label", "position": 0},
+                      {"key": "amount", "label": "Amount", "input_field_key": "secondary__amount", "position": 1}
+                    ],
+                    "position": 0
+                  }
+                ]
+              },
+              "reference_bindings": []
+            },
+            {
+              "resource_key": "dataset.disjoint-binding",
+              "definition": {
+                "name": "Disjoint Responses",
+                "slug": "disjoint-responses-dataset",
+                "grain": "submission",
+                "version_label": "Initial",
+                "force_new_major_version": false,
+                "visibility_node_ids": [null],
+                "initial_source": null,
+                "operations": [
+                  {
+                    "kind": "projection",
+                    "fields": [
+                      {"key": "label", "label": "Label", "input_field_key": "disjoint__label", "position": 0}
+                    ],
+                    "position": 0
+                  }
+                ]
+              },
+              "reference_bindings": []
+            }
+          ],
+          "expected_rejections": [
+            {
+              "resource_key": "dataset.cycle-candidate",
+              "source_resource_keys": ["dataset.derived-second-hop", "dataset.cycle-candidate"],
+              "expected_code": "dataset.dependencies.cycle"
+            }
+          ]
+        },
+        "receipt_bindings": [
+          {"target_pointer": "/datasets/0/definition/visibility_node_ids/0", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/datasets/0/definition/initial_source", "source_owner": "core", "resource_key": "form.primary/v1.dataset_source", "value_encoding": "json"},
+          {"target_pointer": "/datasets/1/definition/visibility_node_ids/0", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/datasets/2/definition/visibility_node_ids/0", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/datasets/3/definition/visibility_node_ids/0", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/datasets/3/definition/initial_source", "source_owner": "core", "resource_key": "form.secondary/v1.dataset_source", "value_encoding": "json"},
+          {"target_pointer": "/datasets/4/definition/visibility_node_ids/0", "source_owner": "core", "resource_key": "scope.disjoint", "value_encoding": "string"},
+          {"target_pointer": "/datasets/4/definition/initial_source", "source_owner": "core", "resource_key": "form.disjoint/v1.dataset_source", "value_encoding": "json"}
+        ]
+      }
+    },
+    {
+      "definition_id": "tessara.components",
+      "version_requirement": "=1.1.0",
+      "enabled": true,
+      "dependency_bindings": {"tessara.components.dataset-major-line": "tessara.datasets"},
+      "configuration": {"schema_version": 1, "display_label": "Components", "dataset_request_timeout_seconds": 5},
+      "bootstrap": {
+        "source": "inline",
+        "schema_version": "tessara.io/component-bootstrap/v1",
+        "value": {
+          "schema_version": "tessara.io/component-bootstrap/v1",
+          "dependency_validation": {
+            "schema_version": 2,
+            "items": [
+              {
+                "validation_key": "component.dataset-table",
+                "reference": null,
+                "required_fields": [
+                  {"field_key": "amount", "accepted_types": ["boolean", "date", "multi_choice", "number", "single_choice", "text"]},
+                  {"field_key": "label", "accepted_types": ["boolean", "date", "multi_choice", "number", "single_choice", "text"]}
+                ]
+              },
+              {
+                "validation_key": "component.dataset-chart",
+                "reference": null,
+                "required_fields": [
+                  {"field_key": "amount", "accepted_types": ["boolean", "date", "multi_choice", "number", "single_choice", "text"]},
+                  {"field_key": "category", "accepted_types": ["boolean", "date", "multi_choice", "number", "single_choice", "text"]}
+                ]
+              },
+              {"validation_key": "component.dataset-stat", "reference": null, "required_fields": []},
+              {
+                "validation_key": "component.dataset-disjoint",
+                "reference": null,
+                "required_fields": [
+                  {"field_key": "label", "accepted_types": ["boolean", "date", "multi_choice", "number", "single_choice", "text"]}
+                ]
+              }
+            ]
+          },
+          "components": [
+            {
+              "external_key": "component.dataset-table",
+              "name": "Dataset Table",
+              "slug": "dataset-table",
+              "description": "Reference Dataset table",
+              "versions": [
+                {
+                  "resource_key": "component.dataset-table",
+                  "component_type": "table",
+                  "dataset_reference": null,
+                  "dataset_scope_node_ids": [null],
+                  "status": "published",
+                  "lifecycle_state": "active",
+                  "resource_revision": 1,
+                  "authority_revision": 1,
+                  "successor_resource_key": null,
+                  "version_number": 1,
+                  "version_label": "1.0.0",
+                  "version_note": "Reference Dataset table",
+                  "config": {"visible_columns": ["label", "amount"], "page_size": 25}
+                }
+              ]
+            },
+            {
+              "external_key": "component.dataset-chart",
+              "name": "Dataset Chart",
+              "slug": "dataset-chart",
+              "description": "Reference Dataset chart",
+              "versions": [
+                {
+                  "resource_key": "component.dataset-chart",
+                  "component_type": "bar",
+                  "dataset_reference": null,
+                  "dataset_scope_node_ids": [null],
+                  "status": "published",
+                  "lifecycle_state": "active",
+                  "resource_revision": 1,
+                  "authority_revision": 1,
+                  "successor_resource_key": null,
+                  "version_number": 1,
+                  "version_label": "1.0.0",
+                  "version_note": "Reference Dataset chart",
+                  "config": {"summary_field": "amount", "summary_type": "count", "value_format": "integer", "sort_field": "summary_value", "sort_direction": "desc", "mode": "summary", "category_field": "category", "number_of_points": 20}
+                }
+              ]
+            },
+            {
+              "external_key": "component.dataset-stat",
+              "name": "Dataset Row Count",
+              "slug": "dataset-row-count",
+              "description": "Reference Dataset row count",
+              "versions": [
+                {
+                  "resource_key": "component.dataset-stat",
+                  "component_type": "stat_card",
+                  "dataset_reference": null,
+                  "dataset_scope_node_ids": [null],
+                  "status": "published",
+                  "lifecycle_state": "active",
+                  "resource_revision": 1,
+                  "authority_revision": 1,
+                  "successor_resource_key": null,
+                  "version_number": 1,
+                  "version_label": "1.0.0",
+                  "version_note": "Reference Dataset row count",
+                  "config": {"summary_field": "", "summary_type": "row_count", "value_format": "integer", "label": "Response rows", "supporting_text": "Dataset v2 materialization", "panel_style": "accent"}
+                }
+              ]
+            },
+            {
+              "external_key": "component.dataset-disjoint",
+              "name": "Dataset Disjoint Probe",
+              "slug": "dataset-disjoint-probe",
+              "description": "Reference nondisclosure probe",
+              "versions": [
+                {
+                  "resource_key": "component.dataset-disjoint",
+                  "component_type": "table",
+                  "dataset_reference": null,
+                  "dataset_scope_node_ids": [null],
+                  "status": "published",
+                  "lifecycle_state": "active",
+                  "resource_revision": 1,
+                  "authority_revision": 1,
+                  "successor_resource_key": null,
+                  "version_number": 1,
+                  "version_label": "1.0.0",
+                  "version_note": "Reference nondisclosure probe",
+                  "config": {"visible_columns": ["label"], "page_size": 25}
+                }
+              ]
+            }
+          ]
+        },
+        "receipt_bindings": [
+          {"target_pointer": "/dependency_validation/items/0/reference", "source_owner": "tessara.datasets", "resource_key": "dataset.derived-second-hop", "value_encoding": "json"},
+          {"target_pointer": "/dependency_validation/items/1/reference", "source_owner": "tessara.datasets", "resource_key": "dataset.derived-second-hop", "value_encoding": "json"},
+          {"target_pointer": "/dependency_validation/items/2/reference", "source_owner": "tessara.datasets", "resource_key": "dataset.derived-second-hop", "value_encoding": "json"},
+          {"target_pointer": "/dependency_validation/items/3/reference", "source_owner": "tessara.datasets", "resource_key": "dataset.disjoint-binding", "value_encoding": "json"},
+          {"target_pointer": "/components/0/versions/0/dataset_reference", "source_owner": "tessara.datasets", "resource_key": "dataset.derived-second-hop", "value_encoding": "json"},
+          {"target_pointer": "/components/0/versions/0/dataset_scope_node_ids/0", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/components/1/versions/0/dataset_reference", "source_owner": "tessara.datasets", "resource_key": "dataset.derived-second-hop", "value_encoding": "json"},
+          {"target_pointer": "/components/1/versions/0/dataset_scope_node_ids/0", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/components/2/versions/0/dataset_reference", "source_owner": "tessara.datasets", "resource_key": "dataset.derived-second-hop", "value_encoding": "json"},
+          {"target_pointer": "/components/2/versions/0/dataset_scope_node_ids/0", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/components/3/versions/0/dataset_reference", "source_owner": "tessara.datasets", "resource_key": "dataset.disjoint-binding", "value_encoding": "json"},
+          {"target_pointer": "/components/3/versions/0/dataset_scope_node_ids/0", "source_owner": "core", "resource_key": "scope.disjoint", "value_encoding": "string"}
+        ]
+      }
+    },
+    {
+      "definition_id": "tessara.dashboards",
+      "version_requirement": "=3.0.1",
+      "enabled": true,
+      "dependency_bindings": {"tessara.dashboards.component-version": "tessara.components"},
+      "configuration": {"schema_version": 1, "display_label": "Dashboards", "default_page_size": 25},
+      "bootstrap": {
+        "source": "inline",
+        "schema_version": "tessara.io/dashboard-bootstrap/v2",
+        "value": {
+          "schema_version": "tessara.io/dashboard-bootstrap/v2",
+          "external_key": "dashboard.dataset-components",
+          "name": "Dataset Components",
+          "description": "Reference Dashboard over Dataset v2 Components",
+          "scope_node_id": null,
+          "placements": [
+            {"placement_key": "dataset-stat", "component_reference": null, "column": 0, "row": 0, "width": 4, "height": 2},
+            {"placement_key": "dataset-table", "component_reference": null, "column": 0, "row": 2, "width": 12, "height": 6},
+            {"placement_key": "dataset-chart", "component_reference": null, "column": 0, "row": 8, "width": 8, "height": 4},
+            {"placement_key": "dataset-disjoint", "component_reference": null, "column": 8, "row": 8, "width": 4, "height": 4}
+          ]
+        },
+        "receipt_bindings": [
+          {"target_pointer": "/scope_node_id", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"},
+          {"target_pointer": "/placements/0/component_reference", "source_owner": "tessara.components", "resource_key": "component.dataset-stat", "value_encoding": "json"},
+          {"target_pointer": "/placements/1/component_reference", "source_owner": "tessara.components", "resource_key": "component.dataset-table", "value_encoding": "json"},
+          {"target_pointer": "/placements/2/component_reference", "source_owner": "tessara.components", "resource_key": "component.dataset-chart", "value_encoding": "json"},
+          {"target_pointer": "/placements/3/component_reference", "source_owner": "tessara.components", "resource_key": "component.dataset-disjoint", "value_encoding": "json"}
+        ]
+      }
+    },
+    {
+      "definition_id": "tessara.reference.scoped-records",
+      "version_requirement": "=1.0.1",
+      "enabled": true,
+      "dependency_bindings": {},
+      "configuration": {"schema_version": 1, "display_label": "Scoped Records", "retention_mode": "retain_on_undeploy"},
+      "bootstrap": {
+        "source": "inline",
+        "schema_version": "tessara.io/scoped-records-bootstrap/v1",
+        "value": {
+          "schema_version": "tessara.io/scoped-records-bootstrap/v1",
+          "records": [
+            {"external_key": "scoped-record.reference", "label": "Reference record", "organization_owner_id": null}
+          ]
+        },
+        "receipt_bindings": [
+          {"target_pointer": "/records/0/organization_owner_id", "source_owner": "core", "resource_key": "scope.full", "value_encoding": "string"}
+        ]
+      }
+    }
+  ],
+  "navigation": [
+    {"destination_id": "tessara.datasets.navigation", "group_id": "core.main", "order": 6, "visible": true},
+    {"destination_id": "tessara.reference.scoped-records.navigation", "group_id": "core.main", "order": 7, "visible": true},
+    {"destination_id": "tessara.components.navigation", "group_id": "core.main", "order": 8, "visible": true},
+    {"destination_id": "tessara.dashboards.navigation", "group_id": "core.main", "order": 9, "visible": true},
+    {"destination_id": "core.admin.composition", "group_id": "core.admin", "order": 4, "visible": true}
+  ],
+  "roles": [
+    {"name": "admin", "capabilities": ["admin:all", "composition:approve", "composition:plan", "composition:read"]},
+    {"name": "reference-operator", "capabilities": ["components:read", "components:manage", "dashboards:read", "dashboards:manage", "datasets:read", "datasets:read_restricted", "datasets:read_confidential", "datasets:manage", "operations:view", "tessara.reference.scoped-records:read", "tessara.reference.scoped-records:manage"]}
+  ],
+  "administrator_enrollment_role": "admin",
+  "secret_references": {
+    "core_database_password": {"provider": "environment", "name": "TESSARA_DATABASE_PASSWORD", "revision": "sprint-8b-v1"}
+  }
+}

@@ -149,6 +149,18 @@ function Get-Sprint7AApprovedEffects {
     } | Sort-Object -Unique)
 }
 
+function Get-Sprint7ARuntimeServiceName {
+    param([Parameter(Mandatory)][string]$DefinitionId)
+
+    switch -CaseSensitive ($DefinitionId) {
+        "tessara.reference.scoped-records" { "scoped-records"; break }
+        "tessara.datasets" { "datasets"; break }
+        "tessara.components" { "components"; break }
+        "tessara.dashboards" { "dashboards"; break }
+        default { $null }
+    }
+}
+
 function Test-Sprint7ABootstrapHelpers {
     $effects = @(Get-Sprint7AApprovedEffects -Actions @(
         [pscustomobject]@{ action = "acquire_image" },
@@ -163,6 +175,21 @@ function Test-Sprint7ABootstrapHelpers {
     $expectedEffects = @("bootstrap", "configure", "disable", "enable", "install", "upgrade")
     if (($effects | ConvertTo-Json -Compress) -cne ($expectedEffects | ConvertTo-Json -Compress)) {
         throw "Sprint 7A approved-effect projection self-test failed."
+    }
+    $expectedRuntimeServices = [ordered]@{
+        "tessara.reference.scoped-records" = "scoped-records"
+        "tessara.datasets" = "datasets"
+        "tessara.components" = "components"
+        "tessara.dashboards" = "dashboards"
+    }
+    foreach ($definitionId in $expectedRuntimeServices.Keys) {
+        if ((Get-Sprint7ARuntimeServiceName -DefinitionId $definitionId) -cne
+            [string]$expectedRuntimeServices[$definitionId]) {
+            throw "Sprint 7A runtime image service projection self-test failed for '$definitionId'."
+        }
+    }
+    if ($null -ne (Get-Sprint7ARuntimeServiceName -DefinitionId "tessara.unknown")) {
+        throw "Sprint 7A runtime image service projection accepted an unknown module definition."
     }
 
     $roundTripTimestamp = (@{ expires_at = "2031-02-03T04:05:06.1234567+00:00" } |
@@ -377,10 +404,12 @@ try {
         $catalog.core_releases[0].core_image = Get-ImageDigest (Get-ConfiguredServiceImage "core")
         $catalog.core_releases[0].gateway_image = Get-ImageDigest (Get-ConfiguredServiceImage "gateway")
         $catalog.core_releases[0].database_image = Get-ImageDigest (Get-ConfiguredServiceImage "postgres")
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "scoped-records")
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "dashboards")
-        $componentRelease = $catalog.module_releases | Where-Object definition_id -eq "tessara.components"
-        if ($componentRelease) { $componentRelease.runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "components") }
+        foreach ($moduleRelease in @($catalog.module_releases)) {
+            $runtimeService = Get-Sprint7ARuntimeServiceName -DefinitionId ([string]$moduleRelease.definition_id)
+            if (-not [string]::IsNullOrWhiteSpace($runtimeService)) {
+                $moduleRelease.runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage $runtimeService)
+            }
+        }
         [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
         & cargo run -q -p tessara-supervisor --bin tessara-compose -- catalog-sign $catalogPayloadPath $catalogPath
         if ($LASTEXITCODE -ne 0) { throw "Runtime release catalog signing failed." }
@@ -594,6 +623,46 @@ try {
     if ($applyExitCode -ne 0) {
         $failureResponsePath = Join-Path $runtimeDirectory "apply-failure-response.log"
         [IO.File]::WriteAllLines($failureResponsePath, $response, [Text.UTF8Encoding]::new($false))
+        try {
+            $configuredServiceNames = @($composeConfiguration.services.PSObject.Properties.Name)
+            $failureLogServices = @(
+                "datasets",
+                "response-provider-proxy",
+                "form-provider-proxy",
+                "supervisor",
+                "core"
+            ) | Where-Object { $configuredServiceNames -ccontains $_ }
+            if ($failureLogServices.Count -gt 0) {
+                $failureServiceLogs = @(& docker @composeArguments logs `
+                    --no-color --timestamps @failureLogServices 2>&1 |
+                    ForEach-Object { [string]$_ })
+                $failureServiceLogsPath = Join-Path $runtimeDirectory `
+                    "composition-failure-service-logs.log"
+                [IO.File]::WriteAllLines(
+                    $failureServiceLogsPath,
+                    $failureServiceLogs,
+                    [Text.UTF8Encoding]::new($false)
+                )
+            }
+        } catch {
+            # Apply output remains authoritative. Service logs are retained as
+            # bounded diagnostic evidence when Compose can provide them.
+        }
+        try {
+            $failureSummary = Invoke-RestMethod `
+                -Uri "$CoreUrl/api/admin/composition" `
+                -Method Get `
+                -WebSession $coreSession
+            $failureSummaryPath = Join-Path $runtimeDirectory "composition-failure-summary.json"
+            [IO.File]::WriteAllText(
+                $failureSummaryPath,
+                ($failureSummary | ConvertTo-Json -Depth 100) + "`n",
+                [Text.UTF8Encoding]::new($false)
+            )
+        } catch {
+            # The raw apply failure remains authoritative when Core itself is
+            # unavailable. Do not replace it with a diagnostic-capture error.
+        }
         throw "Supervisor apply failed. Raw response: $failureResponsePath"
     }
     [IO.File]::WriteAllLines($receiptPath, $response, [Text.UTF8Encoding]::new($false))

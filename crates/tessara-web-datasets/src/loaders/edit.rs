@@ -2,11 +2,8 @@
 
 #[cfg(feature = "hydrate")]
 use super::super::api;
-#[cfg(feature = "hydrate")]
 use super::super::expressions::source_payload_to_draft;
-#[cfg(feature = "hydrate")]
 use super::super::types::DatasetFieldDraft;
-#[cfg(feature = "hydrate")]
 use super::super::types::{
     DatasetAggregationDraft, DatasetAggregationMetricDraft, DatasetAggregationMetricPayload,
     DatasetCalculatedFieldDraft, DatasetCalculatedFieldPayload, DatasetCalculationFunctionDraft,
@@ -14,8 +11,9 @@ use super::super::types::{
     DatasetProjectionFieldPayload, DatasetRowFilterDraft, DatasetRowFilterPayload,
     DatasetRowPickerDraft, DatasetRowPickerPayload, DatasetRowPickerSortDraft,
 };
-use super::super::types::{DatasetOperationDraft, DatasetSourceDraft};
-#[cfg(feature = "hydrate")]
+use super::super::types::{
+    DatasetDefinition, DatasetOperationDraft, DatasetRevisionDetail, DatasetSourceDraft,
+};
 use super::load_rendered_form;
 use leptos::prelude::*;
 use std::collections::BTreeMap;
@@ -37,6 +35,167 @@ pub(crate) struct DatasetEditLoadTargets {
     pub(crate) sql_preview: RwSignal<Option<String>>,
     pub(crate) load_error: RwSignal<Option<String>>,
     pub(crate) editor_ready: RwSignal<bool>,
+}
+
+pub(crate) fn seed_dataset_for_edit(payload: DatasetDefinition, targets: &DatasetEditLoadTargets) {
+    targets.editor_ready.set(false);
+    targets.name.set(payload.name);
+    targets.slug.set(payload.slug);
+    targets.tags.set(payload.tags);
+    targets.force_new_major_version.set(false);
+    targets.sql_preview.set(None);
+    targets.visibility_node_ids.set(
+        payload
+            .visibility_nodes
+            .into_iter()
+            .map(|node| node.node_id)
+            .collect(),
+    );
+    let Some(initial_source) = payload.initial_source else {
+        targets.load_error.set(Some(
+            "This dataset was not created with the operation pipeline and cannot be edited here."
+                .into(),
+        ));
+        return;
+    };
+    seed_pipeline(
+        initial_source,
+        payload.operations,
+        &payload.fields,
+        payload.restriction_policy,
+        targets,
+    );
+}
+
+pub(crate) fn seed_dataset_revision_for_edit(
+    payload: DatasetRevisionDetail,
+    tags: Vec<String>,
+    targets: &DatasetEditLoadTargets,
+) {
+    targets.editor_ready.set(false);
+    targets.name.set(payload.metadata.name);
+    targets.slug.set(payload.metadata.slug);
+    targets.tags.set(tags);
+    targets
+        .force_new_major_version
+        .set(payload.force_new_major_version);
+    targets.sql_preview.set(None);
+    targets
+        .visibility_node_ids
+        .set(payload.metadata.visibility_node_ids.into_iter().collect());
+    seed_pipeline(
+        payload.initial_source,
+        payload.operations,
+        &payload.output_fields,
+        payload.restriction_policy,
+        targets,
+    );
+}
+
+fn seed_pipeline(
+    initial_source_payload: super::super::types::DatasetSourcePayload,
+    operations: Vec<DatasetOperationPayload>,
+    fields: &[DatasetFieldDefinition],
+    restriction_policy: Option<super::super::types::DatasetRestrictionPolicyPayload>,
+    targets: &DatasetEditLoadTargets,
+) {
+    let initial_source_draft = source_payload_to_draft(&initial_source_payload);
+    preload_source_form(&initial_source_draft, targets.rendered_forms);
+    targets.initial_source.set(initial_source_draft);
+    let source_field_lookup = source_field_lookup(fields);
+    let mut operation_order_drafts = Vec::new();
+    for operation in operations {
+        match operation {
+            DatasetOperationPayload::AddSource {
+                source,
+                add_type,
+                join_keys,
+                ..
+            } => {
+                let mut draft = DatasetOperationDraft::new(
+                    operation_order_drafts.len() as u64 + 1,
+                    DatasetOperationDraftKind::AddSource,
+                );
+                draft.source = Some(source_payload_to_draft(&source));
+                if let Some(source) = draft.source.as_ref() {
+                    preload_source_form(source, targets.rendered_forms);
+                }
+                draft.add_type = add_type;
+                if let Some(join_key) = join_keys.first() {
+                    draft.left_field_key = join_key.left_field.clone();
+                    draft.right_field_key = join_key.right_field.clone();
+                }
+                operation_order_drafts.push(draft);
+            }
+            DatasetOperationPayload::Projection {
+                fields: operation_fields,
+                ..
+            } => {
+                let mut draft = DatasetOperationDraft::new(
+                    operation_order_drafts.len() as u64 + 1,
+                    DatasetOperationDraftKind::Projection,
+                );
+                draft.projection_fields =
+                    projection_field_drafts_from_payload(operation_fields, &source_field_lookup);
+                operation_order_drafts.push(draft);
+            }
+            DatasetOperationPayload::Aggregation {
+                group_fields,
+                metrics,
+                row_picker,
+                ..
+            } => {
+                let mut draft = DatasetOperationDraft::new(
+                    operation_order_drafts.len() as u64 + 1,
+                    DatasetOperationDraftKind::Aggregation,
+                );
+                draft.aggregation =
+                    aggregation_draft_from_payload(group_fields, metrics, row_picker);
+                operation_order_drafts.push(draft);
+            }
+            DatasetOperationPayload::CalculatedFields {
+                fields: operation_fields,
+                ..
+            } => {
+                let mut draft = DatasetOperationDraft::new(
+                    operation_order_drafts.len() as u64 + 1,
+                    DatasetOperationDraftKind::CalculatedFields,
+                );
+                draft.calculated_fields = calculated_field_drafts_from_payload(operation_fields);
+                operation_order_drafts.push(draft);
+            }
+            DatasetOperationPayload::Filter {
+                filters: operation_filters,
+                ..
+            } => {
+                let mut draft = DatasetOperationDraft::new(
+                    operation_order_drafts.len() as u64 + 1,
+                    DatasetOperationDraftKind::Filter,
+                );
+                draft.row_filters = row_filter_drafts_from_payload(operation_filters);
+                operation_order_drafts.push(draft);
+            }
+        }
+    }
+    targets.operation_order.set(operation_order_drafts);
+    targets.restriction_internal_field_key.set(
+        restriction_policy
+            .as_ref()
+            .and_then(|policy| policy.internal_field_key.clone())
+            .unwrap_or_default(),
+    );
+    targets.restriction_restricted_field_key.set(
+        restriction_policy
+            .as_ref()
+            .and_then(|policy| policy.restricted_field_key.clone())
+            .unwrap_or_default(),
+    );
+    targets.restriction_confidential_field_key.set(
+        restriction_policy
+            .and_then(|policy| policy.confidential_field_key)
+            .unwrap_or_default(),
+    );
+    targets.editor_ready.set(true);
 }
 
 #[cfg(feature = "hydrate")]
@@ -332,7 +491,6 @@ pub(crate) fn load_dataset_revision_for_edit(
     });
 }
 
-#[cfg(feature = "hydrate")]
 fn projection_field_drafts_from_payload(
     fields: Vec<DatasetProjectionFieldPayload>,
     source_field_lookup: &BTreeMap<String, DatasetFieldDefinition>,
@@ -365,7 +523,6 @@ fn projection_field_drafts_from_payload(
         .collect()
 }
 
-#[cfg(feature = "hydrate")]
 fn preload_source_form(
     source: &DatasetSourceDraft,
     rendered_forms: RwSignal<BTreeMap<String, super::super::types::DatasetRenderedForm>>,
@@ -378,7 +535,6 @@ fn preload_source_form(
     }
 }
 
-#[cfg(feature = "hydrate")]
 fn aggregation_draft_from_payload(
     group_fields: Vec<String>,
     metrics: Vec<DatasetAggregationMetricPayload>,
@@ -411,7 +567,6 @@ fn aggregation_draft_from_payload(
     }
 }
 
-#[cfg(feature = "hydrate")]
 fn row_filter_drafts_from_payload(
     filters: Vec<DatasetRowFilterPayload>,
 ) -> Vec<DatasetRowFilterDraft> {
@@ -429,7 +584,6 @@ fn row_filter_drafts_from_payload(
         .collect()
 }
 
-#[cfg(feature = "hydrate")]
 fn calculated_field_drafts_from_payload(
     fields: Vec<DatasetCalculatedFieldPayload>,
 ) -> Vec<DatasetCalculatedFieldDraft> {
@@ -459,7 +613,6 @@ fn calculated_field_drafts_from_payload(
         .collect()
 }
 
-#[cfg(feature = "hydrate")]
 fn split_canonical_field_key(field_key: &str) -> (String, String) {
     field_key
         .split_once("__")
@@ -467,7 +620,6 @@ fn split_canonical_field_key(field_key: &str) -> (String, String) {
         .unwrap_or_else(|| (String::new(), field_key.into()))
 }
 
-#[cfg(feature = "hydrate")]
 fn source_field_lookup(
     fields: &[DatasetFieldDefinition],
 ) -> BTreeMap<String, DatasetFieldDefinition> {

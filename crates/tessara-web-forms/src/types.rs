@@ -112,8 +112,17 @@ pub(crate) struct FormDefinition {
     pub(crate) versions: Vec<FormVersionSummary>,
     #[serde(default)]
     pub(crate) workflows: Vec<FormWorkflowLink>,
-    #[serde(default)]
+    pub(crate) dataset_sources_state: FormDatasetSourcesState,
     pub(crate) dataset_sources: Vec<FormDatasetSourceLink>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum FormDatasetSourcesState {
+    Available,
+    Empty,
+    Unavailable,
+    Undisclosed,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -133,6 +142,9 @@ pub(crate) struct FormDatasetSourceLink {
     pub(crate) dataset_id: String,
     pub(crate) dataset_name: String,
     pub(crate) source_alias: String,
+    pub(crate) pinned_form_version_id: String,
+    pub(crate) lifecycle_state: String,
+    pub(crate) semantic_destination: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

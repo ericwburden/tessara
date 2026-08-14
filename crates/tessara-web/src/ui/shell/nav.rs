@@ -10,8 +10,8 @@ use crate::state::shell_navigation::{
 };
 use crate::ui::empty_view;
 use icons::{
-    Blocks, CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks,
-    LogOut, Network, PanelRight, Pencil, ShieldCheck, SlidersHorizontal, Users,
+    Blocks, CircleHelp, File, FileText, GitBranch, House, LayoutDashboard, ListChecks, LogOut,
+    Network, PanelRight, Pencil, ShieldCheck, SlidersHorizontal, Users,
 };
 use leptos::prelude::*;
 
@@ -362,7 +362,6 @@ fn nav_icon_for(route_key: &str) -> impl IntoView + use<> {
         "operations" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><ListChecks class="sidebar-link__icon"/></span> }.into_any(),
         "components" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Pencil class="sidebar-link__icon"/></span> }.into_any(),
         "dashboards" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><LayoutDashboard class="sidebar-link__icon"/></span> }.into_any(),
-        "datasets" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Database class="sidebar-link__icon"/></span> }.into_any(),
         "administration" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><SlidersHorizontal class="sidebar-link__icon"/></span> }.into_any(),
         "user_management" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Users class="sidebar-link__icon"/></span> }.into_any(),
         "roles_access" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><ShieldCheck class="sidebar-link__icon"/></span> }.into_any(),
@@ -491,6 +490,14 @@ mod tests {
         assert!(html.contains("M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"));
         assert!(html.contains("x=\"14\""));
         assert!(html.contains("y=\"2\""));
+    }
+
+    #[test]
+    fn module_owned_dataset_navigation_uses_the_policy_neutral_fallback_icon() {
+        let dataset = Owner::new().with(|| nav_icon_for("datasets").to_html());
+        let future_module = Owner::new().with(|| nav_icon_for("future_module").to_html());
+
+        assert_eq!(dataset, future_module);
     }
 
     #[test]

@@ -16,7 +16,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tessara_module_contract::{
     ArtifactDigest, AuthorizationAudienceV1, BootstrapValidationAudienceDeclaration,
-    ModuleManifest, ServiceActionMethod, SignedEnvelopeV1,
+    CapabilityScopeBindingV1, ModuleManifest, ProtocolEnvelopeError, PurposeBoundSigningKeyV1,
+    PurposeBoundVerifyingKeyV1, ServiceActionMethod, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -394,6 +395,132 @@ pub struct BootstrapReceiptV1 {
     pub resource_ids: BTreeMap<String, String>,
 }
 
+pub const OWNER_BOOTSTRAP_AUTHORIZATION_SCHEMA_VERSION_V1: u16 = 1;
+pub const OWNER_BOOTSTRAP_AUTHORIZATION_MAX_LIFETIME_SECONDS: i64 = 60;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnerBootstrapAuthorizationV1 {
+    pub schema_version: u16,
+    pub installation_id: Uuid,
+    pub owner: AuthorizationAudienceV1,
+    pub owner_definition_id: String,
+    pub initiator: ActorEvidenceV1,
+    pub original_actor_id: Uuid,
+    pub capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
+    pub provider_actions: Vec<OwnerBootstrapProviderActionV1>,
+    pub authorization_revision: u64,
+    pub organization_revision: u64,
+    pub locked_input_digest: ArtifactDigest,
+    pub input_digest: ArtifactDigest,
+    pub desired_revision: u64,
+    pub apply_sequence: u64,
+    pub target_plan_digest: ArtifactDigest,
+    pub idempotency_key: String,
+    pub correlation_id: Uuid,
+    pub jti: Uuid,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnerBootstrapProviderActionV1 {
+    pub dependency_binding: String,
+    pub functional_contract: String,
+    pub action: String,
+    pub method: ServiceActionMethod,
+    pub path: String,
+    pub audience: AuthorizationAudienceV1,
+}
+
+pub struct OwnerBootstrapAuthorizationContextV1<'a> {
+    pub installation_id: Uuid,
+    pub owner: &'a AuthorizationAudienceV1,
+    pub owner_definition_id: &'a str,
+    pub locked_input_digest: &'a ArtifactDigest,
+    pub input_digest: &'a ArtifactDigest,
+    pub desired_revision: u64,
+    pub apply_sequence: u64,
+    pub target_plan_digest: &'a ArtifactDigest,
+    pub idempotency_key: &'a str,
+    pub now: DateTime<Utc>,
+}
+
+impl OwnerBootstrapAuthorizationV1 {
+    pub fn validate_for(
+        &self,
+        context: &OwnerBootstrapAuthorizationContextV1<'_>,
+    ) -> Result<(), OwnerBootstrapAuthorizationError> {
+        if self.schema_version != OWNER_BOOTSTRAP_AUTHORIZATION_SCHEMA_VERSION_V1 {
+            return Err(OwnerBootstrapAuthorizationError::UnsupportedSchema);
+        }
+        if self.installation_id != context.installation_id
+            || &self.owner != context.owner
+            || self.owner_definition_id != context.owner_definition_id
+            || !self.owner.is_valid_for_installation(self.installation_id)
+        {
+            return Err(OwnerBootstrapAuthorizationError::WrongOwner);
+        }
+        if &self.locked_input_digest != context.locked_input_digest
+            || &self.input_digest != context.input_digest
+        {
+            return Err(OwnerBootstrapAuthorizationError::WrongInputDigest);
+        }
+        if self.desired_revision != context.desired_revision
+            || self.apply_sequence != context.apply_sequence
+            || self.desired_revision == 0
+            || self.apply_sequence == 0
+            || &self.target_plan_digest != context.target_plan_digest
+        {
+            return Err(OwnerBootstrapAuthorizationError::WrongApply);
+        }
+        if self.idempotency_key != context.idempotency_key || self.idempotency_key.trim().is_empty()
+        {
+            return Err(OwnerBootstrapAuthorizationError::WrongIdempotencyKey);
+        }
+        if self.initiator.actor_id.trim().is_empty()
+            || self.initiator.actor_kind.trim().is_empty()
+            || self.initiator.authority.trim().is_empty()
+            || self.original_actor_id.is_nil()
+            || self.authorization_revision == 0
+            || self.organization_revision == 0
+            || self.correlation_id.is_nil()
+            || self.jti.is_nil()
+        {
+            return Err(OwnerBootstrapAuthorizationError::InvalidIdentity);
+        }
+        let lifetime = self.expires_at - self.issued_at;
+        if self.issued_at > context.now
+            || self.expires_at <= context.now
+            || lifetime <= chrono::Duration::zero()
+            || lifetime
+                > chrono::Duration::seconds(OWNER_BOOTSTRAP_AUTHORIZATION_MAX_LIFETIME_SECONDS)
+        {
+            return Err(OwnerBootstrapAuthorizationError::Expired);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum OwnerBootstrapAuthorizationError {
+    #[error("owner bootstrap authorization schema is unsupported")]
+    UnsupportedSchema,
+    #[error("owner bootstrap authorization belongs to another owner")]
+    WrongOwner,
+    #[error("owner bootstrap authorization binds another input")]
+    WrongInputDigest,
+    #[error("owner bootstrap authorization binds another apply")]
+    WrongApply,
+    #[error("owner bootstrap authorization binds another idempotency key")]
+    WrongIdempotencyKey,
+    #[error("owner bootstrap authorization identity is invalid")]
+    InvalidIdentity,
+    #[error("owner bootstrap authorization is not currently valid")]
+    Expired,
+}
+
 pub const BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1: u16 = 1;
 pub const BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_MAX_LIFETIME_SECONDS: i64 = 60;
 pub const BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1: u16 = 1;
@@ -536,9 +663,12 @@ pub enum BootstrapDependencyValidationAuthorizationError {
 pub struct BootstrapDependencyValidationAuthorizationIssueRequestV1 {
     pub installation_id: Uuid,
     pub owner_definition_id: String,
+    pub locked_input_digest: ArtifactDigest,
     pub input_digest: ArtifactDigest,
+    pub input: Value,
     pub desired_revision: u64,
     pub apply_sequence: u64,
+    pub idempotency_key: String,
     pub apply_authorization: SignedEnvelopeV1<ApplyAuthorizationV1>,
 }
 
@@ -566,6 +696,7 @@ pub struct BootstrapDependencyValidationInvocationV1 {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BootstrapDependencyValidationAuthorizationIssueResponseV1 {
+    pub authorization: SignedEnvelopeV1<OwnerBootstrapAuthorizationV1>,
     pub validation: Option<BootstrapDependencyValidationInvocationV1>,
 }
 
@@ -577,7 +708,9 @@ pub struct OwnerBootstrapRequestV1<T> {
     pub apply_sequence: u64,
     pub target_plan_digest: ArtifactDigest,
     pub idempotency_key: String,
+    pub locked_input_digest: ArtifactDigest,
     pub input_digest: ArtifactDigest,
+    pub authorization: SignedEnvelopeV1<OwnerBootstrapAuthorizationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependency_validation: Option<BootstrapDependencyValidationInvocationV1>,
     pub input: T,
@@ -587,12 +720,63 @@ impl<T: Serialize> OwnerBootstrapRequestV1<T> {
     pub fn validate_input_digest(&self) -> Result<bool, serde_json::Error> {
         Ok(canonical_digest(&self.input)? == self.input_digest)
     }
+
+    pub fn validate_authorization_for(
+        &self,
+        verifier: &PurposeBoundVerifyingKeyV1,
+        owner: &AuthorizationAudienceV1,
+        owner_definition_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), OwnerBootstrapRequestAuthorizationError> {
+        verifier.verify(&self.authorization)?;
+        self.authorization
+            .payload
+            .validate_for(&OwnerBootstrapAuthorizationContextV1 {
+                installation_id: self.installation_id,
+                owner,
+                owner_definition_id,
+                locked_input_digest: &self.locked_input_digest,
+                input_digest: &self.input_digest,
+                desired_revision: self.desired_revision,
+                apply_sequence: self.apply_sequence,
+                target_plan_digest: &self.target_plan_digest,
+                idempotency_key: &self.idempotency_key,
+                now,
+            })?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum OwnerBootstrapRequestAuthorizationError {
+    #[error(transparent)]
+    Envelope(#[from] ProtocolEnvelopeError),
+    #[error(transparent)]
+    Authorization(#[from] OwnerBootstrapAuthorizationError),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnerBootstrapResponseV1 {
     pub receipt: BootstrapReceiptV1,
+    pub signed_receipt: SignedEnvelopeV1<BootstrapReceiptV1>,
+}
+
+impl OwnerBootstrapResponseV1 {
+    pub fn signed(
+        receipt: BootstrapReceiptV1,
+        signer: &PurposeBoundSigningKeyV1,
+    ) -> Result<Self, ProtocolEnvelopeError> {
+        let signed_receipt = signer.sign(receipt.clone())?;
+        Ok(Self {
+            receipt,
+            signed_receipt,
+        })
+    }
+
+    pub fn has_exact_signed_receipt(&self) -> bool {
+        self.signed_receipt.payload == self.receipt
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -837,6 +1021,37 @@ pub fn module_instance_id(installation_id: Uuid, definition_id: &str) -> Uuid {
     Uuid::from_bytes(bytes)
 }
 
+/// Returns an owner-local physical identity derived from a logical bootstrap
+/// key. Blueprints retain only the logical key; the owner emits this UUID only
+/// through its signed bootstrap read-back.
+pub fn owner_resource_id(
+    installation_id: Uuid,
+    owner_definition_id: &str,
+    resource_kind: &str,
+    logical_key: &str,
+) -> Uuid {
+    let digest = canonical_digest(&(
+        installation_id,
+        owner_definition_id,
+        resource_kind,
+        logical_key,
+        "owner-bootstrap-resource",
+    ))
+    .expect("owner bootstrap identity inputs are always serializable");
+    let hex = digest
+        .as_str()
+        .strip_prefix("sha256:")
+        .expect("canonical digests use the sha256 prefix");
+    let mut bytes = [0_u8; 16];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16)
+            .expect("canonical digests contain hexadecimal bytes");
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x80;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResolvedBootstrapDependencyValidationV1 {
     pub target: BootstrapDependencyValidationTargetV1,
@@ -850,6 +1065,7 @@ pub fn resolve_bootstrap_dependency_validation(
     lockfile: &ApplicationLockfileV1,
     module: &ResolvedModuleReleaseV1,
     manifest: &ModuleManifest,
+    resolved_input: Option<&Value>,
 ) -> Result<Option<ResolvedBootstrapDependencyValidationV1>, BootstrapValidationResolutionError> {
     if manifest.definition_id.as_str() != module.definition_id
         || manifest.release_version != module.version
@@ -910,10 +1126,12 @@ pub fn resolve_bootstrap_dependency_validation(
     else {
         return Err(BootstrapValidationResolutionError::InlineBootstrapRequired);
     };
-    if !receipt_bindings.is_empty() {
-        return Err(BootstrapValidationResolutionError::ReceiptBindingsUnsupported);
-    }
-    let payload = value
+    let payload_source = if receipt_bindings.is_empty() {
+        value
+    } else {
+        resolved_input.ok_or(BootstrapValidationResolutionError::ReceiptBindingsUnresolved)?
+    };
+    let payload = payload_source
         .pointer(&declaration.payload_pointer)
         .cloned()
         .ok_or(BootstrapValidationResolutionError::PayloadMissing)?;
@@ -946,8 +1164,8 @@ pub enum BootstrapValidationResolutionError {
     ProviderInvalid,
     #[error("bootstrap validation requires an inline bootstrap input")]
     InlineBootstrapRequired,
-    #[error("bootstrap validation cannot depend on unresolved receipt bindings")]
-    ReceiptBindingsUnsupported,
+    #[error("bootstrap validation receipt bindings have not been resolved")]
+    ReceiptBindingsUnresolved,
     #[error("bootstrap validation payload is absent at the declared pointer")]
     PayloadMissing,
     #[error("bootstrap validation canonicalization failed: {0}")]
@@ -1998,6 +2216,59 @@ mod tests {
     }
 
     #[test]
+    fn sprint_8b_reference_blueprint_is_uuid_free_and_resolves_owner_order() {
+        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8b/blueprints/reference.json"
+        )))
+        .expect("Sprint 8B reference Blueprint");
+        let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8b/catalogs/local-release-catalog.json"
+        )))
+        .expect("Sprint 8B release catalog");
+        fn assert_no_physical_uuid(value: &Value) {
+            match value {
+                Value::String(value) => assert!(
+                    Uuid::parse_str(value).is_err(),
+                    "owner bootstrap input predicts physical UUID {value}"
+                ),
+                Value::Array(values) => values.iter().for_each(assert_no_physical_uuid),
+                Value::Object(values) => values.values().for_each(assert_no_physical_uuid),
+                _ => {}
+            }
+        }
+        if let Some(BootstrapInputV1::Inline { value, .. }) = blueprint.core.bootstrap.as_ref() {
+            assert_no_physical_uuid(value);
+        }
+        for module in &blueprint.modules {
+            if let Some(BootstrapInputV1::Inline { value, .. }) = module.bootstrap.as_ref() {
+                assert_no_physical_uuid(value);
+            }
+        }
+        let lockfile = resolve(&blueprint, &catalog).expect("Sprint 8B reference composition");
+        let bootstrap_owners = lockfile
+            .materialization_plan
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                MaterializationActionV1::Bootstrap { owner, .. } => Some(owner.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            bootstrap_owners,
+            [
+                "core",
+                "tessara.datasets",
+                "tessara.components",
+                "tessara.dashboards",
+                "tessara.reference.scoped-records"
+            ]
+        );
+    }
+
+    #[test]
     fn module_instance_identity_is_stable_and_definition_scoped() {
         let installation_id = Uuid::parse_str("01980000-0000-7000-8000-00000000006f").unwrap();
         assert_eq!(
@@ -2007,6 +2278,44 @@ mod tests {
         assert_ne!(
             module_instance_id(installation_id, "tessara.dashboards"),
             module_instance_id(installation_id, "tessara.reference.scoped-records")
+        );
+    }
+
+    #[test]
+    fn owner_bootstrap_resource_identity_is_stable_and_logical_key_scoped() {
+        let installation_id = Uuid::from_u128(0x8b);
+        let component = owner_resource_id(
+            installation_id,
+            "tessara.components",
+            "component",
+            "component.dataset-table",
+        );
+        assert_eq!(
+            component,
+            owner_resource_id(
+                installation_id,
+                "tessara.components",
+                "component",
+                "component.dataset-table",
+            )
+        );
+        assert_ne!(
+            component,
+            owner_resource_id(
+                installation_id,
+                "tessara.components",
+                "component-version",
+                "component.dataset-table",
+            )
+        );
+        assert_ne!(
+            component,
+            owner_resource_id(
+                installation_id,
+                "tessara.dashboards",
+                "dashboard",
+                "component.dataset-table",
+            )
         );
     }
 
@@ -2526,54 +2835,122 @@ mod tests {
     }
 
     #[test]
-    fn sprint_8a_bootstrap_dependency_validation_is_exact_and_opt_in() {
-        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../deploy/sprint-8a/blueprints/reference.json"
-        )))
+    fn sprint_8b_bootstrap_dependency_validation_is_exact_and_opt_in() {
+        let component_manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-component-module/manifest.json"))
+                .unwrap();
+        let dashboard_manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-dashboard-module/manifest.json"))
+                .unwrap();
+        let scoped_records_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../tessara-reference-scoped-records/manifest.json"
+        ))
         .unwrap();
-        let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../deploy/sprint-8a/catalogs/local-release-catalog.json"
-        )))
-        .unwrap();
+        let mut catalog = catalog();
+        catalog.module_releases = vec![
+            ModuleCatalogReleaseV1 {
+                definition_id: "tessara.datasets".into(),
+                version: Version::new(1, 0, 0),
+                manifest_digest: digest('8'),
+                runtime_image: digest('7'),
+                deployment_profile: "tessara-oci-v1".into(),
+                configuration_schema_version: "1.0.0".into(),
+                bootstrap_schema_version: Some("tessara.io/dataset-bootstrap/v1".into()),
+                provided_contracts: BTreeMap::from([(
+                    "tessara.datasets.dataset-major-line".into(),
+                    Version::new(2, 0, 0),
+                )]),
+                dependencies: Vec::new(),
+                feature_declarations: Vec::new(),
+                contribution_schemas: BTreeMap::new(),
+                configuration_schema: json!({"type":"object"}),
+            },
+            ModuleCatalogReleaseV1 {
+                definition_id: "tessara.components".into(),
+                version: component_manifest.release_version.clone(),
+                manifest_digest: canonical_digest(&component_manifest).unwrap(),
+                runtime_image: digest('6'),
+                deployment_profile: "tessara-oci-v1".into(),
+                configuration_schema_version: "1.0.0".into(),
+                bootstrap_schema_version: Some("tessara.io/component-bootstrap/v1".into()),
+                provided_contracts: BTreeMap::new(),
+                dependencies: vec![ContractDependencyV1 {
+                    binding_key: "tessara.components.dataset-major-line".into(),
+                    contract_id: "tessara.datasets.dataset-major-line".into(),
+                    version_requirement: VersionReq::parse("=2.0.0").unwrap(),
+                    optional: false,
+                }],
+                feature_declarations: Vec::new(),
+                contribution_schemas: BTreeMap::new(),
+                configuration_schema: json!({"type":"object"}),
+            },
+        ];
+        let mut blueprint = blueprint();
+        blueprint.modules = vec![
+            ModuleSelectionV1 {
+                definition_id: "tessara.datasets".into(),
+                version_requirement: VersionReq::parse("=1.0.0").unwrap(),
+                enabled: true,
+                dependency_bindings: BTreeMap::new(),
+                configuration: json!({}),
+                bootstrap: None,
+            },
+            ModuleSelectionV1 {
+                definition_id: "tessara.components".into(),
+                version_requirement: VersionReq::parse(&format!(
+                    "={}",
+                    component_manifest.release_version
+                ))
+                .unwrap(),
+                enabled: true,
+                dependency_bindings: BTreeMap::from([(
+                    "tessara.components.dataset-major-line".into(),
+                    "tessara.datasets".into(),
+                )]),
+                configuration: json!({}),
+                bootstrap: Some(BootstrapInputV1::Inline {
+                    schema_version: "tessara.io/component-bootstrap/v1".into(),
+                    value: json!({
+                        "schema_version": "tessara.io/component-bootstrap/v1",
+                        "dependency_validation": {
+                            "schema_version": 2,
+                            "items": []
+                        },
+                        "components": []
+                    }),
+                    receipt_bindings: Vec::new(),
+                }),
+            },
+        ];
         let lockfile = resolve(&blueprint, &catalog).unwrap();
-        let manifests: Vec<ModuleManifest> = [
-            include_str!("../../tessara-component-module/manifest.json"),
-            include_str!("../../tessara-dashboard-module/manifest.json"),
-            include_str!("../../tessara-reference-scoped-records/manifest.json"),
-        ]
-        .into_iter()
-        .map(|source| serde_json::from_str(source).unwrap())
-        .collect();
-
-        let resolved = manifests
+        let component_module = lockfile
+            .modules
             .iter()
-            .map(|manifest| {
-                let module = lockfile
-                    .modules
-                    .iter()
-                    .find(|module| module.definition_id == manifest.definition_id.as_str())
-                    .unwrap();
-                (
-                    manifest.definition_id.as_str(),
-                    resolve_bootstrap_dependency_validation(&lockfile, module, manifest).unwrap(),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        let component = resolved["tessara.components"].as_ref().unwrap();
+            .find(|module| module.definition_id == "tessara.components")
+            .unwrap();
+        let component = resolve_bootstrap_dependency_validation(
+            &lockfile,
+            component_module,
+            &component_manifest,
+            None,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(
             component.target,
             BootstrapDependencyValidationTargetV1 {
                 dependency_binding: "tessara.components.dataset-major-line".into(),
                 functional_contract: "tessara.datasets.dataset-major-line".into(),
-                functional_contract_version: Version::new(1, 0, 0),
+                functional_contract_version: Version::new(2, 0, 0),
                 action: "datasets.bootstrap_validate".into(),
                 method: ServiceActionMethod::Post,
                 path: "/api/private/datasets/bootstrap-validation".into(),
-                audience: AuthorizationAudienceV1::CoreInstallation {
-                    installation_id: lockfile.installation_id,
+                audience: AuthorizationAudienceV1::ModuleInstance {
+                    module_instance_id: module_instance_id(
+                        lockfile.installation_id,
+                        "tessara.datasets",
+                    ),
+                    module_definition_id: "tessara.datasets".parse().unwrap(),
                 },
                 payload_pointer: "/dependency_validation".into(),
             }
@@ -2593,8 +2970,12 @@ mod tests {
             component.payload,
             value.pointer("/dependency_validation").unwrap().clone()
         );
-        assert_eq!(resolved["tessara.dashboards"], None);
-        assert_eq!(resolved["tessara.reference.scoped-records"], None);
+        assert!(dashboard_manifest.bootstrap_dependency_validation.is_none());
+        assert!(
+            scoped_records_manifest
+                .bootstrap_dependency_validation
+                .is_none()
+        );
     }
 
     #[test]

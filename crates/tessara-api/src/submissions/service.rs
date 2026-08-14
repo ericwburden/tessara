@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use serde_json::Value;
-use sqlx::PgPool;
-use tessara_submissions::{RequiredFieldStatus, ensure_required_values_present};
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
@@ -125,20 +124,48 @@ pub async fn save_submission_values(
     values: HashMap<String, Value>,
 ) -> ApiResult<Uuid> {
     let access = require_submission_access(pool, account, submission_id).await?;
-    let form_version_id =
-        require_draft_submission_status(submission_id, &access.status, access.form_version_id)?;
-    let fields = repo::fields_by_key(pool, form_version_id).await?;
+    let mut transaction = pool.begin().await?;
+    let locked = sqlx::query(
+        "SELECT form_version_id,status::text AS status
+           FROM submissions WHERE id=$1 FOR UPDATE",
+    )
+    .bind(submission_id)
+    .fetch_optional(&mut *transaction)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
+    let form_version_id: Uuid = locked.try_get("form_version_id")?;
+    let status: String = locked.try_get("status")?;
+    if form_version_id != access.form_version_id {
+        return Err(ApiError::Conflict(
+            "submission form identity changed during save".into(),
+        ));
+    }
+    require_draft_submission_status(submission_id, &status, form_version_id)?;
+    let fields = repo::fields_by_key_tx(&mut transaction, form_version_id).await?;
 
     for (key, value) in values {
         let field = fields
             .get(&key)
             .ok_or_else(|| ApiError::BadRequest(format!("unknown form field '{key}'")))?;
         validate_field_value(field.field_type, &value)?;
-        repo::upsert_submission_value(pool, submission_id, form_version_id, field.id, value)
-            .await?;
+        repo::upsert_submission_value_tx(
+            &mut transaction,
+            submission_id,
+            form_version_id,
+            field.id,
+            value,
+        )
+        .await?;
     }
 
-    repo::audit_submission(pool, submission_id, "save_draft", Some(account.account_id)).await?;
+    repo::audit_submission_tx(
+        &mut transaction,
+        submission_id,
+        "save_draft",
+        Some(account.account_id),
+    )
+    .await?;
+    transaction.commit().await?;
     Ok(submission_id)
 }
 
@@ -147,38 +174,14 @@ pub async fn submit_submission(
     account: &auth::AccountContext,
     submission_id: Uuid,
 ) -> ApiResult<Uuid> {
-    let access = require_submission_access(pool, account, submission_id).await?;
-    let form_version_id =
-        require_draft_submission_status(submission_id, &access.status, access.form_version_id)?;
-    let fields = repo::fields_by_key(pool, form_version_id).await?;
-    let saved_values = repo::saved_values_by_field_id(pool, submission_id).await?;
+    require_submission_access(pool, account, submission_id).await?;
 
-    for field in fields.values() {
-        if let Some(value) = saved_values.get(&field.id) {
-            validate_field_value(field.field_type, value)?;
-        }
-    }
-
-    ensure_required_values_present(fields.values().map(|field| {
-        RequiredFieldStatus {
-            key: &field.key,
-            required: field.required,
-            has_value: saved_values
-                .get(&field.id)
-                .map(saved_value_counts_as_present)
-                .unwrap_or(false),
-        }
-    }))
-    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-
-    if !repo::mark_submission_submitted(pool, submission_id).await? {
-        return Err(ApiError::BadRequest(
-            "submitted records are immutable in the initial workflow".into(),
-        ));
-    }
-
-    workflows::complete_workflow_step_and_advance(pool, submission_id).await?;
-    repo::audit_submission(pool, submission_id, "submit", Some(account.account_id)).await?;
+    crate::response_owner_actions::submit_existing_response(
+        pool,
+        account.account_id,
+        submission_id,
+    )
+    .await?;
     Ok(submission_id)
 }
 
@@ -265,13 +268,4 @@ async fn ensure_submission_row_access(
     }
 
     Ok(())
-}
-
-fn saved_value_counts_as_present(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::String(value) => !value.trim().is_empty(),
-        Value::Array(values) => values.iter().any(saved_value_counts_as_present),
-        _ => true,
-    }
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 84,
+  "expected_total": 95,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
@@ -52,7 +52,14 @@
         "canonical module UI visual baselines › Components editor at 390 px (dark)",
         "canonical module UI visual baselines › Components versions at 768 px",
         "canonical module UI visual baselines › Components viewer at 1280 px",
-        "canonical module UI visual baselines › Components, Dashboards, and Scoped Records share one module canvas"
+        "canonical module UI visual baselines › Components, Dashboards, and Scoped Records share one module canvas",
+        "canonical module UI visual baselines › Datasets directory at 1440 px (light)",
+        "canonical module UI visual baselines › Datasets editor at 390 px (light)",
+        "canonical module UI visual baselines › Datasets directory at 1440 px (dark)",
+        "canonical module UI visual baselines › Datasets editor at 390 px (dark)",
+        "canonical module UI visual baselines › Datasets revisions at 1024 px",
+        "canonical module UI visual baselines › Datasets preview at 1440 px",
+        "canonical module UI visual baselines › Datasets, Components, Dashboards, and Scoped Records share one module canvas"
       ]
     },
     {
@@ -82,6 +89,15 @@
         "dataset source picker keeps Version N major-line fields after a newer major exists",
         "admin can review and publish a dataset draft revision",
         "frozen Dataset document routes preserve direct-load and refresh ownership"
+      ]
+    },
+    {
+      "path": "datasets-module.spec.ts",
+      "tests": [
+        "Sprint 8B independent Dataset module › editor options use only Dataset-owned browser routes",
+        "Sprint 8B independent Dataset module › synchronous refresh preserves last-good data and atomically promotes the full Dataset dependency closure",
+        "Sprint 8B independent Dataset module › reverse consumers distinguish authorized empty unavailable and undisclosed states",
+        "Sprint 8B independent Dataset module › mutation replay and static route precedence remain exact"
       ]
     },
     {

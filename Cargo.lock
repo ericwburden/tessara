@@ -4674,14 +4674,15 @@ dependencies = [
  "sha2",
  "sqlx",
  "tessara-composition",
+ "tessara-control-plane-contract",
  "tessara-core",
- "tessara-data-ops",
- "tessara-datasets",
  "tessara-datasets-contract",
  "tessara-forms",
+ "tessara-forms-contract",
  "tessara-hierarchy",
  "tessara-module-contract",
  "tessara-reference-scoped-records",
+ "tessara-responses-contract",
  "tessara-submissions",
  "tessara-web",
  "thiserror 2.0.18",
@@ -4699,7 +4700,7 @@ version = "0.1.0"
 
 [[package]]
 name = "tessara-component-module"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4789,6 +4790,15 @@ dependencies = [
  "sha2",
  "tessara-module-contract",
  "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "tessara-control-plane-contract"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "uuid",
 ]
 
@@ -4890,15 +4900,63 @@ dependencies = [
 ]
 
 [[package]]
-name = "tessara-datasets"
-version = "0.1.0"
+name = "tessara-dataset-module"
+version = "1.0.0"
 dependencies = [
+ "anyhow",
+ "axum",
+ "base64",
+ "chrono",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde_jcs",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tessara-composition",
+ "tessara-control-plane-contract",
  "tessara-data-ops",
+ "tessara-dataset-ui",
+ "tessara-datasets-contract",
+ "tessara-forms-contract",
+ "tessara-module-contract",
+ "tessara-module-ui",
+ "tessara-responses-contract",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "tessara-dataset-ui"
+version = "1.0.0"
+dependencies = [
+ "any_spawner",
+ "chrono",
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-datasets-contract",
+ "tessara-module-contract",
+ "tessara-module-ui",
+ "tessara-web-data-ops",
+ "tessara-web-http",
+ "uuid",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
 name = "tessara-datasets-contract"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4928,6 +4986,18 @@ dependencies = [
 [[package]]
 name = "tessara-forms"
 version = "0.1.0"
+
+[[package]]
+name = "tessara-forms-contract"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_jcs",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "uuid",
+]
 
 [[package]]
 name = "tessara-hierarchy"
@@ -5080,6 +5150,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessara-responses-contract"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_jcs",
+ "serde_json",
+ "sha2",
+ "tessara-module-contract",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "tessara-submissions"
 version = "0.1.0"
 
@@ -5089,6 +5172,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64",
  "chrono",
  "reqwest",
  "rusqlite",
@@ -5120,7 +5204,6 @@ dependencies = [
  "serde_json",
  "tessara-module-contract",
  "tessara-module-ui",
- "tessara-web-datasets",
  "tessara-web-forms",
  "tessara-web-http",
  "tessara-web-organization",
@@ -5138,23 +5221,6 @@ dependencies = [
  "icons",
  "leptos",
  "tessara-module-ui",
-]
-
-[[package]]
-name = "tessara-web-datasets"
-version = "0.1.0"
-dependencies = [
- "gloo-net",
- "icons",
- "js-sys",
- "leptos",
- "serde",
- "serde_json",
- "tessara-module-ui",
- "tessara-web-data-ops",
- "tessara-web-http",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

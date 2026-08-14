@@ -64,7 +64,7 @@ async function findSeedEndpointLiterals(directory) {
 
 try {
   await runGuardProbe({ acceptance: "1", dataState: "upgraded", expectedCalls: 0 });
-  await runGuardProbe({ acceptance: "1", dataState: "fresh", expectedCalls: 1 });
+  await runGuardProbe({ acceptance: "1", dataState: "fresh", expectedCalls: 0 });
   await runGuardProbe({ acceptance: undefined, dataState: undefined, expectedCalls: 1 });
 
   process.env.TESSARA_PLAYWRIGHT_ACCEPTANCE = "1";
@@ -94,4 +94,4 @@ try {
   }
 }
 
-console.log("Playwright demo seed guard and endpoint inventory self-test passed.");
+console.log("Playwright Reference fixture guard and demo endpoint inventory self-test passed.");

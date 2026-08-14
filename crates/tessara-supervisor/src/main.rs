@@ -8,6 +8,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use tessara_composition::{
     ApplicationLockfileV1, ApplyAuthorizationV1,
@@ -17,7 +18,10 @@ use tessara_composition::{
     InstallationReceiptV1, MaterializationActionV1, MaterializationPlanV1, OwnerBootstrapRequestV1,
     OwnerBootstrapResponseV1,
 };
-use tessara_module_contract::{ArtifactDigest, ProtocolSignaturePurposeV1, SignedEnvelopeV1};
+use tessara_module_contract::{
+    ArtifactDigest, MODULE_SERVICE_IDENTITIES_ENVIRONMENT, ModuleServiceIdentityRegistryV1,
+    ProtocolSignaturePurposeV1, PurposeBoundVerifyingKeyV1, SignedEnvelopeV1,
+};
 use tessara_supervisor::{
     MaterializationAdapter, RecordingAdapter, SupervisorError, SupervisorLedger,
 };
@@ -34,6 +38,8 @@ struct AppState {
     projection_token: String,
     module_control_key: String,
     local_cas_root: PathBuf,
+    module_service_identities: ModuleServiceIdentityRegistryV1,
+    core_bootstrap_receipt_verifier: PurposeBoundVerifyingKeyV1,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -78,6 +84,24 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "127.0.0.1:8090".into())
         .parse()?;
     let listener = tokio::net::TcpListener::bind(address).await?;
+    let module_service_identities = ModuleServiceIdentityRegistryV1::from_json(
+        &env::var(MODULE_SERVICE_IDENTITIES_ENVIRONMENT)
+            .with_context(|| format!("{MODULE_SERVICE_IDENTITIES_ENVIRONMENT} is required"))?,
+    )?;
+    let core_public_key: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(
+            env::var("TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY")
+                .context("TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY is required")?,
+        )?
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Core authorization public key must contain 32 bytes"))?;
+    let core_bootstrap_receipt_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
+        "tessara.core",
+        env::var("TESSARA_CORE_AUTHORIZATION_KEY_ID")
+            .unwrap_or_else(|_| "core-development-v1".into()),
+        ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+        core_public_key,
+    )?;
     let app = Router::new()
         .route("/health/live", get(|| async { StatusCode::NO_CONTENT }))
         .route("/health/ready", get(|| async { StatusCode::NO_CONTENT }))
@@ -104,6 +128,8 @@ async fn main() -> anyhow::Result<()> {
             local_cas_root: env::var_os("TESSARA_LOCAL_CAS_ROOT")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("/var/lib/tessara-supervisor/cas")),
+            module_service_identities,
+            core_bootstrap_receipt_verifier,
         });
     axum::serve(listener, app).await.context("serve Supervisor")
 }
@@ -369,6 +395,7 @@ impl OwnerHttpAdapter {
                 apply_module_enablement(state, lockfile, definition_id, *enabled).await?;
             }
         }
+        enroll_bootstrap_capabilities(state, lockfile).await?;
 
         for action in &lockfile.materialization_plan.actions {
             match action {
@@ -508,6 +535,58 @@ fn run_compose(
     Ok(())
 }
 
+async fn enroll_bootstrap_capabilities(
+    state: &AppState,
+    lockfile: &ApplicationLockfileV1,
+) -> anyhow::Result<()> {
+    let mut manifests = BTreeMap::new();
+    for module in lockfile.modules.iter().filter(|module| module.enabled) {
+        let base = state
+            .module_urls
+            .get(&module.definition_id)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no owner endpoint is configured for bootstrap capability enrollment for {}",
+                    module.definition_id
+                )
+            })?;
+        let manifest = state
+            .client
+            .get(format!("{}/api/manifest", base.trim_end_matches('/')))
+            .header("x-tessara-module-control-key", &state.module_control_key)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<tessara_module_contract::ModuleManifest>()
+            .await?;
+        let manifest_digest = tessara_composition::canonical_digest(&manifest)?;
+        anyhow::ensure!(
+            manifest.definition_id.as_str() == module.definition_id
+                && manifest.release_version == module.version
+                && manifest_digest == module.manifest_digest,
+            "live manifest for {} does not match its locked release identity",
+            module.definition_id
+        );
+        manifests.insert(module.definition_id.clone(), manifest);
+    }
+    let status = state
+        .client
+        .post(format!(
+            "{}/api/internal/composition/bootstrap-capabilities",
+            state.core_url.trim_end_matches('/')
+        ))
+        .header("x-tessara-supervisor-token", &state.projection_token)
+        .json(&serde_json::json!({"lockfile": lockfile, "manifests": manifests}))
+        .send()
+        .await?
+        .status();
+    anyhow::ensure!(
+        status.is_success(),
+        "Core bootstrap capability enrollment failed with HTTP {status}"
+    );
+    Ok(())
+}
+
 async fn apply_module_enablement(
     state: &AppState,
     lockfile: &ApplicationLockfileV1,
@@ -576,7 +655,7 @@ async fn invoke_bootstrap(
     input: &BootstrapInputV1,
     prior_receipts: &BTreeMap<String, BootstrapReceiptV1>,
 ) -> anyhow::Result<BootstrapReceiptV1> {
-    let mut request = prepare_bootstrap_request(
+    let prepared = prepare_bootstrap_request(
         BootstrapRequestContext {
             installation_id: lockfile.installation_id,
             desired_revision: lockfile.blueprint_revision,
@@ -588,17 +667,21 @@ async fn invoke_bootstrap(
         prior_receipts,
         &state.local_cas_root,
     )?;
-    if owner != "core" {
-        request.dependency_validation = issue_bootstrap_dependency_authorization(
-            state,
+    let authorization = issue_bootstrap_dependency_authorization(
+        state,
+        BootstrapAuthorizationIssueContext {
             owner,
-            &request.input_digest,
-            request.desired_revision,
-            request.apply_sequence,
+            idempotency_key: &prepared.idempotency_key,
+            locked_input_digest: &prepared.locked_input_digest,
+            input_digest: &prepared.input_digest,
+            input: &prepared.input,
+            desired_revision: prepared.desired_revision,
+            apply_sequence: prepared.apply_sequence,
             apply_authorization,
-        )
-        .await?;
-    }
+        },
+    )
+    .await?;
+    let request = prepared.authorize(authorization);
     let (url, header_name, header_value) = if owner == "core" {
         (
             format!(
@@ -635,6 +718,26 @@ async fn invoke_bootstrap(
     );
     let response: OwnerBootstrapResponseV1 = serde_json::from_slice(&body)?;
     anyhow::ensure!(
+        response.has_exact_signed_receipt(),
+        "bootstrap response does not contain its exact signed receipt"
+    );
+    if owner == "core" {
+        state
+            .core_bootstrap_receipt_verifier
+            .verify(&response.signed_receipt)?;
+    } else {
+        let definition_id = owner
+            .parse()
+            .map_err(|_| anyhow::anyhow!("bootstrap receipt owner is invalid"))?;
+        state
+            .module_service_identities
+            .verifier_for_purpose(
+                &definition_id,
+                ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+            )?
+            .verify(&response.signed_receipt)?;
+    }
+    anyhow::ensure!(
         response.receipt.owner == owner,
         "bootstrap receipt owner mismatch"
     );
@@ -647,12 +750,8 @@ async fn invoke_bootstrap(
 
 async fn issue_bootstrap_dependency_authorization(
     state: &AppState,
-    owner: &str,
-    input_digest: &ArtifactDigest,
-    desired_revision: u64,
-    apply_sequence: u64,
-    apply_authorization: &SignedEnvelopeV1<ApplyAuthorizationV1>,
-) -> anyhow::Result<Option<tessara_composition::BootstrapDependencyValidationInvocationV1>> {
+    context: BootstrapAuthorizationIssueContext<'_>,
+) -> anyhow::Result<BootstrapDependencyValidationAuthorizationIssueResponseV1> {
     let response = state
         .client
         .post(format!(
@@ -661,12 +760,15 @@ async fn issue_bootstrap_dependency_authorization(
         ))
         .header("x-tessara-supervisor-token", &state.projection_token)
         .json(&BootstrapDependencyValidationAuthorizationIssueRequestV1 {
-            installation_id: apply_authorization.payload.installation_id,
-            owner_definition_id: owner.to_string(),
-            input_digest: input_digest.clone(),
-            desired_revision,
-            apply_sequence,
-            apply_authorization: apply_authorization.clone(),
+            installation_id: context.apply_authorization.payload.installation_id,
+            owner_definition_id: context.owner.to_string(),
+            locked_input_digest: context.locked_input_digest.clone(),
+            input_digest: context.input_digest.clone(),
+            input: context.input.clone(),
+            desired_revision: context.desired_revision,
+            apply_sequence: context.apply_sequence,
+            idempotency_key: context.idempotency_key.to_string(),
+            apply_authorization: context.apply_authorization.clone(),
         })
         .send()
         .await?;
@@ -674,13 +776,24 @@ async fn issue_bootstrap_dependency_authorization(
     let body = response.bytes().await?;
     anyhow::ensure!(
         status.is_success(),
-        "{owner} bootstrap dependency authorization failed with HTTP {status}: {}",
+        "{} bootstrap dependency authorization failed with HTTP {status}: {}",
+        context.owner,
         String::from_utf8_lossy(&body)
     );
-    Ok(
-        serde_json::from_slice::<BootstrapDependencyValidationAuthorizationIssueResponseV1>(&body)?
-            .validation,
-    )
+    Ok(serde_json::from_slice::<
+        BootstrapDependencyValidationAuthorizationIssueResponseV1,
+    >(&body)?)
+}
+
+struct BootstrapAuthorizationIssueContext<'a> {
+    owner: &'a str,
+    idempotency_key: &'a str,
+    locked_input_digest: &'a ArtifactDigest,
+    input_digest: &'a ArtifactDigest,
+    input: &'a serde_json::Value,
+    desired_revision: u64,
+    apply_sequence: u64,
+    apply_authorization: &'a SignedEnvelopeV1<ApplyAuthorizationV1>,
 }
 
 struct BootstrapRequestContext {
@@ -690,19 +803,50 @@ struct BootstrapRequestContext {
     target_plan_digest: ArtifactDigest,
 }
 
+struct PreparedBootstrapRequest {
+    installation_id: Uuid,
+    desired_revision: u64,
+    apply_sequence: u64,
+    target_plan_digest: ArtifactDigest,
+    idempotency_key: String,
+    locked_input_digest: ArtifactDigest,
+    input_digest: ArtifactDigest,
+    input: serde_json::Value,
+}
+
+impl PreparedBootstrapRequest {
+    fn authorize(
+        self,
+        authorization: BootstrapDependencyValidationAuthorizationIssueResponseV1,
+    ) -> OwnerBootstrapRequestV1<serde_json::Value> {
+        OwnerBootstrapRequestV1 {
+            installation_id: self.installation_id,
+            desired_revision: self.desired_revision,
+            apply_sequence: self.apply_sequence,
+            target_plan_digest: self.target_plan_digest,
+            idempotency_key: self.idempotency_key,
+            locked_input_digest: self.locked_input_digest,
+            input_digest: self.input_digest,
+            authorization: authorization.authorization,
+            dependency_validation: authorization.validation,
+            input: self.input,
+        }
+    }
+}
+
 fn prepare_bootstrap_request(
     context: BootstrapRequestContext,
     owner: &str,
     input: &BootstrapInputV1,
     prior_receipts: &BTreeMap<String, BootstrapReceiptV1>,
     local_cas_root: &std::path::Path,
-) -> anyhow::Result<OwnerBootstrapRequestV1<serde_json::Value>> {
+) -> anyhow::Result<PreparedBootstrapRequest> {
     let input_bytes = tessara_composition::acquire_bootstrap_input(input, local_cas_root)?;
     let acquired_value: serde_json::Value = serde_json::from_slice(&input_bytes)?;
+    let locked_input_digest = tessara_composition::canonical_digest(&acquired_value)?;
     if let BootstrapInputV1::LocalCas { digest, .. } = input {
-        let acquired_digest = tessara_composition::canonical_digest(&acquired_value)?;
         anyhow::ensure!(
-            &acquired_digest == digest,
+            &locked_input_digest == digest,
             "bootstrap input digest does not match its locked identity"
         );
     }
@@ -712,7 +856,7 @@ fn prepare_bootstrap_request(
         prior_receipts,
     )?;
     let input_digest = tessara_composition::canonical_digest(&input_value)?;
-    Ok(OwnerBootstrapRequestV1 {
+    Ok(PreparedBootstrapRequest {
         installation_id: context.installation_id,
         desired_revision: context.desired_revision,
         apply_sequence: context.apply_sequence,
@@ -721,8 +865,8 @@ fn prepare_bootstrap_request(
             "composition:{}:{owner}:r{}:{input_digest}",
             context.installation_id, context.desired_revision
         ),
+        locked_input_digest,
         input_digest,
-        dependency_validation: None,
         input: input_value,
     })
 }

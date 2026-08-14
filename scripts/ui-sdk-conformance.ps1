@@ -53,6 +53,7 @@ try {
     $productSources = @(
         "crates/tessara-component-module", "crates/tessara-component-ui",
         "crates/tessara-dashboard-module", "crates/tessara-dashboard-ui",
+        "crates/tessara-dataset-module", "crates/tessara-web-datasets",
         "crates/tessara-reference-scoped-records", "crates/tessara-reference-module-sdk"
     )
     foreach ($sourceRoot in $productSources) {

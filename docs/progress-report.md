@@ -8,6 +8,48 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-11 - Sprint 8B Dataset Module Separation Kickoff
+
+- Status: kickoff planning complete; implementation has not started.
+- Branch: `codex/sprint-8b`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8b`.
+- Execution contract: `docs/sprints/sprint-8b-plan.md`.
+- Planned validation record: `docs/sprints/sprint-8b-verification.md`.
+- Policy-v2 validation contract:
+  `docs/sprints/sprint-8b-validation-contract.json` using the required
+  `phase8-module-extraction` profile.
+- Planned verification traces all 26 acceptance criteria plus one internal
+  implementation-exit gate through 24 exact implementation-readiness targets
+  and 31 ordered formal Readiness, Candidate Rehearsal, Preflight, SIT, and UAT
+  lanes. The formal Rust proof includes
+  `cargo test --workspace --all-features --locked --offline --jobs 1`; the
+  acceptance proof includes the full Playwright inventory, clean
+  materialization/no-op/recovery, source-cursor and Dataset-DAG atomicity,
+  deployed smoke, scripted and eleven-scenario manual UAT, and Dataset-only
+  upgrade/rollback.
+- Product blockers: none. Any newly discovered source-storage dependency or UI
+  ownership ambiguity must return to planning rather than preserve a hidden
+  Core coupling.
+- Product decision: Response synchronization is synchronous and incremental in
+  Sprint 8B. The current Response owner adds a transactional monotonically
+  increasing change sequence/log and exposes an opaque head plus stable paged
+  upsert/tombstone export. Dataset commits its cursor only with successful
+  materialization; timestamps are not watermarks. Streaming remains future
+  work over the same cursor/change-envelope semantics.
+- The planning pass inventories both forward and reverse Dataset edges: Forms,
+  Responses, scope and principal providers; Dataset dependency chains;
+  Component and Dashboard consumers; Form usage, Operations readiness, app
+  summary, and generic resource-resolution consumers; Dataset browser option
+  loading; and Core analytics/submission subtraction. Each edge has a matching
+  implementation slice and post-implementation proof.
+- Recommended first implementation slice: freeze Dataset v2 Module
+  Instance-owned contracts, all four Response/Form/scope/principal provider
+  contracts, the three reverse-consumer contract families, and executable
+  Core-subtraction/boundary assertions.
+- This kickoff created planning artifacts only. No product source, test,
+  migration, fixture, script, manifest, deployment, or generated asset change
+  has begun.
+
 ## 2026-08-11 - Sprint 8A Component Module Separation Closeout
 
 Sprint 8A is complete. Components now runs as an independently deployed

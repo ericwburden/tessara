@@ -40,20 +40,6 @@ const SUBMISSION_ID: &[ParameterSpec] = &[ParameterSpec {
     name: "submission_id",
     value_type: RouteParameterType::Uuid,
 }];
-const DATASET_ID: &[ParameterSpec] = &[ParameterSpec {
-    name: "dataset_id",
-    value_type: RouteParameterType::Uuid,
-}];
-const DATASET_REVISION_ID: &[ParameterSpec] = &[
-    ParameterSpec {
-        name: "dataset_id",
-        value_type: RouteParameterType::Uuid,
-    },
-    ParameterSpec {
-        name: "revision_id",
-        value_type: RouteParameterType::Uuid,
-    },
-];
 const FORMS_READ: &[&str] = &["forms:read", "forms:manage"];
 const FORMS_MANAGE: &[&str] = &["forms:manage"];
 const WORKFLOWS_READ: &[&str] = &["workflows:read", "workflows:manage"];
@@ -64,8 +50,6 @@ const RESPONSES_READ: &[&str] = &[
     "submissions:manage",
 ];
 const RESPONSES_WRITE: &[&str] = &["submissions:respond", "submissions:manage"];
-const DATASETS_READ: &[&str] = &["datasets:read", "datasets:manage"];
-const DATASETS_MANAGE: &[&str] = &["datasets:manage"];
 const SCOPED_RECORDS_READ: &[&str] = &[
     "tessara.reference.scoped-records:read",
     "tessara.reference.scoped-records:manage",
@@ -203,14 +187,6 @@ fn route_spec(name: &str) -> Option<RouteSpec> {
         "workflows.create" | "workflows.edit" => (WORKFLOW_ID_OR_NONE(name), WORKFLOWS_MANAGE),
         "responses.directory" | "responses.detail" => (SUBMISSION_ID_OR_NONE(name), RESPONSES_READ),
         "responses.start" | "responses.edit" => (SUBMISSION_ID_OR_NONE(name), RESPONSES_WRITE),
-        "datasets.directory"
-        | "datasets.detail"
-        | "datasets.preview"
-        | "datasets.revisions"
-        | "datasets.revision_detail" => (dataset_parameters(name), DATASETS_READ),
-        "datasets.create" | "datasets.edit" | "datasets.revision_edit" => {
-            (dataset_parameters(name), DATASETS_MANAGE)
-        }
         "tessara.reference.scoped-records.directory" => (NONE, SCOPED_RECORDS_READ),
         _ => return None,
     };
@@ -239,14 +215,6 @@ fn route_name(name: &str) -> &'static str {
         "responses.start" => "responses.start",
         "responses.detail" => "responses.detail",
         "responses.edit" => "responses.edit",
-        "datasets.directory" => "datasets.directory",
-        "datasets.create" => "datasets.create",
-        "datasets.detail" => "datasets.detail",
-        "datasets.preview" => "datasets.preview",
-        "datasets.revisions" => "datasets.revisions",
-        "datasets.revision_detail" => "datasets.revision_detail",
-        "datasets.revision_edit" => "datasets.revision_edit",
-        "datasets.edit" => "datasets.edit",
         "tessara.reference.scoped-records.directory" => {
             "tessara.reference.scoped-records.directory"
         }
@@ -281,16 +249,6 @@ fn SUBMISSION_ID_OR_NONE(name: &str) -> &'static [ParameterSpec] {
     }
 }
 
-fn dataset_parameters(name: &str) -> &'static [ParameterSpec] {
-    match name {
-        "datasets.detail" | "datasets.preview" | "datasets.revisions" | "datasets.edit" => {
-            DATASET_ID
-        }
-        "datasets.revision_detail" | "datasets.revision_edit" => DATASET_REVISION_ID,
-        _ => NONE,
-    }
-}
-
 fn render_path(
     route: &str,
     parameters: &std::collections::BTreeMap<String, SemanticParameterValue>,
@@ -313,22 +271,6 @@ fn render_path(
         "responses.start" => "/responses/new".to_string(),
         "responses.detail" => format!("/responses/{}", uuid("submission_id")?),
         "responses.edit" => format!("/responses/{}/edit", uuid("submission_id")?),
-        "datasets.directory" => "/datasets".to_string(),
-        "datasets.create" => "/datasets/new".to_string(),
-        "datasets.detail" => format!("/datasets/{}", uuid("dataset_id")?),
-        "datasets.preview" => format!("/datasets/{}/preview", uuid("dataset_id")?),
-        "datasets.revisions" => format!("/datasets/{}/revisions", uuid("dataset_id")?),
-        "datasets.revision_detail" => format!(
-            "/datasets/{}/revisions/{}",
-            uuid("dataset_id")?,
-            uuid("revision_id")?
-        ),
-        "datasets.revision_edit" => format!(
-            "/datasets/{}/revisions/{}/edit",
-            uuid("dataset_id")?,
-            uuid("revision_id")?
-        ),
-        "datasets.edit" => format!("/datasets/{}/edit", uuid("dataset_id")?),
         "tessara.reference.scoped-records.directory" => "/reference/scoped-records".to_string(),
         _ => return None,
     })
@@ -377,7 +319,7 @@ mod tests {
                     route: SemanticRouteName::new("forms.directory").expect("route"),
                     parameters: BTreeMap::new(),
                 },
-                account("datasets:read"),
+                account("workflows:read"),
                 "semantic_destination_unauthorized",
             ),
         ];
@@ -394,20 +336,23 @@ mod tests {
     }
 
     #[test]
-    fn extracted_dashboard_destination_is_not_core_owned() {
+    fn independently_deployed_destinations_are_not_core_owned() {
         let installation_id = Uuid::new_v4();
-        let destination = SemanticDestination {
-            owner: ResourceOwner::CoreInstallation { installation_id },
-            route: SemanticRouteName::new("dashboards.directory").expect("route"),
-            parameters: BTreeMap::new(),
-        };
+        for route in ["datasets.directory", "dashboards.directory"] {
+            let destination = SemanticDestination {
+                owner: ResourceOwner::CoreInstallation { installation_id },
+                route: SemanticRouteName::new(route).expect("route"),
+                parameters: BTreeMap::new(),
+            };
 
-        let result = resolve(&destination, installation_id, &account("admin:all"));
-        assert_eq!(result.status, DestinationResolutionStatusV1::Rejected);
-        assert_eq!(
-            result.finding.as_ref().map(|finding| finding.code),
-            Some("semantic_destination_unknown")
-        );
+            let result = resolve(&destination, installation_id, &account("admin:all"));
+            assert_eq!(result.status, DestinationResolutionStatusV1::Rejected);
+            assert_eq!(
+                result.finding.as_ref().map(|finding| finding.code),
+                Some("semantic_destination_unknown"),
+                "{route} must be resolved by its enrolled module rather than Core"
+            );
+        }
     }
 
     #[test]
@@ -448,32 +393,6 @@ mod tests {
                 "responses.edit",
                 "/responses/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit",
             ),
-            ("datasets.directory", "/datasets"),
-            ("datasets.create", "/datasets/new"),
-            (
-                "datasets.detail",
-                "/datasets/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            ),
-            (
-                "datasets.preview",
-                "/datasets/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/preview",
-            ),
-            (
-                "datasets.revisions",
-                "/datasets/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/revisions",
-            ),
-            (
-                "datasets.revision_detail",
-                "/datasets/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/revisions/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            ),
-            (
-                "datasets.revision_edit",
-                "/datasets/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/revisions/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit",
-            ),
-            (
-                "datasets.edit",
-                "/datasets/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit",
-            ),
             (
                 "tessara.reference.scoped-records.directory",
                 "/reference/scoped-records",
@@ -494,22 +413,6 @@ mod tests {
                     "submission_id".to_string(),
                     SemanticParameterValue::Uuid(resource_id),
                 )]),
-                "datasets.detail" | "datasets.preview" | "datasets.revisions" | "datasets.edit" => {
-                    BTreeMap::from([(
-                        "dataset_id".to_string(),
-                        SemanticParameterValue::Uuid(resource_id),
-                    )])
-                }
-                "datasets.revision_detail" | "datasets.revision_edit" => BTreeMap::from([
-                    (
-                        "dataset_id".to_string(),
-                        SemanticParameterValue::Uuid(resource_id),
-                    ),
-                    (
-                        "revision_id".to_string(),
-                        SemanticParameterValue::Uuid(resource_id),
-                    ),
-                ]),
                 _ => BTreeMap::new(),
             };
             let destination = SemanticDestination {

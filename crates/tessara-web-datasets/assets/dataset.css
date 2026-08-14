@@ -1,0 +1,9 @@
+.module-scope--tessara-datasets .datasets-page,
+.module-scope--tessara-datasets .dataset-detail,
+.module-scope--tessara-datasets .dataset-editor {
+  min-width: 0;
+}
+
+.module-scope--tessara-datasets [data-dataset-preview] {
+  overflow: auto;
+}

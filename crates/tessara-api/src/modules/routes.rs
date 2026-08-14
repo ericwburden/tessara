@@ -556,26 +556,26 @@ async fn create_resource_reference(
 ) -> ModuleHttpResult<Json<super::dto::ResourceReferenceResponseV1>> {
     let Json(payload) = strict_json(payload)?;
     let installation_id = current_installation_id(&state).await?;
-    Ok(Json(reference::construct(
-        payload,
-        installation_id,
-        &auth.account,
-    )?))
+    Ok(Json(
+        reference::construct(&state, payload, installation_id, &auth.account).await?,
+    ))
 }
 
 async fn resolve_resource_reference(
     State(state): State<AppState>,
     auth: AuthenticatedRequest,
+    headers: HeaderMap,
     payload: Result<Json<ResolveResourceReferenceRequestV1>, JsonRejection>,
 ) -> ModuleHttpResult<Json<tessara_module_contract::ResourceResolutionV1>> {
     let Json(payload) = strict_json(payload)?;
     ensure_schema_v1(payload.schema_version)?;
     let installation_id = current_installation_id(&state).await?;
     let resolution = reference::resolve(
-        &state.pool,
+        &state,
         &payload.reference,
         installation_id,
-        &auth.account,
+        &auth,
+        crate::core_security::request_correlation_id_or_new(&headers),
     )
     .await?;
     Ok(Json(resolution))
@@ -584,16 +584,18 @@ async fn resolve_resource_reference(
 async fn observe_resource_reference(
     State(state): State<AppState>,
     auth: AuthenticatedRequest,
+    headers: HeaderMap,
     payload: Result<Json<ResolveResourceReferenceRequestV1>, JsonRejection>,
 ) -> ModuleHttpResult<Json<super::dto::ResourceObservationResponseV1>> {
     let Json(payload) = strict_json(payload)?;
     ensure_schema_v1(payload.schema_version)?;
     let installation_id = current_installation_id(&state).await?;
     let (resolution, observation) = reference::observe(
-        &state.pool,
+        &state,
         &payload.reference,
         installation_id,
-        &auth.account,
+        &auth,
+        crate::core_security::request_correlation_id_or_new(&headers),
     )
     .await?;
     Ok(Json(super::dto::ResourceObservationResponseV1 {
@@ -1102,15 +1104,15 @@ mod tests {
             installation_id: Uuid::nil(),
             revision: 7,
             entries: vec![NavigationPolicyEntry {
-                contribution_id: "tessara.datasets.navigation".to_string(),
-                definition_id: "tessara.datasets".to_string(),
-                destination: "datasets.directory".to_string(),
-                label: "Datasets".to_string(),
-                group: "Admin".to_string(),
-                reorder_band: "admin_between_administration_and_module_management".to_string(),
-                source_order_hint: 20,
+                contribution_id: "tessara.forms.navigation".to_string(),
+                definition_id: "tessara.forms".to_string(),
+                destination: "forms.directory".to_string(),
+                label: "Forms".to_string(),
+                group: "Main".to_string(),
+                reorder_band: "main_between_organization_and_operations".to_string(),
+                source_order_hint: 10,
                 default_policy_order: 0,
-                required_capabilities_any_of: vec!["datasets:read".to_string()],
+                required_capabilities_any_of: vec!["forms:read".to_string()],
                 visible: true,
                 order: 0,
             }],
@@ -1118,14 +1120,8 @@ mod tests {
 
         let response = navigation_policy_response(policy, false).expect("policy response");
         assert!(!response.can_manage_navigation);
-        assert_eq!(
-            response.contributions[0].before_core_anchor,
-            "module_management"
-        );
-        assert_eq!(
-            response.contributions[0].after_core_anchor,
-            "administration"
-        );
+        assert_eq!(response.contributions[0].before_core_anchor, "operations");
+        assert_eq!(response.contributions[0].after_core_anchor, "organization");
         assert!(
             response
                 .immutable_core_items

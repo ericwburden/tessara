@@ -1,21 +1,27 @@
 [package]
-name = "tessara-web-datasets"
-version = "0.1.0"
+name = "tessara-dataset-ui"
+version = "1.0.0"
 edition = "2024"
 publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
 hydrate = [
     "leptos/hydrate",
+    "tessara-module-ui/hydrate",
     "tessara-web-http/hydrate",
 ]
 ssr = [
     "leptos/ssr",
+    "tessara-module-ui/ssr",
 ]
 
 [dependencies]
 gloo-net = { workspace = true }
+any_spawner = { version = "0.3", features = ["wasm-bindgen"] }
 icons = { workspace = true }
 js-sys = { workspace = true }
 leptos = { workspace = true }
@@ -24,5 +30,11 @@ serde_json = { workspace = true }
 tessara-web-data-ops = { path = "../tessara-web-data-ops" }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-module-ui = { path = "../tessara-module-ui", features = ["components"] }
+tessara-module-contract = { path = "../tessara-module-contract" }
+tessara-datasets-contract = { path = "../tessara-datasets-contract" }
 wasm-bindgen = { workspace = true }
 web-sys = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+uuid = { workspace = true }

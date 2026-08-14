@@ -1,13 +1,14 @@
 //! Related dataset source table for form detail pages.
 
-use crate::FormDatasetSourceLink;
 use crate::support::pagination::pagination_page_start;
 use crate::support::text::text_matches;
+use crate::{FormDatasetSourceLink, FormDatasetSourcesState};
 use leptos::prelude::*;
 use tessara_module_ui::{SearchableDataTable, TablePaginationFooter};
 
 #[component]
 pub(crate) fn FormRelatedDatasetSourcesTable(
+    state: FormDatasetSourcesState,
     dataset_sources: Vec<FormDatasetSourceLink>,
 ) -> impl IntoView {
     let search = RwSignal::new(String::new());
@@ -23,6 +24,15 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
             .collect::<Vec<_>>()
     });
     let total_count = Memo::new(move |_| filtered_sources.get().len());
+
+    if let Some(message) = dataset_sources_state_message(state) {
+        return view! {
+            <div class="empty-state" role="status">
+                <p>{message}</p>
+            </div>
+        }
+        .into_any();
+    }
 
     view! {
         <div class="related-work-responsive-table">
@@ -52,10 +62,16 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                                 .take(page_size.get())
                                 .cloned()
                                 .map(|source| {
+                                    let href = dataset_source_href(&source);
                                     view! {
                                         <tr>
                                             <th scope="row">
-                                                <a class="data-table__primary-link" href=format!("/datasets/{}", source.dataset_id)>{source.dataset_name}</a>
+                                                {match href {
+                                                    Some(href) => view! {
+                                                        <a class="data-table__primary-link" href=href>{source.dataset_name}</a>
+                                                    }.into_any(),
+                                                    None => view! { <span>{source.dataset_name}</span> }.into_any(),
+                                                }}
                                             </th>
                                             <td>{source.source_alias}</td>
                                         </tr>
@@ -88,10 +104,16 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                             .take(page_size.get())
                             .cloned()
                             .map(|source| {
+                                let href = dataset_source_href(&source);
                                 view! {
                                     <article class="related-work-mobile-card">
                                         <div class="related-work-mobile-card__header">
-                                            <h4><a href=format!("/datasets/{}", source.dataset_id)>{source.dataset_name}</a></h4>
+                                            <h4>
+                                                {match href {
+                                                    Some(href) => view! { <a href=href>{source.dataset_name}</a> }.into_any(),
+                                                    None => view! { <span>{source.dataset_name}</span> }.into_any(),
+                                                }}
+                                            </h4>
                                         </div>
                                         <dl>
                                             <div>
@@ -108,5 +130,69 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                 }}
             </div>
         </div>
+    }
+    .into_any()
+}
+
+fn dataset_source_href(source: &FormDatasetSourceLink) -> Option<String> {
+    let dataset_id = source
+        .semantic_destination
+        .strip_prefix("datasets.detail:")?;
+    (dataset_id == source.dataset_id).then(|| format!("/datasets/{dataset_id}"))
+}
+
+fn dataset_sources_state_message(state: FormDatasetSourcesState) -> Option<&'static str> {
+    match state {
+        FormDatasetSourcesState::Available => None,
+        FormDatasetSourcesState::Empty => Some("No Related Dataset Sources to Display"),
+        FormDatasetSourcesState::Unavailable => Some(
+            "Dataset source information is temporarily unavailable. Other Form details remain available.",
+        ),
+        FormDatasetSourcesState::Undisclosed => {
+            Some("Dataset source information is unavailable for this Form.")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{dataset_source_href, dataset_sources_state_message};
+    use crate::{FormDatasetSourceLink, FormDatasetSourcesState};
+
+    #[test]
+    fn empty_outage_and_undisclosed_have_distinct_nonleaking_copy() {
+        assert_eq!(
+            dataset_sources_state_message(FormDatasetSourcesState::Empty),
+            Some("No Related Dataset Sources to Display")
+        );
+        assert!(
+            dataset_sources_state_message(FormDatasetSourcesState::Unavailable)
+                .expect("unavailable copy")
+                .contains("temporarily unavailable")
+        );
+        assert_eq!(
+            dataset_sources_state_message(FormDatasetSourcesState::Undisclosed),
+            Some("Dataset source information is unavailable for this Form.")
+        );
+    }
+
+    #[test]
+    fn dataset_links_use_the_provider_semantic_destination_identity() {
+        let dataset_id = "018f032a-1f76-7f15-9f31-f1cfec675bbe";
+        let mut source = FormDatasetSourceLink {
+            dataset_id: dataset_id.into(),
+            dataset_name: "Cases".into(),
+            source_alias: "case_form".into(),
+            pinned_form_version_id: "018f032a-1f76-7f15-9f31-f1cfec675bbf".into(),
+            lifecycle_state: "active".into(),
+            semantic_destination: format!("datasets.detail:{dataset_id}"),
+        };
+        assert_eq!(
+            dataset_source_href(&source).as_deref(),
+            Some("/datasets/018f032a-1f76-7f15-9f31-f1cfec675bbe")
+        );
+
+        source.semantic_destination = "datasets.detail:018f032a-1f76-7f15-9f31-f1cfec675bc0".into();
+        assert_eq!(dataset_source_href(&source), None);
     }
 }

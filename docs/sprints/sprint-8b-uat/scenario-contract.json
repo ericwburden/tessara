@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8b.uat-scenarios",
+  "scenarios": [
+    {
+      "id": "UAT-8B-01",
+      "name": "Product parity and UI",
+      "role": "dataset_manager",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["author", "preview", "revise", "publish", "catalog", "responsive", "accessible"],
+      "cleanup": "restore_reference_fixture"
+    },
+    {
+      "id": "UAT-8B-02",
+      "name": "Fresh materialization",
+      "role": "operator",
+      "start_state": "empty_topology",
+      "assertions": ["owner_order", "exact_releases", "owner_receipts", "semantic_noop"],
+      "cleanup": "remove_lane_topology"
+    },
+    {
+      "id": "UAT-8B-03",
+      "name": "Configuration and diagnostics",
+      "role": "administrator",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["validate_configuration", "apply_configuration", "exact_health", "sanitized_diagnostics"],
+      "cleanup": "restore_canonical_configuration"
+    },
+    {
+      "id": "UAT-8B-04",
+      "name": "Provider contracts, cursor, scope, and Dataset DAG",
+      "role": "dataset_manager",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["unchanged_head_no_page", "ordered_changes_once", "interrupt_retry", "concurrent_refresh", "expired_cursor_rebase", "atomic_dataset_closure", "independent_binding_unchanged", "cycle_rejected", "derived_failure_rolls_back", "nondisclosure"],
+      "cleanup": "restore_reference_fixture_and_proxies"
+    },
+    {
+      "id": "UAT-8B-05",
+      "name": "Cross-module exit and outage",
+      "role": "full_scope_reader",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["component_executes_dataset", "dashboard_renders_component", "dataset_outage_degrades", "recovery_converges"],
+      "cleanup": "restore_reference_fixture_and_proxies"
+    },
+    {
+      "id": "UAT-8B-06",
+      "name": "Core subtraction and isolation",
+      "role": "operator",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["four_core_transitions", "one_dataset_enrollment", "no_core_dataset_schema", "no_core_dataset_adapter", "pairwise_database_denial"],
+      "cleanup": "none"
+    },
+    {
+      "id": "UAT-8B-07",
+      "name": "Failure retry and recovery",
+      "role": "operator",
+      "start_state": "empty_topology",
+      "assertions": ["failed_apply_retained", "partial_topology_removed", "clean_successor", "retry_noop", "healthy_without_manual_repair"],
+      "cleanup": "remove_lane_topology"
+    },
+    {
+      "id": "UAT-8B-08",
+      "name": "Independent upgrade and rollback",
+      "role": "operator",
+      "start_state": "dataset_0_9_0_reference_fixture",
+      "assertions": ["upgrade", "rollback", "restore", "dataset_state_preserved", "unrelated_owners_unchanged"],
+      "cleanup": "restore_dataset_1_0_0"
+    },
+    {
+      "id": "UAT-8B-09",
+      "name": "Editor provider boundaries",
+      "role": "dataset_manager",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["form_picker", "schema_fields", "scope_tree", "principal_labels", "direct_and_lifecycle_hydration", "isolated_provider_faults", "browser_calls_dataset_only", "unsaved_input_retained"],
+      "cleanup": "restore_reference_fixture_and_proxies"
+    },
+    {
+      "id": "UAT-8B-10",
+      "name": "Reverse consumers and Operations",
+      "role": "administrator_and_disjoint_reader",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["form_dataset_sources", "operations_readiness", "app_summary", "outage_is_unavailable_not_empty", "unrelated_content_usable", "recovery_exact"],
+      "cleanup": "restore_reference_fixture_and_proxies"
+    },
+    {
+      "id": "UAT-8B-11",
+      "name": "Resource, replay, and routing",
+      "role": "dataset_manager",
+      "start_state": "reference_fixture_healthy",
+      "assertions": ["three_v2_resource_types", "known_random_nondisclosure", "mutation_replay", "changed_input_rejected", "private_nonce_one_use", "static_routes_precede_ids"],
+      "cleanup": "restore_reference_fixture"
+    }
+  ]
+}

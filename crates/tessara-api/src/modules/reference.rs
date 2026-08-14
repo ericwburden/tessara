@@ -1,17 +1,25 @@
-//! Transition adapters for installation-bound typed resource references.
+//! Generic installation-bound typed resource reference construction and observation.
 
-use semver::Version;
 use sqlx::PgPool;
+use tessara_datasets_contract::{
+    DatasetResourceObservationRequest, DatasetResourceObservationResponse,
+};
 use tessara_module_contract::{
-    ContractCompatibilityState, CoreInstallationOwnerState, FunctionalContractId,
-    ModuleInstanceOwnerState, OwnerDataState, ProviderAvailabilityState, ProviderContractIdentity,
-    ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
-    ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceOwnerState,
-    ResourceResolutionV1, ResourceRevision, TypedResourceReference,
+    ContractCompatibilityState, CoreInstallationOwnerState, ModuleInstanceOwnerState,
+    OwnerDataState, ProviderAvailabilityState, ReferenceValidationError, ResourceAccessState,
+    ResourceIdentityState, ResourceLifecycleState, ResourceObservationV1, ResourceOwner,
+    ResourceOwnerState, ResourceResolutionV1, TypedResourceReference,
 };
 use uuid::Uuid;
 
-use crate::auth::AccountContext;
+use crate::{
+    auth::{AccountContext, AuthenticatedRequest},
+    db::AppState,
+    module_gateway::{
+        CorePrivateProviderResult, ResourceObservationProviderLookup, call_private_provider,
+        resource_observation_provider,
+    },
+};
 
 use super::{
     dto::{
@@ -22,20 +30,17 @@ use super::{
 };
 
 #[derive(Clone, Copy, Debug)]
-enum ResourceKind {
+enum CoreResourceKind {
     Form,
     FormVersion,
     Workflow,
     WorkflowVersion,
     Response,
-    Dataset,
-    DatasetRevision,
-    DatasetMajorLine,
 }
 
 #[derive(Clone, Copy)]
-struct ResourceSpec {
-    kind: ResourceKind,
+struct CoreResourceSpec {
+    kind: CoreResourceKind,
     capabilities_any_of: &'static [&'static str],
 }
 
@@ -46,9 +51,9 @@ const RESPONSES: &[&str] = &[
     "submissions:respond",
     "submissions:manage",
 ];
-const DATASETS: &[&str] = &["datasets:read", "datasets:manage"];
 
-pub(crate) fn construct(
+pub(crate) async fn construct(
+    state: &AppState,
     request: CreateResourceReferenceRequestV1,
     installation_id: Uuid,
     account: &AccountContext,
@@ -65,22 +70,176 @@ pub(crate) fn construct(
             "The resource reference installation does not match this installation.",
         ));
     }
-    if !matches!(
-        &request.owner,
+
+    let reference = TypedResourceReference::new(
+        request.installation_id,
+        request.owner,
+        request.resource_type,
+        request.resource_id,
+    )
+    .map_err(|error| {
+        if error == ReferenceValidationError::InstallationMismatch {
+            owner_mismatch()
+        } else {
+            ModuleHttpError::bad_request(
+                "resource_reference_invalid",
+                "The resource reference is structurally invalid.",
+            )
+        }
+    })?;
+
+    match reference.owner() {
         ResourceOwner::CoreInstallation {
-            installation_id: owner_installation_id
-        } if *owner_installation_id == installation_id
-    ) {
-        return Err(ModuleHttpError::bad_request(
-            "resource_reference_owner_mismatch",
-            "Sprint 6A transition references must be owned by this Core installation.",
-        ));
+            installation_id: owner_installation_id,
+        } if *owner_installation_id == installation_id => {
+            validate_core_reference_construction(&reference, account)?;
+        }
+        ResourceOwner::CoreInstallation { .. } => {
+            return Err(owner_mismatch());
+        }
+        ResourceOwner::ModuleInstance {
+            installation_id: owner_installation_id,
+            ..
+        } if *owner_installation_id == installation_id => {
+            let route = load_resource_observation_provider(state, &reference).await?;
+            let ResourceObservationProviderLookup::Registered(route) = route else {
+                return Err(ModuleHttpError::bad_request(
+                    "resource_reference_not_registered",
+                    "The exact Module Instance does not register this typed resource reference.",
+                ));
+            };
+            if !account.has_capability(route.actor_capability()) {
+                return Err(ModuleHttpError::forbidden(
+                    "resource_reference_capability_required",
+                    "The current account lacks authority to construct this resource reference.",
+                ));
+            }
+        }
+        ResourceOwner::ModuleInstance { .. } => return Err(owner_mismatch()),
     }
 
-    let Some(spec) = resource_spec(request.resource_type.as_str()) else {
+    Ok(ResourceReferenceResponseV1 {
+        schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
+        reference,
+    })
+}
+
+pub(crate) async fn resolve(
+    state: &AppState,
+    reference: &TypedResourceReference,
+    installation_id: Uuid,
+    actor: &AuthenticatedRequest,
+    correlation_id: Uuid,
+) -> ModuleHttpResult<ResourceResolutionV1> {
+    resolve_and_observe(state, reference, installation_id, actor, correlation_id)
+        .await
+        .map(|(resolution, _)| resolution)
+}
+
+pub(crate) async fn observe(
+    state: &AppState,
+    reference: &TypedResourceReference,
+    installation_id: Uuid,
+    actor: &AuthenticatedRequest,
+    correlation_id: Uuid,
+) -> ModuleHttpResult<(ResourceResolutionV1, Option<ResourceObservationV1>)> {
+    resolve_and_observe(state, reference, installation_id, actor, correlation_id).await
+}
+
+async fn resolve_and_observe(
+    state: &AppState,
+    reference: &TypedResourceReference,
+    installation_id: Uuid,
+    actor: &AuthenticatedRequest,
+    correlation_id: Uuid,
+) -> ModuleHttpResult<(ResourceResolutionV1, Option<ResourceObservationV1>)> {
+    match reference.owner() {
+        ResourceOwner::CoreInstallation { .. } => {
+            resolve_core_reference(&state.pool, reference, installation_id, &actor.account)
+                .await
+                .map(|resolution| (resolution, None))
+        }
+        ResourceOwner::ModuleInstance { .. } => {
+            resolve_module_reference(state, reference, installation_id, actor, correlation_id).await
+        }
+    }
+}
+
+async fn resolve_module_reference(
+    state: &AppState,
+    reference: &TypedResourceReference,
+    installation_id: Uuid,
+    actor: &AuthenticatedRequest,
+    correlation_id: Uuid,
+) -> ModuleHttpResult<(ResourceResolutionV1, Option<ResourceObservationV1>)> {
+    if reference.installation_id() != installation_id
+        || !matches!(
+            reference.owner(),
+            ResourceOwner::ModuleInstance {
+                installation_id: owner_installation_id,
+                ..
+            } if *owner_installation_id == installation_id
+        )
+    {
+        return restricted_observation(ResourceAccessState::NotEvaluated);
+    }
+
+    let route = load_resource_observation_provider(state, reference).await?;
+    let ResourceObservationProviderLookup::Registered(route) = route else {
+        return restricted_observation(ResourceAccessState::NotEvaluated);
+    };
+    if !actor.account.has_capability(route.actor_capability()) {
+        return restricted_observation(ResourceAccessState::Unauthorized);
+    }
+
+    let request = DatasetResourceObservationRequest {
+        schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
+        reference: reference.clone(),
+    };
+    match call_private_provider::<_, DatasetResourceObservationResponse>(
+        state,
+        actor,
+        route.private_request(correlation_id, &request),
+    )
+    .await
+    .map_err(|error| {
+        tracing::error!(error = ?error, "Generic resource-observation dispatch failed");
+        ModuleHttpError::Internal("generic resource-observation dispatch failed")
+    })? {
+        CorePrivateProviderResult::Response(response) => {
+            if let Err(error) = response.validate_for(reference) {
+                tracing::warn!(error = ?error, "Module resource-observation response was invalid");
+                return module_provider_unavailable();
+            }
+            Ok((response.resolution, response.observation))
+        }
+        CorePrivateProviderResult::Unavailable => module_provider_unavailable(),
+        CorePrivateProviderResult::Undisclosed => {
+            restricted_observation(ResourceAccessState::Unauthorized)
+        }
+    }
+}
+
+async fn load_resource_observation_provider(
+    state: &AppState,
+    reference: &TypedResourceReference,
+) -> ModuleHttpResult<ResourceObservationProviderLookup> {
+    resource_observation_provider(&state.pool, reference)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = ?error, "Generic resource-observation registration failed");
+            ModuleHttpError::Internal("generic resource-observation registration failed")
+        })
+}
+
+fn validate_core_reference_construction(
+    reference: &TypedResourceReference,
+    account: &AccountContext,
+) -> ModuleHttpResult<()> {
+    let Some(spec) = core_resource_spec(reference.resource_type().as_str()) else {
         return Err(ModuleHttpError::bad_request(
             "resource_reference_type_unknown",
-            "The resource type is not registered for a Sprint 6A transition adapter.",
+            "The Core-owned resource type is not registered.",
         ));
     };
     if !has_any_capability(account, spec.capabilities_any_of) {
@@ -89,50 +248,30 @@ pub(crate) fn construct(
             "The current account lacks authority to construct this resource reference.",
         ));
     }
-    if !valid_resource_id(spec.kind, &request.resource_id) {
+    if parse_canonical_uuid(reference.resource_id()).is_none() {
         return Err(ModuleHttpError::bad_request(
             "resource_reference_id_invalid",
-            "The resource identifier does not match the registered transition resource type.",
+            "The resource identifier does not match the registered Core resource type.",
         ));
     }
-
-    let reference = TypedResourceReference::new(
-        request.installation_id,
-        request.owner,
-        request.resource_type,
-        request.resource_id,
-    )
-    .map_err(|_| {
-        ModuleHttpError::bad_request(
-            "resource_reference_invalid",
-            "The resource reference is structurally invalid.",
-        )
-    })?;
-
-    Ok(ResourceReferenceResponseV1 {
-        schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
-        reference,
-    })
+    Ok(())
 }
 
-/// Resolves an adapter reference without consulting product data until the
-/// actor has installation-global product authority. Scoped authority is
-/// deliberately projected as `not_evaluated`: the adapter cannot infer the
-/// provider's row-level scope decision without disclosing resource existence.
-pub(crate) async fn resolve(
+/// Resolves Core-owned transition resources without changing the established
+/// Form, Workflow, or Response behavior.
+async fn resolve_core_reference(
     pool: &PgPool,
     reference: &TypedResourceReference,
     installation_id: Uuid,
     account: &AccountContext,
 ) -> ModuleHttpResult<ResourceResolutionV1> {
-    let Some(spec) = resource_spec(reference.resource_type().as_str()) else {
+    let Some(spec) = core_resource_spec(reference.resource_type().as_str()) else {
         return restricted(ResourceAccessState::NotEvaluated);
     };
-
     if !has_any_capability(account, spec.capabilities_any_of) {
         return restricted(ResourceAccessState::Unauthorized);
     }
-    if matches!(spec.kind, ResourceKind::Response)
+    if matches!(spec.kind, CoreResourceKind::Response)
         && !account.has_global_capability("submissions:manage")
     {
         return resolve_ownership_bound_response(pool, reference, installation_id, account).await;
@@ -162,19 +301,11 @@ pub(crate) async fn resolve(
             );
         }
         ResourceOwner::ModuleInstance { .. } => {
-            return authorized(
-                ResourceOwnerState::ModuleInstance {
-                    instance_state: ModuleInstanceOwnerState::UnknownModuleInstance,
-                    data_state: OwnerDataState::NotEvaluated,
-                },
-                ResourceIdentityState::NotEvaluated,
-                ResourceLifecycleState::NotEvaluated,
-                ProviderAvailabilityState::Unavailable,
-            );
+            return restricted(ResourceAccessState::NotEvaluated);
         }
     };
 
-    if !valid_resource_id(spec.kind, reference.resource_id()) {
+    if parse_canonical_uuid(reference.resource_id()).is_none() {
         return authorized(
             owner_state,
             ResourceIdentityState::UnknownResource,
@@ -183,8 +314,7 @@ pub(crate) async fn resolve(
         );
     }
 
-    let lifecycle = load_lifecycle(pool, spec.kind, reference.resource_id()).await?;
-    match lifecycle {
+    match load_core_lifecycle(pool, spec.kind, reference.resource_id()).await? {
         Some(state) => authorized(
             owner_state,
             ResourceIdentityState::Resolved,
@@ -197,70 +327,6 @@ pub(crate) async fn resolve(
             ResourceLifecycleState::NotEvaluated,
             ProviderAvailabilityState::Available,
         ),
-    }
-}
-
-/// Produces an exact live observation only after the same authorization-first
-/// resolution used by the transition reference adapter. Restricted and unknown
-/// resources never carry an observation envelope.
-pub(crate) async fn observe(
-    pool: &PgPool,
-    reference: &TypedResourceReference,
-    installation_id: Uuid,
-    account: &AccountContext,
-) -> ModuleHttpResult<(ResourceResolutionV1, Option<ResourceObservationV1>)> {
-    let resolution = resolve(pool, reference, installation_id, account).await?;
-    if resolution.access_state() != ResourceAccessState::Authorized {
-        return Ok((resolution, None));
-    }
-    let Some(spec) = resource_spec(reference.resource_type().as_str()) else {
-        return Ok((resolution, None));
-    };
-    let Some((contract_id, contract_version)) = observation_contract(spec.kind) else {
-        return Ok((resolution, None));
-    };
-    let revision = match spec.kind {
-        ResourceKind::DatasetRevision => {
-            let Some(id) = parse_canonical_uuid(reference.resource_id()) else {
-                return Ok((resolution, None));
-            };
-            sqlx::query_scalar::<_, i64>(
-                "SELECT resource_revision FROM dataset_revisions WHERE id = $1",
-            )
-            .bind(id)
-            .fetch_optional(pool)
-            .await?
-        }
-        _ => return Ok((resolution, None)),
-    };
-    let Some(revision) = revision else {
-        return Ok((resolution, None));
-    };
-    let revision = u64::try_from(revision)
-        .ok()
-        .and_then(|value| ResourceRevision::new(value).ok())
-        .ok_or(ModuleHttpError::Internal(
-            "provider resource revision was invalid",
-        ))?;
-    let contract_id = FunctionalContractId::new(contract_id)
-        .map_err(|_| ModuleHttpError::Internal("provider contract identity was invalid"))?;
-    let contract_version = Version::parse(contract_version)
-        .map_err(|_| ModuleHttpError::Internal("provider contract version was invalid"))?;
-    Ok((
-        resolution,
-        Some(ResourceObservationV1::new(
-            reference.clone(),
-            ProviderContractIdentity::new(contract_id, contract_version),
-            ResourceObservationStrategy::LiveResolutionWithRevision,
-            revision,
-        )),
-    ))
-}
-
-fn observation_contract(kind: ResourceKind) -> Option<(&'static str, &'static str)> {
-    match kind {
-        ResourceKind::DatasetRevision => Some(("tessara.datasets.dataset-revision", "1.0.0")),
-        _ => None,
     }
 }
 
@@ -310,6 +376,12 @@ fn restricted(access_state: ResourceAccessState) -> ModuleHttpResult<ResourceRes
         .map_err(|_| ModuleHttpError::Internal("restricted resource projection was invalid"))
 }
 
+fn restricted_observation(
+    access_state: ResourceAccessState,
+) -> ModuleHttpResult<(ResourceResolutionV1, Option<ResourceObservationV1>)> {
+    restricted(access_state).map(|resolution| (resolution, None))
+}
+
 fn authorized(
     owner_state: ResourceOwnerState,
     identity_state: ResourceIdentityState,
@@ -326,6 +398,27 @@ fn authorized(
     .map_err(|_| ModuleHttpError::Internal("authorized resource projection was invalid"))
 }
 
+fn module_provider_unavailable()
+-> ModuleHttpResult<(ResourceResolutionV1, Option<ResourceObservationV1>)> {
+    authorized(
+        ResourceOwnerState::ModuleInstance {
+            instance_state: ModuleInstanceOwnerState::Live,
+            data_state: OwnerDataState::Retained,
+        },
+        ResourceIdentityState::NotEvaluated,
+        ResourceLifecycleState::NotEvaluated,
+        ProviderAvailabilityState::Unavailable,
+    )
+    .map(|resolution| (resolution, None))
+}
+
+fn owner_mismatch() -> ModuleHttpError {
+    ModuleHttpError::bad_request(
+        "resource_reference_owner_mismatch",
+        "The resource owner does not belong to this installation.",
+    )
+}
+
 fn has_any_capability(account: &AccountContext, capabilities: &[&str]) -> bool {
     capabilities
         .iter()
@@ -338,29 +431,19 @@ fn has_any_global_capability(account: &AccountContext, capabilities: &[&str]) ->
         .any(|capability| account.has_global_capability(capability))
 }
 
-fn resource_spec(resource_type: &str) -> Option<ResourceSpec> {
+fn core_resource_spec(resource_type: &str) -> Option<CoreResourceSpec> {
     let (kind, capabilities_any_of) = match resource_type {
-        "tessara.transition.form" => (ResourceKind::Form, FORMS),
-        "tessara.transition.form_version" => (ResourceKind::FormVersion, FORMS),
-        "tessara.transition.workflow" => (ResourceKind::Workflow, WORKFLOWS),
-        "tessara.transition.workflow_version" => (ResourceKind::WorkflowVersion, WORKFLOWS),
-        "tessara.transition.response" => (ResourceKind::Response, RESPONSES),
-        "tessara.transition.dataset" => (ResourceKind::Dataset, DATASETS),
-        "tessara.transition.dataset_revision" => (ResourceKind::DatasetRevision, DATASETS),
-        "tessara.transition.dataset_major_line" => (ResourceKind::DatasetMajorLine, DATASETS),
+        "tessara.transition.form" => (CoreResourceKind::Form, FORMS),
+        "tessara.transition.form_version" => (CoreResourceKind::FormVersion, FORMS),
+        "tessara.transition.workflow" => (CoreResourceKind::Workflow, WORKFLOWS),
+        "tessara.transition.workflow_version" => (CoreResourceKind::WorkflowVersion, WORKFLOWS),
+        "tessara.transition.response" => (CoreResourceKind::Response, RESPONSES),
         _ => return None,
     };
-    Some(ResourceSpec {
+    Some(CoreResourceSpec {
         kind,
         capabilities_any_of,
     })
-}
-
-fn valid_resource_id(kind: ResourceKind, resource_id: &str) -> bool {
-    match kind {
-        ResourceKind::DatasetMajorLine => parse_dataset_major_line(resource_id).is_some(),
-        _ => parse_canonical_uuid(resource_id).is_some(),
-    }
 }
 
 fn parse_canonical_uuid(resource_id: &str) -> Option<Uuid> {
@@ -368,213 +451,130 @@ fn parse_canonical_uuid(resource_id: &str) -> Option<Uuid> {
     (parsed.hyphenated().to_string() == resource_id).then_some(parsed)
 }
 
-fn parse_dataset_major_line(resource_id: &str) -> Option<(Uuid, i32)> {
-    let (dataset_id, major) = resource_id.split_once('@')?;
-    if major.contains('@') {
-        return None;
-    }
-    let dataset_id = parse_canonical_uuid(dataset_id)?;
-    let major = major.parse::<i32>().ok()?;
-    if major <= 0 {
-        return None;
-    }
-    // Match the Dataset compatibility contract and reject alternate integer
-    // spellings such as +1 and 01.
-    let (_, source_major) = resource_id.split_once('@')?;
-    (source_major == major.to_string()).then_some((dataset_id, major))
-}
-
-async fn load_lifecycle(
+async fn load_core_lifecycle(
     pool: &PgPool,
-    kind: ResourceKind,
+    kind: CoreResourceKind,
     resource_id: &str,
 ) -> Result<Option<String>, sqlx::Error> {
     let uuid = || parse_canonical_uuid(resource_id).expect("validated UUID resource id");
     match kind {
-        ResourceKind::Form => {
+        CoreResourceKind::Form => {
             sqlx::query_scalar("SELECT 'active'::text FROM forms WHERE id = $1")
                 .bind(uuid())
                 .fetch_optional(pool)
                 .await
         }
-        ResourceKind::FormVersion => {
+        CoreResourceKind::FormVersion => {
             sqlx::query_scalar("SELECT status::text FROM form_versions WHERE id = $1")
                 .bind(uuid())
                 .fetch_optional(pool)
                 .await
         }
-        ResourceKind::Workflow => {
+        CoreResourceKind::Workflow => {
             sqlx::query_scalar("SELECT 'active'::text FROM workflows WHERE id = $1")
                 .bind(uuid())
                 .fetch_optional(pool)
                 .await
         }
-        ResourceKind::WorkflowVersion => {
+        CoreResourceKind::WorkflowVersion => {
             sqlx::query_scalar("SELECT status::text FROM workflow_versions WHERE id = $1")
                 .bind(uuid())
                 .fetch_optional(pool)
                 .await
         }
-        ResourceKind::Response => {
+        CoreResourceKind::Response => {
             sqlx::query_scalar("SELECT status::text FROM submissions WHERE id = $1")
                 .bind(uuid())
                 .fetch_optional(pool)
                 .await
-        }
-        ResourceKind::Dataset => {
-            sqlx::query_scalar("SELECT 'active'::text FROM datasets WHERE id = $1")
-                .bind(uuid())
-                .fetch_optional(pool)
-                .await
-        }
-        ResourceKind::DatasetRevision => {
-            sqlx::query_scalar("SELECT status::text FROM dataset_revisions WHERE id = $1")
-                .bind(uuid())
-                .fetch_optional(pool)
-                .await
-        }
-        ResourceKind::DatasetMajorLine => {
-            let (dataset_id, major) =
-                parse_dataset_major_line(resource_id).expect("validated major-line id");
-            sqlx::query_scalar(
-                "SELECT rebuild_status FROM dataset_major_materializations \
-                 WHERE dataset_id = $1 AND version_major = $2",
-            )
-            .bind(dataset_id)
-            .bind(major)
-            .fetch_optional(pool)
-            .await
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use tessara_module_contract::{
-        ResourceAccessState, ResourceOwner, ResourceTypeId, TypedResourceReference,
-    };
+    use tessara_module_contract::{ResourceAccessState, ResourceOwner, ResourceTypeId};
     use uuid::Uuid;
 
     use crate::auth::{AccountContext, CapabilityScope};
 
-    use super::{
-        CreateResourceReferenceRequestV1, construct, parse_dataset_major_line, resource_spec,
-    };
+    use super::{core_resource_spec, module_provider_unavailable, resolve_core_reference};
 
     #[test]
-    fn registry_contains_every_transition_resource_type_and_no_release_instance_type() {
+    fn core_registry_retains_only_core_owned_transition_resource_types() {
         for resource_type in [
             "tessara.transition.form",
             "tessara.transition.form_version",
             "tessara.transition.workflow",
             "tessara.transition.workflow_version",
             "tessara.transition.response",
+        ] {
+            assert!(
+                core_resource_spec(resource_type).is_some(),
+                "{resource_type}"
+            );
+        }
+        for removed in [
             "tessara.transition.dataset",
             "tessara.transition.dataset_revision",
             "tessara.transition.dataset_major_line",
+            "tessara.module.release",
+            "tessara.module.instance",
         ] {
-            assert!(resource_spec(resource_type).is_some(), "{resource_type}");
+            assert!(core_resource_spec(removed).is_none(), "{removed}");
         }
-        assert!(resource_spec("tessara.module.release").is_none());
-        assert!(resource_spec("tessara.module.instance").is_none());
     }
 
     #[test]
-    fn construction_rejects_foreign_owner_before_returning_a_reference() {
-        let installation_id = Uuid::new_v4();
-        let error = construct(
-            CreateResourceReferenceRequestV1 {
-                schema_version: 1,
-                installation_id,
-                owner: ResourceOwner::CoreInstallation {
-                    installation_id: Uuid::new_v4(),
-                },
-                resource_type: ResourceTypeId::new("tessara.transition.form_version")
-                    .expect("resource type"),
-                resource_id: Uuid::new_v4().to_string(),
-            },
-            installation_id,
-            &account("forms:read", true),
-        )
-        .expect_err("foreign owner fails");
-
-        assert_eq!(error.code(), "resource_reference_owner_mismatch");
-    }
-
-    #[test]
-    fn dataset_major_line_identifier_is_canonical_and_unambiguous() {
-        let dataset_id = Uuid::new_v4();
+    fn module_provider_outage_is_distinct_from_nondisclosure() {
+        let (resolution, observation) = module_provider_unavailable().expect("valid projection");
+        assert!(observation.is_none());
         assert_eq!(
-            parse_dataset_major_line(&format!("{dataset_id}@12")),
-            Some((dataset_id, 12))
+            resolution.access_state(),
+            tessara_module_contract::ResourceAccessState::Authorized
         );
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@0")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@01")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@-1")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}@1@2")), None);
-        assert_eq!(parse_dataset_major_line(&format!("{dataset_id}:1")), None);
-    }
+        assert_eq!(
+            resolution.availability_state(),
+            tessara_module_contract::ProviderAvailabilityState::Unavailable
+        );
 
-    #[test]
-    fn contract_can_build_restricted_shape_for_known_and_random_identifiers() {
-        let installation_id = Uuid::new_v4();
-        for resource_id in [Uuid::nil().to_string(), Uuid::new_v4().to_string()] {
-            let reference = TypedResourceReference::new(
-                installation_id,
-                ResourceOwner::CoreInstallation { installation_id },
-                ResourceTypeId::new("tessara.transition.dataset_major_line").expect("type"),
-                format!("{resource_id}@1"),
-            )
-            .expect("reference");
-            assert_eq!(reference.installation_id(), installation_id);
-        }
-
-        let resolution = tessara_module_contract::ResourceResolutionV1::restricted(
+        let restricted = tessara_module_contract::ResourceResolutionV1::restricted(
             ResourceAccessState::Unauthorized,
         )
         .expect("restricted projection");
-        let wire = serde_json::to_value(resolution).expect("serialize");
-        assert_eq!(wire["access_state"], "unauthorized");
-        assert_eq!(wire["owner_state"]["kind"], "undisclosed");
+        assert_ne!(resolution, restricted);
     }
 
     #[tokio::test]
-    async fn unauthorized_and_scoped_only_resolution_never_touch_data_or_disclose_identity() {
+    async fn unauthorized_core_resolution_remains_non_disclosing_without_database_access() {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .connect_lazy("postgres://invalid:invalid@127.0.0.1:1/never_connected")
             .expect("lazy pool");
         let installation_id = Uuid::new_v4();
-        let known_shape_id = Uuid::nil().to_string();
-        let random_id = Uuid::new_v4().to_string();
 
-        for actor in [account("datasets:read", false), account("forms:read", true)] {
-            let mut wires = Vec::new();
-            for resource_id in [&known_shape_id, &random_id] {
-                let reference = TypedResourceReference::new(
-                    installation_id,
-                    ResourceOwner::CoreInstallation { installation_id },
-                    ResourceTypeId::new("tessara.transition.dataset_revision").expect("type"),
-                    resource_id,
-                )
-                .expect("reference");
-                let resolution = super::resolve(&pool, &reference, installation_id, &actor)
-                    .await
-                    .expect("restricted resolution");
-                wires.push(serde_json::to_value(resolution).expect("serialize"));
-                let (resolution, observation) =
-                    super::observe(&pool, &reference, installation_id, &actor)
-                        .await
-                        .expect("restricted observation");
-                assert!(observation.is_none());
-                assert_eq!(
-                    serde_json::to_value(resolution).expect("serialize"),
-                    *wires.last().expect("resolution wire")
-                );
-            }
-            assert_eq!(wires[0], wires[1]);
-            assert_eq!(wires[0]["owner_state"]["kind"], "undisclosed");
-            assert_eq!(wires[0]["resource_identity_state"], "undisclosed");
+        let mut wires = Vec::new();
+        for resource_id in [Uuid::nil(), Uuid::new_v4()] {
+            let reference = tessara_module_contract::TypedResourceReference::new(
+                installation_id,
+                ResourceOwner::CoreInstallation { installation_id },
+                ResourceTypeId::new("tessara.transition.form_version").expect("type"),
+                resource_id.to_string(),
+            )
+            .expect("reference");
+            let resolution = resolve_core_reference(
+                &pool,
+                &reference,
+                installation_id,
+                &account("workflows:read", true),
+            )
+            .await
+            .expect("restricted resolution");
+            wires.push(serde_json::to_value(resolution).expect("serialize"));
         }
+
+        assert_eq!(wires[0], wires[1]);
+        assert_eq!(wires[0]["owner_state"]["kind"], "undisclosed");
+        assert_eq!(wires[0]["resource_identity_state"], "undisclosed");
     }
 
     fn account(capability: &str, global: bool) -> AccountContext {

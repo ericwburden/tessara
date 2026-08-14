@@ -3,7 +3,6 @@
 //! Keep only route nesting and feature route wiring here; screen rendering and data loading should remain in the corresponding feature modules.
 
 pub mod administration;
-pub mod datasets;
 pub mod forms;
 pub mod home;
 pub mod login;
@@ -31,7 +30,6 @@ pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
         workflows::workflow_routes(),
         responses::response_routes(),
         operations::operation_routes(),
-        datasets::dataset_routes(),
         administration::administration_routes(),
         // Enrollment and the manifest-owned gateway decide whether a path is
         // a module route. The browser host is deliberately the final,

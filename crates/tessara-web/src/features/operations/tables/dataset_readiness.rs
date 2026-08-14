@@ -1,6 +1,8 @@
 //! Dataset readiness table for Operations.
 
-use crate::features::operations::types::DatasetStatus;
+use crate::features::operations::types::{
+    DatasetProviderResultState, DatasetReadiness, DatasetStatus,
+};
 use crate::ui::{DataTable, EmptyState, StatusBadge, TableFilterHeader, TablePaginationFooter};
 use crate::utils::filtering::unique_filter_options;
 use crate::utils::pagination::pagination_page_start;
@@ -10,7 +12,9 @@ use leptos::prelude::*;
 use super::dataset_readiness_filtering::filtered_dataset_readiness;
 
 #[component]
-pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoView {
+pub(crate) fn DatasetReadinessTable(readiness: DatasetReadiness) -> impl IntoView {
+    let datasets = readiness.datasets;
+    let state = readiness.state;
     let all_datasets = datasets.clone();
     let search = RwSignal::new(String::new());
     let status_filter = RwSignal::new("all".to_string());
@@ -26,7 +30,23 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
     view! {
         <section class="route-panel__section operations-table-section" aria-label="Dataset readiness">
             <h3>"Dataset Readiness"</h3>
-            {if datasets.is_empty() {
+            {if state == DatasetProviderResultState::Unavailable {
+                view! {
+                    <EmptyState
+                        title="Dataset readiness unavailable"
+                        message="The Dataset provider is temporarily unavailable. Workflow and reporting status remain current."
+                    />
+                }
+                .into_any()
+            } else if state == DatasetProviderResultState::Undisclosed {
+                view! {
+                    <EmptyState
+                        title="Dataset readiness restricted"
+                        message="Dataset readiness is not available to the current account."
+                    />
+                }
+                .into_any()
+            } else if datasets.is_empty() {
                 view! {
                     <EmptyState
                         title="No visible datasets"

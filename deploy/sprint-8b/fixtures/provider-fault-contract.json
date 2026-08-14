@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8b.provider-faults",
+  "isolation": "one-binding-per-proxy",
+  "runtime_configuration": {
+    "core_authorization_environment": "TESSARA_CORE_INTERNAL_URL",
+    "core_authorization_endpoint": "http://core:8080",
+    "provider_endpoints_environment": "TESSARA_DATASET_PROVIDER_ENDPOINTS",
+    "bindings": [
+      { "binding": "tessara.datasets.response-export", "service": "response-provider-proxy", "endpoint": "http://response-provider-proxy:8080" },
+      { "binding": "tessara.datasets.form-version-schema", "service": "form-provider-proxy", "endpoint": "http://form-provider-proxy:8080" },
+      { "binding": "tessara.datasets.scope-catalog", "service": "scope-provider-proxy", "endpoint": "http://scope-provider-proxy:8080" },
+      { "binding": "tessara.datasets.principal-display-catalog", "service": "principal-provider-proxy", "endpoint": "http://principal-provider-proxy:8080" }
+    ]
+  },
+  "faults": [
+    { "key": "response.timeout", "binding": "tessara.datasets.response-export", "mode": "timeout" },
+    { "key": "response.malformed", "binding": "tessara.datasets.response-export", "mode": "malformed_body" },
+    { "key": "response.incompatible", "binding": "tessara.datasets.response-export", "mode": "incompatible_version" },
+    { "key": "response.expired-cursor", "binding": "tessara.datasets.response-export", "mode": "expired_cursor" },
+    { "key": "response.epoch-change", "binding": "tessara.datasets.response-export", "mode": "provider_epoch_change" },
+    { "key": "response.scope-substitution", "binding": "tessara.datasets.response-export", "mode": "scope_substitution" },
+    { "key": "forms.unavailable", "binding": "tessara.datasets.form-version-schema", "mode": "unavailable" },
+    { "key": "scope.unavailable", "binding": "tessara.datasets.scope-catalog", "mode": "unavailable" },
+    { "key": "principal.unavailable", "binding": "tessara.datasets.principal-display-catalog", "mode": "unavailable" },
+    { "key": "dataset.derived-rebuild", "binding": "dataset.derived", "mode": "deterministic_rebuild_failure" }
+  ],
+  "product_bypass_forbidden": true,
+  "database_bypass_forbidden": true
+}

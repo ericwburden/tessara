@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.components",
-  "release_version": "1.0.1",
+  "release_version": "1.1.0",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -143,7 +143,7 @@
   "dependencies": [
     {
       "contract_id": "tessara.datasets.dataset-major-line",
-      "version_requirement": "=1.0.0",
+      "version_requirement": "=2.0.0",
       "binding_key": "tessara.components.dataset-major-line",
       "optional": false
     }
@@ -640,7 +640,7 @@
   "bootstrap_dependency_validation": {
     "dependency_binding": "tessara.components.dataset-major-line",
     "functional_contract": "tessara.datasets.dataset-major-line",
-    "contract_version": "1.0.0",
+    "contract_version": "2.0.0",
     "authorization_action": "datasets.bootstrap_validate",
     "method": "POST",
     "path": "/api/private/datasets/bootstrap-validation",
@@ -672,7 +672,7 @@
     },
     {
       "path": "/component.js",
-      "digest": "sha256:bc5237617aec365549741171d86da5557cbde4936e862ccf438cf763e646d221",
+      "digest": "sha256:e897fbe5db50174d776719b800c83a8b380e09f7ea878e544069832cdd6241ca",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
@@ -682,7 +682,7 @@
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:29b8b29a4ac6ddb4366aa18ce889a8bd50b18c14f7a6002d1147a77e1d670d15",
+      "digest": "sha256:b0e1275f2a3c12830014a18663c5f66022f7ad70b6f247e191b2291ed505de60",
       "content_type": "application/wasm"
     }
   ]

@@ -150,13 +150,24 @@ impl ModuleServiceIdentityRegistryV1 {
         &self,
         definition_id: &ModuleDefinitionId,
     ) -> Result<PurposeBoundVerifyingKeyV1, ModuleServiceIdentityRegistryError> {
+        self.verifier_for_purpose(
+            definition_id,
+            ProtocolSignaturePurposeV1::ModuleServiceRequest,
+        )
+    }
+
+    pub fn verifier_for_purpose(
+        &self,
+        definition_id: &ModuleDefinitionId,
+        purpose: ProtocolSignaturePurposeV1,
+    ) -> Result<PurposeBoundVerifyingKeyV1, ModuleServiceIdentityRegistryError> {
         let identity = self.identities.get(definition_id).ok_or_else(|| {
             ModuleServiceIdentityRegistryError::UnknownDefinition(definition_id.clone())
         })?;
         PurposeBoundVerifyingKeyV1::from_public_bytes(
             definition_id.as_str(),
             identity.key_id.clone(),
-            ProtocolSignaturePurposeV1::ModuleServiceRequest,
+            purpose,
             identity.public_key_bytes().map_err(|_| {
                 ModuleServiceIdentityRegistryError::InvalidDefinitionPublicKey(
                     definition_id.clone(),

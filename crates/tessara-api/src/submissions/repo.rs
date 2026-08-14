@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde_json::Value;
-use sqlx::{PgPool, Row, postgres::PgRow};
+use sqlx::{PgPool, Postgres, Row, Transaction, postgres::PgRow};
 use tessara_core::FieldType;
 use uuid::Uuid;
 
@@ -21,9 +21,7 @@ pub struct SubmissionAccessRow {
 
 pub struct FormFieldContract {
     pub id: Uuid,
-    pub key: String,
     pub field_type: FieldType,
-    pub required: bool,
 }
 
 pub struct SubmissionListFilters<'a> {
@@ -64,21 +62,25 @@ pub async fn load_submission_access(
     .transpose()
 }
 
-pub async fn fields_by_key(
-    pool: &PgPool,
+pub async fn fields_by_key_tx(
+    transaction: &mut Transaction<'_, Postgres>,
     form_version_id: Uuid,
 ) -> ApiResult<HashMap<String, FormFieldContract>> {
     let rows = sqlx::query(
         r#"
-        SELECT field_id, key, field_type::text AS field_type, required
+        SELECT field_id, key, field_type::text AS field_type
         FROM form_fields
         WHERE form_version_id = $1
+        FOR SHARE OF form_fields
         "#,
     )
     .bind(form_version_id)
-    .fetch_all(pool)
+    .fetch_all(&mut **transaction)
     .await?;
+    form_field_contracts(rows)
+}
 
+fn form_field_contracts(rows: Vec<PgRow>) -> ApiResult<HashMap<String, FormFieldContract>> {
     let mut fields = HashMap::new();
     for row in rows {
         let key: String = row.try_get("key")?;
@@ -86,9 +88,7 @@ pub async fn fields_by_key(
             key.clone(),
             FormFieldContract {
                 id: row.try_get("field_id")?,
-                key,
                 field_type: parse_field_type(&row.try_get::<String, _>("field_type")?)?,
-                required: row.try_get("required")?,
             },
         );
     }
@@ -287,30 +287,8 @@ async fn load_submission_runtime_detail(
     }))
 }
 
-pub async fn saved_values_by_field_id(
-    pool: &PgPool,
-    submission_id: Uuid,
-) -> ApiResult<HashMap<Uuid, Value>> {
-    let rows = sqlx::query(
-        r#"
-        SELECT field_id, value
-        FROM submission_values
-        WHERE submission_id = $1
-        "#,
-    )
-    .bind(submission_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut values = HashMap::new();
-    for row in rows {
-        values.insert(row.try_get("field_id")?, row.try_get("value")?);
-    }
-    Ok(values)
-}
-
-pub async fn upsert_submission_value(
-    pool: &PgPool,
+pub async fn upsert_submission_value_tx(
+    transaction: &mut Transaction<'_, Postgres>,
     submission_id: Uuid,
     form_version_id: Uuid,
     field_id: Uuid,
@@ -328,25 +306,9 @@ pub async fn upsert_submission_value(
     .bind(form_version_id)
     .bind(field_id)
     .bind(value)
-    .execute(pool)
+    .execute(&mut **transaction)
     .await?;
-
     Ok(())
-}
-
-pub async fn mark_submission_submitted(pool: &PgPool, submission_id: Uuid) -> ApiResult<bool> {
-    let result = sqlx::query(
-        r#"
-        UPDATE submissions
-        SET status = 'submitted'::submission_status, submitted_at = now()
-        WHERE id = $1 AND status = 'draft'::submission_status
-        "#,
-    )
-    .bind(submission_id)
-    .execute(pool)
-    .await?;
-
-    Ok(result.rows_affected() == 1)
 }
 
 pub async fn delete_workflow_step_instance_for_submission(
@@ -406,8 +368,8 @@ pub async fn delete_submission(pool: &PgPool, submission_id: Uuid) -> ApiResult<
     Ok(())
 }
 
-pub async fn audit_submission(
-    pool: &PgPool,
+pub async fn audit_submission_tx(
+    transaction: &mut Transaction<'_, Postgres>,
     submission_id: Uuid,
     event_type: &str,
     account_id: Option<Uuid>,
@@ -421,9 +383,8 @@ pub async fn audit_submission(
     .bind(submission_id)
     .bind(event_type)
     .bind(account_id)
-    .execute(pool)
+    .execute(&mut **transaction)
     .await?;
-
     Ok(())
 }
 

@@ -16,7 +16,7 @@ pub(super) struct OperationsStatus {
 pub(super) struct OperationsSummary {
     pub(super) open_workflow_assignment_count: i64,
     pub(super) draft_response_count: i64,
-    pub(super) dataset_attention_count: i64,
+    pub(super) dataset_attention_count: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -41,7 +41,17 @@ pub(super) struct WorkflowAssignmentStatus {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(super) struct DatasetReadiness {
+    pub(super) state: DatasetProviderResultState,
     pub(super) datasets: Vec<DatasetStatus>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DatasetProviderResultState {
+    Available,
+    Empty,
+    Unavailable,
+    Undisclosed,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

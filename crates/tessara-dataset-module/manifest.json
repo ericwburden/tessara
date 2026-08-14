@@ -1,0 +1,946 @@
+{
+  "schema_version": 3,
+  "definition_id": "tessara.datasets",
+  "release_version": "1.0.0",
+  "publisher": "tessara.first_party",
+  "support": {
+    "support_tier": "first_party",
+    "contact": "support@tessara.example",
+    "documentation": "https://docs.tessara.example/modules/datasets"
+  },
+  "deployment": {
+    "profile": "tessara-oci-v1",
+    "declaration": {
+      "runtime_image": {
+        "image_reference": "registry.example/tessara/datasets@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": [
+          "/usr/local/bin/dataset-module",
+          "serve"
+        ]
+      },
+      "migration_image": {
+        "image_reference": "registry.example/tessara/datasets@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": [
+          "/usr/local/bin/dataset-module",
+          "migrate"
+        ]
+      },
+      "listen": {
+        "protocol": "http",
+        "port": 8093,
+        "registration_name": "datasets"
+      },
+      "configuration_keys": [
+        "DISPLAY_LABEL",
+        "PROVIDER_REQUEST_TIMEOUT_SECONDS",
+        "PROVIDER_RETRY_LIMIT",
+        "RESPONSE_EXPORT_PAGE_SIZE",
+        "DATASET_MODULE_BIND_ADDR",
+        "TESSARA_CORE_INTERNAL_URL",
+        "TESSARA_DATASET_PROVIDER_ENDPOINTS",
+        "TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY",
+        "TESSARA_CORE_AUTHORIZATION_KEY_ID",
+        "TESSARA_DATASET_SERVICE_SIGNING_KEY_ID",
+        "TESSARA_MODULE_SERVICE_IDENTITIES"
+      ],
+      "secret_keys": [
+        "DATABASE_URL",
+        "TESSARA_DATASET_SERVICE_SIGNING_KEY",
+        "TESSARA_MODULE_CONTROL_SHARED_KEY"
+      ],
+      "runtime_identity": "datasets-runtime",
+      "migration_identity": "datasets-migration",
+      "readiness_path": "/health/ready",
+      "liveness_path": "/health/live",
+      "graceful_shutdown_seconds": 30,
+      "resources": {
+        "cpu_request_millis": 150,
+        "cpu_limit_millis": 500,
+        "memory_request_mebibytes": 96,
+        "memory_limit_mebibytes": 256
+      }
+    }
+  },
+  "features": [
+    {
+      "id": "tessara.datasets.authoring",
+      "name": "Dataset authoring and materialization",
+      "description": "Author, publish, refresh, and inspect module-owned Datasets.",
+      "use_cases": [
+        "Create and materialize Datasets from declared providers."
+      ],
+      "inputs": [
+        "Typed provider contracts and Dataset definitions."
+      ],
+      "outcomes": [
+        "Published Dataset resources and materialized major lines."
+      ],
+      "constraints": [
+        "Source data is imported only through declared provider contracts."
+      ],
+      "contracts": [
+        "tessara.datasets.dataset",
+        "tessara.datasets.dataset-revision",
+        "tessara.datasets.dataset-major-line"
+      ],
+      "resource_types": [
+        "tessara.datasets.dataset",
+        "tessara.datasets.dataset_revision",
+        "tessara.datasets.dataset_major_line"
+      ],
+      "destinations": [
+        "datasets.directory",
+        "datasets.create",
+        "datasets.detail",
+        "datasets.edit",
+        "datasets.revisions",
+        "datasets.revision_detail",
+        "datasets.revision_edit"
+      ],
+      "capabilities": [
+        "datasets:manage"
+      ],
+      "configuration_pointers": [
+        "/properties/provider_request_timeout_seconds",
+        "/properties/provider_retry_limit",
+        "/properties/response_export_page_size"
+      ]
+    },
+    {
+      "id": "tessara.datasets.execution",
+      "name": "Dataset execution",
+      "description": "Resolve and execute authorized Dataset major lines.",
+      "use_cases": [
+        "Preview or consume a published Dataset."
+      ],
+      "inputs": [
+        "An exact Dataset major-line reference and authorized scope."
+      ],
+      "outcomes": [
+        "Bounded materialized rows."
+      ],
+      "constraints": [
+        "Restricted references remain non-disclosing."
+      ],
+      "contracts": [
+        "tessara.datasets.dataset-major-line"
+      ],
+      "resource_types": [
+        "tessara.datasets.dataset_major_line"
+      ],
+      "destinations": [
+        "datasets.directory",
+        "datasets.detail",
+        "datasets.preview"
+      ],
+      "capabilities": [
+        "datasets:read"
+      ],
+      "configuration_pointers": []
+    }
+  ],
+  "provided_contracts": [
+    {
+      "id": "tessara.datasets.dataset",
+      "version": "1.0.0",
+      "kind": "resource",
+      "description": "Resolve a Dataset owned by this Module Instance."
+    },
+    {
+      "id": "tessara.datasets.dataset-revision",
+      "version": "1.0.0",
+      "kind": "resource",
+      "description": "Resolve a DatasetRevision owned by this Module Instance."
+    },
+    {
+      "id": "tessara.datasets.dataset-major-line",
+      "version": "2.0.0",
+      "kind": "resource",
+      "description": "Catalog, resolve, and execute a Dataset major line owned by this Module Instance."
+    },
+    {
+      "id": "tessara.datasets.source-usage",
+      "version": "1.0.0",
+      "kind": "behavior",
+      "description": "List authorized Dataset sources for a Form or FormVersion."
+    },
+    {
+      "id": "tessara.datasets.operational-status",
+      "version": "1.0.0",
+      "kind": "behavior",
+      "description": "Expose scoped Dataset readiness and summary state."
+    },
+    {
+      "id": "tessara.datasets.resource-observation",
+      "version": "1.0.0",
+      "kind": "behavior",
+      "description": "Resolve and observe Dataset resources."
+    },
+    {
+      "id": "tessara.datasets.authoring",
+      "version": "1.0.0",
+      "kind": "behavior",
+      "description": "Create, publish, refresh, and manage module-owned Datasets."
+    }
+  ],
+  "dependencies": [
+    {
+      "contract_id": "tessara.responses.submitted-response-export",
+      "version_requirement": "=1.0.0",
+      "binding_key": "tessara.datasets.response-export",
+      "optional": false
+    },
+    {
+      "contract_id": "tessara.forms.form-version-schema",
+      "version_requirement": "=1.0.0",
+      "binding_key": "tessara.datasets.form-version-schema",
+      "optional": false
+    },
+    {
+      "contract_id": "tessara.core.scope-catalog",
+      "version_requirement": "=1.0.0",
+      "binding_key": "tessara.datasets.scope-catalog",
+      "optional": false
+    },
+    {
+      "contract_id": "tessara.core.principal-display-catalog",
+      "version_requirement": "=1.0.0",
+      "binding_key": "tessara.datasets.principal-display-catalog",
+      "optional": false
+    }
+  ],
+  "resource_types": [
+    {
+      "id": "tessara.datasets.dataset",
+      "description": "A Dataset owned by the Dataset Module Instance."
+    },
+    {
+      "id": "tessara.datasets.dataset_revision",
+      "description": "An immutable DatasetRevision owned by the Dataset Module Instance."
+    },
+    {
+      "id": "tessara.datasets.dataset_major_line",
+      "description": "A published Dataset major line owned by the Dataset Module Instance."
+    }
+  ],
+  "typed_reference_schemas": [
+    {
+      "resource_type": "tessara.datasets.dataset",
+      "resource_id": {
+        "format": "uuid"
+      }
+    },
+    {
+      "resource_type": "tessara.datasets.dataset_revision",
+      "resource_id": {
+        "format": "uuid"
+      }
+    },
+    {
+      "resource_type": "tessara.datasets.dataset_major_line",
+      "resource_id": {
+        "format": "opaque_string",
+        "min_length": 38,
+        "max_length": 47
+      }
+    }
+  ],
+  "routes": [
+    {
+      "name": "datasets.directory",
+      "kind": "product",
+      "parameters": []
+    },
+    {
+      "name": "datasets.create",
+      "kind": "product",
+      "parameters": []
+    },
+    {
+      "name": "datasets.detail",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "dataset_id",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "datasets.edit",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "dataset_id",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "datasets.preview",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "dataset_id",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "datasets.revisions",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "dataset_id",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "datasets.revision_detail",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "dataset_id",
+          "value_type": "string",
+          "required": true
+        },
+        {
+          "name": "revision_id",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "datasets.revision_edit",
+      "kind": "product",
+      "parameters": [
+        {
+          "name": "dataset_id",
+          "value_type": "string",
+          "required": true
+        },
+        {
+          "name": "revision_id",
+          "value_type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "datasets.configuration.validate",
+      "kind": "configuration",
+      "parameters": []
+    },
+    {
+      "name": "datasets.compatibility",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "datasets.status",
+      "kind": "diagnostics",
+      "parameters": []
+    },
+    {
+      "name": "datasets.diagnostics",
+      "kind": "diagnostics",
+      "parameters": []
+    }
+  ],
+  "navigation": [
+    {
+      "id": "tessara.datasets.navigation",
+      "destination": "datasets.directory",
+      "label": "Datasets",
+      "group": "Main",
+      "order_hint": 6,
+      "required_capabilities_any_of": [
+        "datasets:read",
+        "datasets:manage"
+      ]
+    }
+  ],
+  "security_capabilities": [
+    {
+      "id": "datasets:read",
+      "description": "Inspect and execute Dataset definitions."
+    },
+    {
+      "id": "datasets:read_restricted",
+      "description": "Read restricted Dataset rows within an authorized Dataset scope."
+    },
+    {
+      "id": "datasets:read_confidential",
+      "description": "Read confidential and restricted Dataset rows within an authorized Dataset scope."
+    },
+    {
+      "id": "datasets:manage",
+      "description": "Manage Dataset definitions, publication, and refresh."
+    }
+  ],
+  "configuration_schema": {
+    "type": "object",
+    "properties": {
+      "schema_version": {
+        "type": "integer",
+        "const": 1,
+        "default": 1
+      },
+      "display_label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "default": "Datasets"
+      },
+      "provider_request_timeout_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 30,
+        "default": 5
+      },
+      "provider_retry_limit": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 3,
+        "default": 1
+      },
+      "response_export_page_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000,
+        "default": 250
+      }
+    },
+    "required": [
+      "schema_version",
+      "display_label",
+      "provider_request_timeout_seconds",
+      "provider_retry_limit",
+      "response_export_page_size"
+    ],
+    "additionalProperties": false
+  },
+  "operational_routes": {
+    "configuration_validation": "datasets.configuration.validate",
+    "compatibility": "datasets.compatibility",
+    "status": "datasets.status",
+    "diagnostics": "datasets.diagnostics"
+  },
+  "shell_contribution_contracts": null,
+  "platform_versions": {
+    "core_release": "0.1.0",
+    "shell_context_schema": "1.0.0",
+    "module_control_protocol": "1.1.0",
+    "module_contract": "0.3.0",
+    "module_runtime": "0.3.0",
+    "module_ui": "0.3.0",
+    "design_system_asset_abi": "2.0.0",
+    "conformance_suite": "1.2.0"
+  },
+  "linked_packages": {
+    "module_contract": "0.3.0",
+    "module_runtime": "0.3.0",
+    "module_ui": "0.3.0"
+  },
+  "browser_routes": [
+    {
+      "destination": "datasets.directory",
+      "path_template": "/datasets",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.list",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "datasets.create",
+      "path_template": "/datasets/new",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.create",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.authoring",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "datasets.edit",
+      "path_template": "/datasets/{dataset_id}/edit",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.get_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.authoring",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "datasets.preview",
+      "path_template": "/datasets/{dataset_id}/preview",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.preview_table",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "datasets.revisions",
+      "path_template": "/datasets/{dataset_id}/revisions",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.list_revisions",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "datasets.revision_detail",
+      "path_template": "/datasets/{dataset_id}/revisions/{revision_id}",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.get_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "datasets.revision_edit",
+      "path_template": "/datasets/{dataset_id}/revisions/{revision_id}/edit",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.get_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.authoring",
+      "organization_scope_parameter": null
+    },
+    {
+      "destination": "datasets.detail",
+      "path_template": "/datasets/{dataset_id}",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.get",
+      "dependency_binding": "tessara.core.datasets",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "organization_scope_parameter": null
+    }
+  ],
+  "browser_lifecycle": {
+    "lifecycle_abi": "1.0.0",
+    "entry_asset": "/dataset.js",
+    "stylesheet_assets": [
+      "/dataset-lifecycle.css"
+    ],
+    "complete_document_fallback": true,
+    "capabilities": {
+      "navigation_guard": true,
+      "suspend_resume": true
+    }
+  },
+  "public_api_routes": [
+    {
+      "path_template": "/api/datasets",
+      "method": "GET",
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.list",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/datasets/{dataset_id}",
+      "method": "GET",
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.get",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/datasets/{dataset_id}/revisions",
+      "method": "GET",
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.list_revisions",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/datasets/{dataset_id}/revisions/{revision_id}",
+      "method": "GET",
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.get_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/datasets/{dataset_id}/table",
+      "method": "GET",
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.preview_table",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/datasets/{dataset_id}/distinct-values",
+      "method": "GET",
+      "required_capability": "datasets:read",
+      "authorization_action": "datasets.distinct_values",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.dataset-major-line",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets",
+      "method": "POST",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.create",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}",
+      "method": "DELETE",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.delete",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/tags",
+      "method": "PATCH",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.update_tags",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/draft-revision",
+      "method": "POST",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.save_draft_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish",
+      "method": "POST",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.publish_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/label",
+      "method": "PATCH",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.update_revision_label",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/options",
+      "method": "PATCH",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.update_revision_options",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
+      "method": "DELETE",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.delete_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/sql-preview",
+      "method": "POST",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.preview_sql",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/sql-preview",
+      "method": "POST",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.preview_existing_sql",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/refresh",
+      "method": "POST",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.refresh",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "mutation",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "forward_or_generate_header"
+    },
+    {
+      "path_template": "/api/admin/datasets/editor-options/forms",
+      "method": "GET",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.editor_forms",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets/editor-options/forms/{form_version_id}",
+      "method": "GET",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.editor_form_schema",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets/editor-options/scopes",
+      "method": "GET",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.editor_scopes",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets/editor-options/principals",
+      "method": "GET",
+      "required_capability": "datasets:manage",
+      "authorization_action": "datasets.editor_principals",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    }
+  ],
+  "provided_service_actions": [
+    {
+      "path": "/api/private/datasets/bootstrap-validation",
+      "method": "POST",
+      "authorization_action": "datasets.bootstrap_validate",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.dataset-major-line"
+    },
+    {
+      "path": "/api/private/datasets/catalog",
+      "method": "POST",
+      "authorization_action": "datasets.catalog",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.dataset-major-line"
+    },
+    {
+      "path": "/api/private/datasets/schema",
+      "method": "POST",
+      "authorization_action": "datasets.schema",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.dataset-major-line"
+    },
+    {
+      "path": "/api/private/datasets/distinct-values",
+      "method": "POST",
+      "authorization_action": "datasets.distinct_values",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.dataset-major-line"
+    },
+    {
+      "path": "/api/private/datasets/compatibility",
+      "method": "POST",
+      "authorization_action": "datasets.compatibility",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.dataset-major-line"
+    },
+    {
+      "path": "/api/private/datasets/execute",
+      "method": "POST",
+      "authorization_action": "datasets.execute",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.dataset-major-line"
+    },
+    {
+      "path": "/api/private/datasets/resolve",
+      "method": "POST",
+      "authorization_action": "datasets.resolve",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.resource-observation"
+    },
+    {
+      "path": "/api/private/datasets/source-usage",
+      "method": "POST",
+      "authorization_action": "datasets.source_usage",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.source-usage"
+    },
+    {
+      "path": "/api/private/datasets/operations-status",
+      "method": "POST",
+      "authorization_action": "datasets.operations_status",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.operational-status"
+    },
+    {
+      "path": "/api/private/datasets/summary",
+      "method": "POST",
+      "authorization_action": "datasets.summary",
+      "operation": "read",
+      "required_capability": "datasets:read",
+      "functional_contract": "tessara.datasets.operational-status"
+    }
+  ],
+  "consumed_service_actions": [
+    {
+      "dependency_binding": "tessara.datasets.response-export",
+      "functional_contract": "tessara.responses.submitted-response-export",
+      "authorization_action": "responses.export_checkpoint"
+    },
+    {
+      "dependency_binding": "tessara.datasets.response-export",
+      "functional_contract": "tessara.responses.submitted-response-export",
+      "authorization_action": "responses.export_start"
+    },
+    {
+      "dependency_binding": "tessara.datasets.response-export",
+      "functional_contract": "tessara.responses.submitted-response-export",
+      "authorization_action": "responses.export_page"
+    },
+    {
+      "dependency_binding": "tessara.datasets.form-version-schema",
+      "functional_contract": "tessara.forms.form-version-schema",
+      "authorization_action": "forms.form_version_catalog"
+    },
+    {
+      "dependency_binding": "tessara.datasets.form-version-schema",
+      "functional_contract": "tessara.forms.form-version-schema",
+      "authorization_action": "forms.form_version_schema"
+    },
+    {
+      "dependency_binding": "tessara.datasets.scope-catalog",
+      "functional_contract": "tessara.core.scope-catalog",
+      "authorization_action": "core.scope_catalog"
+    },
+    {
+      "dependency_binding": "tessara.datasets.principal-display-catalog",
+      "functional_contract": "tessara.core.principal-display-catalog",
+      "authorization_action": "core.principal_display_catalog"
+    }
+  ],
+  "bootstrap_dependency_validation": null,
+  "control_projections": [
+    {
+      "kind": "security_state",
+      "path": "/api/private/security-state",
+      "revision_field": "authorization_revision"
+    }
+  ],
+  "assets": [
+    {
+      "path": "/module-ui.css",
+      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/dataset.css",
+      "digest": "sha256:4004f8b4af04595493511d28cc16855c410f15c92613ddab77f7a7480dc3e7c0",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/dataset-lifecycle.css",
+      "digest": "sha256:da84cc6e3e0f359be1e7f3276e73ae11fa21963f948ad15c30df32dcdeecadfa",
+      "content_type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/dataset.js",
+      "digest": "sha256:f064e77331ab5e90d8741da3dc1c78745656ff21ccc99afcec1f0db72b48ac63",
+      "content_type": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "/dataset-bindings.js",
+      "digest": "sha256:b5ca9979ad3b1d83904bd36f63f7deddf1737764c75f791807ccdeee953b9463",
+      "content_type": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "/dataset.wasm",
+      "digest": "sha256:b2969c4d1f1d4c074d4f861bbcb443e1de7bc933e7fa6a691412f8c1c1fa7ce5",
+      "content_type": "application/wasm"
+    }
+  ]
+}

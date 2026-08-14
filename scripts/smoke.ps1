@@ -790,10 +790,11 @@ try {
         throw "Expected Component authoring catalog to expose exact Dataset major line '$visualDatasetResourceId'"
     }
     $visualDatasetReference = $visualDatasetOptions[0].reference
-    if ([string]$visualDatasetReference.reference.resource_type -cne "tessara.transition.dataset_major_line" -or
-        [string]$visualDatasetReference.reference.owner.kind -cne "core_installation" -or
+    if ([string]$visualDatasetReference.reference.resource_type -cne "tessara.datasets.dataset_major_line" -or
+        [string]$visualDatasetReference.reference.owner.kind -cne "module_instance" -or
+        [string]::IsNullOrWhiteSpace([string]$visualDatasetReference.reference.owner.module_instance_id) -or
         [string]$visualDatasetReference.reference.owner.installation_id -cne [string]$visualDatasetReference.reference.installation_id) {
-        throw "Expected Component authoring catalog to return one canonical Core-owned Dataset major-line reference"
+        throw "Expected Component authoring catalog to return one canonical Dataset ModuleInstance-owned major-line reference"
     }
     $visualSlug = "smoke-visual-bar-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
     $visualComponent = Invoke-Json `

@@ -24,10 +24,11 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 sqlx = { workspace = true }
 tessara-core = { path = "../tessara-core" }
+tessara-control-plane-contract = { path = "../tessara-control-plane-contract" }
 tessara-datasets-contract = { path = "../tessara-datasets-contract" }
+tessara-forms-contract = { path = "../tessara-forms-contract" }
+tessara-responses-contract = { path = "../tessara-responses-contract" }
 tessara-composition = { path = "../tessara-composition" }
-tessara-data-ops = { path = "../tessara-data-ops" }
-tessara-datasets = { path = "../tessara-datasets" }
 tessara-forms = { path = "../tessara-forms" }
 tessara-hierarchy = { path = "../tessara-hierarchy" }
 tessara-module-contract = { path = "../tessara-module-contract" }

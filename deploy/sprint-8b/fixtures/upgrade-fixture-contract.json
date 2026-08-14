@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8b.dataset-upgrade-fixture",
+  "sequence": ["0.9.0", "1.0.0", "0.9.0", "1.0.0"],
+  "transition": {
+    "owner": "tessara.datasets",
+    "mechanism": "resolved_one_owner_blueprint_delta",
+    "intended_release": "1.0.0"
+  },
+  "prior_compatible_artifact": {
+    "release": "0.9.0",
+    "cargo_package": "tessara-dataset-module",
+    "cargo_feature": "sprint-8b-upgrade-baseline",
+    "dockerfile": "deploy/sprint-8b/Dockerfile.dataset-upgrade-baseline",
+    "builder": "scripts/build-sprint-8b-dataset-upgrade-baseline.ps1",
+    "executable": "/usr/local/bin/dataset-module",
+    "fixture_kind": "source-built-prior-compatible-release-v1",
+    "manifest_source": "crates/tessara-dataset-module/manifest.json",
+    "manifest_projection": "release_version_only",
+    "metadata_receipt_contract": "tessara.sprint-8b.dataset-prior-compatible-release"
+  },
+  "dataset_releases": {
+    "0.9.0": { "contract": "tessara.datasets.dataset-major-line", "contract_version": "2.0.0", "source_built": true },
+    "1.0.0": { "contract": "tessara.datasets.dataset-major-line", "contract_version": "2.0.0", "source_built": true }
+  },
+  "schema_compatibility": {
+    "mode": "reads_additive_1_0_0_schema_after_rollback",
+    "migration_path": "crates/tessara-dataset-module/migrations/001_dataset_module.sql",
+    "baseline_feature_scope": "release_identity_only",
+    "rollback_reader_contract": "same_source_and_storage_read_paths",
+    "required_additive_objects": [
+      "dataset_sync_partitions",
+      "dataset_sync_attempts",
+      "dataset_sync_staged_changes",
+      "dataset_imported_responses",
+      "dataset_imported_response_values",
+      "dataset_materialization_receipts"
+    ]
+  },
+  "fixed_dependencies": {
+    "tessara.components": "1.1.0",
+    "tessara.dashboards": "3.0.1"
+  },
+  "preserved": ["dataset_state", "provider_route", "typed_resource_identity", "navigation_identity"],
+  "unrelated_unchanged": ["images", "containers", "restart_counts", "owner_data", "navigation", "availability"]
+}

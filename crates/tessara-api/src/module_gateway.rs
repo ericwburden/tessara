@@ -4,7 +4,10 @@
 //! service registration, projects current control state, and forwards only
 //! short-lived signed authority plus safe request metadata.
 
-use std::{cmp::Reverse, collections::BTreeMap};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use axum::{
     body::{Body, Bytes, to_bytes},
@@ -14,15 +17,18 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
     AuthorizationGrantV3, BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1,
-    DependencyBindingKey, DeploymentProfile, FunctionalContractId, ModuleManifest,
-    ModuleServicePrincipalV1, NavigationProjectionV1, OriginalActorProjectionV1,
+    CoreServiceRequestV1, DependencyBindingKey, DeploymentProfile, FunctionalContractId,
+    ModuleManifest, ModuleServicePrincipalV1, NavigationProjectionV1, OriginalActorProjectionV1,
     ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId,
-    ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
+    ServiceActionMethod, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
+    TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -38,6 +44,434 @@ struct InstalledModule {
     installation_id: Uuid,
     manifest: ModuleManifest,
     serving: bool,
+}
+
+const CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES: usize = 1024 * 1024;
+const CORE_PRIVATE_PROVIDER_MEDIA_TYPE: &str = "application/json";
+const RESOURCE_OBSERVATION_PROVIDER_CONTRACT_VERSION: &str = "1.0.0";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CorePrivateProviderOwner {
+    pub(crate) installation_id: Uuid,
+    pub(crate) module_instance_id: Uuid,
+}
+
+pub(crate) struct CorePrivateProviderRequest<'a, T> {
+    pub(crate) module_definition_id: &'a str,
+    /// When present, a generic resource call must reach this exact owner rather
+    /// than any installed instance of the same module definition.
+    pub(crate) expected_owner: Option<CorePrivateProviderOwner>,
+    pub(crate) dependency_binding: &'a str,
+    pub(crate) functional_contract: &'a str,
+    pub(crate) contract_version: &'a str,
+    pub(crate) authorization_action: &'a str,
+    pub(crate) path: &'a str,
+    pub(crate) correlation_id: Uuid,
+    /// Core-owned capability whose effective scope is delegated to this exact
+    /// provider action (for example `operations:view` or `admin:all`).
+    pub(crate) actor_capability: &'a str,
+    pub(crate) body: &'a T,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ResourceObservationProviderRoute {
+    owner: CorePrivateProviderOwner,
+    module_definition_id: String,
+    dependency_binding: String,
+    functional_contract: String,
+    contract_version: String,
+    authorization_action: String,
+    path: String,
+    actor_capability: String,
+}
+
+impl ResourceObservationProviderRoute {
+    pub(crate) fn actor_capability(&self) -> &str {
+        &self.actor_capability
+    }
+
+    pub(crate) fn private_request<'a, T>(
+        &'a self,
+        correlation_id: Uuid,
+        body: &'a T,
+    ) -> CorePrivateProviderRequest<'a, T> {
+        CorePrivateProviderRequest {
+            module_definition_id: &self.module_definition_id,
+            expected_owner: Some(self.owner),
+            dependency_binding: &self.dependency_binding,
+            functional_contract: &self.functional_contract,
+            contract_version: &self.contract_version,
+            authorization_action: &self.authorization_action,
+            path: &self.path,
+            correlation_id,
+            actor_capability: &self.actor_capability,
+            body,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum ResourceObservationProviderLookup {
+    Registered(ResourceObservationProviderRoute),
+    OwnerUnavailable,
+    ReferenceUnsupported,
+    ContractUnavailable,
+}
+
+/// Resolves a module-owned typed reference to its manifest-declared generic
+/// resource-observation provider. The platform recognizes only the policy-
+/// neutral `resource-observation` v1 service convention; product definition,
+/// action, route, capability, and Core binding identities all come from the
+/// exact installed manifest.
+pub(crate) async fn resource_observation_provider(
+    pool: &sqlx::PgPool,
+    reference: &TypedResourceReference,
+) -> ApiResult<ResourceObservationProviderLookup> {
+    let installed = installed_modules(pool).await?;
+    Ok(resource_observation_provider_from_installed(
+        &installed, reference,
+    ))
+}
+
+fn resource_observation_provider_from_installed(
+    installed: &[InstalledModule],
+    reference: &TypedResourceReference,
+) -> ResourceObservationProviderLookup {
+    let tessara_module_contract::ResourceOwner::ModuleInstance {
+        installation_id,
+        module_instance_id,
+    } = reference.owner()
+    else {
+        return ResourceObservationProviderLookup::OwnerUnavailable;
+    };
+    if reference.installation_id() != *installation_id {
+        return ResourceObservationProviderLookup::OwnerUnavailable;
+    }
+
+    let mut owners = installed.iter().filter(|module| {
+        module.installation_id == *installation_id && module.instance_id == *module_instance_id
+    });
+    let Some(module) = owners.next() else {
+        return ResourceObservationProviderLookup::OwnerUnavailable;
+    };
+    if owners.next().is_some() {
+        return ResourceObservationProviderLookup::OwnerUnavailable;
+    }
+
+    let mut reference_schemas = module
+        .manifest
+        .typed_reference_schemas
+        .iter()
+        .filter(|schema| schema.resource_type == *reference.resource_type());
+    let Some(reference_schema) = reference_schemas.next() else {
+        return ResourceObservationProviderLookup::ReferenceUnsupported;
+    };
+    if reference_schemas.next().is_some() || reference_schema.validate_reference(reference).is_err()
+    {
+        return ResourceObservationProviderLookup::ReferenceUnsupported;
+    }
+
+    let mut actions = module
+        .manifest
+        .provided_service_actions
+        .iter()
+        .filter(|action| {
+            action.method == ServiceActionMethod::Post
+                && action.operation == AuthorizationGrantOperationV1::Read
+                && action.authorization_action.rsplit('.').next() == Some("resolve")
+                && action.path.rsplit('/').next() == Some("resolve")
+                && action.functional_contract.as_str().rsplit('.').next()
+                    == Some("resource-observation")
+        });
+    let Some(action) = actions.next() else {
+        return ResourceObservationProviderLookup::ContractUnavailable;
+    };
+    if actions.next().is_some() {
+        return ResourceObservationProviderLookup::ContractUnavailable;
+    }
+
+    let mut contracts = module
+        .manifest
+        .provided_contracts
+        .iter()
+        .filter(|contract| {
+            contract.id == action.functional_contract
+                && contract.version.to_string() == RESOURCE_OBSERVATION_PROVIDER_CONTRACT_VERSION
+        });
+    let Some(contract) = contracts.next() else {
+        return ResourceObservationProviderLookup::ContractUnavailable;
+    };
+    if contracts.next().is_some()
+        || !module
+            .manifest
+            .security_capabilities
+            .iter()
+            .any(|capability| capability.id == action.required_capability)
+    {
+        return ResourceObservationProviderLookup::ContractUnavailable;
+    }
+
+    let bindings = module
+        .manifest
+        .browser_routes
+        .iter()
+        .map(|route| route.dependency_binding.as_str())
+        .chain(
+            module
+                .manifest
+                .public_api_routes
+                .iter()
+                .map(|route| route.dependency_binding.as_str()),
+        )
+        .collect::<BTreeSet<_>>();
+    let mut bindings = bindings.into_iter();
+    let Some(dependency_binding) = bindings.next() else {
+        return ResourceObservationProviderLookup::ContractUnavailable;
+    };
+    if bindings.next().is_some() {
+        return ResourceObservationProviderLookup::ContractUnavailable;
+    }
+
+    ResourceObservationProviderLookup::Registered(ResourceObservationProviderRoute {
+        owner: CorePrivateProviderOwner {
+            installation_id: module.installation_id,
+            module_instance_id: module.instance_id,
+        },
+        module_definition_id: module.manifest.definition_id.to_string(),
+        dependency_binding: dependency_binding.to_owned(),
+        functional_contract: contract.id.to_string(),
+        contract_version: contract.version.to_string(),
+        authorization_action: action.authorization_action.clone(),
+        path: action.path.clone(),
+        actor_capability: action.required_capability.to_string(),
+    })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum CorePrivateProviderResult<T> {
+    Response(T),
+    Unavailable,
+    Undisclosed,
+}
+
+/// Calls one exact, manifest-declared private module action as CoreGateway.
+/// Module absence, health failure, transport failure, and incompatible wire
+/// responses remain an explicit unavailable state; an unauthorized actor or
+/// provider rejection remains undisclosed.
+pub(crate) async fn call_private_provider<TRequest, TResponse>(
+    state: &AppState,
+    actor: &AuthenticatedRequest,
+    request: CorePrivateProviderRequest<'_, TRequest>,
+) -> ApiResult<CorePrivateProviderResult<TResponse>>
+where
+    TRequest: Serialize,
+    TResponse: DeserializeOwned,
+{
+    let installed = installed_modules(&state.pool).await?;
+    let mut candidates = installed.into_iter().filter(|module| {
+        module.manifest.definition_id.as_str() == request.module_definition_id
+            && request.expected_owner.is_none_or(|owner| {
+                module.installation_id == owner.installation_id
+                    && module.instance_id == owner.module_instance_id
+            })
+    });
+    let Some(module) = candidates.next() else {
+        return Ok(CorePrivateProviderResult::Unavailable);
+    };
+    if candidates.next().is_some()
+        || !module.serving
+        || !private_action_matches(&module.manifest, &request)
+    {
+        return Ok(CorePrivateProviderResult::Unavailable);
+    }
+
+    let declaration = module
+        .manifest
+        .provided_service_actions
+        .iter()
+        .find(|declaration| {
+            declaration.functional_contract.as_str() == request.functional_contract
+                && declaration.authorization_action == request.authorization_action
+        })
+        .expect("private action was checked before authorization");
+    let mut bindings = capability_bindings(
+        &state.pool,
+        actor.account.account_id,
+        request.actor_capability,
+    )
+    .await?;
+    if actor
+        .account
+        .has_global_capability(request.actor_capability)
+    {
+        bindings.push(CapabilityScopeBindingV1 {
+            capability: declaration.required_capability.clone(),
+            organization_root_id: module.installation_id,
+            authorized_organization_ids: Vec::new(),
+        });
+    }
+    if bindings.is_empty() {
+        return Ok(CorePrivateProviderResult::Undisclosed);
+    }
+    for binding in &mut bindings {
+        binding.capability = declaration.required_capability.clone();
+    }
+
+    if request.correlation_id.is_nil() {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "Core private provider correlation identity must not be nil"
+        )));
+    }
+    let correlation_id = request.correlation_id;
+    let dependency_binding = DependencyBindingKey::new(request.dependency_binding)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let grant = match issue_module_authorization(
+        state,
+        actor,
+        &module,
+        correlation_id,
+        AuthorizationRequest {
+            action: request.authorization_action,
+            dependency_binding: &dependency_binding,
+            operation: AuthorizationGrantOperationV1::Read,
+            required_capability: &declaration.required_capability,
+            contract: &declaration.functional_contract,
+        },
+        bindings,
+    )
+    .await
+    {
+        Ok(grant) => grant,
+        Err(ApiError::Forbidden(_)) => return Ok(CorePrivateProviderResult::Undisclosed),
+        Err(ApiError::ServiceUnavailable(_)) => {
+            return Ok(CorePrivateProviderResult::Unavailable);
+        }
+        Err(error) => return Err(error),
+    };
+    let body =
+        serde_json::to_vec(request.body).map_err(|error| ApiError::Internal(error.into()))?;
+    let encoded_grant = URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&grant).map_err(|error| ApiError::Internal(error.into()))?);
+    let now = Utc::now();
+    let core_request = protocol_signer(ProtocolSignaturePurposeV1::ModuleServiceRequest)?
+        .sign(CoreServiceRequestV1 {
+            schema_version: 1,
+            installation_id: module.installation_id,
+            method: "POST".into(),
+            path: request.path.into(),
+            canonical_body_digest: sha256_hex(&body),
+            inbound_grant_digest: sha256_hex(encoded_grant.as_bytes()),
+            correlation_id: correlation_id.to_string(),
+            nonce: Uuid::new_v4(),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        })
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let encoded_core_request = URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&core_request).map_err(|error| ApiError::Internal(error.into()))?,
+    );
+    let endpoint = match service_endpoint(&module.manifest) {
+        Ok(endpoint) => endpoint,
+        Err(ApiError::ServiceUnavailable(_)) => {
+            return Ok(CorePrivateProviderResult::Unavailable);
+        }
+        Err(error) => return Err(error),
+    };
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    let response = match client
+        .post(format!("{endpoint}{}", request.path))
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            CORE_PRIVATE_PROVIDER_MEDIA_TYPE,
+        )
+        .header(reqwest::header::ACCEPT, CORE_PRIVATE_PROVIDER_MEDIA_TYPE)
+        .header("x-tessara-authorization", encoded_grant)
+        .header("x-tessara-core-service-request", encoded_core_request)
+        .header("x-tessara-correlation-id", correlation_id.to_string())
+        .body(body)
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(_) => return Ok(CorePrivateProviderResult::Unavailable),
+    };
+    if matches!(response.status().as_u16(), 401 | 403) {
+        return Ok(CorePrivateProviderResult::Undisclosed);
+    }
+    if !response.status().is_success() {
+        return Ok(CorePrivateProviderResult::Unavailable);
+    }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let content_length = response.content_length();
+    let bytes = match bounded_private_provider_body(response).await {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) | Err(_) => return Ok(CorePrivateProviderResult::Unavailable),
+    };
+    Ok(decode_private_provider_response(
+        content_type.as_deref(),
+        content_length,
+        &bytes,
+    ))
+}
+
+async fn bounded_private_provider_body(
+    mut response: reqwest::Response,
+) -> Result<Option<Vec<u8>>, reqwest::Error> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if body.len().saturating_add(chunk.len()) > CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES {
+            return Ok(None);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(Some(body))
+}
+
+fn decode_private_provider_response<T: DeserializeOwned>(
+    content_type: Option<&str>,
+    declared_length: Option<u64>,
+    bytes: &[u8],
+) -> CorePrivateProviderResult<T> {
+    if content_type != Some(CORE_PRIVATE_PROVIDER_MEDIA_TYPE)
+        || declared_length
+            .is_some_and(|length| length > CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES as u64)
+        || bytes.len() > CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES
+    {
+        return CorePrivateProviderResult::Unavailable;
+    }
+    serde_json::from_slice(bytes)
+        .map(CorePrivateProviderResult::Response)
+        .unwrap_or(CorePrivateProviderResult::Unavailable)
+}
+
+fn private_action_matches<T>(
+    manifest: &ModuleManifest,
+    request: &CorePrivateProviderRequest<'_, T>,
+) -> bool {
+    let Some(declaration) = manifest
+        .provided_service_actions
+        .iter()
+        .find(|declaration| {
+            declaration.functional_contract.as_str() == request.functional_contract
+                && declaration.authorization_action == request.authorization_action
+        })
+    else {
+        return false;
+    };
+    let contract_matches = manifest.provided_contracts.iter().any(|contract| {
+        contract.id.as_str() == request.functional_contract
+            && contract.version.to_string() == request.contract_version
+    });
+    declaration.method == ServiceActionMethod::Post
+        && declaration.path == request.path
+        && contract_matches
 }
 
 pub(crate) async fn dispatch(
@@ -267,16 +701,6 @@ async fn module_authorization(
     correlation_id: Uuid,
     request: AuthorizationRequest<'_>,
 ) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>> {
-    let revisions = sqlx::query(
-        "SELECT authorization_revision,organization_revision
-         FROM core_security_revisions WHERE singleton=true",
-    )
-    .fetch_one(&state.pool)
-    .await?;
-    let authorization_revision: i64 = revisions.try_get("authorization_revision")?;
-    let organization_revision: i64 = revisions.try_get("organization_revision")?;
-    sync_control_projections(state, module, authorization_revision, organization_revision).await?;
-
     let mut bindings = Vec::new();
     for capability in &module.manifest.security_capabilities {
         bindings.extend(
@@ -301,6 +725,27 @@ async fn module_authorization(
             });
         }
     }
+    issue_module_authorization(state, actor, module, correlation_id, request, bindings).await
+}
+
+async fn issue_module_authorization(
+    state: &AppState,
+    actor: &AuthenticatedRequest,
+    module: &InstalledModule,
+    correlation_id: Uuid,
+    request: AuthorizationRequest<'_>,
+    bindings: Vec<CapabilityScopeBindingV1>,
+) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>> {
+    let revisions = sqlx::query(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    let authorization_revision: i64 = revisions.try_get("authorization_revision")?;
+    let organization_revision: i64 = revisions.try_get("organization_revision")?;
+    sync_control_projections(state, module, authorization_revision, organization_revision).await?;
+
     if !bindings
         .iter()
         .any(|binding| binding.capability == *request.required_capability)
@@ -348,6 +793,13 @@ async fn module_authorization(
     protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
         .sign(grant)
         .map_err(|error| ApiError::Internal(error.into()))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn shell_context(
@@ -633,7 +1085,7 @@ fn service_endpoint(manifest: &ModuleManifest) -> ApiResult<String> {
         .filter(|value| !value.trim().is_empty())
         .map(|value| {
             serde_json::from_str::<BTreeMap<String, String>>(&value)
-                .map_err(|error| ApiError::Internal(error.into()))
+                .map_err(|_| module_unavailable())
                 .and_then(|map| {
                     map.get(manifest.definition_id.as_str())
                         .filter(|endpoint| !endpoint.trim().is_empty())
@@ -692,6 +1144,7 @@ fn api_method_matches(declared: PublicApiMethod, actual: &Method) -> bool {
         (PublicApiMethod::Get, &Method::GET)
             | (PublicApiMethod::Post, &Method::POST)
             | (PublicApiMethod::Put, &Method::PUT)
+            | (PublicApiMethod::Patch, &Method::PATCH)
             | (PublicApiMethod::Delete, &Method::DELETE)
     )
 }
@@ -717,7 +1170,8 @@ async fn has_global_capability(
            JOIN role_capabilities rc ON rc.role_id=ra.role_id
            JOIN capabilities c ON c.id=rc.capability_id
            WHERE ra.account_id=$1 AND ra.node_id IS NULL
-             AND (c.key=$2 OR c.key='admin:all')
+             AND (c.key=$2 OR c.key='admin:all'
+                  OR ($2 LIKE '%:read' AND c.key=replace($2, ':read', ':manage')))
          )",
     )
     .bind(account_id)
@@ -733,8 +1187,259 @@ fn module_unavailable() -> ApiError {
 #[cfg(test)]
 mod tests {
     use axum::http::HeaderValue;
+    use serde::Deserialize;
 
     use super::*;
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+    #[serde(deny_unknown_fields)]
+    struct PrivateResponseFixture {
+        state: String,
+    }
+
+    #[test]
+    fn private_provider_action_matches_exact_manifest_path_action_contract_and_version() {
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-dataset-module/manifest.json"))
+                .expect("Dataset manifest");
+        let body = tessara_datasets_contract::DatasetSummaryRequest { schema_version: 1 };
+        let request = CorePrivateProviderRequest {
+            module_definition_id: tessara_datasets_contract::DATASET_MODULE_DEFINITION_ID,
+            expected_owner: None,
+            dependency_binding: tessara_datasets_contract::DATASET_CORE_BINDING_KEY,
+            functional_contract: tessara_datasets_contract::DATASET_OPERATIONAL_STATUS_CONTRACT_ID,
+            contract_version: tessara_datasets_contract::DATASET_REVERSE_CONTRACT_VERSION,
+            authorization_action: tessara_datasets_contract::DATASET_SUMMARY_ACTION,
+            path: tessara_datasets_contract::DATASET_SUMMARY_PATH,
+            correlation_id: Uuid::from_u128(1),
+            actor_capability: "admin:all",
+            body: &body,
+        };
+        assert!(private_action_matches(&manifest, &request));
+
+        let wrong_path = CorePrivateProviderRequest {
+            path: tessara_datasets_contract::DATASET_OPERATIONS_STATUS_PATH,
+            ..request
+        };
+        assert!(!private_action_matches(&manifest, &wrong_path));
+
+        let wrong_version = CorePrivateProviderRequest {
+            contract_version: "1.0.1",
+            ..wrong_path
+        };
+        assert!(!private_action_matches(&manifest, &wrong_version));
+    }
+
+    #[test]
+    fn generic_resource_observation_route_is_exactly_manifest_and_owner_bound() {
+        let installation_id = Uuid::from_u128(101);
+        let module_instance_id = Uuid::from_u128(102);
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-dataset-module/manifest.json"))
+                .expect("Dataset manifest");
+        let installed = [InstalledModule {
+            instance_id: module_instance_id,
+            installation_id,
+            manifest,
+            serving: true,
+        }];
+        let reference = tessara_datasets_contract::DatasetRevisionReference::from_parts(
+            installation_id,
+            module_instance_id,
+            Uuid::from_u128(103),
+        )
+        .expect("canonical reference");
+
+        let ResourceObservationProviderLookup::Registered(route) =
+            resource_observation_provider_from_installed(&installed, reference.reference())
+        else {
+            panic!("resource observation route was not registered");
+        };
+        let body = tessara_datasets_contract::DatasetResourceObservationRequest {
+            schema_version: 1,
+            reference: reference.reference().clone(),
+        };
+        let request = route.private_request(Uuid::from_u128(104), &body);
+
+        assert_eq!(
+            request.expected_owner,
+            Some(CorePrivateProviderOwner {
+                installation_id,
+                module_instance_id,
+            })
+        );
+        assert_eq!(
+            request.module_definition_id,
+            tessara_datasets_contract::DATASET_MODULE_DEFINITION_ID
+        );
+        assert_eq!(
+            request.dependency_binding,
+            tessara_datasets_contract::DATASET_CORE_BINDING_KEY
+        );
+        assert_eq!(
+            request.functional_contract,
+            tessara_datasets_contract::DATASET_RESOURCE_OBSERVATION_CONTRACT_ID
+        );
+        assert_eq!(
+            request.contract_version,
+            tessara_datasets_contract::DATASET_REVERSE_CONTRACT_VERSION
+        );
+        assert_eq!(
+            request.authorization_action,
+            tessara_datasets_contract::DATASET_RESOLVE_ACTION
+        );
+        assert_eq!(
+            request.path,
+            tessara_datasets_contract::DATASET_RESOLVE_PATH
+        );
+        assert_eq!(request.actor_capability, "datasets:read");
+    }
+
+    #[test]
+    fn generic_resource_observation_rejects_wrong_owner_type_id_and_contract_before_dispatch() {
+        let installation_id = Uuid::from_u128(111);
+        let module_instance_id = Uuid::from_u128(112);
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-dataset-module/manifest.json"))
+                .expect("Dataset manifest");
+        let installed = [InstalledModule {
+            instance_id: module_instance_id,
+            installation_id,
+            manifest: manifest.clone(),
+            serving: true,
+        }];
+
+        let wrong_instance = tessara_datasets_contract::DatasetReference::from_parts(
+            installation_id,
+            Uuid::from_u128(999),
+            Uuid::from_u128(113),
+        )
+        .expect("canonical reference");
+        assert_eq!(
+            resource_observation_provider_from_installed(&installed, wrong_instance.reference()),
+            ResourceObservationProviderLookup::OwnerUnavailable
+        );
+
+        let old_type = TypedResourceReference::new(
+            installation_id,
+            tessara_module_contract::ResourceOwner::ModuleInstance {
+                installation_id,
+                module_instance_id,
+            },
+            tessara_module_contract::ResourceTypeId::new("tessara.transition.dataset_revision")
+                .expect("resource type"),
+            Uuid::from_u128(114).to_string(),
+        )
+        .expect("structural reference");
+        assert_eq!(
+            resource_observation_provider_from_installed(&installed, &old_type),
+            ResourceObservationProviderLookup::ReferenceUnsupported
+        );
+
+        let invalid_id = TypedResourceReference::new(
+            installation_id,
+            tessara_module_contract::ResourceOwner::ModuleInstance {
+                installation_id,
+                module_instance_id,
+            },
+            tessara_module_contract::ResourceTypeId::new(
+                tessara_datasets_contract::DATASET_REVISION_RESOURCE_TYPE,
+            )
+            .expect("resource type"),
+            "not-a-canonical-uuid".to_string(),
+        )
+        .expect("structural reference");
+        assert_eq!(
+            resource_observation_provider_from_installed(&installed, &invalid_id),
+            ResourceObservationProviderLookup::ReferenceUnsupported
+        );
+
+        let mut incompatible_manifest = manifest;
+        incompatible_manifest
+            .provided_contracts
+            .iter_mut()
+            .find(|contract| {
+                contract.id.as_str()
+                    == tessara_datasets_contract::DATASET_RESOURCE_OBSERVATION_CONTRACT_ID
+            })
+            .expect("resource observation contract")
+            .version = semver::Version::parse("1.0.1").expect("version");
+        let incompatible = [InstalledModule {
+            instance_id: module_instance_id,
+            installation_id,
+            manifest: incompatible_manifest,
+            serving: true,
+        }];
+        let canonical = tessara_datasets_contract::DatasetReference::from_parts(
+            installation_id,
+            module_instance_id,
+            Uuid::from_u128(115),
+        )
+        .expect("canonical reference");
+        assert_eq!(
+            resource_observation_provider_from_installed(&incompatible, canonical.reference()),
+            ResourceObservationProviderLookup::ContractUnavailable
+        );
+    }
+
+    #[test]
+    fn private_provider_response_requires_exact_json_and_bounded_valid_wire() {
+        let body = br#"{"state":"available"}"#;
+        assert_eq!(
+            decode_private_provider_response::<PrivateResponseFixture>(
+                Some("application/json"),
+                Some(body.len() as u64),
+                body,
+            ),
+            CorePrivateProviderResult::Response(PrivateResponseFixture {
+                state: "available".into(),
+            })
+        );
+        for content_type in [
+            None,
+            Some("application/json; charset=utf-8"),
+            Some("application/vnd.tessara+json"),
+            Some("text/json"),
+        ] {
+            assert_eq!(
+                decode_private_provider_response::<PrivateResponseFixture>(
+                    content_type,
+                    Some(body.len() as u64),
+                    body,
+                ),
+                CorePrivateProviderResult::Unavailable
+            );
+        }
+    }
+
+    #[test]
+    fn private_provider_malformed_and_oversized_responses_are_unavailable() {
+        assert_eq!(
+            decode_private_provider_response::<PrivateResponseFixture>(
+                Some("application/json"),
+                None,
+                br#"{"state":}"
+            ),
+            CorePrivateProviderResult::Unavailable
+        );
+        let oversized = vec![b' '; CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES + 1];
+        assert_eq!(
+            decode_private_provider_response::<PrivateResponseFixture>(
+                Some("application/json"),
+                None,
+                &oversized,
+            ),
+            CorePrivateProviderResult::Unavailable
+        );
+        assert_eq!(
+            decode_private_provider_response::<PrivateResponseFixture>(
+                Some("application/json"),
+                Some((CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES + 1) as u64),
+                br#"{"state":"available"}"#,
+            ),
+            CorePrivateProviderResult::Unavailable
+        );
+    }
 
     #[test]
     fn manifest_path_matching_distinguishes_static_and_parameter_segments() {
@@ -757,6 +1462,22 @@ mod tests {
         assert!(
             path_template_specificity("/api/admin/components/validate")
                 > path_template_specificity("/api/admin/components/{component_id}")
+        );
+        assert!(
+            path_template_specificity("/datasets/new")
+                > path_template_specificity("/datasets/{dataset_id}")
+        );
+        assert!(
+            path_template_specificity("/api/admin/datasets/sql-preview")
+                > path_template_specificity("/api/admin/datasets/{dataset_id}")
+        );
+        assert!(
+            path_template_specificity("/api/admin/datasets/editor-options/forms")
+                > path_template_specificity("/api/admin/datasets/{dataset_id}/refresh")
+        );
+        assert!(
+            path_template_specificity("/api/admin/datasets/{dataset_id}/sql-preview")
+                > path_template_specificity("/api/admin/datasets/{dataset_id}")
         );
     }
 
@@ -879,5 +1600,11 @@ mod tests {
             &manifest,
             "/dashboards"
         ));
+    }
+
+    #[test]
+    fn generic_gateway_matches_patch_without_definition_specific_routing() {
+        assert!(api_method_matches(PublicApiMethod::Patch, &Method::PATCH));
+        assert!(!api_method_matches(PublicApiMethod::Patch, &Method::PUT));
     }
 }

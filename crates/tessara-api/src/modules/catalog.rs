@@ -9,7 +9,7 @@ use tessara_module_contract::{
 };
 use uuid::Uuid;
 
-const FROZEN_CATALOG: [FrozenCatalogEntry; 5] = [
+const FROZEN_CATALOG: [FrozenCatalogEntry; 4] = [
     FrozenCatalogEntry {
         name: "Forms",
         definition_id: "tessara.forms",
@@ -24,11 +24,6 @@ const FROZEN_CATALOG: [FrozenCatalogEntry; 5] = [
         name: "Responses",
         definition_id: "tessara.responses",
         navigation: Some(("main_between_organization_and_operations", 2)),
-    },
-    FrozenCatalogEntry {
-        name: "Datasets",
-        definition_id: "tessara.datasets",
-        navigation: Some(("admin_between_administration_and_module_management", 0)),
     },
     FrozenCatalogEntry {
         name: "Migration",
@@ -173,17 +168,6 @@ pub(crate) fn canonical_inputs() -> Vec<CatalogInput> {
                 "../../../tessara-module-contract/tests/fixtures/transition-responses-v1.json.sha256"
             ),
             Some(("main_between_organization_and_operations", 2)),
-        ),
-        canonical_input(
-            "Datasets",
-            "tessara.datasets",
-            include_bytes!(
-                "../../../tessara-module-contract/tests/fixtures/transition-datasets-v1.json"
-            ),
-            include_str!(
-                "../../../tessara-module-contract/tests/fixtures/transition-datasets-v1.json.sha256"
-            ),
-            Some(("admin_between_administration_and_module_management", 0)),
         ),
         canonical_input(
             "Migration",
@@ -523,7 +507,6 @@ mod tests {
                 "tessara.forms",
                 "tessara.workflows",
                 "tessara.responses",
-                "tessara.datasets",
                 "tessara.migration",
             ]
         );
@@ -544,7 +527,7 @@ mod tests {
             .flat_map(|source| &source.findings)
             .filter(|finding| finding.code == "transition_internal_only")
             .count();
-        assert_eq!(dependency_finding_count, 5);
+        assert_eq!(dependency_finding_count, 3);
 
         let response_findings = &prepared
             .iter()

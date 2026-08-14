@@ -48,7 +48,8 @@ pub use protocol::{
     AuthorizationExchangeResponseV1, AuthorizationExchangeResponseV2,
     AuthorizationExchangeValidationError, AuthorizationGrantOperationV1, AuthorizationGrantV2,
     AuthorizationGrantV3, AuthorizationValidationContextV2, AuthorizationValidationContextV3,
-    AuthorizationValidationError, CapabilityScopeBindingV1, DelegationBasisV1,
+    AuthorizationValidationError, CapabilityScopeBindingV1, CoreServiceRequestV1,
+    CoreServiceRequestValidationContextV1, CoreServiceRequestValidationError, DelegationBasisV1,
     ExternalIdentityAssertionV1, MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
     ModuleServicePrincipalV1, ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,
     ModuleServiceRequestValidationError, NavigationProjectionV1, OriginalActorProjectionV1,
@@ -1694,6 +1695,7 @@ pub enum PublicApiMethod {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
 }
 
@@ -1718,6 +1720,7 @@ pub enum ServiceActionMethod {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
 }
 
@@ -4906,5 +4909,21 @@ mod tests {
         let mut incompatible = bootstrap;
         incompatible.entry_asset.url = "https://example.invalid/module.js".into();
         assert!(!incompatible.is_supported());
+    }
+
+    #[test]
+    fn public_and_private_method_contracts_preserve_patch_exactly() {
+        assert_eq!(
+            serde_json::to_value(PublicApiMethod::Patch).unwrap(),
+            json!("PATCH")
+        );
+        assert_eq!(
+            serde_json::from_value::<PublicApiMethod>(json!("PATCH")).unwrap(),
+            PublicApiMethod::Patch
+        );
+        assert_eq!(
+            serde_json::from_value::<ServiceActionMethod>(json!("PATCH")).unwrap(),
+            ServiceActionMethod::Patch
+        );
     }
 }

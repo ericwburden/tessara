@@ -8,6 +8,9 @@ use super::super::super::permissions::can_manage_datasets;
 use super::super::super::types::*;
 use super::summary::{MetricCard, tab_class};
 use super::tables::{DatasetFieldsTable, DatasetSourcesTable, DatasetSqlPanel};
+#[cfg(feature = "hydrate")]
+use crate::api;
+use crate::bootstrap::{DatasetRouteBootstrap, dataset_route_bootstrap};
 use crate::text::sentence_label;
 use icons::{ChevronDown, ChevronRight, Database, FileText, X};
 use leptos::portal::Portal;
@@ -19,14 +22,36 @@ use tessara_module_ui::{
 
 #[component]
 pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {
-    let dataset = RwSignal::new(None::<DatasetDefinition>);
-    let table = RwSignal::new(None::<DatasetTable>);
+    let bootstrap = dataset_route_bootstrap();
+    let initial_dataset = bootstrap
+        .as_ref()
+        .and_then(DatasetRouteBootstrap::dataset)
+        .cloned();
+    let (initial_table, initial_table_error) = bootstrap
+        .as_ref()
+        .and_then(DatasetRouteBootstrap::table)
+        .map(|(table, error)| (table.clone(), error.clone()))
+        .unwrap_or_default();
+    let has_initial_dataset = initial_dataset.is_some();
+    let dataset = RwSignal::new(initial_dataset);
+    let table = RwSignal::new(initial_table);
     let account = RwSignal::new(None::<SessionAccount>);
-    let is_loading = RwSignal::new(true);
+    let is_loading = RwSignal::new(!has_initial_dataset);
     let load_error = RwSignal::new(None::<String>);
-    let table_error = RwSignal::new(None::<String>);
+    let table_error = RwSignal::new(initial_table_error);
     let active_tab = RwSignal::new("preview".to_string());
     let visibility_sheet_open = RwSignal::new(false);
+    let refresh_error = RwSignal::new(None::<String>);
+    let refresh_message = RwSignal::new(None::<String>);
+    let is_refreshing = RwSignal::new(false);
+    let refresh_signals = DatasetRefreshSignals {
+        dataset,
+        table,
+        table_error,
+        refresh_error,
+        refresh_message,
+        is_refreshing,
+    };
 
     Effect::new({
         let dataset_id = dataset_id.clone();
@@ -55,6 +80,23 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                     let revisions_href = format!("/datasets/{}/revisions", loaded.id);
                     let tab_dataset = loaded.clone();
                     let visibility_nodes = loaded.visibility_nodes.clone();
+                    let refresh_dataset_id = loaded.id.clone();
+                    let freshness_label = freshness_label(loaded.freshness.state);
+                    let last_succeeded = loaded
+                        .freshness
+                        .last_succeeded_at
+                        .clone()
+                        .unwrap_or_else(|| "Not yet".into());
+                    let last_checked = loaded
+                        .freshness
+                        .last_checked_at
+                        .clone()
+                        .unwrap_or_else(|| "Not checked yet".into());
+                    let freshness_failure = loaded
+                        .freshness
+                        .sanitized_failure_code
+                        .as_deref()
+                        .map(freshness_failure_message);
                     view! {
                         <Breadcrumb>
                             <BreadcrumbItem>
@@ -67,10 +109,22 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                         </Breadcrumb>
                         <PageHeader title="Dataset Detail">
                             {move || if can_manage() && !edit {
+                                let refresh_dataset_id = refresh_dataset_id.clone();
                                 view! {
                                     <div class="button-row">
                                         <a class="button button--secondary" href=revisions_href.clone()>"Revision History"</a>
                                         <a class="button button--secondary" href=edit_href.clone()>"Edit Dataset"</a>
+                                        <button
+                                            class="button"
+                                            type="button"
+                                            disabled=move || is_refreshing.get()
+                                            on:click=move |_| refresh_dataset_now(
+                                                refresh_dataset_id.clone(),
+                                                refresh_signals,
+                                            )
+                                        >
+                                            {move || if is_refreshing.get() { "Refreshing..." } else { "Refresh now" }}
+                                        </button>
                                     </div>
                                 }.into_any()
                             } else if edit {
@@ -79,17 +133,25 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                                 view! { <span></span> }.into_any()
                             }}
                         </PageHeader>
+                        {move || refresh_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
+                        {move || refresh_message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
                         <h2>{loaded.name.clone()}</h2>
                         <section class="dataset-detail-summary">
                             <MetricCard label="Slug" value=loaded.slug.clone()/>
                             <MetricCard label="Grain" value=sentence_label(&loaded.grain)/>
                             <MetricCard label="Tags" value=tag_summary(&loaded.tags)/>
                             <MetricCard label="Provenance" value=provenance_summary(&loaded.provenance)/>
+                            <MetricCard label="Freshness" value=freshness_label/>
+                            <MetricCard label="Last Checked" value=last_checked/>
+                            <MetricCard label="Last Successful Refresh" value=last_succeeded/>
                             <button class="metric-card metric-card--button" type="button" aria-label="Show dataset visibility nodes" on:click=move |_| visibility_sheet_open.set(true)>
                                 <span>"Visibility"</span>
                                 <strong>{visibility_label(&loaded.visibility_nodes)}</strong>
                             </button>
                         </section>
+                        {freshness_failure.map(|message| view! {
+                            <p class="form-status is-error">{message}</p>
+                        })}
                         <div class="tabs" data-active=move || active_tab.get()>
                             <div class="tabs-list" role="tablist">
                                 <button class=tab_class(active_tab, "preview") type="button" on:click=move |_| active_tab.set("preview".into())>"Preview"</button>
@@ -121,6 +183,109 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
             }}
         </section>
     }
+}
+
+fn freshness_label(state: tessara_datasets_contract::DatasetFreshnessState) -> String {
+    match state {
+        tessara_datasets_contract::DatasetFreshnessState::Current => "Current",
+        tessara_datasets_contract::DatasetFreshnessState::Stale => "Stale",
+        tessara_datasets_contract::DatasetFreshnessState::Degraded => "Degraded",
+        tessara_datasets_contract::DatasetFreshnessState::Refreshing => "Refreshing",
+        tessara_datasets_contract::DatasetFreshnessState::Failed => "Failed",
+        tessara_datasets_contract::DatasetFreshnessState::NeverMaterialized => "Never Materialized",
+    }
+    .into()
+}
+
+fn freshness_failure_message(code: &str) -> &'static str {
+    match code {
+        "dataset.dependency_unavailable" => {
+            "The source provider is temporarily unavailable. Last successful data remains available."
+        }
+        "dataset.dependency_incompatible" => {
+            "The source provider returned an incompatible response. Last successful data remains available."
+        }
+        _ => "The last refresh could not be completed. Last successful data remains available.",
+    }
+}
+
+#[derive(Clone, Copy)]
+struct DatasetRefreshSignals {
+    dataset: RwSignal<Option<DatasetDefinition>>,
+    table: RwSignal<Option<DatasetTable>>,
+    table_error: RwSignal<Option<String>>,
+    refresh_error: RwSignal<Option<String>>,
+    refresh_message: RwSignal<Option<String>>,
+    is_refreshing: RwSignal<bool>,
+}
+
+#[cfg(feature = "hydrate")]
+fn refresh_dataset_now(dataset_id: String, signals: DatasetRefreshSignals) {
+    let DatasetRefreshSignals {
+        dataset,
+        table,
+        table_error,
+        refresh_error,
+        refresh_message,
+        is_refreshing,
+    } = signals;
+    if is_refreshing.get_untracked() {
+        return;
+    }
+    is_refreshing.set(true);
+    refresh_error.set(None);
+    refresh_message.set(None);
+    leptos::task::spawn_local(async move {
+        match api::refresh_dataset(&dataset_id).await {
+            Ok(outcome) => {
+                refresh_message.set(Some(
+                    if outcome.changed {
+                        "Dataset refresh completed."
+                    } else {
+                        "Dataset is already current."
+                    }
+                    .into(),
+                ));
+                match api::fetch_dataset_detail(&dataset_id).await {
+                    Ok(Some(payload)) => dataset.set(Some(payload)),
+                    Ok(None) => {}
+                    Err(message) => refresh_error.set(Some(message)),
+                }
+                match api::fetch_dataset_table(&dataset_id).await {
+                    Ok(Some(payload)) => table.set(Some(payload)),
+                    Ok(None) => {}
+                    Err(message) => table_error.set(Some(message)),
+                }
+            }
+            Err(message) => {
+                refresh_error.set(Some(message));
+                if let Ok(Some(payload)) = api::fetch_dataset_detail(&dataset_id).await {
+                    dataset.set(Some(payload));
+                }
+            }
+        }
+        is_refreshing.set(false);
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn refresh_dataset_now(_: String, signals: DatasetRefreshSignals) {
+    let DatasetRefreshSignals {
+        dataset,
+        table,
+        table_error,
+        refresh_error,
+        refresh_message,
+        is_refreshing,
+    } = signals;
+    let _ = (
+        dataset,
+        table,
+        table_error,
+        refresh_error,
+        refresh_message,
+        is_refreshing,
+    );
 }
 
 #[component]
@@ -344,7 +509,7 @@ pub(crate) fn DatasetPreviewTable(
         .collect::<Vec<_>>();
 
     view! {
-        <section class="route-panel__section">
+        <section class="route-panel__section" data-dataset-preview>
             <InteractiveDataTable
                 columns
                 rows

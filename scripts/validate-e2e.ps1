@@ -893,7 +893,7 @@ if ($SelfTest) {
         if ($nodeCommands.Count -ne 1) {
             throw "Self-test requires one unambiguous Node.js executable; found $($nodeCommands.Count)."
         }
-        Invoke-CheckedStep -Label "Validating Playwright fresh demo-seed guard and endpoint inventory" -Command {
+        Invoke-CheckedStep -Label "Validating Playwright Reference fixture guard and demo endpoint inventory" -Command {
             & $nodeCommands[0].Source --no-warnings $demoSeedSelfTest
         }
 

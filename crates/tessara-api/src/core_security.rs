@@ -685,7 +685,8 @@ pub(crate) async fn capability_bindings(
            JOIN role_capabilities rc ON rc.role_id=ra.role_id
            JOIN capabilities c ON c.id=rc.capability_id
            WHERE ra.account_id=$1 AND ra.node_id IS NULL
-             AND (c.key=$2 OR c.key='admin:all')
+             AND (c.key=$2 OR c.key='admin:all'
+                  OR ($2 LIKE '%:read' AND c.key=replace($2, ':read', ':manage')))
          )",
     )
     .bind(account_id)

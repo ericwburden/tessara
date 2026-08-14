@@ -33,6 +33,9 @@ pub enum ProtocolSignaturePurposeV1 {
     ReleaseCatalog,
     ResolvedComposition,
     ApplyAuthorization,
+    OwnerBootstrapAuthorization,
+    OwnerBootstrapReceipt,
+    ResponseOwnerActionReceipt,
     BootstrapValidationAuthorization,
     SupervisorRequest,
     SupervisorResponse,
@@ -536,7 +539,7 @@ pub enum AuthorizationAudienceV1 {
 }
 
 impl AuthorizationAudienceV1 {
-    fn is_valid_for_installation(&self, installation_id: Uuid) -> bool {
+    pub fn is_valid_for_installation(&self, installation_id: Uuid) -> bool {
         match self {
             Self::CoreInstallation {
                 installation_id: audience_installation_id,
@@ -799,6 +802,36 @@ pub struct ModuleServiceRequestValidationContextV1 {
     pub now: DateTime<Utc>,
 }
 
+/// One-use request proof emitted by Core when it calls a module-owned private
+/// provider action. This is deliberately a different wire type from a module
+/// service request: Core is the presenting service and therefore cannot claim
+/// a synthetic Module Instance identity.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoreServiceRequestV1 {
+    pub schema_version: u16,
+    pub installation_id: Uuid,
+    pub method: String,
+    pub path: String,
+    pub canonical_body_digest: String,
+    pub inbound_grant_digest: String,
+    pub correlation_id: String,
+    pub nonce: Uuid,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CoreServiceRequestValidationContextV1 {
+    pub installation_id: Uuid,
+    pub method: String,
+    pub path: String,
+    pub canonical_body_digest: String,
+    pub inbound_grant_digest: String,
+    pub correlation_id: String,
+    pub now: DateTime<Utc>,
+}
+
 impl ModuleServiceRequestV1 {
     pub fn validate_for(
         &self,
@@ -841,6 +874,46 @@ impl ModuleServiceRequestV1 {
             MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
         )
         .map_err(ModuleServiceRequestValidationError::Window)
+    }
+}
+
+impl CoreServiceRequestV1 {
+    pub fn validate_for(
+        &self,
+        expected: &CoreServiceRequestValidationContextV1,
+    ) -> Result<(), CoreServiceRequestValidationError> {
+        if self.schema_version != CONTRACT_SCHEMA_VERSION_V1 {
+            return Err(CoreServiceRequestValidationError::UnsupportedSchemaVersion);
+        }
+        if self.installation_id != expected.installation_id {
+            return Err(CoreServiceRequestValidationError::WrongInstallation);
+        }
+        if self.method != expected.method || self.path != expected.path {
+            return Err(CoreServiceRequestValidationError::WrongTarget);
+        }
+        if self.canonical_body_digest != expected.canonical_body_digest
+            || self.inbound_grant_digest != expected.inbound_grant_digest
+        {
+            return Err(CoreServiceRequestValidationError::WrongDigest);
+        }
+        if !is_sha256_digest(&self.canonical_body_digest)
+            || !is_sha256_digest(&self.inbound_grant_digest)
+        {
+            return Err(CoreServiceRequestValidationError::InvalidDigest);
+        }
+        if self.correlation_id.trim().is_empty() || self.nonce.is_nil() {
+            return Err(CoreServiceRequestValidationError::MissingReplayIdentity);
+        }
+        if self.correlation_id != expected.correlation_id {
+            return Err(CoreServiceRequestValidationError::WrongCorrelation);
+        }
+        validate_window(
+            self.issued_at,
+            self.expires_at,
+            expected.now,
+            MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
+        )
+        .map_err(CoreServiceRequestValidationError::Window)
     }
 }
 
@@ -899,6 +972,26 @@ pub enum ModuleServiceRequestValidationError {
     #[error("module service request correlation identity does not match its grant")]
     WrongCorrelation,
     #[error("module service request is missing correlation or nonce identity")]
+    MissingReplayIdentity,
+    #[error(transparent)]
+    Window(#[from] SignedWindowError),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum CoreServiceRequestValidationError {
+    #[error("Core service request schema version is unsupported")]
+    UnsupportedSchemaVersion,
+    #[error("Core service request is bound to another installation")]
+    WrongInstallation,
+    #[error("Core service request target does not match")]
+    WrongTarget,
+    #[error("Core service request digest does not match")]
+    WrongDigest,
+    #[error("Core service request digest is not a SHA-256 hex digest")]
+    InvalidDigest,
+    #[error("Core service request correlation identity does not match its grant")]
+    WrongCorrelation,
+    #[error("Core service request is missing correlation or nonce identity")]
     MissingReplayIdentity,
     #[error(transparent)]
     Window(#[from] SignedWindowError),
@@ -1109,6 +1202,35 @@ mod tests {
             installation_id: request.installation_id,
             module_instance_id: request.module_instance_id,
             module_definition_id: request.module_definition_id,
+            method: request.method,
+            path: request.path,
+            canonical_body_digest: request.canonical_body_digest,
+            inbound_grant_digest: request.inbound_grant_digest,
+            correlation_id: request.correlation_id,
+            now: now() + Duration::seconds(1),
+        }
+    }
+
+    fn core_service_request() -> CoreServiceRequestV1 {
+        let now = now();
+        CoreServiceRequestV1 {
+            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+            installation_id: id(1),
+            method: "POST".into(),
+            path: "/api/private/datasets/summary".into(),
+            canonical_body_digest: "a".repeat(64),
+            inbound_grant_digest: "b".repeat(64),
+            correlation_id: id(4).to_string(),
+            nonce: id(51),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        }
+    }
+
+    fn core_service_request_validation() -> CoreServiceRequestValidationContextV1 {
+        let request = core_service_request();
+        CoreServiceRequestValidationContextV1 {
+            installation_id: request.installation_id,
             method: request.method,
             path: request.path,
             canonical_body_digest: request.canonical_body_digest,
@@ -1426,6 +1548,54 @@ mod tests {
         assert_eq!(
             request.validate_for(&service_request_validation()),
             Err(ModuleServiceRequestValidationError::Window(
+                SignedWindowError::LifetimeTooLong
+            ))
+        );
+    }
+
+    #[test]
+    fn core_service_request_binds_installation_target_body_grant_and_correlation() {
+        let request = core_service_request();
+        request
+            .validate_for(&core_service_request_validation())
+            .unwrap();
+
+        let mut expected = core_service_request_validation();
+        expected.installation_id = id(99);
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongInstallation)
+        );
+
+        expected = core_service_request_validation();
+        expected.path = "/api/private/datasets/operations-status".into();
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongTarget)
+        );
+
+        expected = core_service_request_validation();
+        expected.canonical_body_digest = "c".repeat(64);
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongDigest)
+        );
+
+        expected = core_service_request_validation();
+        expected.correlation_id = id(98).to_string();
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongCorrelation)
+        );
+    }
+
+    #[test]
+    fn core_service_request_lifetime_is_capped_at_thirty_seconds() {
+        let mut request = core_service_request();
+        request.expires_at += Duration::seconds(1);
+        assert_eq!(
+            request.validate_for(&core_service_request_validation()),
+            Err(CoreServiceRequestValidationError::Window(
                 SignedWindowError::LifetimeTooLong
             ))
         );

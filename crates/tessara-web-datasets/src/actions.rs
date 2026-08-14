@@ -60,6 +60,7 @@ pub(super) fn save_dataset(
                     save_error.set(Some(message));
                     return;
                 }
+                crate::set_lifecycle_dirty(false);
                 let revision_id = value
                     .get("revision_id")
                     .and_then(|value| value.as_str())

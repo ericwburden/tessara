@@ -794,6 +794,29 @@ async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
     .fetch_one(&state.pool)
     .await
     .expect("follow-up form version should be published");
+    let follow_up_section_id: uuid::Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO form_sections (form_version_id, title, position)
+        VALUES ($1, 'Follow-up', 0)
+        RETURNING id
+        "#,
+    )
+    .bind(follow_up_form_version_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("follow-up section should be created");
+    sqlx::query(
+        r#"
+        INSERT INTO form_fields
+            (form_version_id, section_id, key, label, field_type, required, position)
+        VALUES ($1, $2, 'follow_up_note', 'Follow-up note', 'text'::field_type, true, 0)
+        "#,
+    )
+    .bind(follow_up_form_version_id)
+    .bind(follow_up_section_id)
+    .execute(&state.pool)
+    .await
+    .expect("follow-up response field should be created");
 
     let workflows = request_json(
         app.clone(),
@@ -995,6 +1018,7 @@ async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
     let second_submission_id = second_started["id"]
         .as_str()
         .expect("second step start should return submission id");
+    save_required_values(app.clone(), &respondent_token, second_submission_id).await;
     request_json(
         app.clone(),
         authorized_request(
@@ -2378,7 +2402,7 @@ async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorizat
 }
 
 #[tokio::test]
-async fn operations_status_requires_view_capability_and_exposes_assignment_readiness() {
+async fn operations_status_keeps_assignments_usable_when_dataset_provider_is_unavailable() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let app = test_app().await;
     let admin_token = login_token(app.clone()).await;
@@ -2397,21 +2421,9 @@ async fn operations_status_requires_view_capability_and_exposes_assignment_readi
     let datasets = status["dataset_readiness"]["datasets"]
         .as_array()
         .expect("operations status should include dataset readiness");
-    assert!(
-        datasets
-            .iter()
-            .any(|dataset| dataset["readiness"].as_str().is_some())
-    );
-    let dataset_attention_count = datasets
-        .iter()
-        .filter(|dataset| dataset["readiness"].as_str() != Some("Ready"))
-        .count() as i64;
-    assert_eq!(
-        status["summary"]["dataset_attention_count"]
-            .as_i64()
-            .expect("operations summary should expose dataset attention count"),
-        dataset_attention_count
-    );
+    assert!(datasets.is_empty());
+    assert_eq!(status["dataset_readiness"]["state"], "unavailable");
+    assert!(status["summary"]["dataset_attention_count"].is_null());
     assert!(
         status["workflow_assignments"]
             .as_array()
@@ -2422,6 +2434,15 @@ async fn operations_status_requires_view_capability_and_exposes_assignment_readi
                     && assignment["workflow_assignment_id"].as_str().is_some()
             })
     );
+    let app_summary = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/summary", &admin_token, None),
+    )
+    .await;
+    assert_eq!(app_summary["dataset_state"], "unavailable");
+    assert!(app_summary["datasets"].is_null());
+    assert!(app_summary["dataset_revisions"].is_null());
+    assert!(app_summary["published_form_versions"].as_i64().is_some());
 
     let operator_token = login_token_for(
         app.clone(),
@@ -2440,6 +2461,8 @@ async fn operations_status_requires_view_capability_and_exposes_assignment_readi
             .expect("operator operations summary should expose scoped open assignment count")
             >= 0
     );
+    assert_eq!(operator_status["dataset_readiness"]["state"], "unavailable");
+    assert!(operator_status["summary"]["dataset_attention_count"].is_null());
 
     let anonymous_analytics = request_status_and_json(
         app,
@@ -2926,6 +2949,7 @@ async fn reset_database(database_url: &str) {
     );
 
     drop_all_public_tables(&pool).await;
+    drop_all_public_routines(&pool).await;
     sqlx::query("DROP SCHEMA IF EXISTS analytics CASCADE")
         .execute(&pool)
         .await
@@ -2953,6 +2977,34 @@ async fn reset_database(database_url: &str) {
             .execute(&pool)
             .await
             .expect("enum type should be droppable");
+    }
+}
+
+async fn drop_all_public_routines(pool: &PgPool) {
+    let routines = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT procedure.oid::regprocedure::text
+        FROM pg_proc procedure
+        JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+        LEFT JOIN pg_depend extension_dependency
+          ON extension_dependency.classid = 'pg_proc'::regclass
+         AND extension_dependency.objid = procedure.oid
+         AND extension_dependency.deptype = 'e'
+        WHERE namespace.nspname = 'public'
+          AND procedure.prokind IN ('f', 'p')
+          AND extension_dependency.objid IS NULL
+        ORDER BY procedure.oid::regprocedure::text
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .expect("public test routines should be enumerable");
+
+    for routine in routines {
+        sqlx::query(&format!("DROP ROUTINE IF EXISTS {routine} CASCADE"))
+            .execute(pool)
+            .await
+            .expect("public test routine should be droppable");
     }
 }
 

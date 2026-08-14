@@ -21,6 +21,7 @@ const PASSWORD = "tessara-dev-modules";
 const FORMS_DEFINITION = "tessara.forms";
 const RESPONSES_DEFINITION = "tessara.responses";
 const MIGRATION_DEFINITION = "tessara.migration";
+const DATASETS_DEFINITION = "tessara.datasets";
 const COMPONENTS_DEFINITION = "tessara.components";
 const DASHBOARDS_DEFINITION = "tessara.dashboards";
 const SCOPED_RECORDS_DEFINITION = "tessara.reference.scoped-records";
@@ -370,7 +371,7 @@ function expectRfc3339(value: string | null, label: string) {
   );
 }
 
-async function ensureDemoSeed(admin: APIRequestContext) {
+async function ensureReferenceOrLocalFixture(admin: APIRequestContext) {
   const response = await invokeDemoSeedEndpoint(admin);
   if (response === null) {
     return;
@@ -1051,7 +1052,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     cleanupPlaywrightEntities();
     const admin = await newContext();
     await signIn(admin, "admin@tessara.local", "tessara-dev-admin");
-    await ensureDemoSeed(admin);
+    await ensureReferenceOrLocalFixture(admin);
 
     const reader = await createActor(admin, "reader", ["modules:read"]);
     const manager = await createActor(admin, "manager", [
@@ -1102,6 +1103,8 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
     expect(independentEntries.map((entry) => entry.definition.id)).toEqual(
       expect.arrayContaining([
+        DATASETS_DEFINITION,
+        COMPONENTS_DEFINITION,
         DASHBOARDS_DEFINITION,
         SCOPED_RECORDS_DEFINITION,
       ]),
@@ -2143,7 +2146,7 @@ test.describe.serial("Sprint 8A Module Management", () => {
 
     try {
       await signIn(admin, "admin@tessara.local", "tessara-dev-admin");
-      await ensureDemoSeed(admin);
+      await ensureReferenceOrLocalFixture(admin);
       const initial = await independentModuleDetail(admin, COMPONENTS_DEFINITION);
       instanceId = initial.entry.instance.id;
       originalConfiguration = initial.entry.configuration
@@ -2335,6 +2338,10 @@ test.describe.serial("Sprint 8A Module Management", () => {
         admin,
         "/api/admin/components/datasets",
       );
+      const datasetModule = await independentModuleDetail(
+        admin,
+        DATASETS_DEFINITION,
+      );
       const dataset = catalog.datasets.find((candidate) => candidate.fields.length > 0);
       expect(
         dataset,
@@ -2367,11 +2374,11 @@ test.describe.serial("Sprint 8A Module Management", () => {
       expect(diagnostics).toMatchObject({
         schema_version: 1,
         module: COMPONENTS_DEFINITION,
-        release: "1.0.1",
+        release: "1.1.0",
         manifest_schema: 3,
         contracts: {
           components: "3.0.0",
-          dataset_dependency: "1.0.0",
+          dataset_dependency: "2.0.0",
         },
         configuration: temporaryConfiguration,
       });
@@ -2383,12 +2390,14 @@ test.describe.serial("Sprint 8A Module Management", () => {
       );
       expect(binding.binding_key).toBe("tessara.components.dataset-major-line");
       expect(binding.provider_owner).toEqual({
-        kind: "core_installation",
+        kind: "module_instance",
         installation_id: observed.installation_id,
+        module_definition_id: DATASETS_DEFINITION,
+        module_instance_id: datasetModule.entry.instance.id,
       });
       expect(binding.functional_contract).toEqual({
         id: "tessara.datasets.dataset-major-line",
-        version: "1.0.0",
+        version: "2.0.0",
       });
 
       const health = diagnostics.dataset_dependency.health;

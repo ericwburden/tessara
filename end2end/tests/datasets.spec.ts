@@ -6,7 +6,6 @@ import {
   type Page,
 } from "@playwright/test";
 
-import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 import {
   attachNativeRouteGuard,
   expectShellRouteDirectLoadAndRefresh,
@@ -21,21 +20,25 @@ const BENIGN_NAVIGATION_ABORT_ERRORS = [
 
 const PW_DATASET_PREFIX = "pw-dataset-authoring-";
 
-type DemoSeed = {
+type DatasetFixture = {
   form_id: string;
   form_version_id: string;
-  program_node_id: string;
+  scope_node_id: string;
 };
 
-type FormSummary = {
+type DatasetEditorFormOption = {
   id: string;
-  slug: string;
-  visibility_nodes?: Array<{ node_id: string }>;
+  name: string;
   versions: Array<{
     id: string;
     status: string;
-    assignment_nodes?: Array<{ node_id: string }>;
+    field_count: number;
   }>;
+};
+
+type DatasetEditorScopeOption = {
+  id: string;
+  name: string;
 };
 
 type IdResponse = {
@@ -87,7 +90,6 @@ type DatasetDefinition = {
 };
 
 type DatasetTable = {
-  dataset_id: string;
   rows: Array<{ values: Record<string, string | null> }>;
 };
 
@@ -169,13 +171,16 @@ type DatasetPublishRevisionResponse = {
 };
 
 type RenderedField = {
-  field_id: string;
   key: string;
   label: string;
   field_type: string;
+  value_options: string[];
 };
 
 type RenderedForm = {
+  form_version_id: string;
+  form_id: string;
+  form_name: string;
   sections: Array<{
     fields: RenderedField[];
   }>;
@@ -343,44 +348,39 @@ async function expectJson<T>(response: APIResponse) {
   return JSON.parse(text) as T;
 }
 
-async function seedDemo(page: Page) {
-  const response = await invokeDemoSeedEndpoint(page.request);
-  if (response === null) {
-    return existingDemoSeed(page);
-  }
-  const text = await response.text();
-  if (response.ok()) {
-    return JSON.parse(text) as DemoSeed;
-  }
-  if (
-    response.status() === 400 &&
-    text.includes("Demo seed requires an empty database")
-  ) {
-    return existingDemoSeed(page);
-  }
-  expect(
-    response.ok(),
-    `${response.url()} returned ${response.status()}: ${text}`,
-  ).toBeTruthy();
-  return JSON.parse(text) as DemoSeed;
-}
-
-async function existingDemoSeed(page: Page): Promise<DemoSeed> {
-  const forms = await expectJson<FormSummary[]>(
-    await page.request.get("/api/forms"),
+async function referenceDatasetFixture(page: Page): Promise<DatasetFixture> {
+  const forms = await expectJson<DatasetEditorFormOption[]>(
+    await page.request.get("/api/admin/datasets/editor-options/forms"),
   );
-  const form = forms.find((candidate) => candidate.slug === "demo-program-snapshot");
-  expect(form, "demo program snapshot form should already exist").toBeTruthy();
+  const form = forms.find((candidate) => candidate.name === "Primary Responses");
+  expect(form, "Primary Responses should be available through Dataset editor options").toBeTruthy();
   const version = form!.versions.find((candidate) => candidate.status === "published");
-  expect(version, "demo program snapshot should have a published version").toBeTruthy();
-  const programNodeId =
-    version!.assignment_nodes?.[0]?.node_id ?? form!.visibility_nodes?.[0]?.node_id;
-  expect(programNodeId, "demo program snapshot should expose a program node").toBeTruthy();
+  expect(version, "Primary Responses should expose a published version").toBeTruthy();
+  expect(version!.field_count, "Primary Responses should expose the reference field set").toBe(3);
+
+  const scopes = await expectJson<DatasetEditorScopeOption[]>(
+    await page.request.get("/api/admin/datasets/editor-options/scopes"),
+  );
+  const scope = scopes.find((candidate) => candidate.name === "Reference Organization");
+  expect(scope, "Reference Organization should be available through Dataset editor options").toBeTruthy();
+
   return {
     form_id: form!.id,
     form_version_id: version!.id,
-    program_node_id: programNodeId!,
+    scope_node_id: scope!.id,
   };
+}
+
+async function getEditorRenderedForm(page: Page, fixture: DatasetFixture) {
+  const rendered = await expectJson<RenderedForm>(
+    await page.request.get(
+      `/api/admin/datasets/editor-options/forms/${fixture.form_version_id}`,
+    ),
+  );
+  expect(rendered.form_id).toBe(fixture.form_id);
+  expect(rendered.form_version_id).toBe(fixture.form_version_id);
+  expect(rendered.form_name).toBe("Primary Responses");
+  return rendered;
 }
 
 function renderedFields(renderedForm: RenderedForm) {
@@ -654,12 +654,10 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
 }) => {
   const assertNativeRouteGuard = attachNativeRouteGuard(page);
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
+  const seed = await referenceDatasetFixture(page);
   await cleanupPlaywrightDatasets(page);
 
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const field = requireRenderedField(
     renderedFields(renderedForm),
     () => true,
@@ -671,7 +669,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
     name: datasetName,
     slug: `${PW_DATASET_PREFIX}native-route-${runId}`,
     grain: "submission",
-    visibility_node_ids: [seed.program_node_id],
+    visibility_node_ids: [seed.scope_node_id],
     initial_source: {
       kind: "form",
       alias: "program",
@@ -777,25 +775,25 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
   test.setTimeout(180_000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
+  const seed = await referenceDatasetFixture(page);
   await cleanupPlaywrightDatasets(page);
 
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formFields = renderedFields(renderedForm);
   const numberField = requireRenderedField(
     formFields,
     (field) => field.field_type === "number",
     "numeric field",
   );
+  const textFields = formFields.filter((field) => field.field_type === "text");
+  expect(textFields.length, "reference form should expose two text fields").toBeGreaterThanOrEqual(2);
   const textField =
-    formFields.find((field) => field.key === "snapshot_notes") ??
-    requireRenderedField(formFields, (field) => field.field_type === "text", "text field");
-  const booleanField = requireRenderedField(
-    formFields,
-    (field) => field.field_type === "boolean",
-    "boolean field",
+    textFields.find((field) => field.key === "label") ??
+    requireRenderedField(textFields, () => true, "primary text field");
+  const alternateTextField = requireRenderedField(
+    textFields,
+    (field) => field.key !== textField.key,
+    "alternate text field",
   );
   const runId = Date.now();
   const slug = `${PW_DATASET_PREFIX}${runId}`;
@@ -804,7 +802,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     name: datasetName,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.program_node_id],
+    visibility_node_ids: [seed.scope_node_id],
     initial_source: {
       kind: "form",
       alias: "program",
@@ -816,7 +814,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
         datasetField("program", "__node_id", "Attached Node ID", 0),
         datasetField("program", numberField.key, numberField.label, 1),
         datasetField("program", textField.key, textField.label, 2),
-        datasetField("program", booleanField.key, booleanField.label, 3),
+        datasetField("program", alternateTextField.key, alternateTextField.label, 3),
       ]),
     ],
   };
@@ -871,13 +869,16 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
       sourceFieldKey("program", numberField.key),
     );
     await page.getByRole("button", { name: "SQL" }).click();
-    await expect(page.locator("pre.dataset-sql-panel code")).toContainText(
-      "submission_value_fact.field_id",
-    );
-    await expect(page.locator("pre.dataset-sql-panel code")).not.toContainText(
+    const detailSqlPanel = page.locator("pre.dataset-sql-panel code");
+    await expect(detailSqlPanel).toContainText("dataset_imported_responses");
+    await expect(detailSqlPanel).toContainText("dataset_imported_response_values");
+    await expect(detailSqlPanel).toContainText("imported_value.field_id");
+    await expect(detailSqlPanel).not.toContainText("submission_value_fact");
+    await expect(detailSqlPanel).not.toContainText("field_dim");
+    await expect(detailSqlPanel).not.toContainText(
       "field_key",
     );
-    await expect(page.locator("pre.dataset-sql-panel code")).not.toContainText(
+    await expect(detailSqlPanel).not.toContainText(
       "WITH ranked",
     );
     await gotoHydrated(page, `/datasets/${datasetId}/edit`);
@@ -1021,7 +1022,11 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await expect(sqlPanel).toContainText("AVG");
     await expect(sqlPanel).toContainText("ROUND");
     await expect(sqlPanel).toContainText("__restriction_tier");
-    await expect(sqlPanel).toContainText("submission_value_fact.field_id");
+    await expect(sqlPanel).toContainText("dataset_imported_responses");
+    await expect(sqlPanel).toContainText("dataset_imported_response_values");
+    await expect(sqlPanel).toContainText("imported_value.field_id");
+    await expect(sqlPanel).not.toContainText("submission_value_fact");
+    await expect(sqlPanel).not.toContainText("field_dim");
     await expect(sqlPanel).not.toContainText("field_key");
     await expect(sqlPanel).not.toContainText("WITH ranked");
 
@@ -1081,7 +1086,11 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
       base_field_key: "avg_target",
     });
     expect(detail.restriction_policy?.restricted_field_key).toBe("avg_target_restricted");
-    expect(detail.generated_sql ?? "").toContain("submission_value_fact.field_id");
+    expect(detail.generated_sql ?? "").toContain("dataset_imported_responses");
+    expect(detail.generated_sql ?? "").toContain("dataset_imported_response_values");
+    expect(detail.generated_sql ?? "").toContain("imported_value.field_id");
+    expect(detail.generated_sql ?? "").not.toContain("submission_value_fact");
+    expect(detail.generated_sql ?? "").not.toContain("field_dim");
     expect(detail.generated_sql ?? "").toContain("ROUND");
     expect(detail.generated_sql ?? "").toContain("__restriction_tier");
     expect(detail.generated_sql ?? "").not.toContain("field_key");
@@ -1120,62 +1129,41 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
   test.setTimeout(180_000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
+  const seed = await referenceDatasetFixture(page);
   await cleanupPlaywrightDatasets(page);
 
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formFields = renderedFields(renderedForm);
   const numberField = requireRenderedField(
     formFields,
     (field) => field.field_type === "number",
     "numeric field",
   );
-  const booleanField = requireRenderedField(
-    formFields,
-    (field) => field.field_type === "boolean",
-    "boolean field",
-  );
-  const dateFields = formFields.filter((field) =>
-    ["date", "datetime", "timestamp"].includes(field.field_type),
-  );
-  expect(dateFields.length, "demo form should expose date-like fields").toBeGreaterThan(0);
-  const dateField = dateFields[0];
-  const alternateDateField = dateFields[1] ?? dateFields[0];
+  const textFields = formFields.filter((field) => field.field_type === "text");
+  expect(textFields.length, "reference form should expose two text fields").toBeGreaterThanOrEqual(2);
   const textField =
-    formFields.find((field) => field.key === "submission_status") ??
-    requireRenderedField(formFields, (field) => field.field_type === "text", "text field");
+    textFields.find((field) => field.key === "label") ??
+    requireRenderedField(textFields, () => true, "primary text field");
+  const alternateTextField = requireRenderedField(
+    textFields,
+    (field) => field.key !== textField.key,
+    "alternate text field",
+  );
   const runId = Date.now();
   const slug = `${PW_DATASET_PREFIX}uat-${runId}`;
   const datasetName = `Playwright Sprint 3B UAT ${runId}`;
   const initialFields: DatasetProjectionFieldPayload[] = [
     datasetField("program", "__node_id", "Attached Node ID", 0),
     datasetField("program", numberField.key, numberField.label, 1),
-    datasetField("program", booleanField.key, booleanField.label, 2),
-    datasetField("program", dateField.key, dateField.label, 3),
-    datasetField("program", textField.key, textField.label, 4),
+    datasetField("program", textField.key, textField.label, 2),
+    datasetField("program", alternateTextField.key, alternateTextField.label, 3),
   ];
-  if (
-    !initialFields.some(
-      (field) => field.input_field_key === sourceFieldKey("program", alternateDateField.key),
-    )
-  ) {
-    initialFields.push({
-      ...datasetField(
-        "program",
-        alternateDateField.key,
-        alternateDateField.label,
-        initialFields.length,
-      ),
-    });
-  }
   const initialFieldCount = initialFields.length;
   const initialPayload: DatasetPayload = {
     name: datasetName,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.program_node_id],
+    visibility_node_ids: [seed.scope_node_id],
     initial_source: {
       kind: "form",
       alias: "program",
@@ -1249,7 +1237,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       await calculation.getByLabel("Label").press("Tab");
       await calculation
         .getByLabel("Base Field")
-        .selectOption(sourceFieldKey("program", dateField.key));
+        .selectOption(sourceFieldKey("program", numberField.key));
       await calculation.getByRole("button", { name: "Add function" }).click();
       await selectComboboxOption(
         calculation,
@@ -1264,9 +1252,9 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
         .locator("label.form-field")
         .nth(1)
         .locator("select")
-        .selectOption(sourceFieldKey("program2", alternateDateField.key));
+        .selectOption(sourceFieldKey("program2", numberField.key));
       await expect(calculation.locator(".dataset-calculation-preview")).toContainText(
-        `less_than_or_equal(${sourceFieldKey("program2", alternateDateField.key)})`,
+        `less_than_or_equal(${sourceFieldKey("program2", numberField.key)})`,
       );
 
       await calculations.getByRole("button", { name: "Add Calculated Field" }).click();
@@ -1345,18 +1333,20 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       await numberFilterValue.press("Tab");
       await filters.getByRole("button", { name: "Add Filter" }).click();
       filterRows = filters.locator(".dataset-filter-row");
-      const dateFilter = filterRows.nth(1);
-      await dateFilter
+      const fieldComparisonFilter = filterRows.nth(1);
+      await fieldComparisonFilter
         .locator("select")
         .nth(0)
-        .selectOption(sourceFieldKey("program", dateField.key));
-      await dateFilter.locator("select").nth(1).selectOption("less_than_or_equal");
-      await dateFilter.getByRole("button", { name: "Compare against a value" }).click();
-      await dateFilter
+        .selectOption(sourceFieldKey("program", numberField.key));
+      await fieldComparisonFilter.locator("select").nth(1).selectOption("less_than_or_equal");
+      await fieldComparisonFilter
+        .getByRole("button", { name: "Compare against a value" })
+        .click();
+      await fieldComparisonFilter
         .locator("label.form-field")
         .nth(2)
         .locator("select")
-        .selectOption(sourceFieldKey("program2", alternateDateField.key));
+        .selectOption(sourceFieldKey("program2", numberField.key));
       await expect(filters.getByRole("button", { name: "Compare against a field" })).toHaveCount(1);
       await expect(filters.getByRole("button", { name: "Compare against a value" })).toHaveCount(1);
       await expect(filters.getByText("Remove", { exact: true })).toHaveCount(0);
@@ -1368,11 +1358,11 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       await restrictions.getByLabel("Internal flag enabled").check();
       await restrictions
         .getByLabel("Internal flag field")
-        .selectOption(sourceFieldKey("program", booleanField.key));
+        .selectOption("review_started_together");
       await restrictions.getByLabel("Restricted flag enabled").check();
       await restrictions
         .getByLabel("Restricted flag field")
-        .selectOption(sourceFieldKey("program2", booleanField.key));
+        .selectOption("review_started_together");
     });
 
     await test.step("Demo: inspect generated SQL and save the authored definition", async () => {
@@ -1380,7 +1370,9 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       const sqlPanel = page.locator("pre.dataset-sql-panel code");
       await expect(sqlPanel).toContainText("INNER JOIN");
       await expect(sqlPanel).toContainText("NULLIF");
-      await expect(sqlPanel).toContainText("::date");
+      await expect(sqlPanel).toContainText("::numeric");
+      await expect(sqlPanel).toContainText("dataset_imported_responses");
+      await expect(sqlPanel).toContainText("dataset_imported_response_values");
       await expect(sqlPanel).toContainText("__restriction_tier");
       await expect(sqlPanel).toContainText("booger");
       await expect(sqlPanel).toContainText("snot");
@@ -1426,10 +1418,10 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
           value: "0",
         },
         {
-          field_key: sourceFieldKey("program", dateField.key),
+          field_key: sourceFieldKey("program", numberField.key),
           operator: "less_than_or_equal",
           value_mode: "field",
-          value_field_key: sourceFieldKey("program2", alternateDateField.key),
+          value_field_key: sourceFieldKey("program2", numberField.key),
         },
       ]);
       const persistedCalculations = detailOperation(detail, "calculated_fields");
@@ -1441,18 +1433,14 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       expect(persistedCalculations.fields[0].functions[0]).toMatchObject({
         function: "less_than_or_equal",
         argument_mode: "field",
-        argument_field_key: sourceFieldKey("program2", alternateDateField.key),
+        argument_field_key: sourceFieldKey("program2", numberField.key),
       });
       expect(persistedCalculations.fields[1].functions.map((fn) => fn.function)).toEqual([
         "greater_than_or_equal",
         "to_text",
       ]);
-      expect(detail.restriction_policy?.internal_field_key).toBe(
-        sourceFieldKey("program", booleanField.key),
-      );
-      expect(detail.restriction_policy?.restricted_field_key).toBe(
-        sourceFieldKey("program2", booleanField.key),
-      );
+      expect(detail.restriction_policy?.internal_field_key).toBe("review_started_together");
+      expect(detail.restriction_policy?.restricted_field_key).toBe("review_started_together");
 
       await gotoHydrated(page, `/datasets/${datasetId}/edit`);
       const reopenedProjection = await openOperationPanel(page, "Projection");
@@ -1479,12 +1467,10 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
   test.setTimeout(120_000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
+  const seed = await referenceDatasetFixture(page);
   await cleanupPlaywrightDatasets(page);
 
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formFields = renderedFields(renderedForm);
   const firstField = requireRenderedField(
     formFields,
@@ -1503,7 +1489,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
     name: datasetName,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.program_node_id],
+    visibility_node_ids: [seed.scope_node_id],
     initial_source: {
       kind: "form",
       alias: "program",
@@ -1533,7 +1519,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
       name: `Playwright Revision Dependent ${runId}`,
       slug: `${PW_DATASET_PREFIX}revision-dependent-${runId}`,
       grain: "submission",
-      visibility_node_ids: [seed.program_node_id],
+      visibility_node_ids: [seed.scope_node_id],
       initial_source: {
         kind: "dataset",
         alias: "upstream",
@@ -1706,12 +1692,10 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
   test.setTimeout(120_000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
+  const seed = await referenceDatasetFixture(page);
   await cleanupPlaywrightDatasets(page);
 
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formFields = renderedFields(renderedForm);
   const firstField = requireRenderedField(
     formFields,
@@ -1737,7 +1721,7 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
       name: upstreamName,
       slug: upstreamSlug,
       grain: "submission",
-      visibility_node_ids: [seed.program_node_id],
+      visibility_node_ids: [seed.scope_node_id],
       initial_source: {
         kind: "form",
         alias: "program",
@@ -1755,7 +1739,7 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
       name: `${upstreamName} v2`,
       slug: upstreamSlug,
       grain: "submission",
-      visibility_node_ids: [seed.program_node_id],
+      visibility_node_ids: [seed.scope_node_id],
       initial_source: {
         kind: "form",
         alias: "program",
@@ -1780,7 +1764,7 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
       name: `Playwright Version One Consumer ${runId}`,
       slug: `${PW_DATASET_PREFIX}version-one-consumer-${runId}`,
       grain: "submission",
-      visibility_node_ids: [seed.program_node_id],
+      visibility_node_ids: [seed.scope_node_id],
       initial_source: {
         kind: "dataset_major",
         alias: "upstream",
@@ -1838,12 +1822,10 @@ test("dataset revision navigation handles repeated detail and error states", asy
   test.setTimeout(90_000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
+  const seed = await referenceDatasetFixture(page);
   await cleanupPlaywrightDatasets(page);
 
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formField = requireRenderedField(
     renderedFields(renderedForm),
     (field) => field.field_type === "number",
@@ -1854,7 +1836,7 @@ test("dataset revision navigation handles repeated detail and error states", asy
     name: `Playwright Revision Navigation ${runId}`,
     slug: `${PW_DATASET_PREFIX}revision-navigation-${runId}`,
     grain: "submission",
-    visibility_node_ids: [seed.program_node_id],
+    visibility_node_ids: [seed.scope_node_id],
     initial_source: {
       kind: "form",
       alias: "program",
@@ -1921,10 +1903,8 @@ test("dataset SQL preview uses pre-projection join keys and stable field identit
   page,
 }) => {
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const seed = await referenceDatasetFixture(page);
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const field = requireRenderedField(
     renderedFields(renderedForm),
     (candidate) => candidate.field_type === "number",
@@ -1937,7 +1917,7 @@ test("dataset SQL preview uses pre-projection join keys and stable field identit
         name: "Playwright Joined Dataset",
         slug: `${PW_DATASET_PREFIX}sql-preview`,
         grain: "submission",
-        visibility_node_ids: [seed.program_node_id],
+        visibility_node_ids: [seed.scope_node_id],
         initial_source: {
           kind: "form",
           alias: "left_source",
@@ -1990,10 +1970,13 @@ test("dataset SQL preview uses pre-projection join keys and stable field identit
     'l."left_source__node_id" = r."right_source__node_id"',
   );
   expect(preview.generated_sql).toContain("AVG");
-  expect(preview.generated_sql).toContain("submission_value_fact.field_id");
-  expect(preview.generated_sql).toContain("submission_value_fact.form_version_id");
-  expect(preview.generated_sql).not.toContain("submission_value_fact.field_key");
-  expect(preview.generated_sql).not.toContain("field_dim.field_key");
+  expect(preview.generated_sql).toContain("dataset_imported_responses");
+  expect(preview.generated_sql).toContain("dataset_imported_response_values");
+  expect(preview.generated_sql).toContain("imported_value.field_id");
+  expect(preview.generated_sql).toContain("imported.form_version_id");
+  expect(preview.generated_sql).not.toContain("submission_value_fact");
+  expect(preview.generated_sql).not.toContain("field_dim");
+  expect(preview.generated_sql).not.toContain("imported_value.field_key");
   expect(preview.generated_sql).not.toContain("WITH ranked");
   expect(preview.generated_sql).not.toContain("selection_rank");
 });
@@ -2002,10 +1985,8 @@ test("dataset SQL preview renders ordered QuerySpec operations as sequential CTE
   page,
 }) => {
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const seed = await referenceDatasetFixture(page);
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formFields = renderedFields(renderedForm);
   const numberField = requireRenderedField(
     formFields,
@@ -2020,7 +2001,7 @@ test("dataset SQL preview renders ordered QuerySpec operations as sequential CTE
         name: "Playwright Ordered Operations Dataset",
         slug: `${PW_DATASET_PREFIX}ordered-operations`,
         grain: "submission",
-        visibility_node_ids: [seed.program_node_id],
+        visibility_node_ids: [seed.scope_node_id],
         initial_source: {
           kind: "form",
           alias: "program",
@@ -2133,10 +2114,8 @@ test("dataset SQL preview merges unioned source fields under the union step alia
   page,
 }) => {
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const seed = await referenceDatasetFixture(page);
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formFields = renderedFields(renderedForm);
   const textField = requireRenderedField(
     formFields,
@@ -2151,7 +2130,7 @@ test("dataset SQL preview merges unioned source fields under the union step alia
         name: "Playwright Union Merge Dataset",
         slug: `${PW_DATASET_PREFIX}union-merge`,
         grain: "submission",
-        visibility_node_ids: [seed.program_node_id],
+        visibility_node_ids: [seed.scope_node_id],
         initial_source: {
           kind: "form",
           alias: "source_1",
@@ -2198,11 +2177,9 @@ test("dataset operations keep operation-local state through reorder, save, and r
 }) => {
   test.setTimeout(300_000);
   await signInAsAdmin(page);
-  const seed = await seedDemo(page);
+  const seed = await referenceDatasetFixture(page);
   await cleanupPlaywrightDatasets(page);
-  const renderedForm = await expectJson<RenderedForm>(
-    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
-  );
+  const renderedForm = await getEditorRenderedForm(page, seed);
   const formFields = renderedFields(renderedForm);
   const numberField = requireRenderedField(
     formFields,
@@ -2224,7 +2201,7 @@ test("dataset operations keep operation-local state through reorder, save, and r
     name: `Playwright Operation Local UAT ${runId}`,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.program_node_id],
+    visibility_node_ids: [seed.scope_node_id],
     initial_source: {
       kind: "form" as const,
       alias: "program",

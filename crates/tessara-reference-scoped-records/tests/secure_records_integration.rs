@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
@@ -57,10 +59,28 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
         [81; 32],
     )
     .unwrap();
+    let owner_bootstrap_signer = PurposeBoundSigningKeyV1::from_secret_bytes(
+        "tessara.core",
+        "core-test-v1",
+        ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
+        [81; 32],
+    )
+    .unwrap();
+    let bootstrap_receipt_signer = Arc::new(
+        PurposeBoundSigningKeyV1::from_secret_bytes(
+            tessara_reference_scoped_records::MODULE_DEFINITION_ID,
+            "scoped-records-test-v1",
+            ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+            [82; 32],
+        )
+        .unwrap(),
+    );
     let app = router(ModuleState {
         pool: pool.clone(),
         core_authorization_verifier: signer.verifier(),
+        core_owner_bootstrap_verifier: owner_bootstrap_signer.verifier(),
         core_shell_verifier: shell_signer.verifier(),
+        bootstrap_receipt_signer,
     });
     let actor_id = Uuid::new_v4();
     let correlation_id = Uuid::new_v4();

@@ -1,0 +1,2060 @@
+{
+  "schema_version": 2,
+  "contract": "tessara.validation-contract",
+  "policy_version": "tessara-validation-v2",
+  "sprint": "sprint-8b",
+  "implementation_profile": {
+    "kind": "phase8-module-extraction",
+    "playbook": "docs/architecture/module-extraction-playbook.md",
+    "module_definition": "tessara.datasets",
+    "transition_identity": "tessara.datasets"
+  },
+  "requirements": [
+    {
+      "id": "ac-01",
+      "implementation_targets": [
+        "owner-product",
+        "ui-sdk-conformance",
+        "inventory-navigation",
+        "migration-seed",
+        "deployed-smoke"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-materialization",
+        "rehearsal-materialization",
+        "rehearsal-browser",
+        "rehearsal-conformance",
+        "preflight-freeze",
+        "sit-static",
+        "sit-browser",
+        "sit-smoke",
+        "uat-product",
+        "uat-operations",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-02",
+      "implementation_targets": [
+        "owner-product",
+        "ui-sdk-conformance",
+        "fixture-acceptance",
+        "api-idempotency",
+        "dataset-refresh-dag"
+      ],
+      "validation_lanes": [
+        "readiness-acceptance",
+        "rehearsal-rust",
+        "rehearsal-browser",
+        "rehearsal-source-sync",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-browser",
+        "uat-product",
+        "uat-replay-refresh"
+      ]
+    },
+    {
+      "id": "ac-03",
+      "implementation_targets": [
+        "ui-sdk-conformance",
+        "fixture-acceptance",
+        "ui-provider-boundaries"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-acceptance",
+        "rehearsal-browser",
+        "rehearsal-conformance",
+        "preflight-freeze",
+        "sit-static",
+        "sit-browser",
+        "uat-product"
+      ]
+    },
+    {
+      "id": "ac-04",
+      "implementation_targets": [
+        "contract-boundary",
+        "failure-recovery",
+        "response-export-contract",
+        "response-incremental-sync"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-materialization",
+        "rehearsal-source-sync",
+        "rehearsal-recovery",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-smoke",
+        "uat-providers",
+        "uat-replay-refresh",
+        "uat-recovery"
+      ]
+    },
+    {
+      "id": "ac-05",
+      "implementation_targets": [
+        "contract-boundary",
+        "owner-product",
+        "ui-provider-boundaries"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "rehearsal-conformance",
+        "rehearsal-source-sync",
+        "rehearsal-smoke",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-browser",
+        "sit-smoke",
+        "uat-product",
+        "uat-providers"
+      ]
+    },
+    {
+      "id": "ac-06",
+      "implementation_targets": [
+        "contract-boundary",
+        "consumer-cutover",
+        "core-subtraction",
+        "resource-resolution"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "rehearsal-static",
+        "rehearsal-conformance",
+        "rehearsal-reverse-consumers",
+        "rehearsal-smoke",
+        "preflight-freeze",
+        "sit-static",
+        "sit-rust",
+        "sit-smoke",
+        "uat-resource-resolution",
+        "uat-crossmodule",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-07",
+      "implementation_targets": [
+        "contract-boundary",
+        "consumer-cutover",
+        "deployed-smoke",
+        "resource-resolution"
+      ],
+      "validation_lanes": [
+        "rehearsal-conformance",
+        "rehearsal-reverse-consumers",
+        "rehearsal-smoke",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-browser",
+        "sit-smoke",
+        "uat-providers",
+        "uat-resource-resolution",
+        "uat-crossmodule"
+      ]
+    },
+    {
+      "id": "ac-08",
+      "implementation_targets": [
+        "failure-recovery",
+        "deployed-smoke",
+        "response-incremental-sync",
+        "ui-provider-boundaries",
+        "reverse-consumers"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "readiness-acceptance",
+        "rehearsal-source-sync",
+        "rehearsal-reverse-consumers",
+        "rehearsal-smoke",
+        "rehearsal-recovery",
+        "preflight-freeze",
+        "sit-browser",
+        "sit-smoke",
+        "uat-providers",
+        "uat-reverse-consumers",
+        "uat-crossmodule",
+        "uat-recovery"
+      ]
+    },
+    {
+      "id": "ac-09",
+      "implementation_targets": [
+        "failure-recovery",
+        "response-incremental-sync",
+        "api-idempotency",
+        "dataset-refresh-dag"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "rehearsal-rust",
+        "rehearsal-source-sync",
+        "rehearsal-recovery",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-smoke",
+        "uat-providers",
+        "uat-replay-refresh",
+        "uat-recovery"
+      ]
+    },
+    {
+      "id": "ac-10",
+      "implementation_targets": [
+        "core-subtraction",
+        "migration-seed",
+        "clean-materialization",
+        "fixture-acceptance"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "readiness-acceptance",
+        "rehearsal-materialization",
+        "preflight-freeze",
+        "sit-static",
+        "sit-smoke",
+        "uat-materialization",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-11",
+      "implementation_targets": [
+        "clean-materialization",
+        "semantic-noop",
+        "dataset-refresh-dag"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "rehearsal-materialization",
+        "rehearsal-source-sync",
+        "preflight-freeze",
+        "sit-smoke",
+        "uat-materialization",
+        "uat-replay-refresh"
+      ]
+    },
+    {
+      "id": "ac-12",
+      "implementation_targets": [
+        "clean-materialization",
+        "failure-recovery",
+        "dataset-refresh-dag"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "rehearsal-source-sync",
+        "rehearsal-recovery",
+        "preflight-freeze",
+        "sit-smoke",
+        "uat-providers",
+        "uat-recovery"
+      ]
+    },
+    {
+      "id": "ac-13",
+      "implementation_targets": [
+        "contract-boundary",
+        "core-subtraction",
+        "inventory-navigation",
+        "reverse-consumers",
+        "resource-resolution"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "rehearsal-static",
+        "rehearsal-conformance",
+        "rehearsal-reverse-consumers",
+        "preflight-freeze",
+        "sit-static",
+        "sit-rust",
+        "sit-smoke",
+        "uat-reverse-consumers",
+        "uat-resource-resolution",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-14",
+      "implementation_targets": [
+        "contract-boundary",
+        "consumer-cutover",
+        "core-subtraction",
+        "migration-seed",
+        "clean-materialization",
+        "ui-provider-boundaries"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-materialization",
+        "rehearsal-static",
+        "rehearsal-materialization",
+        "rehearsal-source-sync",
+        "rehearsal-reverse-consumers",
+        "preflight-freeze",
+        "sit-static",
+        "sit-smoke",
+        "uat-providers",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-15",
+      "implementation_targets": [
+        "core-subtraction",
+        "inventory-navigation",
+        "migration-seed",
+        "deployed-smoke"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-materialization",
+        "rehearsal-static",
+        "rehearsal-materialization",
+        "rehearsal-smoke",
+        "preflight-freeze",
+        "sit-static",
+        "sit-smoke",
+        "uat-materialization",
+        "uat-operations",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-16",
+      "implementation_targets": [
+        "owner-product",
+        "deployed-smoke",
+        "reverse-consumers"
+      ],
+      "validation_lanes": [
+        "readiness-acceptance",
+        "rehearsal-reverse-consumers",
+        "rehearsal-smoke",
+        "preflight-freeze",
+        "sit-browser",
+        "sit-smoke",
+        "uat-operations",
+        "uat-reverse-consumers"
+      ]
+    },
+    {
+      "id": "ac-17",
+      "implementation_targets": [
+        "inventory-navigation",
+        "deployed-smoke",
+        "independent-upgrade-rollback"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "rehearsal-smoke",
+        "rehearsal-upgrade",
+        "preflight-freeze",
+        "sit-smoke",
+        "uat-upgrade"
+      ]
+    },
+    {
+      "id": "ac-18",
+      "implementation_targets": [
+        "consumer-cutover",
+        "clean-materialization",
+        "deployed-smoke"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "readiness-acceptance",
+        "rehearsal-materialization",
+        "rehearsal-browser",
+        "rehearsal-smoke",
+        "preflight-freeze",
+        "sit-browser",
+        "sit-smoke",
+        "uat-crossmodule"
+      ]
+    },
+    {
+      "id": "ac-19",
+      "implementation_targets": [
+        "clean-materialization",
+        "semantic-noop",
+        "failure-recovery",
+        "fixture-acceptance",
+        "deployed-smoke",
+        "response-export-contract",
+        "response-incremental-sync",
+        "api-idempotency",
+        "dataset-refresh-dag"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-materialization",
+        "rehearsal-materialization",
+        "rehearsal-source-sync",
+        "rehearsal-smoke",
+        "rehearsal-recovery",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-smoke",
+        "uat-providers",
+        "uat-replay-refresh",
+        "uat-recovery"
+      ]
+    },
+    {
+      "id": "ac-20",
+      "implementation_targets": [
+        "contract-boundary",
+        "owner-product",
+        "ui-sdk-conformance",
+        "ui-provider-boundaries"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-acceptance",
+        "rehearsal-browser",
+        "rehearsal-conformance",
+        "rehearsal-source-sync",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-browser",
+        "uat-product",
+        "uat-providers"
+      ]
+    },
+    {
+      "id": "ac-21",
+      "implementation_targets": [
+        "contract-boundary",
+        "core-subtraction",
+        "resource-resolution"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "rehearsal-conformance",
+        "rehearsal-reverse-consumers",
+        "preflight-freeze",
+        "sit-static",
+        "sit-rust",
+        "sit-smoke",
+        "uat-resource-resolution",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-22",
+      "implementation_targets": [
+        "core-subtraction",
+        "deployed-smoke",
+        "reverse-consumers",
+        "resource-resolution"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-acceptance",
+        "rehearsal-reverse-consumers",
+        "rehearsal-smoke",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-browser",
+        "sit-smoke",
+        "uat-operations",
+        "uat-reverse-consumers"
+      ]
+    },
+    {
+      "id": "ac-23",
+      "implementation_targets": [
+        "contract-boundary",
+        "owner-product",
+        "fixture-acceptance",
+        "api-idempotency"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-acceptance",
+        "rehearsal-static",
+        "rehearsal-rust",
+        "rehearsal-conformance",
+        "preflight-freeze",
+        "sit-static",
+        "sit-rust",
+        "sit-browser",
+        "uat-scripted",
+        "uat-product",
+        "uat-resource-resolution",
+        "uat-replay-refresh"
+      ]
+    },
+    {
+      "id": "ac-24",
+      "implementation_targets": [
+        "failure-recovery",
+        "response-incremental-sync",
+        "api-idempotency",
+        "dataset-refresh-dag"
+      ],
+      "validation_lanes": [
+        "readiness-materialization",
+        "rehearsal-rust",
+        "rehearsal-source-sync",
+        "rehearsal-recovery",
+        "preflight-freeze",
+        "sit-rust",
+        "sit-smoke",
+        "uat-providers",
+        "uat-replay-refresh"
+      ]
+    },
+    {
+      "id": "ac-25",
+      "implementation_targets": [
+        "contract-boundary",
+        "owner-product",
+        "core-subtraction",
+        "response-incremental-sync"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-materialization",
+        "rehearsal-static",
+        "rehearsal-rust",
+        "rehearsal-source-sync",
+        "preflight-freeze",
+        "sit-static",
+        "sit-rust",
+        "sit-smoke",
+        "uat-providers",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "ac-26",
+      "implementation_targets": [
+        "contract-boundary",
+        "owner-product",
+        "core-subtraction",
+        "reverse-consumers"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "rehearsal-static",
+        "rehearsal-conformance",
+        "rehearsal-reverse-consumers",
+        "preflight-freeze",
+        "sit-static",
+        "sit-rust",
+        "uat-operations",
+        "uat-reverse-consumers",
+        "uat-subtraction"
+      ]
+    },
+    {
+      "id": "gate-implementation-exit",
+      "implementation_targets": [
+        "static-quality",
+        "contract-boundary",
+        "owner-product",
+        "ui-sdk-conformance",
+        "consumer-cutover",
+        "core-subtraction",
+        "inventory-navigation",
+        "migration-seed",
+        "clean-materialization",
+        "semantic-noop",
+        "failure-recovery",
+        "fixture-acceptance",
+        "runner-selftest",
+        "deployed-smoke",
+        "independent-upgrade-rollback",
+        "uat-readiness",
+        "response-export-contract",
+        "response-incremental-sync",
+        "ui-provider-boundaries",
+        "reverse-consumers",
+        "resource-resolution",
+        "api-idempotency",
+        "dataset-refresh-dag",
+        "planning-contract-alignment"
+      ],
+      "validation_lanes": [
+        "readiness-contract",
+        "readiness-materialization",
+        "readiness-acceptance",
+        "rehearsal-static",
+        "rehearsal-rust",
+        "rehearsal-materialization",
+        "rehearsal-browser",
+        "rehearsal-conformance",
+        "rehearsal-source-sync",
+        "rehearsal-reverse-consumers",
+        "rehearsal-smoke",
+        "rehearsal-recovery",
+        "rehearsal-upgrade",
+        "rehearsal-uat",
+        "preflight-freeze",
+        "sit-static",
+        "sit-rust",
+        "sit-browser",
+        "sit-smoke",
+        "uat-scripted",
+        "uat-product",
+        "uat-materialization",
+        "uat-operations",
+        "uat-providers",
+        "uat-reverse-consumers",
+        "uat-resource-resolution",
+        "uat-replay-refresh",
+        "uat-crossmodule",
+        "uat-subtraction",
+        "uat-recovery",
+        "uat-upgrade"
+      ]
+    }
+  ],
+  "dependency_domains": [
+    {
+      "name": "product-source",
+      "tracked_inputs": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "crates/**",
+        "style/**"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "build-dependencies",
+      "tracked_inputs": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "package.json",
+        "package-lock.json",
+        "end2end/package*.json",
+        "rust-toolchain*",
+        ".cargo/**"
+      ],
+      "environment_sections": [
+        "toolchain"
+      ]
+    },
+    {
+      "name": "migrations-seeds",
+      "tracked_inputs": [
+        "crates/**/migrations/**",
+        "crates/tessara-api/src/demo/**",
+        "scripts/seed*.ps1",
+        "scripts/local-refresh-api.ps1",
+        "scripts/materialize-sprint-8b.ps1",
+        "scripts/*sprint-8b*bootstrap*.ps1"
+      ],
+      "environment_sections": [
+        "databases"
+      ]
+    },
+    {
+      "name": "deployment-materialization",
+      "tracked_inputs": [
+        "deploy/sprint-8b/**",
+        "deploy/sprint-8a/**",
+        "docker-compose*.yml",
+        "Dockerfile",
+        "scripts/local-launch.ps1",
+        "scripts/local-refresh-api.ps1",
+        "scripts/bootstrap-sprint-7a-composition.ps1",
+        "scripts/build-sprint-8b-dataset-upgrade-baseline.ps1",
+        "scripts/materialize-sprint-8b.ps1",
+        "scripts/run-sprint-8b-failure-containment.ps1",
+        "scripts/run-sprint-8b-dataset-upgrade.ps1",
+        "scripts/run-sprint-8b-deployed-smoke.ps1",
+        "scripts/*sprint-8b*fault*.ps1",
+        "scripts/*sprint-8b*isolation*.ps1"
+      ],
+      "environment_sections": [
+        "compose",
+        "ports",
+        "topology",
+        "databases"
+      ]
+    },
+    {
+      "name": "fixtures",
+      "tracked_inputs": [
+        "crates/**/tests/fixtures/**",
+        "scripts/fixtures/**",
+        "scripts/prepare-sprint-8b-uat-fixtures.ps1",
+        "deploy/sprint-8b/fixtures/**",
+        "end2end/fixtures/**"
+      ],
+      "environment_sections": [
+        "accounts",
+        "fixtures"
+      ]
+    },
+    {
+      "name": "acceptance-inventory",
+      "tracked_inputs": [
+        "end2end/**",
+        "docs/audits/sprint-8b-dataset-ui-baseline/**",
+        "docs/sprints/sprint-8b-uat/**",
+        "docs/sprints/sprint-8b-plan.md",
+        "docs/sprints/sprint-8b-test-change-log.md",
+        "docs/sprints/sprint-8b-verification.md",
+        "scripts/sprint-8b-acceptance-contract.ps1",
+        "scripts/smoke.ps1",
+        "scripts/smoke*.ps1",
+        "scripts/capture-sprint-8b-ui-baseline.mjs",
+        "scripts/validate-e2e.ps1",
+        "scripts/uat-sprint.ps1",
+        "scripts/uat-sprint-8b.ps1"
+      ],
+      "environment_sections": [
+        "browser",
+        "fixtures"
+      ]
+    },
+    {
+      "name": "environment-contract",
+      "tracked_inputs": [
+        ".env.example",
+        "rust-toolchain*",
+        "deploy/sprint-8b/**",
+        "scripts/*environment*.ps1",
+        "scripts/local-launch.ps1",
+        "scripts/*sprint-8b*fault*.ps1"
+      ],
+      "environment_sections": [
+        "toolchain",
+        "databases",
+        "compose",
+        "ports",
+        "topology",
+        "evidence-root"
+      ]
+    },
+    {
+      "name": "validation-shared",
+      "tracked_inputs": [
+        "scripts/tessara-validation-policy.psm1",
+        "scripts/test-tessara-validation-policy.ps1",
+        ".codex/skills/tessara-sprint-validation/references/validation-policy-v2.md",
+        ".codex/skills/tessara-sprint-validation/references/*.schema.json",
+        "docs/architecture/module-extraction-playbook.md",
+        "docs/architecture/independent-module-pathway.md"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "sprint-contract",
+      "tracked_inputs": [
+        "docs/sprints/sprint-8b-validation-contract.json"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "implementation-runner",
+      "tracked_inputs": [
+        "scripts/run-sprint-8b-implementation-readiness.ps1",
+        "scripts/assert-sprint-8b-planning-contract.ps1",
+        "scripts/test-sprint-8b-planning-contract.ps1",
+        "scripts/sprint-8b-implementation*.ps1"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "implementation-harness",
+      "tracked_inputs": [
+        "scripts/check-web-crate-boundaries.ps1",
+        "scripts/verify-module-sdk-boundaries.ps1",
+        "scripts/ui-sdk-conformance.ps1",
+        "scripts/build-module-ui-browser-assets.ps1",
+        "scripts/assert-sprint-8b-planning-contract.ps1",
+        "scripts/bootstrap-sprint-7a-composition.ps1",
+        "scripts/build-sprint-8b-dataset-upgrade-baseline.ps1",
+        "scripts/capture-sprint-8b-ui-baseline.mjs",
+        "scripts/check-sprint-8b-dataset-boundaries.ps1",
+        "scripts/sprint-8b-acceptance-contract.ps1",
+        "scripts/sprint-8b-cargo-test-integrity.ps1",
+        "scripts/prepare-sprint-8b-uat-fixtures.ps1",
+        "scripts/materialize-sprint-8b.ps1",
+        "scripts/run-sprint-8b-failure-containment.ps1",
+        "scripts/run-sprint-8b-dataset-upgrade.ps1",
+        "scripts/run-sprint-8b-deployed-smoke.ps1",
+        "scripts/run-sprint-8b-dataset-browser-proof.ps1",
+        "scripts/test-sprint-8b-component-consumer.ps1",
+        "scripts/test-sprint-8b-dataset-module.ps1",
+        "scripts/test-sprint-8b-response-export-contract.ps1",
+        "scripts/validate-e2e.ps1",
+        "scripts/verify-sprint-8b-response-owner-receipt.mjs",
+        "scripts/*sprint-8b*boundary*.ps1",
+        "scripts/*sprint-8b*isolation*.ps1",
+        "scripts/*sprint-8b*fault*.ps1"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "readiness-runner",
+      "tracked_inputs": [
+        "scripts/validate-sprint-8b-readiness.ps1"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "rehearsal-runner",
+      "tracked_inputs": [
+        "scripts/run-sprint-8b-candidate-rehearsal.ps1"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "preflight-runner",
+      "tracked_inputs": [
+        "scripts/run-sprint-8b-validation-preflight.ps1"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "sit-runner",
+      "tracked_inputs": [
+        "scripts/run-sprint-8b-sit.ps1"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "uat-runner",
+      "tracked_inputs": [
+        "scripts/run-sprint-8b-formal-uat.ps1",
+        "scripts/uat-sprint-8b.ps1",
+        "scripts/uat-sprint.ps1"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "evidence-publication",
+      "tracked_inputs": [
+        "scripts/*evidence*.ps1",
+        "scripts/*lifecycle*.ps1",
+        "scripts/sprint-8b-evidence*.ps1"
+      ],
+      "environment_sections": [
+        "evidence-root"
+      ]
+    },
+    {
+      "name": "documentation",
+      "tracked_inputs": [
+        "docs/**",
+        "README.md"
+      ],
+      "environment_sections": []
+    }
+  ],
+  "implementation_targets": [
+    {
+      "id": "static-quality",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target static-quality",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "acceptance-inventory",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "static-quality"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "contract-boundary",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target contract-boundary",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "fixtures",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "owner-product",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target owner-product",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "owner-product"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "ui-sdk-conformance",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target ui-sdk-conformance",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "ui-sdk-conformance"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "consumer-cutover",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target consumer-cutover",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "core-subtraction",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target core-subtraction",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "fixtures",
+        "acceptance-inventory",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "core-subtraction"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "inventory-navigation",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target inventory-navigation",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "inventory-navigation"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "migration-seed",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target migration-seed",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "migration-seed"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "clean-materialization",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target clean-materialization",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "clean-materialization"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "semantic-noop",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target semantic-noop",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "semantic-noop"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "failure-recovery",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target failure-recovery",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "failure-recovery"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "fixture-acceptance",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target fixture-acceptance",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "fixture-acceptance"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "runner-selftest",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target runner-selftest",
+      "dependency_domains": [
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness",
+        "readiness-runner",
+        "rehearsal-runner",
+        "preflight-runner",
+        "sit-runner",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "proof_classes": [
+        "runner-selftest"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "deployed-smoke",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target deployed-smoke",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "deployed-smoke",
+        "consumer-cutover"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "independent-upgrade-rollback",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target independent-upgrade-rollback",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "independent-upgrade-rollback"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "uat-readiness",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target uat-readiness",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness",
+        "uat-runner"
+      ],
+      "proof_classes": [
+        "uat-readiness"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "response-export-contract",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target response-export-contract",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "response-incremental-sync",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target response-incremental-sync",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary",
+        "owner-product"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "ui-provider-boundaries",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target ui-provider-boundaries",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary",
+        "owner-product"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "reverse-consumers",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target reverse-consumers",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "resource-resolution",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target resource-resolution",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary",
+        "owner-product"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "api-idempotency",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target api-idempotency",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "contract-boundary",
+        "owner-product"
+      ],
+      "required": true,
+      "clean_environment": false
+    },
+    {
+      "id": "dataset-refresh-dag",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target dataset-refresh-dag",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness"
+      ],
+      "proof_classes": [
+        "owner-product"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "planning-contract-alignment",
+      "command": ".\\scripts\\run-sprint-8b-implementation-readiness.ps1 -Target planning-contract-alignment",
+      "dependency_domains": [
+        "fixtures",
+        "acceptance-inventory",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness",
+        "readiness-runner",
+        "rehearsal-runner",
+        "preflight-runner",
+        "sit-runner",
+        "uat-runner",
+        "evidence-publication",
+        "documentation"
+      ],
+      "proof_classes": [
+        "contract-boundary"
+      ],
+      "required": true,
+      "clean_environment": false
+    }
+  ],
+  "lanes": [
+    {
+      "id": "readiness-contract",
+      "phase": "validation-readiness",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness",
+        "readiness-runner",
+        "evidence-publication",
+        "documentation"
+      ],
+      "prerequisites": [],
+      "touches_live_state": false
+    },
+    {
+      "id": "readiness-materialization",
+      "phase": "validation-readiness",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "readiness-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "readiness-contract"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "readiness-acceptance",
+      "phase": "validation-readiness",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "fixtures",
+        "acceptance-inventory",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness",
+        "readiness-runner",
+        "uat-runner",
+        "evidence-publication",
+        "documentation"
+      ],
+      "prerequisites": [
+        "readiness-materialization"
+      ],
+      "touches_live_state": false
+    },
+    {
+      "id": "rehearsal-static",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "readiness-acceptance"
+      ],
+      "touches_live_state": false
+    },
+    {
+      "id": "rehearsal-rust",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "fixtures",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-static"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-materialization",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-rust"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-browser",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-materialization"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-conformance",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-browser"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-source-sync",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-conformance"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-reverse-consumers",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-source-sync"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-smoke",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-reverse-consumers"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-recovery",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-smoke"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-upgrade",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-recovery"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "rehearsal-uat",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "rehearsal-runner",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-upgrade"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "preflight-freeze",
+      "phase": "validation-preflight",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-runner",
+        "implementation-harness",
+        "readiness-runner",
+        "rehearsal-runner",
+        "preflight-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "rehearsal-uat"
+      ],
+      "touches_live_state": false
+    },
+    {
+      "id": "sit-static",
+      "phase": "sit",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "sit-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "preflight-freeze"
+      ],
+      "touches_live_state": false
+    },
+    {
+      "id": "sit-rust",
+      "phase": "sit",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "fixtures",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "sit-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "sit-static"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "sit-browser",
+      "phase": "sit",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "sit-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "sit-rust"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "sit-smoke",
+      "phase": "sit",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "sit-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "sit-browser"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-scripted",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "sit-smoke"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-product",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-scripted"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-materialization",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-product"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-operations",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-materialization"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-providers",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-operations"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-reverse-consumers",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-providers"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-resource-resolution",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-reverse-consumers"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-replay-refresh",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-resource-resolution"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-crossmodule",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-replay-refresh"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-subtraction",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-crossmodule"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-recovery",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-subtraction"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "uat-upgrade",
+      "phase": "uat",
+      "dependency_domains": [
+        "product-source",
+        "build-dependencies",
+        "migrations-seeds",
+        "deployment-materialization",
+        "fixtures",
+        "acceptance-inventory",
+        "environment-contract",
+        "validation-shared",
+        "sprint-contract",
+        "implementation-harness",
+        "uat-runner",
+        "evidence-publication"
+      ],
+      "prerequisites": [
+        "uat-recovery"
+      ],
+      "touches_live_state": true
+    }
+  ],
+  "evidence_policy": {
+    "root": "artifacts/sprint-8b-closeout",
+    "tracked": false,
+    "successful_raw": "retained_cold",
+    "phase_local_indexes": true,
+    "final_full_integrity_audit": true
+  }
+}

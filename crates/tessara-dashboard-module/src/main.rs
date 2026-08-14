@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, env, net::SocketAddr, sync::Arc};
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sqlx::postgres::PgPoolOptions;
-use tessara_dashboard_module::{DashboardModuleState, router};
+use tessara_dashboard_module::{DashboardModuleInit, DashboardModuleState, router};
 use tessara_module_contract::{
     ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
 };
@@ -32,16 +32,24 @@ async fn main() -> Result<()> {
         )?
         .try_into()
         .map_err(|_| anyhow::anyhow!("Core authorization public key must contain 32 bytes"))?;
+    let core_authorization_key_id = env::var("TESSARA_CORE_AUTHORIZATION_KEY_ID")
+        .unwrap_or_else(|_| "core-development-v1".into());
     let authorization_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
         "tessara.core",
-        "core-development-v1",
+        &core_authorization_key_id,
         ProtocolSignaturePurposeV1::AuthorizationGrant,
         public_key,
     )?;
     let shell_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
         "tessara.core",
-        "core-development-v1",
+        &core_authorization_key_id,
         ProtocolSignaturePurposeV1::ShellContext,
+        public_key,
+    )?;
+    let owner_bootstrap_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
+        "tessara.core",
+        core_authorization_key_id,
+        ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
         public_key,
     )?;
     let service_secret: [u8; 32] = URL_SAFE_NO_PAD
@@ -58,6 +66,13 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         service_secret,
     )?);
+    let bootstrap_receipt_signer = Arc::new(PurposeBoundSigningKeyV1::from_secret_bytes(
+        "tessara.dashboards",
+        env::var("TESSARA_DASHBOARD_SERVICE_SIGNING_KEY_ID")
+            .unwrap_or_else(|_| "dashboard-development-v1".into()),
+        ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+        service_secret,
+    )?);
     let module_service_endpoints: BTreeMap<String, String> = serde_json::from_str(
         &env::var("TESSARA_MODULE_SERVICE_ENDPOINTS")
             .context("TESSARA_MODULE_SERVICE_ENDPOINTS is required")?,
@@ -72,14 +87,17 @@ async fn main() -> Result<()> {
     let address: SocketAddr = env::var("DASHBOARD_MODULE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8091".into())
         .parse()?;
-    let app = router(DashboardModuleState::new(
+    let app = router(DashboardModuleState::new(DashboardModuleInit {
         pool,
-        authorization_verifier,
-        shell_verifier,
+        core_authorization_verifier: authorization_verifier,
+        core_owner_bootstrap_verifier: owner_bootstrap_verifier,
+        core_shell_verifier: shell_verifier,
         service_request_signer,
-        env::var("TESSARA_CORE_INTERNAL_URL").unwrap_or_else(|_| "http://core:8080".into()),
+        bootstrap_receipt_signer,
+        core_internal_url: env::var("TESSARA_CORE_INTERNAL_URL")
+            .unwrap_or_else(|_| "http://core:8080".into()),
         component_provider_url,
-    )?)
+    })?)
     .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(address).await?;
     tracing::info!(%address, "Dashboard module listening");

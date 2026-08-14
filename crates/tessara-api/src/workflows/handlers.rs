@@ -947,22 +947,37 @@ pub async fn ensure_workflow_assignment_for_form_version(
     account_id: Uuid,
 ) -> ApiResult<Uuid> {
     let mut tx = pool.begin().await?;
-    let (_, workflow_version_id, _) =
-        ensure_workflow_for_published_form_version_tx(&mut tx, form_version_id).await?;
-    let workflow_assignment_id =
-        ensure_workflow_assignment_tx(&mut tx, workflow_version_id, node_id, account_id).await?;
+    let workflow_assignment_id = ensure_workflow_assignment_for_form_version_tx(
+        &mut tx,
+        form_version_id,
+        node_id,
+        account_id,
+    )
+    .await?;
     tx.commit().await?;
     Ok(workflow_assignment_id)
 }
 
-pub async fn ensure_submission_runtime_linkage(
-    pool: &sqlx::PgPool,
+pub(crate) async fn ensure_workflow_assignment_for_form_version_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    form_version_id: Uuid,
+    node_id: Uuid,
+    account_id: Uuid,
+) -> ApiResult<Uuid> {
+    let (_, workflow_version_id, _) =
+        ensure_workflow_for_published_form_version_tx(tx, form_version_id).await?;
+    let workflow_assignment_id =
+        ensure_workflow_assignment_tx(tx, workflow_version_id, node_id, account_id).await?;
+    Ok(workflow_assignment_id)
+}
+
+pub(crate) async fn ensure_submission_runtime_linkage_tx(
+    tx: &mut Transaction<'_, Postgres>,
     submission_id: Uuid,
     workflow_assignment_id: Uuid,
     started_by_account_id: Uuid,
     is_completed: bool,
 ) -> ApiResult<()> {
-    let mut tx = pool.begin().await?;
     let assignment_row = sqlx::query(
         r#"
         SELECT
@@ -975,7 +990,7 @@ pub async fn ensure_submission_runtime_linkage(
         "#,
     )
     .bind(workflow_assignment_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("workflow assignment {workflow_assignment_id}")))?;
 
@@ -987,7 +1002,7 @@ pub async fn ensure_submission_runtime_linkage(
         "#,
     )
     .bind(submission_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
 
@@ -1020,7 +1035,7 @@ pub async fn ensure_submission_runtime_linkage(
         .bind(node_id)
         .bind(assignee_account_id)
         .bind(started_by_account_id)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?
     };
 
@@ -1042,7 +1057,7 @@ pub async fn ensure_submission_runtime_linkage(
             "in_progress"
         })
         .bind(completed_at)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
         existing
     } else {
@@ -1068,7 +1083,7 @@ pub async fn ensure_submission_runtime_linkage(
             "in_progress"
         })
         .bind(completed_at)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?
     };
 
@@ -1085,18 +1100,15 @@ pub async fn ensure_submission_runtime_linkage(
     .bind(workflow_assignment_id)
     .bind(workflow_instance_id)
     .bind(workflow_step_instance_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
-
-    tx.commit().await?;
     Ok(())
 }
 
-pub async fn complete_workflow_step_and_advance(
-    pool: &sqlx::PgPool,
+pub(crate) async fn complete_workflow_step_and_advance_tx(
+    tx: &mut Transaction<'_, Postgres>,
     submission_id: Uuid,
 ) -> ApiResult<()> {
-    let mut tx = pool.begin().await?;
     let row = sqlx::query(
         r#"
         SELECT
@@ -1114,10 +1126,9 @@ pub async fn complete_workflow_step_and_advance(
         "#,
     )
     .bind(submission_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     let Some(row) = row else {
-        tx.commit().await?;
         return Ok(());
     };
 
@@ -1137,7 +1148,7 @@ pub async fn complete_workflow_step_and_advance(
         "#,
     )
     .bind(workflow_step_instance_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
 
     let next_step_id: Option<Uuid> = sqlx::query_scalar(
@@ -1150,12 +1161,12 @@ pub async fn complete_workflow_step_and_advance(
     )
     .bind(workflow_version_id)
     .bind(position + 1)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
 
     if let Some(next_step_id) = next_step_id {
         ensure_specific_workflow_assignment_tx(
-            &mut tx,
+            tx,
             workflow_version_id,
             next_step_id,
             node_id,
@@ -1171,11 +1182,9 @@ pub async fn complete_workflow_step_and_advance(
             "#,
         )
         .bind(workflow_instance_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     }
-
-    tx.commit().await?;
     Ok(())
 }
 

@@ -23,10 +23,7 @@ pub use handlers::{
     list_workflow_assignments, list_workflows, publish_workflow_version,
     replace_workflow_version_steps, start_assignment, update_workflow, update_workflow_assignment,
 };
-pub use runtime::{
-    complete_workflow_step_and_advance, ensure_submission_runtime_linkage,
-    list_pending_assignments_for_account,
-};
+pub use runtime::list_pending_assignments_for_account;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
@@ -77,3 +74,8 @@ pub(crate) fn routes() -> Router<AppState> {
             post(start_assignment),
         )
 }
+
+pub(crate) use handlers::{
+    complete_workflow_step_and_advance_tx, ensure_submission_runtime_linkage_tx,
+    ensure_workflow_assignment_for_form_version_tx,
+};

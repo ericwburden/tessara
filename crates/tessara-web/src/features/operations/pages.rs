@@ -47,7 +47,7 @@ pub fn OperationsPage() -> impl IntoView {
                         view! {
                             <OperationsSummaryPanel summary=loaded_status.summary.clone() reporting_data=loaded_status.reporting_data.clone()/>
                             <WorkflowAssignmentsTable assignments=loaded_status.workflow_assignments.clone()/>
-                            <DatasetReadinessTable datasets=loaded_status.dataset_readiness.datasets.clone()/>
+                            <DatasetReadinessTable readiness=loaded_status.dataset_readiness.clone()/>
                         }
                         .into_any()
                     } else {
