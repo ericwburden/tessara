@@ -266,6 +266,15 @@ function Assert-Sprint8BFormSchema {
     }
 }
 
+function ConvertFrom-Sprint8BHttpContent {
+    param([AllowEmptyString()][AllowNull()]$Content)
+
+    if ($Content -is [byte[]]) {
+        return [System.Text.Encoding]::UTF8.GetString([byte[]]$Content)
+    }
+    [string]$Content
+}
+
 function Invoke-Sprint8BFixtureHttpRequest {
     param(
         [Parameter(Mandatory)][string]$BaseUrl,
@@ -278,7 +287,10 @@ function Invoke-Sprint8BFixtureHttpRequest {
     $response = Invoke-WebRequest -Uri "$($BaseUrl.TrimEnd('/'))$Path" -Method POST `
         -Headers $Headers -ContentType $ContentType -Body $Body -UseBasicParsing `
         -SkipHttpErrorCheck -TimeoutSec 30
-    $content = [string]$response.Content
+    # PowerShell exposes response bodies with unregistered vendor media types as
+    # bytes on some hosts. Preserve the exact UTF-8 wire body instead of
+    # stringifying the byte array as "System.Byte[]".
+    $content = ConvertFrom-Sprint8BHttpContent -Content $response.Content
     if ([int]$response.StatusCode -ne 200) {
         $errorCode = ""
         try {
@@ -1214,6 +1226,13 @@ function New-Sprint8BFixtureSelfTestInput {
 }
 
 function Test-Sprint8BFixturePreparation {
+    $vendorJson = '{"schema_version":1,"state":"passed"}'
+    $vendorJsonBytes = [System.Text.Encoding]::UTF8.GetBytes($vendorJson)
+    if ((ConvertFrom-Sprint8BHttpContent -Content $vendorJsonBytes) -cne $vendorJson -or
+        (ConvertFrom-Sprint8BHttpContent -Content $vendorJson) -cne $vendorJson) {
+        throw "Sprint 8B fixture HTTP content decoding did not preserve vendor JSON bytes."
+    }
+
     $referenceFixture = Read-Sprint8BFixtureJson -Path $ReferenceFixturePath -Label "Reference fixture contract"
     $blueprint = Read-Sprint8BFixtureJson -Path $BlueprintPath -Label "Reference Blueprint"
     $mock = New-Sprint8BFixtureSelfTestInput -ReferenceFixture $referenceFixture -Blueprint $blueprint
