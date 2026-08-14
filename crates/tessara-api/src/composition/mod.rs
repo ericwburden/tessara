@@ -958,24 +958,24 @@ async fn issue_bootstrap_dependency_authorization(
     let manifest = if module.is_some() {
         let endpoint = module_control_endpoints()?
             .remove(&request.owner_definition_id)
-            .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
+            .ok_or_else(|| reject_bootstrap_authorization("owner_endpoint"))?;
         Some(
             reqwest::Client::new()
                 .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
                 .header("x-tessara-module-control-key", module_control_key()?)
                 .send()
                 .await
-                .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
+                .map_err(|_| reject_bootstrap_authorization("manifest_request"))?
                 .error_for_status()
-                .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
+                .map_err(|_| reject_bootstrap_authorization("manifest_status"))?
                 .json::<ModuleManifest>()
                 .await
-                .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?,
+                .map_err(|_| reject_bootstrap_authorization("manifest_decode"))?,
         )
     } else if request.owner_definition_id == "core" {
         None
     } else {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("owner_not_enabled"));
     };
     let locked_bootstrap = match module {
         Some(module) => module.bootstrap.as_ref(),
@@ -990,7 +990,7 @@ async fn issue_bootstrap_dependency_authorization(
             } => Some((value, receipt_bindings.as_slice())),
             tessara_composition::BootstrapInputV1::LocalCas { .. } => None,
         })
-        .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
+        .ok_or_else(|| reject_bootstrap_authorization("bootstrap_input"))?;
     if request.idempotency_key.trim().is_empty()
         || canonical_digest(locked_input).map_err(|error| ApiError::Internal(error.into()))?
             != request.locked_input_digest
@@ -1003,9 +1003,9 @@ async fn issue_bootstrap_dependency_authorization(
     if let Some(manifest) = manifest.as_ref() {
         let registry = crate::module_service_requests::configured_registry()
             .map_err(ApiError::Internal)?
-            .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
+            .ok_or_else(|| reject_bootstrap_authorization("service_registry"))?;
         if registry.identity(&manifest.definition_id).is_none() {
-            return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+            return Err(reject_bootstrap_authorization("service_identity"));
         }
     }
     let validation = match (module, manifest.as_ref()) {
@@ -1015,7 +1015,7 @@ async fn issue_bootstrap_dependency_authorization(
             manifest,
             Some(&request.input),
         )
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?,
+        .map_err(|_| reject_bootstrap_authorization("dependency_validation"))?,
         _ => None,
     };
     if let Some(validation) = validation.as_ref() {
@@ -1026,11 +1026,11 @@ async fn issue_bootstrap_dependency_authorization(
         request.apply_authorization.payload.expires_at,
     );
     if expires_at <= now {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("authorization_expired"));
     }
     let original_actor_id =
         Uuid::parse_str(&request.apply_authorization.payload.initiator.actor_id)
-            .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+            .map_err(|_| reject_bootstrap_authorization("initiator_identity"))?;
     let provider_actions = match (module, manifest.as_ref()) {
         (Some(module), Some(manifest)) => manifest
             .consumed_service_actions
@@ -1153,7 +1153,7 @@ async fn issue_bootstrap_dependency_authorization(
             schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
             installation_id: request.installation_id,
             module_instance_id: module_instance_id
-                .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?,
+                .ok_or_else(|| reject_bootstrap_authorization("module_instance"))?,
             module_definition_id: request.owner_definition_id,
             input_digest: request.input_digest,
             desired_revision: request.desired_revision,
