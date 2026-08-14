@@ -49,6 +49,10 @@ services:
     image: ${TESSARA_SUPERVISOR_IMAGE:-tessara-sprint-8b-supervisor}
     environment:
       TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008b}
+      # The Supervisor invokes Compose from inside its container for runtime
+      # switches. Preserve the harness-selected Core control port so a switch
+      # recreates the exact same externally observable topology.
+      TESSARA_CORE_CONTROL_PORT: ${TESSARA_CORE_CONTROL_PORT:-18089}
       TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8b-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-8b-scoped-records","tessara.datasets":["tessara-sprint-8b-datasets","tessara-sprint-8b-datasets-upgrade-baseline:latest"],"tessara.components":"tessara-sprint-8b-components","tessara.dashboards":"tessara-sprint-8b-dashboards"}'
       TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-8b}
       TESSARA_CORE_INTERNAL_URL: http://core:8080

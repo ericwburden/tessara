@@ -418,6 +418,9 @@ function Test-Sprint8BMaterializationHarness {
     $composeOverride = Get-Content -Raw -LiteralPath (
         Join-Path $repoRoot "deploy/sprint-8b/compose.override.yaml"
     )
+    if ($composeOverride -cnotmatch '(?m)^\s{6}TESSARA_CORE_CONTROL_PORT: \$\{TESSARA_CORE_CONTROL_PORT:-18089\}$') {
+        throw "Sprint 8B Supervisor must preserve the harness-selected Core control port across runtime switches."
+    }
     foreach ($requiredProjection in @(
         [pscustomobject]@{
             Label = "Dataset migration materialized schema"
