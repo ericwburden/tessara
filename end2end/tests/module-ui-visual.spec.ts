@@ -271,6 +271,9 @@ test.describe("canonical module UI visual baselines", () => {
     await page.setViewportSize({ width: 1024, height: 1366 });
     const dataset = await referenceDataset(page);
     await visit(page, `/datasets/${dataset.id}/revisions`, "dark");
+    await page.locator("tbody tr td:nth-child(6)").evaluate((cell) => {
+      cell.textContent = "Pinned fixture time";
+    });
     await expect(page).toHaveScreenshot("datasets-revisions-dark-1024.png", {
       animations: "disabled",
     });
@@ -281,6 +284,9 @@ test.describe("canonical module UI visual baselines", () => {
     const dataset = await referenceDataset(page);
     await visit(page, `/datasets/${dataset.id}/preview`, "light");
     await expect(page.locator(".dataset-preview-page")).toBeVisible();
+    await page.getByRole("button", { name: "Sort and filter Label" }).click();
+    await page.getByRole("menuitem", { name: "Sort ascending" }).click();
+    await expect(page.locator("tbody tr").first()).toContainText("Corrected complete values");
     await expect(page).toHaveScreenshot("datasets-preview-light-1440.png", {
       animations: "disabled",
     });
