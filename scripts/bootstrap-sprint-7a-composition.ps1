@@ -162,6 +162,12 @@ function Get-Sprint7AApprovedEffects {
     } | Sort-Object -Unique)
 }
 
+function Test-Sprint7AComposeStartupRequired {
+    param([Parameter(Mandatory)][bool]$IsSemanticNoOp)
+
+    -not $IsSemanticNoOp
+}
+
 function Get-Sprint7ARuntimeServiceName {
     param([Parameter(Mandatory)][string]$DefinitionId)
 
@@ -204,6 +210,10 @@ function Test-Sprint7ABootstrapHelpers {
     }
     if ($null -ne (Get-Sprint7ARuntimeServiceName -DefinitionId "tessara.unknown")) {
         throw "Sprint 7A runtime image service projection accepted an unknown module definition."
+    }
+    if ((Test-Sprint7AComposeStartupRequired -IsSemanticNoOp $true) -or
+        -not (Test-Sprint7AComposeStartupRequired -IsSemanticNoOp $false)) {
+        throw "Sprint 7A semantic no-op startup-mutation guard self-test failed."
     }
 
     $roundTripTimestamp = (@{ expires_at = "2031-02-03T04:05:06.1234567+00:00" } |
@@ -330,24 +340,26 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel $service image build failed." }
         }
     }
-    if ($ExcludePublicGateway) {
-        $startupServices = @($composeConfiguration.services.PSObject.Properties.Name |
-            Where-Object { [string]$_ -cne "gateway" } |
-            Sort-Object)
-        if ($startupServices.Count -eq 0) {
-            throw "$RuntimeLabel did not resolve any non-gateway startup services."
+    if (Test-Sprint7AComposeStartupRequired -IsSemanticNoOp ([bool]$SemanticNoOp)) {
+        if ($ExcludePublicGateway) {
+            $startupServices = @($composeConfiguration.services.PSObject.Properties.Name |
+                Where-Object { [string]$_ -cne "gateway" } |
+                Sort-Object)
+            if ($startupServices.Count -eq 0) {
+                throw "$RuntimeLabel did not resolve any non-gateway startup services."
+            }
+            & docker @composeArguments up -d --no-build @startupServices
+        } else {
+            & docker @composeArguments up -d --no-build
         }
-        & docker @composeArguments up -d --no-build @startupServices
-    } else {
-        & docker @composeArguments up -d --no-build
-    }
-    if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel service startup failed." }
-    if ($ExcludePublicGateway) {
-        $runningGateway = @(& docker @composeArguments ps --status running -q gateway 2>&1 |
-            ForEach-Object { ([string]$_).Trim() } |
-            Where-Object { $_ })
-        if ($LASTEXITCODE -ne 0 -or $runningGateway.Count -ne 0) {
-            throw "$RuntimeLabel public gateway must remain stopped during owner materialization."
+        if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel service startup failed." }
+        if ($ExcludePublicGateway) {
+            $runningGateway = @(& docker @composeArguments ps --status running -q gateway 2>&1 |
+                ForEach-Object { ([string]$_).Trim() } |
+                Where-Object { $_ })
+            if ($LASTEXITCODE -ne 0 -or $runningGateway.Count -ne 0) {
+                throw "$RuntimeLabel public gateway must remain stopped during owner materialization."
+            }
         }
     }
 
