@@ -879,10 +879,13 @@ async fn issue_bootstrap_dependency_authorization(
     Json(request): Json<BootstrapDependencyValidationAuthorizationIssueRequestV1>,
 ) -> ApiResult<Json<BootstrapDependencyValidationAuthorizationIssueResponseV1>> {
     require_projection_token(&headers)?;
-    apply_authorization_signer()?
+    if apply_authorization_signer()?
         .verifier()
         .verify(&request.apply_authorization)
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+        .is_err()
+    {
+        return Err(reject_bootstrap_authorization("apply_signature"));
+    }
 
     let lockfile_value: Value = sqlx::query_scalar(
         "SELECT document FROM composition_lockfiles
@@ -908,16 +911,21 @@ async fn issue_bootstrap_dependency_authorization(
     .transpose()
     .map_err(|error| ApiError::Internal(error.into()))?;
     let now = Utc::now();
-    request
-        .apply_authorization
-        .payload
-        .validate_for(
-            &lockfile.materialization_plan,
-            &lockfile.materialization_plan_digest,
-            current_receipt_digest.as_ref(),
-            now,
-        )
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    if let Err(finding) = request.apply_authorization.payload.validate_for(
+        &lockfile.materialization_plan,
+        &lockfile.materialization_plan_digest,
+        current_receipt_digest.as_ref(),
+        now,
+    ) {
+        tracing::warn!(
+            operation = "bootstrap_dependency_authorization",
+            result = "rejected",
+            reason = "apply_contract",
+            finding_code = %finding.code,
+            "bootstrap dependency authorization rejected"
+        );
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
     if request.apply_authorization.payload.operation != ApplyOperationKindV1::Materialize
         || !request
             .apply_authorization
@@ -934,7 +942,7 @@ async fn issue_bootstrap_dependency_authorization(
                     && input_digest == &request.locked_input_digest)
         })
     {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("plan_binding"));
     }
 
     let module = lockfile
@@ -990,7 +998,7 @@ async fn issue_bootstrap_dependency_authorization(
             != request.input_digest
         || !resolved_bootstrap_input_matches_lock(locked_input, receipt_bindings, &request.input)
     {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("input_binding"));
     }
     if let Some(manifest) = manifest.as_ref() {
         let registry = crate::module_service_requests::configured_registry()
@@ -1079,7 +1087,7 @@ async fn issue_bootstrap_dependency_authorization(
     .fetch_one(&state.pool)
     .await?;
     if authorization_revision <= 0 || organization_revision <= 0 {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("security_revision"));
     }
     let owner = match (module_instance_id, manifest.as_ref()) {
         (Some(module_instance_id), Some(manifest)) => AuthorizationAudienceV1::ModuleInstance {
@@ -1179,6 +1187,16 @@ async fn issue_bootstrap_dependency_authorization(
             validation,
         },
     ))
+}
+
+fn reject_bootstrap_authorization(reason: &'static str) -> ApiError {
+    tracing::warn!(
+        operation = "bootstrap_dependency_authorization",
+        result = "rejected",
+        reason,
+        "bootstrap dependency authorization rejected"
+    );
+    ApiError::Forbidden("bootstrap:authorize".into())
 }
 
 async fn require_bootstrap_validation_provider_target(
