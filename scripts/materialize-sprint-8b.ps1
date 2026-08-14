@@ -278,6 +278,10 @@ function Get-Sprint8BMaterializationHealth {
 
     $gateway = Wait-Sprint8BHttpProbe -Uri "$($Ports.gateway_url)/health" -ExpectedStatus @(200)
     $supervisor = Wait-Sprint8BHttpProbe -Uri "$($Ports.supervisor_url)/health/ready" -ExpectedStatus @(204)
+    if (-not [string]::IsNullOrWhiteSpace([string]$supervisor.body) -or
+        -not [string]::IsNullOrWhiteSpace([string]$supervisor.content_type)) {
+        throw "Supervisor readiness must return an exact bodyless 204 response without a content type."
+    }
     $datasetLive = Invoke-Sprint8BServiceProbe -ComposePath $ComposePath -Service "datasets" `
         -Uri "http://127.0.0.1:8093/health/live"
     $datasetReady = Invoke-Sprint8BServiceProbe -ComposePath $ComposePath -Service "datasets" `

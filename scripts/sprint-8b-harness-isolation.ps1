@@ -330,11 +330,17 @@ function Invoke-Sprint8BHttpProbe {
     $response = Invoke-WebRequest @parameters
     $status = [int]$response.StatusCode
     $content = [string]$response.Content
+    $contentTypeProperty = $response.Headers.PSObject.Properties['Content-Type']
+    $contentType = if ($null -eq $contentTypeProperty) {
+        ''
+    } else {
+        [string]$contentTypeProperty.Value
+    }
     $result = [pscustomobject][ordered]@{
         uri = $Uri
         method = $Method
         status = $status
-        content_type = [string]$response.Headers.'Content-Type'
+        content_type = $contentType
         body_sha256 = Get-Sprint7ASha256 -Text $content
         body = $content
         passed = $ExpectedStatus -contains $status
