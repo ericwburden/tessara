@@ -294,7 +294,7 @@ function Invoke-Sprint8BFixtureHttpRequest {
     if ([int]$response.StatusCode -ne 200) {
         $errorCode = ""
         try {
-            $errorDocument = $content | ConvertFrom-Json -Depth 30
+            $errorDocument = $content | ConvertFrom-Json -Depth 30 -DateKind String
             $errorCode = if ($null -ne $errorDocument.error) {
                 [string]$errorDocument.error.code
             } else {
@@ -303,7 +303,7 @@ function Invoke-Sprint8BFixtureHttpRequest {
         } catch {}
         throw "Core fixture request 'POST $Path' returned HTTP $([int]$response.StatusCode) ($errorCode)."
     }
-    try { $document = $content | ConvertFrom-Json -Depth 100 } catch {
+    try { $document = $content | ConvertFrom-Json -Depth 100 -DateKind String } catch {
         throw "Core fixture request 'POST $Path' did not return JSON."
     }
     [pscustomobject][ordered]@{
@@ -1231,6 +1231,12 @@ function Test-Sprint8BFixturePreparation {
     if ((ConvertFrom-Sprint8BHttpContent -Content $vendorJsonBytes) -cne $vendorJson -or
         (ConvertFrom-Sprint8BHttpContent -Content $vendorJson) -cne $vendorJson) {
         throw "Sprint 8B fixture HTTP content decoding did not preserve vendor JSON bytes."
+    }
+    $timestampJson = '{"committed_at":"2026-08-14T15:13:32.123456Z"}'
+    $timestampDocument = $timestampJson | ConvertFrom-Json -Depth 10 -DateKind String
+    if ($timestampDocument.committed_at -isnot [string] -or
+        [string]$timestampDocument.committed_at -cne "2026-08-14T15:13:32.123456Z") {
+        throw "Sprint 8B fixture JSON parsing did not preserve canonical signed timestamps."
     }
 
     $referenceFixture = Read-Sprint8BFixtureJson -Path $ReferenceFixturePath -Label "Reference fixture contract"
