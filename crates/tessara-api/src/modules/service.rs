@@ -81,6 +81,128 @@ pub(crate) struct CompositionProjectionDocuments<'a> {
     pub(crate) receipt: &'a Value,
 }
 
+pub(crate) async fn project_bootstrap_module_security(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    installation_id: Uuid,
+    modules: &[tessara_composition::ResolvedModuleReleaseV1],
+    manifests: &BTreeMap<String, ModuleManifest>,
+    service_identities: Option<&tessara_module_contract::ModuleServiceIdentityRegistryV1>,
+) -> anyhow::Result<()> {
+    for module in modules.iter().filter(|module| module.enabled) {
+        let manifest = manifests.get(&module.definition_id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "bootstrap manifest is absent for '{}'",
+                module.definition_id
+            )
+        })?;
+        let display_name = module
+            .definition_id
+            .rsplit(['.', ':'])
+            .next()
+            .unwrap_or(&module.definition_id)
+            .replace(['-', '_'], " ");
+        sqlx::query(
+            "INSERT INTO module_definition_reservations(definition_id,display_name)
+             VALUES($1,$2) ON CONFLICT(definition_id) DO NOTHING",
+        )
+        .bind(&module.definition_id)
+        .bind(display_name)
+        .execute(&mut **transaction)
+        .await?;
+        let release_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO module_releases
+               (id,definition_id,version,manifest_digest,manifest,runtime_image_digest,
+                publisher,trust_state,compatibility_state)
+             VALUES($1,$2,$3,$4,$5,$6,$7,'curated','compatible')
+             ON CONFLICT(definition_id,manifest_digest) DO UPDATE SET
+               version=EXCLUDED.version,
+               manifest=EXCLUDED.manifest,
+               runtime_image_digest=EXCLUDED.runtime_image_digest,
+               publisher=EXCLUDED.publisher,
+               trust_state='curated',
+               compatibility_state='compatible'
+             RETURNING id",
+        )
+        .bind(Uuid::new_v4())
+        .bind(&module.definition_id)
+        .bind(module.version.to_string())
+        .bind(module.manifest_digest.to_string())
+        .bind(sqlx::types::Json(manifest))
+        .bind(module.runtime_image.to_string())
+        .bind(manifest.publisher.as_str())
+        .fetch_one(&mut **transaction)
+        .await?;
+        for declaration in &manifest.security_capabilities {
+            repository::ensure_declared_module_capability(
+                transaction,
+                declaration.id.as_str(),
+                &declaration.description,
+            )
+            .await?;
+        }
+        sqlx::query("DELETE FROM core_module_action_declarations WHERE target_definition_id=$1")
+            .bind(&module.definition_id)
+            .execute(&mut **transaction)
+            .await?;
+        project_manifest_actions(transaction, &module.definition_id, manifest).await?;
+        let route_prefix = manifest
+            .browser_routes
+            .iter()
+            .filter(|route| !route.path_template.contains('{'))
+            .map(|route| route.path_template.as_str())
+            .min_by_key(|path| path.len())
+            .map(str::to_owned);
+        let instance_id = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM module_instances WHERE installation_id=$1 AND definition_id=$2",
+        )
+        .bind(installation_id)
+        .bind(&module.definition_id)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .unwrap_or_else(|| {
+            tessara_composition::module_instance_id(installation_id, &module.definition_id)
+        });
+        sqlx::query(
+            "INSERT INTO module_instances
+               (id,installation_id,definition_id,release_id,identity_state,data_state,
+                database_name,configuration,route_prefix,installed,deployed,configured,
+                ready,enabled,healthy,last_observed_at)
+             VALUES($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,true,true,true,now())
+             ON CONFLICT(installation_id,definition_id) DO UPDATE SET
+               release_id=EXCLUDED.release_id,
+               identity_state='live',
+               data_state='retained',
+               database_name=EXCLUDED.database_name,
+               configuration=EXCLUDED.configuration,
+               route_prefix=EXCLUDED.route_prefix,
+               installed=true,
+               deployed=true,
+               configured=true,
+               ready=true,
+               enabled=true,
+               healthy=true,
+               last_observed_at=EXCLUDED.last_observed_at",
+        )
+        .bind(instance_id)
+        .bind(installation_id)
+        .bind(&module.definition_id)
+        .bind(release_id)
+        .bind(format!("composition:{}", module.definition_id))
+        .bind(sqlx::types::Json(&module.configuration))
+        .bind(route_prefix)
+        .execute(&mut **transaction)
+        .await?;
+        crate::module_service_requests::project_service_identity(
+            transaction,
+            service_identities,
+            instance_id,
+            manifest,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 pub(crate) async fn project_composition_modules(
     pool: &PgPool,
     lockfile: &ApplicationLockfileV1,

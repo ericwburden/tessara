@@ -34,6 +34,7 @@ function Invoke-Sprint8BFocusedCoreFreshProof {
     $containerName = "tessara-s8b-core-fresh-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $databaseName = "tessara_sprint_8b_core_fresh_test"
     $databaseUrlBefore = $env:TEST_API_FRESH_DATABASE_URL
+    $sqlxDatabaseUrlBefore = $env:DATABASE_URL
     $ackBefore = $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET
     try {
         $containerId = (& docker run --detach --rm --name $containerName `
@@ -57,6 +58,7 @@ function Invoke-Sprint8BFocusedCoreFreshProof {
         }
         $env:TEST_API_FRESH_DATABASE_URL =
             "postgres://tessara_materialize:tessara_materialize@127.0.0.1:$($Matches[1])/$databaseName"
+        $env:DATABASE_URL = $env:TEST_API_FRESH_DATABASE_URL
         $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET =
             "I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET"
         Push-Location $repoRoot
@@ -65,6 +67,11 @@ function Invoke-Sprint8BFocusedCoreFreshProof {
                 "test", "-p", "tessara-api", "--test", "sprint_6a_populated_upgrade",
                 "fresh_startup_and_seed_assignment_lock_order_use_a_separate_database",
                 "--locked", "--offline", "--jobs", "1"
+            ) | Out-Null
+            Invoke-Sprint8BCheckedCargoTest -Arguments @(
+                "test", "-p", "tessara-api", "--lib",
+                "composition::tests::fresh_baseline_enrolls_dataset_security_before_core_actor_bootstrap",
+                "--locked", "--offline", "--jobs", "1", "--", "--exact"
             ) | Out-Null
         } finally {
             Pop-Location
@@ -76,6 +83,7 @@ function Invoke-Sprint8BFocusedCoreFreshProof {
         }
     } finally {
         $env:TEST_API_FRESH_DATABASE_URL = $databaseUrlBefore
+        $env:DATABASE_URL = $sqlxDatabaseUrlBefore
         $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = $ackBefore
         $existing = @(& docker ps -a --filter "name=^/$containerName$" --format "{{.Names}}")
         if ($LASTEXITCODE -eq 0 -and $existing -ccontains $containerName) {

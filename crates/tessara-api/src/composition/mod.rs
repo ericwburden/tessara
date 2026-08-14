@@ -1334,8 +1334,18 @@ async fn enroll_bootstrap_capabilities(
     }
     validate_bootstrap_capability_manifests(&request.lockfile.modules, &request.manifests)?;
 
+    let service_identities =
+        crate::module_service_requests::configured_registry().map_err(ApiError::Internal)?;
     let mut transaction = state.pool.begin().await?;
-    insert_bootstrap_capabilities(&mut transaction, &request.manifests).await?;
+    crate::modules::project_bootstrap_module_security(
+        &mut transaction,
+        request.lockfile.installation_id,
+        &request.lockfile.modules,
+        &request.manifests,
+        service_identities.as_ref(),
+    )
+    .await
+    .map_err(ApiError::Internal)?;
     transaction.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1371,27 +1381,6 @@ fn validate_bootstrap_capability_manifests(
                 "Bootstrap capability manifest for '{}' is not source-exact",
                 module.definition_id
             )));
-        }
-    }
-    Ok(())
-}
-
-async fn insert_bootstrap_capabilities(
-    transaction: &mut Transaction<'_, Postgres>,
-    manifests: &BTreeMap<String, ModuleManifest>,
-) -> ApiResult<()> {
-    for manifest in manifests.values() {
-        for capability in &manifest.security_capabilities {
-            sqlx::query(
-                "INSERT INTO capabilities(key,description,scope_mode)
-                 VALUES($1,$2,'scope_aware')
-                 ON CONFLICT(key) DO UPDATE SET description=EXCLUDED.description,
-                     scope_mode=EXCLUDED.scope_mode",
-            )
-            .bind(capability.id.as_str())
-            .bind(&capability.description)
-            .execute(&mut **transaction)
-            .await?;
         }
     }
     Ok(())
@@ -2693,10 +2682,12 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn fresh_baseline_enrolls_dataset_capability_before_core_actor_bootstrap(
+    async fn fresh_baseline_enrolls_dataset_security_before_core_actor_bootstrap(
         pool: sqlx::PgPool,
     ) {
-        let (module, manifest) = dataset_bootstrap_manifest_fixture();
+        let (mut module, mut manifest) = dataset_bootstrap_manifest_fixture();
+        manifest.consumed_service_actions.clear();
+        module.manifest_digest = canonical_digest(&manifest).expect("fixture manifest digest");
         let manifests = BTreeMap::from([(module.definition_id.clone(), manifest)]);
         validate_bootstrap_capability_manifests(std::slice::from_ref(&module), &manifests)
             .expect("source-exact Dataset manifest");
@@ -2710,17 +2701,42 @@ mod tests {
             0,
             "fresh Core must not rely on a retired built-in Dataset capability"
         );
-        let mut transaction = pool.begin().await.expect("capability transaction");
-        insert_bootstrap_capabilities(&mut transaction, &manifests)
-            .await
-            .expect("enroll source-exact capabilities");
-        transaction.commit().await.expect("commit capabilities");
-
         let installation_id: Uuid =
             sqlx::query_scalar("SELECT id FROM application_installations WHERE singleton=true")
                 .fetch_one(&pool)
                 .await
                 .expect("installation identity");
+        let mut transaction = pool.begin().await.expect("security transaction");
+        crate::modules::project_bootstrap_module_security(
+            &mut transaction,
+            installation_id,
+            std::slice::from_ref(&module),
+            &manifests,
+            None,
+        )
+        .await
+        .expect("enroll source-exact bootstrap security state");
+        transaction.commit().await.expect("commit security state");
+
+        let projected_instance: (Uuid, bool, bool, bool) = sqlx::query_as(
+            "SELECT id,ready,enabled,healthy FROM module_instances
+             WHERE installation_id=$1 AND definition_id=$2",
+        )
+        .bind(installation_id)
+        .bind(&module.definition_id)
+        .fetch_one(&pool)
+        .await
+        .expect("pre-bootstrap Dataset ModuleInstance");
+        assert_eq!(
+            projected_instance,
+            (
+                tessara_composition::module_instance_id(installation_id, &module.definition_id),
+                true,
+                true,
+                true,
+            ),
+            "provider nonce consumption requires the exact live ModuleInstance before bootstrap"
+        );
         let apply_actor_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO accounts(id,email,display_name,is_active)

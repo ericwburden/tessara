@@ -15,7 +15,8 @@ mod shell_navigation;
 
 pub(crate) use native::{detail as native_detail, directory as native_directory};
 pub(crate) use service::{
-    CompositionProjectionDocuments, project_composition_modules, synchronize_catalog,
+    CompositionProjectionDocuments, project_bootstrap_module_security, project_composition_modules,
+    synchronize_catalog,
 };
 pub(crate) use shell_navigation::load_context_navigation;
 
