@@ -93,6 +93,7 @@ services:
         TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
     environment:
       DATABASE_URL: postgres://tessara_dataset_runtime:${TESSARA_DATASET_RUNTIME_PASSWORD:-local-dataset-runtime}@postgres:5432/tessara_module_datasets
+      RUST_LOG: ${TESSARA_DATASET_RUST_LOG:-tessara_dataset_module=info,tower_http=error}
       DATASET_MODULE_BIND_ADDR: 0.0.0.0:8093
       TESSARA_CORE_INTERNAL_URL: http://core:8080
       TESSARA_DATASET_PROVIDER_ENDPOINTS: '{"tessara.datasets.response-export":"http://response-provider-proxy:8080","tessara.datasets.form-version-schema":"http://form-provider-proxy:8080","tessara.datasets.scope-catalog":"http://scope-provider-proxy:8080","tessara.datasets.principal-display-catalog":"http://principal-provider-proxy:8080"}'
