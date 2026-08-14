@@ -132,6 +132,7 @@ test.describe("Sprint 8B independent Dataset module", () => {
       "/api/admin/datasets/editor-options/scopes",
     ]);
 
+    await page.getByRole("button", { name: /initial data source/i }).click();
     const formPicker = page.getByRole("combobox", { name: "Form", exact: true }).first();
     await expect(formPicker).toContainText("Primary Responses");
     const schemaResponse = page.waitForResponse((response) =>
