@@ -3,13 +3,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{
-    Json, Router,
-    body::Bytes,
+    Router,
+    body::{Body, Bytes},
     extract::State,
     http::{HeaderMap, header},
+    response::Response,
     routing::post,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -169,7 +170,7 @@ async fn checkpoint(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
-) -> ApiResult<Json<ResponseExportCheckpointResponse>> {
+) -> ApiResult<Response> {
     let inbound = authorize(
         &state,
         &headers,
@@ -204,20 +205,20 @@ async fn checkpoint(
         || committed
             .as_ref()
             .is_none_or(|cursor| cursor.sequence != head_sequence);
-    Ok(Json(ResponseExportCheckpointResponse {
+    contract_response(&ResponseExportCheckpointResponse {
         schema_version: RESPONSE_EXPORT_SCHEMA_VERSION,
         provider_epoch: epoch,
         authenticated_head: head,
         committed_cursor_valid,
         changed,
-    }))
+    })
 }
 
 async fn start(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
-) -> ApiResult<Json<ResponseExportStartResponse>> {
+) -> ApiResult<Response> {
     let inbound = authorize(
         &state,
         &headers,
@@ -246,13 +247,13 @@ async fn start(
         }
         Some(cursor.clone())
     };
-    Ok(Json(ResponseExportStartResponse {
+    contract_response(&ResponseExportStartResponse {
         schema_version: RESPONSE_EXPORT_SCHEMA_VERSION,
         provider_epoch: epoch,
         start_after_cursor,
         snapshot_upper_bound: request.authenticated_head,
         full_snapshot_rebase: request.full_snapshot_rebase,
-    }))
+    })
 }
 
 #[derive(Deserialize)]
@@ -345,7 +346,7 @@ async fn page(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
-) -> ApiResult<Json<ResponseExportPageResponse>> {
+) -> ApiResult<Response> {
     let inbound = authorize(
         &state,
         &headers,
@@ -431,7 +432,16 @@ async fn page(
         page_digest,
     };
     response.validate().map_err(|_| restricted())?;
-    Ok(Json(response))
+    contract_response(&response)
+}
+
+fn contract_response<T: Serialize>(value: &T) -> ApiResult<Response> {
+    let body = serde_json::to_vec(value)
+        .map_err(|error| ApiError::Internal(anyhow::Error::from(error)))?;
+    Response::builder()
+        .header(header::CONTENT_TYPE, RESPONSE_EXPORT_MEDIA_TYPE)
+        .body(Body::from(body))
+        .map_err(|error| ApiError::Internal(anyhow::Error::from(error)))
 }
 
 #[cfg(test)]
@@ -439,6 +449,15 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn response_export_uses_the_exact_contract_media_type() {
+        let response = contract_response(&serde_json::json!({"schema_version": 1})).unwrap();
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).unwrap(),
+            RESPONSE_EXPORT_MEDIA_TYPE
+        );
+    }
 
     #[test]
     fn cursor_is_bound_to_epoch_partition_and_canonical_sequence() {
