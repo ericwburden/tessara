@@ -100,6 +100,13 @@ impl BootstrapInputV1 {
             } => receipt_bindings,
         }
     }
+
+    fn locked_payload_digest(&self) -> ArtifactDigest {
+        match self {
+            Self::Inline { value, .. } => digest_or_infallible(value),
+            Self::LocalCas { digest, .. } => digest.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1971,10 +1978,14 @@ fn materialization_actions(
             digest: core.configuration_digest.clone(),
         },
     ];
-    if let Some(input_digest) = &core.bootstrap_digest {
+    if let Some(input_digest) = core
+        .bootstrap
+        .as_ref()
+        .map(BootstrapInputV1::locked_payload_digest)
+    {
         actions.push(MaterializationActionV1::Bootstrap {
             owner: "core".into(),
-            input_digest: input_digest.clone(),
+            input_digest,
         });
     }
     actions.push(MaterializationActionV1::HealthGate {
@@ -1996,10 +2007,14 @@ fn materialization_actions(
             owner: module.definition_id.clone(),
             digest: module.configuration_digest.clone(),
         });
-        if let Some(input_digest) = &module.bootstrap_digest {
+        if let Some(input_digest) = module
+            .bootstrap
+            .as_ref()
+            .map(BootstrapInputV1::locked_payload_digest)
+        {
             actions.push(MaterializationActionV1::Bootstrap {
                 owner: module.definition_id.clone(),
-                input_digest: input_digest.clone(),
+                input_digest,
             });
         }
         actions.push(MaterializationActionV1::SetEnablement {
@@ -2068,10 +2083,15 @@ fn delta_materialization_actions(
         });
     }
     let core_bootstrap_changed = current.core.bootstrap_digest != desired_core.bootstrap_digest;
-    if core_bootstrap_changed && let Some(input_digest) = &desired_core.bootstrap_digest {
+    if core_bootstrap_changed
+        && let Some(input_digest) = desired_core
+            .bootstrap
+            .as_ref()
+            .map(BootstrapInputV1::locked_payload_digest)
+    {
         actions.push(MaterializationActionV1::Bootstrap {
             owner: "core".into(),
-            input_digest: input_digest.clone(),
+            input_digest,
         });
     }
     if core_release_changed || core_configuration_changed || core_bootstrap_changed {
@@ -2146,10 +2166,15 @@ fn delta_materialization_actions(
                 digest: module.configuration_digest.clone(),
             });
         }
-        if bootstrap_changed && let Some(input_digest) = &module.bootstrap_digest {
+        if bootstrap_changed
+            && let Some(input_digest) = module
+                .bootstrap
+                .as_ref()
+                .map(BootstrapInputV1::locked_payload_digest)
+        {
             actions.push(MaterializationActionV1::Bootstrap {
                 owner: module.definition_id.clone(),
-                input_digest: input_digest.clone(),
+                input_digest,
             });
         }
         if enablement_changed {
@@ -2662,6 +2687,69 @@ mod tests {
             resource_key: "sprint-8a-row-count".into(),
             value_encoding: BootstrapReceiptValueEncodingV1::Json,
         }
+    }
+
+    #[test]
+    fn bootstrap_plan_authority_binds_the_acquired_payload_not_its_wrapper() {
+        let value = json!({"schema_version": "test/v1", "resource": null});
+        let inline = BootstrapInputV1::Inline {
+            schema_version: "test/v1".into(),
+            value: value.clone(),
+            receipt_bindings: vec![BootstrapReceiptBindingV1 {
+                target_pointer: "/resource".into(),
+                source_owner: "core".into(),
+                resource_key: "resource.test".into(),
+                value_encoding: BootstrapReceiptValueEncodingV1::Json,
+            }],
+        };
+        assert_eq!(
+            inline.locked_payload_digest(),
+            canonical_digest(&value).expect("payload digest")
+        );
+        assert_ne!(
+            inline.locked_payload_digest(),
+            canonical_digest(&inline).expect("wrapper digest"),
+            "receipt bindings stay in change detection but are not part of owner payload authority"
+        );
+
+        let cas_digest = digest('a');
+        let cas = BootstrapInputV1::LocalCas {
+            schema_version: "test/v1".into(),
+            digest: cas_digest.clone(),
+            receipt_bindings: Vec::new(),
+        };
+        assert_eq!(cas.locked_payload_digest(), cas_digest);
+    }
+
+    #[test]
+    fn resolved_plan_keeps_wrapper_change_identity_separate_from_owner_payload_authority() {
+        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8b/blueprints/reference.json"
+        )))
+        .expect("Sprint 8B reference Blueprint");
+        let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8b/catalogs/local-release-catalog.json"
+        )))
+        .expect("Sprint 8B release catalog");
+        let bootstrap = blueprint.core.bootstrap.as_ref().expect("Core bootstrap");
+        let BootstrapInputV1::Inline { value, .. } = bootstrap else {
+            panic!("fixture bootstrap must be inline");
+        };
+        let payload_digest = canonical_digest(value).expect("payload digest");
+        let wrapper_digest = canonical_digest(bootstrap).expect("wrapper digest");
+        assert_ne!(payload_digest, wrapper_digest);
+
+        let lockfile = resolve(&blueprint, &catalog).expect("resolved composition");
+        assert_eq!(lockfile.core.bootstrap_digest, Some(wrapper_digest));
+        assert!(lockfile.materialization_plan.actions.iter().any(|action| {
+            matches!(
+                action,
+                MaterializationActionV1::Bootstrap { owner, input_digest }
+                    if owner == "core" && input_digest == &payload_digest
+            )
+        }));
     }
 
     #[test]
