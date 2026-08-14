@@ -350,12 +350,23 @@ where
             );
             return Err(DatasetModuleError::Forbidden);
         }
-        if response
+        let response_media_type = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            != Some(target.media_type)
-        {
+            .and_then(|value| value.to_str().ok());
+        if response_media_type != Some(target.media_type) {
+            tracing::warn!(
+                target: "tessara_dataset_module::provider_client",
+                event = "dataset.provider.response_media_incompatible",
+                correlation_id = %downstream.correlation_id,
+                module_instance_id = %downstream.module_instance_id,
+                operation = target.action,
+                dependency = target.binding,
+                functional_contract = target.contract,
+                expected_media_type = target.media_type,
+                actual_media_type = response_media_type.unwrap_or("absent-or-invalid"),
+                "Dataset provider response media type was incompatible"
+            );
             emit_provider_attempt(
                 downstream.correlation_id,
                 Some(downstream.module_instance_id),
