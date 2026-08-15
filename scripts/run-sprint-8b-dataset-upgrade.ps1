@@ -475,6 +475,63 @@ function New-Sprint8BUpgradeExerciseCatalog {
     $catalog
 }
 
+function Select-Sprint8BBoundRuntimeCatalog {
+    param(
+        [Parameter(Mandatory)][object[]]$Candidates,
+        [Parameter(Mandatory)][string]$ExpectedCatalogDigest
+    )
+
+    $matches = @($Candidates | Where-Object {
+        [string]$_.catalog_digest -ceq $ExpectedCatalogDigest
+    })
+    if ($matches.Count -eq 0) {
+        throw "Materialization runtime catalog is not bound to the current resolved composition."
+    }
+    $expectedPayload = ConvertTo-Sprint8BStableJson $matches[0].payload
+    foreach ($match in @($matches | Select-Object -Skip 1)) {
+        if ((ConvertTo-Sprint8BStableJson $match.payload) -cne $expectedPayload) {
+            throw "Materialization runtime catalogs collide on one digest with different payloads."
+        }
+    }
+    $matches[0]
+}
+
+function Resolve-Sprint8BBoundRuntimeCatalog {
+    param(
+        [Parameter(Mandatory)][string]$MaterializationRoot,
+        [Parameter(Mandatory)][string]$ExpectedCatalogDigest
+    )
+
+    $catalogKeyPath = Resolve-Sprint8BRepositoryPath -Path `
+        "deploy/sprint-8b/catalogs/catalog-dev-v1.public.hex"
+    $candidates = [Collections.Generic.List[object]]::new()
+    foreach ($stage in @("noop", "first")) {
+        $catalogPath = Join-Path $MaterializationRoot "$stage/release-catalog.signed.json"
+        if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { continue }
+        $digestOutput = @(& cargo run -q -p tessara-supervisor --bin tessara-compose -- `
+            catalog-verify $catalogPath $catalogKeyPath 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Materialization runtime release catalog '$stage' failed signature and contract verification."
+        }
+        $digest = [string]($digestOutput | Select-Object -Last 1)
+        if ($digest -cnotmatch '^sha256:[0-9a-f]{64}$') {
+            throw "Materialization runtime release catalog '$stage' did not emit a canonical digest."
+        }
+        $envelope = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json -Depth 100
+        $candidates.Add([pscustomobject][ordered]@{
+            stage = $stage
+            path = $catalogPath
+            catalog_digest = $digest
+            payload = $envelope.payload
+        })
+    }
+    if ($candidates.Count -eq 0) {
+        throw "Dataset upgrade cannot locate a signed materialization runtime release catalog."
+    }
+    Select-Sprint8BBoundRuntimeCatalog -Candidates @($candidates) `
+        -ExpectedCatalogDigest $ExpectedCatalogDigest
+}
+
 function Invoke-Sprint8BDatasetTransition {
     param(
         [Parameter(Mandatory)][string]$Stage,
@@ -562,6 +619,45 @@ function Test-Sprint8BDatasetUpgradeHarness {
     } catch { $rejected = $true }
     if (-not $rejected) { throw "Dataset upgrade self-test accepted an unrelated owner action." }
 
+    $boundCatalog = Select-Sprint8BBoundRuntimeCatalog -ExpectedCatalogDigest $digest `
+        -Candidates @(
+            [pscustomobject]@{
+                stage = "noop"
+                catalog_digest = $digest
+                payload = [pscustomobject]@{ api_version = "tessara.io/release-catalog/v1" }
+            },
+            [pscustomobject]@{
+                stage = "first"
+                catalog_digest = "sha256:$('b' * 64)"
+                payload = [pscustomobject]@{ api_version = "wrong" }
+            }
+        )
+    if ([string]$boundCatalog.stage -cne "noop") {
+        throw "Dataset upgrade self-test did not select the current resolved catalog."
+    }
+    $rejected = $false
+    try {
+        Select-Sprint8BBoundRuntimeCatalog -ExpectedCatalogDigest "sha256:$('c' * 64)" `
+            -Candidates @($boundCatalog) | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Dataset upgrade self-test accepted a catalog outside the current resolved composition."
+    }
+    $rejected = $false
+    try {
+        Select-Sprint8BBoundRuntimeCatalog -ExpectedCatalogDigest $digest -Candidates @(
+            $boundCatalog,
+            [pscustomobject]@{
+                stage = "first"
+                catalog_digest = $digest
+                payload = [pscustomobject]@{ api_version = "digest-collision" }
+            }
+        ) | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Dataset upgrade self-test accepted conflicting catalog payloads under one digest."
+    }
+
     $dataset = [pscustomobject][ordered]@{
         release = $candidateRelease
         runtime_image = $digest
@@ -612,6 +708,7 @@ function Test-Sprint8BDatasetUpgradeHarness {
         compose_project = "tessara-s8b-upgrade-selftest"
         release_sequence = @($contract.sequence)
         exact_one_owner_delta = "passed"
+        runtime_catalog_binding = "passed"
         preservation_rejection = "passed"
         environment_fingerprint_sha256 = Get-Sprint7ASha256 -Text "sprint-8b-dataset-upgrade-self-test`n"
         cleanup_restoration = [pscustomobject][ordered]@{
@@ -804,19 +901,10 @@ try {
         throw "Dataset baseline metadata is not a distinct source-bound compatible 0.9.0 release."
     }
 
-    $runtimeCatalogPath = Join-Path (Split-Path -Parent $resolvedFixturePath) `
-        "first/release-catalog.json"
-    if (-not (Test-Path -LiteralPath $runtimeCatalogPath -PathType Leaf)) {
-        throw "Dataset upgrade cannot locate the materialization runtime release catalog."
-    }
-    $runtimeCatalogDigestOutput = @(& cargo run -q -p tessara-supervisor `
-        --bin tessara-compose -- digest $runtimeCatalogPath 2>&1)
-    if ($LASTEXITCODE -ne 0 -or
-        [string]($runtimeCatalogDigestOutput | Select-Object -Last 1) -cne
-            [string]$summary.latest_lockfile.catalog_digest) {
-        throw "Materialization runtime catalog is not bound to the current resolved composition."
-    }
-    $runtimeCatalog = Get-Content -LiteralPath $runtimeCatalogPath -Raw | ConvertFrom-Json -Depth 100
+    $boundRuntimeCatalog = Resolve-Sprint8BBoundRuntimeCatalog `
+        -MaterializationRoot (Split-Path -Parent $resolvedFixturePath) `
+        -ExpectedCatalogDigest ([string]$summary.latest_lockfile.catalog_digest)
+    $runtimeCatalog = $boundRuntimeCatalog.payload
     $script:upgradeCatalog = New-Sprint8BUpgradeExerciseCatalog `
         -RuntimeCatalog $runtimeCatalog -InitialLockfile $summary.latest_lockfile `
         -BaselineMetadata $baselineMetadata -CandidateManifestDigest $candidateManifestDigest `

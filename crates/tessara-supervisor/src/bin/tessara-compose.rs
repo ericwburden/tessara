@@ -32,10 +32,14 @@ async fn main() -> anyhow::Result<()> {
         }
         [command, input, public_key] if command == "catalog-verify" => {
             let envelope: SignedEnvelopeV1<ReleaseCatalogV1> = read_json(input)?;
+            anyhow::ensure!(
+                envelope.purpose == ProtocolSignaturePurposeV1::ReleaseCatalog,
+                "release catalog envelope has the wrong signature purpose"
+            );
             verifier(
                 &envelope.issuer,
                 &envelope.key_id,
-                envelope.purpose,
+                ProtocolSignaturePurposeV1::ReleaseCatalog,
                 public_key,
             )?
             .verify(&envelope)?;
