@@ -152,7 +152,8 @@ function ConvertFrom-Sprint8BUpgradeContainerInspection {
         [Parameter(Mandatory)][string[]]$InspectionOutput,
         [Parameter(Mandatory)][int]$InspectionExitCode,
         [Parameter(Mandatory)][string]$ExpectedId,
-        [Parameter(Mandatory)][string]$Service
+        [Parameter(Mandatory)][string]$Service,
+        [switch]$AllowStarting
     )
 
     $inspectionJson = @($InspectionOutput | Where-Object { $_.TrimStart().StartsWith('{') })
@@ -170,7 +171,8 @@ function ConvertFrom-Sprint8BUpgradeContainerInspection {
     }
     if ([string]$inspection.Id -cne $ExpectedId -or
         [string]$inspection.State.Status -cne "running" -or
-        (-not [string]::IsNullOrWhiteSpace($health) -and $health -cne "healthy")) {
+        (-not [string]::IsNullOrWhiteSpace($health) -and $health -cne "healthy" -and
+            (-not $AllowStarting -or $health -cne "starting"))) {
         throw "Dataset upgrade service '$Service' is not running and healthy."
     }
     [pscustomobject][ordered]@{
@@ -194,11 +196,20 @@ function Get-Sprint8BUpgradeContainerIdentity {
     if ($id -cnotmatch '^[0-9a-f]{64}$') {
         throw "Dataset upgrade requires exactly one running '$Service' container."
     }
-    $inspectionOutput = @(& docker inspect --format '{{json .}}' -- $id 2>&1 |
-        ForEach-Object { [string]$_ })
-    $inspectionExitCode = $LASTEXITCODE
-    ConvertFrom-Sprint8BUpgradeContainerInspection -InspectionOutput $inspectionOutput `
-        -InspectionExitCode $inspectionExitCode -ExpectedId $id -Service $Service
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(60)
+    do {
+        $inspectionOutput = @(& docker inspect --format '{{json .}}' -- $id 2>&1 |
+            ForEach-Object { [string]$_ })
+        $inspectionExitCode = $LASTEXITCODE
+        $identity = ConvertFrom-Sprint8BUpgradeContainerInspection `
+            -InspectionOutput $inspectionOutput -InspectionExitCode $inspectionExitCode `
+            -ExpectedId $id -Service $Service -AllowStarting
+        if ([string]$identity.health -cne "starting") { return $identity }
+        if ([DateTimeOffset]::UtcNow -ge $deadline) {
+            throw "Dataset upgrade service '$Service' did not become healthy within 60 seconds."
+        }
+        Start-Sleep -Seconds 1
+    } while ($true)
 }
 
 function Invoke-Sprint8BUpgradeRequest {
@@ -693,6 +704,26 @@ function Test-Sprint8BDatasetUpgradeHarness {
     if ([string]$inspection.container_id -cne $containerId -or
         [string]$inspection.health -cne "healthy") {
         throw "Dataset upgrade self-test did not normalize exact Docker inspection identity."
+    }
+    $startingInspection = @((@{
+        Id = $containerId
+        Image = "sha256:$('b' * 64)"
+        RestartCount = 0
+        State = @{ Status = "running"; Health = @{ Status = "starting" } }
+    } | ConvertTo-Json -Compress))
+    $rejected = $false
+    try {
+        ConvertFrom-Sprint8BUpgradeContainerInspection -InspectionOutput $startingInspection `
+            -InspectionExitCode 0 -ExpectedId $containerId -Service "datasets" | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Dataset upgrade self-test accepted a starting service as final evidence."
+    }
+    $starting = ConvertFrom-Sprint8BUpgradeContainerInspection `
+        -InspectionOutput $startingInspection -InspectionExitCode 0 `
+        -ExpectedId $containerId -Service "datasets" -AllowStarting
+    if ([string]$starting.health -cne "starting") {
+        throw "Dataset upgrade self-test did not classify the bounded starting state."
     }
     $rejected = $false
     try {
