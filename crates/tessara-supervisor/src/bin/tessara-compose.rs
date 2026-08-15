@@ -124,6 +124,20 @@ async fn main() -> anyhow::Result<()> {
         [command, url, lockfile, authorization] if command == "apply" => {
             let body = serde_json::json!({
                 "lockfile": read_json::<ApplicationLockfileV1>(lockfile)?,
+                "current_lockfile": null,
+                "authorization": read_json::<SignedEnvelopeV1<ApplyAuthorizationV1>>(authorization)?,
+            });
+            let response = reqwest::Client::new()
+                .post(format!("{}/v1/apply", url.trim_end_matches('/')))
+                .json(&body)
+                .send()
+                .await?;
+            print_response(response).await?;
+        }
+        [command, url, lockfile, authorization, current_lockfile] if command == "apply" => {
+            let body = serde_json::json!({
+                "lockfile": read_json::<ApplicationLockfileV1>(lockfile)?,
+                "current_lockfile": read_json::<ApplicationLockfileV1>(current_lockfile)?,
                 "authorization": read_json::<SignedEnvelopeV1<ApplyAuthorizationV1>>(authorization)?,
             });
             let response = reqwest::Client::new()

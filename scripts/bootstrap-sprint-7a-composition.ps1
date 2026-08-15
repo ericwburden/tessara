@@ -57,6 +57,8 @@ $catalogPayloadPath = Join-Path $runtimeDirectory "release-catalog.json"
 $catalogPath = Join-Path $runtimeDirectory "release-catalog.signed.json"
 $catalogKeyPath = Join-Path $repoRoot "deploy/$DeploymentDirectory/catalogs/catalog-dev-v1.public.hex"
 $lockfilePath = Join-Path $runtimeDirectory "lockfile.json"
+$currentLockfilePath = Join-Path $runtimeDirectory "current-lockfile.json"
+$currentLockfileForApply = $null
 $authorizationPath = Join-Path $runtimeDirectory "authorization.json"
 $signedAuthorizationPath = Join-Path $runtimeDirectory "authorization.signed.json"
 $receiptPath = Join-Path $runtimeDirectory "apply-response.json"
@@ -472,6 +474,12 @@ try {
         if ($null -eq $currentComposition.latest_blueprint -or $null -eq $currentComposition.latest_receipt) {
             throw "Semantic no-op resolution requires one successfully applied current composition."
         }
+        [IO.File]::WriteAllText(
+            $currentLockfilePath,
+            ($currentComposition.latest_lockfile | ConvertTo-Json -Depth 100) + "`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        $currentLockfileForApply = $currentLockfilePath
         $noOpBlueprint = Get-Content -LiteralPath $resolvedBlueprintPath -Raw | ConvertFrom-Json
         $noOpBlueprint.revision = [uint64]$currentComposition.latest_blueprint.revision + 1
         Invoke-RestMethod `
@@ -574,23 +582,6 @@ try {
     }
 
     $now = [DateTimeOffset]::UtcNow
-    if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
-        $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
-        if ($pendingAuthorization.payload.target_plan_digest -eq $lockfile.materialization_plan_digest -and `
-            (ConvertTo-Sprint7ABootstrapDateTimeOffset `
-                -Value $pendingAuthorization.payload.expires_at `
-                -Label "Pending authorization expiry") -gt $now) {
-            $recoveredResponse = & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-                apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
-            if ($LASTEXITCODE -eq 0) {
-                [IO.File]::WriteAllLines($receiptPath, $recoveredResponse, [Text.UTF8Encoding]::new($false))
-                Prepare-Sprint7AUatFixtures
-                Write-Host "Recovered the accepted $RuntimeLabel operation with its original signed authorization."
-                Write-Host "Receipt: $receiptPath"
-                return
-            }
-        }
-    }
     $baseReceiptDigest = $null
     $applySequence = [uint64]1
     try {
@@ -603,8 +594,38 @@ try {
         )
         $baseReceiptDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $currentReceiptPath).Trim()
         $applySequence = [uint64]$currentReceipt.revision + 1
+        if ($null -eq $currentLockfileForApply) {
+            $targetLockfileDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $lockfilePath).Trim()
+            if ($LASTEXITCODE -ne 0 -or $targetLockfileDigest -cne [string]$currentReceipt.lockfile_digest) {
+                throw "The applied Supervisor receipt requires an exact source lockfile distinct from the target lockfile."
+            }
+            Copy-Item -LiteralPath $lockfilePath -Destination $currentLockfilePath -Force
+            $currentLockfileForApply = $currentLockfilePath
+        }
+        $currentLockfileDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $currentLockfileForApply).Trim()
+        if ($LASTEXITCODE -ne 0 -or $currentLockfileDigest -cne [string]$currentReceipt.lockfile_digest) {
+            throw "The source lockfile does not match the applied Supervisor receipt."
+        }
     } catch {
         if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
+    }
+    if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
+        $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
+        if ($pendingAuthorization.payload.target_plan_digest -eq $lockfile.materialization_plan_digest -and `
+            (ConvertTo-Sprint7ABootstrapDateTimeOffset `
+                -Value $pendingAuthorization.payload.expires_at `
+                -Label "Pending authorization expiry") -gt $now) {
+            $recoveryArguments = @("apply", $SupervisorUrl, $lockfilePath, $signedAuthorizationPath)
+            if ($null -ne $currentLockfileForApply) { $recoveryArguments += $currentLockfileForApply }
+            $recoveredResponse = & cargo run -q -p tessara-supervisor --bin tessara-compose -- @recoveryArguments
+            if ($LASTEXITCODE -eq 0) {
+                [IO.File]::WriteAllLines($receiptPath, $recoveredResponse, [Text.UTF8Encoding]::new($false))
+                Prepare-Sprint7AUatFixtures
+                Write-Host "Recovered the accepted $RuntimeLabel operation with its original signed authorization."
+                Write-Host "Receipt: $receiptPath"
+                return
+            }
+        }
     }
     $reuseAuthorization = $false
     if (Test-Path -LiteralPath $signedAuthorizationPath) {
@@ -653,8 +674,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Apply authorization signing failed." }
     }
 
+    $applyArguments = @("apply", $SupervisorUrl, $lockfilePath, $signedAuthorizationPath)
+    if ($null -ne $currentLockfileForApply) { $applyArguments += $currentLockfileForApply }
     $response = @(& cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-        apply $SupervisorUrl $lockfilePath $signedAuthorizationPath 2>&1 | ForEach-Object { [string]$_ })
+        @applyArguments 2>&1 | ForEach-Object { [string]$_ })
     $applyExitCode = $LASTEXITCODE
     if ($applyExitCode -ne 0) {
         $failureResponsePath = Join-Path $runtimeDirectory "apply-failure-response.log"
