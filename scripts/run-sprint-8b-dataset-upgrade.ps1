@@ -142,8 +142,18 @@ function Assert-Sprint8BUpgradePreservation {
         (ConvertTo-Sprint8BStableJson $actualDataset)) {
         throw "$Stage changed Dataset state, provider route, typed identity, configuration, navigation, or behavior."
     }
-    if ((ConvertTo-Sprint8BStableJson $Expected.unrelated) -cne
-        (ConvertTo-Sprint8BStableJson $Actual.unrelated)) {
+    $expectedUnrelated = Copy-Sprint8BJsonValue -Value $Expected.unrelated
+    $actualUnrelated = Copy-Sprint8BJsonValue -Value $Actual.unrelated
+    foreach ($snapshot in @($expectedUnrelated, $actualUnrelated)) {
+        foreach ($module in @($snapshot.modules)) {
+            $authorization = $module.diagnostics.details.authorization
+            if ($null -ne $authorization) {
+                $authorization.updated_at = "<transition-authorization-updated-at>"
+            }
+        }
+    }
+    if ((ConvertTo-Sprint8BStableJson $expectedUnrelated) -cne
+        (ConvertTo-Sprint8BStableJson $actualUnrelated)) {
         throw "$Stage changed an unrelated owner image, container, restart count, data, navigation, or availability."
     }
     [pscustomobject][ordered]@{
@@ -776,7 +786,21 @@ function Test-Sprint8BDatasetUpgradeHarness {
     }
     $unrelated = [pscustomobject][ordered]@{
         services = @([pscustomobject]@{ service = "components"; container_id = "c" * 64; restart_count = 0 })
-        modules = @([pscustomobject]@{ definition = "tessara.components"; release = "1.1.0" })
+        modules = @([pscustomobject]@{
+            definition = "tessara.components"
+            release = "1.1.0"
+            diagnostics = [pscustomobject]@{
+                details = [pscustomobject]@{
+                    authorization = [pscustomobject]@{
+                        authorization_revision = 106
+                        organization_revision = 9
+                        updated_at = "2026-08-15T00:00:00Z"
+                        enabled = $true
+                        document_state = "enabled"
+                    }
+                }
+            }
+        })
         component_product = @([pscustomobject]@{ component_id = "component-1" })
         dashboard_product = [pscustomobject]@{ id = "dashboard-1" }
         forms = @([pscustomobject]@{ id = "form-1" })
@@ -795,6 +819,7 @@ function Test-Sprint8BDatasetUpgradeHarness {
     $after.dataset.module.diagnostics.details.authorization.authorization_revision = 106
     $after.dataset.module.diagnostics.details.authorization.organization_revision = 9
     $after.dataset.module.diagnostics.details.authorization.updated_at = "2026-08-15T00:01:00Z"
+    $after.unrelated.modules[0].diagnostics.details.authorization.updated_at = "2026-08-15T00:01:00Z"
     Assert-Sprint8BUpgradePreservation -Expected $before -Actual $after `
         -Stage "self-test-transition" | Out-Null
     $after.dataset.module.diagnostics.details.authorization.enabled = $false
@@ -805,6 +830,16 @@ function Test-Sprint8BDatasetUpgradeHarness {
     } catch { $rejected = $true }
     if (-not $rejected) { throw "Dataset upgrade self-test accepted effective authorization drift." }
     $after.dataset.module.diagnostics.details.authorization.enabled = $true
+    $after.unrelated.modules[0].diagnostics.details.authorization.enabled = $false
+    $rejected = $false
+    try {
+        Assert-Sprint8BUpgradePreservation -Expected $before -Actual $after `
+            -Stage "self-test-unrelated-authorization-tamper" | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Dataset upgrade self-test accepted unrelated effective authorization drift."
+    }
+    $after.unrelated.modules[0].diagnostics.details.authorization.enabled = $true
     $after.unrelated.services[0].restart_count = 1
     $rejected = $false
     try {
