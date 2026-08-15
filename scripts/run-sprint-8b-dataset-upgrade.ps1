@@ -131,6 +131,12 @@ function Assert-Sprint8BUpgradePreservation {
         $snapshot.manifest_digest = "<transition-manifest>"
         $snapshot.executable_sha256 = "<transition-executable>"
         $snapshot.runtime_identity = "<transition-runtime>"
+        $authorization = $snapshot.module.diagnostics.details.authorization
+        if ($null -ne $authorization) {
+            $authorization.authorization_revision = "<transition-authorization-revision>"
+            $authorization.organization_revision = "<transition-organization-revision>"
+            $authorization.updated_at = "<transition-authorization-updated-at>"
+        }
     }
     if ((ConvertTo-Sprint8BStableJson $expectedDataset) -cne
         (ConvertTo-Sprint8BStableJson $actualDataset)) {
@@ -748,7 +754,21 @@ function Test-Sprint8BDatasetUpgradeHarness {
         manifest_digest = $digest
         executable_sha256 = "a" * 64
         runtime_identity = [pscustomobject]@{ container_id = "a" * 64 }
-        module = [pscustomobject]@{ route = "/datasets" }
+        module = [pscustomobject]@{
+            route = "/datasets"
+            diagnostics = [pscustomobject]@{
+                details = [pscustomobject]@{
+                    authorization = [pscustomobject]@{
+                        authorization_revision = 1
+                        organization_revision = 1
+                        updated_at = "2026-08-15T00:00:00Z"
+                        enabled = $true
+                        document_state = "enabled"
+                        projection = "installed"
+                    }
+                }
+            }
+        }
         typed_resource_identity = [pscustomobject]@{ key = "dataset.base" }
         navigation = [pscustomobject]@{ contribution_id = "tessara.datasets.navigation" }
         product_list = @([pscustomobject]@{ dataset_id = "dataset-1" })
@@ -772,8 +792,19 @@ function Test-Sprint8BDatasetUpgradeHarness {
     $after.dataset.manifest_digest = "sha256:$('e' * 64)"
     $after.dataset.executable_sha256 = "f" * 64
     $after.dataset.runtime_identity = [pscustomobject]@{ container_id = "f" * 64 }
+    $after.dataset.module.diagnostics.details.authorization.authorization_revision = 106
+    $after.dataset.module.diagnostics.details.authorization.organization_revision = 9
+    $after.dataset.module.diagnostics.details.authorization.updated_at = "2026-08-15T00:01:00Z"
     Assert-Sprint8BUpgradePreservation -Expected $before -Actual $after `
         -Stage "self-test-transition" | Out-Null
+    $after.dataset.module.diagnostics.details.authorization.enabled = $false
+    $rejected = $false
+    try {
+        Assert-Sprint8BUpgradePreservation -Expected $before -Actual $after `
+            -Stage "self-test-authorization-tamper" | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected) { throw "Dataset upgrade self-test accepted effective authorization drift." }
+    $after.dataset.module.diagnostics.details.authorization.enabled = $true
     $after.unrelated.services[0].restart_count = 1
     $rejected = $false
     try {
