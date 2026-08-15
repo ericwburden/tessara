@@ -764,7 +764,7 @@ try {
         throw "Live Dataset image differs from the initial resolved candidate lockfile."
     }
     $candidateManifestDigestOutput = @(& cargo run -q -p tessara-supervisor `
-        --bin tessara-compose -- digest $candidateManifestFullPath 2>&1)
+        --bin tessara-compose -- manifest-digest $candidateManifestFullPath 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "Could not compute the candidate Dataset Manifest digest." }
     $candidateManifestDigest = [string]($candidateManifestDigestOutput | Select-Object -Last 1)
     if ($candidateManifestDigest -cne [string]$initialDataset[0].manifest_digest) {
