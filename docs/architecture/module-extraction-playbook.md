@@ -49,12 +49,17 @@ plan and tracked validation contract. The plan must name:
    grants, seed writes, fixtures, and compatibility readers to remove;
 3. every provider and consumer edge, its current coupling, its target public
    contract, typed-reference owner/type, authorization exchange, timeout,
-   nondisclosure, outage, and recovery behavior;
+   nondisclosure, outage, and recovery behavior; this inventory must be
+   bidirectional and include forward dependencies, downstream consumers,
+   reverse-usage views, operational summaries/readiness, generic resource
+   resolution, browser bootstrap, and control-plane callers;
 4. the manifest, configuration, diagnostics, navigation, route, asset,
    deployment, health, upgrade, and rollback contracts;
 5. the fresh materialization topology, exact disposable databases and
    processes, owner bootstrap order, read-back values passed between owners,
-   semantic no-op, injected failure, teardown, and canonical recovery;
+   semantic no-op, injected failure, teardown, and canonical recovery; every
+   physical product identity must come from the owning provider's signed
+   read-back under a logical fixture key rather than a Blueprint-predicted ID;
 6. the canonical fixture and acceptance inventory, including lifecycle,
    authorization, unavailable-provider, incompatible-provider, and negative
    old-contract cases;
@@ -63,7 +68,11 @@ plan and tracked validation contract. The plan must name:
    requirements and dependency domains; and
 9. an accepted pre-extraction visual/interaction baseline and UI ownership
    inventory covering markup, SDK primitives, styles, assets, SSR/hydration,
-   lifecycle behavior, navigation title/state, and responsive behavior.
+   lifecycle behavior, navigation title/state, and responsive behavior; and
+10. every cached, replicated, exported, or materialized cross-owner state
+    machine, including its authoritative head/sentinel, monotonic cursor or
+    revision, hidden attempt checkpoints, fixed read bound, atomic publication,
+    concurrency rule, expiry/rebase behavior, and last-good recovery contract.
 
 Use exact identities instead of copied counts unless the count is itself a
 product contract. When a count is contractual, declare one canonical source of
@@ -222,6 +231,144 @@ Future sprints must prevent these defect families during implementation:
 
 These are implementation obligations. Adding more receipt history or rerunning
 full certification is not an acceptable substitute.
+
+## Lessons retained from Sprint 8B
+
+The Dataset extraction showed that a module migration is a system-boundary
+rewrite, not a crate move. Future extractions must retain the following
+findings.
+
+### Inventory the complete interaction graph
+
+- Inventory callers in both directions. Dataset's obvious providers and
+  downstream Component/Dashboard consumers were only part of the boundary;
+  Core application summary, Operations readiness, Form reverse usage, generic
+  resource observation, browser editor options, and control-plane bootstrap
+  were also first-class consumers.
+- Treat reverse and operational consumers as explicit contract rows with their
+  own authorization, nondisclosure, unavailable, empty, degraded, and recovery
+  semantics. A product route passing does not prove these surfaces.
+- Search by tables, DTOs, route identities, typed resources, capability names,
+  fixtures, browser requests, and operational vocabulary. Searching only for
+  the feature's main API namespace misses hidden coupling.
+
+### Make provider envelopes sufficient for independent ownership
+
+- A consumer must receive every immutable fact needed to authorize, compile,
+  persist, diagnose, and recompute its product without consulting the former
+  owner's storage. For Dataset this included stable field identities, display
+  snapshots, complete source-scope vectors, content and scope revisions and
+  digests, system fields, restriction tier, row scope, and tombstones.
+- Define and test canonical contract DTOs before moving handlers. Local mirror
+  DTOs, untyped JSON facades, inferred defaults, and post-deserialization digest
+  checks allow the new module to retain accidental knowledge of the old owner.
+- Verify exact media type, body-size boundary, raw-body signature/digest, and
+  correlation identity before deserialization. Then independently validate the
+  typed contract and its canonical semantic digest.
+
+### Model incremental synchronization as a publication protocol
+
+- A cheap head or sentinel check is useful, but a timestamp such as
+  `max(created_date)` is not a safe cursor. Equal timestamps, corrections,
+  status changes, redactions, deletions, and tombstones require a canonical
+  monotonically increasing provider change sequence.
+- Separate the published committed cursor from hidden attempt/page checkpoints.
+  Bind attempts to provider instance, contract, source binding, authorization
+  scope, starting cursor, fixed upper bound, and page digests. Staged pages are
+  never caller-visible.
+- Promote imported facts, materializations, resource/authority revisions,
+  receipts, and the published cursor in one transaction. Use a graph lock or
+  compare-and-swap rule to reject stale concurrent promotion.
+- Decide cursor expiry before implementation. A full-snapshot rebase starts
+  from no page cursor, preserves the old last-good publication while staging,
+  and atomically replaces the partition only after complete validation.
+
+### Treat derived data as one dependency closure
+
+- Refreshing only the initiating resource is insufficient when the module can
+  consume itself. Plan and rebuild the complete affected dependency graph in
+  deterministic topological order.
+- Reject transitive cycles before synchronization or product writes. A base
+  change must atomically advance every affected derived hop and downstream
+  observation while leaving unrelated bindings unchanged.
+- Inject failure after owner writes but before a derived rebuild completes and
+  prove that imported facts, cursors, receipts, materializations, revisions,
+  and downstream observations all roll back together.
+
+### Treat browser, SSR, and operational behavior as architecture
+
+- Freeze exact navigation identity, static-versus-parameterized route
+  precedence, direct-document and lifecycle destinations, capability/action
+  contracts, and module-owned browser API routes before cutover.
+- Direct HTML, JavaScript-disabled SSR, lifecycle bootstrap, hydration,
+  dirty-state handling, stored/system theme behavior, responsive overflow,
+  accessibility, console cleanliness, and source-derived browser assets are
+  required owner behavior, not late UI polish.
+- Readiness and diagnostics must share one read-only owner status projection
+  that reflects configuration, exact dependency bindings, compatibility,
+  last-good materialization, source freshness, and sanitized stable failure
+  codes. Process liveness alone is not product readiness.
+
+### Make fixtures and upgrades owner- and semantics-exact
+
+- Blueprints name logical fixture resources; owners allocate physical IDs and
+  return signed typed read-back. Later owners consume only those authenticated
+  logical-key receipts. Generic orchestration must not learn product IDs or
+  branch on a module definition.
+- Build the prior-compatible release independently from source. Do not relabel
+  the candidate image. Upgrade, rollback, and restoration must preserve Module
+  Instance identity and leave unrelated owners running and semantically exact.
+- Define no-op and preservation comparisons in terms of effective state.
+  Explicitly normalize only approved incidental metadata such as observation
+  timestamps; retain negative tests proving that authorization,
+  configuration, topology, or product drift is still rejected.
+
+### Design executable proof with the implementation
+
+- Create target selectors, exact test identities, zero-test guards, dependency
+  domains, evidence schemas, cleanup contracts, and runner self-tests as each
+  slice lands. A broad suite name or a successful process start is not proof of
+  the intended behavior.
+- Use real, isolated, disabled-by-default, one-shot fault controls for provider
+  incompatibility and bounded mid-transaction failure. Self-tests must reject
+  dual arming, tampered receipts, missing cleanup, and false live-proof claims.
+- Every target receipt must bind the clean source commit/tree, validation
+  contract, runner, affected dependency fingerprints, exact command, evidence
+  index, and cleanup state. Finalization authenticates the complete target set
+  and refuses stale, missing, dirty, or failed evidence.
+- Periodically test from an empty build directory. Clean compilation and asset
+  regeneration expose undeclared inputs, stale generated artifacts, missing
+  feature combinations, and cache-dependent success before formal validation.
+
+### Pre-implementation closure questions
+
+Before the first product move, a future extraction plan must answer all of
+these with executable contracts or named implementation work:
+
+1. Who reads or writes the capability directly, indirectly, in reverse, for
+   operations, through the browser, and through the control plane?
+2. Does each provider response contain every fact the new owner needs without
+   old storage, mutable lookup, inferred default, or copied policy?
+3. What is the authoritative change identity, and how do no-op, paging,
+   interruption, concurrency, expiry, rebase, and last-good publication work?
+4. What complete derived-resource and downstream-consumer closure must commit
+   or roll back together?
+5. Which exact public, private, document, lifecycle, health, diagnostics,
+   bootstrap, and resource-observation routes does the module own?
+6. How are physical fixture identities allocated, signed, read back, and bound
+   into later owners without predicted UUIDs or cross-owner writes?
+7. Which real failure controls prove pre-write rejection, transaction rollback,
+   restoration, and unrelated-owner containment?
+8. Which state is semantically invariant across no-op, upgrade, rollback, and
+   retry, and which narrowly defined metadata may legitimately change?
+9. Which exact implementation target and validation lane proves every
+   requirement, and what input change invalidates that proof?
+10. Can the complete touched graph rebuild, materialize, render, recover, and
+    publish evidence from clean source, clean databases, and an empty build
+    cache?
+
+An unanswered question expands the implementation scope. It is not deferred to
+formal validation as an expected discovery.
 
 ## Reuse boundary
 
