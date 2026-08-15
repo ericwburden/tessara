@@ -147,6 +147,42 @@ function Assert-Sprint8BUpgradePreservation {
     }
 }
 
+function ConvertFrom-Sprint8BUpgradeContainerInspection {
+    param(
+        [Parameter(Mandatory)][string[]]$InspectionOutput,
+        [Parameter(Mandatory)][int]$InspectionExitCode,
+        [Parameter(Mandatory)][string]$ExpectedId,
+        [Parameter(Mandatory)][string]$Service
+    )
+
+    $inspectionJson = @($InspectionOutput | Where-Object { $_.TrimStart().StartsWith('{') })
+    if ($InspectionExitCode -ne 0 -or $inspectionJson.Count -ne 1) {
+        throw "Could not inspect exactly one Dataset upgrade service '$Service'."
+    }
+    try {
+        $inspection = $inspectionJson[0] | ConvertFrom-Json -Depth 30
+    } catch {
+        throw "Could not decode Dataset upgrade service '$Service' inspection."
+    }
+    $healthProperty = $inspection.State.PSObject.Properties['Health']
+    $health = if ($null -eq $healthProperty -or $null -eq $healthProperty.Value) { "" } else {
+        [string]$healthProperty.Value.Status
+    }
+    if ([string]$inspection.Id -cne $ExpectedId -or
+        [string]$inspection.State.Status -cne "running" -or
+        (-not [string]::IsNullOrWhiteSpace($health) -and $health -cne "healthy")) {
+        throw "Dataset upgrade service '$Service' is not running and healthy."
+    }
+    [pscustomobject][ordered]@{
+        service = $Service
+        container_id = [string]$inspection.Id
+        image_id = [string]$inspection.Image
+        restart_count = [uint64]$inspection.RestartCount
+        state = [string]$inspection.State.Status
+        health = $health
+    }
+}
+
 function Get-Sprint8BUpgradeContainerIdentity {
     param(
         [Parameter(Mandatory)][string]$ComposePath,
@@ -158,25 +194,11 @@ function Get-Sprint8BUpgradeContainerIdentity {
     if ($id -cnotmatch '^[0-9a-f]{64}$') {
         throw "Dataset upgrade requires exactly one running '$Service' container."
     }
-    $line = @(& docker inspect --format `
-        '{{.Id}}|{{.Image}}|{{.RestartCount}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' `
-        $id 2>&1)
-    if ($LASTEXITCODE -ne 0 -or $line.Count -ne 1) {
-        throw "Could not inspect Dataset upgrade service '$Service'."
-    }
-    $parts = ([string]$line[0]).Split('|')
-    if ($parts.Count -ne 5 -or $parts[3] -cne "running" -or
-        (-not [string]::IsNullOrWhiteSpace($parts[4]) -and $parts[4] -cne "healthy")) {
-        throw "Dataset upgrade service '$Service' is not running and healthy."
-    }
-    [pscustomobject][ordered]@{
-        service = $Service
-        container_id = $parts[0]
-        image_id = $parts[1]
-        restart_count = [uint64]$parts[2]
-        state = $parts[3]
-        health = $parts[4]
-    }
+    $inspectionOutput = @(& docker inspect --format '{{json .}}' -- $id 2>&1 |
+        ForEach-Object { [string]$_ })
+    $inspectionExitCode = $LASTEXITCODE
+    ConvertFrom-Sprint8BUpgradeContainerInspection -InspectionOutput $inspectionOutput `
+        -InspectionExitCode $inspectionExitCode -ExpectedId $id -Service $Service
 }
 
 function Invoke-Sprint8BUpgradeRequest {
@@ -656,6 +678,35 @@ function Test-Sprint8BDatasetUpgradeHarness {
     } catch { $rejected = $true }
     if (-not $rejected) {
         throw "Dataset upgrade self-test accepted conflicting catalog payloads under one digest."
+    }
+
+    $containerId = "a" * 64
+    $inspection = ConvertFrom-Sprint8BUpgradeContainerInspection -InspectionOutput @(
+        "informational Docker output",
+        (@{
+            Id = $containerId
+            Image = "sha256:$('b' * 64)"
+            RestartCount = 0
+            State = @{ Status = "running"; Health = @{ Status = "healthy" } }
+        } | ConvertTo-Json -Compress)
+    ) -InspectionExitCode 0 -ExpectedId $containerId -Service "core"
+    if ([string]$inspection.container_id -cne $containerId -or
+        [string]$inspection.health -cne "healthy") {
+        throw "Dataset upgrade self-test did not normalize exact Docker inspection identity."
+    }
+    $rejected = $false
+    try {
+        ConvertFrom-Sprint8BUpgradeContainerInspection -InspectionOutput @(
+            (@{
+                Id = "c" * 64
+                Image = "sha256:$('b' * 64)"
+                RestartCount = 0
+                State = @{ Status = "running"; Health = @{ Status = "healthy" } }
+            } | ConvertTo-Json -Compress)
+        ) -InspectionExitCode 0 -ExpectedId $containerId -Service "core" | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Dataset upgrade self-test accepted a substituted Docker object identity."
     }
 
     $dataset = [pscustomobject][ordered]@{
