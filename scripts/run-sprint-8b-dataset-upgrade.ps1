@@ -131,7 +131,7 @@ function Assert-Sprint8BUpgradePreservation {
         $snapshot.manifest_digest = "<transition-manifest>"
         $snapshot.executable_sha256 = "<transition-executable>"
         $snapshot.runtime_identity = "<transition-runtime>"
-        $authorization = $snapshot.module.diagnostics.details.authorization
+        $authorization = Get-Sprint8BUpgradeAuthorizationProjection -Module $snapshot.module
         if ($null -ne $authorization) {
             $authorization.authorization_revision = "<transition-authorization-revision>"
             $authorization.organization_revision = "<transition-organization-revision>"
@@ -146,7 +146,7 @@ function Assert-Sprint8BUpgradePreservation {
     $actualUnrelated = Copy-Sprint8BJsonValue -Value $Actual.unrelated
     foreach ($snapshot in @($expectedUnrelated, $actualUnrelated)) {
         foreach ($module in @($snapshot.modules)) {
-            $authorization = $module.diagnostics.details.authorization
+            $authorization = Get-Sprint8BUpgradeAuthorizationProjection -Module $module
             if ($null -ne $authorization) {
                 $authorization.updated_at = "<transition-authorization-updated-at>"
             }
@@ -161,6 +161,18 @@ function Assert-Sprint8BUpgradePreservation {
         dataset_preserved = $true
         unrelated_preserved = $true
     }
+}
+
+function Get-Sprint8BUpgradeAuthorizationProjection {
+    param([Parameter(Mandatory)]$Module)
+
+    $diagnostics = $Module.PSObject.Properties["diagnostics"]
+    if ($null -eq $diagnostics -or $null -eq $diagnostics.Value) { return $null }
+    $details = $diagnostics.Value.PSObject.Properties["details"]
+    if ($null -eq $details -or $null -eq $details.Value) { return $null }
+    $authorization = $details.Value.PSObject.Properties["authorization"]
+    if ($null -eq $authorization) { return $null }
+    $authorization.Value
 }
 
 function ConvertFrom-Sprint8BUpgradeContainerInspection {
@@ -786,21 +798,28 @@ function Test-Sprint8BDatasetUpgradeHarness {
     }
     $unrelated = [pscustomobject][ordered]@{
         services = @([pscustomobject]@{ service = "components"; container_id = "c" * 64; restart_count = 0 })
-        modules = @([pscustomobject]@{
-            definition = "tessara.components"
-            release = "1.1.0"
-            diagnostics = [pscustomobject]@{
-                details = [pscustomobject]@{
-                    authorization = [pscustomobject]@{
-                        authorization_revision = 106
-                        organization_revision = 9
-                        updated_at = "2026-08-15T00:00:00Z"
-                        enabled = $true
-                        document_state = "enabled"
+        modules = @(
+            [pscustomobject]@{
+                definition = "tessara.components"
+                release = "1.1.0"
+                diagnostics = [pscustomobject]@{
+                    details = [pscustomobject]@{
+                        authorization = [pscustomobject]@{
+                            authorization_revision = 106
+                            organization_revision = 9
+                            updated_at = "2026-08-15T00:00:00Z"
+                            enabled = $true
+                            document_state = "enabled"
+                        }
                     }
                 }
+            },
+            [pscustomobject]@{
+                definition = "tessara.scoped-records"
+                release = "1.0.0"
+                diagnostics = [pscustomobject]@{ details = [pscustomobject]@{ state = "ready" } }
             }
-        })
+        )
         component_product = @([pscustomobject]@{ component_id = "component-1" })
         dashboard_product = [pscustomobject]@{ id = "dashboard-1" }
         forms = @([pscustomobject]@{ id = "form-1" })
