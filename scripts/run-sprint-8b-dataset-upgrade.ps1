@@ -365,6 +365,7 @@ function Get-Sprint8BUpgradeStageSnapshot {
         [string]$module.release.runtime_image -cne $ExpectedImage -or
         [string]$module.release.manifest_digest -cne $ExpectedManifestDigest -or
         [string]$module.diagnostics.public_route -cne "/datasets" -or
+        [string]$module.diagnostics.details.release -cne $ExpectedRelease -or
         -not [bool]$module.instance.ready -or -not [bool]$module.instance.healthy) {
         throw "$Stage Module Management read-back does not identify the expected healthy Dataset release."
     }
@@ -374,6 +375,7 @@ function Get-Sprint8BUpgradeStageSnapshot {
     $normalizedModule.release.manifest_digest = "<transition-manifest>"
     $normalizedModule.release.id = "<transition-release-id>"
     $normalizedModule.manifest.release_version = "<transition-release>"
+    $normalizedModule.diagnostics.details.release = "<transition-release>"
 
     $datasetDetails = @($script:upgradeFixture.datasets.PSObject.Properties | ForEach-Object {
         $key = [string]$_.Name
@@ -1029,9 +1031,9 @@ try {
         $snapshot = Get-Sprint8BUpgradeStageSnapshot -Stage ([string]$target.stage) `
             -ExpectedRelease ([string]$target.release) -ExpectedImage ([string]$target.image) `
             -ExpectedManifestDigest ([string]$target.manifest)
+        $stages.Add($snapshot)
         $preservation.Add((Assert-Sprint8BUpgradePreservation -Expected $preExercise `
             -Actual $snapshot -Stage ([string]$target.stage)))
-        $stages.Add($snapshot)
     }
     Assert-Sprint8BExactSequence -Expected @($contract.sequence) `
         -Actual @($transitions.target_release) -Label "Executed Dataset release sequence"
