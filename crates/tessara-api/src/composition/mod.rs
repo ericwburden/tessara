@@ -605,6 +605,32 @@ async fn apply_blueprint(
                 .map_err(|error| ApiError::Internal(error.into()))?,
         )
     };
+    let current_lockfile = if current_receipt.is_some() {
+        let projected: Option<Value> = sqlx::query_scalar(
+            "SELECT lockfile
+             FROM composition_receipt_projections
+             WHERE installation_id=$1
+             ORDER BY revision DESC
+             LIMIT 1",
+        )
+        .bind(installation_id)
+        .fetch_optional(&state.pool)
+        .await?;
+        Some(
+            projected
+                .ok_or_else(|| {
+                    ApiError::BadRequest(
+                        "Supervisor receipt has no matching Core lockfile projection".into(),
+                    )
+                })
+                .and_then(|value| {
+                    serde_json::from_value::<ApplicationLockfileV1>(value)
+                        .map_err(|error| ApiError::Internal(error.into()))
+                })?,
+        )
+    } else {
+        None
+    };
     let now = Utc::now();
     let actor_id = auth.account_id;
     let approved_by: Uuid = row.try_get("approved_by")?;
@@ -652,7 +678,11 @@ async fn apply_blueprint(
         .map_err(|error| ApiError::Internal(error.into()))?;
     let response = client
         .post(format!("{}/v1/apply", supervisor_url.trim_end_matches('/')))
-        .json(&serde_json::json!({"lockfile": lockfile, "authorization": signed}))
+        .json(&serde_json::json!({
+            "lockfile": lockfile,
+            "current_lockfile": current_lockfile,
+            "authorization": signed
+        }))
         .send()
         .await
         .map_err(|_| ApiError::NotFound("Supervisor is unavailable".into()))?;
