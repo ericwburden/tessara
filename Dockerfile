@@ -25,7 +25,9 @@ COPY --from=styles /app/target/site/pkg/tessara-web.css /tmp/tessara-web.css
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo leptos build --release --split \
+    find crates/tessara-api/src crates/tessara-web/src crates/tessara-web-http/src \
+        -type f -name '*.rs' -exec touch {} + \
+    && cargo leptos build --release --split \
     && cp /tmp/tessara-web.css /app/target/site/pkg/tessara-web.css \
     && cp /app/target/release/tessara-api /tmp/tessara-api \
     && cp -r /app/target/site /tmp/site

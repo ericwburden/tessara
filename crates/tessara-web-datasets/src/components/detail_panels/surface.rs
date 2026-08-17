@@ -6,7 +6,7 @@ use super::super::super::display::visibility_label;
 use super::super::super::loaders::{load_account, load_dataset_detail, load_dataset_table};
 use super::super::super::permissions::can_manage_datasets;
 use super::super::super::types::*;
-use super::summary::{MetricCard, tab_class};
+use super::summary::{MetricCard, readable_refresh_timestamp, tab_class};
 use super::tables::{DatasetFieldsTable, DatasetSourcesTable, DatasetSqlPanel};
 #[cfg(feature = "hydrate")]
 use crate::api;
@@ -82,16 +82,14 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                     let visibility_nodes = loaded.visibility_nodes.clone();
                     let refresh_dataset_id = loaded.id.clone();
                     let freshness_label = freshness_label(loaded.freshness.state);
-                    let last_succeeded = loaded
-                        .freshness
-                        .last_succeeded_at
-                        .clone()
-                        .unwrap_or_else(|| "Not yet".into());
-                    let last_checked = loaded
-                        .freshness
-                        .last_checked_at
-                        .clone()
-                        .unwrap_or_else(|| "Not checked yet".into());
+                    let last_succeeded = readable_refresh_timestamp(
+                        loaded.freshness.last_succeeded_at.as_deref(),
+                        "Not yet",
+                    );
+                    let last_checked = readable_refresh_timestamp(
+                        loaded.freshness.last_checked_at.as_deref(),
+                        "Not checked yet",
+                    );
                     let freshness_failure = loaded
                         .freshness
                         .sanitized_failure_code

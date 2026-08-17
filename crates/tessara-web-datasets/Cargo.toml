@@ -20,6 +20,7 @@ ssr = [
 ]
 
 [dependencies]
+chrono = { workspace = true }
 gloo-net = { workspace = true }
 any_spawner = { version = "0.3", features = ["wasm-bindgen"] }
 icons = { workspace = true }
@@ -36,5 +37,4 @@ wasm-bindgen = { workspace = true }
 web-sys = { workspace = true }
 
 [dev-dependencies]
-chrono = { workspace = true }
 uuid = { workspace = true }

@@ -10,8 +10,8 @@ use crate::state::shell_navigation::{
 };
 use crate::ui::empty_view;
 use icons::{
-    Blocks, CircleHelp, File, FileText, GitBranch, House, LayoutDashboard, ListChecks, LogOut,
-    Network, PanelRight, Pencil, ShieldCheck, SlidersHorizontal, Users,
+    Blocks, CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks,
+    LogOut, Network, PanelRight, Pencil, ShieldCheck, SlidersHorizontal, Users,
 };
 use leptos::prelude::*;
 
@@ -360,6 +360,7 @@ fn nav_icon_for(route_key: &str) -> impl IntoView + use<> {
         "workflows" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><PanelRight class="sidebar-link__icon"/></span> }.into_any(),
         "responses" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><CircleHelp class="sidebar-link__icon"/></span> }.into_any(),
         "operations" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><ListChecks class="sidebar-link__icon"/></span> }.into_any(),
+        "datasets" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Database class="sidebar-link__icon"/></span> }.into_any(),
         "components" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Pencil class="sidebar-link__icon"/></span> }.into_any(),
         "dashboards" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><LayoutDashboard class="sidebar-link__icon"/></span> }.into_any(),
         "administration" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><SlidersHorizontal class="sidebar-link__icon"/></span> }.into_any(),
@@ -493,11 +494,13 @@ mod tests {
     }
 
     #[test]
-    fn module_owned_dataset_navigation_uses_the_policy_neutral_fallback_icon() {
+    fn dataset_navigation_retains_its_canonical_database_icon() {
         let dataset = Owner::new().with(|| nav_icon_for("datasets").to_html());
         let future_module = Owner::new().with(|| nav_icon_for("future_module").to_html());
 
-        assert_eq!(dataset, future_module);
+        assert_ne!(dataset, future_module);
+        assert!(dataset.contains("ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\""));
+        assert!(future_module.contains("M15 2H6a2 2 0 0 0-2 2v16"));
     }
 
     #[test]

@@ -7,7 +7,7 @@
 use std::fmt;
 
 #[cfg(feature = "hydrate")]
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 
 /// The recovery policy associated with a browser request failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,11 +91,30 @@ impl fmt::Display for RequestError {
 
 impl std::error::Error for RequestError {}
 
-#[cfg(feature = "hydrate")]
-#[derive(Deserialize)]
+#[cfg(any(feature = "hydrate", test))]
+#[derive(serde::Deserialize)]
 struct ApiErrorResponse {
-    error: Option<String>,
+    error: Option<ApiErrorField>,
     message: Option<String>,
+}
+
+#[cfg(any(feature = "hydrate", test))]
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum ApiErrorField {
+    Message(String),
+    Envelope { message: Option<String> },
+}
+
+#[cfg(any(feature = "hydrate", test))]
+fn api_error_message(body: ApiErrorResponse) -> Option<String> {
+    body.message
+        .or(match body.error {
+            Some(ApiErrorField::Message(message)) => Some(message),
+            Some(ApiErrorField::Envelope { message }) => message,
+            None => None,
+        })
+        .filter(|message| !message.trim().is_empty())
 }
 
 /// Fetches and decodes one JSON response.
@@ -252,8 +271,7 @@ async fn http_error(response: gloo_net::http::Response, action: &str, status: u1
         .json::<ApiErrorResponse>()
         .await
         .ok()
-        .and_then(|body| body.message.or(body.error))
-        .filter(|message| !message.trim().is_empty())
+        .and_then(api_error_message)
         .unwrap_or(fallback);
 
     if is_retryable_status(status) {
@@ -270,7 +288,9 @@ const fn is_retryable_status(status: u16) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{RequestError, RequestErrorKind, is_retryable_status};
+    use super::{
+        ApiErrorResponse, RequestError, RequestErrorKind, api_error_message, is_retryable_status,
+    };
 
     #[test]
     fn error_classification_is_independent_from_display_text() {
@@ -294,6 +314,21 @@ mod tests {
         }
         for status in [400, 401, 403, 404, 409, 422] {
             assert!(!is_retryable_status(status), "status {status}");
+        }
+    }
+
+    #[test]
+    fn error_message_supports_flat_and_canonical_module_envelopes() {
+        for (body, expected) in [
+            (r#"{"error":"flat failure"}"#, "flat failure"),
+            (
+                r#"{"schema_version":1,"error":{"code":"dataset.validation_failed","message":"Form source scope must be fully contained in the Dataset visibility scope"},"correlation_id":"00000000-0000-0000-0000-000000000000"}"#,
+                "Form source scope must be fully contained in the Dataset visibility scope",
+            ),
+            (r#"{"message":"top-level failure"}"#, "top-level failure"),
+        ] {
+            let envelope = serde_json::from_str::<ApiErrorResponse>(body).unwrap();
+            assert_eq!(api_error_message(envelope).as_deref(), Some(expected));
         }
     }
 }

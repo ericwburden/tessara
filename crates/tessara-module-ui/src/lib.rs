@@ -249,7 +249,7 @@ fn render_document_markup(
                 active,
                 escape_attribute(&item.href),
                 escape_attribute(&item.label),
-                navigation_icon(),
+                navigation_icon(&item.href),
                 escape_text(&item.label)
             )
         })
@@ -303,7 +303,7 @@ fn render_document_markup(
         brand_markup(&presentation.return_destination),
         presentation.navigation.iter().map(|item| {
             let active = if navigation_path_matches(&presentation.current_destination, &item.href) { " is-active" } else { "" };
-            format!(r#"<a class="sidebar-link{}" href="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#, active, escape_attribute(&item.href), navigation_icon(), escape_text(&item.label))
+            format!(r#"<a class="sidebar-link{}" href="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#, active, escape_attribute(&item.href), navigation_icon(&item.href), escape_text(&item.label))
         }).collect::<String>(),
         account_markup(&presentation.actor.display_name),
         hydration,
@@ -376,7 +376,15 @@ fn account_markup(display_name: &str) -> String {
 }
 
 #[cfg(feature = "components")]
-fn navigation_icon() -> &'static str {
+fn navigation_icon(href: &str) -> &'static str {
+    if href
+        .trim_start_matches('/')
+        .split('/')
+        .next()
+        .is_some_and(|segment| segment == "datasets")
+    {
+        return r#"<svg class="sidebar-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>"#;
+    }
     r#"<svg class="sidebar-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>"#
 }
 #[cfg(feature = "components")]
@@ -548,6 +556,17 @@ mod tests {
         ));
         assert!(!navigation_path_matches("/dashboards-old", "/dashboards"));
         assert!(!navigation_path_matches("/", "/dashboards"));
+    }
+
+    #[cfg(feature = "components")]
+    #[test]
+    fn dataset_navigation_uses_database_icon_in_complete_module_documents() {
+        let dataset = navigation_icon("/datasets/00000000-0000-0000-0000-000000000001");
+        let generic = navigation_icon("/reference/module-sdk");
+
+        assert!(dataset.contains("<ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/>"));
+        assert!(!dataset.contains("<rect x=\"3\" y=\"3\""));
+        assert!(generic.contains("<rect x=\"3\" y=\"3\""));
     }
 
     #[test]

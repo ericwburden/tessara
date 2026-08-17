@@ -3342,6 +3342,10 @@
   margin-bottom: 1rem;
 }
 
+.dataset-detail-summary .metric-card strong {
+  overflow-wrap: anywhere;
+}
+
 .dataset-editor {
   display: grid;
   gap: 1rem;
