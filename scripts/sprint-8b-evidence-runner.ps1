@@ -1099,7 +1099,7 @@ function Assert-Sprint8BActionAvailability {
 
 function Expand-Sprint8BActionArguments {
     param(
-        [Parameter(Mandatory)][object[]]$Arguments,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Arguments,
         [AllowNull()][string]$Project,
         [Parameter(Mandatory)][string]$EvidencePath,
         [AllowNull()][string]$CandidateFingerprint,
@@ -1897,6 +1897,12 @@ function Test-Sprint8BFormalRunner {
         Assert-Sprint8BActionAvailability -Actions $missingHarness
     }
 
+    $emptyArguments = @(Expand-Sprint8BActionArguments -Arguments @() -Project $null `
+        -EvidencePath "tmp/formal-selftest-evidence.json" -CandidateFingerprint $null -TopologyContext $null)
+    if ($emptyArguments.Count -ne 0) {
+        throw "$Phase zero-argument action expansion produced unexpected arguments."
+    }
+
     Assert-Sprint8BExpectedFailure -Label "$Phase unmapped selector" -Action {
         Invoke-Sprint8BPhaseRunner -Phase $Phase -Lane "not-a-sprint-8b-lane"
     }
@@ -1928,7 +1934,7 @@ function Test-Sprint8BFormalRunner {
         verified = @(
             "identity", "order", "prerequisites", "environment", "evidence-mapping",
             "playwright-data-state", "missing-prerequisite", "missing-harness",
-            "unmapped-selector", "exclusive-mode"
+            "zero-argument-action", "unmapped-selector", "exclusive-mode"
         )
     }
 }
