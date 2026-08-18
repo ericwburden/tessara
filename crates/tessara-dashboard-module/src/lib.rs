@@ -29,7 +29,7 @@ use tessara_dashboards::{
 };
 use tessara_module_contract::{
     ModuleDefinitionId, ModuleManifest, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
-    ResourceOwner, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
+    ResourceOwner, ShellContextV2, ShellContextValidationContextV2, SignedEnvelopeV1,
     derive_row_major_positions,
 };
 use uuid::Uuid;
@@ -44,7 +44,7 @@ pub const READ_CAPABILITY: &str = "dashboards:read";
 pub const MANAGE_CAPABILITY: &str = "dashboards:manage";
 pub const COMPONENT_BINDING_KEY: &str = "tessara.dashboards.component-version";
 pub const COMPONENT_CONTRACT_ID: &str = "tessara.components.component-version";
-pub const MODULE_RELEASE_VERSION: &str = "3.0.1";
+pub const MODULE_RELEASE_VERSION: &str = "3.0.2";
 
 const COMPONENT_PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -509,7 +509,7 @@ fn dashboard_bootstrap_resource_ids(
 pub(crate) async fn verified_shell_context(
     state: &DashboardModuleState,
     headers: &HeaderMap,
-) -> Result<ShellContextV1, DashboardModuleError> {
+) -> Result<ShellContextV2, DashboardModuleError> {
     let encoded = headers
         .get("x-tessara-shell-context")
         .and_then(|value| value.to_str().ok())
@@ -519,7 +519,7 @@ pub(crate) async fn verified_shell_context(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| Uuid::parse_str(value).ok())
         .ok_or(DashboardModuleError::Forbidden)?;
-    let envelope: SignedEnvelopeV1<ShellContextV1> = serde_json::from_slice(
+    let envelope: SignedEnvelopeV1<ShellContextV2> = serde_json::from_slice(
         &URL_SAFE_NO_PAD
             .decode(encoded)
             .map_err(|_| DashboardModuleError::Forbidden)?,
@@ -534,7 +534,7 @@ pub(crate) async fn verified_shell_context(
         .map_err(|_| DashboardModuleError::Forbidden)?;
     envelope
         .payload
-        .validate_for(&ShellContextValidationContextV1 {
+        .validate_for(&ShellContextValidationContextV2 {
             installation_id: security.installation_id,
             module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
                 .map_err(|_| DashboardModuleError::Forbidden)?,
@@ -1401,7 +1401,7 @@ mod tests {
         let manifest: ModuleManifest =
             serde_json::from_str(include_str!("../manifest.json")).expect("valid manifest");
         assert_eq!(manifest.definition_id.as_str(), "tessara.dashboards");
-        assert_eq!(manifest.release_version.to_string(), "3.0.1");
+        assert_eq!(manifest.release_version.to_string(), "3.0.2");
         let lifecycle = manifest
             .browser_lifecycle
             .as_ref()

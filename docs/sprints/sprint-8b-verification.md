@@ -362,7 +362,7 @@ Required logical fixtures include:
   `.independent-binding`, `.disjoint-binding`, `.incompatible`, and
   `.cycle-candidate`;
 - Component Table/Chart/Stat resources in immutable Component `1.1.0`,
-  four Dashboard `3.0.1` placements including the disjoint Component redacted
+  four Dashboard `3.0.2` placements including the disjoint Component redacted
   for the minimum-capability `actor.full`, reverse-consumer states, and all
   three Dataset resource-observation types; and
 - real Dataset `0.9.0` and `1.0.0` release/image/provenance fixtures.

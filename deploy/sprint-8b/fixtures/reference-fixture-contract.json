@@ -52,7 +52,7 @@
     ],
     "dashboard": {
       "key": "dashboard.dataset-components",
-      "release": "3.0.1",
+      "release": "3.0.2",
       "viewer_actor": "actor.full",
       "components": ["component.dataset-table", "component.dataset-chart", "component.dataset-stat", "component.dataset-disjoint"],
       "placements": [

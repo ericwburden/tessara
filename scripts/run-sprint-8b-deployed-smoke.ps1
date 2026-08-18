@@ -752,7 +752,7 @@ try {
     $expectedReleases = [ordered]@{
         "tessara.datasets" = "1.0.0"
         "tessara.components" = "1.1.0"
-        "tessara.dashboards" = "3.0.1"
+        "tessara.dashboards" = "3.0.2"
     }
     foreach ($definitionId in $expectedReleases.Keys) {
         $entry = @($inventory.entries | Where-Object {

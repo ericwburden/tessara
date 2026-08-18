@@ -309,7 +309,7 @@ mod tests {
             "dashboard-lifecycle.css",
             "text/css; charset=utf-8",
         );
-        assert!(asset.url.contains("/tessara.dashboards/3.0.1/"));
+        assert!(asset.url.contains("/tessara.dashboards/3.0.2/"));
         assert!(asset.url.contains(asset.digest.as_str()));
     }
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.reference.scoped-records",
-  "release_version": "1.0.1",
+  "release_version": "1.0.2",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -180,7 +180,7 @@
   "shell_contribution_contracts": null,
   "platform_versions": {
     "core_release": "0.1.0",
-    "shell_context_schema": "1.0.0",
+    "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
     "module_contract": "0.3.0",
     "module_runtime": "0.3.0",
@@ -224,12 +224,12 @@
   ],
   "assets": [
     {
-      "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe/module-ui.css",
-      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
+      "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc/module-ui.css",
+      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
       "content_type": "text/css; charset=utf-8"
     },
     {
-      "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77/scoped-records.css",
+      "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77/scoped-records.css",
       "digest": "sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77",
       "content_type": "text/css; charset=utf-8"
     }

@@ -11,7 +11,7 @@ use tessara_module_contract::{
 const VALID_MANIFEST: &str = include_str!("fixtures/valid-manifest.json");
 const VALID_MANIFEST_DIGEST_SIDECAR: &str = include_str!("fixtures/valid-manifest.json.sha256");
 const VALID_MANIFEST_SHA256: &str =
-    "sha256:fd622759394354caee198d27f5cfd780207e6311eb165176a455eeda32f33b43";
+    "sha256:3d1bbe16f71a9fb3821a89541107ab6f2b2972e83348efc0e91399b5edae0ea0";
 const INVALID_MANIFEST_PROFILE: &str =
     include_str!("fixtures/invalid-manifest-unsupported-profile.json");
 const INVALID_TRANSITION_DEPLOYMENT: &str =

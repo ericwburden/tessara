@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.reference.module-sdk",
-  "release_version": "1.0.1",
+  "release_version": "1.0.2",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -10,7 +10,7 @@
   },
   "platform_versions": {
     "core_release": "0.1.0",
-    "shell_context_schema": "1.0.0",
+    "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
     "module_contract": "0.3.0",
     "module_runtime": "0.3.0",
@@ -185,12 +185,12 @@
   ],
   "assets": [
     {
-      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe/module-ui.css",
-      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
+      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.2/sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc/module-ui.css",
+      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
       "content_type": "text/css; charset=utf-8"
     },
     {
-      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js",
+      "path": "/_tessara/modules/tessara.reference.module-sdk/1.0.2/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js",
       "digest": "sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff",
       "content_type": "text/javascript; charset=utf-8"
     }

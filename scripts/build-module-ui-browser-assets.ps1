@@ -38,7 +38,7 @@ $modules = @(
     [pscustomobject]@{
         Name = "dashboards"
         Definition = "tessara.dashboards"
-        Release = "3.0.1"
+        Release = "3.0.2"
         Package = "tessara-dashboard-ui"
         Wasm = "tessara_dashboard_ui.wasm"
         OutputName = "dashboard-bindings"
@@ -49,7 +49,7 @@ $modules = @(
         WasmName = "dashboard.wasm"
         DigestContract = "crates/tessara-dashboard-ui/src/document.rs"
         Manifest = "crates/tessara-dashboard-module/manifest.json"
-        ReleaseCatalog = "deploy/sprint-8a/catalogs/local-release-catalog.json"
+        ReleaseCatalog = "deploy/sprint-8b/catalogs/local-release-catalog.json"
         AssetSpecs = @(
             [pscustomobject]@{ Path = "/dashboard.css"; Constant = "DASHBOARD_CSS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.css") }
             [pscustomobject]@{ Path = "/dashboard-lifecycle.css"; Constant = "DASHBOARD_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.css", "crates/tessara-dashboard-ui/assets/dashboard-lifecycle.css") }
@@ -75,7 +75,7 @@ $modules = @(
         ReleaseCatalog = "deploy/sprint-8b/catalogs/local-release-catalog.json"
         AssetSpecs = @(
             [pscustomobject]@{ Path = "/dataset.css"; Constant = "DATASET_CSS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.css") }
-            [pscustomobject]@{ Path = "/dataset-lifecycle.css"; Constant = "DATASET_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset-lifecycle.css") }
+            [pscustomobject]@{ Path = "/dataset-lifecycle.css"; Constant = "DATASET_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.css", "crates/tessara-web-datasets/assets/dataset-lifecycle.css") }
             [pscustomobject]@{ Path = "/dataset.js"; Constant = "DATASET_JS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.js") }
             [pscustomobject]@{ Path = "/dataset-bindings.js"; Constant = "DATASET_BINDINGS_JS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset-bindings.js") }
             [pscustomobject]@{ Path = "/dataset.wasm"; Constant = "DATASET_WASM_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.wasm") }

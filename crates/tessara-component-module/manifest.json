@@ -292,7 +292,7 @@
   "shell_contribution_contracts": null,
   "platform_versions": {
     "core_release": "0.1.0",
-    "shell_context_schema": "1.0.0",
+    "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
     "module_contract": "0.3.0",
     "module_runtime": "0.3.0",
@@ -657,7 +657,7 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
+      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
       "content_type": "text/css; charset=utf-8"
     },
     {
@@ -672,17 +672,17 @@
     },
     {
       "path": "/component.js",
-      "digest": "sha256:e897fbe5db50174d776719b800c83a8b380e09f7ea878e544069832cdd6241ca",
+      "digest": "sha256:9e9ad843b07bba441c5c5f915dadf7d80dc0367ec7b0e4f4c2f44f6c9d3428bf",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component-bindings.js",
-      "digest": "sha256:078447da476b377cdf26d4f7351723377e5a041e3206cb39c62af0e77203c033",
+      "digest": "sha256:8a1a34892953e8175b13ba3e85607802208a9ec7e3e51d2435c0f7fa1d5310c8",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:b0e1275f2a3c12830014a18663c5f66022f7ad70b6f247e191b2291ed505de60",
+      "digest": "sha256:3c52b6c27f7d1cfc7df2cace082aea7489bab713a27f87236fa2efb3dcfa6443",
       "content_type": "application/wasm"
     }
   ]

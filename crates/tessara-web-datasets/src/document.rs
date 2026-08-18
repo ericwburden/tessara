@@ -1,5 +1,5 @@
 use leptos::{context::Provider, prelude::*};
-use tessara_module_contract::ShellContextV1;
+use tessara_module_contract::ShellContextV2;
 use tessara_module_ui::{
     MODULE_UI_CSS_SHA256, ModuleBootstrapData, ModuleDocumentAssets, ModuleReleaseMetadata,
     ShellPresentation, render_module_view_document,
@@ -9,25 +9,29 @@ use crate::{DatasetRouteBootstrap, dataset_content};
 
 pub const DATASET_BOOTSTRAP_SCRIPT_ID: &str = "tessara-dataset-bootstrap";
 pub const DATASET_CSS: &str = include_str!("../assets/dataset.css");
-pub const DATASET_LIFECYCLE_CSS: &str = include_str!("../assets/dataset-lifecycle.css");
+pub const DATASET_LIFECYCLE_CSS: &str = concat!(
+    include_str!("../assets/dataset.css"),
+    "\n",
+    include_str!("../assets/dataset-lifecycle.css")
+);
 pub const DATASET_JS: &str = include_str!("../assets/dataset.js");
 pub const DATASET_CSS_SHA256: &str =
-    "7dd795cde57e7772cb3670988d660fdacea823888059e9d8ccaecdd70472e511";
+    "bca623fe094de6e8c43d8fe4eaa8091dc669b19b917b838dad8194858cc4d73d";
 pub const DATASET_LIFECYCLE_CSS_SHA256: &str =
-    "da84cc6e3e0f359be1e7f3276e73ae11fa21963f948ad15c30df32dcdeecadfa";
+    "7b39b961505a180d55dfaa26772a03a7cca5d921fc3ec6037fd0189d334e1ba3";
 pub const DATASET_JS_SHA256: &str =
-    "45ba9b3369b439b6f469aaedbb9adbb076497cbb301ed873063e8f3fcef3f57e";
+    "0d4afa4ba3699d000d13230dc9750a59f8a80d56645a1a95e4c71a0accbfb713";
 pub const DATASET_BINDINGS_JS_SHA256: &str =
-    "4af9ad31ad9cbfc3579cc008bf48dce8d686402011e618b678260d07799a0fd6";
+    "f3e5d1671522c238a54628a7c44f110b9097fe9600e2ba8045635f09a308d7f8";
 pub const DATASET_WASM_SHA256: &str =
-    "936d3472cddbccd9f6352b20a1b991b0ec20c2b6609b946df2f1aa7609f77e03";
+    "7c13c2d90bad64420979668dc1bd484bbbe59cd124eb31b5099514f92704abc7";
 
 pub fn dataset_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.datasets/{release}/sha256:{digest}/{name}")
 }
 
 pub fn render_dataset_document(
-    context: &ShellContextV1,
+    context: &ShellContextV2,
     path: &str,
     title: &str,
     bootstrap: &DatasetRouteBootstrap,
@@ -85,8 +89,9 @@ mod tests {
         DatasetProductSummaryV1,
     };
     use tessara_module_contract::{
-        ModuleDefinitionId, NavigationContributionId, NavigationProjectionV1,
-        OriginalActorProjectionV1, ShellDocumentStateV1, ShellThemeV1,
+        ModuleDefinitionId, NavigationContributionId, OriginalActorProjectionV1,
+        SHELL_CONTEXT_SCHEMA_VERSION_V2, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+        ShellNavigationItemProjectionV2, ShellThemeV1,
     };
     use uuid::Uuid;
 
@@ -95,8 +100,8 @@ mod tests {
     #[test]
     fn direct_dataset_document_uses_sdk_shell_and_only_release_owned_assets() {
         let now = Utc::now();
-        let context = ShellContextV1 {
-            schema_version: 1,
+        let context = ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id: Uuid::from_u128(1),
             module_definition_id: ModuleDefinitionId::new("tessara.datasets").unwrap(),
             module_instance_id: Uuid::from_u128(2),
@@ -106,11 +111,16 @@ mod tests {
                 email: None,
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new("tessara.datasets.navigation")
-                    .unwrap(),
-                label: "Datasets".into(),
-                href: "/datasets".into(),
+            navigation: vec![ShellNavigationGroupProjectionV2 {
+                id: "core.main".into(),
+                label: "Main".into(),
+                items: vec![ShellNavigationItemProjectionV2 {
+                    contribution_id: NavigationContributionId::new("tessara.datasets.navigation")
+                        .unwrap(),
+                    key: "datasets".into(),
+                    label: "Datasets".into(),
+                    href: "/datasets".into(),
+                }],
             }],
             return_destination: "/".into(),
             locale: "en-US".into(),
@@ -165,5 +175,11 @@ mod tests {
         assert!(!html.contains("Loading datasets"));
         assert!(!html.contains("cdnjs.cloudflare.com"));
         assert!(!html.contains("/api/me"));
+        assert!(DATASET_LIFECYCLE_CSS.contains(".dataset-detail-summary"));
+        assert!(DATASET_LIFECYCLE_CSS.contains(".dataset-editor"));
+        assert!(
+            DATASET_LIFECYCLE_CSS
+                .contains(".module-scope--tessara-datasets [data-dataset-preview]")
+        );
     }
 }

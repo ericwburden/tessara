@@ -92,10 +92,10 @@ function Assert-ReferenceFixture {
         "component.dataset-disjoint", "component.dataset-incompatible"
     ) -Actual @(Assert-UniqueKeys -Items @($Fixture.downstream.components) -Label "reference Components") -Label "reference Components"
     if ([string]$Fixture.downstream.dashboard.key -cne "dashboard.dataset-components" -or
-        [string]$Fixture.downstream.dashboard.release -cne "3.0.1" -or
+        [string]$Fixture.downstream.dashboard.release -cne "3.0.2" -or
         [string]$Fixture.downstream.dashboard.viewer_actor -cne "actor.full" -or
         @($Fixture.downstream.components | Where-Object { [string]$_.release -cne "1.1.0" }).Count -ne 0) {
-        throw "Sprint 8B downstream fixtures do not pin Component 1.1.0 and Dashboard 3.0.1 exactly."
+        throw "Sprint 8B downstream fixtures do not pin Component 1.1.0 and Dashboard 3.0.2 exactly."
     }
     Assert-ExactSequence -Expected @(
         "component.dataset-table", "component.dataset-chart", "component.dataset-stat",
@@ -299,8 +299,8 @@ function Assert-UpgradeFixture {
         }
     }
     if ([string]$Fixture.fixed_dependencies.'tessara.components' -cne "1.1.0" -or
-        [string]$Fixture.fixed_dependencies.'tessara.dashboards' -cne "3.0.1") {
-        throw "Upgrade fixture must keep Component 1.1.0 and Dashboard 3.0.1 fixed."
+        [string]$Fixture.fixed_dependencies.'tessara.dashboards' -cne "3.0.2") {
+        throw "Upgrade fixture must keep Component 1.1.0 and Dashboard 3.0.2 fixed."
     }
     foreach ($required in @("dataset_state", "provider_route", "typed_resource_identity", "navigation_identity")) {
         if (@($Fixture.preserved) -cnotcontains $required) { throw "Upgrade fixture omits preserved identity '$required'." }

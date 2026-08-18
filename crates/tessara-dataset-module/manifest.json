@@ -441,7 +441,7 @@
   "shell_contribution_contracts": null,
   "platform_versions": {
     "core_release": "0.1.0",
-    "shell_context_schema": "1.0.0",
+    "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
     "module_contract": "0.3.0",
     "module_runtime": "0.3.0",
@@ -914,32 +914,32 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
+      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/dataset.css",
-      "digest": "sha256:7dd795cde57e7772cb3670988d660fdacea823888059e9d8ccaecdd70472e511",
+      "digest": "sha256:bca623fe094de6e8c43d8fe4eaa8091dc669b19b917b838dad8194858cc4d73d",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/dataset-lifecycle.css",
-      "digest": "sha256:da84cc6e3e0f359be1e7f3276e73ae11fa21963f948ad15c30df32dcdeecadfa",
+      "digest": "sha256:7b39b961505a180d55dfaa26772a03a7cca5d921fc3ec6037fd0189d334e1ba3",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/dataset.js",
-      "digest": "sha256:45ba9b3369b439b6f469aaedbb9adbb076497cbb301ed873063e8f3fcef3f57e",
+      "digest": "sha256:0d4afa4ba3699d000d13230dc9750a59f8a80d56645a1a95e4c71a0accbfb713",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dataset-bindings.js",
-      "digest": "sha256:4af9ad31ad9cbfc3579cc008bf48dce8d686402011e618b678260d07799a0fd6",
+      "digest": "sha256:f3e5d1671522c238a54628a7c44f110b9097fe9600e2ba8045635f09a308d7f8",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dataset.wasm",
-      "digest": "sha256:936d3472cddbccd9f6352b20a1b991b0ec20c2b6609b946df2f1aa7609f77e03",
+      "digest": "sha256:7c13c2d90bad64420979668dc1bd484bbbe59cd124eb31b5099514f92704abc7",
       "content_type": "application/wasm"
     }
   ]

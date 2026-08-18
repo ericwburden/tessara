@@ -145,7 +145,7 @@ The complete roadmap block is authoritative:
 | Dataset major-line contract | `tessara.datasets.dataset-major-line` `2.0.0` |
 | Dataset resources | `tessara.datasets.dataset`, `.dataset_revision`, `.dataset_major_line` |
 | Component consumer release / binding | immutable `tessara.components` `1.1.0` / `tessara.components.dataset-major-line` exact v2 |
-| Dashboard release held fixed | `tessara.dashboards` `3.0.1` |
+| Dashboard release held fixed | `tessara.dashboards` `3.0.2` |
 | Response source binding | `tessara.datasets.response-export` |
 | Response synchronization | provider-owned opaque monotonic cursor over a stable snapshot/change log |
 | Form schema binding | `tessara.datasets.form-version-schema` |
@@ -281,7 +281,7 @@ assertion.
 | Core identity -> Datasets | browser `/api/me` and `/api/admin/users`; account join for updater display names | signed ShellContext for current actor plus policy-neutral `principal-display-catalog` v1 for authorized display-name choices and a requested-set digest | no email/credential export; actor and random/unauthorized principal requests are nondisclosing; names are cached only as bounded display facts |
 | Dataset -> Dataset | direct same-database upstream joins | Dataset module's own v2 major-line reference plus tracked upstream materialization generation | cycle checks, revision/major pinning, scope intersection, and topological refresh remain owner-local; one transaction promotes the affected dependency closure or none of it |
 | Datasets -> Components | Core compatibility provider and v1 Core-owned references | Dataset v2 catalog/schema/distinct/compatibility/execute actions and Module Instance-owned typed major-line references consumed by immutable Component `1.1.0` | preserve shared governing-node semantics, correlation identity, restriction tiers, known/random nondisclosure, timeout, incompatibility, deletion/lifecycle, and recovery |
-| Components -> Dashboards | already public Components v3 contract | unchanged Component v3 contract and Dashboard `3.0.1` process | Dataset outage becomes coherent Component then Dashboard degradation; source-provider outage may serve the last good Dataset snapshot while freshness is degraded |
+| Components -> Dashboards | already public Components v3 contract | unchanged Component v3 contract and Dashboard `3.0.2` process | Dataset outage becomes coherent Component then Dashboard degradation; source-provider outage may serve the last good Dataset snapshot while freshness is degraded |
 | Datasets -> Forms reverse usage | Form detail directly queries Dataset source tables | Dataset-owned `source-usage` v1 action keyed by Form/FormVersion | authorized empty, unavailable, and undisclosed are distinct internal states; UI never presents outage as zero links or leaks hidden Datasets |
 | Datasets -> Core Operations/app summary | Core joins Dataset/analytics tables and counts Dataset rows | Dataset-owned `operational-status` v1 scoped readiness and summary actions | `operations:view`/admin context is forwarded exactly; other Operations sections remain usable during Dataset outage and show Dataset status unavailable rather than false zero |
 | Datasets -> resource consumers | Core transition reference registry reads Dataset rows/lifecycle/revision | Dataset-owned `resolve` action returning exact `ResourceResolutionV1`/`ResourceObservationV1` for Dataset, revision, and major-line types | owner/type/version rejected before lookup; known/random and scoped unauthorized inputs collapse; unavailable and lifecycle states remain contract-accurate |
@@ -598,7 +598,7 @@ not UUIDs or mutable counts, are the test vocabulary:
   bootstrap-validation-batch, retry, and outage expectations;
 - Component Table/Chart/Stat resources in `tessara.components` `1.1.0` over
   Dataset v2, with compatible, disjoint, lifecycle, and incompatible cases;
-- Dashboard `3.0.1` has four receipt-bound non-overlapping placements over
+- Dashboard `3.0.2` has four receipt-bound non-overlapping placements over
   compatible Components, including `component.dataset-disjoint`; `actor.full`
   has the minimum `components:read`/`dashboards:read` capabilities and observes
   that disjoint placement only as a redacted footprint, plus outage/recovery;
@@ -823,9 +823,14 @@ single durable receipt as an uninterrupted run.
   `provider_retry_limit` integer 0–3 default `1`, and
   `response_export_page_size` integer 1–1000 default `250`; unknown fields,
   coercion, clamping, unsupported schema, and partial save are rejected.
-- Platform versions are exact: Core Release `0.1.0`, Shell Context `1.0.0`,
+- Platform versions are exact: Core Release `0.1.0`, Shell Context `2.0.0`,
   module control `1.1.0`, module contract/runtime/UI `0.3.0`, design-system
   asset ABI `2.0.0`, and conformance suite `1.2.0`.
+- Shell presentation is invariant across Core-hosted lifecycle views and
+  complete module documents. Both consume the shared `ApplicationShell` and
+  grouped Shell Context projection; modules may not reproduce or restyle the
+  navigation, account context, icons, typography, themes, responsive behavior,
+  accessibility, or shell interactions.
 - Readiness requires the Dataset database, projected security/configuration,
   structurally compatible required bindings, and either no product state yet
   during controlled bootstrap or a valid last-good materialization. Transient
@@ -858,7 +863,7 @@ single durable receipt as an uninterrupted run.
   same Module Instance-owned Dataset v2 provider contract and a database shape
   that can read state after `1.0.0`'s additive sync migration. Component
   `1.1.0` requires Dataset contract `=2.0.0` and remains byte-for-byte selected
-  across the Dataset-only transition; Dashboard remains `3.0.1`.
+  across the Dataset-only transition; Dashboard remains `3.0.2`.
 - Core, Component, Dashboard, and unrelated module images, containers, restart
   counts, data, navigation, and availability must remain unchanged during the
   Dataset-only release transition.
@@ -900,7 +905,7 @@ single durable receipt as an uninterrupted run.
   completed before Sprint 8B.
 - Component public contract v3 and Dashboard public contract v3 remain the
   downstream path. An immutable Component `1.1.0` release changes only its
-  consumed Dataset contract/binding to v2; Dashboard `3.0.1` remains selected.
+  consumed Dataset contract/binding to v2; Dashboard `3.0.2` remains selected.
 - Current Forms, Responses, Core auth/scope/principal, Operations, app summary,
   and Core analytics behavior must be split at the exact boundaries above
   without extracting those owners.
@@ -933,13 +938,13 @@ scans alone when the row calls for a live outcome.
 | Post-publish refresh | Manager refresh checks dependency vector; unchanged head makes no page call/mutation; changes/rebase promote atomically; GETs remain side-effect free and last-good | `response-incremental-sync`, `dataset-refresh-dag`, `semantic-noop`, `failure-recovery`, `api-idempotency` | `rehearsal-source-sync`, `rehearsal-recovery`, `sit-rust`, `sit-smoke`, `uat-replay-refresh`; UAT-8B-04/11 |
 | Query/materialize/preview | Compiler reads only Dataset imported/materialized tables; complete operation pipeline and restriction tiers match current behavior | `owner-product`, `core-subtraction`, `response-incremental-sync` | `rehearsal-rust`, `sit-static`, `sit-rust`, `sit-browser`; UAT-8B-01/04 |
 | Dataset dependency DAG | Dataset sources pin v2 major line/revision/generation; base -> derived -> second-hop promotes as one closure, independent binding is stable, cycles reject before staging, rebuild failure rolls back the whole closure, and Component/Dashboard observe no mixed generation | `dataset-refresh-dag`, `owner-product`, `failure-recovery`, `deployed-smoke` | `rehearsal-source-sync`, `rehearsal-recovery`, `sit-rust`, `sit-smoke`, `uat-providers`; UAT-8B-04/11 |
-| Component/Dashboard | Component `1.1.0` consumes only Dataset v2 six-action provider; Dashboard `3.0.1` still consumes Component v3; scope/lifecycle/outage remain exact | `consumer-cutover`, `contract-boundary`, `deployed-smoke` | `rehearsal-reverse-consumers`, `rehearsal-smoke`, `sit-browser`, `sit-smoke`, `uat-crossmodule`; UAT-8B-05 |
+| Component/Dashboard | Component `1.1.0` consumes only Dataset v2 six-action provider; Dashboard `3.0.2` still consumes Component v3; scope/lifecycle/outage remain exact | `consumer-cutover`, `contract-boundary`, `deployed-smoke` | `rehearsal-reverse-consumers`, `rehearsal-smoke`, `sit-browser`, `sit-smoke`, `uat-crossmodule`; UAT-8B-05 |
 | Forms reverse usage | Form detail gets authorized Dataset-source links through `source-usage`; semantic destination links and empty/unavailable/undisclosed states are correct | `reverse-consumers`, `core-subtraction`, `deployed-smoke` | `rehearsal-reverse-consumers`, `sit-rust`, `sit-browser`, `sit-smoke`, `uat-reverse-consumers`; UAT-8B-10 |
 | Operations/app summary | Core delegates Dataset readiness/counts to operational-status; other sections survive outage; no false zero or metadata leak | `reverse-consumers`, `core-subtraction`, `deployed-smoke` | `rehearsal-reverse-consumers`, `sit-rust`, `sit-browser`, `sit-smoke`, `uat-reverse-consumers`; UAT-8B-10 |
 | Typed-resource lifecycle | Dataset resolves/observes Dataset, revision, and major-line references with owner revision/lifecycle; Core transition SQL/readers disappear | `resource-resolution`, `contract-boundary`, `core-subtraction` | `rehearsal-conformance`, `sit-static`, `sit-rust`, `uat-resource-resolution`; UAT-8B-11 |
 | Source/owner outage | Per-binding proxies fault Response/Form/scope/principal independently; last-good read, blocked mutation, degraded diagnostic, nondisclosure, and recovery are exact | `response-incremental-sync`, `ui-provider-boundaries`, `reverse-consumers`, `failure-recovery`, `deployed-smoke` | `rehearsal-source-sync`, `rehearsal-smoke`, `rehearsal-recovery`, `sit-smoke`, provider/reverse UAT lanes; UAT-8B-04/05/09/10 |
 | Fresh apply/no-op/failure | Owner-only bootstrap/read-back order, exact isolation, failed-attempt teardown, successor empty apply, and semantic no-op | `migration-seed`, `clean-materialization`, `semantic-noop`, `failure-recovery`, `fixture-acceptance` | readiness/rehearsal materialization and recovery, `sit-smoke`, materialization/recovery UAT; UAT-8B-02/07 |
-| Upgrade/rollback | Real Dataset `0.9.0`/`1.0.0`; fixed Component `1.1.0` and Dashboard `3.0.1`; state/provider route preserved, no Core fallback | `independent-upgrade-rollback`, `inventory-navigation`, `deployed-smoke` | `rehearsal-upgrade`, `sit-smoke`, `uat-upgrade`; UAT-8B-08 |
+| Upgrade/rollback | Real Dataset `0.9.0`/`1.0.0`; fixed Component `1.1.0` and Dashboard `3.0.2`; state/provider route preserved, no Core fallback | `independent-upgrade-rollback`, `inventory-navigation`, `deployed-smoke` | `rehearsal-upgrade`, `sit-smoke`, `uat-upgrade`; UAT-8B-08 |
 | Plan/proof integrity | Acceptance-criterion, target, lane, fixture, command, and evidence identities are set-equal across plan, record, contract, and UAT contract; representative path-impact tests prevent stale inheritance | `planning-contract-alignment`, `runner-selftest`, `uat-readiness` | `readiness-contract`, `rehearsal-static`, `preflight-freeze`, `uat-scripted`; all UAT preconditions |
 
 ## Acceptance Criteria
@@ -1218,7 +1223,7 @@ Prerequisites: S1–S2.
   audience/nonce validation for private provider calls.
 - Cut Components through immutable release `1.1.0` to Dataset v2 in
   contract/client/manifest/store/bootstrap/UI, remove all Core URL/owner and v1
-  fallback assumptions, and preserve Dashboard `3.0.1` behavior via Components
+  fallback assumptions, and preserve Dashboard `3.0.2` behavior via Components
   v3.
 - Cut Forms reverse usage, Core Operations, application summary, and generic
   resource observation to Dataset-owned actions with exact outage/

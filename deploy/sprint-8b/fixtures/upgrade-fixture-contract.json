@@ -39,7 +39,7 @@
   },
   "fixed_dependencies": {
     "tessara.components": "1.1.0",
-    "tessara.dashboards": "3.0.1"
+    "tessara.dashboards": "3.0.2"
   },
   "preserved": ["dataset_state", "provider_route", "typed_resource_identity", "navigation_identity"],
   "unrelated_unchanged": ["images", "containers", "restart_counts", "owner_data", "navigation", "availability"]

@@ -17,13 +17,13 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AdministratorEligibilityDecisionV1,
     AdministratorEnrollmentClaimKindV1, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
-    AuthorizationGrantV3, CONTRACT_SCHEMA_VERSION_V1, CapabilityScopeBindingV1,
-    DependencyBindingKey, EnrollmentRedemptionResultV1, EnrollmentReservationV1,
-    ExternalIdentityAssertionV1, FunctionalContractId, LocalOperatorAuthorizationV1,
-    ModuleDefinitionId, ModuleManifest, ModuleServicePrincipalV1, NavigationContributionId,
-    NavigationProjectionV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
+    AuthorizationGrantV3, CapabilityScopeBindingV1, DependencyBindingKey,
+    EnrollmentRedemptionResultV1, EnrollmentReservationV1, ExternalIdentityAssertionV1,
+    FunctionalContractId, LocalOperatorAuthorizationV1, ModuleDefinitionId, ModuleManifest,
+    ModuleServicePrincipalV1, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
     PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV2,
-    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
+    SHELL_CONTEXT_SCHEMA_VERSION_V2, SecurityCapabilityId, ShellContextV2, ShellDocumentStateV1,
+    ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -884,7 +884,7 @@ async fn proxy_scoped_records_root(
     Query(query): Query<ScopedRecordsDirectoryQuery>,
 ) -> ApiResult<Response> {
     require_module_page_access(&request)?;
-    scoped_records_document(&state.pool, &request, "", Some(&query)).await
+    scoped_records_document(&state, &request, "", Some(&query)).await
 }
 
 async fn proxy_scoped_records_page(
@@ -896,7 +896,7 @@ async fn proxy_scoped_records_page(
     if module_path.starts_with("api/") || module_path.contains("..") {
         return Err(ApiError::NotFound("module route".into()));
     }
-    scoped_records_document(&state.pool, &request, &module_path, None).await
+    scoped_records_document(&state, &request, &module_path, None).await
 }
 
 async fn proxy_scoped_record_page(
@@ -912,7 +912,7 @@ async fn proxy_scoped_record_page(
             Uuid::parse_str(&record_id).map_err(|_| ApiError::NotFound("module route".into()))?;
         format!("records/{record_id}")
     };
-    scoped_records_document(&state.pool, &request, &module_path, None).await
+    scoped_records_document(&state, &request, &module_path, None).await
 }
 
 fn require_module_page_access(request: &AuthenticatedRequest) -> ApiResult<()> {
@@ -1031,28 +1031,11 @@ async fn proxy_manifest_module_document(
     }
     let correlation_id = Uuid::new_v4();
     let now = Utc::now();
-    let navigation = manifest
-        .navigation
-        .iter()
-        .filter(|item| {
-            item.required_capabilities_any_of
-                .iter()
-                .any(|capability| request.account.has_capability(capability.as_str()))
-        })
-        .filter_map(|item| {
-            let route = manifest.browser_routes.iter().find(|route| {
-                route.destination == item.destination && !route.path_template.contains('{')
-            })?;
-            Some(NavigationProjectionV1 {
-                contribution_id: item.id.clone(),
-                label: item.label.clone(),
-                href: route.path_template.clone(),
-            })
-        })
-        .collect();
+    let navigation =
+        crate::modules::load_context_navigation(&state, &request.account, installation_id).await?;
     let shell = protocol_signer(ProtocolSignaturePurposeV1::ShellContext)?
-        .sign(ShellContextV1 {
-            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+        .sign(ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id,
             module_definition_id: manifest.definition_id.clone(),
             module_instance_id: instance_id,
@@ -1225,12 +1208,13 @@ async fn proxy_record_update(
 }
 
 async fn proxy_module_get(
-    pool: &PgPool,
+    state: &AppState,
     request: &AuthenticatedRequest,
     path: &str,
     query: Option<&ScopedRecordsDirectoryQuery>,
 ) -> ApiResult<Response> {
-    let (shell_context, correlation_id) = scoped_records_shell_context(pool, request).await?;
+    let pool = &state.pool;
+    let (shell_context, correlation_id) = scoped_records_shell_context(state, request).await?;
     let encoded = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&shell_context).map_err(|error| ApiError::Internal(error.into()))?,
     );
@@ -1358,12 +1342,12 @@ async fn update_scoped_record_form(
 }
 
 async fn scoped_records_document(
-    pool: &PgPool,
+    state: &AppState,
     request: &AuthenticatedRequest,
     path: &str,
     query: Option<&ScopedRecordsDirectoryQuery>,
 ) -> ApiResult<Response> {
-    proxy_module_get(pool, request, path, query).await
+    proxy_module_get(state, request, path, query).await
 }
 
 async fn scoped_records_organization_access(
@@ -1416,9 +1400,10 @@ async fn scoped_records_organization_access(
 }
 
 async fn scoped_records_shell_context(
-    pool: &PgPool,
+    state: &AppState,
     request: &AuthenticatedRequest,
-) -> ApiResult<(SignedEnvelopeV1<ShellContextV1>, Uuid)> {
+) -> ApiResult<(SignedEnvelopeV1<ShellContextV2>, Uuid)> {
+    let pool = &state.pool;
     let instance = sqlx::query(
         "SELECT id,installation_id,enabled,healthy
          FROM module_instances
@@ -1466,8 +1451,8 @@ async fn scoped_records_shell_context(
     } else {
         ShellDocumentStateV1::Active
     };
-    let context = ShellContextV1 {
-        schema_version: CONTRACT_SCHEMA_VERSION_V1,
+    let context = ShellContextV2 {
+        schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
         installation_id,
         module_definition_id: ModuleDefinitionId::new(
             tessara_reference_scoped_records::MODULE_DEFINITION_ID,
@@ -1480,22 +1465,12 @@ async fn scoped_records_shell_context(
             email: Some(request.account.email.clone()),
         },
         theme: ShellThemeV1::System,
-        navigation: vec![
-            NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new("tessara.core.home")
-                    .map_err(|error| ApiError::Internal(error.into()))?,
-                label: "Home".into(),
-                href: "/".into(),
-            },
-            NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new(
-                    "tessara.reference.scoped-records.directory",
-                )
-                .map_err(|error| ApiError::Internal(error.into()))?,
-                label: "Scoped Records".into(),
-                href: "/reference/scoped-records".into(),
-            },
-        ],
+        navigation: crate::modules::load_context_navigation(
+            state,
+            &request.account,
+            installation_id,
+        )
+        .await?,
         return_destination: "/".into(),
         locale: "en-US".into(),
         time_zone: "UTC".into(),

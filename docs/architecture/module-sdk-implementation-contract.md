@@ -56,7 +56,7 @@ facade.
 
 ### Contract and verification
 
-- `ShellContextV1`, `SignedEnvelopeV1`, purpose-bound signing/verifying keys,
+- `ShellContextV2`, `SignedEnvelopeV1`, purpose-bound signing/verifying keys,
   validation contexts, and pure signature/context/grant validation remain in
   `tessara-module-contract`.
 - Base64 header extraction, environment decoding, construction of the trusted
@@ -178,7 +178,7 @@ arbitrary serialized error chain.
 
 ## Normalized UI Interface
 
-Runtime converts a verified `ShellContextV1` into a normalized presentation
+Runtime converts a verified `ShellContextV2` into a normalized presentation
 model containing only:
 
 - actor display projection;

@@ -17,9 +17,10 @@ use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
     AuthorizationGrantV3, BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1,
     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleServicePrincipalV1,
-    NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
-    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, SecurityCapabilityId, ShellContextV1,
-    ShellDocumentStateV1, ShellThemeV1,
+    NavigationContributionId, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
+    PurposeBoundSigningKeyV1, SHELL_CONTEXT_SCHEMA_VERSION_V2, SecurityCapabilityId,
+    ShellContextV2, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+    ShellNavigationItemProjectionV2, ShellThemeV1,
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -852,8 +853,8 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     );
 
     let shell = shell_signer
-        .sign(ShellContextV1 {
-            schema_version: 1,
+        .sign(ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id,
             module_definition_id: ModuleDefinitionId::new("tessara.datasets")
                 .expect("Dataset definition id"),
@@ -864,11 +865,16 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
                 email: None,
             },
             theme: ShellThemeV1::System,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new("tessara.datasets.navigation")
-                    .expect("Dataset navigation contribution"),
-                label: "Datasets".into(),
-                href: "/datasets".into(),
+            navigation: vec![ShellNavigationGroupProjectionV2 {
+                id: "core.main".into(),
+                label: "Main".into(),
+                items: vec![ShellNavigationItemProjectionV2 {
+                    contribution_id: NavigationContributionId::new("tessara.datasets.navigation")
+                        .expect("Dataset navigation contribution"),
+                    key: "datasets".into(),
+                    label: "Datasets".into(),
+                    href: "/datasets".into(),
+                }],
             }],
             return_destination: "/".into(),
             locale: "en-US".into(),
@@ -1012,8 +1018,8 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
             })
             .expect("sign Dataset document grant");
         let shell = shell_signer
-            .sign(ShellContextV1 {
-                schema_version: 1,
+            .sign(ShellContextV2 {
+                schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
                 installation_id,
                 module_definition_id: ModuleDefinitionId::new("tessara.datasets")
                     .expect("Dataset definition id"),

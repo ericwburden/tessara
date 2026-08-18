@@ -21,7 +21,7 @@ use sqlx::{FromRow, PgPool};
 use tessara_datasets_contract::{DatasetMajorLineMetadata, DatasetMajorLineReference};
 use tessara_module_contract::{
     ModuleDefinitionId, ModuleManifest, ModuleServiceIdentityRegistryV1, PurposeBoundSigningKeyV1,
-    PurposeBoundVerifyingKeyV1, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
+    PurposeBoundVerifyingKeyV1, ShellContextV2, ShellContextValidationContextV2, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -281,7 +281,7 @@ pub fn router(state: ComponentModuleState) -> Router {
 pub(crate) async fn verified_shell_context(
     state: &ComponentModuleState,
     headers: &HeaderMap,
-) -> Result<ShellContextV1, ComponentModuleError> {
+) -> Result<ShellContextV2, ComponentModuleError> {
     let encoded = headers
         .get("x-tessara-shell-context")
         .and_then(|value| value.to_str().ok())
@@ -291,7 +291,7 @@ pub(crate) async fn verified_shell_context(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| Uuid::parse_str(value).ok())
         .ok_or(ComponentModuleError::Forbidden)?;
-    let envelope: SignedEnvelopeV1<ShellContextV1> = serde_json::from_slice(
+    let envelope: SignedEnvelopeV1<ShellContextV2> = serde_json::from_slice(
         &URL_SAFE_NO_PAD
             .decode(encoded)
             .map_err(|_| ComponentModuleError::Forbidden)?,
@@ -306,7 +306,7 @@ pub(crate) async fn verified_shell_context(
         .map_err(|_| ComponentModuleError::Forbidden)?;
     envelope
         .payload
-        .validate_for(&ShellContextValidationContextV1 {
+        .validate_for(&ShellContextValidationContextV2 {
             installation_id: security.installation_id,
             module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
                 .map_err(|_| ComponentModuleError::Forbidden)?,

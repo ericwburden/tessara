@@ -885,6 +885,121 @@ textarea {
   gap: 0.75rem;
 }
 
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+  gap: 0.6rem;
+}
+
+.metric-card {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 0.85rem;
+}
+
+.metric-card span {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.metric-card--button {
+  width: 100%;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.metric-card--button:hover,
+.metric-card--button:focus-visible {
+  border-color: var(--semantic-primary-border);
+  background: var(--semantic-primary-soft);
+}
+
+.data-table-filter__trigger.is-filtered {
+  background: var(--semantic-primary-soft);
+  color: var(--semantic-primary);
+}
+
+.interactive-data-table__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.interactive-data-table__columns,
+.interactive-data-table__header-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.interactive-data-table__table:has(.interactive-data-table__header-menu.is-open) {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.interactive-data-table__columns.is-open .interactive-data-table__columns-menu {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.interactive-data-table__columns.is-open .data-table-filter__scrim {
+  display: block;
+}
+
+.interactive-data-table__header-meta {
+  color: var(--color-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.interactive-data-table__header-menu .data-table-filter__trigger {
+  width: 1.65rem;
+  height: 1.65rem;
+  min-height: 1.65rem;
+}
+
+.interactive-data-table__header-menu .data-table-filter__trigger svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.interactive-data-table__header-menu .data-table-filter__menu {
+  display: none;
+}
+
+.interactive-data-table__header-menu.is-open .data-table-filter__menu {
+  display: grid;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.interactive-data-table__header-menu.is-open .data-table-filter__scrim {
+  display: block;
+}
+
 .interactive-data-table__search {
   flex: 1 1 18rem;
 }

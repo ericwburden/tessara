@@ -52,12 +52,13 @@ pub use protocol::{
     CoreServiceRequestValidationContextV1, CoreServiceRequestValidationError, DelegationBasisV1,
     ExternalIdentityAssertionV1, MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
     ModuleServicePrincipalV1, ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,
-    ModuleServiceRequestValidationError, NavigationProjectionV1, OriginalActorProjectionV1,
-    ProtocolEnvelopeError, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
-    PurposeBoundVerifyingKeyV1, ResourceAuthorizationAssertionV2,
-    SHELL_CONTEXT_MAX_LIFETIME_SECONDS, ShellContextV1, ShellContextValidationContextV1,
-    ShellContextValidationError, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
-    SignedWindowError, canonical_protocol_signing_bytes,
+    ModuleServiceRequestValidationError, OriginalActorProjectionV1, ProtocolEnvelopeError,
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
+    ResourceAuthorizationAssertionV2, SHELL_CONTEXT_MAX_LIFETIME_SECONDS,
+    SHELL_CONTEXT_SCHEMA_VERSION_V2, ShellContextV2, ShellContextValidationContextV2,
+    ShellContextValidationError, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+    ShellNavigationItemProjectionV2, ShellThemeV1, SignedEnvelopeV1, SignedWindowError,
+    canonical_protocol_signing_bytes,
 };
 pub use service_identity::{
     MODULE_SERVICE_IDENTITIES_ENVIRONMENT, MODULE_SERVICE_IDENTITY_REGISTRY_SCHEMA_VERSION_V1,
@@ -78,7 +79,7 @@ pub const CONTRACT_SCHEMA_VERSION_V1: u16 = 1;
 pub const RESOURCE_OBSERVATION_SCHEMA_VERSION_V1: u16 = 1;
 pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 3;
 pub const CURRENT_CORE_RELEASE: &str = "0.1.0";
-pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "1.0.0";
+pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "2.0.0";
 pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.1.0";
 pub const CURRENT_MODULE_CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const CURRENT_MODULE_RUNTIME_VERSION: &str = "0.3.0";
@@ -3567,7 +3568,7 @@ mod tests {
             },
             platform_versions: ModulePlatformVersions {
                 core_release: Version::new(0, 1, 0),
-                shell_context_schema: Version::new(1, 0, 0),
+                shell_context_schema: Version::parse(CURRENT_SHELL_CONTEXT_SCHEMA).unwrap(),
                 module_control_protocol: Version::new(1, 1, 0),
                 module_contract: Version::parse(CURRENT_MODULE_CONTRACT_VERSION).unwrap(),
                 module_runtime: Version::parse(CURRENT_MODULE_RUNTIME_VERSION).unwrap(),

@@ -1,4 +1,4 @@
-use tessara_module_contract::ShellContextV1;
+use tessara_module_contract::ShellContextV2;
 use tessara_module_ui::{
     MODULE_UI_CSS_SHA256, ModuleBootstrapData, ModuleDocumentAssets, ModuleReleaseMetadata,
     ShellPresentation, render_module_view_document,
@@ -23,18 +23,18 @@ pub const COMPONENT_CSS_SHA256: &str =
 pub const COMPONENT_LIFECYCLE_CSS_SHA256: &str =
     "17eac83dcf01b4d39808474e7f58b5d4188d784f077d61f9d0a09021cb612724";
 pub const COMPONENT_JS_SHA256: &str =
-    "e897fbe5db50174d776719b800c83a8b380e09f7ea878e544069832cdd6241ca";
+    "9e9ad843b07bba441c5c5f915dadf7d80dc0367ec7b0e4f4c2f44f6c9d3428bf";
 pub const COMPONENT_BINDINGS_JS_SHA256: &str =
-    "078447da476b377cdf26d4f7351723377e5a041e3206cb39c62af0e77203c033";
+    "8a1a34892953e8175b13ba3e85607802208a9ec7e3e51d2435c0f7fa1d5310c8";
 pub const COMPONENT_WASM_SHA256: &str =
-    "b0e1275f2a3c12830014a18663c5f66022f7ad70b6f247e191b2291ed505de60";
+    "3c52b6c27f7d1cfc7df2cace082aea7489bab713a27f87236fa2efb3dcfa6443";
 
 pub fn component_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.components/{release}/sha256:{digest}/{name}")
 }
 
 pub fn render_component_document(
-    context: &ShellContextV1,
+    context: &ShellContextV2,
     path: &str,
     title: &str,
     bootstrap: &ComponentRouteBootstrap,
@@ -99,8 +99,9 @@ fn escaped_bootstrap_json(bootstrap: &ComponentRouteBootstrap) -> String {
 mod tests {
     use chrono::{Duration, Utc};
     use tessara_module_contract::{
-        ModuleDefinitionId, NavigationContributionId, NavigationProjectionV1,
-        OriginalActorProjectionV1, ShellDocumentStateV1, ShellThemeV1,
+        ModuleDefinitionId, NavigationContributionId, OriginalActorProjectionV1,
+        SHELL_CONTEXT_SCHEMA_VERSION_V2, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+        ShellNavigationItemProjectionV2, ShellThemeV1,
     };
     use uuid::Uuid;
 
@@ -110,8 +111,8 @@ mod tests {
     #[test]
     fn direct_document_renders_the_same_interactive_directory_view() {
         let now = Utc::now();
-        let context = ShellContextV1 {
-            schema_version: 1,
+        let context = ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id: Uuid::from_u128(1),
             module_definition_id: ModuleDefinitionId::new("tessara.components").unwrap(),
             module_instance_id: Uuid::from_u128(2),
@@ -121,11 +122,16 @@ mod tests {
                 email: None,
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new("tessara.components.navigation")
-                    .unwrap(),
-                label: "Components".into(),
-                href: "/components".into(),
+            navigation: vec![ShellNavigationGroupProjectionV2 {
+                id: "core.main".into(),
+                label: "Main".into(),
+                items: vec![ShellNavigationItemProjectionV2 {
+                    contribution_id: NavigationContributionId::new("tessara.components.navigation")
+                        .unwrap(),
+                    key: "components".into(),
+                    label: "Components".into(),
+                    href: "/components".into(),
+                }],
             }],
             return_destination: "/".into(),
             locale: "en-US".into(),

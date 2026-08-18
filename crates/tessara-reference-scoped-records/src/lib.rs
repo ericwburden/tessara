@@ -22,8 +22,8 @@ use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
     AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
     ModuleDefinitionId, ModuleManifest, ModuleServicePrincipalV1, PurposeBoundSigningKeyV1,
-    PurposeBoundVerifyingKeyV1, SecurityCapabilityId, ShellContextV1,
-    ShellContextValidationContextV1, SignedEnvelopeV1,
+    PurposeBoundVerifyingKeyV1, SecurityCapabilityId, ShellContextV2,
+    ShellContextValidationContextV2, SignedEnvelopeV1,
 };
 use tessara_module_runtime::{
     decode_signed_envelope_header, request_correlation_id, verify_shell_context,
@@ -36,12 +36,12 @@ use tessara_module_ui::{
 use uuid::Uuid;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.reference.scoped-records";
-pub const MODULE_RELEASE_VERSION: &str = "1.0.1";
-pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe/module-ui.css";
+pub const MODULE_RELEASE_VERSION: &str = "1.0.2";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc/module-ui.css";
 pub const SCOPED_RECORDS_CSS: &str = include_str!("../assets/scoped-records.css");
 pub const SCOPED_RECORDS_CSS_SHA256: &str =
     "ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77";
-pub const SCOPED_RECORDS_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77/scoped-records.css";
+pub const SCOPED_RECORDS_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77/scoped-records.css";
 pub const READ_CAPABILITY: &str = "tessara.reference.scoped-records:read";
 pub const MANAGE_CAPABILITY: &str = "tessara.reference.scoped-records:manage";
 
@@ -1233,14 +1233,14 @@ async fn shell_page(
 ) -> Result<Response, ApiError> {
     let correlation_id =
         request_correlation_id(headers).map_err(|_| ApiError::shell_unavailable())?;
-    let envelope: SignedEnvelopeV1<ShellContextV1> =
+    let envelope: SignedEnvelopeV1<ShellContextV2> =
         decode_signed_envelope_header(headers, "x-tessara-shell-context")
             .map_err(|_| ApiError::shell_unavailable())?;
     let security = load_security_state(&state.pool).await?;
     verify_shell_context(
         &envelope,
         &state.core_shell_verifier,
-        &ShellContextValidationContextV1 {
+        &ShellContextValidationContextV2 {
             installation_id: security.installation_id,
             module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
                 .map_err(|_| ApiError::shell_unavailable())?,

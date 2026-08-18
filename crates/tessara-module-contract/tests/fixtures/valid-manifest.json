@@ -182,7 +182,7 @@
   "shell_contribution_contracts": null,
   "platform_versions": {
     "core_release": "0.1.0",
-    "shell_context_schema": "1.0.0",
+    "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
     "module_contract": "0.3.0",
     "module_runtime": "0.3.0",

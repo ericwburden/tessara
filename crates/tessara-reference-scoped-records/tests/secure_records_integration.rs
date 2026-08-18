@@ -11,9 +11,10 @@ use sqlx::postgres::PgPoolOptions;
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
     CapabilityScopeBindingV1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
-    ModuleServicePrincipalV1, NavigationContributionId, NavigationProjectionV1,
-    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
-    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
+    ModuleServicePrincipalV1, NavigationContributionId, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, SHELL_CONTEXT_SCHEMA_VERSION_V2,
+    SecurityCapabilityId, ShellContextV2, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+    ShellNavigationItemProjectionV2, ShellThemeV1,
 };
 use tessara_reference_scoped_records::{
     MANAGE_CAPABILITY, ModuleState, OrganizationAccessProjectionV1, READ_CAPABILITY, router,
@@ -92,8 +93,8 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     };
     let now = Utc::now();
     let shell = shell_signer
-        .sign(ShellContextV1 {
-            schema_version: tessara_module_contract::CONTRACT_SCHEMA_VERSION_V1,
+        .sign(ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id,
             module_definition_id: ModuleDefinitionId::new(
                 tessara_reference_scoped_records::MODULE_DEFINITION_ID,
@@ -106,10 +107,15 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
                 email: None,
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new("tessara.core.home").unwrap(),
-                label: "Home".into(),
-                href: "/".into(),
+            navigation: vec![ShellNavigationGroupProjectionV2 {
+                id: "core.main".into(),
+                label: "Main".into(),
+                items: vec![ShellNavigationItemProjectionV2 {
+                    contribution_id: NavigationContributionId::new("tessara.core.home").unwrap(),
+                    key: "home".into(),
+                    label: "Home".into(),
+                    href: "/".into(),
+                }],
             }],
             return_destination: "/".into(),
             locale: "en-US".into(),

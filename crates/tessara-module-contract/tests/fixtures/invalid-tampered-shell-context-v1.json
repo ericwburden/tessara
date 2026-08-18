@@ -12,9 +12,16 @@
     "module_instance_id": "00000000-0000-0000-0000-000000000002",
     "navigation": [
       {
-        "contribution_id": "tessara.reference.scoped-records.main",
-        "href": "/modules/scoped-records/",
-        "label": "Scoped Records"
+        "id": "core.main",
+        "items": [
+          {
+            "contribution_id": "tessara.reference.scoped-records.main",
+            "href": "/modules/scoped-records/",
+            "key": "scoped_records",
+            "label": "Scoped Records"
+          }
+        ],
+        "label": "Main"
       }
     ],
     "original_actor": {
@@ -23,11 +30,11 @@
       "email": "admin@tessara.local"
     },
     "return_destination": "/admin/modules",
-    "schema_version": 1,
+    "schema_version": 2,
     "theme": "dark",
     "time_zone": "America/New_York"
   },
   "purpose": "shell_context",
   "schema_version": 1,
-  "signature": "AQNDlvfoY7FG_ocGy-vLc1F8LzFFlvEEL9RLO5mE_got-skV5Vb1sGf9e9dSLwrqQpErS8XrDj6HvMTP3NQxDA"
+  "signature": "736L63jj-URqRQpbq7C1r9ai3eLPrTxdhggvZ7iI4LzGJXysOmoer3L5yG-M8xwQF7EaVrnrbERI7eoqTWTGDw"
 }

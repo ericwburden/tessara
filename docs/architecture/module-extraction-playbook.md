@@ -105,6 +105,13 @@ assertions, not only prose.
 - Build typed SDK/Leptos views and canonical asset composition before consumer
   cutover. The SDK owns the outer document, reset, design tokens, theme, shell,
   and generic primitives; product CSS is namespace-rooted and product-only.
+- Treat shell presentation as an exact platform invariant, not a visual target
+  for each module to approximate. Core-hosted and complete-document rendering
+  must call the same shared shell/sidebar/icon components with the grouped
+  Shell Context projection. Reject module-owned shell markup or styles, flat or
+  module-only navigation substitutes, missing account/group/icon projections,
+  and product selectors left in Core CSS. A shell contract or shared-shell
+  change advances affected Module Release identities before validation.
 - Generate and source-check first-party browser assets with
   `pwsh -NoProfile -File scripts/build-module-ui-browser-assets.ps1 -Module all -Check`;
   reconcile every emitted digest with the loader, manifest, and release catalog.

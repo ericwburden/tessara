@@ -71,8 +71,8 @@ function Read-Sprint8BUpgradeContract {
         $baselineRelease, $candidateRelease, $baselineRelease, $candidateRelease
     ) -Actual @($contract.sequence) -Label "Dataset upgrade sequence"
     if ([string]$contract.fixed_dependencies.'tessara.components' -cne "1.1.0" -or
-        [string]$contract.fixed_dependencies.'tessara.dashboards' -cne "3.0.1") {
-        throw "Dataset upgrade fixture does not keep Component 1.1.0 and Dashboard 3.0.1 fixed."
+        [string]$contract.fixed_dependencies.'tessara.dashboards' -cne "3.0.2") {
+        throw "Dataset upgrade fixture does not keep Component 1.1.0 and Dashboard 3.0.2 fixed."
     }
     foreach ($required in @(
         "dataset_state", "provider_route", "typed_resource_identity", "navigation_identity"

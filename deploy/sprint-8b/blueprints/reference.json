@@ -539,7 +539,7 @@
     },
     {
       "definition_id": "tessara.dashboards",
-      "version_requirement": "=3.0.1",
+      "version_requirement": "=3.0.2",
       "enabled": true,
       "dependency_bindings": {"tessara.dashboards.component-version": "tessara.components"},
       "configuration": {"schema_version": 1, "display_label": "Dashboards", "default_page_size": 25},
@@ -570,7 +570,7 @@
     },
     {
       "definition_id": "tessara.reference.scoped-records",
-      "version_requirement": "=1.0.1",
+      "version_requirement": "=1.0.2",
       "enabled": true,
       "dependency_bindings": {},
       "configuration": {"schema_version": 1, "display_label": "Scoped Records", "retention_mode": "retain_on_undeploy"},

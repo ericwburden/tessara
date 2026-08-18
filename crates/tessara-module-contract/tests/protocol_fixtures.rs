@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 use tessara_module_contract::{
     AuthorizationGrantOperationV1, AuthorizationGrantV2, AuthorizationValidationContextV2,
     DependencyBindingKey, ExternalIdentityAssertionV1, FunctionalContractId, ModuleDefinitionId,
-    ProtocolEnvelopeError, ProtocolSignaturePurposeV1, PurposeBoundVerifyingKeyV1, ShellContextV1,
-    ShellContextValidationContextV1, SignedEnvelopeV1,
+    ProtocolEnvelopeError, ProtocolSignaturePurposeV1, PurposeBoundVerifyingKeyV1, ShellContextV2,
+    ShellContextValidationContextV2, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ const TAMPERED_SHELL_CONTEXT_DIGEST: &str =
 struct ProtocolFixtures {
     authorization_grant: SignedEnvelopeV1<AuthorizationGrantV2>,
     external_identity: SignedEnvelopeV1<ExternalIdentityAssertionV1>,
-    shell_context: SignedEnvelopeV1<ShellContextV1>,
+    shell_context: SignedEnvelopeV1<ShellContextV2>,
     trust: DevelopmentTrustV1,
 }
 
@@ -106,7 +106,7 @@ fn canonical_protocol_messages_verify_with_purpose_specific_public_keys() {
     fixtures
         .shell_context
         .payload
-        .validate_for(&ShellContextValidationContextV1 {
+        .validate_for(&ShellContextValidationContextV2 {
             installation_id: Uuid::from_u128(1),
             module_definition_id: ModuleDefinitionId::new("tessara.reference.scoped-records")
                 .unwrap(),
@@ -140,7 +140,7 @@ fn canonical_protocol_messages_verify_with_purpose_specific_public_keys() {
 fn tampered_shell_context_fixture_fails_signature_verification() {
     assert_canonical_fixture(TAMPERED_SHELL_CONTEXT, TAMPERED_SHELL_CONTEXT_DIGEST);
     let fixtures: ProtocolFixtures = serde_json::from_slice(VALID_PROTOCOL_MESSAGES).unwrap();
-    let tampered: SignedEnvelopeV1<ShellContextV1> =
+    let tampered: SignedEnvelopeV1<ShellContextV2> =
         serde_json::from_slice(TAMPERED_SHELL_CONTEXT).unwrap();
     assert_eq!(
         fixtures

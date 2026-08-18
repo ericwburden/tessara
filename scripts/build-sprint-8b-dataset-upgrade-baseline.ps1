@@ -203,8 +203,8 @@ function Assert-SourceFixture {
     Assert-ExactSequence -Actual @($fixture.fixed_dependencies.PSObject.Properties.Name) `
         -Expected @("tessara.components", "tessara.dashboards") -Label "fixed dependency owners"
     if ([string]$fixture.fixed_dependencies.'tessara.components' -cne "1.1.0" -or
-        [string]$fixture.fixed_dependencies.'tessara.dashboards' -cne "3.0.1") {
-        throw "Component 1.1.0 and Dashboard 3.0.1 must remain fixed."
+        [string]$fixture.fixed_dependencies.'tessara.dashboards' -cne "3.0.2") {
+        throw "Component 1.1.0 and Dashboard 3.0.2 must remain fixed."
     }
     Assert-ExactSequence -Actual @($fixture.preserved) `
         -Expected @("dataset_state", "provider_route", "typed_resource_identity", "navigation_identity") `

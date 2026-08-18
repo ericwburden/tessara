@@ -25,10 +25,10 @@ use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
     AuthorizationGrantV3, BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1,
     CoreServiceRequestV1, DependencyBindingKey, DeploymentProfile, FunctionalContractId,
-    ModuleManifest, ModuleServicePrincipalV1, NavigationProjectionV1, OriginalActorProjectionV1,
-    ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod, SecurityCapabilityId,
-    ServiceActionMethod, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
-    TypedResourceReference,
+    ModuleManifest, ModuleServicePrincipalV1, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod,
+    SHELL_CONTEXT_SCHEMA_VERSION_V2, SecurityCapabilityId, ServiceActionMethod, ShellContextV2,
+    ShellDocumentStateV1, ShellNavigationGroupProjectionV2, ShellThemeV1, TypedResourceReference,
 };
 use uuid::Uuid;
 
@@ -807,11 +807,11 @@ fn shell_context(
     module: &InstalledModule,
     path: &str,
     correlation_id: Uuid,
-    navigation: Vec<NavigationProjectionV1>,
-) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<ShellContextV1>> {
+    navigation: Vec<ShellNavigationGroupProjectionV2>,
+) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<ShellContextV2>> {
     let now = Utc::now();
-    let context = ShellContextV1 {
-        schema_version: 1,
+    let context = ShellContextV2 {
+        schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
         installation_id: module.installation_id,
         module_definition_id: module.manifest.definition_id.clone(),
         module_instance_id: module.instance_id,
@@ -916,7 +916,7 @@ struct ForwardRequest<'a> {
     inbound_headers: &'a HeaderMap,
     body: Bytes,
     grant: Option<&'a tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>>,
-    shell: Option<&'a tessara_module_contract::SignedEnvelopeV1<ShellContextV1>>,
+    shell: Option<&'a tessara_module_contract::SignedEnvelopeV1<ShellContextV2>>,
     idempotent: bool,
 }
 
