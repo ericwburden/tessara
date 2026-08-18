@@ -4,7 +4,8 @@ param(
     [string]$EvidenceRoot = "artifacts/sprint-8b-closeout/implementation",
     [switch]$ListTargets,
     [switch]$SelfTest,
-    [switch]$Finalize
+    [switch]$Finalize,
+    [switch]$WorkspaceTestOnly
 )
 
 Set-StrictMode -Version Latest
@@ -1556,13 +1557,23 @@ $modeCount = @(
     [bool]$ListTargets,
     [bool]$SelfTest,
     [bool]$Finalize,
+    [bool]$WorkspaceTestOnly,
     -not [string]::IsNullOrWhiteSpace($Target)
     | Where-Object { $_ }
 ).Count
 if ($modeCount -ne 1) {
-    throw "Select exactly one of -Target, -ListTargets, -SelfTest, or -Finalize."
+    throw "Select exactly one of -Target, -ListTargets, -SelfTest, -Finalize, or -WorkspaceTestOnly."
 }
 if ($ListTargets) { $targetIds; exit 0 }
+if ($WorkspaceTestOnly) {
+    Push-Location $repoRoot
+    try {
+        Invoke-Sprint8BWorkspaceTestsWithDatabase
+    } finally {
+        Pop-Location
+    }
+    exit 0
+}
 if ($SelfTest) {
     $rejected = $false
     try {

@@ -545,7 +545,9 @@ function Get-Sprint8BFormalActionMap {
     )
     $map["rehearsal-rust"] = @(
         New-Sprint8BMaterializeAction -Id "setup" -Target Reference -KeepTopology
-        New-Sprint8BProgramAction -Id "workspace-rust" -Program "cargo" -Arguments @("test", "--workspace", "--all-features", "--locked", "--offline", "--jobs", "1")
+        New-Sprint8BPowerShellAction -Id "workspace-rust" `
+            -Script "scripts/run-sprint-8b-implementation-readiness.ps1" `
+            -Arguments @("-WorkspaceTestOnly")
         New-Sprint8BSmokeAction -Id "restoration-checkpoint" -UseExistingTopology
         New-Sprint8BAction -Id "teardown" -Kind teardown -Command "compose-down"
     )
@@ -593,7 +595,9 @@ function Get-Sprint8BFormalActionMap {
     )
     $map["sit-rust"] = @(
         New-Sprint8BMaterializeAction -Id "frozen-sit-setup" -Target Reference -KeepTopology
-        New-Sprint8BProgramAction -Id "workspace-rust" -Program "cargo" -Arguments @("test", "--workspace", "--all-features", "--locked", "--offline", "--jobs", "1")
+        New-Sprint8BPowerShellAction -Id "workspace-rust" `
+            -Script "scripts/run-sprint-8b-implementation-readiness.ps1" `
+            -Arguments @("-WorkspaceTestOnly")
         New-Sprint8BSmokeAction -Id "restoration-checkpoint" -UseExistingTopology
     )
     $map["sit-browser"] = @(
