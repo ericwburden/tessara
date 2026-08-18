@@ -1319,7 +1319,7 @@ function Invoke-Sprint8BAction {
                 -EvidencePath $harnessEvidencePath -CandidateFingerprint $CandidateFingerprint `
                 -TopologyContext $TopologyContext)
             $commandText = "pwsh -NoProfile -File $($Action.command) $($arguments -join ' ')"
-            & pwsh -NoProfile -File $scriptPath @arguments
+            & pwsh -NoProfile -File $scriptPath @arguments | Out-Host
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) { throw "Action '$($Action.id)' exited $exitCode." }
             if ([bool]$Action.produces_evidence) {
@@ -1355,7 +1355,7 @@ function Invoke-Sprint8BAction {
                         "TESSARA_PLAYWRIGHT_DATA_STATE", $expectedDataState, "Process"
                     )
                 }
-                & ([string]$Action.command) @arguments
+                & ([string]$Action.command) @arguments | Out-Host
                 $exitCode = $LASTEXITCODE
             } finally {
                 [Environment]::SetEnvironmentVariable(
@@ -1903,6 +1903,24 @@ function Test-Sprint8BFormalRunner {
         throw "$Phase zero-argument action expansion produced unexpected arguments."
     }
 
+    $stdoutAttemptRoot = Join-Path $script:Sprint8BRepositoryRoot `
+        "tmp/formal-action-stdout-$([guid]::NewGuid().ToString('N'))"
+    try {
+        $stdoutAction = New-Sprint8BProgramAction -Id "stdout" -Program "pwsh" `
+            -Arguments @("-NoProfile", "-Command", "Write-Output 'child-output'")
+        $stdoutResult = @(Invoke-Sprint8BAction -Contract $contract -Action $stdoutAction `
+            -AttemptRoot $stdoutAttemptRoot -Project $null -CandidateFingerprint $null `
+            -TopologyContext $null -Source $source)
+        if ($stdoutResult.Count -ne 1 -or
+            -not ($stdoutResult[0].PSObject.Properties.Name -contains "result_reference")) {
+            throw "$Phase child stdout contaminated the typed action result."
+        }
+    } finally {
+        if (Test-Path -LiteralPath $stdoutAttemptRoot) {
+            Remove-Item -LiteralPath $stdoutAttemptRoot -Recurse -Force
+        }
+    }
+
     Assert-Sprint8BExpectedFailure -Label "$Phase unmapped selector" -Action {
         Invoke-Sprint8BPhaseRunner -Phase $Phase -Lane "not-a-sprint-8b-lane"
     }
@@ -1934,7 +1952,7 @@ function Test-Sprint8BFormalRunner {
         verified = @(
             "identity", "order", "prerequisites", "environment", "evidence-mapping",
             "playwright-data-state", "missing-prerequisite", "missing-harness",
-            "zero-argument-action", "unmapped-selector", "exclusive-mode"
+            "zero-argument-action", "typed-action-result", "unmapped-selector", "exclusive-mode"
         )
     }
 }
