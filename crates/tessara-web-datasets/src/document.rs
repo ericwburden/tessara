@@ -16,9 +16,9 @@ pub const DATASET_LIFECYCLE_CSS: &str = concat!(
 );
 pub const DATASET_JS: &str = include_str!("../assets/dataset.js");
 pub const DATASET_CSS_SHA256: &str =
-    "1d787d1d608d62ac151771143c73771fa06d52be231b2f266a118f42553d4319";
+    "6a19ec80265c6c0c530e1e95928cf8e0eabe4a0cab8e4f52739c5caaba1bf10c";
 pub const DATASET_LIFECYCLE_CSS_SHA256: &str =
-    "54d61ae8a930e488db268825ff438980550f486debed66f49d4c90ab602ec9d9";
+    "64117ab4979e9f9138b3538a6b0c67f9d138fbc478478cfe42262d9b26dd81a0";
 pub const DATASET_JS_SHA256: &str =
     "0d4afa4ba3699d000d13230dc9750a59f8a80d56645a1a95e4c71a0accbfb713";
 pub const DATASET_BINDINGS_JS_SHA256: &str =

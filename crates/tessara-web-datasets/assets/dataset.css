@@ -2008,6 +2008,10 @@
 
 @media (max-width: 780px) {
 
+  .dataset-tags-editor__controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .dataset-table-section > .table-wrap {
     display: none;
   }
