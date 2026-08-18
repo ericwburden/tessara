@@ -1298,7 +1298,8 @@ function Invoke-Sprint8BAction {
         [AllowNull()][string]$Project,
         [AllowNull()][string]$CandidateFingerprint,
         [AllowNull()]$TopologyContext,
-        [Parameter(Mandatory)]$Source
+        [Parameter(Mandatory)]$Source,
+        [switch]$SuppressChildOutput
     )
     $actionsRoot = Join-Path $AttemptRoot "actions"
     [IO.Directory]::CreateDirectory($actionsRoot) | Out-Null
@@ -1319,7 +1320,11 @@ function Invoke-Sprint8BAction {
                 -EvidencePath $harnessEvidencePath -CandidateFingerprint $CandidateFingerprint `
                 -TopologyContext $TopologyContext)
             $commandText = "pwsh -NoProfile -File $($Action.command) $($arguments -join ' ')"
-            & pwsh -NoProfile -File $scriptPath @arguments | Out-Host
+            if ($SuppressChildOutput) {
+                & pwsh -NoProfile -File $scriptPath @arguments | Out-Null
+            } else {
+                & pwsh -NoProfile -File $scriptPath @arguments | Out-Host
+            }
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) { throw "Action '$($Action.id)' exited $exitCode." }
             if ([bool]$Action.produces_evidence) {
@@ -1355,7 +1360,11 @@ function Invoke-Sprint8BAction {
                         "TESSARA_PLAYWRIGHT_DATA_STATE", $expectedDataState, "Process"
                     )
                 }
-                & ([string]$Action.command) @arguments | Out-Host
+                if ($SuppressChildOutput) {
+                    & ([string]$Action.command) @arguments | Out-Null
+                } else {
+                    & ([string]$Action.command) @arguments | Out-Host
+                }
                 $exitCode = $LASTEXITCODE
             } finally {
                 [Environment]::SetEnvironmentVariable(
@@ -1910,7 +1919,7 @@ function Test-Sprint8BFormalRunner {
             -Arguments @("-NoProfile", "-Command", "Write-Output 'child-output'")
         $stdoutResult = @(Invoke-Sprint8BAction -Contract $contract -Action $stdoutAction `
             -AttemptRoot $stdoutAttemptRoot -Project $null -CandidateFingerprint $null `
-            -TopologyContext $null -Source $source)
+            -TopologyContext $null -Source $source -SuppressChildOutput)
         if ($stdoutResult.Count -ne 1 -or
             -not ($stdoutResult[0].PSObject.Properties.Name -contains "result_reference")) {
             throw "$Phase child stdout contaminated the typed action result."
