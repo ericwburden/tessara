@@ -16,9 +16,9 @@ pub const DATASET_LIFECYCLE_CSS: &str = concat!(
 );
 pub const DATASET_JS: &str = include_str!("../assets/dataset.js");
 pub const DATASET_CSS_SHA256: &str =
-    "bca623fe094de6e8c43d8fe4eaa8091dc669b19b917b838dad8194858cc4d73d";
+    "1d787d1d608d62ac151771143c73771fa06d52be231b2f266a118f42553d4319";
 pub const DATASET_LIFECYCLE_CSS_SHA256: &str =
-    "7b39b961505a180d55dfaa26772a03a7cca5d921fc3ec6037fd0189d334e1ba3";
+    "54d61ae8a930e488db268825ff438980550f486debed66f49d4c90ab602ec9d9";
 pub const DATASET_JS_SHA256: &str =
     "0d4afa4ba3699d000d13230dc9750a59f8a80d56645a1a95e4c71a0accbfb713";
 pub const DATASET_BINDINGS_JS_SHA256: &str =
@@ -177,6 +177,9 @@ mod tests {
         assert!(!html.contains("/api/me"));
         assert!(DATASET_LIFECYCLE_CSS.contains(".dataset-detail-summary"));
         assert!(DATASET_LIFECYCLE_CSS.contains(".dataset-editor"));
+        assert!(DATASET_LIFECYCLE_CSS.contains(
+            ".dataset-tags-editor {\n  align-content: start;\n  border: 0;\n  margin: 0;\n  min-inline-size: 0;\n  padding: 0;"
+        ));
         assert!(
             DATASET_LIFECYCLE_CSS
                 .contains(".module-scope--tessara-datasets [data-dataset-preview]")

@@ -786,6 +786,17 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
         visible_summary.visibility_nodes[0].node_id,
         allowed_scope.to_string()
     );
+    let downstream_summary = datasets
+        .iter()
+        .find(|dataset| dataset.id == downstream_dataset.to_string())
+        .expect("downstream Dataset summary");
+    assert!(downstream_summary.provenance.forms.is_empty());
+    assert_eq!(downstream_summary.provenance.datasets.len(), 1);
+    assert_eq!(
+        downstream_summary.provenance.datasets[0].id,
+        visible_dataset.to_string()
+    );
+    assert_eq!(downstream_summary.provenance.datasets[0].name, "visible");
 
     let detail_correlation_id = Uuid::new_v4();
     let detail_now = Utc::now();

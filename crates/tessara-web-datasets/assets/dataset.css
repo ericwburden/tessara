@@ -1753,6 +1753,10 @@
 
 .dataset-tags-editor {
   align-content: start;
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
 }
 
 .dataset-tags-editor__controls {

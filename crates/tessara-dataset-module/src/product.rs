@@ -1822,6 +1822,7 @@ pub(crate) async fn list_dataset_summaries(
         .bind(dataset_id)
         .fetch_one(&state.pool)
         .await?;
+        let provenance = load_dataset_provenance(state, dataset_id).await?;
         let field_count = output_fields.len() as i64;
         let current_revision_id = row.try_get::<Option<Uuid>, _>("current_revision_id")?;
         let version_number = row.try_get::<Option<i32>, _>("version_number")?;
@@ -1855,7 +1856,7 @@ pub(crate) async fn list_dataset_summaries(
             slug: row.try_get("slug")?,
             grain: row.try_get("grain")?,
             tags,
-            provenance: DatasetProductProvenanceSummaryV1::default(),
+            provenance,
             materialized_row_count: row.try_get("materialized_row_count")?,
             materialized_at: materialized_at.map(|value| value.to_rfc3339()),
             freshness,
@@ -1867,6 +1868,52 @@ pub(crate) async fn list_dataset_summaries(
         });
     }
     Ok(datasets)
+}
+
+async fn load_dataset_provenance(
+    state: &DatasetModuleState,
+    dataset_id: Uuid,
+) -> Result<DatasetProductProvenanceSummaryV1, DatasetModuleError> {
+    let source_rows = sqlx::query(
+        "SELECT source_reference,source_name,source_slug
+         FROM dataset_sources WHERE dataset_id=$1 ORDER BY position,source_alias",
+    )
+    .bind(dataset_id)
+    .fetch_all(&state.pool)
+    .await?;
+    let mut provenance = DatasetProductProvenanceSummaryV1::default();
+    for source_row in source_rows {
+        let reference: DatasetProductSourceV1 =
+            serde_json::from_value(source_row.try_get("source_reference")?)
+                .map_err(|error| DatasetModuleError::Internal(error.to_string()))?;
+        append_source_provenance(
+            &mut provenance,
+            &reference,
+            source_row.try_get("source_name")?,
+            source_row.try_get("source_slug")?,
+        );
+    }
+    Ok(provenance)
+}
+
+fn append_source_provenance(
+    provenance: &mut DatasetProductProvenanceSummaryV1,
+    reference: &DatasetProductSourceV1,
+    source_name: String,
+    source_slug: Option<String>,
+) {
+    let (items, id) = match reference {
+        DatasetProductSourceV1::Form { form_id, .. } => (&mut provenance.forms, form_id),
+        DatasetProductSourceV1::Dataset { dataset_id, .. }
+        | DatasetProductSourceV1::DatasetMajor { dataset_id, .. } => {
+            (&mut provenance.datasets, dataset_id)
+        }
+    };
+    items.push(DatasetProductProvenanceItemV1 {
+        id: id.clone(),
+        name: source_name,
+        slug: source_slug,
+    });
 }
 
 async fn get_dataset(
@@ -1975,112 +2022,97 @@ pub(crate) async fn dataset_definition(
         let source_slug: Option<String> = source_row.try_get("source_slug")?;
         let source_version_label: Option<String> = source_row.try_get("source_version_label")?;
         let position: i32 = source_row.try_get("position")?;
+        append_source_provenance(
+            &mut provenance,
+            &reference,
+            source_name.clone(),
+            source_slug.clone(),
+        );
         let (definition, lineage) = match reference {
             DatasetProductSourceV1::Form {
                 alias,
                 form_id,
                 form_version_id,
-            } => {
-                provenance.forms.push(DatasetProductProvenanceItemV1 {
-                    id: form_id.clone(),
+            } => (
+                DatasetProductSourceDefinitionV1 {
+                    source_alias: alias,
+                    form_id: Some(form_id.clone()),
+                    form_name: Some(source_name.clone()),
+                    form_version_id: Some(form_version_id),
+                    form_version_label: source_version_label.clone(),
+                    source_dataset_id: None,
+                    source_dataset_name: None,
+                    source_dataset_slug: None,
+                    dataset_revision_id: None,
+                    dataset_revision_label: None,
+                    dataset_version_major: None,
+                    position,
+                },
+                DatasetProductLineageNodeV1 {
+                    id: form_id,
                     name: source_name.clone(),
                     slug: source_slug.clone(),
-                });
-                (
-                    DatasetProductSourceDefinitionV1 {
-                        source_alias: alias,
-                        form_id: Some(form_id.clone()),
-                        form_name: Some(source_name.clone()),
-                        form_version_id: Some(form_version_id),
-                        form_version_label: source_version_label.clone(),
-                        source_dataset_id: None,
-                        source_dataset_name: None,
-                        source_dataset_slug: None,
-                        dataset_revision_id: None,
-                        dataset_revision_label: None,
-                        dataset_version_major: None,
-                        position,
-                    },
-                    DatasetProductLineageNodeV1 {
-                        id: form_id,
-                        name: source_name.clone(),
-                        slug: source_slug.clone(),
-                        source_type: "form".into(),
-                        version_label: source_version_label.clone(),
-                        children: Vec::new(),
-                    },
-                )
-            }
+                    source_type: "form".into(),
+                    version_label: source_version_label.clone(),
+                    children: Vec::new(),
+                },
+            ),
             DatasetProductSourceV1::Dataset {
                 alias,
                 dataset_id: source_dataset_id,
                 dataset_revision_id,
-            } => {
-                provenance.datasets.push(DatasetProductProvenanceItemV1 {
-                    id: source_dataset_id.clone(),
+            } => (
+                DatasetProductSourceDefinitionV1 {
+                    source_alias: alias,
+                    form_id: None,
+                    form_name: None,
+                    form_version_id: None,
+                    form_version_label: None,
+                    source_dataset_id: Some(source_dataset_id.clone()),
+                    source_dataset_name: Some(source_name.clone()),
+                    source_dataset_slug: source_slug.clone(),
+                    dataset_revision_id: Some(dataset_revision_id),
+                    dataset_revision_label: source_version_label.clone(),
+                    dataset_version_major: None,
+                    position,
+                },
+                DatasetProductLineageNodeV1 {
+                    id: source_dataset_id,
                     name: source_name.clone(),
                     slug: source_slug.clone(),
-                });
-                (
-                    DatasetProductSourceDefinitionV1 {
-                        source_alias: alias,
-                        form_id: None,
-                        form_name: None,
-                        form_version_id: None,
-                        form_version_label: None,
-                        source_dataset_id: Some(source_dataset_id.clone()),
-                        source_dataset_name: Some(source_name.clone()),
-                        source_dataset_slug: source_slug.clone(),
-                        dataset_revision_id: Some(dataset_revision_id),
-                        dataset_revision_label: source_version_label.clone(),
-                        dataset_version_major: None,
-                        position,
-                    },
-                    DatasetProductLineageNodeV1 {
-                        id: source_dataset_id,
-                        name: source_name.clone(),
-                        slug: source_slug.clone(),
-                        source_type: "dataset".into(),
-                        version_label: source_version_label.clone(),
-                        children: Vec::new(),
-                    },
-                )
-            }
+                    source_type: "dataset".into(),
+                    version_label: source_version_label.clone(),
+                    children: Vec::new(),
+                },
+            ),
             DatasetProductSourceV1::DatasetMajor {
                 alias,
                 dataset_id: source_dataset_id,
                 version_major,
-            } => {
-                provenance.datasets.push(DatasetProductProvenanceItemV1 {
-                    id: source_dataset_id.clone(),
+            } => (
+                DatasetProductSourceDefinitionV1 {
+                    source_alias: alias,
+                    form_id: None,
+                    form_name: None,
+                    form_version_id: None,
+                    form_version_label: None,
+                    source_dataset_id: Some(source_dataset_id.clone()),
+                    source_dataset_name: Some(source_name.clone()),
+                    source_dataset_slug: source_slug.clone(),
+                    dataset_revision_id: None,
+                    dataset_revision_label: None,
+                    dataset_version_major: Some(version_major),
+                    position,
+                },
+                DatasetProductLineageNodeV1 {
+                    id: source_dataset_id,
                     name: source_name.clone(),
                     slug: source_slug.clone(),
-                });
-                (
-                    DatasetProductSourceDefinitionV1 {
-                        source_alias: alias,
-                        form_id: None,
-                        form_name: None,
-                        form_version_id: None,
-                        form_version_label: None,
-                        source_dataset_id: Some(source_dataset_id.clone()),
-                        source_dataset_name: Some(source_name.clone()),
-                        source_dataset_slug: source_slug.clone(),
-                        dataset_revision_id: None,
-                        dataset_revision_label: None,
-                        dataset_version_major: Some(version_major),
-                        position,
-                    },
-                    DatasetProductLineageNodeV1 {
-                        id: source_dataset_id,
-                        name: source_name.clone(),
-                        slug: source_slug.clone(),
-                        source_type: "dataset".into(),
-                        version_label: Some(format!("v{version_major}")),
-                        children: Vec::new(),
-                    },
-                )
-            }
+                    source_type: "dataset".into(),
+                    version_label: Some(format!("v{version_major}")),
+                    children: Vec::new(),
+                },
+            ),
         };
         sources.push(definition);
         lineage_children.push(lineage);

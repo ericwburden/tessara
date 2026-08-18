@@ -919,12 +919,12 @@
     },
     {
       "path": "/dataset.css",
-      "digest": "sha256:bca623fe094de6e8c43d8fe4eaa8091dc669b19b917b838dad8194858cc4d73d",
+      "digest": "sha256:1d787d1d608d62ac151771143c73771fa06d52be231b2f266a118f42553d4319",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/dataset-lifecycle.css",
-      "digest": "sha256:7b39b961505a180d55dfaa26772a03a7cca5d921fc3ec6037fd0189d334e1ba3",
+      "digest": "sha256:54d61ae8a930e488db268825ff438980550f486debed66f49d4c90ab602ec9d9",
       "content_type": "text/css; charset=utf-8"
     },
     {
