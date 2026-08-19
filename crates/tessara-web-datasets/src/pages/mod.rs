@@ -230,6 +230,17 @@ pub fn DatasetRevisionHistoryContent(dataset_id: String) -> impl IntoView {
 pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> impl IntoView {
     let initial_revision =
         dataset_route_bootstrap().and_then(|bootstrap| bootstrap.revision().cloned());
+    let initial_label = initial_revision
+        .as_ref()
+        .and_then(|revision| revision_label_text(revision.version_number, &revision.version_label))
+        .unwrap_or_default();
+    let initial_notes = initial_revision
+        .as_ref()
+        .map(|revision| revision.revision_notes.clone())
+        .unwrap_or_default();
+    let initial_revision_id = initial_revision
+        .as_ref()
+        .map(|revision| revision.id.clone());
     let has_initial_revision = initial_revision.is_some();
     let revision = RwSignal::new(initial_revision);
     let is_loading = RwSignal::new(!has_initial_revision);
@@ -237,9 +248,9 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
     let publish_error = RwSignal::new(None::<String>);
     let publish_message = RwSignal::new(None::<String>);
     let is_publishing = RwSignal::new(false);
-    let label_draft = RwSignal::new(String::new());
-    let notes_draft = RwSignal::new(String::new());
-    let label_loaded_revision_id = RwSignal::new(None::<String>);
+    let label_draft = RwSignal::new(initial_label);
+    let notes_draft = RwSignal::new(initial_notes);
+    let label_loaded_revision_id = RwSignal::new(initial_revision_id);
     let label_error = RwSignal::new(None::<String>);
     let label_message = RwSignal::new(None::<String>);
     let options_error = RwSignal::new(None::<String>);
