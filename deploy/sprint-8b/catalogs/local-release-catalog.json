@@ -17,7 +17,7 @@
   "module_releases": [
     {
       "definition_id":"tessara.datasets","version":"1.0.0",
-      "manifest_digest":"sha256:4b6a19a2e2021625cebed7a4b99fd0ffece33e11bd3d1595f3186f5af22c0cb7",
+      "manifest_digest":"sha256:f6c8be9f77af135d1d805eb19a8687c061bff45ee725c906abe066c701f27877",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000003",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/dataset-configuration/v1",

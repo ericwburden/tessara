@@ -1,7 +1,7 @@
 //! Loading lifecycle for the dataset editor surface.
 
 use super::DatasetEditorState;
-use crate::bootstrap::dataset_route_bootstrap;
+use crate::bootstrap::{DatasetEditorBootstrap, dataset_route_bootstrap};
 use crate::loaders::{
     DatasetEditLoadTargets, load_dataset_for_edit, load_dataset_revision_for_edit, load_datasets,
     load_forms, load_nodes, load_users, seed_dataset_for_edit, seed_dataset_revision_for_edit,
@@ -11,9 +11,10 @@ use leptos::prelude::*;
 pub(crate) fn install_dataset_editor_loaders(
     dataset_id: Option<String>,
     revision_id: Option<String>,
+    editor_bootstrap: Option<DatasetEditorBootstrap>,
     state: DatasetEditorState,
 ) {
-    let seeded_from_bootstrap = seed_dataset_editor_from_bootstrap(state);
+    let seeded_from_bootstrap = seed_dataset_editor_from_bootstrap(editor_bootstrap, state);
     Effect::new(move |_| {
         if seeded_from_bootstrap {
             return;
@@ -32,8 +33,12 @@ pub(crate) fn install_dataset_editor_loaders(
     });
 }
 
-fn seed_dataset_editor_from_bootstrap(state: DatasetEditorState) -> bool {
-    let Some(editor) = dataset_route_bootstrap().and_then(|bootstrap| bootstrap.editor().cloned())
+fn seed_dataset_editor_from_bootstrap(
+    editor_bootstrap: Option<DatasetEditorBootstrap>,
+    state: DatasetEditorState,
+) -> bool {
+    let Some(editor) = editor_bootstrap
+        .or_else(|| dataset_route_bootstrap().and_then(|bootstrap| bootstrap.editor().cloned()))
     else {
         return false;
     };

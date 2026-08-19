@@ -43,8 +43,9 @@ pub(crate) fn dataset_content(bootstrap: &DatasetRouteBootstrap) -> leptos::prel
     use leptos::prelude::*;
     match bootstrap {
         DatasetRouteBootstrap::Directory { .. } => view! { <DatasetsIndexContent/> }.into_any(),
-        DatasetRouteBootstrap::Create { .. } => {
-            view! { <DatasetEditorContent dataset_id=None/> }.into_any()
+        DatasetRouteBootstrap::Create { editor, .. } => {
+            view! { <DatasetEditorContent dataset_id=None editor_bootstrap=editor.clone()/> }
+                .into_any()
         }
         DatasetRouteBootstrap::Detail { dataset_id, .. } => {
             view! { <DatasetDetailContent dataset_id=dataset_id.clone()/> }.into_any()
@@ -52,9 +53,15 @@ pub(crate) fn dataset_content(bootstrap: &DatasetRouteBootstrap) -> leptos::prel
         DatasetRouteBootstrap::Preview { dataset_id, .. } => {
             view! { <DatasetPreviewContent dataset_id=dataset_id.clone()/> }.into_any()
         }
-        DatasetRouteBootstrap::Edit { dataset_id, .. } => {
-            view! { <DatasetEditorContent dataset_id=Some(dataset_id.clone())/> }.into_any()
+        DatasetRouteBootstrap::Edit {
+            dataset_id, editor, ..
+        } => view! {
+            <DatasetEditorContent
+                dataset_id=Some(dataset_id.clone())
+                editor_bootstrap=editor.clone()
+            />
         }
+        .into_any(),
         DatasetRouteBootstrap::Revisions { dataset_id, .. } => {
             view! { <DatasetRevisionHistoryContent dataset_id=dataset_id.clone()/> }.into_any()
         }
@@ -81,11 +88,13 @@ pub(crate) fn dataset_content(bootstrap: &DatasetRouteBootstrap) -> leptos::prel
         DatasetRouteBootstrap::RevisionEdit {
             dataset_id,
             revision_id,
+            editor,
             ..
         } => view! {
             <DatasetRevisionEditorContent
                 dataset_id=dataset_id.clone()
                 revision_id=revision_id.clone()
+                editor_bootstrap=editor.clone()
             />
         }
         .into_any(),

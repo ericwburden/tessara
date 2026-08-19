@@ -20,6 +20,7 @@ const PASSWORD = "tessara-dev-permissions";
 const COMPONENT_DOCUMENT_ROOT = "#module-content";
 const COMPONENT_CONTENT_ROOT = ".components-page";
 const DASHBOARD_DOCUMENT_ROOT = "#module-content";
+const DATASET_DOCUMENT_ROOT = "#module-content";
 
 type IdResponse = { id: string };
 type CapabilitySummary = { id: string; key: string };
@@ -1830,7 +1831,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await assertNativeRouteGuard();
   });
 
-  test("dashboard composition excludes hidden Components before viewer execution", async ({
+  test("dashboard composition redacts reader-hidden Components before viewer execution", async ({
     page,
   }) => {
     const dashboard = await postJson<IdResponse>(fixtures.admin, "/api/admin/dashboards", {
@@ -1845,33 +1846,57 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     try {
       const composition = await getJson<{
         available_component_versions: Array<{
+          component_reference: unknown;
           component_version_id: string;
           component_slug: string;
           default_grid_width: number;
           default_grid_height: number;
         }>;
       }>(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`);
+      const hiddenOption = composition.available_component_versions.find(
+        (option) => option.component_slug === fixtures.outOfScopeVisualComponent.slug,
+      );
       expect(
-        composition.available_component_versions.some(
-          (option) => option.component_slug === fixtures.outOfScopeVisualComponent.slug,
-        ),
-        "Dashboard authoring must exclude a Component that is hidden from part of the Dashboard audience",
-      ).toBe(false);
+        hiddenOption,
+        "an authorized manager may bind a Component contained by the Dashboard's complete scope",
+      ).toBeTruthy();
+      await putJson(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`, {
+        commands: [
+          {
+            operation: "bind",
+            client_key: `${RUN_ID}-redacted-placement`,
+            component_reference: hiddenOption!.component_reference,
+            geometry: {
+              grid_row: 1,
+              grid_column: 1,
+              grid_width: hiddenOption!.default_grid_width,
+              grid_height: hiddenOption!.default_grid_height,
+            },
+          },
+        ],
+      });
 
       const scopedDashboard = await getJson<{
         placements: Array<{
+          placement_id: string;
           availability: "available" | "unavailable";
           component?: { component_slug: string };
         }>;
       }>(fixtures.scopedManager, `/api/dashboards/${dashboard.id}`);
-      expect(scopedDashboard.placements).toHaveLength(0);
+      expect(scopedDashboard.placements).toHaveLength(1);
+      expect(scopedDashboard.placements[0]).toMatchObject({ availability: "unavailable" });
+      expect(scopedDashboard.placements[0].component).toBeUndefined();
 
       const hiddenExecutionRequests: string[] = [];
+      const hiddenPlacementRenderPath = new RegExp(
+        `^/api/dashboards/${dashboard.id}/placements/${scopedDashboard.placements[0].placement_id}/render/`,
+      );
       page.on("request", (request) => {
         const pathname = new URL(request.url()).pathname;
         if (
           request.method() === "GET" &&
-          pathname.includes(`/api/components/${fixtures.outOfScopeVisualComponent.slug}/`)
+          (pathname.includes(`/api/components/${fixtures.outOfScopeVisualComponent.slug}/`) ||
+            hiddenPlacementRenderPath.test(pathname))
         ) {
           hiddenExecutionRequests.push(pathname);
         }
@@ -1879,8 +1904,10 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
       await page.goto(`/dashboards/${dashboard.id}`);
       await expect(page.getByRole("heading", { level: 1, name: `${RUN_ID} Redacted Dashboard` })).toBeVisible();
+      await expect(page.locator(".dashboard-placement-card.is-unavailable")).toHaveCount(1);
       await page.goto(`/dashboards/${dashboard.id}/view`);
       await expect(page.getByRole("heading", { level: 1, name: `${RUN_ID} Redacted Dashboard` })).toBeVisible();
+      await expect(page.locator(".dashboard-redacted-placeholder")).toHaveCount(1);
       await page.waitForLoadState("networkidle");
       expect(hiddenExecutionRequests).toEqual([]);
     } finally {
@@ -2389,12 +2416,14 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expectHydratedRoute(page, {
         path: `/datasets/${dataset.id}/revisions`,
         expectedText: "Dataset Revisions",
+        documentRootSelector: DATASET_DOCUMENT_ROOT,
       });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Draft");
       await expectHydratedRoute(page, {
         path: `/datasets/${dataset.id}/revisions/${draft.revision_id}`,
         expectedText: "Dataset Revision",
+        documentRootSelector: DATASET_DOCUMENT_ROOT,
       });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revision" })).toBeVisible();
       await expect(page.locator(".route-panel__section").filter({ hasText: "Status" }).first()).toContainText("Draft");
@@ -2403,16 +2432,19 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expectHydratedRoute(page, {
         path: `/datasets/${dataset.id}/revisions`,
         expectedText: "Dataset Revisions",
+        documentRootSelector: DATASET_DOCUMENT_ROOT,
       });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Published current");
       await expect(page.locator("tbody")).not.toContainText("Draft");
-      await expectStatus(
-        fixtures.scopedManager,
-        "get",
+      const hiddenDraftResponse = await fixtures.scopedManager.get(
         `/api/datasets/${dataset.id}/revisions/${draft.revision_id}`,
-        [403],
       );
+      expect(hiddenDraftResponse.status()).toBe(404);
+      const hiddenDraftBody = (await hiddenDraftResponse.json()) as {
+        error: { code: string };
+      };
+      expect(hiddenDraftBody.error.code).toBe("dataset.not_found_or_forbidden");
       await assertNativeRouteGuard();
     } finally {
       await expectStatus(
@@ -2783,15 +2815,22 @@ test.describe.serial("capability + scope + ownership permissions", () => {
             path: "/datasets",
             expectedText: "Datasets",
             additionalExpectedTexts: [dataset.name],
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
           },
-          { path: "/datasets/new", expectedText: "Create Dataset" },
+          {
+            path: "/datasets/new",
+            expectedText: "Create Dataset",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
+          },
           {
             path: `/datasets/${dataset.id}`,
             expectedText: dataset.name,
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
           },
           {
             path: `/datasets/${dataset.id}/edit`,
             expectedText: "Edit Dataset",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
             expectedLabeledValues: [
               { label: "Name", value: dataset.name },
               { label: "Slug", value: dataset.slug },
@@ -2802,10 +2841,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
             expectedText: dataset.name,
             expectedRootMarkup: 'class="dataset-preview-page"',
             contentSelector: ".dataset-preview-page",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
           },
           {
             path: `/datasets/${dataset.id}/revisions`,
             expectedText: dataset.name,
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
             additionalExpectedTexts: [
               datasetDraftVersion,
               datasetDraftLabel,
@@ -2815,6 +2856,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           {
             path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
             expectedText: datasetDraftName,
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
             additionalExpectedTexts: [datasetDraftVersion, "Draft"],
             expectedLabeledValues: [
               { label: "Revision label", value: datasetDraftLabel },
@@ -2823,6 +2865,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           {
             path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}/edit`,
             expectedText: "Edit Revision",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
             expectedLabeledValues: [
               { label: "Name", value: datasetDraftName },
               { label: "Slug", value: dataset.slug },

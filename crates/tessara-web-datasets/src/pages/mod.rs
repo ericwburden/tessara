@@ -555,13 +555,26 @@ fn PublishRevisionMenu(
 }
 
 #[component]
-pub fn DatasetEditorContent(dataset_id: Option<String>) -> impl IntoView {
-    view! { <DatasetEditorSurface dataset_id revision_id=None/> }
+pub fn DatasetEditorContent(
+    dataset_id: Option<String>,
+    #[prop(optional)] editor_bootstrap: Option<crate::DatasetEditorBootstrap>,
+) -> impl IntoView {
+    view! { <DatasetEditorSurface dataset_id revision_id=None editor_bootstrap/> }
 }
 
 #[component]
-pub fn DatasetRevisionEditorContent(dataset_id: String, revision_id: String) -> impl IntoView {
-    view! { <DatasetEditorSurface dataset_id=Some(dataset_id) revision_id=Some(revision_id)/> }
+pub fn DatasetRevisionEditorContent(
+    dataset_id: String,
+    revision_id: String,
+    #[prop(optional)] editor_bootstrap: Option<crate::DatasetEditorBootstrap>,
+) -> impl IntoView {
+    view! {
+        <DatasetEditorSurface
+            dataset_id=Some(dataset_id)
+            revision_id=Some(revision_id)
+            editor_bootstrap
+        />
+    }
 }
 
 #[component]

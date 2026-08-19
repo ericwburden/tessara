@@ -4,6 +4,7 @@ import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-dashboards-${Date.now()}`;
 const REFERENCE_DASHBOARD_NAME = "Dataset Components";
+const REFERENCE_HIDDEN_COMPONENT_SLUG = "dataset-disjoint-probe";
 const REFERENCE_FULL_READER_EMAIL = "full-reader@tessara.local";
 const REFERENCE_FULL_READER_PASSWORD = "sprint-8b-full-reader";
 let fixtureSequence = 0;
@@ -931,7 +932,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const fullscreenRows = fullscreenDialog.locator("tbody tr[data-row-id]");
       await expect(fullscreenPagination.getByLabel("Rows")).toHaveValue("25");
       await expect(fullscreenPagination.getByText("Page 1", { exact: true })).toBeVisible();
-      await expect(fullscreenRows).toHaveCount(4);
+      await expect(fullscreenRows).toHaveCount(3);
       await expect(fullscreenRows.first()).toHaveAttribute(
         "data-row-id",
         firstPageFirstRow!,
@@ -954,11 +955,11 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         firstPageFirstRow!,
       );
 
-      expect(executionUrls.length).toBeGreaterThanOrEqual(4);
+      expect(executionUrls).toHaveLength(2);
       expect(
-        allExecutionPaths.length >= 3 &&
+        allExecutionPaths.length === executionUrls.length &&
           allExecutionPaths.every((path) => mediatedTablePath.test(path)),
-        "embedded Table controls must stay bound to the Dashboard placement endpoint",
+        "initial and page-size UI execution must stay bound to one Dashboard placement endpoint; the two explicit cursor-page requests are asserted separately above",
       ).toBe(true);
       assertNoConsoleErrors();
     } finally {
@@ -1192,6 +1193,14 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         await page.request.get(`/api/dashboards/${dashboard!.id}`),
       );
       expect(adminDefinition.placements).toHaveLength(dashboard!.placement_count);
+      const adminRedactedPlacements = adminDefinition.placements.filter(
+        (placement) =>
+          placement.availability === "unavailable" && placement.component === undefined,
+      );
+      expect(
+        adminRedactedPlacements,
+        "Dashboard projection must not widen its visibility to disclose a disjoint Component even to an administrator",
+      ).toHaveLength(1);
 
       await page.goto("/dashboards");
       await expect(page.getByRole("heading", { level: 1, name: "Dashboards" })).toBeVisible();
@@ -1265,13 +1274,9 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         ),
       );
       expect(
-        adminPlacementsForRedacted.filter((placement) => placement?.component !== undefined),
-        "Admin read-back should resolve the exact Component hidden from the scoped reader",
-      ).toHaveLength(1);
-      const hiddenBindings = adminPlacementsForRedacted.flatMap((placement) =>
-        placement?.component === undefined ? [] : [placement.component],
-      );
-      expect(hiddenBindings).toHaveLength(1);
+        adminPlacementsForRedacted,
+        "Administrator and scoped-reader projections must preserve the same opaque Dashboard footprint",
+      ).toEqual(adminRedactedPlacements);
 
       await page.goto("/dashboards");
       await expect(page.locator(`[data-dashboard-id="${dashboard!.id}"]`)).toContainText(
@@ -1286,10 +1291,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         unavailablePlacements.length,
       );
       const detailHtml = await page.content();
-      for (const binding of hiddenBindings) {
-        expect(detailHtml).not.toContain(binding.component_version_id);
-        expect(detailHtml).not.toContain(binding.component_slug);
-      }
+      expect(detailHtml).not.toContain(REFERENCE_HIDDEN_COMPONENT_SLUG);
 
       await page.goto(`/dashboards/${dashboard!.id}/view`);
       await expect(page.locator(".dashboard-viewer-placement")).toHaveCount(
@@ -1299,10 +1301,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         unavailablePlacements.length,
       );
       const viewerHtml = await page.content();
-      for (const binding of hiddenBindings) {
-        expect(viewerHtml).not.toContain(binding.component_version_id);
-        expect(viewerHtml).not.toContain(binding.component_slug);
-      }
+      expect(viewerHtml).not.toContain(REFERENCE_HIDDEN_COMPONENT_SLUG);
     } finally {
       await context.close();
     }

@@ -1795,10 +1795,10 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
 
     const sourceSection = await openEditorSection(page, "Initial Data Source");
     await expect(
-      sourceSection.getByLabel("Dataset", { exact: true }),
+      sourceSection.getByRole("combobox", { name: "Dataset", exact: true }),
     ).toHaveValue(upstreamDatasetId);
     await expect(
-      sourceSection.getByLabel("Version", { exact: true }),
+      sourceSection.getByRole("combobox", { name: "Version", exact: true }),
     ).toHaveValue("1");
 
     const projection = await openOperationPanel(page, "Projection");

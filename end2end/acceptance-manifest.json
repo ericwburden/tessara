@@ -136,7 +136,7 @@
         "capability + scope + ownership permissions › scoped component manager cannot bind or publish out-of-scope dataset major lines",
         "capability + scope + ownership permissions › explicit historical component table checks selected version dataset scope",
         "capability + scope + ownership permissions › dashboard native routes and APIs exercise scoped manage permission",
-        "capability + scope + ownership permissions › dashboard composition excludes hidden Components before viewer execution",
+        "capability + scope + ownership permissions › dashboard composition redacts reader-hidden Components before viewer execution",
         "capability + scope + ownership permissions › JavaScript-disabled Core, Organization, and direct Admin routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Form and Workflow routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Response and Dataset routes preserve native SSR ownership",

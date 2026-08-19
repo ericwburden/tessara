@@ -15,6 +15,7 @@ use tessara_module_ui::{
 pub(crate) fn DatasetEditorSurface(
     dataset_id: Option<String>,
     revision_id: Option<String>,
+    editor_bootstrap: Option<crate::DatasetEditorBootstrap>,
 ) -> impl IntoView {
     let is_edit = dataset_id.is_some();
     let is_revision_edit = revision_id.is_some();
@@ -27,7 +28,12 @@ pub(crate) fn DatasetEditorSurface(
     };
     let state = DatasetEditorState::new(!is_edit);
     on_cleanup(|| crate::set_lifecycle_dirty(false));
-    install_dataset_editor_loaders(dataset_id.clone(), revision_id.clone(), state);
+    install_dataset_editor_loaders(
+        dataset_id.clone(),
+        revision_id.clone(),
+        editor_bootstrap,
+        state,
+    );
     let save_dataset_id = dataset_id.clone();
     let detail_href = dataset_id.as_ref().map(|id| format!("/datasets/{id}"));
     let history_href = dataset_id
