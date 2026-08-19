@@ -1506,6 +1506,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
               "data-hydration",
               "ready",
             );
+            await page.waitForLoadState("networkidle");
             await chooseThemeWithKeyboard(page, theme);
 
             const heading =
@@ -1558,6 +1559,11 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/components");
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    await page.waitForLoadState("networkidle");
     await chooseThemeWithKeyboard(page, "light");
     const createAction = page.getByRole("link", {
       name: "Create Component",

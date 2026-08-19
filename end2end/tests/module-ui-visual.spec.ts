@@ -119,10 +119,9 @@ async function pinScopedRecordsVisualFacts(page: Page) {
     /Read access across \d+ accessible Organizations/,
   );
   await accessSummary.evaluate((summary) => {
-    summary.innerHTML = summary.innerHTML.replaceAll(
-      /\d+ accessible/g,
-      "N accessible",
-    );
+    summary.innerHTML = summary.innerHTML
+      .replaceAll(/\d+ accessible/g, "N accessible")
+      .replaceAll(/\d+ include manage/g, "N include manage");
   });
   await page.locator("select option").evaluateAll((options) => {
     options.forEach((option) => {
