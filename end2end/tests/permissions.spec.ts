@@ -767,7 +767,7 @@ function componentDatasetReference(
   catalog: ComponentDatasetCatalog,
   dataset: DatasetSummary,
 ) {
-  expect(catalog.schema_version).toBe(1);
+  expect(catalog.schema_version).toBe(2);
   const resourceId = `${dataset.id}@${datasetMajor(dataset)}`;
   const option = requireItem(
     catalog.datasets,

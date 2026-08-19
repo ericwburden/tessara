@@ -10,7 +10,8 @@
     { "key": "actor.full", "capabilities": ["components:read", "dashboards:read", "datasets:read"], "scope": "scope.full", "restriction_tier": "public" },
     { "key": "actor.restricted", "capabilities": ["datasets:read", "datasets:read_restricted"], "scope": "scope.restricted", "restriction_tier": "restricted" },
     { "key": "actor.confidential", "capabilities": ["datasets:read", "datasets:read_restricted", "datasets:read_confidential"], "scope": "scope.confidential", "restriction_tier": "confidential" },
-    { "key": "actor.disjoint", "capabilities": ["datasets:read"], "scope": "scope.disjoint", "restriction_tier": "public" }
+    { "key": "actor.disjoint", "capabilities": ["datasets:read"], "scope": "scope.disjoint", "restriction_tier": "public" },
+    { "key": "actor.delegate", "capabilities": ["submissions:read_own", "submissions:respond", "workflows:read"], "scope": "scope.full" }
   ],
   "form_versions": [
     { "key": "form.primary/v1", "state": "published", "scope": "scope.full", "requires_exact_field_type_option_layout_digest": true },

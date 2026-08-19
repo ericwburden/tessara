@@ -128,7 +128,10 @@ test("authenticated primary routes render in the native shell", async ({
   }
 
   await page.goto("/datasets");
-  await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
   await expect(
     page.getByRole("heading", { level: 1, name: "Datasets" }),
   ).toBeVisible();

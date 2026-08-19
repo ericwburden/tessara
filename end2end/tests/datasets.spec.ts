@@ -326,7 +326,10 @@ function attachConsoleGuard(page: Page) {
 
 async function gotoHydrated(page: Page, url: string) {
   await page.goto(url);
-  await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
 }
 
 async function signInAsAdmin(page: Page) {
@@ -512,9 +515,6 @@ async function publishDatasetRevision(
 ) {
   const response = await page.request.post(
     `/api/admin/datasets/${datasetId}/revisions/${revisionId}/publish`,
-    {
-      data: {},
-    },
   );
   return expectJson<DatasetPublishRevisionResponse>(response);
 }

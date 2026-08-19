@@ -66,7 +66,7 @@ function Assert-ReferenceFixture {
 
     Assert-ExactSequence -Expected @(
         "actor.admin", "actor.dataset-manager", "actor.operations", "actor.full",
-        "actor.restricted", "actor.confidential", "actor.disjoint"
+        "actor.restricted", "actor.confidential", "actor.disjoint", "actor.delegate"
     ) -Actual @(Assert-UniqueKeys -Items @($Fixture.actors) -Label "reference actors") -Label "reference actors"
     Assert-ExactSequence -Expected @(
         "form.primary/v1", "form.secondary/v1", "form.disjoint/v1"

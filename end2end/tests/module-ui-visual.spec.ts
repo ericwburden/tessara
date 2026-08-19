@@ -117,16 +117,14 @@ test.describe("canonical module UI visual baselines", () => {
   test.beforeEach(async ({ page }) => signIn(page));
 
   const referenceComponents = [
-    "Reference Label Bar",
-    "Reference Label Donut",
-    "Reference Label Line",
-    "Reference Label Pie",
-    "Reference Records Table",
-    "Reference Row Count",
+    "Dataset Chart",
+    "Dataset Disjoint Probe",
+    "Dataset Row Count",
+    "Dataset Table",
   ];
 
   async function showReferenceComponents(page: Page) {
-    await page.getByPlaceholder("Search components").fill("Reference");
+    await page.getByPlaceholder("Search components").fill("Dataset");
     await expect(page.locator('tbody tr [scope="row"]')).toHaveText(
       referenceComponents,
     );
@@ -179,7 +177,7 @@ test.describe("canonical module UI visual baselines", () => {
 
     test(`Components editor at 390 px (${theme})`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
-      await visit(page, "/components/sprint-8a-label-bar/edit", theme);
+      await visit(page, "/components/dataset-table/edit", theme);
       await expect(page.locator(".mobile-nav__toggle")).toBeVisible();
       await expect(page).toHaveScreenshot(`components-editor-${theme}-390.png`, {
         animations: "disabled",
@@ -189,7 +187,7 @@ test.describe("canonical module UI visual baselines", () => {
 
   test("Components versions at 768 px", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
-    await visit(page, "/components/sprint-8a-label-bar/versions", "dark");
+    await visit(page, "/components/dataset-table/versions", "dark");
     await expect(page).toHaveScreenshot("components-versions-dark-768.png", {
       animations: "disabled",
     });
@@ -197,7 +195,7 @@ test.describe("canonical module UI visual baselines", () => {
 
   test("Components viewer at 1280 px", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await visit(page, "/components/sprint-8a-label-bar/view", "dark");
+    await visit(page, "/components/dataset-table/view", "dark");
     await expect(
       page
         .locator(

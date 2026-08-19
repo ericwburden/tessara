@@ -205,6 +205,14 @@
             "password": "sprint-8b-disjoint-reader",
             "capabilities": ["datasets:read"],
             "scope_node_keys": ["scope.disjoint"]
+          },
+          {
+            "resource_key": "actor.delegate",
+            "email": "delegate@tessara.local",
+            "display_name": "Reference Workflow Delegate",
+            "password": "tessara-dev-delegate",
+            "capabilities": ["submissions:read_own", "submissions:respond", "workflows:read"],
+            "scope_node_keys": ["scope.full"]
           }
         ]
       }
@@ -446,7 +454,7 @@
                   "version_number": 1,
                   "version_label": "1.0.0",
                   "version_note": "Reference Dataset table",
-                  "config": {"visible_columns": ["label", "amount"], "page_size": 25}
+                  "config": {"visible_columns": ["label", "amount"], "page_size": 2}
                 }
               ]
             },

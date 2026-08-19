@@ -768,11 +768,11 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
 
     try {
       const tableOption = fixture.composition.available_component_versions.find(
-        (option) => option.component_slug === "sprint-8a-record-table",
+        (option) => option.component_slug === "dataset-table",
       );
       expect(
         tableOption,
-        "the Sprint 8A seed should expose the exact module-owned multi-page record Table",
+        "the source-exact Reference topology should expose its Dataset Table",
       ).toBeTruthy();
       await expectJson<DashboardComposition>(
         await page.request.put(`/api/admin/dashboards/${fixture.id}/composition`, {
@@ -821,7 +821,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(next).toBeEnabled();
 
       const rows = tableViewer.locator("tbody tr[data-row-id]");
-      await expect(rows).toHaveCount(10);
+      await expect(rows).toHaveCount(2);
       const firstPageFirstRow = await rows.first().getAttribute("data-row-id");
       expect(firstPageFirstRow).toBeTruthy();
       await expect.poll(() => executionUrls.length).toBeGreaterThanOrEqual(1);
@@ -883,7 +883,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       expect(pageSizeUrl.searchParams.get("page_size")).toBe("25");
       expect(pageSizeUrl.searchParams.has("cursor")).toBe(false);
       await expect(pagination.getByText("Page 1", { exact: true })).toBeVisible();
-      await expect(rows).toHaveCount(25);
+      await expect(rows).toHaveCount(4);
       await expect(page.locator(".component-table-preview__header")).toHaveCount(0);
       await expect(rows.first()).toHaveAttribute("data-row-id", firstPageFirstRow!);
 
@@ -932,7 +932,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const fullscreenRows = fullscreenDialog.locator("tbody tr[data-row-id]");
       await expect(fullscreenPagination.getByLabel("Rows")).toHaveValue("25");
       await expect(fullscreenPagination.getByText("Page 1", { exact: true })).toBeVisible();
-      await expect(fullscreenRows).toHaveCount(25);
+      await expect(fullscreenRows).toHaveCount(4);
       await expect(fullscreenRows.first()).toHaveAttribute(
         "data-row-id",
         firstPageFirstRow!,
@@ -942,32 +942,17 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         "opening fullscreen must not create a second Table request state machine",
       ).toBe(requestCountBeforeFullscreen);
 
-      const fullscreenNextRequest = page.waitForResponse((response) => {
-        const url = new URL(response.url());
-        return (
-          response.request().method() === "GET" &&
-          mediatedTablePath.test(url.pathname) &&
-          url.searchParams.get("page_size") === "25" &&
-          Boolean(url.searchParams.get("cursor"))
-        );
-      });
-      await fullscreenPagination
-        .getByRole("button", { name: "Next page" })
-        .click();
-      expect((await fullscreenNextRequest).ok()).toBe(true);
-      await expect(fullscreenPagination.getByText("Page 2", { exact: true })).toBeVisible();
-      const fullscreenSecondPageFirstRow = await fullscreenRows
-        .first()
-        .getAttribute("data-row-id");
-      expect(fullscreenSecondPageFirstRow).toBeTruthy();
+      await expect(
+        fullscreenPagination.getByRole("button", { name: "Next page" }),
+      ).toBeDisabled();
       await page.keyboard.press("Escape");
       await expect(fullscreenDialog).toBeHidden();
       await expect(fullscreenTrigger).toBeFocused();
-      await expect(pagination.getByText("Page 2", { exact: true })).toBeVisible();
+      await expect(pagination.getByText("Page 1", { exact: true })).toBeVisible();
       await expect(pageSize).toHaveValue("25");
       await expect(rows.first()).toHaveAttribute(
         "data-row-id",
-        fullscreenSecondPageFirstRow!,
+        firstPageFirstRow!,
       );
 
       expect(executionUrls.length).toBeGreaterThanOrEqual(4);

@@ -255,12 +255,18 @@ export async function expectShellRouteDirectLoadAndRefresh(
   page: Page,
   expectation: ShellRouteExpectation,
 ) {
+  const documentRootSelector = expectation.path.startsWith("/datasets") ||
+      expectation.path.startsWith("/components") ||
+      expectation.path.startsWith("/dashboards")
+    ? "#module-content"
+    : "#app-root";
   await page.setViewportSize(DESKTOP_VIEWPORT);
   await expectNativeDocument(
     page,
     await page.goto(expectation.path),
     expectation.path,
     'class="app-shell"',
+    documentRootSelector,
   );
   await expectShellOwnership(page, expectation, false);
   await expectation.ready(page);
@@ -272,6 +278,7 @@ export async function expectShellRouteDirectLoadAndRefresh(
     await page.reload(),
     expectation.path,
     'class="app-shell"',
+    documentRootSelector,
   );
   await expectShellOwnership(page, expectation, true);
   await expectation.ready(page);

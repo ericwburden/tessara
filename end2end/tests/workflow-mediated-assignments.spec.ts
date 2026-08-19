@@ -177,15 +177,18 @@ function generatedWorkflowFor(form: FormDefinition): FormWorkflowLink {
   return workflow!;
 }
 
-async function activityNodeTypeId(page: Page): Promise<string> {
+async function formScopeNodeTypeId(page: Page): Promise<string> {
   const nodeTypes = await apiGet<NodeTypeSummary[]>(page, "/api/admin/node-types");
-  const activity = nodeTypes.find((item) => item.slug === "activity");
-  expect(activity, "demo seed should expose the Activity node type").toBeTruthy();
-  return activity!.id;
+  const scopeType = nodeTypes.find((item) => item.slug === "organization");
+  expect(
+    scopeType,
+    "the source-exact Reference topology should expose its Organization node type",
+  ).toBeTruthy();
+  return scopeType!.id;
 }
 
 async function createDraftForm(page: Page, name: string, slug: string) {
-  const scopeNodeTypeId = await activityNodeTypeId(page);
+  const scopeNodeTypeId = await formScopeNodeTypeId(page);
   const form = await apiPost<IdResponse>(page, "/api/admin/forms", {
     name,
     slug,

@@ -384,6 +384,19 @@ function Set-Sprint8BTopologyEnvironment {
         "PLAYWRIGHT_BASE_URL", "http://127.0.0.1:$([string]$Context.environment.TESSARA_GATEWAY_PORT)", "Process"
     )
     [Environment]::SetEnvironmentVariable("TESSARA_PLAYWRIGHT_ACCEPTANCE", "1", "Process")
+
+    $container = @(& docker compose -f deploy/sprint-8b/compose.yaml -p $ExpectedProject ps -q postgres)
+    if ($LASTEXITCODE -ne 0 -or $container.Count -ne 1 -or
+        [string]$container[0] -cnotmatch '^[0-9a-f]{12,64}$') {
+        throw "Retained topology '$ExpectedProject' does not expose one exact PostgreSQL container."
+    }
+    $containerId = [string](& docker inspect --format "{{.Id}}" ([string]$container[0]))
+    if ($LASTEXITCODE -ne 0 -or $containerId -cnotmatch '^[0-9a-f]{64}$') {
+        throw "Retained topology '$ExpectedProject' PostgreSQL identity is not a full immutable container ID."
+    }
+    [Environment]::SetEnvironmentVariable("PLAYWRIGHT_POSTGRES_CONTAINER", $containerId, "Process")
+    [Environment]::SetEnvironmentVariable("PLAYWRIGHT_POSTGRES_DATABASE", "tessara_core", "Process")
+    [Environment]::SetEnvironmentVariable("PLAYWRIGHT_POSTGRES_USER", "tessara_bootstrap", "Process")
 }
 
 function New-Sprint8BAction {
@@ -1650,7 +1663,8 @@ function Invoke-Sprint8BFormalLane {
     $environmentNames = @(
         "COMPOSE_PROJECT_NAME", "TESSARA_GATEWAY_PORT", "TESSARA_CORE_CONTROL_PORT",
         "TESSARA_SUPERVISOR_PORT", "PLAYWRIGHT_BASE_URL", "TESSARA_PLAYWRIGHT_ACCEPTANCE",
-        "TESSARA_PLAYWRIGHT_DATA_STATE"
+        "TESSARA_PLAYWRIGHT_DATA_STATE", "PLAYWRIGHT_POSTGRES_CONTAINER",
+        "PLAYWRIGHT_POSTGRES_DATABASE", "PLAYWRIGHT_POSTGRES_USER"
     )
     $environmentBefore = Get-Sprint8BProcessEnvironmentSnapshot -Names $environmentNames
     $transcribing = $false

@@ -144,6 +144,7 @@ async function datasetOption(page: Page) {
   );
   const datasets = catalog.datasets;
   const dataset =
+    datasets.find((candidate) => candidate.dataset_slug === "derived-second-hop") ??
     datasets.find((candidate) =>
       candidate.fields.some(
         (field) => field.field_type.toLowerCase() !== "number",
@@ -319,7 +320,9 @@ function attachConsoleGuard(page: Page) {
 }
 
 async function chooseThemeWithKeyboard(page: Page, theme: "light" | "dark") {
-  const themeTrigger = page.getByRole("button", { name: "Theme options" });
+  const themeTrigger = page
+    .locator(".top-app-bar .theme-toggle__trigger:visible")
+    .first();
   await themeTrigger.focus();
   await page.keyboard.press("Enter");
   const themeOption = page.getByRole("menuitemradio", {
@@ -532,7 +535,9 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
           `.sidebar-link.is-active[href="${route.path}"]`,
         );
         await expect(active).toHaveCount(2);
-        await expect(active.first()).toHaveText(route.label);
+        await expect(active.first().locator(".sidebar-link__label")).toHaveText(
+          route.label,
+        );
         expect(await presentation()).toEqual(core);
         if (route.path === "/components" || route.path === "/dashboards") {
           await expect(page.locator("#module-content")).toHaveAttribute(

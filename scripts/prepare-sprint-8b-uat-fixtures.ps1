@@ -1247,7 +1247,7 @@ function Test-Sprint8BFixturePreparation {
         -ResolvedComposeProject "tessara-s8b-fixture-selftest" -ApplyResponseSha256 ("b" * 64)
     if ($receipt.state -cne "passed" -or
         @($receipt.logical_identities.core.scopes.PSObject.Properties).Count -ne 4 -or
-        @($receipt.logical_identities.core.actors.PSObject.Properties).Count -ne 7 -or
+        @($receipt.logical_identities.core.actors.PSObject.Properties).Count -ne 8 -or
         @($receipt.logical_identities.core.forms.PSObject.Properties).Count -ne 3 -or
         @($receipt.logical_identities.core.forms.PSObject.Properties.Value | Where-Object {
             [string]$_.exact_field_type_option_layout -ceq "passed"
