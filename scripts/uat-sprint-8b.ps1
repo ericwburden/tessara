@@ -609,6 +609,45 @@ function Get-Sprint8BUatAssertionProofState {
     }
 }
 
+function ConvertTo-Sprint8BUatScenarioAssertionResults {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$SelectedScenarios,
+        [Parameter(Mandatory)]$AssertionMap,
+        [Parameter(Mandatory)]$EvidenceClaims,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$VerifiedAssertionEvidence,
+        [Parameter(Mandatory)][bool]$PredicateExecutionPassed
+    )
+
+    @($SelectedScenarios | ForEach-Object {
+        $scenarioDefinition = $_
+        [pscustomobject][ordered]@{
+            scenario_id = [string]$scenarioDefinition.id
+            start_state = [string]$scenarioDefinition.start_state
+            cleanup = [string]$scenarioDefinition.cleanup
+            assertions = @($scenarioDefinition.assertions | ForEach-Object {
+                $assertion = [string]$_
+                $proofState = Get-Sprint8BUatAssertionProofState `
+                    -ScenarioId ([string]$scenarioDefinition.id) -Assertion $assertion `
+                    -EvidenceClaims $EvidenceClaims `
+                    -VerifiedAssertionEvidence @($VerifiedAssertionEvidence) `
+                    -PredicateExecutionPassed $PredicateExecutionPassed
+                [pscustomobject][ordered]@{
+                    assertion = $assertion
+                    predicate_ids = @($AssertionMap[[string]$scenarioDefinition.id][$assertion])
+                    exact_evidence_claims = @(
+                        if ($null -ne $EvidenceClaims[[string]$scenarioDefinition.id]) {
+                            @($EvidenceClaims[[string]$scenarioDefinition.id][$assertion])
+                        }
+                    )
+                    state = [string]$proofState.state
+                    automated_claim_kind = [string]$proofState.automated_claim_kind
+                    manual_acceptance_required = [bool]$proofState.manual_acceptance_required
+                }
+            })
+        }
+    })
+}
+
 function Test-Sprint8BUatPredicateReadiness {
     $scenarioContract = Get-Content -LiteralPath $scenarioContractPath -Raw | ConvertFrom-Json -Depth 100
     $catalog = @(Get-Sprint8BUatPredicateCatalog)
@@ -641,6 +680,21 @@ function Test-Sprint8BUatPredicateReadiness {
         $predicates.id -cnotcontains "dataset-refresh-orchestration" -or
         $predicates.id -cnotcontains "resource-resolution") {
         throw "Sprint 8B UAT exact scenario/predicate selection self-test failed."
+    }
+
+    $allSelected = @(Get-Sprint8BSelectedScenarios `
+        -ScenarioContract $scenarioContract -Selections @("All"))
+    $allScenarioAssertions = @(ConvertTo-Sprint8BUatScenarioAssertionResults `
+        -SelectedScenarios $allSelected -AssertionMap $mapping `
+        -EvidenceClaims $evidenceClaims -VerifiedAssertionEvidence @() `
+        -PredicateExecutionPassed $false)
+    if ($allScenarioAssertions.Count -ne 11 -or
+        @($allScenarioAssertions.assertions).Count -ne 64 -or
+        @($allScenarioAssertions.assertions | Where-Object {
+            [string]$_.state -cne "not_proven" -or
+            -not [bool]$_.manual_acceptance_required
+        }).Count -ne 0) {
+        throw "Sprint 8B UAT All-scenario result assembly self-test failed."
     }
 
     $tampered = Get-Sprint8BUatAssertionMap
@@ -1099,34 +1153,11 @@ $document = [pscustomobject][ordered]@{
     fixture_receipt_sha256 = if ($fixtureHash -ceq "none") { $null } else { $fixtureHash }
     selected_scenarios = @($selectedScenarios.id)
     predicates = @($predicateResults)
-    scenario_assertions = @($selectedScenarios | ForEach-Object {
-        $scenario = $_
-        [pscustomobject][ordered]@{
-            scenario_id = [string]$scenario.id
-            start_state = [string]$scenario.start_state
-            cleanup = [string]$scenario.cleanup
-            assertions = @($scenario.assertions | ForEach-Object {
-                $assertion = [string]$_
-                $proofState = Get-Sprint8BUatAssertionProofState `
-                    -ScenarioId ([string]$scenario.id) -Assertion $assertion `
-                    -EvidenceClaims $evidenceClaims `
-                    -VerifiedAssertionEvidence @($verifiedAssertionEvidence) `
-                    -PredicateExecutionPassed ($null -eq $failure)
-                [pscustomobject][ordered]@{
-                    assertion = $assertion
-                    predicate_ids = @($assertionMap[[string]$scenario.id][$assertion])
-                    exact_evidence_claims = @(
-                        if ($null -ne $evidenceClaims[[string]$scenario.id]) {
-                            @($evidenceClaims[[string]$scenario.id][$assertion])
-                        }
-                    )
-                    state = [string]$proofState.state
-                    automated_claim_kind = [string]$proofState.automated_claim_kind
-                    manual_acceptance_required = [bool]$proofState.manual_acceptance_required
-                }
-            })
-        }
-    })
+    scenario_assertions = @(ConvertTo-Sprint8BUatScenarioAssertionResults `
+        -SelectedScenarios $selectedScenarios -AssertionMap $assertionMap `
+        -EvidenceClaims $evidenceClaims `
+        -VerifiedAssertionEvidence @($verifiedAssertionEvidence) `
+        -PredicateExecutionPassed ($null -eq $failure))
     verified_assertion_evidence = @($verifiedAssertionEvidence)
     cleanup_restoration = $cleanup
     failure = if ($null -eq $failure) { $null } else { [pscustomobject][ordered]@{
