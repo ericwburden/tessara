@@ -17,6 +17,7 @@ $targets = @($contract.implementation_targets)
 $targetIds = @($targets.id)
 . (Join-Path $PSScriptRoot "sprint-8b-cargo-test-integrity.ps1")
 Import-Module (Join-Path $PSScriptRoot "tessara-validation-policy.psm1") -Force
+$script:TargetAttemptRoot = $null
 
 function Assert-RunnerContract {
     if ($targets.Count -ne 24) { throw "Runner expected 24 targets, found $($targets.Count)." }
