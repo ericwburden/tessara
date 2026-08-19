@@ -187,9 +187,7 @@ test.describe("canonical module UI visual baselines", () => {
       await expect(
         mobileNavigation.getByRole("link", { name: "Datasets", exact: true }),
       ).toBeVisible();
-      await mobileNavigation
-        .locator(".mobile-nav__scrim")
-        .click({ position: { x: 380, y: 100 } });
+      await mobileNavigation.locator(".mobile-nav__scrim").click();
       await expect(mobileToggle).toHaveAttribute("aria-expanded", "false");
       await expect(mobileNavigation.locator(".mobile-nav__panel")).toBeHidden();
       await expect(page).toHaveScreenshot(`components-editor-${theme}-390.png`, {
