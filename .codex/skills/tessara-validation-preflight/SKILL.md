@@ -26,6 +26,10 @@ When an earlier candidate was invalidated after SIT, also read
 completely and validate its records against
 [`../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json`](../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json).
 
+When any prior v2 target, lane, or scenario failed, also read
+[`../tessara-sprint-validation/references/defect-provenance.md`](../tessara-sprint-validation/references/defect-provenance.md)
+and validate every retained record against its schema.
+
 ## Inputs
 
 - passing `validation-readiness-result.json` and
@@ -53,7 +57,11 @@ completely and validate its records against
    to have authorized return to the legacy complete pass or v2 affected-lane
    pre-freeze recertification, and require the resulting certificates to bind
    the final corrected source and authenticated inherited coverage.
-5. Audit all changes and require one clean implementation commit.
+5. Audit all changes and require one clean implementation commit. Require
+   every defect-provenance record to be verified or validly superseded. Reject
+   an open implementation-exit gap, unresolved provenance, blocked broad
+   rerun, or test expectation change without approved authority and a
+   test-change-log entry.
 6. Reconcile every roadmap exit condition with automated, smoke, and manual
    UAT coverage in the validation record.
 7. Discover required environment variables from the actual test and runner
@@ -96,6 +104,8 @@ checks explicitly and retain their outputs. The contract must catch:
 - wrong or missing image-label keys
 - unsupported absolute/relative output-path forms
 - missing test files, scripts, accounts, fixtures, or evidence destinations
+- unresolved defect provenance, process drift, or implementation-exit gaps
+- changed test expectations without exact authority and replacement coverage
 - Markdown evidence that would fail repository link validation
 
 Do not build product images merely to discover labels. Audit Dockerfiles and
@@ -134,6 +144,11 @@ or deployment source, commit it before issuing a new candidate receipt.
 Do not characterize a preflight failure as SIT. Do not write a passing
 candidate receipt from partial checks.
 
+For v2, emit and validate `defect-provenance.json` before correcting a failed
+Preflight check. A bounded setup/environment record may authorize the narrow
+Preflight rerun; product, fixture, harness, ambiguity, or mixed provenance
+returns to the coordinator-selected earlier boundary.
+
 ## Finish criteria
 
 Finish only when:
@@ -142,5 +157,6 @@ Finish only when:
 - the acceptance inventory is complete and frozen
 - all environment and deployment prerequisites pass
 - evidence paths and required artifacts are declared
+- the defect-provenance chronology is complete and resolved
 - preflight and candidate receipts parse and agree
 - no SIT or UAT assertion has run

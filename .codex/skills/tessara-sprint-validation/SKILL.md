@@ -34,6 +34,13 @@ the legacy protocol unchanged. Never add v2 fields to legacy evidence, convert
 it into v2 certificates, or use this policy change to reopen a completed
 lifecycle.
 
+For every failed implementation target or formal validation lane/scenario in
+a v2 sprint, read
+[`references/defect-provenance.md`](references/defect-provenance.md)
+completely and validate `defect-provenance.json` against
+[`references/defect-provenance.schema.json`](references/defect-provenance.schema.json).
+The provenance gate must finish before correction or a broad rerun begins.
+
 After authoritative SIT has started, read
 [`references/post-sit-defect-convergence.md`](references/post-sit-defect-convergence.md)
 completely before handling a candidate-invalidating UAT failure or any
@@ -56,6 +63,11 @@ SIT passed -> UAT failure -> diagnostic defect harvest -> mutable batch
                                       -> focused repair validation
                                       -> final readiness/rehearsal -> new freeze
                                       -> complete SIT -> complete UAT
+
+Any failed target/lane/scenario -> defect provenance gate
+                                -> implementation or process correction
+                                -> focused reproducer + implementation targets
+                                -> coordinator-authorized validation boundary
 ```
 
 Preserve these invariants:
@@ -83,6 +95,12 @@ Preserve these invariants:
   regardless of focused repair results.
 - Closeout never originates an acceptance check.
 - Product decisions pause for user direction.
+- Formal validation never serves as the first execution of its exact product,
+  fixture, environment, and acceptance inventory combination.
+- A failed attempt cannot be corrected or broadly rerun until its defect
+  provenance is classified and its routing decision is retained.
+- Automation may classify, invalidate, route, and block reruns; it never edits
+  tests or declares an assertion obsolete.
 
 Do not interpret every command failure as a candidate failure. Record its
 stage and `assertions_started`, then apply the shared invalidation matrix.
@@ -120,6 +138,10 @@ For a v2 sprint:
    `docs/architecture/module-extraction-playbook.md`; an omitted extraction
    surface returns to implementation and does not become a diagnostic
    Rehearsal lane.
+   Reject implementation entry when any prior provenance record is open,
+   blocked, or missing its required focused proof. Require the exact formal
+   fixture, environment, and acceptance inventory to have passed through the
+   selected implementation targets.
 2. Run or recertify Validation Readiness from the impact-selected lanes and
    authenticated unaffected lane certificates. Fall back to complete Readiness
    when any mapping, fingerprint, or prior certificate is uncertain.
@@ -133,7 +155,8 @@ For a v2 sprint:
 6. Consume certificate and correction hashes through `evidence-chain.json`.
    Do not recursively reopen raw evidence during routine phase authorization.
 7. At closeout, perform one full integrity audit across all sealed phase-local
-   indexes, then authorize the exact candidate.
+   indexes and the complete defect-provenance chronology, then authorize the
+   exact candidate.
 
 The remaining full-regime steps describe the legacy policy used by Sprint 8A
 and earlier sprint-specific runners.
@@ -215,13 +238,22 @@ complete authoritative SIT and UAT from the beginning.
 For every failure:
 
 1. Retain the failed receipt and raw evidence.
-2. Classify it using the protocol vocabulary.
+2. Run the defect-provenance gate and classify every distinct finding against
+   the authenticated source, fixture, environment, inventory, and
+   implementation-exit proof.
 3. Establish whether assertions or product actions began.
-4. Run the narrowest safe reproducer for diagnosis.
-5. Identify any tracked-source or shared-environment change.
-6. Select the minimum safe invalidation boundary from the matrix.
-7. Record the decision and rationale in the receipt and verification record.
-8. Mark invalidated attempts superseded before resuming.
+4. Record implementation-exit gaps, process drift, and every proposed test
+   expectation change with its governing authority.
+5. Run the narrowest safe reproducer for diagnosis.
+6. Identify any tracked-source or shared-environment change.
+7. Select the minimum safe invalidation boundary from the matrix.
+8. Record the decision and rationale in `defect-provenance.json`, the receipt,
+   and the verification record.
+9. Block a broad rerun until focused reproducers and affected implementation
+   targets pass; after two consecutive failures of one lane, require this
+   concentrated proof before another launch, and after three treat it as a
+   validation-platform incident.
+10. Mark invalidated attempts superseded before resuming.
 
 Examples:
 
@@ -245,6 +277,12 @@ lanes, including their prerequisite closure. An unknown path, missing digest,
 or uncertain consumer selects complete affected-phase execution. After freeze,
 a candidate-changing correction still requires a successor freeze followed by
 complete SIT and complete UAT.
+
+Do not label a failure `product` merely because a product assertion failed.
+A missing fixture identity, divergent runner command, absent environment
+binding, stale schema expectation, or acceptance inventory not exercised by
+implementation exit is process provenance even when it exposes a real product
+defect in the same attempt; use `mixed` and apply the union cone.
 
 ## Result collection and recovery
 
@@ -272,6 +310,9 @@ Authorize `tessara-sprint-closeout` only when:
 - all invalidation decisions were satisfied
 - no required evidence is missing, stale, malformed, or unhashed
 - no product decision or open acceptance defect remains
+- every defect-provenance record is verified or validly superseded, no
+  expectation change lacks authority and a test-change-log entry, and no
+  implementation-exit gap remains open
 - the intended candidate route, topology, provenance, and health are restored
 
 Write `closeout-authorization.json` with hashes of the prerequisite receipts
@@ -291,5 +332,6 @@ in closeout when they cannot alter executable behavior or test interpretation.
 
 Do not report validation complete unless the receipt chain parses and hashes,
 all authoritative phases passed, failure invalidations are satisfied, the
-verification record explicitly authorizes closeout, and the application is in
-the intended healthy handoff state.
+defect-provenance chronology is resolved, the verification record explicitly
+authorizes closeout, and the application is in the intended healthy handoff
+state.

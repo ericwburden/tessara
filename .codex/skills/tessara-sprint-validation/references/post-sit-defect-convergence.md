@@ -1,5 +1,11 @@
 # Tessara Post-SIT Defect Convergence
 
+Before adding any failed SIT lane or UAT scenario to this convergence cycle,
+run the mandatory
+[`defect-provenance.md`](defect-provenance.md) gate and validate its record.
+Use the provenance finding IDs and evidence in the harvest and consolidated
+batch; do not reclassify them merely to narrow the repair cone.
+
 This reference defines the mandatory convergence cycle after authoritative SIT
 has passed and formal UAT exposes a candidate-invalidating defect. The
 `tessara-sprint-validation` coordinator owns every authorization decision.

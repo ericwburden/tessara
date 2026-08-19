@@ -31,6 +31,10 @@ validation skills.
    contract's exact dependency domains and implementation targets. Sprint 8A
    and earlier remain governed by their retained sprint-specific plans and
    runners; never retrofit their evidence to v2.
+   When correcting a failed implementation target or formal validation
+   lane/scenario, also read
+   `../tessara-sprint-validation/references/defect-provenance.md` and consume
+   its validated `defect-provenance.json` before editing.
 7. When that contract declares
    `implementation_profile.kind: phase8-module-extraction`, read
    `docs/architecture/module-extraction-playbook.md` completely. Treat its
@@ -176,6 +180,15 @@ that cone instead of silently expanding scope.
   as the ordinary debugging loop. Reproduce and resolve every known failure in
   the implementation phase. Do not launch Readiness or Rehearsal merely to find
   out whether a known target now passes.
+- For every failed implementation target, emit a defect-provenance record
+  before correction. For a failure returned from formal validation, require
+  the coordinator-issued record and follow its owner, invalidation, and rerun
+  boundary. Do not silently reclassify a process defect as product or vice
+  versa.
+- Record every changed test expectation in the provenance record and sprint
+  test-change log with its approved authority, supersession rationale, and
+  equal-or-stronger replacement coverage. An unrecorded assertion change is an
+  open contract ambiguity and blocks implementation exit.
 - Require formatting, compilation, and Clippy with warnings denied. Do not add
   blanket warning allowlists or suppressions to defer cleanup.
 
@@ -219,6 +232,8 @@ complete.
    not launch it again until its clean focused reproducer passes. After three
    consecutive failures, treat the lane as a concentrated validation-platform
    incident and resolve its root cause before another full launch.
+   Mark the provenance record verified only after its focused reproducers and
+   every affected implementation target pass on clean committed source.
 4. Run applicable repository boundary checks such as
    `scripts/check-web-crate-boundaries.ps1`,
    `scripts/verify-module-sdk-boundaries.ps1`, or
@@ -241,6 +256,11 @@ complete.
    environment proof where required, report zero known failures, and record
    required materialization/no-op/recovery and restoration results. A missing,
    blocked, or failing selected target forbids formal Readiness entry.
+   Also require every prior defect-provenance record to be verified or validly
+   superseded, require no undocumented expectation change, and authenticate
+   that the exact formal fixture, environment, and acceptance inventory were
+   exercised. A later formal failure in that claimed cone is an
+   implementation-exit gap requiring a new implementation result.
    For `phase8-module-extraction`, also verify that every playbook proof class
    is represented by a required passing target and that the three clean-
    environment classes were actually executed from the declared disposable

@@ -19,6 +19,14 @@ reinterpret a legacy receipt as a v2 certificate.
 5. A candidate-changing correction after freeze creates a successor candidate
    and requires complete authoritative SIT and UAT. Pre-freeze lane reuse never
    substitutes for those candidate-bound phases.
+6. Every failed target, lane, or scenario passes the defect-provenance gate
+   before correction or broad rerun. The gate automates classification,
+   invalidation, routing, and rerun blocking; it never edits tests or decides
+   that an assertion is obsolete.
+
+Read [`defect-provenance.md`](defect-provenance.md) for the mandatory gate and
+validate each `defect-provenance.json` record against
+[`defect-provenance.schema.json`](defect-provenance.schema.json).
 
 ## Tracked validation contract
 
@@ -108,6 +116,14 @@ For a Phase 8 extraction, it must cover every required playbook proof class;
 formal validation may not be used to discover which extraction slice was
 omitted.
 
+Implementation exit also authenticates that its selected targets exercised
+the same formal fixture/reference topology, environment contract, acceptance
+inventory, and assertion contract they claim to cover. It rejects any open or
+blocked defect-provenance record and every undocumented expectation change.
+When formal validation later discovers a failure that an exact selected target
+was required to expose, mark `implementation_exit_gap` and return to
+implementation even if the attempt also contains a product defect.
+
 ## Compact phase certificates
 
 Keep the established canonical result names, including
@@ -151,7 +167,11 @@ Readiness and Candidate Rehearsal use one impact plan, fixed before assertions:
 
 V2 has no rehearsal deferral counter or diagnostic Wave A/Wave B state. A
 failed pass retains one terminal attempt, one harvest, and one consolidated
-defect batch. After correction and a passing implementation exit gate, the next
+defect batch. Before correction, retain and validate the attempt's
+`defect-provenance.json`; it classifies product versus process origin, detects
+implementation-exit gaps and process drift, and fixes the allowed next
+boundary. After correction, passing focused reproducers, and a passing
+implementation exit gate, the next
 pre-freeze pass executes its affected plan and may inherit unchanged lanes.
 A phase passes only when every declared lane is either newly passed or validly
 inherited, no lane is failed or blocked, no defect is open, and required
@@ -166,7 +186,10 @@ lanes unless conservative fallback is required.
 
 Preflight authenticates the compact Readiness and Rehearsal certificates, their
 prerequisites, dependency fingerprints, lane coverage, evidence-index hashes,
-and current non-impact assessment. It then freezes the exact candidate.
+current non-impact assessment, and the complete resolved defect-provenance
+chronology. It rejects an open implementation-exit gap, unresolved
+classification, or expectation change without approved authority and a
+test-change-log entry. It then freezes the exact candidate.
 
 SIT and UAT remain complete candidate-bound phases. If the candidate changes,
 run complete SIT and complete UAT for the successor candidate. Do not inherit
@@ -216,6 +239,12 @@ domain fingerprints and repository evidence supporting non-impact.
   execution; after freeze, uncertainty requires a successor candidate with
   complete SIT and UAT.
 
+The defect-provenance gate precedes this impact decision. Its classification
+does not reduce the dependency-map cone by itself; it identifies the owning
+correction surface and supplies evidence to the impact assessment. `mixed` or
+unresolved provenance selects the union or conservative full affected-phase
+boundary.
+
 ## Authority and finish criteria
 
 Implementation owns the non-authoritative exit gate. The validation
@@ -225,5 +254,6 @@ acceptance. Closeout consumes certificates and never originates a test.
 
 Do not authorize closeout unless all canonical phase certificates pass, their
 prerequisites and evidence indexes authenticate, the final evidence-chain audit
-passes, the candidate-bound SIT and UAT are complete, no defect or product
-decision remains open, and the intended topology is healthy.
+passes, every provenance record is verified or validly superseded, the
+candidate-bound SIT and UAT are complete, no defect, undocumented expectation
+change, or product decision remains open, and the intended topology is healthy.

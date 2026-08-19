@@ -164,6 +164,9 @@ Seed the validation record before implementation with:
 - source provenance, candidate identity, migration-baseline, and evidence rules
 - the passing non-authoritative implementation-readiness result required before
   formal Readiness entry
+- the mandatory defect-provenance gate for every failed target, lane, or
+  scenario, including its schema-valid record, automated routing, focused-
+  reproducer block, expectation-change authority, and Preflight/Closeout audit
 - compact phase certificates, phase-local evidence indexes, and the final
   `evidence-chain.json` integrity audit
 - the rule that deployed acceptance smoke runs inside SIT
@@ -172,6 +175,10 @@ Seed the validation record before implementation with:
   restart for a successor candidate, authenticated affected-lane pre-freeze
   recertification, and certificate reuse only when declared dependency
   fingerprints prove earlier results unaffected
+
+Plan `defect-provenance.json` beside every possible failed attempt. State that
+automation may classify, invalidate, route, and block reruns, but may not edit
+tests, change expected values, or decide that an assertion is obsolete.
 
 Plan updates to smoke, UAT, Playwright, fixtures, manifests, and deployment
 bootstrap in the same implementation slice as the behavior that makes them
@@ -208,6 +215,8 @@ Before declaring kickoff complete, verify that:
 - acceptance commands, roles, environments, data, and evidence destinations
   are concrete
 - assumptions and unresolved decisions are visible and no blocker is hidden
+- the plan traces the defect-provenance gate through implementation exit,
+  every formal phase failure, Preflight rejection, and Closeout audit
 - the plan and validation record agree
 - the `main` checkout remains clean and all planning changes are confined to
   the sprint worktree

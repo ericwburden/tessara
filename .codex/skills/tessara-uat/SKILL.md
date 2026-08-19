@@ -24,6 +24,11 @@ focused repair portion, also read
 [`../tessara-sprint-validation/references/post-sit-defect-convergence.md`](../tessara-sprint-validation/references/post-sit-defect-convergence.md)
 completely.
 
+On any failed UAT script or scenario, also read
+[`../tessara-sprint-validation/references/defect-provenance.md`](../tessara-sprint-validation/references/defect-provenance.md)
+and emit a schema-valid `defect-provenance.json` beside the failed attempt
+before correction or another broad scenario run.
+
 ## Prerequisites
 
 Require parsed, passing:
@@ -83,6 +88,10 @@ script or scenario changes the candidate/inventory fingerprint.
 
 Record the stage and whether product actions began. Use a narrow safe check to
 classify the cause, then ask `tessara-sprint-validation` for invalidation scope.
+The defect-provenance record must compare the exact candidate behavior with
+the frozen fixture, environment, harness, and acceptance contract and must
+route ambiguity to a product decision rather than changing the expected
+result.
 
 - product or tracked harness correction: enter coordinator-owned convergence,
   then refreeze only after the required legacy complete pass or v2 affected-
@@ -138,8 +147,9 @@ is sealed; closeout performs the one required full integrity audit.
 
 Finish only when scripted UAT and every manual scenario pass for the exact SIT
 candidate, evidence is complete and hashed, no defect or product decision is
-open, the handoff topology is restored, and `uat-result.json` agrees with the
-human verification record.
+open, every UAT provenance record is verified or validly superseded, the
+handoff topology is restored, and `uat-result.json` agrees with the human
+verification record.
 
 Diagnostic harvest or focused repair work finishes at its coordinator-defined
 record boundary, not at this formal-UAT finish criterion.

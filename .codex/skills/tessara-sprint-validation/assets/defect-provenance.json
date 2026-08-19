@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.validation.defect-provenance",
+  "policy_version": "tessara-validation-v2",
+  "sprint": "sprint-0a",
+  "record_id": "dp-example-attempt-1",
+  "status": "open",
+  "trigger": {
+    "phase": "candidate-rehearsal",
+    "subject": "replace-lane-id",
+    "attempt": 1,
+    "state": "failed",
+    "assertions_started": true,
+    "product_actions_started": false,
+    "consecutive_failure_count": 1,
+    "failed_receipt": {
+      "path": "artifacts/sprint-0a-closeout/candidate-rehearsal/lanes/replace-lane-id/result.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "source_identity": {
+    "commit": "0000000000000000000000000000000000000000",
+    "tree": "0000000000000000000000000000000000000000",
+    "dirty": false,
+    "branch": "codex/sprint-0a"
+  },
+  "environment_fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+  "inputs": {
+    "validation_contract": {
+      "path": "docs/sprints/sprint-0a-validation-contract.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "implementation_readiness": null,
+    "fixture_identity": null,
+    "acceptance_inventory": null,
+    "test_change_log": null
+  },
+  "findings": [
+    {
+      "id": "dp-finding-1",
+      "classification": "contract-ambiguity",
+      "confidence": "unresolved",
+      "symptom": "Replace with the observed failure.",
+      "root_cause": "Unresolved until evidence selects a bounded cause.",
+      "governing_authority": [],
+      "affected_subjects": ["replace-lane-id"],
+      "evidence": [
+        {
+          "path": "artifacts/sprint-0a-closeout/candidate-rehearsal/lanes/replace-lane-id/result.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "status": "open"
+    }
+  ],
+  "drift_assessment": {
+    "origin_boundary": "unresolved",
+    "implementation_exit_gap": false,
+    "process_drift": false,
+    "affected_domains": ["validation-shared"],
+    "rationale": "Replace with the evidence-based drift assessment."
+  },
+  "routing": {
+    "owner": "validation-coordinator",
+    "action": "resolve-ambiguity",
+    "invalidate": [],
+    "focused_reproducers": [],
+    "full_rerun_blocked": true,
+    "next_boundary": "focused-diagnosis",
+    "rationale": "Broad rerun remains blocked until provenance is bounded."
+  },
+  "expectation_changes": [],
+  "created_at": "2000-01-01T00:00:00Z",
+  "updated_at": "2000-01-01T00:00:00Z"
+}

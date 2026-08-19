@@ -23,6 +23,7 @@
 | `candidate.json` | Preflight | SIT | Not Run |
 | `sit-result.json` | SIT | UAT | Not Run |
 | `uat-result.json` | UAT | Authorization | Not Run |
+| per-failure `defect-provenance.json` | Implementation/coordinator/phase owner | Any correction or broad rerun | Planned / Conditional |
 | `uat-defect-harvest.json` | UAT/coordinator | Correction batch, when triggered | Planned / Conditional |
 | `defect-batch.json` | Coordinator | Impact assessment, when triggered | Planned / Conditional |
 | `correction-impact-assessment.json` | Coordinator | Focused repair validation, when triggered | Planned / Conditional |
@@ -49,6 +50,8 @@ a planning/implementation defect, not work for formal validation to discover.
 - Failure containment / recovery:
 - Fixture, runner, smoke, and acceptance reproducers:
 - Known failure count:
+- Open/blocked defect-provenance records:
+- Exact formal fixture, environment, inventory, and assertion contract proved:
 - Implementation-readiness result:
 
 ## Candidate identity
@@ -195,9 +198,13 @@ a planning/implementation defect, not work for formal validation to discover.
 
 ## Failure and invalidation chronology
 
-| Time | Phase/lane/stage | Assertions started | Candidate | Classification | Correction/narrow proof | Invalidation scope | Authoritative replacement |
-|---|---|---|---|---|---|---|---|
-| | | | | | | | |
+| Time | Phase/lane/stage | Assertions started | Candidate | Provenance record | Origin boundary | Exit gap/process drift | Correction/narrow proof | Invalidation scope | Authoritative replacement |
+|---|---|---|---|---|---|---|---|---|---|
+| | | | | | | | | | |
+
+- Every provenance record schema-valid and verified/superseded:
+- Every expectation change has approved authority, equal-or-stronger coverage, and a test-change-log entry:
+- No broad rerun launched while provenance routing blocked it:
 
 ## Evidence integrity
 
