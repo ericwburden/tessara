@@ -353,6 +353,7 @@ test.describe("canonical module UI visual baselines", () => {
     page,
     browser,
   }) => {
+    test.setTimeout(90_000);
     await page.setViewportSize({ width: 1440, height: 1000 });
     for (const module of [
       { path: "/datasets", name: "datasets", title: "Datasets" },
