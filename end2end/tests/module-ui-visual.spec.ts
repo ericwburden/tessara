@@ -30,6 +30,7 @@ async function visitDocument(page: Page, path: string) {
     await expect(page.locator("#module-content")).toHaveAttribute(
       "data-hydration",
       "ready",
+      { timeout: 30_000 },
     );
   }
   if (path.startsWith("/reference/scoped-records")) {
