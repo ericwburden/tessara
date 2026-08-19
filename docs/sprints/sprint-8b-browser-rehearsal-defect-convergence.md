@@ -71,6 +71,9 @@ Each changed assertion is recorded in
 same accepted inventory and adds exact logical identity, nondisclosure,
 no-duplicate-fetch, opaque-cursor, or accessibility assertions.
 
+| Root shell assertion matched a transient lifecycle copy of an admin link | fresh exact 95-test implementation proof on `b355a869` (1 failure; focused rerun 1/1 passed) | 3. Validation harness or environment defect | `ac-03`, `ac-20`, `gate-implementation-exit` | The unscoped role locator briefly resolved both the canonical sidebar link and a lifecycle-hosted copy under `Application content`, producing a strict-mode error before visibility was evaluated. The focused reproducer passed after the transient copy had settled. | Scope all direct-admin assertions to the uniquely named `Primary navigation` landmark. This is stronger ownership proof: it retains exact visible links and absence of the retired aggregate Administration link while refusing content-area copies as shell evidence. |
+| Scoped Records visual capture raced the complete organization-filter projection | fresh exact 95-test implementation proof on `b355a869` (2 failures, identical 861-pixel filter shifts; focused rerun 2/2 passed before the strengthened synchronization) | 3. Validation harness or environment defect | `ac-03`, `ac-20`, `gate-implementation-exit` | Both canvas comparisons captured after a numeric summary existed but before the hydrated eight-option Reference implementation inventory had settled. Only the intrinsic filter width differed; the unchanged topology subsequently projected all eight options. | Require all eight options plus the All/Disjoint/Reference identities before normalizing mutable authorization text and taking either screenshot. The shell, canvas, real summary shape, themes, viewports, and overflow assertions are unchanged. |
+
 ## Implementation-to-requirement and target mapping
 
 | Capability correction | Requirements | Required implementation targets |

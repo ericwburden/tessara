@@ -121,12 +121,22 @@ async function pinScopedRecordsVisualFacts(page: Page) {
   await expect(accessSummary).toContainText(
     /Read access across \d+ accessible Organizations/,
   );
+  const organizationOptions = page.locator(
+    'select[aria-label="Filter by Organization"] option',
+  );
+  await expect(organizationOptions).toHaveCount(8);
+  await expect(organizationOptions.first()).toHaveText(
+    "All accessible Organizations",
+  );
+  await expect(
+    page.locator('select[aria-label="Filter by Organization"]'),
+  ).toContainText(/Disjoint Organization.*Reference Organization/s);
   await accessSummary.evaluate((summary) => {
     summary.innerHTML = summary.innerHTML
       .replaceAll(/\d+ accessible/g, "N accessible")
       .replaceAll(/\d+ include manage/g, "N include manage");
   });
-  await page.locator("select option").evaluateAll((options) => {
+  await organizationOptions.evaluateAll((options) => {
     options.forEach((option) => {
       option.textContent =
         option.textContent?.replaceAll(/\d+ accessible/g, "N accessible") ?? "";
