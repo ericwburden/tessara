@@ -26,6 +26,7 @@ pub(crate) fn DatasetIdentitySection(
                     <span>"Name"</span>
                     <input
                         required
+                        value=move || name.get()
                         prop:value=move || name.get()
                         on:change=move |event| {
                             commit_name(name, slug, event_target_value(&event));
@@ -39,6 +40,7 @@ pub(crate) fn DatasetIdentitySection(
                     <span>"Slug"</span>
                     <input
                         required
+                        value=move || slug.get()
                         prop:value=move || slug.get()
                         on:change=move |event| slug.set(event_target_value(&event))
                         on:blur=move |event| slug.set(event_target_value(&event))

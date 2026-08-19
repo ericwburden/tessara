@@ -20,11 +20,11 @@ pub const DATASET_CSS_SHA256: &str =
 pub const DATASET_LIFECYCLE_CSS_SHA256: &str =
     "64117ab4979e9f9138b3538a6b0c67f9d138fbc478478cfe42262d9b26dd81a0";
 pub const DATASET_JS_SHA256: &str =
-    "2577088c65c3b49c4c0a739658d8eeb2afa921447b7d42cac937914db570a040";
+    "ba94e837e8f74ff1321e636c112aefcb73d5aeeeecd997cc3dbc25447face2eb";
 pub const DATASET_BINDINGS_JS_SHA256: &str =
-    "a5271627c346fdd9e8442a2be01eaba74715ceb40b5d574867dfc71f67831eed";
+    "98cf0aae3429c493ff5a2acc9cf44b7ba685d002f76c8f296d41c53f0215f1e8";
 pub const DATASET_WASM_SHA256: &str =
-    "42803d39c448d97d6d3a6f0e92f5cd1b8b52f80d2d9c8275ff2ced6903725aa7";
+    "851f0906ba4dc217f36e8fd4c222e65a7d5d61118427bab25746b6ee2953fbd6";
 
 pub fn dataset_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.datasets/{release}/sha256:{digest}/{name}")

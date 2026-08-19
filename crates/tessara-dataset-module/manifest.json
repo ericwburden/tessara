@@ -929,17 +929,17 @@
     },
     {
       "path": "/dataset.js",
-      "digest": "sha256:2577088c65c3b49c4c0a739658d8eeb2afa921447b7d42cac937914db570a040",
+      "digest": "sha256:ba94e837e8f74ff1321e636c112aefcb73d5aeeeecd997cc3dbc25447face2eb",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dataset-bindings.js",
-      "digest": "sha256:a5271627c346fdd9e8442a2be01eaba74715ceb40b5d574867dfc71f67831eed",
+      "digest": "sha256:98cf0aae3429c493ff5a2acc9cf44b7ba685d002f76c8f296d41c53f0215f1e8",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dataset.wasm",
-      "digest": "sha256:42803d39c448d97d6d3a6f0e92f5cd1b8b52f80d2d9c8275ff2ced6903725aa7",
+      "digest": "sha256:851f0906ba4dc217f36e8fd4c222e65a7d5d61118427bab25746b6ee2953fbd6",
       "content_type": "application/wasm"
     }
   ]

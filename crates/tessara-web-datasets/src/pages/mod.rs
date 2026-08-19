@@ -384,6 +384,7 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
                                         maxlength="80"
                                         aria-label="Revision label"
                                         placeholder=revision_label
+                                        value=move || label_draft.get()
                                         prop:value=move || label_draft.get()
                                         on:change=move |event| label_draft.set(event_target_value(&event))
                                         on:input=move |event| label_draft.set(event_target_value(&event))
