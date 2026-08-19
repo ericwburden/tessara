@@ -7,9 +7,9 @@ import init, {
   resume_dataset,
   suspend_dataset,
   unmount_dataset,
-} from "/_tessara/modules/tessara.datasets/1.0.0/sha256:63efa6f1f1c7e50a7516a4294e6dfc719f7d1b96eec79286aacc64a46aece6e8/dataset-bindings.js";
+} from "/_tessara/modules/tessara.datasets/1.0.0/sha256:a5271627c346fdd9e8442a2be01eaba74715ceb40b5d574867dfc71f67831eed/dataset-bindings.js";
 
-await init("/_tessara/modules/tessara.datasets/1.0.0/sha256:a0285bf275a541588e5c7b469052802df2bcc0615ad1e8d298eaa0691afb8660/dataset.wasm");
+await init("/_tessara/modules/tessara.datasets/1.0.0/sha256:79b4228c8eebab6c42a6ab36d7701cd91674488ba832c3c27c934888929d2866/dataset.wasm");
 
 if (document.getElementById("module-content")) {
   hydrate_dataset();

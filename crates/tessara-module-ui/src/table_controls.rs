@@ -185,7 +185,7 @@ pub fn TableColumnSelector(
                                                 &key,
                                                 minimum_visible_columns,
                                             );
-                                            on_change.run(next);
+                                            defer_table_column_change(on_change, next);
                                         }
                                     />
                                     <span>{column.label}</span>
@@ -197,6 +197,31 @@ pub fn TableColumnSelector(
             </div>
         </div>
     }
+}
+
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+fn defer_table_column_change(on_change: Callback<Vec<String>>, next: Vec<String>) {
+    use wasm_bindgen::{JsCast, closure::Closure};
+
+    let Some(window) = web_sys::window() else {
+        on_change.run(next);
+        return;
+    };
+    // Let the checkbox commit its native checked state before a server-backed
+    // result replaces the table subtree. This preserves exact pointer and
+    // keyboard interaction semantics even when the owner responds immediately.
+    let callback = Closure::once(move |_: f64| on_change.run(next));
+    if window
+        .request_animation_frame(callback.as_ref().unchecked_ref())
+        .is_ok()
+    {
+        callback.forget();
+    }
+}
+
+#[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
+fn defer_table_column_change(on_change: Callback<Vec<String>>, next: Vec<String>) {
+    on_change.run(next);
 }
 
 fn toggled_columns(
