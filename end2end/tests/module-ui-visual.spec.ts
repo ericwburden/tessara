@@ -22,6 +22,28 @@ async function useTheme(page: Page, theme: "light" | "dark") {
 
 async function visitDocument(page: Page, path: string) {
   await page.goto(path);
+  const stylesheetReadiness = await page.evaluate(() => {
+    const declared = Array.from(
+      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]'),
+    ).map((link) => link.href);
+    const loaded = new Set(
+      Array.from(document.styleSheets)
+        .map((sheet) => sheet.href)
+        .filter((href): href is string => href !== null),
+    );
+    return {
+      declared,
+      missing: declared.filter((href) => !loaded.has(href)),
+    };
+  });
+  expect(
+    stylesheetReadiness.declared.length,
+    `document ${path} must declare release-owned stylesheets`,
+  ).toBeGreaterThan(0);
+  expect(
+    stylesheetReadiness.missing,
+    `document ${path} must load every declared stylesheet before UI readiness`,
+  ).toEqual([]);
   if (
     path.startsWith("/components") ||
     path.startsWith("/dashboards") ||
@@ -306,6 +328,8 @@ test.describe("canonical module UI visual baselines", () => {
         "data-hydration",
         "ready",
       );
+      await expect(page.locator(".dataset-table-section > .table-wrap")).toBeVisible();
+      await expect(page.locator(".related-work-mobile-cards")).toBeHidden();
       await expect(page).toHaveScreenshot(`datasets-directory-${theme}-1440.png`, {
         animations: "disabled",
       });

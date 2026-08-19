@@ -449,6 +449,34 @@ function New-Sprint8BProgramAction {
         -PlaywrightDataState $PlaywrightDataState
 }
 
+function Get-Sprint8BBrowserFunctionalSpecs {
+    @(
+        "tests/analytics-sprint-7a.spec.ts",
+        "tests/app.spec.ts",
+        "tests/components.spec.ts",
+        "tests/composition.spec.ts",
+        "tests/dashboards.spec.ts",
+        "tests/datasets-module.spec.ts",
+        "tests/datasets.spec.ts",
+        "tests/modules.spec.ts",
+        "tests/permissions.spec.ts",
+        "tests/workflow-mediated-assignments.spec.ts"
+    )
+}
+
+function New-Sprint8BBrowserAcceptanceActions {
+    param([ValidateSet("fresh", "upgraded")][string]$PlaywrightDataState = "fresh")
+    @(
+        New-Sprint8BProgramAction -Id "browser-acceptance-functional" -Program "npm" `
+            -Arguments (@("--prefix", ".\end2end", "test", "--") + `
+                @(Get-Sprint8BBrowserFunctionalSpecs)) `
+            -PlaywrightDataState $PlaywrightDataState
+        New-Sprint8BProgramAction -Id "browser-acceptance-visual" -Program "npm" `
+            -Arguments @("--prefix", ".\end2end", "test", "--", "tests/module-ui-visual.spec.ts") `
+            -PlaywrightDataState $PlaywrightDataState
+    )
+}
+
 function New-Sprint8BMaterializeAction {
     param(
         [string]$Id = "materialize",
@@ -570,8 +598,7 @@ function Get-Sprint8BFormalActionMap {
     )
     $map["rehearsal-browser"] = @(
         New-Sprint8BMaterializeAction -Id "setup" -Target Reference -KeepTopology
-        New-Sprint8BProgramAction -Id "browser-acceptance" -Program "npm" `
-            -Arguments @("--prefix", ".\end2end", "test") -PlaywrightDataState fresh
+        @(New-Sprint8BBrowserAcceptanceActions -PlaywrightDataState fresh)
         New-Sprint8BSmokeAction -Id "restoration-checkpoint" -UseExistingTopology
         New-Sprint8BAction -Id "teardown" -Kind teardown -Command "compose-down"
     )
@@ -614,8 +641,7 @@ function Get-Sprint8BFormalActionMap {
         New-Sprint8BSmokeAction -Id "restoration-checkpoint" -UseExistingTopology
     )
     $map["sit-browser"] = @(
-        New-Sprint8BProgramAction -Id "browser-acceptance" -Program "npm" `
-            -Arguments @("--prefix", ".\end2end", "test") -PlaywrightDataState fresh
+        @(New-Sprint8BBrowserAcceptanceActions -PlaywrightDataState fresh)
         New-Sprint8BSmokeAction -Id "browser-restoration" -UseExistingTopology
     )
     $map["sit-smoke"] = @(
@@ -802,10 +828,13 @@ function Assert-Sprint8BFormalProfile {
                 @($action.arguments) -cnotcontains "{fixture}") {
                 throw "Existing-topology action '$id/$($action.id)' omits its authenticated fixture receipt."
             }
+            $actionArguments = @($action.arguments)
             $isPlaywrightAcceptance = [string]$action.kind -ceq "program" -and
                 [string]$action.command -ceq "npm" -and
-                (@($action.arguments) -join "`n") -ceq
-                    (@("--prefix", ".\end2end", "test") -join "`n")
+                $actionArguments.Count -ge 3 -and
+                [string]$actionArguments[0] -ceq "--prefix" -and
+                [string]$actionArguments[1] -ceq ".\end2end" -and
+                [string]$actionArguments[2] -ceq "test"
             if ($isPlaywrightAcceptance -and
                 [string]$action.playwright_data_state -notin @("fresh", "upgraded")) {
                 throw "Playwright action '$id/$($action.id)' omits its exact data-state identity."
@@ -1894,20 +1923,36 @@ function Test-Sprint8BFormalRunner {
         "sit-browser"
     } else { $null }
     if ($null -ne $browserLaneId) {
-        $browserAction = @($actionMap[$browserLaneId] | Where-Object {
-            [string]$_.id -ceq "browser-acceptance"
+        $browserActions = @($actionMap[$browserLaneId] | Where-Object {
+            [string]$_.id -in @("browser-acceptance-functional", "browser-acceptance-visual")
         })
-        if ($browserAction.Count -ne 1 -or
-            [string]$browserAction[0].playwright_data_state -cne "fresh") {
-            throw "$browserLaneId does not bind its browser action to fresh reference data."
+        if ($browserActions.Count -ne 2 -or
+            @($browserActions | Where-Object {
+                [string]$_.playwright_data_state -cne "fresh"
+            }).Count -ne 0) {
+            throw "$browserLaneId does not bind both browser actions to fresh reference data."
         }
-        $browserAction[0].playwright_data_state = ""
+        $functionalAction = @($browserActions | Where-Object {
+            [string]$_.id -ceq "browser-acceptance-functional"
+        })[0]
+        $visualAction = @($browserActions | Where-Object {
+            [string]$_.id -ceq "browser-acceptance-visual"
+        })[0]
+        $expectedFunctionalArguments = @("--prefix", ".\end2end", "test", "--") +
+            @(Get-Sprint8BBrowserFunctionalSpecs)
+        if ((@($functionalAction.arguments) -join "`n") -cne
+            ($expectedFunctionalArguments -join "`n") -or
+            (@($visualAction.arguments) -join "`n") -cne
+            (@("--prefix", ".\end2end", "test", "--", "tests/module-ui-visual.spec.ts") -join "`n")) {
+            throw "$browserLaneId does not partition the exact functional and visual browser inventory."
+        }
+        $browserActions[0].playwright_data_state = ""
         try {
             Assert-Sprint8BExpectedFailure -Label "$Phase missing Playwright data state" -Action {
                 Assert-Sprint8BFormalProfile -Contract $contract -Phase $Phase -ActionMap $actionMap
             }
         } finally {
-            $browserAction[0].playwright_data_state = "fresh"
+            $browserActions[0].playwright_data_state = "fresh"
         }
     }
 
