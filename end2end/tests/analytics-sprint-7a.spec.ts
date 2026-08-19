@@ -52,13 +52,23 @@ async function referenceInventory(page: Page) {
     expect(placement, `Dashboard should bind Component ${componentId}`).toBeTruthy();
     return placement!;
   };
+  const disjointPlacement = detail.placements.find(
+    (item) =>
+      item.availability === "unavailable" &&
+      item.resolution_state === "restricted" &&
+      item.component === undefined,
+  );
+  expect(
+    disjointPlacement,
+    "Dashboard should retain one nondisclosing disjoint placement",
+  ).toBeTruthy();
   return {
     dataset: dataset!, table: table!, chart: chart!, stat: stat!, disjoint: disjoint!,
     dashboard: dashboard!, detail,
     tablePlacement: placementFor(table!.component_id),
     chartPlacement: placementFor(chart!.component_id),
     statPlacement: placementFor(stat!.component_id),
-    disjointPlacement: placementFor(disjoint!.component_id),
+    disjointPlacement: disjointPlacement!,
   };
 }
 
@@ -72,7 +82,7 @@ test.describe("source-exact scoped analytics boundary", () => {
         fixture.table.component_id,
         fixture.chart.component_id,
         fixture.stat.component_id,
-        fixture.disjoint.component_id,
+        undefined,
       ]),
     );
   });
@@ -84,15 +94,15 @@ test.describe("source-exact scoped analytics boundary", () => {
       `/api/dashboards/${fixture.dashboard.id}/placements/${fixture.statPlacement.placement_id}/render/stat-card`,
     ));
     expect(stat.materialization_state).toBe("ready");
-    expect(stat.stat.display_value).toBe("4");
+    expect(stat.stat.display_value).toBe("1");
     const table = await json<any>(await page.request.get(
       `/api/dashboards/${fixture.dashboard.id}/placements/${fixture.tablePlacement.placement_id}/render/table?page_size=100`,
     ));
     expect(table.materialization_state).toBe("ready");
     const rows = JSON.stringify(table.rows);
-    for (const expected of ["Initial", "Same time A", "Same time B"]) {
-      expect(rows).toContain(expected);
-    }
+    expect(rows).toContain("Initial");
+    expect(rows).not.toContain("Same time A");
+    expect(rows).not.toContain("Same time B");
     expect(rows).not.toContain("Outside scope");
   });
 

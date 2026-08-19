@@ -1151,7 +1151,9 @@ test.describe.serial("Sprint 6A Module Management", () => {
         ).toBeVisible();
         for (const property of Object.keys(configurationProperties)) {
           await expect(
-            configurationCard.locator(`[name="${property}"]`),
+            configurationCard.locator(
+              `[name="${property}"]:not([type="hidden"])`,
+            ),
           ).toBeVisible();
         }
         const [configurationResponse] = await Promise.all([

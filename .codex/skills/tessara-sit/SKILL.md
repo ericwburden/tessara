@@ -22,6 +22,11 @@ When the coordinator assigns a focused repair portion, also read
 [`../tessara-sprint-validation/references/post-sit-defect-convergence.md`](../tessara-sprint-validation/references/post-sit-defect-convergence.md)
 completely.
 
+On any failed SIT lane, also read
+[`../tessara-sprint-validation/references/defect-provenance.md`](../tessara-sprint-validation/references/defect-provenance.md)
+and emit a schema-valid `defect-provenance.json` beside the failed attempt
+before correction or another full lane launch.
+
 ## Prerequisites
 
 Require parsed, passing `preflight-result.json` and `candidate.json`. Reject
@@ -129,6 +134,12 @@ candidate, environment, stage, whether assertions started, and raw evidence.
 Use the narrowest safe reproducer for diagnosis, but never substitute it for
 the authoritative lane.
 
+Compare the failure with the frozen fixture, environment, acceptance
+inventory, and implementation-readiness proof. Route product, fixture,
+harness, environment, evidence, flaky, and ambiguous findings through the
+provenance record. Do not change source or tests inside authoritative SIT and
+do not rerun broadly while `routing.full_rerun_blocked` is true.
+
 Do not decide that all earlier phases are invalid merely because a command
 returned nonzero. Apply the shared invalidation matrix through
 `tessara-sprint-validation`:
@@ -165,4 +176,5 @@ suite after the successor candidate freezes.
 
 Finish only when every authoritative lane passed, evidence parses and hashes,
 the candidate fingerprint is unchanged, the canonical topology is restored,
-and `sit-result.json` authorizes `tessara-uat`—not closeout.
+every SIT provenance record is verified or validly superseded, and
+`sit-result.json` authorizes `tessara-uat`—not closeout.

@@ -9,7 +9,6 @@ import {
 import {
   attachNativeRouteGuard,
   expectShellRouteDirectLoadAndRefresh,
-  expectStandaloneRouteDirectLoadAndRefresh,
 } from "./support/native-route";
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
@@ -326,10 +325,14 @@ function attachConsoleGuard(page: Page) {
 
 async function gotoHydrated(page: Page, url: string) {
   await page.goto(url);
-  await expect(page.locator("#module-content")).toHaveAttribute(
-    "data-hydration",
-    "ready",
-  );
+  await expect(page.locator(".app-shell")).toBeVisible();
+  await expect(
+    page
+      .locator(
+        '#module-content[data-hydration="ready"], #tessara-module-outlet[data-hydration="ready"]',
+      )
+      .first(),
+  ).toBeVisible();
 }
 
 async function signInAsAdmin(page: Page) {
@@ -595,10 +598,11 @@ async function openEditorSection(page: Page, heading: string) {
     has: page.getByRole("heading", { name: heading, exact: true }),
   });
   await expect(section).toBeVisible();
-  const toggle = section.getByRole("button", { name: heading, exact: true }).first();
+  const toggle = section.locator("button.dataset-editor-section__collapse").first();
   if ((await toggle.getAttribute("aria-expanded")) === "false") {
     await toggle.click();
   }
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
   return section;
 }
 
@@ -626,12 +630,11 @@ async function openOperationPanel(
 }
 
 async function addOperation(page: Page, title: string) {
-  await page.getByLabel("Add operation").last().click();
-  await page
-    .locator(".dataset-operation-insert__menu")
-    .last()
-    .getByRole("button", { name: title, exact: true })
-    .click();
+  const insert = page.locator(".dataset-operation-insert").last();
+  const trigger = insert.getByRole("button", { name: "Add operation", exact: true });
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await insert.getByRole("button", { name: title, exact: true }).click();
   return openOperationPanel(page, title, "last");
 }
 
@@ -687,7 +690,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
   try {
     await expectShellRouteDirectLoadAndRefresh(page, {
       path: "/datasets/new",
-      shellTitle: "Create Dataset",
+      shellTitle: "Datasets",
       activeHref: "/datasets",
       ready: async (routePage) => {
         await expect(
@@ -703,9 +706,10 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
     });
 
     datasetId = await createDataset(page, payload);
-    await expectStandaloneRouteDirectLoadAndRefresh(page, {
+    await expectShellRouteDirectLoadAndRefresh(page, {
       path: `/datasets/${datasetId}/preview`,
-      rootSelector: ".dataset-preview-page",
+      shellTitle: "Datasets",
+      activeHref: "/datasets",
       ready: async (routePage) => {
         await expect(
           routePage.getByText("Dataset Preview", { exact: true }),
@@ -741,7 +745,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
     });
     await expectShellRouteDirectLoadAndRefresh(page, {
       path: `/datasets/${datasetId}/revisions/${draft.revision_id}/edit`,
-      shellTitle: "Edit Revision",
+      shellTitle: "Datasets",
       activeHref: "/datasets",
       ready: async (routePage) => {
         await expect(
@@ -965,8 +969,8 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     const roundedCalculation = calculations.locator(".dataset-calculation-row").first();
     await roundedCalculation.getByLabel("Output Key").fill("avg_target_rounded");
     await roundedCalculation.getByLabel("Output Key").press("Tab");
-    await roundedCalculation.getByLabel("Label").fill("Average Target Rounded");
-    await roundedCalculation.getByLabel("Label").press("Tab");
+    await roundedCalculation.getByLabel("Label", { exact: true }).fill("Average Target Rounded");
+    await roundedCalculation.getByLabel("Label", { exact: true }).press("Tab");
     await roundedCalculation.getByLabel("Base Field").selectOption("avg_target");
     await roundedCalculation.getByRole("button", { name: "Add function" }).click();
     await selectComboboxOption(roundedCalculation, "Function", "round", "Round");
@@ -981,9 +985,9 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await restrictionCalculation.getByLabel("Output Key").fill("avg_target_restricted");
     await restrictionCalculation.getByLabel("Output Key").press("Tab");
     await restrictionCalculation
-      .getByLabel("Label")
+      .getByLabel("Label", { exact: true })
       .fill("Average Target Restricted");
-    await restrictionCalculation.getByLabel("Label").press("Tab");
+    await restrictionCalculation.getByLabel("Label", { exact: true }).press("Tab");
     await restrictionCalculation.getByLabel("Base Field").selectOption("avg_target");
     await restrictionCalculation.getByRole("button", { name: "Add function" }).click();
     await selectComboboxOption(
@@ -1033,7 +1037,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     const visibility = page.locator("section.dataset-editor-section", {
       has: page.getByRole("heading", { name: "Visibility" }),
     });
-    await visibility.getByPlaceholder("Search nodes").fill("Community");
+    await visibility.getByPlaceholder("Search nodes").fill("Restricted");
     await expect(visibility.locator(".dataset-visibility-node.is-search-match").first()).toBeVisible();
 
     const saveResponse = page.waitForResponse(
@@ -1193,7 +1197,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
           .locator("section.dataset-editor-section", {
             has: page.getByRole("heading", { name: "View Restrictions", exact: true }),
           })
-          .getByRole("button", { name: "View Restrictions", exact: true })
+          .locator("button.dataset-editor-section__collapse")
           .first(),
       ).toHaveAttribute("aria-expanded", "false");
     });
@@ -1233,8 +1237,8 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       const calculation = calculations.locator(".dataset-calculation-row").first();
       await calculation.getByLabel("Output Key").fill("review_started_together");
       await calculation.getByLabel("Output Key").press("Tab");
-      await calculation.getByLabel("Label").fill("Review Started Together");
-      await calculation.getByLabel("Label").press("Tab");
+      await calculation.getByLabel("Label", { exact: true }).fill("Review Started Together");
+      await calculation.getByLabel("Label", { exact: true }).press("Tab");
       await calculation
         .getByLabel("Base Field")
         .selectOption(sourceFieldKey("program", numberField.key));
@@ -1261,8 +1265,8 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       const numericCalculation = calculations.locator(".dataset-calculation-row").nth(1);
       await numericCalculation.getByLabel("Output Key").fill("target_band");
       await numericCalculation.getByLabel("Output Key").press("Tab");
-      await numericCalculation.getByLabel("Label").fill("Target Band");
-      await numericCalculation.getByLabel("Label").press("Tab");
+      await numericCalculation.getByLabel("Label", { exact: true }).fill("Target Band");
+      await numericCalculation.getByLabel("Label", { exact: true }).press("Tab");
       await numericCalculation
         .getByLabel("Base Field")
         .selectOption(sourceFieldKey("program", numberField.key));
@@ -1291,8 +1295,8 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       const mapCalculation = calculations.locator(".dataset-calculation-row").nth(2);
       await mapCalculation.getByLabel("Output Key").fill("status_mapped");
       await mapCalculation.getByLabel("Output Key").press("Tab");
-      await mapCalculation.getByLabel("Label").fill("Status Mapped");
-      await mapCalculation.getByLabel("Label").press("Tab");
+      await mapCalculation.getByLabel("Label", { exact: true }).fill("Status Mapped");
+      await mapCalculation.getByLabel("Label", { exact: true }).press("Tab");
       await mapCalculation
         .getByLabel("Base Field")
         .selectOption(sourceFieldKey("program", textField.key));
@@ -1790,12 +1794,12 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
     await expect(page.getByRole("button", { name: "Save Dataset" })).toBeEnabled();
 
     const sourceSection = await openEditorSection(page, "Initial Data Source");
-    await expect(sourceSection.locator("label.form-field").nth(2).locator("select")).toHaveValue(
-      upstreamDatasetId,
-    );
-    await expect(sourceSection.locator("label.form-field").nth(3).locator("select")).toHaveValue(
-      "1",
-    );
+    await expect(
+      sourceSection.getByLabel("Dataset", { exact: true }),
+    ).toHaveValue(upstreamDatasetId);
+    await expect(
+      sourceSection.getByLabel("Version", { exact: true }),
+    ).toHaveValue("1");
 
     const projection = await openOperationPanel(page, "Projection");
     const selectedFields = projection.locator(".dataset-projection-selected__item");

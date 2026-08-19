@@ -13,8 +13,11 @@ pub(crate) fn install_dataset_editor_loaders(
     revision_id: Option<String>,
     state: DatasetEditorState,
 ) {
-    seed_dataset_editor_from_bootstrap(state);
+    let seeded_from_bootstrap = seed_dataset_editor_from_bootstrap(state);
     Effect::new(move |_| {
+        if seeded_from_bootstrap {
+            return;
+        }
         load_forms(state.forms, state.load_error);
         load_datasets(state.datasets, RwSignal::new(false), state.load_error);
         load_nodes(state.nodes, state.load_error);
@@ -29,11 +32,12 @@ pub(crate) fn install_dataset_editor_loaders(
     });
 }
 
-fn seed_dataset_editor_from_bootstrap(state: DatasetEditorState) {
+fn seed_dataset_editor_from_bootstrap(state: DatasetEditorState) -> bool {
     let Some(editor) = dataset_route_bootstrap().and_then(|bootstrap| bootstrap.editor().cloned())
     else {
-        return;
+        return false;
     };
+    let bootstrap_is_complete = editor.provider_error.is_none();
     state.datasets.set(editor.datasets);
     state.forms.set(editor.forms);
     state.nodes.set(editor.nodes);
@@ -52,6 +56,12 @@ fn seed_dataset_editor_from_bootstrap(state: DatasetEditorState) {
     } else {
         state.editor_ready.set(true);
     }
+    // A complete owner projection is authoritative for this document and
+    // must not be fetched a second time during hydration. A degraded SSR
+    // projection still triggers the canonical Dataset-owned loaders so a
+    // provider that recovered between document render and hydration can heal
+    // without discarding the editor route.
+    bootstrap_is_complete
 }
 
 fn edit_targets(state: DatasetEditorState) -> DatasetEditLoadTargets {

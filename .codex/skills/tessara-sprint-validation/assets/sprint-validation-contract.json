@@ -27,7 +27,7 @@
     { "name": "fixtures", "tracked_inputs": ["**/fixtures/**", "scripts/prepare*-fixtures.ps1"], "environment_sections": ["accounts", "fixtures"] },
     { "name": "acceptance-inventory", "tracked_inputs": ["end2end/**", "docs/sprints/*-uat/**", "docs/sprints/*-validation-contract.json"], "environment_sections": ["browser"] },
     { "name": "environment-contract", "tracked_inputs": [".env.example", "rust-toolchain*", "scripts/*environment*.ps1"], "environment_sections": ["toolchain", "databases", "compose", "ports"] },
-    { "name": "validation-shared", "tracked_inputs": ["scripts/tessara-validation-policy.psm1", ".codex/skills/tessara-sprint-validation/references/validation-policy-v2.md", ".codex/skills/tessara-sprint-validation/references/*.schema.json", "docs/architecture/module-extraction-playbook.md"], "environment_sections": [] },
+    { "name": "validation-shared", "tracked_inputs": ["scripts/tessara-validation-policy.psm1", ".codex/skills/tessara-sprint-validation/SKILL.md", ".codex/skills/tessara-sprint-validation/references/validation-policy-v2.md", ".codex/skills/tessara-sprint-validation/references/defect-provenance.md", ".codex/skills/tessara-sprint-validation/references/*.schema.json", ".codex/skills/tessara-sprint-validation/assets/defect-provenance.json", "docs/architecture/module-extraction-playbook.md"], "environment_sections": [] },
     { "name": "readiness-runner", "tracked_inputs": ["scripts/*readiness*.ps1"], "environment_sections": [] },
     { "name": "rehearsal-runner", "tracked_inputs": ["scripts/*rehearsal*.ps1"], "environment_sections": [] },
     { "name": "preflight-runner", "tracked_inputs": ["scripts/*preflight*.ps1"], "environment_sections": [] },

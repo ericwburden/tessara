@@ -1747,7 +1747,7 @@ pub(crate) async fn list_dataset_summaries(
 
     let rows = sqlx::query(
         "SELECT DISTINCT d.id,d.name,d.slug,d.grain,
-                r.id AS current_revision_id,r.version_number,r.version_major,
+                r.id AS current_revision_id,r.version_major,
                 r.version_minor,r.version_patch,r.materialized_row_count,r.materialized_at
          FROM datasets d
          JOIN dataset_scope_nodes s ON s.dataset_id=d.id
@@ -1775,6 +1775,32 @@ pub(crate) async fn list_dataset_summaries(
         .bind(dataset_id)
         .fetch_all(&state.pool)
         .await?;
+        let revision_rows = sqlx::query(
+            "SELECT id,version_number,version_major,version_minor,version_patch,output_fields
+             FROM dataset_revisions
+             WHERE dataset_id=$1 AND status IN ('published','superseded')
+             ORDER BY version_number,id",
+        )
+        .bind(dataset_id)
+        .fetch_all(&state.pool)
+        .await?;
+        let revisions = revision_rows
+            .into_iter()
+            .map(|revision| {
+                let output_fields = serde_json::from_value::<Vec<DatasetProductFieldV1>>(
+                    revision.try_get("output_fields")?,
+                )
+                .map_err(|error| DatasetModuleError::Internal(error.to_string()))?;
+                Ok(DatasetProductRevisionFieldSummaryV1 {
+                    id: revision.try_get::<Uuid, _>("id")?.to_string(),
+                    version_number: revision.try_get("version_number")?,
+                    version_major: revision.try_get("version_major")?,
+                    version_minor: revision.try_get("version_minor")?,
+                    version_patch: revision.try_get("version_patch")?,
+                    output_fields,
+                })
+            })
+            .collect::<Result<Vec<_>, DatasetModuleError>>()?;
         let scope_rows = sqlx::query(
             "SELECT node_id,node_name,node_type_name,parent_node_id,node_path
              FROM dataset_scope_nodes WHERE dataset_id=$1 ORDER BY node_path,node_id",
@@ -1825,24 +1851,9 @@ pub(crate) async fn list_dataset_summaries(
         let provenance = load_dataset_provenance(state, dataset_id).await?;
         let field_count = output_fields.len() as i64;
         let current_revision_id = row.try_get::<Option<Uuid>, _>("current_revision_id")?;
-        let version_number = row.try_get::<Option<i32>, _>("version_number")?;
         let version_major = row.try_get::<Option<i32>, _>("version_major")?;
         let version_minor = row.try_get::<Option<i32>, _>("version_minor")?;
         let version_patch = row.try_get::<Option<i32>, _>("version_patch")?;
-        let revisions = current_revision_id
-            .map(|id| {
-                vec![DatasetProductRevisionFieldSummaryV1 {
-                    id: id.to_string(),
-                    version_number: version_number
-                        .expect("a current Dataset revision has a version number"),
-                    version_major,
-                    version_minor,
-                    version_patch,
-                    output_fields: output_fields.clone(),
-                }]
-            })
-            .unwrap_or_default();
-
         let materialized_at: Option<chrono::DateTime<Utc>> = row.try_get("materialized_at")?;
         let freshness = load_dataset_freshness(state, dataset_id, materialized_at).await?;
         datasets.push(DatasetProductSummaryV1 {

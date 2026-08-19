@@ -744,7 +744,15 @@ async fn issue_module_authorization(
     .await?;
     let authorization_revision: i64 = revisions.try_get("authorization_revision")?;
     let organization_revision: i64 = revisions.try_get("organization_revision")?;
-    sync_control_projections(state, module, authorization_revision, organization_revision).await?;
+    sync_control_projections(
+        state,
+        module.installation_id,
+        module.instance_id,
+        &module.manifest,
+        authorization_revision,
+        organization_revision,
+    )
+    .await?;
 
     if !bindings
         .iter()
@@ -836,22 +844,24 @@ fn shell_context(
         .map_err(|error| ApiError::Internal(error.into()))
 }
 
-async fn sync_control_projections(
+pub(crate) async fn sync_control_projections(
     state: &AppState,
-    module: &InstalledModule,
+    installation_id: Uuid,
+    module_instance_id: Uuid,
+    manifest: &ModuleManifest,
     authorization_revision: i64,
     organization_revision: i64,
 ) -> ApiResult<()> {
-    let endpoint = service_endpoint(&module.manifest)?;
+    let endpoint = service_endpoint(manifest)?;
     let control_key = std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
         .unwrap_or_else(|_| "development-module-control-only".into());
     let client = reqwest::Client::new();
-    for projection in &module.manifest.control_projections {
+    for projection in &manifest.control_projections {
         let payload = match projection.kind {
             tessara_module_contract::ControlProjectionKind::SecurityState => json!({
                 "schema_version":1,
-                "installation_id":module.installation_id,
-                "module_instance_id":module.instance_id,
+                "installation_id":installation_id,
+                "module_instance_id":module_instance_id,
                 "authorization_revision":authorization_revision,
                 "organization_revision":organization_revision,
                 "enabled":true,

@@ -751,7 +751,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
         );
       });
       await page
-        .getByRole("group", { name: "Visible columns" })
+        .getByRole("dialog", { name: "Visible columns" })
         .getByLabel(secondField.label, { exact: false })
         .uncheck();
       await projectionResponse;
@@ -1344,7 +1344,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
         "/api/admin/components/datasets/distinct-values",
         {
           data: {
-            schema_version: 1,
+            schema_version: 2,
             action: "distinct_values",
             reference: dataset.reference,
             field_key: fieldKey,

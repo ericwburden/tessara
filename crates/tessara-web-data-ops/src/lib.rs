@@ -970,10 +970,8 @@ pub fn DataOpsAggregationEditor(
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <For
-                                        each=move || aggregation.get().metrics
-                                        key=|metric| metric.id
-                                        children=move |metric| {
+                                    {move || {
+                                        aggregation.get().metrics.into_iter().map(|metric| {
                                             let metric_id = metric.id;
                                             let initial_key = metric.key.clone();
                                             let initial_label = metric.label.clone();
@@ -1112,8 +1110,8 @@ pub fn DataOpsAggregationEditor(
                                                     </td>
                                                 </tr>
                                             }
-                                        }
-                                    />
+                                        }).collect_view()
+                                    }}
                                 </tbody>
                             </DataTable>
                         </div>

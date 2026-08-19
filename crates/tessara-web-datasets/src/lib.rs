@@ -69,6 +69,15 @@ pub(crate) fn dataset_content(bootstrap: &DatasetRouteBootstrap) -> leptos::prel
             />
         }
         .into_any(),
+        DatasetRouteBootstrap::RevisionUnavailable { message, .. } => view! {
+            <section class="route-panel datasets-page">
+                <tessara_module_ui::EmptyState
+                    title="Revision unavailable"
+                    message=message.clone()
+                />
+            </section>
+        }
+        .into_any(),
         DatasetRouteBootstrap::RevisionEdit {
             dataset_id,
             revision_id,

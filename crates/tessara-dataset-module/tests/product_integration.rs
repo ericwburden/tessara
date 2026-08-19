@@ -786,6 +786,22 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
         visible_summary.visibility_nodes[0].node_id,
         allowed_scope.to_string()
     );
+    assert_eq!(visible_summary.revisions.len(), 2);
+    assert_eq!(
+        visible_summary.revisions[0].id,
+        visible_revision.to_string()
+    );
+    assert_eq!(
+        visible_summary.revisions[1].id,
+        superseded_revision.to_string()
+    );
+    assert_eq!(visible_summary.revisions[1].output_fields[0].key, "program");
+    assert!(
+        visible_summary
+            .revisions
+            .iter()
+            .all(|revision| revision.id != draft_revision.to_string())
+    );
     let downstream_summary = datasets
         .iter()
         .find(|dataset| dataset.id == downstream_dataset.to_string())
@@ -1163,6 +1179,44 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
         );
         assert_eq!(projection.payload["route"], expected_route, "{path}");
     }
+
+    let unavailable_revision = Uuid::new_v4();
+    let unavailable_path = format!("/datasets/{visible_dataset}/revisions/{unavailable_revision}");
+    let (authorization, shell, correlation_id) = document_credentials(
+        "datasets.get_revision",
+        "tessara.datasets.dataset-major-line",
+        true,
+    );
+    let unavailable = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&unavailable_path)
+                .header(
+                    header::ACCEPT,
+                    "application/vnd.tessara.module-view+json; version=1",
+                )
+                .header("x-tessara-authorization", authorization)
+                .header("x-tessara-shell-context", shell)
+                .header("x-tessara-correlation-id", correlation_id.to_string())
+                .body(Body::empty())
+                .expect("unavailable Dataset revision lifecycle request"),
+        )
+        .await
+        .expect("unavailable Dataset revision lifecycle response");
+    assert_eq!(unavailable.status(), StatusCode::OK);
+    let projection: BrowserLifecycleBootstrapV1 = serde_json::from_slice(
+        &to_bytes(unavailable.into_body(), usize::MAX)
+            .await
+            .expect("read unavailable Dataset revision lifecycle response"),
+    )
+    .expect("canonical unavailable Dataset revision lifecycle response");
+    assert_eq!(projection.destination.as_str(), "datasets.revision_detail");
+    assert_eq!(projection.payload["route"], "revision_unavailable");
+    assert_eq!(
+        projection.payload["message"],
+        "Dataset revision was not found."
+    );
     assert_eq!(owner_write_fingerprint(&pool).await, before_document_gets);
 
     let hidden = app

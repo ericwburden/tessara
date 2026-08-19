@@ -126,11 +126,10 @@ test.describe("Sprint 8B independent Dataset module", () => {
     await expect(page.getByRole("heading", { name: /create dataset/i })).toBeVisible();
     expect(forbidden).toEqual([]);
     expect(external).toEqual([]);
-    expect([...ownedOptions].sort()).toEqual([
-      "/api/admin/datasets/editor-options/forms",
-      "/api/admin/datasets/editor-options/principals",
-      "/api/admin/datasets/editor-options/scopes",
-    ]);
+    // The complete document now carries the canonical Dataset-owned editor
+    // projection, so hydration must not issue a second browser fetch for the
+    // same options.
+    expect([...ownedOptions]).toEqual([]);
 
     await page.getByRole("button", { name: /initial data source/i }).click();
     const formPicker = page.getByRole("combobox", { name: "Form", exact: true }).first();
@@ -159,7 +158,9 @@ test.describe("Sprint 8B independent Dataset module", () => {
     ]);
     const versionPicker = page.getByRole("combobox", { name: "Version", exact: true }).first();
     await expect(versionPicker.locator("option")).not.toHaveCount(0);
-    expect([...ownedOptions].some((path) => /^\/api\/admin\/datasets\/editor-options\/forms\/[^/]+$/.test(path))).toBe(true);
+    expect([...ownedOptions]).toEqual([
+      `/api/admin/datasets/editor-options/forms/${await versionPicker.inputValue()}`,
+    ]);
     expect(forbidden).toEqual([]);
     expect(external).toEqual([]);
 

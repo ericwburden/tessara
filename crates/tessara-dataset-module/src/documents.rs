@@ -218,13 +218,32 @@ async fn dataset_document(
         }
         ("revision_detail", Some(revision_id)) => {
             let revision_uuid = parse_product_id(&revision_id)?;
-            let revision = product::dataset_revision_detail(
+            let revision = match product::dataset_revision_detail(
                 &state,
                 &grant.payload,
                 dataset_uuid,
                 revision_uuid,
             )
-            .await?;
+            .await
+            {
+                Ok(revision) => revision,
+                Err(DatasetModuleError::NotFound(_)) => {
+                    return document(
+                        &state,
+                        &headers,
+                        &format!("/datasets/{dataset_id}/revisions/{revision_id}"),
+                        "Dataset Revision",
+                        DatasetRouteBootstrap::RevisionUnavailable {
+                            dataset_id,
+                            revision_id,
+                            message: "Dataset revision was not found.".into(),
+                            can_manage,
+                        },
+                    )
+                    .await;
+                }
+                Err(error) => return Err(error),
+            };
             (
                 format!("/datasets/{dataset_id}/revisions/{revision_id}"),
                 "Dataset Revision",
@@ -447,6 +466,7 @@ fn destination(value: &DatasetRouteBootstrap) -> &'static str {
         DatasetRouteBootstrap::Edit { .. } => "datasets.edit",
         DatasetRouteBootstrap::Revisions { .. } => "datasets.revisions",
         DatasetRouteBootstrap::RevisionDetail { .. } => "datasets.revision_detail",
+        DatasetRouteBootstrap::RevisionUnavailable { .. } => "datasets.revision_detail",
         DatasetRouteBootstrap::RevisionEdit { .. } => "datasets.revision_edit",
     }
 }

@@ -13,6 +13,8 @@ use super::types::{
 use serde::Deserialize;
 #[cfg(feature = "hydrate")]
 use tessara_component_viewer_ui::ComponentRenderResponse;
+#[cfg(feature = "hydrate")]
+use tessara_datasets_contract::DATASET_CONTRACT_SCHEMA_VERSION;
 
 #[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_components() -> Result<Option<Vec<ComponentSummary>>, String> {
@@ -87,7 +89,7 @@ pub(crate) async fn fetch_dataset_distinct_values(
         .ok_or_else(|| "Selected Dataset reference is unavailable.".to_string())?;
     let response: DistinctResponse = send_json_request(
         gloo_net::http::Request::post("/api/admin/components/datasets/distinct-values"),
-        serde_json::json!({"schema_version":1,"action":"distinct_values","reference":reference,"field_key":field,"limit":100}).to_string(),
+        serde_json::json!({"schema_version":DATASET_CONTRACT_SCHEMA_VERSION,"action":"distinct_values","reference":reference,"field_key":field,"limit":100}).to_string(),
         "Dataset distinct values",
     ).await?;
     Ok(Some(DatasetDistinctValues {

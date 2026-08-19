@@ -4741,6 +4741,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tessara-component-viewer-ui",
+ "tessara-datasets-contract",
  "tessara-module-contract",
  "tessara-module-ui",
  "tessara-web-data-ops",

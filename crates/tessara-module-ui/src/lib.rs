@@ -366,7 +366,7 @@ pub fn navigation_path_matches(current_path: &str, navigation_href: &str) -> boo
 
 #[cfg(feature = "components")]
 fn shell_interaction_script() -> &'static str {
-    r#"(function(){const root=document.documentElement;const shell=document.querySelector('.app-shell');const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{shell?.classList.remove('mobile-nav-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{shell?.classList.add('mobile-nav-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);document.querySelector('[data-shell-sign-out]')?.addEventListener('click',()=>{const form=document.createElement('form');form.method='post';form.action='/api/logout';document.body.appendChild(form);form.submit()})})();"#
+    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);document.querySelector('[data-shell-sign-out]')?.addEventListener('click',()=>{const form=document.createElement('form');form.method='post';form.action='/api/logout';document.body.appendChild(form);form.submit()})})();"#
 }
 
 #[cfg(feature = "components")]
@@ -499,6 +499,7 @@ mod tests {
         assert!(html.contains("data-shell-state=\"recovery\""));
         assert!(html.contains("data-theme-preference=\"dark\""));
         assert!(html.contains("tessara.themePreference"));
+        assert_eq!(html.matches("data-theme-value=").count(), 3);
         assert!(html.contains("&lt;Operator&gt;"));
         assert!(html.contains("operator@tessara.local"));
         assert_eq!(html.matches(">Main</p>").count(), 2);
@@ -510,6 +511,8 @@ mod tests {
         assert!(html.contains("module-scope--tessara-reference-module-sdk"));
         assert!(html.contains(r#"class="top-app-bar__title">SDK Reference</span>"#));
         assert_eq!(html.matches("sidebar-link is-active").count(), 2);
+        assert!(html.contains("mobileNavigation?.classList.add('is-open')"));
+        assert!(!html.contains("shell?.classList.add('mobile-nav-open')"));
         assert!(html.contains(r#"name="tessara-module-release" content="1.0.1""#));
         assert!(!html.contains("type=\"module\""));
     }

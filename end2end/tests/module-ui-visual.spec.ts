@@ -178,7 +178,20 @@ test.describe("canonical module UI visual baselines", () => {
     test(`Components editor at 390 px (${theme})`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await visit(page, "/components/dataset-table/edit", theme);
-      await expect(page.locator(".mobile-nav__toggle")).toBeVisible();
+      const mobileNavigation = page.locator(".mobile-nav");
+      const mobileToggle = mobileNavigation.locator(".mobile-nav__toggle");
+      await expect(mobileToggle).toBeVisible();
+      await mobileToggle.click();
+      await expect(mobileToggle).toHaveAttribute("aria-expanded", "true");
+      await expect(mobileNavigation.locator(".mobile-nav__panel")).toBeVisible();
+      await expect(
+        mobileNavigation.getByRole("link", { name: "Datasets", exact: true }),
+      ).toBeVisible();
+      await mobileNavigation
+        .locator(".mobile-nav__scrim")
+        .click({ position: { x: 380, y: 100 } });
+      await expect(mobileToggle).toHaveAttribute("aria-expanded", "false");
+      await expect(mobileNavigation.locator(".mobile-nav__panel")).toBeHidden();
       await expect(page).toHaveScreenshot(`components-editor-${theme}-390.png`, {
         animations: "disabled",
       });

@@ -179,7 +179,7 @@ function generatedWorkflowFor(form: FormDefinition): FormWorkflowLink {
 
 async function formScopeNodeTypeId(page: Page): Promise<string> {
   const nodeTypes = await apiGet<NodeTypeSummary[]>(page, "/api/admin/node-types");
-  const scopeType = nodeTypes.find((item) => item.slug === "organization");
+  const scopeType = nodeTypes.find((item) => item.slug === "scope.organization");
   expect(
     scopeType,
     "the source-exact Reference topology should expose its Organization node type",

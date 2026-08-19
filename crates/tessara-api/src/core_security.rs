@@ -1987,6 +1987,12 @@ fn configuration_form_payload(
     let mut configuration =
         serde_json::Map::from_iter([("schema_version".into(), json!(schema_version))]);
     for (name, property) in properties {
+        // The form envelope and every canonical module configuration both use
+        // `schema_version`. It is consumed above and seeded into the module
+        // payload, so do not require a second form field with the same name.
+        if name == "schema_version" {
+            continue;
+        }
         let Some(raw) = fields.remove(name) else {
             if required.contains(&name.as_str()) {
                 return Err(ApiError::BadRequest(format!(
@@ -2616,6 +2622,30 @@ mod tests {
                 "display_label": "Scoped Records",
                 "retention_mode": "retain_on_undeploy"
             })
+        );
+    }
+
+    #[test]
+    fn configuration_form_schema_version_is_shared_with_the_module_payload() {
+        let configuration = configuration_form_payload(
+            &json!({
+                "type": "object",
+                "properties": {
+                    "schema_version": {"type": "integer", "const": 1},
+                    "display_label": {"type": "string"}
+                },
+                "required": ["schema_version", "display_label"]
+            }),
+            BTreeMap::from([
+                ("schema_version".into(), "1".into()),
+                ("display_label".into(), "Datasets".into()),
+            ]),
+        )
+        .expect("the envelope schema version is also the module configuration version");
+
+        assert_eq!(
+            configuration,
+            json!({"schema_version": 1, "display_label": "Datasets"})
         );
     }
 

@@ -2021,13 +2021,13 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.scopedManager,
       "get",
       `/api/datasets/${fixtures.outOfScopeDataset.id}`,
-      [403],
+      [404],
     );
     await expectStatus(
       fixtures.scopedManager,
       "get",
       `/api/datasets/${fixtures.outOfScopeDataset.id}/table`,
-      [403],
+      [404],
     );
 
     const components = await getJson<ComponentListSummary[]>(fixtures.scopedManager, "/api/components");

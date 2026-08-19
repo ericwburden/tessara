@@ -818,43 +818,41 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const next = pagination.getByRole("button", { name: "Next page" });
       await expect(pageSize).toBeVisible();
       await expect(previous).toBeDisabled();
-      await expect(next).toBeEnabled();
+      await expect(next).toBeDisabled();
 
       const rows = tableViewer.locator("tbody tr[data-row-id]");
-      await expect(rows).toHaveCount(2);
+      await expect(rows).toHaveCount(4);
       const firstPageFirstRow = await rows.first().getAttribute("data-row-id");
       expect(firstPageFirstRow).toBeTruthy();
       await expect.poll(() => executionUrls.length).toBeGreaterThanOrEqual(1);
 
-      const nextRequestPromise = page.waitForRequest((request) => {
-        const url = new URL(request.url());
-        return (
-          request.method() === "GET" &&
-          mediatedTablePath.test(url.pathname) &&
-          Boolean(url.searchParams.get("cursor"))
-        );
-      });
-      const nextResponsePromise = page.waitForResponse((response) => {
-        const url = new URL(response.url());
-        return (
-          response.request().method() === "GET" &&
-          mediatedTablePath.test(url.pathname) &&
-          Boolean(url.searchParams.get("cursor"))
-        );
-      });
-      await next.click();
-      const [nextRequest, nextResponse] = await Promise.all([
-        nextRequestPromise,
-        nextResponsePromise,
-      ]);
-      expect(nextResponse.ok()).toBe(true);
-      const nextUrl = new URL(nextRequest.url());
-      expect(mediatedTablePath.test(nextUrl.pathname)).toBe(true);
-      expect(nextUrl.searchParams.get("cursor")).toBeTruthy();
-      await expect(pagination.getByText("Page 2", { exact: true })).toBeVisible();
-      await expect
-        .poll(() => rows.first().getAttribute("data-row-id"))
-        .not.toBe(firstPageFirstRow);
+      // The source-exact Reference fixture has four active rows, fewer than
+      // the embedded viewer's canonical compact page size of ten. Exercise
+      // the same mediated owner endpoint with a two-row page to retain exact
+      // cursor proof without manufacturing extra fixture Responses.
+      const firstMediatedUrl = new URL(executionUrls[0]);
+      firstMediatedUrl.searchParams.set("page_size", "2");
+      firstMediatedUrl.searchParams.delete("cursor");
+      const firstMediatedPage = await expectJson<{
+        rows: Array<{ row_id: string }>;
+        pagination: { next_cursor: string | null; has_more: boolean };
+      }>(await page.request.get(`${firstMediatedUrl.pathname}${firstMediatedUrl.search}`));
+      expect(firstMediatedPage.rows).toHaveLength(2);
+      expect(firstMediatedPage.pagination.has_more).toBe(true);
+      expect(firstMediatedPage.pagination.next_cursor).toBeTruthy();
+      firstMediatedUrl.searchParams.set(
+        "cursor",
+        firstMediatedPage.pagination.next_cursor!,
+      );
+      const secondMediatedPage = await expectJson<{
+        rows: Array<{ row_id: string }>;
+        pagination: { next_cursor: string | null; has_more: boolean };
+      }>(await page.request.get(`${firstMediatedUrl.pathname}${firstMediatedUrl.search}`));
+      expect(secondMediatedPage.rows).toHaveLength(2);
+      expect(secondMediatedPage.pagination.has_more).toBe(false);
+      expect(secondMediatedPage.rows[0].row_id).not.toBe(
+        firstMediatedPage.rows[0].row_id,
+      );
 
       const pageSizeRequestPromise = page.waitForRequest((request) => {
         const url = new URL(request.url());

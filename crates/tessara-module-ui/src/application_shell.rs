@@ -125,6 +125,7 @@ fn ThemeToggle() -> impl IntoView {
                             class=move || if preference.get() == value { "theme-toggle__option is-active" } else { "theme-toggle__option" }
                             type="button"
                             role="menuitemradio"
+                            data-theme-value=value
                             aria-checked=move || (preference.get() == value).to_string()
                             on:click=move |_| {
                                 preference.set(value);
@@ -132,11 +133,13 @@ fn ThemeToggle() -> impl IntoView {
                                 is_open.set(false);
                             }
                         >
-                            {if value == "dark" {
-                                view! { <Moon class="theme-toggle__option-icon"/> }.into_any()
-                            } else {
-                                view! { <Sun class="theme-toggle__option-icon"/> }.into_any()
-                            }}
+                            <span aria-hidden="true">
+                                {if value == "dark" {
+                                    view! { <Moon class="theme-toggle__option-icon"/> }.into_any()
+                                } else {
+                                    view! { <Sun class="theme-toggle__option-icon"/> }.into_any()
+                                }}
+                            </span>
                             <span>{label}</span>
                         </button>
                     })

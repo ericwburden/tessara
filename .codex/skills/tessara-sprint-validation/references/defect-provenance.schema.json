@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/defect-provenance.schema.json",
+  "title": "Tessara defect provenance record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract",
+    "policy_version",
+    "sprint",
+    "record_id",
+    "status",
+    "trigger",
+    "source_identity",
+    "inputs",
+    "findings",
+    "drift_assessment",
+    "routing",
+    "expectation_changes",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.validation.defect-provenance" },
+    "policy_version": { "const": "tessara-validation-v2" },
+    "sprint": { "$ref": "#/$defs/id" },
+    "record_id": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["open", "classified", "corrected", "verified", "blocked", "superseded"] },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "subject", "attempt", "state", "assertions_started", "failed_receipt"],
+      "properties": {
+        "phase": { "enum": ["implementation", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] },
+        "subject": { "$ref": "#/$defs/id" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "state": { "const": "failed" },
+        "assertions_started": { "type": "boolean" },
+        "product_actions_started": { "type": "boolean" },
+        "consecutive_failure_count": { "type": "integer", "minimum": 1 },
+        "failed_receipt": { "$ref": "#/$defs/hashedEvidence" }
+      }
+    },
+    "source_identity": { "$ref": "#/$defs/sourceIdentity" },
+    "environment_fingerprint": { "$ref": "#/$defs/sha256" },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation_contract", "implementation_readiness", "fixture_identity", "acceptance_inventory", "test_change_log"],
+      "properties": {
+        "validation_contract": { "$ref": "#/$defs/hashedEvidence" },
+        "implementation_readiness": { "anyOf": [{ "$ref": "#/$defs/hashedEvidence" }, { "type": "null" }] },
+        "fixture_identity": { "anyOf": [{ "$ref": "#/$defs/hashedEvidence" }, { "type": "null" }] },
+        "acceptance_inventory": { "anyOf": [{ "$ref": "#/$defs/hashedEvidence" }, { "type": "null" }] },
+        "test_change_log": { "anyOf": [{ "$ref": "#/$defs/hashedEvidence" }, { "type": "null" }] }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "drift_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin_boundary", "implementation_exit_gap", "process_drift", "affected_domains", "rationale"],
+      "properties": {
+        "origin_boundary": { "enum": ["implementation", "process", "mixed", "unresolved"] },
+        "implementation_exit_gap": { "type": "boolean" },
+        "process_drift": { "type": "boolean" },
+        "affected_domains": { "$ref": "#/$defs/ids" },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "action", "invalidate", "focused_reproducers", "full_rerun_blocked", "next_boundary", "rationale"],
+      "properties": {
+        "owner": { "enum": ["implementation", "validation-coordinator", "validation-platform", "environment-owner", "user"] },
+        "action": { "enum": ["return-to-implementation", "repair-process", "restore-environment", "finalization-only", "resolve-ambiguity", "investigate-flake"] },
+        "invalidate": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["implementation-readiness", "validation-readiness", "candidate-rehearsal", "candidate", "sit", "uat"] }
+        },
+        "focused_reproducers": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+        "full_rerun_blocked": { "type": "boolean" },
+        "next_boundary": { "enum": ["focused-diagnosis", "implementation-targets", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat", "user-decision"] },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "expectation_changes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/expectationChange" }
+    },
+    "correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_paths", "changed_domains", "focused_results", "implementation_target_results", "clean_source"],
+      "properties": {
+        "changed_paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/path" } },
+        "changed_domains": { "$ref": "#/$defs/ids" },
+        "focused_results": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+        "implementation_target_results": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+        "clean_source": { "$ref": "#/$defs/sourceIdentity" },
+        "authorized_next_boundary": { "enum": ["validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] }
+      }
+    },
+    "supersedes": { "type": "array", "items": { "$ref": "#/$defs/hashedEvidence" } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "verified" } } },
+      "then": {
+        "required": ["correction"],
+        "properties": {
+          "routing": {
+            "properties": { "full_rerun_blocked": { "const": false } }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "hashedEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tree", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "dirty": { "type": "boolean" },
+        "branch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "classification", "confidence", "symptom", "root_cause", "governing_authority", "affected_subjects", "evidence", "status"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "classification": { "enum": ["product", "fixture", "harness", "environment", "evidence-finalization", "flaky", "contract-ambiguity", "product-decision"] },
+        "confidence": { "enum": ["high", "bounded", "unresolved"] },
+        "symptom": { "type": "string", "minLength": 1 },
+        "root_cause": { "type": "string", "minLength": 1 },
+        "governing_authority": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "affected_subjects": { "$ref": "#/$defs/ids" },
+        "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/hashedEvidence" } },
+        "status": { "enum": ["open", "corrected", "verified", "blocked", "superseded"] }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command", "state", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "command": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["not-run", "passed", "failed", "blocked"] },
+        "evidence": { "anyOf": [{ "$ref": "#/$defs/hashedEvidence" }, { "type": "null" }] }
+      }
+    },
+    "expectationChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["test_path", "old_assertion", "new_assertion", "authority", "supersession_rationale", "replacement_coverage", "test_change_log"],
+      "properties": {
+        "test_path": { "$ref": "#/$defs/path" },
+        "old_assertion": { "type": "string", "minLength": 1 },
+        "new_assertion": { "type": "string", "minLength": 1 },
+        "authority": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "supersession_rationale": { "type": "string", "minLength": 1 },
+        "replacement_coverage": { "type": "string", "minLength": 1 },
+        "test_change_log": { "$ref": "#/$defs/hashedEvidence" }
+      }
+    }
+  }
+}

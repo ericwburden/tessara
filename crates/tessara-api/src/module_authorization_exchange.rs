@@ -115,6 +115,21 @@ async fn exchange(
         return Err(restricted());
     }
     let revisions = security_revisions(&state).await?;
+    if matches!(
+        &request.target,
+        AuthorizationAudienceV1::ModuleInstance { .. }
+    ) {
+        let target = audience_module(&state, installation_id, &request.target).await?;
+        crate::module_gateway::sync_control_projections(
+            &state,
+            installation_id,
+            target.instance_id,
+            &target.manifest,
+            revisions.0 as i64,
+            revisions.1 as i64,
+        )
+        .await?;
+    }
     let now = Utc::now();
     let lifetime = match provider_action.operation {
         AuthorizationGrantOperationV1::Read => 60,

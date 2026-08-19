@@ -20,6 +20,10 @@ read
 completely and validate its records against
 [`../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json`](../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json).
 
+When any v2 target, lane, or scenario failed, read
+[`../tessara-sprint-validation/references/defect-provenance.md`](../tessara-sprint-validation/references/defect-provenance.md)
+and validate the complete provenance chronology against its schema.
+
 ## Boundary with validation
 
 Closeout consumes validation evidence; it does not create it.
@@ -32,6 +36,8 @@ Closeout consumes validation evidence; it does not create it.
   chain selected by the sprint contract.
 - If evidence is missing, stale, or tied to multiple candidates, reopen
   validation rather than filling the gap during closeout.
+- If a provenance record is open, blocked, missing, or lacks authority for an
+  expectation change, reopen validation at the coordinator-selected boundary.
 - If a post-SIT convergence cycle occurred, require its complete retained
   harvest, batch, impact, focused-attempt, restoration, and final-entry chain;
   verify that the authorized candidate was frozen only after the required
@@ -105,6 +111,9 @@ Require all of the following before changing roadmap status:
   deployment contracts have explicit coverage
 - no acceptance test first appeared during closeout
 - no unresolved product decision, unsupported scenario, or unowned blocker
+- every defect-provenance record is verified or validly superseded; no
+  implementation-exit gap, process drift, or undocumented test expectation
+  change remains open
 - intended candidate routing, health, provenance, and rollback state are recorded
 
 Stop if any item is false or unknown. Return to `tessara-sprint-validation`.
@@ -122,6 +131,8 @@ Stop if any item is false or unknown. Return to `tessara-sprint-validation`.
 - Preserve superseded pre-correction authoritative evidence and diagnostic
   convergence evidence as history, but exclude both from the final passing
   candidate's authoritative proof.
+- Hash and audit every defect-provenance record as part of the failure
+  chronology; never reconstruct missing classification during closeout.
 - Record command durations and restart reasons already captured during
   validation; do not manufacture missing chronology during closeout.
 - Preserve the immutable rollback baseline and confirm the intended candidate
@@ -230,6 +241,7 @@ Do not finalize closeout if:
 - under the legacy policy, an executable or harness change was made without
   restarting SIT; under v2, a changed certificate dependency lacks its required
   invalidation/recertification, or a successor candidate lacks complete SIT
+- any v2 failure lacks a resolved, schema-valid defect-provenance record
 - the closeout documentation commit is not distinguished from the evidence
   source commit
 - the intended application route is unhealthy or not left reviewer-testable
