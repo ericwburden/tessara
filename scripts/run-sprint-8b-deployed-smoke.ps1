@@ -407,6 +407,22 @@ function Get-Sprint8BSmokeTopologySnapshot {
     })
 }
 
+function Assert-Sprint8BFreshDatasetReadiness {
+    param([Parameter(Mandatory)]$ReadinessResponse)
+
+    if ([int]$ReadinessResponse.status -ne 200 -or
+        [string]$ReadinessResponse.document.status -cne "ready") {
+        throw "Dataset service did not expose a fresh ready response from the restarted process."
+    }
+
+    [pscustomobject][ordered]@{
+        state = "passed"
+        status = [int]$ReadinessResponse.status
+        readiness = [string]$ReadinessResponse.document.status
+        body_sha256 = [string]$ReadinessResponse.body_sha256
+    }
+}
+
 function Assert-Sprint8BPairwiseDatabaseDenial {
     param(
         [Parameter(Mandatory)]$ComposeConfiguration,
@@ -636,6 +652,20 @@ function Test-Sprint8BDeployedSmokeHarness {
         throw "Deployed smoke self-test accepted a substituted available Dashboard placement."
     } catch {
         if ($_.Exception.Message -notmatch 'expected available and redacted') { throw }
+    }
+    $freshReadiness = [pscustomobject]@{
+        status = 200
+        body_sha256 = "ready-body"
+        document = [pscustomobject]@{ status = "ready" }
+    }
+    Assert-Sprint8BFreshDatasetReadiness -ReadinessResponse $freshReadiness | Out-Null
+    $staleReadiness = $freshReadiness | ConvertTo-Json -Depth 10 | ConvertFrom-Json -Depth 10
+    $staleReadiness.document.status = "not_ready"
+    try {
+        Assert-Sprint8BFreshDatasetReadiness -ReadinessResponse $staleReadiness | Out-Null
+        throw "Deployed smoke self-test accepted a non-ready restarted Dataset process."
+    } catch {
+        if ($_.Exception.Message -notmatch 'fresh ready response') { throw }
     }
     [pscustomobject][ordered]@{
         schema_version = 1
@@ -1013,13 +1043,26 @@ try {
 
     Invoke-Sprint8BDockerCompose -ComposePath $composePath -Arguments @("start", "datasets") | Out-Null
     $datasetStopped = $false
+    $freshDatasetReadiness = $null
     for ($attempt = 1; $attempt -le 60; $attempt++) {
         $datasetState = @(Get-Sprint8BComposeServiceState -ComposePath $composePath | Where-Object {
             [string]$_.Service -ceq "datasets"
         })
         if ($datasetState.Count -eq 1 -and [string]$datasetState[0].State -ceq "running" -and
-            [string]$datasetState[0].Health -ceq "healthy") { break }
-        if ($attempt -eq 60) { throw "Dataset service did not recover healthy." }
+            [string]$datasetState[0].Health -ceq "healthy") {
+            try {
+                $candidateReadiness = Invoke-Sprint8BInternalDatasetRequest `
+                    -ComposePath $composePath -Path "/health/ready"
+                $freshDatasetReadiness = Assert-Sprint8BFreshDatasetReadiness `
+                    -ReadinessResponse $candidateReadiness
+                break
+            } catch {
+                if ($attempt -eq 60) { throw }
+            }
+        }
+        if ($attempt -eq 60) {
+            throw "Dataset service did not recover with a fresh ready response."
+        }
         Start-Sleep -Seconds 1
     }
     $recoveredOperations = (Invoke-Sprint8BSmokeRequest -BaseUrl $ports.gateway_url `
@@ -1056,6 +1099,7 @@ try {
         state = "passed"; reverse_consumers = $availability
         form_dataset_sources = $formAvailability
         core_and_unrelated_content_usable = $true
+        fresh_dataset_readiness = $freshDatasetReadiness
         dataset_component_dashboard_exact_recovery = $true
     }
 
