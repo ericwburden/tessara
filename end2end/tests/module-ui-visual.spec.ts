@@ -32,6 +32,9 @@ async function visitDocument(page: Page, path: string) {
       "ready",
     );
   }
+  if (path.startsWith("/reference/scoped-records")) {
+    await page.waitForLoadState("networkidle");
+  }
   await expect(
     page.locator("[data-hydration=ready], #tessara-module-outlet, #module-content").first(),
   ).toBeVisible();

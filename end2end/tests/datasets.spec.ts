@@ -1660,6 +1660,11 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
     await page.getByRole("menuitem", { name: "New Major Version" }).click();
     const majorPublish = await majorPublishResponse;
     expect(majorPublish.ok()).toBeTruthy();
+    await expect(page).toHaveURL(
+      new RegExp(
+        `/datasets/${datasetId}/revisions/${majorDraft.revision_id}$`,
+      ),
+    );
     const majorRevision = (await getDatasetRevisions(page, datasetId)).find(
       (revision) => revision.id === majorDraft.revision_id,
     );
