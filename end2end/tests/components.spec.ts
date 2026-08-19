@@ -1757,6 +1757,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/components/${definition.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     const kindPanel = page.getByRole("group", { name: "Component Kind" });
     const filtersPanel = page.getByRole("group", { name: "Filters" });
     await expect(kindPanel).toBeVisible();

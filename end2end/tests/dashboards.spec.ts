@@ -821,15 +821,16 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(next).toBeDisabled();
 
       const rows = tableViewer.locator("tbody tr[data-row-id]");
-      await expect(rows).toHaveCount(4);
+      await expect(rows).toHaveCount(3);
       const firstPageFirstRow = await rows.first().getAttribute("data-row-id");
       expect(firstPageFirstRow).toBeTruthy();
       await expect.poll(() => executionUrls.length).toBeGreaterThanOrEqual(1);
 
-      // The source-exact Reference fixture has four active rows, fewer than
-      // the embedded viewer's canonical compact page size of ten. Exercise
-      // the same mediated owner endpoint with a two-row page to retain exact
-      // cursor proof without manufacturing extra fixture Responses.
+      // The source-exact Reference fixture materializes the three initial
+      // Responses. `response.new` is intentionally created after that snapshot
+      // and remains pending until the explicit refresh scenario. Exercise the
+      // same mediated owner endpoint with a two-row page to retain exact cursor
+      // proof without manufacturing extra fixture Responses.
       const firstMediatedUrl = new URL(executionUrls[0]);
       firstMediatedUrl.searchParams.set("page_size", "2");
       firstMediatedUrl.searchParams.delete("cursor");
@@ -848,7 +849,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         rows: Array<{ row_id: string }>;
         pagination: { next_cursor: string | null; has_more: boolean };
       }>(await page.request.get(`${firstMediatedUrl.pathname}${firstMediatedUrl.search}`));
-      expect(secondMediatedPage.rows).toHaveLength(2);
+      expect(secondMediatedPage.rows).toHaveLength(1);
       expect(secondMediatedPage.pagination.has_more).toBe(false);
       expect(secondMediatedPage.rows[0].row_id).not.toBe(
         firstMediatedPage.rows[0].row_id,
@@ -881,7 +882,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       expect(pageSizeUrl.searchParams.get("page_size")).toBe("25");
       expect(pageSizeUrl.searchParams.has("cursor")).toBe(false);
       await expect(pagination.getByText("Page 1", { exact: true })).toBeVisible();
-      await expect(rows).toHaveCount(4);
+      await expect(rows).toHaveCount(3);
       await expect(page.locator(".component-table-preview__header")).toHaveCount(0);
       await expect(rows.first()).toHaveAttribute("data-row-id", firstPageFirstRow!);
 

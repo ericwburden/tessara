@@ -24,6 +24,33 @@ use tessara_responses_contract::{
     ResponseTombstoneReason, SubmittedResponseChange, SubmittedResponseRestrictionTier,
     SubmittedResponseUpsert, SubmittedResponseValue,
 };
+
+const PARTITION_HEAD_SQL: &str = "WITH RECURSIVE authorized_scope(node_id) AS (
+         SELECT unnest($2::uuid[])
+         UNION
+         SELECT nodes.id
+         FROM nodes
+         JOIN authorized_scope ON nodes.parent_node_id=authorized_scope.node_id
+     )
+     SELECT COALESCE(MAX(change_sequence),0)
+     FROM response_export_changes
+     WHERE form_version_id=ANY($1)
+       AND node_id IN (SELECT node_id FROM authorized_scope)";
+
+const PARTITION_PAGE_SQL: &str = "WITH RECURSIVE authorized_scope(node_id) AS (
+         SELECT unnest($2::uuid[])
+         UNION
+         SELECT nodes.id
+         FROM nodes
+         JOIN authorized_scope ON nodes.parent_node_id=authorized_scope.node_id
+     )
+     SELECT change_sequence,change_kind,payload::text AS payload_text,content_digest
+     FROM response_export_changes
+     WHERE form_version_id=ANY($1)
+       AND node_id IN (SELECT node_id FROM authorized_scope)
+       AND change_sequence>$3 AND change_sequence<=$4
+     ORDER BY change_sequence
+     LIMIT $5";
 use uuid::Uuid;
 
 use crate::{
@@ -154,16 +181,12 @@ async fn provider_epoch(state: &AppState) -> ApiResult<Uuid> {
 }
 
 async fn partition_head(state: &AppState, partition: &ResponseExportPartition) -> ApiResult<i64> {
-    sqlx::query_scalar(
-        "SELECT COALESCE(MAX(change_sequence),0)
-         FROM response_export_changes
-         WHERE form_version_id = ANY($1) AND node_id = ANY($2)",
-    )
-    .bind(&partition.form_version_ids)
-    .bind(&partition.authorized_scope_node_ids)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(Into::into)
+    sqlx::query_scalar(PARTITION_HEAD_SQL)
+        .bind(&partition.form_version_ids)
+        .bind(&partition.authorized_scope_node_ids)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(Into::into)
 }
 
 async fn checkpoint(
@@ -381,21 +404,14 @@ async fn page(
     {
         return Err(restricted());
     }
-    let rows = sqlx::query(
-        "SELECT change_sequence,change_kind,payload::text AS payload_text,content_digest
-         FROM response_export_changes
-         WHERE form_version_id=ANY($1) AND node_id=ANY($2)
-           AND change_sequence>$3 AND change_sequence<=$4
-         ORDER BY change_sequence
-         LIMIT $5",
-    )
-    .bind(&request.partition.form_version_ids)
-    .bind(&request.partition.authorized_scope_node_ids)
-    .bind(after.sequence)
-    .bind(upper.sequence)
-    .bind(i64::from(request.page_size) + 1)
-    .fetch_all(&state.pool)
-    .await?;
+    let rows = sqlx::query(PARTITION_PAGE_SQL)
+        .bind(&request.partition.form_version_ids)
+        .bind(&request.partition.authorized_scope_node_ids)
+        .bind(after.sequence)
+        .bind(upper.sequence)
+        .bind(i64::from(request.page_size) + 1)
+        .fetch_all(&state.pool)
+        .await?;
     let has_more = rows.len() > usize::from(request.page_size);
     let mut entries = Vec::with_capacity(rows.len().min(usize::from(request.page_size)));
     for row in rows.into_iter().take(usize::from(request.page_size)) {
@@ -457,6 +473,18 @@ mod tests {
             response.headers().get(header::CONTENT_TYPE).unwrap(),
             RESPONSE_EXPORT_MEDIA_TYPE
         );
+    }
+
+    #[test]
+    fn response_export_expands_authorized_scope_roots_for_heads_and_pages() {
+        for query in [PARTITION_HEAD_SQL, PARTITION_PAGE_SQL] {
+            assert!(query.contains("WITH RECURSIVE authorized_scope(node_id)"));
+            assert!(query.contains(
+                "JOIN authorized_scope ON nodes.parent_node_id=authorized_scope.node_id"
+            ));
+            assert!(query.contains("node_id IN (SELECT node_id FROM authorized_scope)"));
+            assert!(!query.contains("node_id=ANY($2)"));
+        }
     }
 
     #[test]
