@@ -113,6 +113,28 @@ async function expectDatasetZoomContainment(browser: Browser) {
   }
 }
 
+async function pinScopedRecordsVisualFacts(page: Page) {
+  const accessSummary = page.locator(".scoped-records-scope-summary");
+  await expect(accessSummary).toContainText(
+    /Read access across \d+ accessible Organizations/,
+  );
+  await accessSummary.evaluate((summary) => {
+    summary.innerHTML = summary.innerHTML.replaceAll(
+      /\d+ accessible/g,
+      "N accessible",
+    );
+  });
+  await page.locator("select option").evaluateAll((options) => {
+    options.forEach((option) => {
+      option.textContent =
+        option.textContent?.replaceAll(/\d+ accessible/g, "N accessible") ?? "";
+    });
+  });
+  await page.locator("tbody tr td:nth-child(3)").evaluate((cell) => {
+    cell.textContent = "Pinned fixture time";
+  });
+}
+
 test.describe("canonical module UI visual baselines", () => {
   test.beforeEach(async ({ page }) => signIn(page));
 
@@ -214,6 +236,19 @@ test.describe("canonical module UI visual baselines", () => {
         )
         .first(),
     ).toBeVisible();
+    const viewerRows = page.locator(".component-table-viewer__table tbody tr");
+    await expect(viewerRows).toHaveCount(2);
+    await viewerRows.evaluateAll((rows) => {
+      const pinnedRows = [
+        ["Pinned row A", "10"],
+        ["Pinned row B", "20"],
+      ];
+      rows.forEach((row, rowIndex) => {
+        Array.from(row.querySelectorAll("td")).forEach((cell, columnIndex) => {
+          cell.textContent = pinnedRows[rowIndex]?.[columnIndex] ?? "Pinned value";
+        });
+      });
+    });
     await expect(page).toHaveScreenshot("components-viewer-dark-1280.png", {
       animations: "disabled",
     });
@@ -238,9 +273,7 @@ test.describe("canonical module UI visual baselines", () => {
         await showReferenceComponents(page);
       }
       if (module.name === "scoped-records") {
-        await page.locator("tbody tr td:nth-child(3)").evaluate((cell) => {
-          cell.textContent = "Pinned fixture time";
-        });
+        await pinScopedRecordsVisualFacts(page);
       }
       await expect(page.locator(".app-main")).toHaveScreenshot(
         `module-parity-${module.name}-dark-1280.png`,
@@ -326,9 +359,7 @@ test.describe("canonical module UI visual baselines", () => {
         await showSprint8BDatasetComponents(page);
       }
       if (module.name === "scoped-records") {
-        await page.locator("tbody tr td:nth-child(3)").evaluate((cell) => {
-          cell.textContent = "Pinned fixture time";
-        });
+        await pinScopedRecordsVisualFacts(page);
       }
       await expect(page.locator(".app-main")).toHaveScreenshot(
         `module-parity-with-datasets-${module.name}-dark-1440.png`,
