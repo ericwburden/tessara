@@ -470,11 +470,20 @@ function Assert-AcceptanceManifest {
         'REFERENCE_DASHBOARD_NAME = "Dataset Components"',
         'REFERENCE_FULL_READER_EMAIL = "full-reader@tessara.local"',
         "expect(dashboard!.placement_count).toBe(4)",
-        "expect(hiddenBindings).toHaveLength(1)"
+        "const unavailablePlacements = operatorDefinition.placements.filter(",
+        "const redactedPlacements = unavailablePlacements.filter(",
+        "adminPlacementsForRedacted",
+        "expect(viewerHtml).not.toContain(REFERENCE_HIDDEN_COMPONENT_SLUG)"
     )) {
         if (-not $dashboardSource.Contains($requiredDashboardIdentity)) {
             throw "Dashboard browser acceptance omits Reference fixture predicate '$requiredDashboardIdentity'."
         }
+    }
+    if ($dashboardSource -notmatch '(?s)expect\(\s*redactedPlacements,.*?\)\.toHaveLength\(1\);') {
+        throw "Dashboard browser acceptance does not require exactly one opaque redacted placement."
+    }
+    if ($dashboardSource -notmatch '(?s)expect\(\s*unavailablePlacements\.length,.*?\)\.toBe\(1\);') {
+        throw "Dashboard browser acceptance does not require exactly one unavailable placement."
     }
     $changeLog = Get-Content -Raw -LiteralPath (Join-Path $repoRoot "docs/sprints/sprint-8b-test-change-log.md")
     foreach ($requiredLogIdentity in @(
