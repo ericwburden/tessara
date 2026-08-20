@@ -697,6 +697,61 @@ function Test-Sprint8BUatPredicateReadiness {
         throw "Sprint 8B UAT All-scenario result assembly self-test failed."
     }
 
+    $allPredicates = @(Get-Sprint8BPredicateSelection -SelectedScenarios $allSelected `
+        -AssertionMap $mapping -PredicateCatalog $catalog)
+    $parentProject = "tessara-s8b-uat-selftest"
+    $topologyPlans = @($allPredicates | ForEach-Object {
+        Get-Sprint8BUatPredicateTopologyPlan -Predicate $_ -ParentComposeProject $parentProject
+    })
+    $ownedCleanPlans = @($topologyPlans | Where-Object { [bool]$_.owns_clean_lane })
+    $referencePlans = @($topologyPlans | Where-Object { [bool]$_.requires_reference })
+    if ($ownedCleanPlans.Count -ne 3 -or
+        @($ownedCleanPlans.compose_project | Sort-Object -Unique).Count -ne $ownedCleanPlans.Count -or
+        @($ownedCleanPlans | Where-Object {
+            [string]$_.compose_project -ceq $parentProject -or [bool]$_.requires_reference
+        }).Count -ne 0 -or
+        $referencePlans.Count -eq 0 -or
+        @($referencePlans | Where-Object {
+            [string]$_.compose_project -cne $parentProject -or
+            -not [bool]$_.materialize_reference_on_demand -or
+            -not [bool]$_.reference_preflight_required
+        }).Count -ne 0 -or
+        @($topologyPlans | Where-Object {
+            -not [bool]$_.requires_reference -and -not [bool]$_.owns_clean_lane -and
+            [string]$_.compose_project -cne $parentProject
+        }).Count -ne 0) {
+        throw "Sprint 8B UAT topology scheduling self-test failed."
+    }
+
+    $materializedPorts = Set-Sprint8BUatMaterializedTopologyEnvironment `
+        -ExpectedComposeProject $parentProject -MaterializationReceipt ([pscustomobject]@{
+            compose_project = $parentProject
+            environment = [pscustomobject]@{
+                COMPOSE_PROJECT_NAME = $parentProject
+                TESSARA_GATEWAY_PORT = "45101"
+                TESSARA_CORE_CONTROL_PORT = "45102"
+                TESSARA_SUPERVISOR_PORT = "45103"
+            }
+        })
+    if ([string]$materializedPorts.gateway_url -cne "http://127.0.0.1:45101") {
+        throw "Sprint 8B UAT materialized-port handoff self-test failed."
+    }
+    try {
+        Set-Sprint8BUatMaterializedTopologyEnvironment `
+            -ExpectedComposeProject $parentProject -MaterializationReceipt ([pscustomobject]@{
+                compose_project = "tessara-s8b-substituted"
+                environment = [pscustomobject]@{
+                    COMPOSE_PROJECT_NAME = "tessara-s8b-substituted"
+                    TESSARA_GATEWAY_PORT = "45101"
+                    TESSARA_CORE_CONTROL_PORT = "45102"
+                    TESSARA_SUPERVISOR_PORT = "45103"
+                }
+            }) | Out-Null
+        throw "Sprint 8B UAT materialized-port handoff accepted a substituted project."
+    } catch {
+        if ($_.Exception.Message -notmatch 'substituted the Compose project') { throw }
+    }
+
     $tampered = Get-Sprint8BUatAssertionMap
     [void]$tampered["UAT-8B-04"].Remove("unchanged_head_no_page")
     try {
@@ -883,12 +938,102 @@ function Assert-Sprint8BFixtureReceipt {
     }
 }
 
+function Get-Sprint8BUatChildComposeProject {
+    param(
+        [Parameter(Mandatory)][string]$ParentComposeProject,
+        [Parameter(Mandatory)][string]$PredicateId
+    )
+
+    Assert-Sprint8BComposeProject -ComposeProject $ParentComposeProject | Out-Null
+    $digest = (Get-Sprint7ASha256 -Text "$ParentComposeProject`n$PredicateId`n").Substring(0, 12)
+    $child = "tessara-s8b-uat-$digest"
+    Assert-Sprint8BComposeProject -ComposeProject $child | Out-Null
+    $child
+}
+
+function Get-Sprint8BUatPredicateTopologyPlan {
+    param(
+        [Parameter(Mandatory)]$Predicate,
+        [Parameter(Mandatory)][string]$ParentComposeProject
+    )
+
+    $topology = [string]$Predicate.topology
+    $requiresReference = $topology -in @("existing-reference", "existing-or-owned-reference")
+    $ownsCleanLane = $topology -ceq "owned-clean-lane"
+    [pscustomobject][ordered]@{
+        predicate_id = [string]$Predicate.id
+        topology = $topology
+        compose_project = if ($ownsCleanLane) {
+            Get-Sprint8BUatChildComposeProject -ParentComposeProject $ParentComposeProject `
+                -PredicateId ([string]$Predicate.id)
+        } else {
+            $ParentComposeProject
+        }
+        requires_reference = $requiresReference
+        materialize_reference_on_demand = $requiresReference
+        reference_preflight_required = $requiresReference
+        owns_clean_lane = $ownsCleanLane
+    }
+}
+
+function Assert-Sprint8BUatReferenceTopologyReady {
+    param(
+        [Parameter(Mandatory)][string]$ComposePath,
+        [Parameter(Mandatory)][string]$ComposeProject,
+        [Parameter(Mandatory)][string]$GatewayUrl,
+        [Parameter(Mandatory)]$Fixture
+    )
+
+    Assert-Sprint8BExistingTopology -ComposePath $ComposePath `
+        -ComposeProject $ComposeProject | Out-Null
+    $probe = Invoke-Sprint8BHttpProbe -Uri "$($GatewayUrl.TrimEnd('/'))/health" `
+        -ExpectedStatus @(200)
+    Assert-Sprint8BFixtureReceipt -Path ([string]$Fixture.path) `
+        -ExpectedComposeProject $ComposeProject | Out-Null
+    [pscustomobject][ordered]@{
+        state = "passed"
+        compose_project = $ComposeProject
+        gateway = [pscustomobject][ordered]@{
+            status = [int]$probe.status
+            content_type = [string]$probe.content_type
+            body_sha256 = [string]$probe.body_sha256
+        }
+        fixture_sha256 = [string]$Fixture.sha256
+    }
+}
+
+function Set-Sprint8BUatMaterializedTopologyEnvironment {
+    param(
+        [Parameter(Mandatory)]$MaterializationReceipt,
+        [Parameter(Mandatory)][string]$ExpectedComposeProject
+    )
+
+    if ([string]$MaterializationReceipt.compose_project -cne $ExpectedComposeProject -or
+        $null -eq $MaterializationReceipt.environment -or
+        [string]$MaterializationReceipt.environment.COMPOSE_PROJECT_NAME -cne $ExpectedComposeProject) {
+        throw "Owned UAT reference materialization substituted the Compose project identity."
+    }
+    $portValues = @(
+        [string]$MaterializationReceipt.environment.TESSARA_GATEWAY_PORT,
+        [string]$MaterializationReceipt.environment.TESSARA_CORE_CONTROL_PORT,
+        [string]$MaterializationReceipt.environment.TESSARA_SUPERVISOR_PORT
+    )
+    if (@($portValues | Where-Object { $_ -cnotmatch '^[0-9]{4,5}$' }).Count -ne 0) {
+        throw "Owned UAT reference materialization did not publish exact port identities."
+    }
+
+    Set-Sprint8BComposeEnvironment -ComposeProject $ExpectedComposeProject `
+        -GatewayPort ([int]$portValues[0]) -CorePort ([int]$portValues[1]) `
+        -SupervisorPort ([int]$portValues[2])
+}
+
 function Invoke-Sprint8BUatPredicate {
     param(
         [Parameter(Mandatory)]$Predicate,
         [Parameter(Mandatory)][string]$ResolvedComposeProject,
+        [Parameter(Mandatory)][string]$PredicateComposeProject,
         [Parameter(Mandatory)][string]$ChildEvidenceRoot,
-        [Parameter(Mandatory)][string]$ResolvedFixtureReceiptPath,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ResolvedFixtureReceiptPath,
         [Parameter(Mandatory)][bool]$ExistingTopology,
         [Parameter(Mandatory)][bool]$ResetAuthorized,
         [Parameter(Mandatory)][bool]$BuildSkipped
@@ -922,7 +1067,7 @@ function Invoke-Sprint8BUatPredicate {
         "materialization" {
             $arguments = @(
                 "-Target", "ReferenceNoOp",
-                "-ComposeProject", $ResolvedComposeProject,
+                "-ComposeProject", $PredicateComposeProject,
                 "-EvidencePath", $childEvidence,
                 "-AuthorizeDisposableReset"
             )
@@ -944,7 +1089,7 @@ function Invoke-Sprint8BUatPredicate {
         "failure-recovery" {
             if (-not $ResetAuthorized) { throw "Failure-recovery UAT predicate requires reset authorization." }
             $arguments = @(
-                "-ComposeProject", $ResolvedComposeProject,
+                "-ComposeProject", $PredicateComposeProject,
                 "-EvidencePath", $childEvidence,
                 "-AuthorizeDisposableReset"
             )
@@ -955,7 +1100,7 @@ function Invoke-Sprint8BUatPredicate {
         "independent-upgrade-rollback" {
             if (-not $ResetAuthorized) { throw "Upgrade UAT predicate requires reset authorization." }
             $arguments = @(
-                "-ComposeProject", $ResolvedComposeProject,
+                "-ComposeProject", $PredicateComposeProject,
                 "-EvidencePath", $childEvidence,
                 "-AuthorizeDisposableReset"
             )
@@ -973,6 +1118,7 @@ function Invoke-Sprint8BUatPredicate {
         predicate_id = [string]$Predicate.id
         command_kind = [string]$Predicate.kind
         topology = [string]$Predicate.topology
+        compose_project = $PredicateComposeProject
         started_at = $started.ToString("o")
         finished_at = [DateTimeOffset]::UtcNow.ToString("o")
         exit_code = [int]$commandResult.exit_code
@@ -1055,18 +1201,28 @@ try {
         Assert-Sprint8BResetAuthorization -ComposeProject $ComposeProject `
             -Authorized ([bool]$AuthorizeDisposableReset)
         $ports = Set-Sprint8BComposeEnvironment -ComposeProject $ComposeProject
-        $needsReference = @($selectedPredicates | Where-Object {
-            [string]$_.topology -in @("existing-reference", "existing-or-owned-reference")
-        }).Count -gt 0
-        if ($needsReference) {
+    }
+    $env:PLAYWRIGHT_BASE_URL = $ports.gateway_url
+    $env:TESSARA_PLAYWRIGHT_ACCEPTANCE = "1"
+
+    foreach ($predicate in $selectedPredicates) {
+        $topologyPlan = Get-Sprint8BUatPredicateTopologyPlan -Predicate $predicate `
+            -ParentComposeProject $ComposeProject
+        $requiresFixture = [bool]$topologyPlan.requires_reference
+        if ($requiresFixture -and $null -eq $resolvedFixture -and -not $UseExistingTopology) {
             $materializationEvidence = Join-Path $childEvidenceRoot "reference-materialization.json"
+            if (Test-Path -LiteralPath $materializationEvidence) {
+                throw "Owned UAT reference materialization evidence already exists: $materializationEvidence"
+            }
             $arguments = @(
                 "-Target", "ReferenceNoOp", "-ComposeProject", $ComposeProject,
                 "-EvidencePath", $materializationEvidence, "-AuthorizeDisposableReset", "-KeepTopology"
             )
             if ($SkipBuild) { $arguments += "-SkipBuild" }
-            Invoke-Sprint8BChildScript -ScriptPath "scripts/materialize-sprint-8b.ps1" -Arguments $arguments | Out-Null
+            # Ownership begins before launch because the child may create resources and then fail.
             $ownedTopology = $true
+            Invoke-Sprint8BChildScript -ScriptPath "scripts/materialize-sprint-8b.ps1" `
+                -Arguments $arguments | Out-Null
             $materialized = Get-Content -LiteralPath $materializationEvidence -Raw | ConvertFrom-Json -Depth 100
             if ([string]$materialized.state -cne "passed" -or
                 [string]::IsNullOrWhiteSpace([string]$materialized.fixture_receipt_path)) {
@@ -1074,19 +1230,23 @@ try {
             }
             $resolvedFixture = Assert-Sprint8BFixtureReceipt `
                 -Path ([string]$materialized.fixture_receipt_path) -ExpectedComposeProject $ComposeProject
+            $ports = Set-Sprint8BUatMaterializedTopologyEnvironment `
+                -MaterializationReceipt $materialized -ExpectedComposeProject $ComposeProject
+            $env:PLAYWRIGHT_BASE_URL = $ports.gateway_url
         }
-    }
-    $env:PLAYWRIGHT_BASE_URL = $ports.gateway_url
-    $env:TESSARA_PLAYWRIGHT_ACCEPTANCE = "1"
-
-    foreach ($predicate in $selectedPredicates) {
-        $requiresFixture = [string]$predicate.topology -in @("existing-reference", "existing-or-owned-reference")
         if ($requiresFixture -and $null -eq $resolvedFixture) {
             throw "Predicate '$($predicate.id)' requires an authenticated reference fixture receipt."
         }
+        if ($requiresFixture) {
+            Assert-Sprint8BUatReferenceTopologyReady -ComposePath $composePath `
+                -ComposeProject $ComposeProject -GatewayUrl $ports.gateway_url `
+                -Fixture $resolvedFixture | Out-Null
+        }
+        $predicateComposeProject = [string]$topologyPlan.compose_project
         $fixturePath = if ($null -eq $resolvedFixture) { "" } else { [string]$resolvedFixture.path }
         $predicateResults.Add((Invoke-Sprint8BUatPredicate -Predicate $predicate `
-            -ResolvedComposeProject $ComposeProject -ChildEvidenceRoot $childEvidenceRoot `
+            -ResolvedComposeProject $ComposeProject -PredicateComposeProject $predicateComposeProject `
+            -ChildEvidenceRoot $childEvidenceRoot `
             -ResolvedFixtureReceiptPath $fixturePath -ExistingTopology ([bool]$UseExistingTopology -or $ownedTopology) `
             -ResetAuthorized ([bool]$AuthorizeDisposableReset) -BuildSkipped ([bool]$SkipBuild)))
     }
