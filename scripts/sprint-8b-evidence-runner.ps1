@@ -639,6 +639,8 @@ function Get-Sprint8BFormalActionMap {
             -Script "scripts/run-sprint-8b-implementation-readiness.ps1" `
             -Arguments @("-WorkspaceTestOnly")
         New-Sprint8BSmokeAction -Id "restoration-checkpoint" -UseExistingTopology
+        New-Sprint8BAction -Id "post-smoke-teardown" -Kind teardown -Command "compose-down"
+        New-Sprint8BMaterializeAction -Id "fresh-browser-handoff" -Target Reference -KeepTopology
     )
     $map["sit-browser"] = @(
         @(New-Sprint8BBrowserAcceptanceActions -PlaywrightDataState fresh)
@@ -1956,6 +1958,27 @@ function Test-Sprint8BFormalRunner {
         }
     }
 
+    if ($Phase -ceq "sit") {
+        $sitRustActions = @($actionMap["sit-rust"])
+        $expectedSitRustActionIds = @(
+            "frozen-sit-setup",
+            "workspace-rust",
+            "restoration-checkpoint",
+            "post-smoke-teardown",
+            "fresh-browser-handoff"
+        )
+        Assert-Sprint8BExactSequence -Expected $expectedSitRustActionIds `
+            -Actual @($sitRustActions.id) -Label "SIT fresh browser handoff"
+        $handoff = $sitRustActions[-1]
+        if ([string]$sitRustActions[-2].kind -cne "teardown" -or
+            [string]$handoff.kind -cne "pwsh" -or
+            [string]$handoff.command -cne "scripts/materialize-sprint-8b.ps1" -or
+            @($handoff.arguments) -cnotcontains "Reference" -or
+            @($handoff.arguments) -cnotcontains "-KeepTopology") {
+            throw "SIT Rust must remove the mutation-bearing smoke topology and retain a newly materialized fresh Reference topology for SIT browser."
+        }
+    }
+
     $firstLane = Get-Sprint8BLaneContract -Contract $contract -Phase $Phase -Lane $expectedIds[0]
     $contractCopy = $contract | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
     $contractCopy.evidence_policy.root = "tmp/formal-selftest-$([guid]::NewGuid().ToString('N'))"
@@ -2024,7 +2047,8 @@ function Test-Sprint8BFormalRunner {
         verified = @(
             "identity", "order", "prerequisites", "environment", "evidence-mapping",
             "playwright-data-state", "missing-prerequisite", "missing-harness",
-            "zero-argument-action", "typed-action-result", "unmapped-selector", "exclusive-mode"
+            "zero-argument-action", "typed-action-result", "unmapped-selector", "exclusive-mode",
+            "sit-fresh-browser-handoff"
         )
     }
 }
