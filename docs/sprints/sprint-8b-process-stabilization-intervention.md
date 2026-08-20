@@ -27,6 +27,7 @@ the bounded correction below.
 | Reference gateway lifecycle | Validation harness defect | `gate-implementation-exit`; validation-v2 isolated-live environment/restoration rules | Attempt `20260820T012216623Z-77adfe59` retained four `ECONNREFUSED` failures at `127.0.0.1:63923`, zero product actions, passing cleanup, and no Docker stop/restart/OOM/destroy event before the requests. | Triggers the user-authorized off-ramp after ten passing Candidate Rehearsal lanes. Invalidates the affected implementation/readiness and `rehearsal-uat` evidence; no broad rerun is authorized. |
 | Materialized-port handoff | Validation harness defect | `gate-implementation-exit`; validation-v2 source-exact environment identity | Focused receipt `target/sprint-8b-process-stabilization/uat-8b-01-live-v2.json` retained two passing isolated Dataset predicates and a refusal at the parent-reserved `127.0.0.1:57918`; the child materialization receipt independently proves the retained Reference gateway healthy at `127.0.0.1:58023`. Cleanup passed with no retained topology. | Exposed inside the bounded intervention and caused no additional broad invalidation. It proves the parent failed to adopt the child materializer's authenticated environment identity. |
 | SIT fresh-state handoff | Validation harness/lifecycle defect | `sit-rust`, `sit-browser`, `gate-implementation-exit`; validation-v2 environment identity | Candidate Rehearsal browser passed the exact 95-test fresh inventory. SIT browser then retained two exact `3 -> 6` row-count failures after `sit-rust` ran the Response outage/recovery refresh; four later serial Dashboard assertions did not run. Emergency cleanup passed. | Triggers the user's next-process-defect off-ramp. Invalidates the current candidate and SIT evidence plus the affected implementation-runner proof; no broad rerun is authorized. |
+| Retained defect-provenance chronology | Evidence-finalization/validation-platform defect | `gate-implementation-exit`; validation-v2 defect-provenance completion and immutable-evidence rules | Hardened audit finds 11 retained records: 10 schema-valid, one schema-invalid, zero fully verified, zero validly superseded, and 11 unresolved. The historical invalid record keeps SHA-256 `e16b7bb42636d3910cdaf7ea3ca8c57ff5ad76096fba0383c8d93a85e611a613`; older records also expose moved/mismatched evidence and conflicting proof maps. | Triggers this process-only correction and blocks aggregate/final phase publication. The current contract still selects all 24 implementation targets through `validation-shared`; focused proof cannot silently narrow that impact or authorize a broad restart. |
 
 ## Shared root cause
 
@@ -43,6 +44,13 @@ workflow that deliberately advances Response/Dataset state was named a
 "restoration checkpoint" because it restored process health, even though it did
 not restore fixture data. The next lane trusted the retained topology and its
 `fresh` label instead of requiring a fresh materialization after that mutation.
+
+The chronology defect is the evidence-finalization form of the same pattern:
+individual result/schema checks were treated as sufficient even though no
+single boundary authenticated the complete retained chronology immediately
+around publication. Superseded-directory moves also broke the repository paths
+claimed by older records. The correction makes those failures visible; it does
+not reinterpret or repair historical bytes.
 
 The bounded correction does not change acceptance meaning. `uat-sprint-8b.ps1`
 now:
@@ -98,3 +106,90 @@ any other formal phase remains blocked after that focused proof.
 Broad certification remains blocked after focused proof. The minimum-safe resume
 boundary will be reported from authenticated impact evidence and requires explicit
 user authorization; no Preflight, SIT, or UAT phase may start from this record.
+
+## Retained defect-provenance chronology intervention
+
+A further evidence-finalization defect was discovered while auditing retained
+Sprint 8B state. The superseded Candidate Rehearsal `rehearsal-browser` record at
+`artifacts/sprint-8b-closeout/candidate-rehearsal-superseded-20836b8-20260820T001522Z/lanes/rehearsal-browser/attempts/20260819T185314991Z-1351ad69/defect-provenance.json`
+claims `verified`, but does not satisfy the unchanged
+`defect-provenance.schema.json`. It contains forbidden finding fields, a
+noncanonical focused-evidence collection, and the retired correction shape. The
+retained record is immutable evidence: it must not be rewritten, deleted, or
+relabelled to obtain a pass.
+
+The bounded correction adds one canonical chronology gate owned by the shared
+validation policy. Implementation-readiness finalization and formal lane/phase
+publication consume that same gate. Every retained Sprint record must be either
+schema-valid and `verified`, or referenced by exact repository-relative path and
+SHA-256 from one later, schema-valid, `verified` superseding record. The gate
+rejects open, classified, corrected, blocked, foreign-sprint, invalid,
+self-referencing, dangling, hash-mismatched, duplicate-ID, and ambiguously
+superseded records. It also authenticates every claimed evidence reference,
+requires the complete focused/implementation proof inventory and clean source
+behind `verified`, preserves exact RFC 3339 chronology, rejects linked or
+traversal-bearing evidence paths, and rechecks retained bytes and inventory
+before returning. A `.sha256` sidecar, where present, must authenticate the
+exact retained bytes. The historical invalid record remains byte-for-byte
+unchanged; the correction incident may resolve it only by publishing a new
+schema-valid record that reaches `verified` after focused proof **and every
+implementation target selected by the current dependency contract**, and binds
+that exact old path and hash.
+
+This intervention changes no product behavior, fixture meaning, acceptance
+assertion, snapshot or other baseline, retry policy, or timeout. Proof is limited
+to the application-free synthetic chronology suite and the directly affected
+runner/finalization boundary checks. The current Sprint 8B dependency contract
+continues to determine the full impact cone; it is not narrowed to make the
+correction pass. Another broad Implementation Readiness, Validation Readiness,
+Candidate Rehearsal, Preflight, SIT, or UAT run remains blocked pending the
+reported minimum-safe boundary and an explicit user decision.
+
+The runner-owned checks and transactional cleanup now close every deterministic
+publication window exercised by the synthetic suite. Absolute exclusion of an
+independent provenance writer still requires the deferred validation-platform
+lease/lock protocol; Sprint 8B must not claim that stronger guarantee from
+caller-local rechecks alone.
+
+## Deferred post-Sprint-8B validation-platform separation
+
+The architectural separation is explicitly deferred until Sprint 8B has passed
+its authorized closeout. It is not part of the Sprint 8B candidate, and no
+roadmap entry changes during this intervention. Immediately after closeout, the
+work must first be recorded in the appropriate roadmap/planning artifact, then
+implemented as the first validation-platform work before the next application
+sprint proceeds.
+
+The target has three explicit owners:
+
+1. **Application acceptance contract** owns product scenarios, expected
+   behavior, fixtures, assertions, and application-owned tests. Changes remain
+   candidate-affecting.
+2. **Validation platform** owns scheduling and state transitions, child-process
+   execution, Compose and port lifecycle, health/readiness synchronization,
+   locks, checkpoints, cleanup/restoration/recovery, and immutable evidence
+   writing, hashing, indexing, and certificate assembly.
+3. **Thin sprint adapter** declaratively maps sprint scenarios to commands,
+   topology requirements, and evidence contracts; it owns no lifecycle or
+   evidence machinery.
+
+The first extraction point is `scripts/uat-sprint-8b.ps1`, whose acceptance,
+topology, process, fixture, and publication responsibilities must be separated
+behind one canonical validation-platform boundary. The application candidate,
+acceptance contract, and validation-platform release each receive an independent
+fingerprint. A synthetic platform-certification suite using fake or minimal
+services must prove lifecycle, port handoff, interruption/failure containment,
+cleanup/restoration, and evidence finalization without running Tessara product
+tests. Impact mapping must then distinguish harness-only, acceptance-contract,
+and application changes precisely: process-only corrections invalidate the
+platform certificate, affected adapter, affected formal lanes, and narrow
+integration boundaries without automatically invalidating unrelated application
+targets; acceptance or application changes continue to select their full
+required cones.
+
+The migration is forward-only. It must leave one runner path, no compatibility
+layer, no duplicate lifecycle implementation, and no superseded machinery in
+the touched cone. Handoff requires synthetic certification, selection proofs for
+all three change classes, immutable failed/interrupted evidence, restored
+topology, and explicit proof that no assertion, fixture meaning, retry policy,
+timeout, or baseline was weakened.

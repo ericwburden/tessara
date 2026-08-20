@@ -56,6 +56,7 @@ function Assert-RunnerContract {
             (@($targetIds | Sort-Object) -join "`n")) {
         throw "Implementation runner dispatch is not set-equal to all 24 tracked targets."
     }
+    Assert-Sprint8BImplementationPublicationBoundaryPlacement
 }
 
 function Invoke-CheckedCommand {
@@ -322,6 +323,109 @@ function Get-Sha256Text {
     $bytes = [Text.Encoding]::UTF8.GetBytes($Text)
     $hash = [Security.Cryptography.SHA256]::HashData($bytes)
     [Convert]::ToHexString($hash).ToLowerInvariant()
+}
+
+function Invoke-CheckedValidationPolicySelfTest {
+    param([Parameter(Mandatory)][string]$OutputPath)
+
+    $scriptPath = Join-Path $PSScriptRoot "test-tessara-validation-policy.ps1"
+    $policyPath = Join-Path $PSScriptRoot "tessara-validation-policy.psm1"
+    foreach ($requiredPath in @($scriptPath, $policyPath)) {
+        if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+            throw "Required validation-policy self-test input is missing: $requiredPath"
+        }
+    }
+
+    $startedAt = [DateTimeOffset]::UtcNow
+    $lines = [Collections.Generic.List[string]]::new()
+    & pwsh -NoProfile -File $scriptPath -SelfTest 2>&1 | ForEach-Object {
+        $line = [string]$_
+        $lines.Add($line)
+    }
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Validation-policy adversarial self-test exited $exitCode."
+    }
+    $nonEmptyLines = @($lines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($nonEmptyLines.Count -eq 0 -or
+        $nonEmptyLines[-1] -cne "Tessara validation policy v2 self-tests passed.") {
+        throw "Validation-policy adversarial self-test did not emit its exact success marker."
+    }
+
+    $resolvedOutput = [IO.Path]::GetFullPath($OutputPath)
+    $logPath = [IO.Path]::ChangeExtension($resolvedOutput, ".log")
+    $transcript = (@($lines) -join "`n") + "`n"
+    Write-Sprint8BNewEvidenceFile -Path $logPath -Text $transcript
+    try {
+        $receipt = [pscustomobject][ordered]@{
+            schema_version = 1
+            contract = "tessara.validation-policy-selftest-receipt"
+            policy_version = "tessara-validation-v2"
+            sprint = "sprint-8b"
+            state = "passed"
+            started_at = $startedAt.ToString("O")
+            completed_at = [DateTimeOffset]::UtcNow.ToString("O")
+            command = [pscustomobject][ordered]@{
+                program = "pwsh"
+                arguments = @("-NoProfile", "-File", "scripts/test-tessara-validation-policy.ps1", "-SelfTest")
+            }
+            inputs = @(
+                [pscustomobject][ordered]@{
+                    path = Get-Sprint8BRepositoryRelativePath -Path $scriptPath
+                    sha256 = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                },
+                [pscustomobject][ordered]@{
+                    path = Get-Sprint8BRepositoryRelativePath -Path $policyPath
+                    sha256 = (Get-FileHash -LiteralPath $policyPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                }
+            )
+            transcript = [pscustomobject][ordered]@{
+                path = Get-Sprint8BRepositoryRelativePath -Path $logPath
+                sha256 = (Get-FileHash -LiteralPath $logPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
+        Write-Sprint8BNewEvidenceFile -Path $resolvedOutput `
+            -Text (ConvertTo-Sprint8BJsonText -Document $receipt)
+        return $receipt
+    } catch {
+        if (Test-Path -LiteralPath $resolvedOutput -PathType Leaf) {
+            Remove-Item -LiteralPath $resolvedOutput -Force
+        }
+        if (Test-Path -LiteralPath $logPath -PathType Leaf) {
+            Remove-Item -LiteralPath $logPath -Force
+        }
+        throw
+    }
+}
+
+function Test-Sprint8BValidationPolicySelfTestContract {
+    $root = [IO.Path]::GetFullPath((Join-Path $repoRoot (
+        "target/sprint-8b-policy-selftest-$([guid]::NewGuid().ToString('N'))"
+    )))
+    $allowedRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot "target"))
+    if (-not $root.StartsWith(
+            $allowedRoot + [IO.Path]::DirectorySeparatorChar,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+        throw "Validation-policy self-test root is not confined to the repository target directory."
+    }
+    try {
+        $receipt = Invoke-CheckedValidationPolicySelfTest `
+            -OutputPath (Join-Path $root "validation-policy-selftest.json")
+        if ([string]$receipt.state -cne "passed" -or
+            [string]$receipt.contract -cne "tessara.validation-policy-selftest-receipt") {
+            throw "Validation-policy self-test receipt did not pass its exact contract."
+        }
+        [pscustomobject][ordered]@{
+            state = "passed"
+            canonical_adversarial_suite = "passed"
+            receipt_authenticated_before_cleanup = $true
+        }
+    } finally {
+        if (Test-Path -LiteralPath $root) {
+            Remove-Item -LiteralPath $root -Recurse -Force
+        }
+    }
 }
 
 function Convert-TrackedGlobToRegex {
@@ -965,12 +1069,25 @@ function Assert-Sprint8BImplementationTargetReceipt {
 function Get-Sprint8BImplementationFinalizationInputs {
     param(
         [Parameter(Mandatory)][string]$EvidenceRootPath,
-        [Parameter(Mandatory)]$ExpectedSource
+        [Parameter(Mandatory)]$ExpectedSource,
+        [string]$DefectProvenanceEvidenceRootPath
     )
 
     if ([bool]$ExpectedSource.dirty) {
         throw "Implementation readiness finalization requires a clean source identity."
     }
+    $provenanceEvidenceRoot = if ([string]::IsNullOrWhiteSpace(
+        $DefectProvenanceEvidenceRootPath
+    )) {
+        [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$contract.evidence_policy.root)))
+    } elseif ([IO.Path]::IsPathRooted($DefectProvenanceEvidenceRootPath)) {
+        [IO.Path]::GetFullPath($DefectProvenanceEvidenceRootPath)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repoRoot $DefectProvenanceEvidenceRootPath))
+    }
+    $null = Get-Sprint8BRepositoryRelativePath -Path $provenanceEvidenceRoot
+    $chronology = Assert-TessaraDefectProvenanceChronology -RepositoryRoot $repoRoot `
+        -EvidenceRoot $provenanceEvidenceRoot -Sprint "sprint-8b"
     $audits = [Collections.Generic.List[object]]::new()
     $byId = @{}
     foreach ($contractTarget in @($targets)) {
@@ -984,6 +1101,8 @@ function Get-Sprint8BImplementationFinalizationInputs {
     }
     [pscustomobject][ordered]@{
         source = $ExpectedSource
+        defect_provenance_evidence_root = $provenanceEvidenceRoot
+        defect_provenance_chronology = $chronology
         audits = @($audits)
         first_apply = $byId["clean-materialization"].clean_environment_evidence
         semantic_no_op = $byId["semantic-noop"].clean_environment_evidence
@@ -1005,44 +1124,224 @@ function Get-Sprint8BTextSha256 {
 function Write-Sprint8BNewEvidenceFile {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][AllowEmptyString()][string]$Text
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Text,
+        [scriptblock]$AfterCreateHook
     )
 
     [IO.Directory]::CreateDirectory((Split-Path -Parent $Path)) | Out-Null
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes($Text)
-    $stream = [IO.File]::Open(
-        $Path,
-        [IO.FileMode]::CreateNew,
-        [IO.FileAccess]::Write,
-        [IO.FileShare]::None
-    )
-    try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
+    $stream = $null
+    $created = $false
+    $writeFailure = $null
+    try {
+        $stream = [IO.File]::Open(
+            $Path,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        $created = $true
+        if ($null -ne $AfterCreateHook) { & $AfterCreateHook }
+        $stream.Write($bytes, 0, $bytes.Length)
+    } catch {
+        $writeFailure = $_
+    } finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+    }
+    if ($null -ne $writeFailure) {
+        if ($created -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Remove-Item -LiteralPath $Path -Force
+        }
+        throw $writeFailure
+    }
 }
 
 function Publish-Sprint8BNewJsonPair {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)]$Document
+        [Parameter(Mandatory)]$Document,
+        [scriptblock]$BeforeSidecarPublicationHook
     )
 
+    foreach ($candidate in @($Path, "$Path.sha256")) {
+        if (Test-Path -LiteralPath $candidate) {
+            throw "Evidence publication will not overwrite an existing file: $candidate"
+        }
+    }
     $text = ConvertTo-Sprint8BJsonText -Document $Document
     $sha = Get-Sprint8BTextSha256 -Text $text
-    Write-Sprint8BNewEvidenceFile -Path $Path -Text $text
+    $jsonCreated = $false
+    $sidecarCreated = $false
     try {
+        Write-Sprint8BNewEvidenceFile -Path $Path -Text $text
+        $jsonCreated = $true
+        if ($null -ne $BeforeSidecarPublicationHook) {
+            & $BeforeSidecarPublicationHook
+        }
         Write-Sprint8BNewEvidenceFile -Path "$Path.sha256" -Text "$sha`n"
+        $sidecarCreated = $true
     } catch {
-        Remove-Item -LiteralPath $Path -Force
+        if ($sidecarCreated -and (Test-Path -LiteralPath "$Path.sha256" -PathType Leaf)) {
+            Remove-Item -LiteralPath "$Path.sha256" -Force
+        }
+        if ($jsonCreated -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Remove-Item -LiteralPath $Path -Force
+        }
         throw
     }
     $sha
 }
 
-function Publish-Sprint8BImplementationReadinessResult {
+function Add-Sprint8BCreatedEvidenceFile {
     param(
-        [Parameter(Mandatory)][string]$EvidenceRootPath,
+        [Parameter(Mandatory)][AllowEmptyCollection()]
+        [Collections.Generic.List[object]]$CreatedFiles,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSha256,
+        [scriptblock]$AfterRegistrationHook
+    )
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $CreatedFiles.Add([pscustomobject][ordered]@{
+        path = $fullPath
+        sha256 = $ExpectedSha256
+    })
+    if ($null -ne $AfterRegistrationHook) { & $AfterRegistrationHook }
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        throw "Newly published evidence file is missing: $fullPath"
+    }
+    $actualSha = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualSha -cne $ExpectedSha256) {
+        throw "Newly published evidence file does not match its owned bytes: $fullPath"
+    }
+}
+
+function Assert-Sprint8BImplementationEvidenceSnapshot {
+    param(
+        [Parameter(Mandatory)]$Index,
         [Parameter(Mandatory)]$FinalizationInputs
     )
 
+    $null = Assert-TessaraPhaseEvidenceIndex -Index $Index -RepositoryRoot $repoRoot -AuditFiles
+    foreach ($audit in @($FinalizationInputs.audits)) {
+        $attemptRoot = [IO.Path]::GetFullPath([string]$audit.attempt_root)
+        $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in @($audit.aggregate_files)) {
+            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$entry.path)))
+            if ($fullPath.StartsWith(
+                    $attemptRoot + [IO.Path]::DirectorySeparatorChar,
+                    [StringComparison]::OrdinalIgnoreCase
+                )) {
+                $null = $expected.Add($fullPath)
+            }
+        }
+        $actual = @(
+            Get-ChildItem -LiteralPath $attemptRoot -File -Recurse | ForEach-Object {
+                [IO.Path]::GetFullPath($_.FullName)
+            }
+        )
+        if ($actual.Count -ne $expected.Count -or
+            @($actual | Where-Object { -not $expected.Contains($_) }).Count -ne 0) {
+            throw "Implementation target '$([string]$audit.id)' evidence inventory changed during aggregate sealing."
+        }
+    }
+}
+
+function Remove-Sprint8BCreatedEvidenceFilesExact {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()]
+        [object[]]$CreatedFiles
+    )
+
+    $cleanupFailures = [Collections.Generic.List[string]]::new()
+    for ($index = $CreatedFiles.Count - 1; $index -ge 0; $index--) {
+        $created = $CreatedFiles[$index]
+        $path = [string]$created.path
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $actualSha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualSha -cne [string]$created.sha256) {
+            $cleanupFailures.Add("Refused to remove changed publication file '$path'.")
+            continue
+        }
+        Remove-Item -LiteralPath $path -Force
+    }
+    if ($cleanupFailures.Count -ne 0) {
+        throw (@($cleanupFailures) -join " ")
+    }
+}
+
+function Assert-Sprint8BImplementationPublicationBoundaryPlacement {
+    $inputSource = ${function:Get-Sprint8BImplementationFinalizationInputs}.ToString()
+    $inputChronology = $inputSource.IndexOf(
+        "Assert-TessaraDefectProvenanceChronology",
+        [StringComparison]::Ordinal
+    )
+    $targetAuthentication = $inputSource.IndexOf(
+        'foreach ($contractTarget',
+        [StringComparison]::Ordinal
+    )
+    if ($inputChronology -lt 0 -or $targetAuthentication -le $inputChronology) {
+        throw "Implementation finalization does not authenticate chronology before target receipts."
+    }
+
+    $publisherSource = ${function:Publish-Sprint8BImplementationReadinessResult}.ToString()
+    $firstPublication = $publisherSource.IndexOf(
+        "Publish-Sprint8BNewJsonPair",
+        [StringComparison]::Ordinal
+    )
+    $firstChronology = $publisherSource.IndexOf(
+        "Assert-TessaraDefectProvenanceChronology",
+        [StringComparison]::Ordinal
+    )
+    $lastChronology = $publisherSource.LastIndexOf(
+        "Assert-TessaraDefectProvenanceChronology",
+        [StringComparison]::Ordinal
+    )
+    $lastPublication = $publisherSource.LastIndexOf(
+        "Publish-Sprint8BNewJsonPair",
+        [StringComparison]::Ordinal
+    )
+    $cleanup = $publisherSource.IndexOf(
+        "Remove-Sprint8BCreatedEvidenceFilesExact",
+        [StringComparison]::Ordinal
+    )
+    $lastEvidenceAudit = $publisherSource.LastIndexOf(
+        "Assert-Sprint8BImplementationEvidenceSnapshot",
+        [StringComparison]::Ordinal
+    )
+    $betweenPublications = if ($firstPublication -ge 0 -and
+        $lastPublication -gt $firstPublication) {
+        $publisherSource.Substring(
+            $firstPublication,
+            $lastPublication - $firstPublication
+        )
+    } else { "" }
+    if ($firstChronology -lt 0 -or $firstPublication -le $firstChronology -or
+        $betweenPublications.IndexOf(
+            "Assert-TessaraDefectProvenanceChronology",
+            [StringComparison]::Ordinal
+        ) -lt 0 -or
+        $lastChronology -le $lastPublication -or
+        $lastEvidenceAudit -le $lastPublication -or $cleanup -le $lastChronology) {
+        throw "Implementation aggregate chronology/publication/cleanup placement is not fail-closed."
+    }
+}
+
+function Publish-Sprint8BImplementationReadinessResult {
+    param(
+        [Parameter(Mandatory)][string]$EvidenceRootPath,
+        [Parameter(Mandatory)]$FinalizationInputs,
+        [scriptblock]$BeforeIndexPublicationHook,
+        [scriptblock]$BeforeResultPublicationHook,
+        [scriptblock]$AfterResultPublicationHook
+    )
+
+    $provenanceEvidenceRoot = [IO.Path]::GetFullPath(
+        [string]$FinalizationInputs.defect_provenance_evidence_root
+    )
+    $null = Get-Sprint8BRepositoryRelativePath -Path $provenanceEvidenceRoot
+    $null = Assert-TessaraDefectProvenanceChronology -RepositoryRoot $repoRoot `
+        -EvidenceRoot $provenanceEvidenceRoot -Sprint "sprint-8b"
     $fullEvidenceRoot = [IO.Path]::GetFullPath($EvidenceRootPath)
     $indexPath = Join-Path $fullEvidenceRoot "evidence-index.json"
     $resultPath = Join-Path $fullEvidenceRoot "implementation-readiness-result.json"
@@ -1080,7 +1379,8 @@ function Publish-Sprint8BImplementationReadinessResult {
         entry_count = $entries.Count
         entries = $entries
     }
-    $null = Assert-TessaraPhaseEvidenceIndex -Index $index -RepositoryRoot $repoRoot -AuditFiles
+    Assert-Sprint8BImplementationEvidenceSnapshot -Index $index `
+        -FinalizationInputs $FinalizationInputs
     $indexText = ConvertTo-Sprint8BJsonText -Document $index
     $indexSha = Get-Sprint8BTextSha256 -Text $indexText
     $contractSha = (Get-FileHash -LiteralPath $contractPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -1130,29 +1430,49 @@ function Publish-Sprint8BImplementationReadinessResult {
     $null = Assert-TessaraImplementationReadinessResult -Result $result `
         -Contract $contract -ContractPath $contractPath
 
-    $indexPublished = $false
-    $resultPublished = $false
+    $createdFiles = [Collections.Generic.List[object]]::new()
     try {
+        if ($null -ne $BeforeIndexPublicationHook) { & $BeforeIndexPublicationHook }
+        $null = Assert-TessaraDefectProvenanceChronology -RepositoryRoot $repoRoot `
+            -EvidenceRoot $provenanceEvidenceRoot -Sprint "sprint-8b"
+        Assert-Sprint8BImplementationEvidenceSnapshot -Index $index `
+            -FinalizationInputs $FinalizationInputs
         $publishedIndexSha = Publish-Sprint8BNewJsonPair -Path $indexPath -Document $index
-        $indexPublished = $true
+        Add-Sprint8BCreatedEvidenceFile -CreatedFiles $createdFiles -Path $indexPath `
+            -ExpectedSha256 $publishedIndexSha
+        Add-Sprint8BCreatedEvidenceFile -CreatedFiles $createdFiles -Path "$indexPath.sha256" `
+            -ExpectedSha256 (Get-Sprint8BTextSha256 -Text "$publishedIndexSha`n")
         if ($publishedIndexSha -cne $indexSha) {
             throw "Published implementation evidence index changed during finalization."
         }
-        $null = Publish-Sprint8BNewJsonPair -Path $resultPath -Document $result
-        $resultPublished = $true
+        if ($null -ne $BeforeResultPublicationHook) { & $BeforeResultPublicationHook }
+        $null = Assert-TessaraDefectProvenanceChronology -RepositoryRoot $repoRoot `
+            -EvidenceRoot $provenanceEvidenceRoot -Sprint "sprint-8b"
+        Assert-Sprint8BImplementationEvidenceSnapshot -Index $index `
+            -FinalizationInputs $FinalizationInputs
+        $publishedResultSha = Publish-Sprint8BNewJsonPair -Path $resultPath -Document $result
+        Add-Sprint8BCreatedEvidenceFile -CreatedFiles $createdFiles -Path $resultPath `
+            -ExpectedSha256 $publishedResultSha
+        Add-Sprint8BCreatedEvidenceFile -CreatedFiles $createdFiles -Path "$resultPath.sha256" `
+            -ExpectedSha256 (Get-Sprint8BTextSha256 -Text "$publishedResultSha`n")
+        if ($null -ne $AfterResultPublicationHook) { & $AfterResultPublicationHook }
+        $null = Assert-TessaraDefectProvenanceChronology -RepositoryRoot $repoRoot `
+            -EvidenceRoot $provenanceEvidenceRoot -Sprint "sprint-8b"
+        Assert-Sprint8BImplementationEvidenceSnapshot -Index $index `
+            -FinalizationInputs $FinalizationInputs
         $published = Read-Sprint8BAuthenticatedJsonFile -Path $resultPath `
             -RequiredRoot $fullEvidenceRoot
         $null = Assert-TessaraImplementationReadinessResult -Result $published.document `
             -Contract $contract -ContractPath $contractPath
         $published.document
     } catch {
-        if ($resultPublished) {
-            Remove-Item -LiteralPath $resultPath, "$resultPath.sha256" -Force
+        $publicationFailure = $_
+        try {
+            Remove-Sprint8BCreatedEvidenceFilesExact -CreatedFiles $createdFiles
+        } catch {
+            throw "Implementation aggregate publication failed: $($publicationFailure.Exception.Message) Exact cleanup also failed: $($_.Exception.Message)"
         }
-        if ($indexPublished) {
-            Remove-Item -LiteralPath $indexPath, "$indexPath.sha256" -Force
-        }
-        throw
+        throw $publicationFailure
     }
 }
 
@@ -1372,7 +1692,9 @@ function Test-Sprint8BImplementationFinalizationContract {
         dirty = $false
         branch = "codex/sprint-8b-selftest"
     }
+    $provenanceEvidenceRoot = Join-Path $selfTestRoot "synthetic-provenance"
     try {
+        [IO.Directory]::CreateDirectory($provenanceEvidenceRoot) | Out-Null
         foreach ($contractTarget in @($targets)) {
             $targetId = [string]$contractTarget.id
             $targetRoot = Join-Path $selfTestRoot "targets/$targetId"
@@ -1465,9 +1787,32 @@ function Test-Sprint8BImplementationFinalizationContract {
         }
 
         $inputs = Get-Sprint8BImplementationFinalizationInputs `
-            -EvidenceRootPath $selfTestRoot -ExpectedSource $source
+            -EvidenceRootPath $selfTestRoot -ExpectedSource $source `
+            -DefectProvenanceEvidenceRootPath $provenanceEvidenceRoot
         if (@($inputs.audits).Count -ne 24) {
             throw "Finalizer self-test did not authenticate all 24 synthetic targets."
+        }
+        if ([string]$inputs.defect_provenance_chronology.state -cne "passed") {
+            throw "Finalizer self-test did not authenticate its synthetic provenance chronology."
+        }
+
+        $invalidProvenancePath = Join-Path $provenanceEvidenceRoot `
+            "attempts/invalid/defect-provenance.json"
+        Write-Sprint8BNewEvidenceFile -Path $invalidProvenancePath -Text "{ invalid chronology"
+        $chronologyRejected = $false
+        try {
+            Get-Sprint8BImplementationFinalizationInputs `
+                -EvidenceRootPath $selfTestRoot -ExpectedSource $source `
+                -DefectProvenanceEvidenceRootPath $provenanceEvidenceRoot | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $chronologyRejected = $true
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+        if (-not $chronologyRejected) {
+            throw "Finalizer self-test admitted unresolved defect provenance."
         }
 
         $missingResult = Join-Path $selfTestRoot "targets/static-quality/result.json"
@@ -1476,7 +1821,8 @@ function Test-Sprint8BImplementationFinalizationContract {
         $missingRejected = $false
         try {
             Get-Sprint8BImplementationFinalizationInputs `
-                -EvidenceRootPath $selfTestRoot -ExpectedSource $source | Out-Null
+                -EvidenceRootPath $selfTestRoot -ExpectedSource $source `
+                -DefectProvenanceEvidenceRootPath $provenanceEvidenceRoot | Out-Null
         } catch { $missingRejected = $true }
         Move-Item -LiteralPath $movedResult -Destination $missingResult
         if (-not $missingRejected) {
@@ -1513,6 +1859,178 @@ function Test-Sprint8BImplementationFinalizationContract {
             throw "Finalizer self-test admitted evidence changed after sidecar publication."
         }
 
+        $foreignPairPath = Join-Path $selfTestRoot "foreign-publication.json"
+        $foreignSidecarPath = "$foreignPairPath.sha256"
+        Write-Sprint8BNewEvidenceFile -Path $foreignSidecarPath -Text "foreign-owned`n"
+        $foreignSidecarSha = (
+            Get-FileHash -LiteralPath $foreignSidecarPath -Algorithm SHA256
+        ).Hash.ToLowerInvariant()
+        $foreignPublicationRejected = $false
+        try {
+            Publish-Sprint8BNewJsonPair -Path $foreignPairPath `
+                -Document ([pscustomobject]@{ state = "passed" }) | Out-Null
+        } catch {
+            $foreignPublicationRejected = $true
+        }
+        if (-not $foreignPublicationRejected -or
+            (Test-Path -LiteralPath $foreignPairPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $foreignSidecarPath -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $foreignSidecarPath -Algorithm SHA256).Hash.ToLowerInvariant() `
+                -cne $foreignSidecarSha) {
+            throw "Finalizer self-test did not preserve a foreign publication member exactly."
+        }
+        Remove-Item -LiteralPath $foreignSidecarPath -Force
+
+        $partialWritePath = Join-Path $selfTestRoot "partial-write.txt"
+        $partialWriteRejected = $false
+        try {
+            Write-Sprint8BNewEvidenceFile -Path $partialWritePath -Text "owned`n" `
+                -AfterCreateHook { throw "synthetic write failure" }
+        } catch {
+            if ($_.Exception.Message -notmatch 'synthetic write failure') { throw }
+            $partialWriteRejected = $true
+        }
+        if (-not $partialWriteRejected -or
+            (Test-Path -LiteralPath $partialWritePath -PathType Leaf)) {
+            throw "Finalizer self-test left a partial newly-created evidence file."
+        }
+
+        $racingPairPath = Join-Path $selfTestRoot "sidecar-race.json"
+        $racingSidecarPath = "$racingPairPath.sha256"
+        $sidecarRaceHook = {
+            Write-Sprint8BNewEvidenceFile -Path $racingSidecarPath -Text "foreign-race`n"
+        }.GetNewClosure()
+        $sidecarRaceRejected = $false
+        try {
+            Publish-Sprint8BNewJsonPair -Path $racingPairPath `
+                -Document ([pscustomobject]@{ state = "passed" }) `
+                -BeforeSidecarPublicationHook $sidecarRaceHook | Out-Null
+        } catch { $sidecarRaceRejected = $true }
+        if (-not $sidecarRaceRejected -or
+            (Test-Path -LiteralPath $racingPairPath -PathType Leaf) -or
+            (Get-Content -LiteralPath $racingSidecarPath -Raw) -cne "foreign-race`n") {
+            throw "Finalizer self-test did not preserve a sidecar won by a concurrent writer."
+        }
+        Remove-Item -LiteralPath $racingSidecarPath -Force
+
+        $registrationPath = Join-Path $selfTestRoot "registration-failure.txt"
+        Write-Sprint8BNewEvidenceFile -Path $registrationPath -Text "owned-registration`n"
+        $registrationSha = (
+            Get-FileHash -LiteralPath $registrationPath -Algorithm SHA256
+        ).Hash.ToLowerInvariant()
+        $registrationFiles = [Collections.Generic.List[object]]::new()
+        $registrationRejected = $false
+        try {
+            Add-Sprint8BCreatedEvidenceFile -CreatedFiles $registrationFiles `
+                -Path $registrationPath -ExpectedSha256 $registrationSha `
+                -AfterRegistrationHook { throw "synthetic registration failure" }
+        } catch {
+            if ($_.Exception.Message -notmatch 'synthetic registration failure') { throw }
+            $registrationRejected = $true
+        }
+        Remove-Sprint8BCreatedEvidenceFilesExact -CreatedFiles $registrationFiles
+        if (-not $registrationRejected -or
+            (Test-Path -LiteralPath $registrationPath -PathType Leaf)) {
+            throw "Finalizer self-test did not retain ownership across registration failure."
+        }
+
+        $aggregatePaths = @(
+            (Join-Path $selfTestRoot "evidence-index.json"),
+            (Join-Path $selfTestRoot "evidence-index.json.sha256"),
+            (Join-Path $selfTestRoot "implementation-readiness-result.json"),
+            (Join-Path $selfTestRoot "implementation-readiness-result.json.sha256")
+        )
+        $insertInvalidProvenance = {
+            Write-Sprint8BNewEvidenceFile -Path $invalidProvenancePath `
+                -Text "{ invalid chronology"
+        }.GetNewClosure()
+
+        $preIndexChronologyRejected = $false
+        try {
+            Publish-Sprint8BImplementationReadinessResult `
+                -EvidenceRootPath $selfTestRoot -FinalizationInputs $inputs `
+                -BeforeIndexPublicationHook $insertInvalidProvenance | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $preIndexChronologyRejected = $true
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+        if (-not $preIndexChronologyRejected -or
+            @($aggregatePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "Finalizer self-test did not fail cleanly before aggregate index publication."
+        }
+
+        $postIndexChronologyRejected = $false
+        try {
+            Publish-Sprint8BImplementationReadinessResult `
+                -EvidenceRootPath $selfTestRoot -FinalizationInputs $inputs `
+                -BeforeResultPublicationHook $insertInvalidProvenance | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $postIndexChronologyRejected = $true
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+        if (-not $postIndexChronologyRejected -or
+            @($aggregatePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "Finalizer self-test did not roll back its aggregate index after a later chronology failure."
+        }
+
+        $postResultChronologyRejected = $false
+        try {
+            Publish-Sprint8BImplementationReadinessResult `
+                -EvidenceRootPath $selfTestRoot -FinalizationInputs $inputs `
+                -AfterResultPublicationHook $insertInvalidProvenance | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $postResultChronologyRejected = $true
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+        if (-not $postResultChronologyRejected -or
+            @($aggregatePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "Finalizer self-test did not roll back a pass published during a chronology race."
+        }
+
+        $lateInventoryPath = Join-Path ([string]$inputs.audits[0].attempt_root) `
+            "late-unindexed-evidence.txt"
+        $insertLateEvidence = {
+            Write-Sprint8BNewEvidenceFile -Path $lateInventoryPath -Text "late evidence`n"
+        }.GetNewClosure()
+        $preResultInventoryRejected = $false
+        try {
+            Publish-Sprint8BImplementationReadinessResult `
+                -EvidenceRootPath $selfTestRoot -FinalizationInputs $inputs `
+                -BeforeResultPublicationHook $insertLateEvidence | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'evidence inventory changed') { throw }
+            $preResultInventoryRejected = $true
+        }
+        Remove-Item -LiteralPath $lateInventoryPath -Force
+        if (-not $preResultInventoryRejected -or
+            @($aggregatePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "Finalizer self-test did not roll back an index after evidence inventory drift."
+        }
+
+        $postResultInventoryRejected = $false
+        try {
+            Publish-Sprint8BImplementationReadinessResult `
+                -EvidenceRootPath $selfTestRoot -FinalizationInputs $inputs `
+                -AfterResultPublicationHook $insertLateEvidence | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'evidence inventory changed') { throw }
+            $postResultInventoryRejected = $true
+        }
+        Remove-Item -LiteralPath $lateInventoryPath -Force
+        if (-not $postResultInventoryRejected -or
+            @($aggregatePaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "Finalizer self-test did not roll back a sealed pass after evidence inventory drift."
+        }
+
         $published = Publish-Sprint8BImplementationReadinessResult `
             -EvidenceRootPath $selfTestRoot -FinalizationInputs $inputs
         if ([string]$published.state -cne "passed" -or @($published.targets).Count -ne 24) {
@@ -1534,6 +2052,16 @@ function Test-Sprint8BImplementationFinalizationContract {
             dirty_source_rejected = $dirtyRejected
             mutating_noop_rejected = $noOpRejected
             evidence_tamper_rejected = $authenticationRejected
+            foreign_publication_preserved = $foreignPublicationRejected
+            partial_write_cleanup_exact = $partialWriteRejected
+            sidecar_create_race_preserved = $sidecarRaceRejected
+            registration_failure_cleanup_exact = $registrationRejected
+            unresolved_provenance_rejected = $chronologyRejected
+            pre_index_provenance_insertion_rejected = $preIndexChronologyRejected
+            post_index_provenance_insertion_rolled_back = $postIndexChronologyRejected
+            post_result_provenance_insertion_rolled_back = $postResultChronologyRejected
+            pre_result_inventory_drift_rolled_back = $preResultInventoryRejected
+            post_result_inventory_drift_rolled_back = $postResultInventoryRejected
             sealed_overwrite_rejected = $overwriteRejected
         }
     } finally {
@@ -1583,12 +2111,14 @@ if ($SelfTest) {
     if (-not $rejected) { throw "Runner self-test admitted an unknown target." }
     Assert-CargoTestGuardSelfTest
     Assert-Sprint8BWorkspaceTestDatabaseContractSelfTest
+    $policySelfTest = Test-Sprint8BValidationPolicySelfTestContract
     $finalizationSelfTest = Test-Sprint8BImplementationFinalizationContract
     [pscustomobject]@{
         sprint = "sprint-8b"
         target_count = $targetIds.Count
         cargo_zero_test_guard = "passed"
         full_workspace_database_contract = "passed"
+        validation_policy_selftest = $policySelfTest
         finalization_contract = $finalizationSelfTest
         status = "passed"
     } | ConvertTo-Json
@@ -1909,6 +2439,9 @@ try {
             Assert-RunnerContract
             Assert-CargoTestGuardSelfTest
             Assert-Sprint8BWorkspaceTestDatabaseContractSelfTest
+            Invoke-CheckedValidationPolicySelfTest `
+                -OutputPath (Join-Path $script:TargetAttemptRoot `
+                    "validation-policy-selftest.json") | Out-Null
             Test-Sprint8BImplementationFinalizationContract | Out-Null
             foreach ($implementationHarness in @(
                 "sprint-8b-harness-isolation.ps1",

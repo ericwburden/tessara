@@ -88,6 +88,26 @@ function Get-Sprint8BPhaseRoot {
     return [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot $relative))
 }
 
+function Assert-Sprint8BDefectProvenanceChronology {
+    param(
+        [Parameter(Mandatory)]$Contract,
+        [string]$EvidenceRootPath
+    )
+
+    $root = if ([string]::IsNullOrWhiteSpace($EvidenceRootPath)) {
+        [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot (
+            [string]$Contract.evidence_policy.root
+        )))
+    } elseif ([IO.Path]::IsPathRooted($EvidenceRootPath)) {
+        [IO.Path]::GetFullPath($EvidenceRootPath)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot $EvidenceRootPath))
+    }
+    $null = Get-Sprint8BRepositoryRelativePath -Path $root
+    return Assert-TessaraDefectProvenanceChronology `
+        -RepositoryRoot $script:Sprint8BRepositoryRoot -EvidenceRoot $root -Sprint "sprint-8b"
+}
+
 function Get-Sprint8BLaneEvidencePaths {
     param(
         [Parameter(Mandatory)]$Contract,
@@ -136,13 +156,36 @@ function Get-Sprint8BFileReference {
 function Write-Sprint8BNewUtf8File {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][AllowEmptyString()][string]$Text
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Text,
+        [scriptblock]$AfterCreateHook
     )
     $parent = Split-Path -Parent $Path
     [IO.Directory]::CreateDirectory($parent) | Out-Null
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes($Text)
-    $stream = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
+    $stream = $null
+    $created = $false
+    $writeFailure = $null
+    try {
+        $stream = [IO.File]::Open(
+            $Path,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        $created = $true
+        if ($null -ne $AfterCreateHook) { & $AfterCreateHook }
+        $stream.Write($bytes, 0, $bytes.Length)
+    } catch {
+        $writeFailure = $_
+    } finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+    }
+    if ($null -ne $writeFailure) {
+        if ($created -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Remove-Item -LiteralPath $Path -Force
+        }
+        throw $writeFailure
+    }
 }
 
 function Write-Sprint8BNewJsonFile {
@@ -157,37 +200,407 @@ function Write-Sprint8BNewJsonFile {
 function Publish-Sprint8BJsonAndSidecar {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)]$Document
+        [Parameter(Mandatory)]$Document,
+        [scriptblock]$BeforeSidecarPublicationHook
     )
-    Write-Sprint8BNewJsonFile -Path $Path -Document $Document
+    foreach ($candidate in @($Path, "$Path.sha256")) {
+        if (Test-Path -LiteralPath $candidate) {
+            throw "Formal evidence publication will not overwrite an existing file: $candidate"
+        }
+    }
+    $jsonCreated = $false
+    $sidecarCreated = $false
     try {
+        Write-Sprint8BNewJsonFile -Path $Path -Document $Document
+        $jsonCreated = $true
         $sha = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($null -ne $BeforeSidecarPublicationHook) {
+            & $BeforeSidecarPublicationHook
+        }
         Write-Sprint8BNewUtf8File -Path "$Path.sha256" -Text "$sha`n"
+        $sidecarCreated = $true
         return $sha
     } catch {
-        if (Test-Path -LiteralPath $Path -PathType Leaf) { Remove-Item -LiteralPath $Path -Force }
+        if ($sidecarCreated -and (Test-Path -LiteralPath "$Path.sha256" -PathType Leaf)) {
+            Remove-Item -LiteralPath "$Path.sha256" -Force
+        }
+        if ($jsonCreated -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Remove-Item -LiteralPath $Path -Force
+        }
         throw
+    }
+}
+
+function Get-Sprint8BJsonDocumentSha256 {
+    param([Parameter(Mandatory)]$Document)
+
+    $json = $Document | ConvertTo-Json -Depth 100
+    return Get-Sprint8BSha256Text -Text "$json`n"
+}
+
+function Add-Sprint8BCreatedPublicationFile {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()]
+        [Collections.Generic.List[object]]$CreatedFiles,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSha256,
+        [scriptblock]$AfterRegistrationHook
+    )
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $CreatedFiles.Add([pscustomobject][ordered]@{
+        path = $fullPath
+        sha256 = $ExpectedSha256
+    })
+    if ($null -ne $AfterRegistrationHook) { & $AfterRegistrationHook }
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        throw "Newly published formal evidence file is missing: $fullPath"
+    }
+    $actualSha = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualSha -cne $ExpectedSha256) {
+        throw "Newly published formal evidence file does not match its owned bytes: $fullPath"
+    }
+}
+
+function Remove-Sprint8BCreatedPublicationFilesExact {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()]
+        [object[]]$CreatedFiles
+    )
+
+    $cleanupFailures = [Collections.Generic.List[string]]::new()
+    for ($index = $CreatedFiles.Count - 1; $index -ge 0; $index--) {
+        $created = $CreatedFiles[$index]
+        $path = [string]$created.path
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $actualSha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualSha -cne [string]$created.sha256) {
+            $cleanupFailures.Add("Refused to remove changed formal publication file '$path'.")
+            continue
+        }
+        Remove-Item -LiteralPath $path -Force
+    }
+    if ($cleanupFailures.Count -ne 0) {
+        throw (@($cleanupFailures) -join " ")
     }
 }
 
 function Copy-Sprint8BNewFile {
     param(
         [Parameter(Mandatory)][string]$Source,
-        [Parameter(Mandatory)][string]$Destination
+        [Parameter(Mandatory)][string]$Destination,
+        [scriptblock]$AfterDestinationCreateHook
     )
     if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
         throw "Publication source is missing: $Source"
     }
     $parent = Split-Path -Parent $Destination
     [IO.Directory]::CreateDirectory($parent) | Out-Null
+    if (Test-Path -LiteralPath $Destination) {
+        throw "Formal evidence copy will not overwrite an existing file: $Destination"
+    }
     $input = [IO.File]::OpenRead($Source)
     $output = $null
+    $destinationCreated = $false
+    $copyFailure = $null
     try {
         $output = [IO.File]::Open($Destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        $destinationCreated = $true
+        if ($null -ne $AfterDestinationCreateHook) {
+            & $AfterDestinationCreateHook
+        }
         $input.CopyTo($output)
+    } catch {
+        $copyFailure = $_
     } finally {
         if ($null -ne $output) { $output.Dispose() }
         $input.Dispose()
+    }
+    if ($null -ne $copyFailure) {
+        if ($destinationCreated -and (Test-Path -LiteralPath $Destination -PathType Leaf)) {
+            Remove-Item -LiteralPath $Destination -Force
+        }
+        throw $copyFailure
+    }
+}
+
+function Assert-Sprint8BPhaseEvidenceSnapshot {
+    param(
+        [Parameter(Mandatory)]$Index,
+        [Parameter(Mandatory)][string[]]$PublicationPaths
+    )
+
+    $null = Assert-TessaraPhaseEvidenceIndex -Index $Index `
+        -RepositoryRoot $script:Sprint8BRepositoryRoot -AuditFiles
+    $evidenceRoot = [IO.Path]::GetFullPath((Join-Path `
+        $script:Sprint8BRepositoryRoot ([string]$Index.evidence_root)))
+    $null = Get-Sprint8BRepositoryRelativePath -Path $evidenceRoot
+    $excluded = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($path in $PublicationPaths) {
+        $null = $excluded.Add([IO.Path]::GetFullPath($path))
+    }
+    $expected = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($entry in @($Index.entries)) {
+        $null = $expected.Add([IO.Path]::GetFullPath((Join-Path `
+            $script:Sprint8BRepositoryRoot ([string]$entry.path))))
+    }
+    $actual = @(
+        Get-ChildItem -LiteralPath $evidenceRoot -File -Recurse | Where-Object {
+            -not $excluded.Contains([IO.Path]::GetFullPath($_.FullName))
+        } | ForEach-Object { [IO.Path]::GetFullPath($_.FullName) }
+    )
+    if ($actual.Count -ne $expected.Count -or
+        @($actual | Where-Object { -not $expected.Contains($_) }).Count -ne 0) {
+        throw "Formal phase evidence inventory changed during certificate sealing."
+    }
+}
+
+function Publish-Sprint8BFormalLanePassResult {
+    param(
+        [Parameter(Mandatory)]$Contract,
+        [Parameter(Mandatory)]$Paths,
+        [Parameter(Mandatory)][string]$AttemptLog,
+        [Parameter(Mandatory)][string]$AttemptReferences,
+        [Parameter(Mandatory)]$Result,
+        [string]$ChronologyEvidenceRootPath,
+        [scriptblock]$BeforeResultPublicationHook,
+        [scriptblock]$AfterResultPublicationHook
+    )
+
+    $canonicalPaths = @(
+        [string]$Paths.command_log,
+        [string]$Paths.evidence_references,
+        [string]$Paths.result,
+        "$([string]$Paths.result).sha256"
+    )
+    foreach ($path in $canonicalPaths) {
+        if (Test-Path -LiteralPath $path) {
+            throw "Formal lane pass publication will not overwrite existing evidence: $path"
+        }
+    }
+
+    $createdFiles = [Collections.Generic.List[object]]::new()
+    try {
+        $null = Assert-Sprint8BDefectProvenanceChronology -Contract $Contract `
+            -EvidenceRootPath $ChronologyEvidenceRootPath
+        $attemptLogSha = (Get-FileHash -LiteralPath $AttemptLog -Algorithm SHA256).Hash.ToLowerInvariant()
+        Copy-Sprint8BNewFile -Source $AttemptLog -Destination $Paths.command_log
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles -Path $Paths.command_log `
+            -ExpectedSha256 $attemptLogSha
+        $attemptReferencesSha = (
+            Get-FileHash -LiteralPath $AttemptReferences -Algorithm SHA256
+        ).Hash.ToLowerInvariant()
+        Copy-Sprint8BNewFile -Source $AttemptReferences -Destination $Paths.evidence_references
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles `
+            -Path $Paths.evidence_references -ExpectedSha256 $attemptReferencesSha
+        $Result.command_log = Get-Sprint8BFileReference -Path $Paths.command_log
+        $Result.evidence_references = Get-Sprint8BFileReference -Path $Paths.evidence_references
+        if ($null -ne $BeforeResultPublicationHook) { & $BeforeResultPublicationHook }
+        $null = Assert-Sprint8BDefectProvenanceChronology -Contract $Contract `
+            -EvidenceRootPath $ChronologyEvidenceRootPath
+        $resultSha = Publish-Sprint8BJsonAndSidecar -Path $Paths.result -Document $Result
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles -Path $Paths.result `
+            -ExpectedSha256 $resultSha
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles `
+            -Path "$($Paths.result).sha256" `
+            -ExpectedSha256 (Get-Sprint8BSha256Text -Text "$resultSha`n")
+        if ($null -ne $AfterResultPublicationHook) { & $AfterResultPublicationHook }
+        $null = Assert-Sprint8BDefectProvenanceChronology -Contract $Contract `
+            -EvidenceRootPath $ChronologyEvidenceRootPath
+        return [pscustomobject][ordered]@{
+            result = $Result
+            created_files = @($createdFiles)
+        }
+    } catch {
+        $publicationFailure = $_
+        try {
+            Remove-Sprint8BCreatedPublicationFilesExact -CreatedFiles $createdFiles
+        } catch {
+            throw "Formal lane pass publication failed: $($publicationFailure.Exception.Message) Exact cleanup also failed: $($_.Exception.Message)"
+        }
+        throw $publicationFailure
+    }
+}
+
+function Publish-Sprint8BPhasePassCertificate {
+    param(
+        [Parameter(Mandatory)]$Contract,
+        [Parameter(Mandatory)][string]$IndexPath,
+        [Parameter(Mandatory)]$IndexDocument,
+        [Parameter(Mandatory)][string]$ExpectedIndexSha256,
+        [Parameter(Mandatory)][string]$CertificatePath,
+        [Parameter(Mandatory)]$CertificateDocument,
+        [string]$ChronologyEvidenceRootPath,
+        [scriptblock]$BeforeCertificatePublicationHook,
+        [scriptblock]$AfterCertificatePublicationHook
+    )
+
+    $publicationPaths = @(
+        $IndexPath, "$IndexPath.sha256", $CertificatePath, "$CertificatePath.sha256"
+    )
+    foreach ($path in $publicationPaths) {
+        if (Test-Path -LiteralPath $path) {
+            throw "Formal phase pass publication will not overwrite existing evidence: $path"
+        }
+    }
+
+    $createdFiles = [Collections.Generic.List[object]]::new()
+    try {
+        $null = Assert-Sprint8BDefectProvenanceChronology -Contract $Contract `
+            -EvidenceRootPath $ChronologyEvidenceRootPath
+        Assert-Sprint8BPhaseEvidenceSnapshot -Index $IndexDocument `
+            -PublicationPaths $publicationPaths
+        $publishedIndexSha = Publish-Sprint8BJsonAndSidecar `
+            -Path $IndexPath -Document $IndexDocument
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles -Path $IndexPath `
+            -ExpectedSha256 $publishedIndexSha
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles -Path "$IndexPath.sha256" `
+            -ExpectedSha256 (Get-Sprint8BSha256Text -Text "$publishedIndexSha`n")
+        if ($publishedIndexSha -cne $ExpectedIndexSha256) {
+            throw "Published formal phase evidence index changed during finalization."
+        }
+        if ($null -ne $BeforeCertificatePublicationHook) {
+            & $BeforeCertificatePublicationHook
+        }
+        $null = Assert-Sprint8BDefectProvenanceChronology -Contract $Contract `
+            -EvidenceRootPath $ChronologyEvidenceRootPath
+        Assert-Sprint8BPhaseEvidenceSnapshot -Index $IndexDocument `
+            -PublicationPaths $publicationPaths
+        $certificateSha = Publish-Sprint8BJsonAndSidecar `
+            -Path $CertificatePath -Document $CertificateDocument
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles -Path $CertificatePath `
+            -ExpectedSha256 $certificateSha
+        Add-Sprint8BCreatedPublicationFile -CreatedFiles $createdFiles `
+            -Path "$CertificatePath.sha256" `
+            -ExpectedSha256 (Get-Sprint8BSha256Text -Text "$certificateSha`n")
+        if ($null -ne $AfterCertificatePublicationHook) {
+            & $AfterCertificatePublicationHook
+        }
+        $null = Assert-Sprint8BDefectProvenanceChronology -Contract $Contract `
+            -EvidenceRootPath $ChronologyEvidenceRootPath
+        Assert-Sprint8BPhaseEvidenceSnapshot -Index $IndexDocument `
+            -PublicationPaths $publicationPaths
+        return $CertificateDocument
+    } catch {
+        $publicationFailure = $_
+        try {
+            Remove-Sprint8BCreatedPublicationFilesExact -CreatedFiles $createdFiles
+        } catch {
+            throw "Formal phase pass publication failed: $($publicationFailure.Exception.Message) Exact cleanup also failed: $($_.Exception.Message)"
+        }
+        throw $publicationFailure
+    }
+}
+
+function Invoke-Sprint8BLanePassTransaction {
+    param(
+        [Parameter(Mandatory)]$Contract,
+        [Parameter(Mandatory)]$Paths,
+        [Parameter(Mandatory)][string]$AttemptLog,
+        [Parameter(Mandatory)][string]$AttemptReferences,
+        [Parameter(Mandatory)]$Result,
+        [AllowNull()][scriptblock]$PhaseCompletionAction,
+        [string]$ChronologyEvidenceRootPath,
+        [scriptblock]$BeforeResultPublicationHook,
+        [scriptblock]$AfterResultPublicationHook
+    )
+
+    $publication = $null
+    try {
+        $publication = Publish-Sprint8BFormalLanePassResult -Contract $Contract `
+            -Paths $Paths -AttemptLog $AttemptLog -AttemptReferences $AttemptReferences `
+            -Result $Result -ChronologyEvidenceRootPath $ChronologyEvidenceRootPath `
+            -BeforeResultPublicationHook $BeforeResultPublicationHook `
+            -AfterResultPublicationHook $AfterResultPublicationHook
+        if ($null -ne $PhaseCompletionAction) {
+            $null = & $PhaseCompletionAction
+        }
+        return $publication.result
+    } catch {
+        $transactionFailure = $_
+        if ($null -ne $publication) {
+            try {
+                Remove-Sprint8BCreatedPublicationFilesExact `
+                    -CreatedFiles @($publication.created_files)
+            } catch {
+                throw "Formal lane pass transaction failed: $($transactionFailure.Exception.Message) Exact lane-result rollback also failed: $($_.Exception.Message)"
+            }
+        }
+        throw $transactionFailure
+    }
+}
+
+function Complete-Sprint8BFailedLaneAttempt {
+    param(
+        [Parameter(Mandatory)][string]$Phase,
+        [Parameter(Mandatory)][string]$Lane,
+        [Parameter(Mandatory)][string]$AttemptRoot,
+        [Parameter(Mandatory)]$LaneError,
+        [Parameter(Mandatory)]$LaneContract,
+        [AllowNull()]$TopologyContext,
+        [AllowNull()][string]$Project,
+        [Parameter(Mandatory)]$Prerequisites,
+        [Parameter(Mandatory)]$EnvironmentBefore,
+        [scriptblock]$TopologyEnvironmentAction,
+        [scriptblock]$TeardownAction,
+        [scriptblock]$RestoreEnvironmentAction
+    )
+
+    $emergencyCleanup = $null
+    if ([bool]$LaneContract.touches_live_state -and $null -ne $TopologyContext) {
+        try {
+            if ($null -ne $TopologyEnvironmentAction) {
+                & $TopologyEnvironmentAction
+            } else {
+                Set-Sprint8BTopologyEnvironment -Context $TopologyContext `
+                    -ExpectedProject $Project `
+                    -CandidateFingerprint ([string]$Prerequisites.candidate_fingerprint)
+            }
+            $emergencyPath = Join-Path $AttemptRoot "emergency-teardown.json"
+            if ($null -ne $TeardownAction) {
+                & $TeardownAction $emergencyPath
+            } else {
+                $null = Invoke-Sprint8BComposeTeardown -Project $Project `
+                    -EvidencePath $emergencyPath
+            }
+            $emergencyCleanup = [ordered]@{
+                state = "passed"
+                evidence = Get-Sprint8BFileReference -Path $emergencyPath
+            }
+        } catch {
+            $emergencyCleanup = [ordered]@{
+                state = "failed"
+                message = $_.Exception.Message
+            }
+        } finally {
+            if ($null -ne $RestoreEnvironmentAction) {
+                & $RestoreEnvironmentAction
+            } else {
+                Restore-Sprint8BProcessEnvironmentSnapshot -Snapshot $EnvironmentBefore
+            }
+        }
+    }
+    $failure = [ordered]@{
+        schema_version = 1
+        contract = "tessara.validation.lane-attempt-failure"
+        sprint = "sprint-8b"
+        phase = $Phase
+        lane = $Lane
+        state = "failed"
+        failed_at = [DateTimeOffset]::UtcNow.ToString("O")
+        message = $LaneError.Exception.Message
+        emergency_cleanup = $emergencyCleanup
+    }
+    $failurePath = Join-Path $AttemptRoot "failure.json"
+    Write-Sprint8BNewJsonFile -Path $failurePath -Document $failure
+    return [pscustomobject][ordered]@{
+        failure = $failure
+        failure_reference = Get-Sprint8BFileReference -Path $failurePath
+        emergency_cleanup = $emergencyCleanup
     }
 }
 
@@ -1528,6 +1941,7 @@ function Complete-Sprint8BPhase {
         [AllowNull()][string]$CandidateFingerprint
     )
     $phaseRoot = Get-Sprint8BPhaseRoot -Contract $Contract -Phase $Phase
+    $null = Assert-Sprint8BDefectProvenanceChronology -Contract $Contract
     $certificatePath = Get-Sprint8BCertificatePath -Contract $Contract -Phase $Phase
     if (Test-Path -LiteralPath $certificatePath) {
         throw "$Phase certificate already exists and will not be overwritten."
@@ -1586,7 +2000,7 @@ function Complete-Sprint8BPhase {
         entries = $entries
     }
     $null = Assert-TessaraPhaseEvidenceIndex -Index $index
-    $indexSha = Publish-Sprint8BJsonAndSidecar -Path $indexPath -Document $index
+    $indexSha = Get-Sprint8BJsonDocumentSha256 -Document $index
 
     $phaseDomains = @($Contract.lanes | Where-Object { [string]$_.phase -ceq $Phase } | ForEach-Object { @($_.dependency_domains) } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
     $allFingerprints = @(Get-TessaraDependencyFingerprints -Contract $Contract -RepositoryRoot $script:Sprint8BRepositoryRoot)
@@ -1649,8 +2063,9 @@ function Complete-Sprint8BPhase {
         }
     }
     $null = Assert-TessaraPhaseCertificate -Certificate $certificate
-    $null = Publish-Sprint8BJsonAndSidecar -Path $certificatePath -Document $certificate
-    return $certificate
+    return Publish-Sprint8BPhasePassCertificate -Contract $Contract `
+        -IndexPath $indexPath -IndexDocument $index -ExpectedIndexSha256 $indexSha `
+        -CertificatePath $certificatePath -CertificateDocument $certificate
 }
 
 function Invoke-Sprint8BFormalLane {
@@ -1667,6 +2082,7 @@ function Invoke-Sprint8BFormalLane {
 
     $sourceBefore = Get-Sprint8BSourceIdentity
     Assert-Sprint8BCleanSource -Source $sourceBefore
+    $null = Assert-Sprint8BDefectProvenanceChronology -Contract $contract
     $prerequisites = Assert-Sprint8BLanePrerequisites -Contract $contract -LaneContract $laneContract -Source $sourceBefore
     $project = Get-Sprint8BExpectedProject -Phase $Phase -LaneContract $laneContract
     $topologyContext = $prerequisites.topology_context
@@ -1730,32 +2146,11 @@ function Invoke-Sprint8BFormalLane {
         }
     } catch {
         $laneError = $_
-        $emergencyCleanup = $null
-        if ([bool]$laneContract.touches_live_state -and $null -ne $topologyContext) {
-            try {
-                $emergencyPath = Join-Path $attemptRoot "emergency-teardown.json"
-                $null = Invoke-Sprint8BComposeTeardown -Project $project -EvidencePath $emergencyPath
-                $emergencyCleanup = [ordered]@{
-                    state = "passed"
-                    evidence = Get-Sprint8BFileReference -Path $emergencyPath
-                }
-                $topologyContext = $null
-            } catch {
-                $emergencyCleanup = [ordered]@{ state = "failed"; message = $_.Exception.Message }
-            }
-        }
-        $failure = [ordered]@{
-            schema_version = 1
-            contract = "tessara.validation.lane-attempt-failure"
-            sprint = "sprint-8b"
-            phase = $Phase
-            lane = $Lane
-            state = "failed"
-            failed_at = [DateTimeOffset]::UtcNow.ToString("O")
-            message = $laneError.Exception.Message
-            emergency_cleanup = $emergencyCleanup
-        }
-        Write-Sprint8BNewJsonFile -Path (Join-Path $attemptRoot "failure.json") -Document $failure
+        $failureOutcome = Complete-Sprint8BFailedLaneAttempt -Phase $Phase -Lane $Lane `
+            -AttemptRoot $attemptRoot -LaneError $laneError -LaneContract $laneContract `
+            -TopologyContext $topologyContext -Project $project `
+            -Prerequisites $prerequisites -EnvironmentBefore $environmentBefore
+        $emergencyCleanup = $failureOutcome.emergency_cleanup
         if ($null -ne $emergencyCleanup -and [string]$emergencyCleanup.state -ceq "failed") {
             throw "Formal lane '$Lane' failed: $($laneError.Exception.Message) Emergency cleanup also failed: $([string]$emergencyCleanup.message)"
         }
@@ -1766,6 +2161,7 @@ function Invoke-Sprint8BFormalLane {
         Restore-Sprint8BProcessEnvironmentSnapshot -Snapshot $environmentBefore
     }
 
+    try {
     $sourceAfter = Get-Sprint8BSourceIdentity
     Assert-Sprint8BCleanSource -Source $sourceAfter
     Assert-Sprint8BSourceMatches -Expected $sourceBefore -Actual $sourceAfter -Label "Formal lane '$Lane'"
@@ -1834,30 +2230,33 @@ function Invoke-Sprint8BFormalLane {
         evidence_references = $null
     }
 
-    $published = [Collections.Generic.List[string]]::new()
-    try {
-        Copy-Sprint8BNewFile -Source $attemptLog -Destination $paths.command_log
-        $published.Add($paths.command_log)
-        Copy-Sprint8BNewFile -Source $attemptReferences -Destination $paths.evidence_references
-        $published.Add($paths.evidence_references)
-        $result.command_log = Get-Sprint8BFileReference -Path $paths.command_log
-        $result.evidence_references = Get-Sprint8BFileReference -Path $paths.evidence_references
-        $null = Publish-Sprint8BJsonAndSidecar -Path $paths.result -Document $result
-        $published.Add($paths.result)
-        $published.Add("$($paths.result).sha256")
-    } catch {
-        foreach ($path in @($published | Sort-Object -Descending)) {
-            if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
-        }
-        throw
-    }
-
     $phaseLaneIds = @(Get-Sprint8BExpectedLaneIds -Phase $Phase)
+    $phaseCompletionAction = $null
     if ($Lane -ceq $phaseLaneIds[-1]) {
         $candidateFingerprint = if ($Phase -in @("validation-preflight", "sit", "uat")) {
             [string]$result.candidate_fingerprint
         } else { $null }
-        $null = Complete-Sprint8BPhase -Contract $contract -Phase $Phase -Source $sourceAfter -CandidateFingerprint $candidateFingerprint
+        $phaseCompletionAction = {
+            Complete-Sprint8BPhase -Contract $contract -Phase $Phase `
+                -Source $sourceAfter -CandidateFingerprint $candidateFingerprint
+        }.GetNewClosure()
+    }
+
+    $result = Invoke-Sprint8BLanePassTransaction -Contract $contract -Paths $paths `
+        -AttemptLog $attemptLog -AttemptReferences $attemptReferences -Result $result `
+        -PhaseCompletionAction $phaseCompletionAction
+    } catch {
+        $lateLaneError = $_
+        $failureOutcome = Complete-Sprint8BFailedLaneAttempt -Phase $Phase -Lane $Lane `
+            -AttemptRoot $attemptRoot -LaneError $lateLaneError -LaneContract $laneContract `
+            -TopologyContext $topologyContext -Project $project `
+            -Prerequisites $prerequisites -EnvironmentBefore $environmentBefore
+        $emergencyCleanup = $failureOutcome.emergency_cleanup
+        if ($null -ne $emergencyCleanup -and
+            [string]$emergencyCleanup.state -ceq "failed") {
+            throw "Formal lane '$Lane' failed after action execution: $($lateLaneError.Exception.Message) Emergency cleanup also failed: $([string]$emergencyCleanup.message)"
+        }
+        throw $lateLaneError
     }
 
     return $result
@@ -1872,12 +2271,543 @@ function Assert-Sprint8BExpectedFailure {
     throw "Formal runner self-test expected rejection: $Label"
 }
 
+function Test-Sprint8BChronologyPublicationLifecycle {
+    param(
+        [Parameter(Mandatory)]$Contract,
+        [Parameter(Mandatory)][string]$Phase
+    )
+
+    $root = [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot (
+        "tmp/formal-publication-selftest-$([guid]::NewGuid().ToString('N'))"
+    )))
+    $allowedRoot = [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot "tmp"))
+    if (-not $root.StartsWith(
+            $allowedRoot + [IO.Path]::DirectorySeparatorChar,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+        throw "Formal publication self-test root escaped the repository tmp directory."
+    }
+
+    $invalidProvenancePath = Join-Path $root "provenance/defect-provenance.json"
+    $insertInvalidProvenance = {
+        Write-Sprint8BNewUtf8File -Path $invalidProvenancePath -Text "{ invalid chronology"
+    }.GetNewClosure()
+    try {
+        [IO.Directory]::CreateDirectory($root) | Out-Null
+        $attemptLog = Join-Path $root "attempt/command.log"
+        $attemptReferences = Join-Path $root "attempt/evidence-references.json"
+        Write-Sprint8BNewUtf8File -Path $attemptLog -Text "synthetic formal transcript`n"
+        Write-Sprint8BNewJsonFile -Path $attemptReferences -Document ([ordered]@{
+            schema_version = 1
+            references = @()
+        })
+        $foreignPairPath = Join-Path $root "foreign/result.json"
+        $foreignSidecarPath = "$foreignPairPath.sha256"
+        Write-Sprint8BNewUtf8File -Path $foreignSidecarPath -Text "foreign-owned`n"
+        $foreignSidecarSha = (
+            Get-FileHash -LiteralPath $foreignSidecarPath -Algorithm SHA256
+        ).Hash.ToLowerInvariant()
+        $foreignPublicationRejected = $false
+        try {
+            Publish-Sprint8BJsonAndSidecar -Path $foreignPairPath `
+                -Document ([ordered]@{ state = "passed" }) | Out-Null
+        } catch {
+            $foreignPublicationRejected = $true
+        }
+        if (-not $foreignPublicationRejected -or
+            (Test-Path -LiteralPath $foreignPairPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $foreignSidecarPath -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $foreignSidecarPath -Algorithm SHA256).Hash.ToLowerInvariant() `
+                -cne $foreignSidecarSha) {
+            throw "$Phase formal publisher did not preserve a foreign publication member exactly."
+        }
+        Remove-Item -LiteralPath $foreignSidecarPath -Force
+
+        $partialWritePath = Join-Path $root "faults/partial-write.txt"
+        $partialWriteRejected = $false
+        try {
+            Write-Sprint8BNewUtf8File -Path $partialWritePath -Text "owned`n" `
+                -AfterCreateHook { throw "synthetic write failure" }
+        } catch {
+            if ($_.Exception.Message -notmatch 'synthetic write failure') { throw }
+            $partialWriteRejected = $true
+        }
+        if (-not $partialWriteRejected -or
+            (Test-Path -LiteralPath $partialWritePath -PathType Leaf)) {
+            throw "$Phase formal publisher left a partial newly-created evidence file."
+        }
+
+        $racingPairPath = Join-Path $root "faults/sidecar-race.json"
+        $racingSidecarPath = "$racingPairPath.sha256"
+        $sidecarRaceHook = {
+            Write-Sprint8BNewUtf8File -Path $racingSidecarPath -Text "foreign-race`n"
+        }.GetNewClosure()
+        $sidecarRaceRejected = $false
+        try {
+            Publish-Sprint8BJsonAndSidecar -Path $racingPairPath `
+                -Document ([ordered]@{ state = "passed" }) `
+                -BeforeSidecarPublicationHook $sidecarRaceHook | Out-Null
+        } catch { $sidecarRaceRejected = $true }
+        if (-not $sidecarRaceRejected -or
+            (Test-Path -LiteralPath $racingPairPath -PathType Leaf) -or
+            (Get-Content -LiteralPath $racingSidecarPath -Raw) -cne "foreign-race`n") {
+            throw "$Phase formal publisher did not preserve a sidecar won by a concurrent writer."
+        }
+        Remove-Item -LiteralPath $racingSidecarPath -Force
+
+        $copySourcePath = Join-Path $root "faults/copy-source.txt"
+        $copyDestinationPath = Join-Path $root "faults/copy-destination.txt"
+        Write-Sprint8BNewUtf8File -Path $copySourcePath -Text "copy source`n"
+        $partialCopyRejected = $false
+        try {
+            Copy-Sprint8BNewFile -Source $copySourcePath -Destination $copyDestinationPath `
+                -AfterDestinationCreateHook { throw "synthetic copy failure" }
+        } catch {
+            if ($_.Exception.Message -notmatch 'synthetic copy failure') { throw }
+            $partialCopyRejected = $true
+        }
+        if (-not $partialCopyRejected -or
+            (Test-Path -LiteralPath $copyDestinationPath -PathType Leaf)) {
+            throw "$Phase formal publisher left a partial newly-created copy."
+        }
+        Remove-Item -LiteralPath $copySourcePath -Force
+
+        $registrationPath = Join-Path $root "faults/registration-failure.txt"
+        Write-Sprint8BNewUtf8File -Path $registrationPath -Text "owned-registration`n"
+        $registrationSha = (
+            Get-FileHash -LiteralPath $registrationPath -Algorithm SHA256
+        ).Hash.ToLowerInvariant()
+        $registrationFiles = [Collections.Generic.List[object]]::new()
+        $registrationRejected = $false
+        try {
+            Add-Sprint8BCreatedPublicationFile -CreatedFiles $registrationFiles `
+                -Path $registrationPath -ExpectedSha256 $registrationSha `
+                -AfterRegistrationHook { throw "synthetic registration failure" }
+        } catch {
+            if ($_.Exception.Message -notmatch 'synthetic registration failure') { throw }
+            $registrationRejected = $true
+        }
+        Remove-Sprint8BCreatedPublicationFilesExact -CreatedFiles $registrationFiles
+        if (-not $registrationRejected -or
+            (Test-Path -LiteralPath $registrationPath -PathType Leaf)) {
+            throw "$Phase formal publisher did not retain ownership across registration failure."
+        }
+        $lanePaths = [pscustomobject][ordered]@{
+            command_log = Join-Path $root "lane/command.log"
+            evidence_references = Join-Path $root "lane/evidence-references.json"
+            result = Join-Path $root "lane/result.json"
+        }
+        $laneResult = [pscustomobject][ordered]@{
+            schema_version = 1
+            sprint = "sprint-8b"
+            phase = $Phase
+            lane = "synthetic-lane"
+            state = "passed"
+            command_log = $null
+            evidence_references = $null
+        }
+
+        $laneInsertionRejected = $false
+        try {
+            Publish-Sprint8BFormalLanePassResult -Contract $Contract -Paths $lanePaths `
+                -AttemptLog $attemptLog -AttemptReferences $attemptReferences `
+                -Result $laneResult -ChronologyEvidenceRootPath $root `
+                -BeforeResultPublicationHook $insertInvalidProvenance | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $laneInsertionRejected = $true
+        }
+        $laneCanonicalPaths = @(
+            $lanePaths.command_log,
+            $lanePaths.evidence_references,
+            $lanePaths.result,
+            "$($lanePaths.result).sha256"
+        )
+        if (-not $laneInsertionRejected -or
+            @($laneCanonicalPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0 -or
+            -not (Test-Path -LiteralPath $attemptLog -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $attemptReferences -PathType Leaf)) {
+            throw "$Phase formal lane chronology insertion did not preserve only retained attempt evidence."
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+
+        $lanePostPublicationRejected = $false
+        try {
+            Publish-Sprint8BFormalLanePassResult -Contract $Contract -Paths $lanePaths `
+                -AttemptLog $attemptLog -AttemptReferences $attemptReferences `
+                -Result $laneResult -ChronologyEvidenceRootPath $root `
+                -AfterResultPublicationHook $insertInvalidProvenance | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $lanePostPublicationRejected = $true
+        }
+        if (-not $lanePostPublicationRejected -or
+            @($laneCanonicalPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "$Phase formal lane post-publication chronology race left a sealed pass result."
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+
+        $phaseCompletionInsertion = {
+            Write-Sprint8BNewUtf8File -Path $invalidProvenancePath -Text "{ invalid chronology"
+            Assert-Sprint8BDefectProvenanceChronology -Contract $Contract `
+                -EvidenceRootPath $root | Out-Null
+        }.GetNewClosure()
+        $phaseCompletionRollbackPassed = $false
+        try {
+            Invoke-Sprint8BLanePassTransaction -Contract $Contract -Paths $lanePaths `
+                -AttemptLog $attemptLog -AttemptReferences $attemptReferences `
+                -Result $laneResult -ChronologyEvidenceRootPath $root `
+                -PhaseCompletionAction $phaseCompletionInsertion | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $phaseCompletionRollbackPassed = $true
+        }
+        if (-not $phaseCompletionRollbackPassed -or
+            @($laneCanonicalPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "$Phase phase-completion failure stranded a non-overwritable lane result."
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+
+        $failureLifecycleState = [pscustomobject]@{
+            setup = 0
+            teardown = 0
+            restore = 0
+        }
+        $topologySetup = {
+            $failureLifecycleState.setup++
+        }.GetNewClosure()
+        $syntheticTeardown = {
+            param($evidencePath)
+            $failureLifecycleState.teardown++
+            Write-Sprint8BNewJsonFile -Path $evidencePath -Document ([ordered]@{
+                schema_version = 1
+                state = "passed"
+            })
+        }.GetNewClosure()
+        $syntheticRestore = {
+            $failureLifecycleState.restore++
+        }.GetNewClosure()
+        $syntheticLaneError = $null
+        try { throw "synthetic late publication failure" } catch { $syntheticLaneError = $_ }
+        $failureOutcome = Complete-Sprint8BFailedLaneAttempt -Phase $Phase `
+            -Lane "synthetic-late-lane" -AttemptRoot (Split-Path -Parent $attemptLog) `
+            -LaneError $syntheticLaneError `
+            -LaneContract ([pscustomobject]@{ touches_live_state = $true }) `
+            -TopologyContext ([pscustomobject]@{ state = "retained" }) `
+            -Project "synthetic-project" `
+            -Prerequisites ([pscustomobject]@{ candidate_fingerprint = ('a' * 64) }) `
+            -EnvironmentBefore @{} -TopologyEnvironmentAction $topologySetup `
+            -TeardownAction $syntheticTeardown -RestoreEnvironmentAction $syntheticRestore
+        $failureReceiptPath = Join-Path (Split-Path -Parent $attemptLog) "failure.json"
+        $emergencyReceiptPath = Join-Path (Split-Path -Parent $attemptLog) `
+            "emergency-teardown.json"
+        $failureDocument = Get-Content -LiteralPath $failureReceiptPath -Raw | ConvertFrom-Json
+        $failureLifecyclePassed = (
+            $failureLifecycleState.setup -eq 1 -and
+            $failureLifecycleState.teardown -eq 1 -and
+            $failureLifecycleState.restore -eq 1 -and
+            [string]$failureDocument.state -ceq "failed" -and
+            [string]$failureDocument.message -ceq "synthetic late publication failure" -and
+            [string]$failureOutcome.emergency_cleanup.state -ceq "passed" -and
+            (Test-Path -LiteralPath $attemptLog -PathType Leaf) -and
+            (Test-Path -LiteralPath $attemptReferences -PathType Leaf)
+        )
+        if (-not $failureLifecyclePassed) {
+            throw "$Phase formal failure finalizer did not prove teardown, restoration, retained attempt evidence, and failure receipt."
+        }
+        Remove-Item -LiteralPath $failureReceiptPath, $emergencyReceiptPath -Force
+
+        $phaseEvidenceRoot = Join-Path $root "phase"
+        $phaseSeedPath = Join-Path $phaseEvidenceRoot "lane-evidence.json"
+        Write-Sprint8BNewJsonFile -Path $phaseSeedPath -Document ([ordered]@{
+            schema_version = 1
+            state = "passed"
+        })
+        $phaseSeedItem = Get-Item -LiteralPath $phaseSeedPath
+        $indexPath = Join-Path $phaseEvidenceRoot "evidence-index.json"
+        $certificatePath = Join-Path $phaseEvidenceRoot "result.json"
+        $indexDocument = [pscustomobject][ordered]@{
+            schema_version = 1
+            contract = "tessara.validation.phase-evidence-index"
+            policy_version = "tessara-validation-v2"
+            sprint = "sprint-8b"
+            phase = $Phase
+            attempt = 1
+            evidence_root = Get-Sprint8BRepositoryRelativePath -Path $phaseEvidenceRoot
+            sealed_at = [DateTimeOffset]::UtcNow.ToString("O")
+            entry_count = 1
+            entries = @([pscustomobject][ordered]@{
+                path = Get-Sprint8BRepositoryRelativePath -Path $phaseSeedPath
+                sha256 = (Get-FileHash -LiteralPath $phaseSeedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                size = [long]$phaseSeedItem.Length
+                kind = "receipt"
+            })
+        }
+        $certificateDocument = [pscustomobject][ordered]@{
+            schema_version = 1
+            sprint = "sprint-8b"
+            phase = $Phase
+            state = "passed"
+        }
+        $phaseInsertionRejected = $false
+        try {
+            Publish-Sprint8BPhasePassCertificate -Contract $Contract `
+                -IndexPath $indexPath -IndexDocument $indexDocument `
+                -ExpectedIndexSha256 (Get-Sprint8BJsonDocumentSha256 -Document $indexDocument) `
+                -CertificatePath $certificatePath -CertificateDocument $certificateDocument `
+                -ChronologyEvidenceRootPath $root `
+                -BeforeCertificatePublicationHook $insertInvalidProvenance | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $phaseInsertionRejected = $true
+        }
+        $phasePassPaths = @(
+            $indexPath, "$indexPath.sha256", $certificatePath, "$certificatePath.sha256"
+        )
+        if (-not $phaseInsertionRejected -or
+            @($phasePassPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "$Phase formal phase chronology insertion left a sealed index or pass certificate."
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+
+        $phasePostPublicationRejected = $false
+        try {
+            Publish-Sprint8BPhasePassCertificate -Contract $Contract `
+                -IndexPath $indexPath -IndexDocument $indexDocument `
+                -ExpectedIndexSha256 (Get-Sprint8BJsonDocumentSha256 -Document $indexDocument) `
+                -CertificatePath $certificatePath -CertificateDocument $certificateDocument `
+                -ChronologyEvidenceRootPath $root `
+                -AfterCertificatePublicationHook $insertInvalidProvenance | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $phasePostPublicationRejected = $true
+        }
+        if (-not $phasePostPublicationRejected -or
+            @($phasePassPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "$Phase formal phase post-publication chronology race left a sealed certificate."
+        }
+        Remove-Item -LiteralPath $invalidProvenancePath -Force
+
+        $latePhaseEvidencePath = Join-Path $phaseEvidenceRoot "late-unindexed-evidence.txt"
+        $insertLatePhaseEvidence = {
+            Write-Sprint8BNewUtf8File -Path $latePhaseEvidencePath -Text "late evidence`n"
+        }.GetNewClosure()
+        $phaseInventoryRejected = $false
+        try {
+            Publish-Sprint8BPhasePassCertificate -Contract $Contract `
+                -IndexPath $indexPath -IndexDocument $indexDocument `
+                -ExpectedIndexSha256 (Get-Sprint8BJsonDocumentSha256 -Document $indexDocument) `
+                -CertificatePath $certificatePath -CertificateDocument $certificateDocument `
+                -ChronologyEvidenceRootPath $root `
+                -BeforeCertificatePublicationHook $insertLatePhaseEvidence | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'evidence inventory changed') { throw }
+            $phaseInventoryRejected = $true
+        }
+        Remove-Item -LiteralPath $latePhaseEvidencePath -Force
+        if (-not $phaseInventoryRejected -or
+            @($phasePassPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "$Phase formal phase evidence drift left a sealed index."
+        }
+
+        $phasePostPublicationInventoryRejected = $false
+        try {
+            Publish-Sprint8BPhasePassCertificate -Contract $Contract `
+                -IndexPath $indexPath -IndexDocument $indexDocument `
+                -ExpectedIndexSha256 (Get-Sprint8BJsonDocumentSha256 -Document $indexDocument) `
+                -CertificatePath $certificatePath -CertificateDocument $certificateDocument `
+                -ChronologyEvidenceRootPath $root `
+                -AfterCertificatePublicationHook $insertLatePhaseEvidence | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'evidence inventory changed') { throw }
+            $phasePostPublicationInventoryRejected = $true
+        }
+        Remove-Item -LiteralPath $latePhaseEvidencePath -Force
+        if (-not $phasePostPublicationInventoryRejected -or
+            @($phasePassPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+            throw "$Phase formal phase post-publication evidence drift left a sealed certificate."
+        }
+
+        return [pscustomobject][ordered]@{
+            state = "passed"
+            foreign_publication_preserved = $foreignPublicationRejected
+            partial_write_cleanup_exact = $partialWriteRejected
+            partial_copy_cleanup_exact = $partialCopyRejected
+            sidecar_create_race_preserved = $sidecarRaceRejected
+            registration_failure_cleanup_exact = $registrationRejected
+            lane_pass_insertion_rejected = $laneInsertionRejected
+            lane_canonical_cleanup_exact = $true
+            lane_post_publication_insertion_rolled_back = $lanePostPublicationRejected
+            phase_completion_lane_result_rolled_back = $phaseCompletionRollbackPassed
+            failure_finalizer_runtime_proven = $failureLifecyclePassed
+            phase_pass_insertion_rejected = $phaseInsertionRejected
+            phase_index_cleanup_exact = $true
+            phase_post_publication_insertion_rolled_back = $phasePostPublicationRejected
+            phase_inventory_drift_rolled_back = $phaseInventoryRejected
+            phase_post_publication_inventory_drift_rolled_back = `
+                $phasePostPublicationInventoryRejected
+            sealed_pass_absent = $true
+        }
+    } finally {
+        if (Test-Path -LiteralPath $root) {
+            Remove-Item -LiteralPath $root -Recurse -Force
+        }
+        if (Test-Path -LiteralPath $root) {
+            throw "Formal publication self-test cleanup was not exact."
+        }
+    }
+}
+
+function Assert-Sprint8BPublicationBoundaryPlacement {
+    $laneSource = ${function:Invoke-Sprint8BFormalLane}.ToString()
+    $cleanSourceIndex = $laneSource.IndexOf("Assert-Sprint8BCleanSource", [StringComparison]::Ordinal)
+    $initialChronologyIndex = $laneSource.IndexOf(
+        "Assert-Sprint8BDefectProvenanceChronology",
+        [StringComparison]::Ordinal
+    )
+    $prerequisiteIndex = $laneSource.IndexOf(
+        "Assert-Sprint8BLanePrerequisites",
+        [StringComparison]::Ordinal
+    )
+    $lanePublicationIndex = $laneSource.IndexOf(
+        "Invoke-Sprint8BLanePassTransaction",
+        [StringComparison]::Ordinal
+    )
+    $lateFailureFinalizerIndex = $laneSource.LastIndexOf(
+        "Complete-Sprint8BFailedLaneAttempt",
+        [StringComparison]::Ordinal
+    )
+    $failureFinalizerCount = [regex]::Matches(
+        $laneSource,
+        [regex]::Escape("Complete-Sprint8BFailedLaneAttempt")
+    ).Count
+    $failureFinalizerSource = ${function:Complete-Sprint8BFailedLaneAttempt}.ToString()
+    $canonicalFailureLifecycle = @(@(
+        "Invoke-Sprint8BComposeTeardown",
+        "Restore-Sprint8BProcessEnvironmentSnapshot",
+        'Join-Path $AttemptRoot "failure.json"'
+    ) | Where-Object {
+        $failureFinalizerSource.IndexOf($_, [StringComparison]::Ordinal) -lt 0
+    })
+    if ($cleanSourceIndex -lt 0 -or $initialChronologyIndex -le $cleanSourceIndex -or
+        $prerequisiteIndex -le $initialChronologyIndex -or
+        $lanePublicationIndex -le $prerequisiteIndex -or
+        $lateFailureFinalizerIndex -le $lanePublicationIndex -or
+        $failureFinalizerCount -ne 2 -or $canonicalFailureLifecycle.Count -ne 0) {
+        throw "Formal lane chronology/authentication/publication placement is not fail-closed."
+    }
+
+    $lanePublisherSource = ${function:Publish-Sprint8BFormalLanePassResult}.ToString()
+    $laneResultPublication = $lanePublisherSource.IndexOf(
+        "Publish-Sprint8BJsonAndSidecar",
+        [StringComparison]::Ordinal
+    )
+    $laneFirstChronology = $lanePublisherSource.IndexOf(
+        "Assert-Sprint8BDefectProvenanceChronology",
+        [StringComparison]::Ordinal
+    )
+    $laneFinalChronology = $lanePublisherSource.LastIndexOf(
+        "Assert-Sprint8BDefectProvenanceChronology",
+        [StringComparison]::Ordinal
+    )
+    if ($laneFirstChronology -lt 0 -or
+        $laneResultPublication -le $laneFirstChronology -or
+        $laneFinalChronology -le $laneResultPublication) {
+        throw "Formal lane pass result is not guarded at its canonical publication boundary."
+    }
+
+    $phaseSource = ${function:Complete-Sprint8BPhase}.ToString()
+    if ($phaseSource.IndexOf(
+            "Publish-Sprint8BPhasePassCertificate",
+            [StringComparison]::Ordinal
+        ) -lt 0) {
+        throw "Formal phase completion bypasses the transactional pass publisher."
+    }
+    $phasePublisherSource = ${function:Publish-Sprint8BPhasePassCertificate}.ToString()
+    $phaseIndexPublication = $phasePublisherSource.IndexOf(
+        "Publish-Sprint8BJsonAndSidecar",
+        [StringComparison]::Ordinal
+    )
+    $phaseFinalChronology = $phasePublisherSource.LastIndexOf(
+        "Assert-Sprint8BDefectProvenanceChronology",
+        [StringComparison]::Ordinal
+    )
+    $phaseCertificatePublication = $phasePublisherSource.LastIndexOf(
+        "Publish-Sprint8BJsonAndSidecar",
+        [StringComparison]::Ordinal
+    )
+    $phaseFinalEvidenceAudit = $phasePublisherSource.LastIndexOf(
+        "Assert-Sprint8BPhaseEvidenceSnapshot",
+        [StringComparison]::Ordinal
+    )
+    $betweenPhasePublications = if ($phaseIndexPublication -ge 0 -and
+        $phaseCertificatePublication -gt $phaseIndexPublication) {
+        $phasePublisherSource.Substring(
+            $phaseIndexPublication,
+            $phaseCertificatePublication - $phaseIndexPublication
+        )
+    } else { "" }
+    if ($phaseIndexPublication -lt 0 -or
+        $betweenPhasePublications.IndexOf(
+            "Assert-Sprint8BDefectProvenanceChronology",
+            [StringComparison]::Ordinal
+        ) -lt 0 -or
+        $phaseFinalChronology -le $phaseCertificatePublication -or
+        $phaseFinalEvidenceAudit -le $phaseCertificatePublication) {
+        throw "Formal phase index/certificate chronology placement is not fail-closed."
+    }
+}
+
 function Test-Sprint8BFormalRunner {
     param([Parameter(Mandatory)][string]$Phase)
     $contract = Get-Sprint8BContract
     $actionMap = Get-Sprint8BFormalActionMap
     $null = Assert-Sprint8BFormalProfile -Contract $contract -Phase $Phase -ActionMap $actionMap
+    Assert-Sprint8BPublicationBoundaryPlacement
     $expectedIds = @(Get-Sprint8BExpectedLaneIds -Phase $Phase)
+
+    $chronologyRoot = Join-Path $script:Sprint8BRepositoryRoot `
+        "tmp/formal-chronology-selftest-$([guid]::NewGuid().ToString('N'))"
+    $chronologyRejected = $false
+    try {
+        [IO.Directory]::CreateDirectory($chronologyRoot) | Out-Null
+        $chronology = Assert-Sprint8BDefectProvenanceChronology -Contract $contract `
+            -EvidenceRootPath $chronologyRoot
+        if ([string]$chronology.state -cne "passed") {
+            throw "$Phase formal runner self-test did not authenticate empty synthetic provenance."
+        }
+        $invalidChronologyPath = Join-Path $chronologyRoot `
+            "attempts/invalid/defect-provenance.json"
+        Write-Sprint8BNewUtf8File -Path $invalidChronologyPath -Text "{ invalid chronology"
+        try {
+            Assert-Sprint8BDefectProvenanceChronology -Contract $contract `
+                -EvidenceRootPath $chronologyRoot | Out-Null
+        } catch {
+            if ($_.Exception.Message -notmatch 'Defect-provenance chronology is unresolved') {
+                throw
+            }
+            $chronologyRejected = $true
+        }
+        if (-not $chronologyRejected) {
+            throw "$Phase formal runner self-test admitted unresolved defect provenance."
+        }
+    } finally {
+        if (Test-Path -LiteralPath $chronologyRoot) {
+            Remove-Item -LiteralPath $chronologyRoot -Recurse -Force
+        }
+    }
+    $publicationLifecycle = Test-Sprint8BChronologyPublicationLifecycle `
+        -Contract $contract -Phase $Phase
 
     $mutatedIdentity = $contract | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
     $identityLane = @($mutatedIdentity.lanes | Where-Object { [string]$_.phase -ceq $Phase })[0]
@@ -2048,8 +2978,11 @@ function Test-Sprint8BFormalRunner {
             "identity", "order", "prerequisites", "environment", "evidence-mapping",
             "playwright-data-state", "missing-prerequisite", "missing-harness",
             "zero-argument-action", "typed-action-result", "unmapped-selector", "exclusive-mode",
-            "sit-fresh-browser-handoff"
+            "sit-fresh-browser-handoff", "defect-provenance-chronology",
+            "chronology-publication-rollback"
         )
+        unresolved_provenance_rejected = $chronologyRejected
+        chronology_publication_lifecycle = $publicationLifecycle
     }
 }
 
