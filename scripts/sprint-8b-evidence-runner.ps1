@@ -888,11 +888,12 @@ function New-Sprint8BPowerShellAction {
         [string[]]$Arguments = @(),
         [switch]$ProducesEvidence,
         [switch]$ProvidesEnvironment,
-        [switch]$ProvidesRestoration
+        [switch]$ProvidesRestoration,
+        [ValidateSet("", "fresh", "upgraded")][string]$PlaywrightDataState = ""
     )
     New-Sprint8BAction -Id $Id -Kind pwsh -Command $Script -Arguments $Arguments `
         -ProducesEvidence:$ProducesEvidence -ProvidesEnvironment:$ProvidesEnvironment `
-        -ProvidesRestoration:$ProvidesRestoration
+        -ProvidesRestoration:$ProvidesRestoration -PlaywrightDataState $PlaywrightDataState
 }
 
 function New-Sprint8BProgramAction {
@@ -906,31 +907,17 @@ function New-Sprint8BProgramAction {
         -PlaywrightDataState $PlaywrightDataState
 }
 
-function Get-Sprint8BBrowserFunctionalSpecs {
-    @(
-        "tests/analytics-sprint-7a.spec.ts",
-        "tests/app.spec.ts",
-        "tests/components.spec.ts",
-        "tests/composition.spec.ts",
-        "tests/dashboards.spec.ts",
-        "tests/datasets-module.spec.ts",
-        "tests/datasets.spec.ts",
-        "tests/modules.spec.ts",
-        "tests/permissions.spec.ts",
-        "tests/workflow-mediated-assignments.spec.ts"
-    )
-}
-
 function New-Sprint8BBrowserAcceptanceActions {
     param([ValidateSet("fresh", "upgraded")][string]$PlaywrightDataState = "fresh")
     @(
-        New-Sprint8BProgramAction -Id "browser-acceptance-functional" -Program "npm" `
-            -Arguments (@("--prefix", ".\end2end", "test", "--") + `
-                @(Get-Sprint8BBrowserFunctionalSpecs)) `
-            -PlaywrightDataState $PlaywrightDataState
-        New-Sprint8BProgramAction -Id "browser-acceptance-visual" -Program "npm" `
-            -Arguments @("--prefix", ".\end2end", "test", "--", "tests/module-ui-visual.spec.ts") `
-            -PlaywrightDataState $PlaywrightDataState
+        New-Sprint8BPowerShellAction -Id "browser-acceptance-batches" `
+            -Script "scripts/tessara-validation-evidence-browser-batches.ps1" `
+            -Arguments @(
+                "-ManifestPath", "end2end/acceptance-manifest.json",
+                "-ExpectedDataState", $PlaywrightDataState,
+                "-EvidencePath", "{evidence}"
+            ) `
+            -ProducesEvidence -PlaywrightDataState $PlaywrightDataState
     )
 }
 
@@ -1288,12 +1275,15 @@ function Assert-Sprint8BFormalProfile {
                 throw "Existing-topology action '$id/$($action.id)' omits its authenticated fixture receipt."
             }
             $actionArguments = @($action.arguments)
-            $isPlaywrightAcceptance = [string]$action.kind -ceq "program" -and
+            $isRawPlaywrightAcceptance = [string]$action.kind -ceq "program" -and
                 [string]$action.command -ceq "npm" -and
                 $actionArguments.Count -ge 3 -and
                 [string]$actionArguments[0] -ceq "--prefix" -and
                 [string]$actionArguments[1] -ceq ".\end2end" -and
                 [string]$actionArguments[2] -ceq "test"
+            $isBatchedPlaywrightAcceptance = [string]$action.kind -ceq "pwsh" -and
+                [string]$action.command -ceq "scripts/tessara-validation-evidence-browser-batches.ps1"
+            $isPlaywrightAcceptance = $isRawPlaywrightAcceptance -or $isBatchedPlaywrightAcceptance
             if ($isPlaywrightAcceptance -and
                 [string]$action.playwright_data_state -notin @("fresh", "upgraded")) {
                 throw "Playwright action '$id/$($action.id)' omits its exact data-state identity."
@@ -1827,12 +1817,33 @@ function Invoke-Sprint8BAction {
                 -EvidencePath $harnessEvidencePath -CandidateFingerprint $CandidateFingerprint `
                 -TopologyContext $TopologyContext)
             $commandText = "pwsh -NoProfile -File $($Action.command) $($arguments -join ' ')"
-            if ($SuppressChildOutput) {
-                & pwsh -NoProfile -File $scriptPath @arguments | Out-Null
-            } else {
-                & pwsh -NoProfile -File $scriptPath @arguments | Out-Host
+            $expectedDataState = [string]$Action.playwright_data_state
+            $dataStateBefore = [Environment]::GetEnvironmentVariable(
+                "TESSARA_PLAYWRIGHT_DATA_STATE", "Process"
+            )
+            try {
+                if (-not [string]::IsNullOrWhiteSpace($expectedDataState)) {
+                    if ($null -eq $TopologyContext -or
+                        [Environment]::GetEnvironmentVariable(
+                            "TESSARA_PLAYWRIGHT_ACCEPTANCE", "Process"
+                        ) -cne "1") {
+                        throw "Playwright action '$($Action.id)' lacks an authenticated retained topology/acceptance binding."
+                    }
+                    [Environment]::SetEnvironmentVariable(
+                        "TESSARA_PLAYWRIGHT_DATA_STATE", $expectedDataState, "Process"
+                    )
+                }
+                if ($SuppressChildOutput) {
+                    & pwsh -NoProfile -File $scriptPath @arguments | Out-Null
+                } else {
+                    & pwsh -NoProfile -File $scriptPath @arguments | Out-Host
+                }
+                $exitCode = $LASTEXITCODE
+            } finally {
+                [Environment]::SetEnvironmentVariable(
+                    "TESSARA_PLAYWRIGHT_DATA_STATE", $dataStateBefore, "Process"
+                )
             }
-            $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) { throw "Action '$($Action.id)' exited $exitCode." }
             if ([bool]$Action.produces_evidence) {
                 $harnessDocument = Assert-Sprint8BHarnessEvidence -Path $harnessEvidencePath -Action $Action -ExpectedProject $Project
@@ -2936,35 +2947,51 @@ function Test-Sprint8BFormalRunner {
     } else { $null }
     if ($null -ne $browserLaneId) {
         $browserActions = @($actionMap[$browserLaneId] | Where-Object {
-            [string]$_.id -in @("browser-acceptance-functional", "browser-acceptance-visual")
+            [string]$_.id -ceq "browser-acceptance-batches"
         })
-        if ($browserActions.Count -ne 2 -or
+        if ($browserActions.Count -ne 1 -or
             @($browserActions | Where-Object {
                 [string]$_.playwright_data_state -cne "fresh"
             }).Count -ne 0) {
-            throw "$browserLaneId does not bind both browser actions to fresh reference data."
+            throw "$browserLaneId does not bind its canonical browser-batch action to fresh reference data."
         }
-        $functionalAction = @($browserActions | Where-Object {
-            [string]$_.id -ceq "browser-acceptance-functional"
-        })[0]
-        $visualAction = @($browserActions | Where-Object {
-            [string]$_.id -ceq "browser-acceptance-visual"
-        })[0]
-        $expectedFunctionalArguments = @("--prefix", ".\end2end", "test", "--") +
-            @(Get-Sprint8BBrowserFunctionalSpecs)
-        if ((@($functionalAction.arguments) -join "`n") -cne
-            ($expectedFunctionalArguments -join "`n") -or
-            (@($visualAction.arguments) -join "`n") -cne
-            (@("--prefix", ".\end2end", "test", "--", "tests/module-ui-visual.spec.ts") -join "`n")) {
-            throw "$browserLaneId does not partition the exact functional and visual browser inventory."
+        $browserAction = $browserActions[0]
+        $expectedArguments = @(
+            "-ManifestPath", "end2end/acceptance-manifest.json",
+            "-ExpectedDataState", "fresh",
+            "-EvidencePath", "{evidence}"
+        )
+        if ([string]$browserAction.kind -cne "pwsh" -or
+            [string]$browserAction.command -cne "scripts/tessara-validation-evidence-browser-batches.ps1" -or
+            -not [bool]$browserAction.produces_evidence -or
+            (@($browserAction.arguments) -join "`n") -cne ($expectedArguments -join "`n")) {
+            throw "$browserLaneId does not use the exact fresh-process browser acceptance boundary."
         }
-        $browserActions[0].playwright_data_state = ""
+        $manifest = Get-Content -LiteralPath (
+            Join-Path $script:Sprint8BRepositoryRoot "end2end/acceptance-manifest.json"
+        ) -Raw | ConvertFrom-Json
+        if ([int]$manifest.expected_total -ne 95 -or @($manifest.files).Count -ne 11) {
+            throw "$browserLaneId is not bound to the exact 95-test, 11-file acceptance inventory."
+        }
+        if ($Phase -ceq "candidate-rehearsal") {
+            $platformSelfTestOutput = @(& pwsh -NoProfile -File (
+                Join-Path $script:Sprint8BRepositoryRoot `
+                    "scripts/tessara-validation-evidence-browser-batches.ps1"
+            ) -SelfTest 2>&1 | ForEach-Object { [string]$_ })
+            if ($LASTEXITCODE -ne 0 -or
+                @($platformSelfTestOutput | Where-Object {
+                    $_ -ceq "Synthetic browser lifecycle certification passed: 11 fresh processes."
+                }).Count -ne 1) {
+                throw "Candidate Rehearsal browser platform certification did not pass exactly."
+            }
+        }
+        $browserAction.playwright_data_state = ""
         try {
             Assert-Sprint8BExpectedFailure -Label "$Phase missing Playwright data state" -Action {
                 Assert-Sprint8BFormalProfile -Contract $contract -Phase $Phase -ActionMap $actionMap
             }
         } finally {
-            $browserActions[0].playwright_data_state = "fresh"
+            $browserAction.playwright_data_state = "fresh"
         }
     }
 

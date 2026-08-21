@@ -217,3 +217,54 @@ the touched cone. Handoff requires synthetic certification, selection proofs for
 all three change classes, immutable failed/interrupted evidence, restored
 topology, and explicit proof that no assertion, fixture meaning, retry policy,
 timeout, or baseline was weakened.
+
+## 2026-08-21 browser-process off-ramp
+
+Candidate Rehearsal on clean source `6970a678cea5fea5208a898156a4de11ff6ba6b7`
+passed static, Rust, and source-exact materialization before the browser lane
+failed after 76 of the 81 functional identities had passed. The exact failure
+was a browser-origin `net::ERR_NO_BUFFER_SPACE` while navigating to
+`/administration/modules`; one identity failed and four were safely not run.
+No product assertion failed before the resource error. The lane retained its
+trace and failure receipt, and emergency teardown removed the exact owned
+Compose topology successfully.
+
+This is a validation harness/environment defect governed by `ac-03` and
+`gate-implementation-exit`, not a Tessara product or Reference-fixture defect.
+The retained incident index is
+`artifacts/sprint-8b-closeout/process-incidents/20260821T225052881Z-browser-socket-buffer/evidence-index.json`
+with SHA-256
+`82d33f491fdaa4be7af68fe8dfdf7a762f2010fbce96166c7c217b6edb780803`;
+the immutable lane failure is
+`0970008a8cbb4b5cd3f5c2f389686a3d06a016a86bafafce77cb3bd4ee31f010`
+and the successful emergency teardown is
+`6d350f905824116dca74b3096dc74919b7d05f6ca5e58c19831c9ccf551c2732`.
+The socket snapshot also retained substantial unrelated host socket ownership,
+so the correction must bound the validation process rather than mutate user
+applications or host networking.
+
+The earlier functional/visual split reduced one 95-test process to an 81-test
+functional process and a 14-test visual process, but this failure proves the
+remaining functional lifecycle is still too broad. The bounded forward-only
+correction replaces that partition with one manifest-driven runner that starts
+a fresh Playwright/Chromium process for each of the 11 unchanged acceptance
+files. It keeps one worker, zero retries, comparison-only snapshots, the exact
+fresh Reference data state, and all 95 existing identities. It continues
+fail-late between files and retains each file's JSON, JUnit, command log, and
+failure traces before authenticating the exact union. A synthetic local HTTP
+probe certifies all 11 browser-process start/navigation/disconnect lifecycles
+without executing Tessara application behavior.
+
+No test identity or expectation changes in this correction, so it does not add
+an acceptance-inventory entry to the Sprint test-change log. This process
+incident and its execution-only correction are recorded here under validation-
+platform ownership; any future assertion change remains subject to the normal
+test-change-log authority and application impact cone.
+
+The minimum-safe automatic resume boundary is the failed `rehearsal-browser`
+lane, after the synthetic platform proof, both contract-selected implementation
+targets, clean committed source, and a verified defect-provenance record pass.
+The old failed attempt is never retried or rewritten. If current impact policy
+requires an earlier certificate because the validation-platform source identity
+changed, that authenticated boundary takes precedence automatically; no
+separate user authorization pause is required.
