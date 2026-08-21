@@ -103,9 +103,12 @@ proof must execute that lifecycle without the workspace-wide Rust step and then
 run the two unchanged assertions that previously observed six rows. Broad SIT or
 any other formal phase remains blocked after that focused proof.
 
-Broad certification remains blocked after focused proof. The minimum-safe resume
-boundary will be reported from authenticated impact evidence and requires explicit
-user authorization; no Preflight, SIT, or UAT phase may start from this record.
+Broad certification remains blocked until focused proof establishes and
+authenticates the minimum-safe resume boundary. Once that boundary is established,
+the validation coordinator resumes automatically from it; a separate user
+authorization pause is not required. No failed attempt is retried or converted
+to a pass, and no later phase may start before its ordinary prerequisite
+certificates are valid.
 
 ## Retained defect-provenance chronology intervention
 
@@ -143,13 +146,34 @@ runner/finalization boundary checks. The current Sprint 8B dependency contract
 continues to determine the full impact cone; it is not narrowed to make the
 correction pass. Another broad Implementation Readiness, Validation Readiness,
 Candidate Rehearsal, Preflight, SIT, or UAT run remains blocked pending the
-reported minimum-safe boundary and an explicit user decision.
+authenticated minimum-safe boundary. After the process-only correction and its
+affected implementation targets pass, progression resumes automatically at that
+boundary without a separate authorization request.
 
 The runner-owned checks and transactional cleanup now close every deterministic
 publication window exercised by the synthetic suite. Absolute exclusion of an
 independent provenance writer still requires the deferred validation-platform
 lease/lock protocol; Sprint 8B must not claim that stronger guarantee from
 caller-local rechecks alone.
+
+## Current off-ramp rule
+
+Effective 2026-08-21, a newly discovered process-origin defect still triggers
+the Sprint 8B off-ramp immediately. The failed attempt and provenance remain
+immutable; only safe fail-late evidence collection, cleanup, and restoration may
+continue. The correction must remain process-only, preserve every acceptance
+assertion, fixture meaning, baseline, retry policy, and timeout, and pass focused
+harness proof plus every implementation target selected by authenticated impact
+analysis.
+
+The off-ramp is a correction-and-resume mechanism, not a user-approval stop.
+After the correction establishes the minimum-safe resume boundary, the
+coordinator continues from that boundary automatically. Broad phases are never
+opportunistically restarted, and an application-candidate change still requires
+the normal candidate-affecting implementation and certification cone. A
+process-only correction invalidates only the validation-platform evidence,
+affected sprint adapter, affected formal lanes, and narrow integration checks
+identified by the current contract.
 
 ## Deferred post-Sprint-8B validation-platform separation
 
