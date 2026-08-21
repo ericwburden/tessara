@@ -79,13 +79,57 @@ function Get-Sprint8BPhaseResultName {
     }
 }
 
+function Get-Sprint8BEvidenceRoot {
+    param([Parameter(Mandatory)]$Contract)
+
+    $canonicalRelative = ([string]$Contract.evidence_policy.root).TrimEnd("/", "\")
+    $override = [Environment]::GetEnvironmentVariable(
+        "TESSARA_SPRINT_8B_RUN_EVIDENCE_ROOT",
+        "Process"
+    )
+    $relative = if ([string]::IsNullOrWhiteSpace($override)) {
+        $canonicalRelative
+    } else {
+        $override.Replace("\", "/").TrimEnd("/")
+    }
+    if ([IO.Path]::IsPathRooted($relative) -or $relative -match '(^|/)\.\.(/|$)') {
+        throw "Sprint 8B run evidence root must be a repository-relative path without traversal."
+    }
+
+    $full = [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot $relative))
+    $repository = [IO.Path]::GetFullPath($script:Sprint8BRepositoryRoot)
+    if (-not $full.StartsWith(
+            $repository + [IO.Path]::DirectorySeparatorChar,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+        throw "Sprint 8B run evidence root escapes the repository."
+    }
+
+    $actualRelative = [IO.Path]::GetRelativePath($repository, $full).Replace("\", "/")
+    if ($actualRelative -cne $canonicalRelative.Replace("\", "/") -and
+        $actualRelative -cnotmatch ('^' + [regex]::Escape($canonicalRelative.Replace("\", "/")) + '/runs/[a-z0-9][a-z0-9._-]{0,79}$')) {
+        throw "Sprint 8B run evidence root must be the canonical root or one bounded canonical runs/<identity> child."
+    }
+
+    $cursor = $repository
+    foreach ($segment in @($actualRelative -split '/')) {
+        $cursor = Join-Path $cursor $segment
+        if (Test-Path -LiteralPath $cursor) {
+            $item = Get-Item -LiteralPath $cursor -Force
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Sprint 8B run evidence root traverses a reparse point: $cursor"
+            }
+        }
+    }
+    return $full
+}
+
 function Get-Sprint8BPhaseRoot {
     param(
         [Parameter(Mandatory)]$Contract,
         [Parameter(Mandatory)][string]$Phase
     )
-    $relative = ([string]$Contract.evidence_policy.root).TrimEnd("/", "\") + "/$Phase"
-    return [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot $relative))
+    return Join-Path (Get-Sprint8BEvidenceRoot -Contract $Contract) $Phase
 }
 
 function Assert-Sprint8BDefectProvenanceChronology {
@@ -1271,7 +1315,9 @@ function Assert-Sprint8BFormalProfile {
         }
 
         $paths = Get-Sprint8BLaneEvidencePaths -Contract $Contract -Phase $Phase -Lane $id
-        $expectedSuffix = ([string]$Contract.evidence_policy.root).TrimEnd("/", "\") + "/$Phase/lanes/$id"
+        $expectedSuffix = (Get-Sprint8BRepositoryRelativePath -Path (
+            Get-Sprint8BEvidenceRoot -Contract $Contract
+        )).TrimEnd("/", "\") + "/$Phase/lanes/$id"
         $actualSuffix = (Get-Sprint8BRepositoryRelativePath -Path $paths.lane_root)
         if ($actualSuffix -cne $expectedSuffix.Replace("\", "/")) {
             throw "Lane '$id' evidence mapping is not canonical."
@@ -1354,13 +1400,13 @@ function Assert-Sprint8BSourceMatches {
 
 function Get-Sprint8BImplementationResultPath {
     param([Parameter(Mandatory)]$Contract)
-    $root = [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot ([string]$Contract.evidence_policy.root)))
+    $root = Get-Sprint8BEvidenceRoot -Contract $Contract
     return Join-Path $root "implementation/implementation-readiness-result.json"
 }
 
 function Get-Sprint8BImpactPath {
     param([Parameter(Mandatory)]$Contract)
-    $root = [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot ([string]$Contract.evidence_policy.root)))
+    $root = Get-Sprint8BEvidenceRoot -Contract $Contract
     return Join-Path $root "validation-impact.json"
 }
 
@@ -1398,7 +1444,7 @@ function Get-Sprint8BCertificatePath {
 
 function Get-Sprint8BCandidatePath {
     param([Parameter(Mandatory)]$Contract)
-    $root = [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot ([string]$Contract.evidence_policy.root)))
+    $root = Get-Sprint8BEvidenceRoot -Contract $Contract
     return Join-Path $root "candidate.json"
 }
 
@@ -1644,7 +1690,7 @@ function Get-Sprint8BManualScenarioPath {
         [Parameter(Mandatory)]$Contract,
         [Parameter(Mandatory)][string]$Scenario
     )
-    $root = [IO.Path]::GetFullPath((Join-Path $script:Sprint8BRepositoryRoot ([string]$Contract.evidence_policy.root)))
+    $root = Get-Sprint8BEvidenceRoot -Contract $Contract
     return Join-Path $root "uat/scenarios/$Scenario/result.json"
 }
 
@@ -2111,7 +2157,8 @@ function Invoke-Sprint8BFormalLane {
         "COMPOSE_PROJECT_NAME", "TESSARA_GATEWAY_PORT", "TESSARA_CORE_CONTROL_PORT",
         "TESSARA_SUPERVISOR_PORT", "PLAYWRIGHT_BASE_URL", "TESSARA_PLAYWRIGHT_ACCEPTANCE",
         "TESSARA_PLAYWRIGHT_DATA_STATE", "PLAYWRIGHT_POSTGRES_CONTAINER",
-        "PLAYWRIGHT_POSTGRES_DATABASE", "PLAYWRIGHT_POSTGRES_USER"
+        "PLAYWRIGHT_POSTGRES_DATABASE", "PLAYWRIGHT_POSTGRES_USER",
+        "TESSARA_SPRINT_8B_RUN_EVIDENCE_ROOT"
     )
     $environmentBefore = Get-Sprint8BProcessEnvironmentSnapshot -Names $environmentNames
     $transcribing = $false
@@ -2849,6 +2896,39 @@ function Test-Sprint8BFormalRunner {
         Assert-Sprint8BFormalProfile -Contract $mutatedEvidence -Phase $Phase -ActionMap $actionMap
     }
 
+    $priorRunRoot = [Environment]::GetEnvironmentVariable(
+        "TESSARA_SPRINT_8B_RUN_EVIDENCE_ROOT",
+        "Process"
+    )
+    try {
+        $runIdentity = "selftest-$([guid]::NewGuid().ToString('N'))"
+        $runRelative = "$([string]$contract.evidence_policy.root)/runs/$runIdentity"
+        [Environment]::SetEnvironmentVariable(
+            "TESSARA_SPRINT_8B_RUN_EVIDENCE_ROOT",
+            $runRelative,
+            "Process"
+        )
+        $runPaths = Get-Sprint8BLaneEvidencePaths -Contract $contract -Phase $Phase -Lane $expectedIds[0]
+        if ((Get-Sprint8BRepositoryRelativePath -Path $runPaths.result) -cne
+            "$runRelative/$Phase/lanes/$($expectedIds[0])/result.json") {
+            throw "$Phase did not isolate its canonical result inside the selected run evidence root."
+        }
+        [Environment]::SetEnvironmentVariable(
+            "TESSARA_SPRINT_8B_RUN_EVIDENCE_ROOT",
+            "artifacts/sprint-8b-outside-canonical-runs",
+            "Process"
+        )
+        Assert-Sprint8BExpectedFailure -Label "$Phase unbounded run evidence root" -Action {
+            Get-Sprint8BEvidenceRoot -Contract $contract | Out-Null
+        }
+    } finally {
+        [Environment]::SetEnvironmentVariable(
+            "TESSARA_SPRINT_8B_RUN_EVIDENCE_ROOT",
+            $priorRunRoot,
+            "Process"
+        )
+    }
+
     $browserLaneId = if ($Phase -ceq "candidate-rehearsal") {
         "rehearsal-browser"
     } elseif ($Phase -ceq "sit") {
@@ -2960,8 +3040,11 @@ function Test-Sprint8BFormalRunner {
             throw "Self-test found unsafe project identity for '$($lane.id)'."
         }
         $paths = Get-Sprint8BLaneEvidencePaths -Contract $contract -Phase $Phase -Lane ([string]$lane.id)
+        $effectiveRoot = Get-Sprint8BRepositoryRelativePath -Path (
+            Get-Sprint8BEvidenceRoot -Contract $contract
+        )
         if ((Get-Sprint8BRepositoryRelativePath -Path $paths.result) -cne
-            "$([string]$contract.evidence_policy.root)/$Phase/lanes/$([string]$lane.id)/result.json") {
+            "$effectiveRoot/$Phase/lanes/$([string]$lane.id)/result.json") {
             throw "Self-test found an incorrect result path for '$($lane.id)'."
         }
     }
