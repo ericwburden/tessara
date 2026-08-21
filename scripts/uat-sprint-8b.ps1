@@ -529,6 +529,20 @@ function Assert-Sprint8BExactTestPredicateEvidence {
     }
 }
 
+function Get-Sprint8BUatChildEvidenceRoot {
+    param(
+        [Parameter(Mandatory)][string]$EvidencePath
+    )
+
+    $resolvedEvidencePath = Resolve-Sprint8BRepositoryPath -Path $EvidencePath
+    $evidenceStem = [IO.Path]::GetFileNameWithoutExtension($resolvedEvidencePath)
+    if ([string]::IsNullOrWhiteSpace($evidenceStem) -or
+        $evidenceStem -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+        throw "Sprint 8B UAT evidence path must have a bounded action-specific JSON filename."
+    }
+    Join-Path (Join-Path (Split-Path -Parent $resolvedEvidencePath) "predicates") $evidenceStem
+}
+
 function Assert-Sprint8BSelectedAssertionEvidence {
     param(
         [Parameter(Mandatory)][object[]]$SelectedScenarios,
@@ -777,6 +791,43 @@ function Test-Sprint8BUatPredicateReadiness {
         "tessara-s8b-uat-predicate-$([Guid]::NewGuid().ToString('N'))"
     try {
         [IO.Directory]::CreateDirectory($selfTestRoot) | Out-Null
+        $firstScenarioEvidence = Join-Path $selfTestRoot "actions/uat-8b-01-evidence.json"
+        $secondScenarioEvidence = Join-Path $selfTestRoot "actions/uat-8b-09-evidence.json"
+        $firstChildRoot = Get-Sprint8BUatChildEvidenceRoot -EvidencePath $firstScenarioEvidence
+        $secondChildRoot = Get-Sprint8BUatChildEvidenceRoot -EvidencePath $secondScenarioEvidence
+        if ($firstChildRoot -ceq $secondChildRoot -or
+            [IO.Path]::GetFileName($firstChildRoot) -cne "uat-8b-01-evidence" -or
+            [IO.Path]::GetFileName($secondChildRoot) -cne "uat-8b-09-evidence") {
+            throw "Sprint 8B UAT self-test did not isolate child evidence by formal action identity."
+        }
+        [IO.Directory]::CreateDirectory($firstChildRoot) | Out-Null
+        [IO.Directory]::CreateDirectory($secondChildRoot) | Out-Null
+        $firstMaterialization = Join-Path $firstChildRoot "reference-materialization.json"
+        $secondMaterialization = Join-Path $secondChildRoot "reference-materialization.json"
+        $syntheticMaterialization = [pscustomobject][ordered]@{
+            schema_version = 1
+            sprint = "sprint-8b"
+            proof = "synthetic-uat-materialization"
+            state = "passed"
+        }
+        Publish-Sprint8BHarnessEvidence -Document $syntheticMaterialization `
+            -OutputPath $firstMaterialization | Out-Null
+        Publish-Sprint8BHarnessEvidence -Document $syntheticMaterialization `
+            -OutputPath $secondMaterialization | Out-Null
+        if (-not (Test-Sprint7AEvidencePair -ArtifactPath $firstMaterialization `
+                -SidecarPath "$firstMaterialization.sha256") -or
+            -not (Test-Sprint7AEvidencePair -ArtifactPath $secondMaterialization `
+                -SidecarPath "$secondMaterialization.sha256")) {
+            throw "Sprint 8B UAT self-test did not publish both action-scoped evidence pairs."
+        }
+        try {
+            Publish-Sprint8BHarnessEvidence -Document $syntheticMaterialization `
+                -OutputPath $firstMaterialization | Out-Null
+            throw "Sprint 8B UAT self-test allowed an overwrite within one action evidence scope."
+        } catch {
+            if ($_.Exception.Message -notmatch 'Retained evidence exists') { throw }
+        }
+
         $refreshPredicate = @($catalog | Where-Object {
             [string]$_.id -ceq "dataset-refresh-orchestration"
         })[0]
@@ -1177,7 +1228,7 @@ $resolvedFixture = $null
 $failure = $null
 $composePath = Resolve-Sprint8BRepositoryPath -Path "deploy/sprint-8b/compose.yaml"
 $evidenceFullPath = Resolve-Sprint8BRepositoryPath -Path $EvidencePath
-$childEvidenceRoot = Join-Path (Split-Path -Parent $evidenceFullPath) "predicates"
+$childEvidenceRoot = Get-Sprint8BUatChildEvidenceRoot -EvidencePath $evidenceFullPath
 [IO.Directory]::CreateDirectory($childEvidenceRoot) | Out-Null
 
 try {
