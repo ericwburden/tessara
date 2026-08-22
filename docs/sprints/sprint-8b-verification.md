@@ -643,5 +643,5 @@ candidate, authorize SIT/UAT, or authorize closeout.
   `tessara-s8b-uat-manual` at `http://127.0.0.1:49452`.
 - Evidence source commit:
   `83e8b123de315ed2c7186ec4f0586f5a03198131`.
-- Documentation commit: recorded after this closeout-only documentation commit.
+- Closeout documentation commit: `3c3c472a` (`docs: close out Sprint 8B`).
 - Authorization timestamp: retained in the authorization receipt.

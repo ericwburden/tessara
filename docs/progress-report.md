@@ -6921,8 +6921,8 @@ Next UI steps:
   Component `1.1.0`, Dashboard `3.0.2`.
 - Reviewer topology: `tessara-s8b-uat-manual` remains healthy and reachable at
   `http://127.0.0.1:49452`.
-- Closeout documentation: `PENDING_CLOSEOUT_DOCUMENTATION_COMMIT` (this
-  documentation-only change; no image rebuild required).
+- Closeout documentation commit:
+  `3c3c472a` (`docs: close out Sprint 8B`); no image rebuild was required.
 - Next Sprint: Sprint 8C Response Module Separation Slice.
 
 ### Sprint Handoff / Demo Instructions
